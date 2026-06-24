@@ -34,6 +34,7 @@ extern uint16_t AXIS_Z;
 
 extern uint16_t HALF_TOP;
 extern uint16_t HALF_BOTTOM;
+extern uint16_t HALF_DOUBLE;
 
 extern uint16_t OPEN_TRUE;
 extern uint16_t OPEN_FALSE;

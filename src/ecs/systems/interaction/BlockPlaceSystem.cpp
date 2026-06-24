@@ -42,7 +42,7 @@ void recordPostPlaceSuppression(BlockInteractionRuntimeComponent& runtime,
     runtime.postPlaceInteractionSuppressSeconds = 0.25f;
 }
 
-BlockID resolvePlacementState(const BlockID blockId,
+StateID resolvePlacementState(const BlockID blockId,
                               const CameraStateComponent& camera,
                               const MoveIntentComponent& moveIntent,
                               const glm::ivec3& hitNormal,
@@ -62,6 +62,36 @@ BlockID resolvePlacementState(const BlockID blockId,
 
     const StateID stateId = strategy(pctx);
     return stateId != 0 ? stateId : BlockIds::AIR;
+}
+
+struct PlacementResolution {
+    glm::ivec3 placeBlock{};
+    StateID stateId = BlockIds::AIR;
+    bool replacesExisting = false;
+};
+
+PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
+                                           const BlockTargetComponent& target,
+                                           const BlockID blockId,
+                                           const CameraStateComponent& camera,
+                                           const MoveIntentComponent& moveIntent) {
+    PlacementResolution result;
+    result.placeBlock = target.placeBlock;
+    result.stateId = resolvePlacementState(blockId, camera, moveIntent, target.hitNormal, target.hitPosition);
+
+    const StateID existingTargetState =
+        worldView.getBlockState(target.targetBlock.x, target.targetBlock.y, target.targetBlock.z);
+    const StateID inCellState =
+        resolvePlacementState(blockId, camera, moveIntent, -target.hitNormal, target.hitPosition);
+
+    StateID mergedState = BlockIds::AIR;
+    if (tryMergePlacementStates(existingTargetState, inCellState, mergedState)) {
+        result.placeBlock = target.targetBlock;
+        result.stateId = mergedState;
+        result.replacesExisting = true;
+    }
+
+    return result;
 }
 
 } // namespace
@@ -108,7 +138,16 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         }
 
         // Server-side distance validation: player must be within reach
-        const glm::ivec3 placeBlock = target.placeBlock;
+        Inventory& inventory = inventoryData.inventory;
+        const ItemID selectedItem = inventory.getSelectedItem();
+        const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
+        PlacementResolution placement;
+        if (blockToPlace != 0) {
+            placement = resolvePlacementTarget(worldView, target, blockToPlace, camera, moveIntent);
+        } else {
+            placement.placeBlock = target.placeBlock;
+        }
+        const glm::ivec3 placeBlock = placement.placeBlock;
         constexpr float kMaxPlaceDistance = 6.5f;
         const glm::vec3 blockCenter = glm::vec3(placeBlock) + glm::vec3(0.5f);
         const glm::vec3 playerPos = view.get<TransformComponent>(e).position;
@@ -118,13 +157,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        Inventory& inventory = inventoryData.inventory;
-        const ItemID selectedItem = inventory.getSelectedItem();
-        const BlockID blockToPlace = ItemRegistry::toPlaceBlock(selectedItem);
-        BlockID placedState = BlockIds::AIR;
-        if (blockToPlace != 0) {
-            placedState = resolvePlacementState(blockToPlace, camera, moveIntent, target.hitNormal, target.hitPosition);
-        }
+        const StateID placedState = placement.stateId;
 
         GameplayBlockActionRequest request;
         request.hasHit = target.hasTarget;
@@ -133,6 +166,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         request.placeCooldownRemaining = runtime.placeCooldownRemaining;
         if (target.hasTarget) {
             request.targetBlock = worldView.getBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+            request.placementReplacesTarget = placement.replacesExisting;
             request.playerWouldOverlapPlaceBlock =
                 placedState != BlockIds::AIR && wouldOverlapPlacedState(physicsBody.body, placeBlock, placedState);
         }

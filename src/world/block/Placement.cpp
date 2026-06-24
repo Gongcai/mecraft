@@ -1,5 +1,6 @@
 #include "Placement.h"
 
+#include "BlockCollision.h"
 #include "PropIndices.h"
 
 #include <cmath>
@@ -19,6 +20,8 @@ PlacementStrategyFn PlacementStrategyRegistry::getStrategy(const std::string& na
 }
 
 namespace {
+
+constexpr float kPlacementEpsilon = 0.0001f;
 
 StateID strategySimple(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
@@ -104,6 +107,63 @@ uint16_t stairFacingFromSideNormal(const BlockID blockId, const glm::ivec3& norm
     return applyPlacementFacingRevert(blockId, facingFromSideNormal(normal));
 }
 
+float boxVolume(const BlockCollisionBox& box) {
+    const glm::vec3 size = box.max - box.min;
+    return size.x * size.y * size.z;
+}
+
+float totalBoxVolume(const std::vector<BlockCollisionBox>& boxes) {
+    float volume = 0.0f;
+    for (const BlockCollisionBox& box : boxes) {
+        volume += boxVolume(box);
+    }
+    return volume;
+}
+
+bool boxesIntersect(const BlockCollisionBox& a, const BlockCollisionBox& b) {
+    return a.min.x < b.max.x && a.max.x > b.min.x &&
+           a.min.y < b.max.y && a.max.y > b.min.y &&
+           a.min.z < b.max.z && a.max.z > b.min.z;
+}
+
+bool anyBoxesIntersect(const std::vector<BlockCollisionBox>& a,
+                       const std::vector<BlockCollisionBox>& b) {
+    for (const BlockCollisionBox& aBox : a) {
+        for (const BlockCollisionBox& bBox : b) {
+            if (boxesIntersect(aBox, bBox)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool containsBox(const BlockCollisionBox& container, const BlockCollisionBox& box) {
+    return container.min.x <= box.min.x + kPlacementEpsilon &&
+           container.min.y <= box.min.y + kPlacementEpsilon &&
+           container.min.z <= box.min.z + kPlacementEpsilon &&
+           container.max.x + kPlacementEpsilon >= box.max.x &&
+           container.max.y + kPlacementEpsilon >= box.max.y &&
+           container.max.z + kPlacementEpsilon >= box.max.z;
+}
+
+bool boxesCoverAll(const std::vector<BlockCollisionBox>& containers,
+                   const std::vector<BlockCollisionBox>& boxes) {
+    for (const BlockCollisionBox& box : boxes) {
+        bool covered = false;
+        for (const BlockCollisionBox& container : containers) {
+            if (containsBox(container, box)) {
+                covered = true;
+                break;
+            }
+        }
+        if (!covered) {
+            return false;
+        }
+    }
+    return true;
+}
+
 uint16_t halfFromHit(const PlacementContext& ctx) {
     if (PropIndices::HALF == PropIndices::INVALID ||
         PropIndices::HALF_TOP == PropIndices::INVALID ||
@@ -176,6 +236,58 @@ StateID strategyWall(const PlacementContext& ctx) {
 }
 
 } // namespace
+
+bool tryMergePlacementStates(const StateID existingState,
+                             const StateID incomingState,
+                             StateID& mergedState) {
+    const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
+    if (blockId == BlockIds::AIR || blockId != BlockStateRegistry::getBlockId(incomingState)) {
+        return false;
+    }
+
+    const std::vector<BlockCollisionBox> existingBoxes = BlockCollision::getBoxes(existingState);
+    const std::vector<BlockCollisionBox> incomingBoxes = BlockCollision::getBoxes(incomingState);
+    if (existingBoxes.empty() || incomingBoxes.empty() || anyBoxesIntersect(existingBoxes, incomingBoxes)) {
+        return false;
+    }
+
+    const float mergedVolume = totalBoxVolume(existingBoxes) + totalBoxVolume(incomingBoxes);
+    for (const StateID candidateState : BlockStateRegistry::getStatesForBlock(blockId)) {
+        const std::vector<BlockCollisionBox> candidateBoxes = BlockCollision::getBoxes(candidateState);
+        if (candidateBoxes.empty()) {
+            continue;
+        }
+        if (std::abs(totalBoxVolume(candidateBoxes) - mergedVolume) > kPlacementEpsilon) {
+            continue;
+        }
+        if (!boxesCoverAll(candidateBoxes, existingBoxes) ||
+            !boxesCoverAll(candidateBoxes, incomingBoxes)) {
+            continue;
+        }
+
+        mergedState = candidateState;
+        return true;
+    }
+
+    return false;
+}
+
+bool canReplaceWithMergedPlacementResult(const StateID existingState,
+                                         const StateID resultState) {
+    const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
+    if (blockId == BlockIds::AIR || blockId != BlockStateRegistry::getBlockId(resultState)) {
+        return false;
+    }
+
+    for (const StateID incomingState : BlockStateRegistry::getStatesForBlock(blockId)) {
+        StateID mergedState = BlockIds::AIR;
+        if (tryMergePlacementStates(existingState, incomingState, mergedState) &&
+            mergedState == resultState) {
+            return true;
+        }
+    }
+    return false;
+}
 
 void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("simple", strategySimple);

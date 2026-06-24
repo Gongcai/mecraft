@@ -34,6 +34,7 @@ struct GameplayBlockActionRequest {
     float placeCooldownRemaining = 0.0f;
     BlockID targetBlock = 0;
     bool playerWouldOverlapPlaceBlock = false;
+    bool placementReplacesTarget = false;
 };
 
 namespace gameplay_mode_rules_detail {
@@ -50,7 +51,9 @@ namespace gameplay_mode_rules_detail {
         if (request.placeCooldownRemaining > 0.0f) {
             return GameplayBlockAction::None;
         }
-        if (request.targetBlock != 0 && !FluidState::isWater(request.targetBlock)) {
+        if (request.targetBlock != 0 &&
+            !FluidState::isWater(request.targetBlock) &&
+            !request.placementReplacesTarget) {
             return GameplayBlockAction::None;
         }
         if (request.playerWouldOverlapPlaceBlock) {

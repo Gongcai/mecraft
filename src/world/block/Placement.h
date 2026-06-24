@@ -17,6 +17,12 @@ struct PlacementContext {
 
 using PlacementStrategyFn = StateID(*)(const PlacementContext&);
 
+[[nodiscard]] bool tryMergePlacementStates(StateID existingState,
+                                           StateID incomingState,
+                                           StateID& mergedState);
+[[nodiscard]] bool canReplaceWithMergedPlacementResult(StateID existingState,
+                                                       StateID resultState);
+
 class PlacementStrategyRegistry {
 public:
     static void registerStrategy(const std::string& name, PlacementStrategyFn fn);

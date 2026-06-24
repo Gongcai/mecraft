@@ -223,6 +223,9 @@ int main() {
     if (oakSlabDef.placementStrategy != "slab") {
         return fail("oak_slab should parse slab placement strategy");
     }
+    if (PropIndices::HALF_DOUBLE == PropIndices::INVALID) {
+        return fail("half=double should be registered for stacked slabs");
+    }
     const StateID oakSlabTop = BlockStateRegistry::getState(
         oakSlab,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -232,6 +235,16 @@ int main() {
     if (oakSlabVariant == nullptr || oakSlabVariant->model == nullptr ||
         oakSlabVariant->model->name != "block/oak_slab_top") {
         return fail("oak_slab top state should resolve to the top slab model");
+    }
+    const StateID oakSlabDouble = BlockStateRegistry::getState(
+        oakSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_DOUBLE}
+        });
+    const ModelVariant* oakSlabDoubleVariant = BlockStateRegistry::getModelVariant(oakSlabDouble);
+    if (oakSlabDoubleVariant == nullptr || oakSlabDoubleVariant->model == nullptr ||
+        oakSlabDoubleVariant->model->name != "block/oak_slab_double") {
+        return fail("oak_slab double state should resolve to the full slab model");
     }
 
     const BlockID cauldron = BlockRegistry::findByName("cauldron");
@@ -375,6 +388,18 @@ int main() {
     const StateID slabPlacedTop = slabStrategy(slabTopPlacement);
     if (BlockStateRegistry::getPropertyIndex(slabPlacedTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
         return fail("slab placement should place top slabs on downward-facing hits");
+    }
+
+    StateID slabMerged = BlockIds::AIR;
+    if (!tryMergePlacementStates(slabPlacedBottom, slabPlacedTop, slabMerged) ||
+        slabMerged != oakSlabDouble) {
+        return fail("bottom and top slab placement states should merge into a double slab");
+    }
+    if (!canReplaceWithMergedPlacementResult(slabPlacedBottom, oakSlabDouble)) {
+        return fail("server placement validation should accept legal slab merge results");
+    }
+    if (canReplaceWithMergedPlacementResult(slabPlacedBottom, slabPlacedTop)) {
+        return fail("server placement validation should reject non-merged occupied slab replacement");
     }
 
     PlacementContext slabSideTopPlacement;

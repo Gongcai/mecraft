@@ -99,6 +99,15 @@ int main() {
     if (topSlabBox.min.y != 0.5f || topSlabBox.max.y != 1.0f) {
         return fail("top slab selection box should cover the upper half");
     }
+    const StateID doubleSlab = BlockStateRegistry::getState(
+        oakSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_DOUBLE}
+        });
+    const BlockSelectionBox doubleSlabBox = BlockSelection::getBox(doubleSlab);
+    if (doubleSlabBox.min.y != 0.0f || doubleSlabBox.max.y != 1.0f) {
+        return fail("double slab selection box should cover the full block");
+    }
     const std::vector<BlockCollisionBox> bottomSlabCollision = BlockCollision::getBoxes(bottomSlab);
     if (bottomSlabCollision.size() != 1 ||
         bottomSlabCollision.front().min.y != 0.0f ||
@@ -110,6 +119,12 @@ int main() {
         topSlabCollision.front().min.y != 0.5f ||
         topSlabCollision.front().max.y != 1.0f) {
         return fail("top slab collision should use the upper model element");
+    }
+    const std::vector<BlockCollisionBox> doubleSlabCollision = BlockCollision::getBoxes(doubleSlab);
+    if (doubleSlabCollision.size() != 1 ||
+        doubleSlabCollision.front().min.y != 0.0f ||
+        doubleSlabCollision.front().max.y != 1.0f) {
+        return fail("double slab collision should cover the full block");
     }
 
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");

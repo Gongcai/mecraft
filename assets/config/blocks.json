@@ -250,7 +250,7 @@
       "renderShape": "model",
       "placementStrategy": "slab",
       "properties": {
-        "half": ["bottom", "top"]
+        "half": ["bottom", "top", "double"]
       },
       "defaultState": {
         "half": "bottom"
@@ -261,7 +261,8 @@
       },
       "modelVariants": {
         "half=bottom": { "model": "block/oak_slab" },
-        "half=top": { "model": "block/oak_slab_top" }
+        "half=top": { "model": "block/oak_slab_top" },
+        "half=double": { "model": "block/oak_slab_double" }
       }
     },
     {

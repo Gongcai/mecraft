@@ -655,3 +655,15 @@ std::string BlockStateRegistry::stateToString(const StateID stateId) {
 size_t BlockStateRegistry::getStateCount() {
     return s_states.size();
 }
+
+std::vector<StateID> BlockStateRegistry::getStatesForBlock(const BlockID blockId) {
+    std::vector<StateID> states;
+    const bool hasExpandedStates = s_blockPropertyLayouts.find(blockId) != s_blockPropertyLayouts.end();
+    for (const BlockStateEntry& entry : s_states) {
+        if (entry.blockId == blockId &&
+            (!hasExpandedStates || entry.propertyCount > 0)) {
+            states.push_back(entry.stateId);
+        }
+    }
+    return states;
+}

@@ -440,6 +440,70 @@ static void testClientBlockActionRoundTrip() {
     std::printf("[PASS] testClientBlockActionRoundTrip\n");
 }
 
+static void testClientBlockActionMergesStackedSlabs() {
+    ServerHarness harness;
+    client::GameClient client;
+
+    auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
+    harness.server.acceptClient(std::move(serverTransport), 1);
+    client.connect(std::move(clientTransport));
+
+    const glm::ivec3 placeBlock(1, Chunk::SIZE_Y - 8, 1);
+    for (int tick = 0;
+         tick < 240 && !harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+         ++tick) {
+        harness.server.tick(1.0f / 20.0f);
+        client.receiveMessages();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z),
+            "slab merge test chunk should be loaded");
+
+    const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
+    require(oakSlab != BlockIds::AIR, "oak_slab should be registered for server slab merge test");
+    const StateID bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
+    const StateID topSlab = BlockStateRegistry::getState(
+        oakSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_TOP}
+        });
+    const StateID doubleSlab = BlockStateRegistry::getState(
+        oakSlab,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::HALF, PropIndices::HALF_DOUBLE}
+        });
+
+    harness.server.world().setBlock(placeBlock.x, placeBlock.y, placeBlock.z, bottomSlab);
+
+    net::ClientBlockAction merge;
+    merge.sequence = 1;
+    merge.action = net::ClientBlockActionType::Place;
+    merge.targetBlock = placeBlock;
+    merge.placeBlock = placeBlock;
+    merge.hitNormal = {0, 1, 0};
+    merge.playerPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
+    merge.blockState = static_cast<uint16_t>(doubleSlab);
+    client.sendBlockAction(merge);
+
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+    require(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == doubleSlab,
+            "server should accept a legal bottom+top slab merge result");
+
+    harness.server.world().setBlock(placeBlock.x, placeBlock.y, placeBlock.z, bottomSlab);
+
+    net::ClientBlockAction invalidReplace = merge;
+    invalidReplace.sequence = 2;
+    invalidReplace.blockState = static_cast<uint16_t>(topSlab);
+    client.sendBlockAction(invalidReplace);
+
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+    require(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == bottomSlab,
+            "server should reject occupied slab replacement that is not a merge result");
+    std::printf("[PASS] testClientBlockActionMergesStackedSlabs\n");
+}
+
 static void testChatBroadcastRoundTrip() {
     ServerHarness harness;
     client::GameClient clientA;
@@ -3295,6 +3359,7 @@ int main() {
     testClientAppliesPlayerHealthSnapshot();
     testClientAppliesInventorySnapshot();
     testClientBlockActionRoundTrip();
+    testClientBlockActionMergesStackedSlabs();
     testChatBroadcastRoundTrip();
     testAdminCommandUpdatesWorldState();
     testNonAdminCommandDenied();

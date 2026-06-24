@@ -80,6 +80,7 @@ public:
     static const std::string& getPropertyValue(uint16_t nameIndex, uint16_t valueIndex);
     static std::string stateToString(StateID stateId);
     static size_t getStateCount();
+    static std::vector<StateID> getStatesForBlock(BlockID blockId);
 
 private:
     struct RegisteredBlockProperties {

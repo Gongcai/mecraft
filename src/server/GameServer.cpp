@@ -3,6 +3,7 @@
 #include "../world/World.h"
 #include "../world/WeatherSystem.h"
 #include "../world/block/Block.h"
+#include "../world/block/Placement.h"
 #include "../thread/ThreadPool.h"
 #include "../save/SaveManager.h"
 #include "../ecs/GameplayPipeline.h"
@@ -17,6 +18,7 @@
 #include "../item/Item.h"
 #include "../physics/PhysicsSystem.h"
 #include "../world/block/BlockStateRegistry.h"
+#include "../world/fluid/FluidState.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -1379,7 +1381,11 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     if (action.blockState == BlockIds::AIR) {
         return;
     }
-    if (m_world.getBlock(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z) != BlockIds::AIR) {
+    const StateID existingPlaceState =
+        m_world.getBlockState(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z);
+    if (existingPlaceState != BlockIds::AIR &&
+        !FluidState::isWater(existingPlaceState) &&
+        !canReplaceWithMergedPlacementResult(existingPlaceState, action.blockState)) {
         return;
     }
 
