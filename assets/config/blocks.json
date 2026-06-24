@@ -196,6 +196,7 @@
       "drop": "minecraft:furnace",
       "materialKind": "stone",
       "placementStrategy": "horizontal_facing",
+      "revert": true,
       "properties": {
         "facing": ["north", "south", "east", "west"]
       },

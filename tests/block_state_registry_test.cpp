@@ -108,6 +108,13 @@ int main() {
     if (furnace == BlockIds::AIR) {
         return fail("furnace should be registered from blocks.json");
     }
+    const BlockDef& furnaceDef = BlockRegistry::get(furnace);
+    if (furnaceDef.placementStrategy != "horizontal_facing") {
+        return fail("furnace should parse horizontal_facing placement strategy");
+    }
+    if (!furnaceDef.revertPlacementFacing) {
+        return fail("furnace should face back toward the placing player");
+    }
     const StateID furnaceSouth = BlockStateRegistry::getState(furnace, PropIndices::FACING, PropIndices::FACING_SOUTH);
     const StateID furnaceNorth = BlockStateRegistry::getState(furnace, PropIndices::FACING, PropIndices::FACING_NORTH);
     const StateID furnaceEast = BlockStateRegistry::getState(furnace, PropIndices::FACING, PropIndices::FACING_EAST);
@@ -129,6 +136,17 @@ int main() {
     if (furnaceWestTextures.faceLeft.firstLayer != furnaceFrontLayer ||
         furnaceWestTextures.faceFront.firstLayer != furnaceSideLayer) {
         return fail("west-facing furnace should place the front texture on the left face");
+    }
+    PlacementStrategyFn furnaceStrategy = PlacementStrategyRegistry::getStrategy(furnaceDef.placementStrategy);
+    if (furnaceStrategy == nullptr) {
+        return fail("furnace placement strategy should be registered");
+    }
+    PlacementContext furnacePlacement;
+    furnacePlacement.blockId = furnace;
+    furnacePlacement.playerYaw = 270.0f;
+    const StateID furnacePlacedSouth = furnaceStrategy(furnacePlacement);
+    if (BlockStateRegistry::getPropertyIndex(furnacePlacedSouth, PropIndices::FACING) != PropIndices::FACING_SOUTH) {
+        return fail("furnace placement should face back toward the placing player");
     }
 
     const std::string torchStateString = BlockStateRegistry::stateToString(torchNorth);
