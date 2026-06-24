@@ -12,12 +12,14 @@
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
+#include "save/SaveManager.h"
 #include "item/Item.h"
 #include "world/World.h"
 #include "world/DayNightSystem.h"
 #include "world/WeatherSystem.h"
 #include "world/block/Block.h"
 #include "world/block/BlockStateRegistry.h"
+#include "world/block/PropIndices.h"
 #include "renderer/mesh/ChunkMesher.h"
 #include "thread/ThreadPool.h"
 #include <cassert>
@@ -2320,6 +2322,79 @@ static void testPersistentChestInventoryRestoresFromSave() {
     std::printf("[PASS] testPersistentChestInventoryRestoresFromSave\n");
 }
 
+static void testPersistentChestBlockRestoresFromSave() {
+    const std::filesystem::path saveRoot = "test_server_chest_block_save";
+    std::filesystem::remove_all(saveRoot);
+    const glm::ivec3 chestPos(2, Chunk::SIZE_Y - 8, 3);
+    const StateID eastChest = BlockStateRegistry::getState(
+        BlockIds::CHEST,
+        PropIndices::FACING,
+        PropIndices::FACING_EAST);
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Chest Block Save Test");
+
+        for (int tick = 0;
+             tick < 240 && !server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
+             ++tick) {
+            server.tick(1.0f / 20.0f);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        require(server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
+                "test setup should load the chest chunk before placement");
+
+        server.world().setBlock(chestPos.x, chestPos.y, chestPos.z, eastChest);
+        server.shutdown();
+    }
+
+    {
+        save::SaveManager mgr(saveRoot);
+        std::vector<save::BlockEntityData> blockEntities;
+        require(mgr.loadBlockEntities(blockEntities),
+                "persistent chest block save should write block entity data");
+
+        bool sawEmptyChestEntity = false;
+        for (const save::BlockEntityData& entity : blockEntities) {
+            if (entity.type == "minecraft:chest" &&
+                entity.x == chestPos.x &&
+                entity.y == chestPos.y &&
+                entity.z == chestPos.z &&
+                entity.slots.empty()) {
+                sawEmptyChestEntity = true;
+                break;
+            }
+        }
+        require(sawEmptyChestEntity,
+                "persistent chest block save should include an empty chest block entity");
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Chest Block Save Test");
+
+        for (int tick = 0;
+             tick < 240 && !server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
+             ++tick) {
+            server.tick(1.0f / 20.0f);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        require(server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
+                "test setup should load the saved chest chunk");
+
+        const StateID loadedState = server.world().getBlock(chestPos.x, chestPos.y, chestPos.z);
+        require(BlockStateRegistry::getBlockId(loadedState) == BlockIds::CHEST,
+                "persistent chest block save should restore the chest block from chunk data");
+        require(BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) == PropIndices::FACING_EAST,
+                "persistent chest block save should preserve the chest facing state");
+
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testPersistentChestBlockRestoresFromSave\n");
+}
+
 static void testServerBlockActionBreaksChestLifecycle() {
     ServerHarness harness(2);
     ecs::GameplayRegistry registry;
@@ -3243,6 +3318,7 @@ int main() {
     testPersistentZombieRestoresFromSave();
     testPersistentDropRestoresFromSave();
     testPersistentChestInventoryRestoresFromSave();
+    testPersistentChestBlockRestoresFromSave();
     testServerBlockActionBreaksChestLifecycle();
     testOwnedServerEcsRestoresPersistentZombie();
     testOwnedServerEcsRestoresPersistentDrop();

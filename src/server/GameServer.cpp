@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace server {
@@ -61,6 +62,26 @@ std::string normalizeEntityCommandId(const std::string& value) {
     }
     return value.find(':') == std::string::npos ? "minecraft:" + value : value;
 }
+
+struct BlockEntityPositionKey {
+    int x = 0;
+    int y = 0;
+    int z = 0;
+
+    [[nodiscard]] bool operator==(const BlockEntityPositionKey& other) const {
+        return x == other.x && y == other.y && z == other.z;
+    }
+};
+
+struct BlockEntityPositionHash {
+    [[nodiscard]] std::size_t operator()(const BlockEntityPositionKey& key) const {
+        const std::size_t hx = std::hash<int>{}(key.x);
+        const std::size_t hy = std::hash<int>{}(key.y);
+        const std::size_t hz = std::hash<int>{}(key.z);
+        return hx ^ (hy + 0x9e3779b9u + (hx << 6u) + (hx >> 2u)) ^
+               (hz + 0x9e3779b9u + (hy << 6u) + (hy >> 2u));
+    }
+};
 
 net::NetworkWeatherType toNetworkWeather(const WeatherType type) {
     switch (type) {
@@ -1791,17 +1812,64 @@ std::vector<save::PersistentEntityData> GameServer::snapshotPersistentEntities()
 
 std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
     std::vector<save::BlockEntityData> entities;
-    if (m_ecsRegistry == nullptr || !m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
-        return entities;
-    }
+    std::unordered_map<BlockEntityPositionKey, std::size_t, BlockEntityPositionHash> entityByPosition;
 
-    const ChestInventoryStore& store = m_ecsRegistry->ctx().get<ChestInventoryStore>();
-    store.forEach([&entities](const glm::ivec3& position, const ChestInventory& chest) {
+    const auto ensureChestEntry = [&entities, &entityByPosition](const glm::ivec3& position) -> save::BlockEntityData& {
+        const BlockEntityPositionKey key{position.x, position.y, position.z};
+        const auto found = entityByPosition.find(key);
+        if (found != entityByPosition.end()) {
+            return entities[found->second];
+        }
+
         save::BlockEntityData data;
         data.type = "minecraft:chest";
         data.x = position.x;
         data.y = position.y;
         data.z = position.z;
+        entities.push_back(std::move(data));
+        const std::size_t index = entities.size() - 1u;
+        entityByPosition.emplace(key, index);
+        return entities[index];
+    };
+
+    for (const auto& [chunkKey, chunk] : m_world.getActiveChunks()) {
+        static_cast<void>(chunkKey);
+        if (!chunk) {
+            continue;
+        }
+
+        const glm::ivec3 worldOffset = chunk->getWorldOffset();
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            const SubChunk* subChunk = chunk->getSubChunk(scy);
+            if (subChunk == nullptr || subChunk->getType() == SubChunkType::Air) {
+                continue;
+            }
+
+            const int yBase = scy * SubChunk::SIZE;
+            for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+                for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                    for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                        const StateID state = subChunk->getBlock(x, ly, z);
+                        if (BlockStateRegistry::getBlockId(state) != BlockIds::CHEST) {
+                            continue;
+                        }
+                        ensureChestEntry(glm::ivec3(worldOffset.x + x,
+                                                    yBase + ly,
+                                                    worldOffset.z + z));
+                    }
+                }
+            }
+        }
+    }
+
+    if (m_ecsRegistry == nullptr || !m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
+        return entities;
+    }
+
+    const ChestInventoryStore& store = m_ecsRegistry->ctx().get<ChestInventoryStore>();
+    store.forEach([&ensureChestEntry](const glm::ivec3& position, const ChestInventory& chest) {
+        save::BlockEntityData& data = ensureChestEntry(position);
+        data.slots.clear();
 
         for (int slot = 0; slot < ChestInventory::SLOT_COUNT; ++slot) {
             const ItemStack stack = chest.getSlotStack(slot);
@@ -1816,10 +1884,6 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
             slotData.durability = stack.durability;
             data.slots.push_back(slotData);
         }
-
-        if (!data.slots.empty()) {
-            entities.push_back(std::move(data));
-        }
     });
 
     return entities;
@@ -1833,10 +1897,14 @@ void GameServer::savePersistentEntities() {
 }
 
 void GameServer::saveBlockEntities() {
-    if (!m_saveManager || m_ecsRegistry == nullptr) {
+    if (!m_saveManager) {
         return;
     }
-    m_saveManager->saveBlockEntities(snapshotBlockEntities());
+    std::vector<save::BlockEntityData> entities = snapshotBlockEntities();
+    if (m_ecsRegistry == nullptr && entities.empty()) {
+        return;
+    }
+    m_saveManager->saveBlockEntities(entities);
 }
 
 void GameServer::restorePersistentEntities() {

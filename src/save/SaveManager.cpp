@@ -433,7 +433,7 @@ void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities
     root["blockEntities"] = nlohmann::json::array();
 
     for (const BlockEntityData& entity : entities) {
-        if (entity.type.empty() || entity.slots.empty()) {
+        if (entity.type.empty()) {
             continue;
         }
 
@@ -450,10 +450,6 @@ void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities
                     {"durability", slot.durability}
                 }}
             });
-        }
-
-        if (slots.empty()) {
-            continue;
         }
 
         nlohmann::json j;
@@ -555,9 +551,7 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
                 entity.slots.push_back(slot);
             }
 
-            if (!entity.slots.empty()) {
-                out.push_back(std::move(entity));
-            }
+            out.push_back(std::move(entity));
         }
 
         return true;

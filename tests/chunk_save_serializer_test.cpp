@@ -287,6 +287,35 @@ static void testBlockStateRoundTrip() {
     std::printf("[PASS] testBlockStateRoundTrip\n");
 }
 
+static void testChestBlockStateRoundTrip() {
+    auto original = std::make_shared<Chunk>(0, 0);
+
+    const StateID eastChest = BlockStateRegistry::getState(
+        BlockIds::CHEST,
+        PropIndices::FACING,
+        PropIndices::FACING_EAST);
+    original->setBlock(6, 70, 5, eastChest);
+
+    const std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
+    auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
+    if (loaded == nullptr) {
+        std::fprintf(stderr, "[FAIL] chunk with chest state should deserialize\n");
+        std::abort();
+    }
+
+    const StateID loadedState = loaded->getBlock(6, 70, 5);
+    if (BlockStateRegistry::getBlockId(loadedState) != BlockIds::CHEST ||
+        BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) != PropIndices::FACING_EAST) {
+        std::fprintf(stderr,
+                     "[FAIL] chunk serializer should preserve chest state: expected=%s loaded=%s\n",
+                     BlockStateRegistry::stateToString(eastChest).c_str(),
+                     BlockStateRegistry::stateToString(loadedState).c_str());
+        std::abort();
+    }
+
+    std::printf("[PASS] testChestBlockStateRoundTrip\n");
+}
+
 static void testBareStateNameLoadsDefaultBlockState() {
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
     if (oakStairs == BlockIds::AIR) {
@@ -613,7 +642,7 @@ static void testSaveManagerBlockEntitiesRoundTrip() {
 
     std::vector<save::BlockEntityData> loaded;
     assert(mgr.loadBlockEntities(loaded));
-    assert(loaded.size() == 1);
+    assert(loaded.size() == 2);
     assert(loaded[0].type == "minecraft:chest");
     assert(loaded[0].x == chest.x);
     assert(loaded[0].y == chest.y);
@@ -625,6 +654,11 @@ static void testSaveManagerBlockEntitiesRoundTrip() {
     assert(loaded[0].slots[1].slot == pickaxe.slot);
     assert(loaded[0].slots[1].itemId == pickaxe.itemId);
     assert(loaded[0].slots[1].durability == pickaxe.durability);
+    assert(loaded[1].type == "minecraft:chest");
+    assert(loaded[1].x == emptyChest.x);
+    assert(loaded[1].y == emptyChest.y);
+    assert(loaded[1].z == emptyChest.z);
+    assert(loaded[1].slots.empty());
 
     mgr.saveBlockEntities({});
     loaded.clear();
@@ -745,6 +779,7 @@ int main() {
     testNegativeCoordinatesRoundTrip();
     testMixedBlocksInSubchunk();
     testBlockStateRoundTrip();
+    testChestBlockStateRoundTrip();
     testBareStateNameLoadsDefaultBlockState();
     testInvalidPackedPaletteIndexRejected();
     testFluidLayerRoundTrip();
