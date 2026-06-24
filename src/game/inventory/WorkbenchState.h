@@ -26,6 +26,8 @@ public:
 
         InventoryPanelLayout layout = m_previousLayout;
         layout.backgroundTextureName = "crafting_table";
+        layout.backgroundAtlasWidth = 256.0f;
+        layout.backgroundAtlasHeight = 256.0f;
         layout.showPlayerPreview = false;
         layout.gridOffsetX = 6.8f;
         layout.gridOffsetY = 84.0f;

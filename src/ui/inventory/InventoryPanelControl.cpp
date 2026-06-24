@@ -292,14 +292,20 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
     const float y0 = panelRect.y;
     const float x1 = panelRect.x + panelRect.width;
     const float y1 = panelRect.y + panelRect.height;
+    const float atlasWidth = m_layout.backgroundAtlasWidth;
+    const float atlasHeight = m_layout.backgroundAtlasHeight;
+    const float u0 = 0.0f;
+    const float u1 = InventoryPanelLayout::kTextureWidth / atlasWidth;
+    const float v0 = 1.0f - InventoryPanelLayout::kTextureHeight / atlasHeight;
+    const float v1 = 1.0f;
 
     const float vertices[] = {
-        x0, y0, 0.0f, 0.0f,
-        x1, y0, 1.0f, 0.0f,
-        x1, y1, 1.0f, 1.0f,
-        x0, y0, 0.0f, 0.0f,
-        x1, y1, 1.0f, 1.0f,
-        x0, y1, 0.0f, 1.0f,
+        x0, y0, u0, v0,
+        x1, y0, u1, v0,
+        x1, y1, u1, v1,
+        x0, y0, u0, v0,
+        x1, y1, u1, v1,
+        x0, y1, u0, v1,
     };
 
     glDisable(GL_DEPTH_TEST);

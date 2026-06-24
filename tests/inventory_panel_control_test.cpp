@@ -66,8 +66,6 @@ int main() {
         return fail("row 4 col 3 should map to slot index 29");
     }
 
-    panel.shutdown();
-
     std::cout << "[inventory_panel_control_test] PASS\n";
     return EXIT_SUCCESS;
 }

@@ -16,6 +16,8 @@ struct InventoryPanelLayout {
     static constexpr float kTextureWidth = 176.0f;
     static constexpr float kTextureHeight = 166.0f;
     std::string backgroundTextureName = "inventory";
+    float backgroundAtlasWidth = kTextureWidth;
+    float backgroundAtlasHeight = kTextureHeight;
     bool showPlayerPreview = true;
 
     // Anchor is normalized to current screen size (0..1).
@@ -47,6 +49,10 @@ struct InventoryPanelLayout {
 
 class InventoryPanelControl : public UIWidget {
 public:
+    InventoryPanelControl() {
+        visible = false;
+    }
+
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
 
