@@ -428,6 +428,81 @@ static void testMobSpawnCreatesConfiguredCreeperReplica() {
     require(genericPartCount == 7, "creeper replica should create generic model part entities");
 }
 
+static void testMobSpawnCreatesConfiguredPassiveAnimalReplicas() {
+    struct ExpectedAnimal {
+        const char* id;
+        const char* texture;
+        uint16_t health;
+    };
+
+    const ExpectedAnimal animals[] = {
+        {"minecraft:cow", "cow", 10},
+        {"minecraft:pig", "pig", 10},
+        {"minecraft:sheep", "sheep", 8},
+    };
+
+    for (const ExpectedAnimal& expected : animals) {
+        client::ClientEntityStore store;
+        ecs::GameplayRegistry registry;
+        store.init(registry, nullptr);
+
+        net::EntitySpawnMessage spawn;
+        spawn.netId = 100;
+        spawn.kind = net::EntityKind::Mob;
+        spawn.entityId = expected.id;
+        spawn.position = glm::vec3(4.0f, 64.0f, -5.0f);
+        spawn.yaw = 75.0f;
+        store.handleSpawn(spawn);
+
+        require(store.remoteEntityCount() == 1, "passive animal spawn was not tracked");
+        require(store.hasEntity(100), "passive animal netId missing");
+
+        auto& raw = registry.registry();
+        auto view = raw.view<ecs::MobTag,
+                             ecs::MobVisualComponent,
+                             ecs::EntityModelComponent,
+                             ecs::ChildrenComponent,
+                             ecs::MobAIComponent,
+                             ecs::HealthComponent,
+                             ecs::EntityTypeComponent,
+                             ecs::EntityNetIdComponent>();
+        require(view.begin() != view.end(), "passive animal replica components missing");
+        const entt::entity mob = *view.begin();
+        const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
+        const auto& model = raw.get<ecs::EntityModelComponent>(mob);
+        const auto& ai = raw.get<ecs::MobAIComponent>(mob);
+        const auto& health = raw.get<ecs::HealthComponent>(mob);
+
+        require(raw.get<ecs::EntityTypeComponent>(mob).entityId == expected.id,
+                "passive animal replica should keep the network entity id");
+        require(visual.model == expected.id &&
+                visual.textureKey == expected.texture &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
+                "passive animal replica should apply configured visual data");
+        require(model.modelId == expected.id &&
+                model.animationId == "minecraft:quadruped_walk" &&
+                model.yawPartName == "root",
+                "passive animal replica should apply generic model metadata");
+        require(std::fabs(ai.yaw - 75.0f) < 0.001f,
+                "passive animal replica should initialize synced yaw");
+        require(!ai.targetsPlayers,
+                "passive animal replica should preserve passive AI tuning");
+        require(health.current == expected.health && health.max == expected.health,
+                "passive animal replica should initialize configured synced health");
+
+        int genericPartCount = 0;
+        auto partView = raw.view<ecs::EntityModelPartComponent,
+                                 ecs::LocalTransformComponent,
+                                 ecs::WorldTransformComponent,
+                                 ecs::ParentComponent>();
+        for (const entt::entity partEntity : partView) {
+            static_cast<void>(partEntity);
+            ++genericPartCount;
+        }
+        require(genericPartCount == 7, "passive animal replica should create generic model part entities");
+    }
+}
+
 static void testProjectileSpawnCreatesAppleReplica() {
     client::ClientEntityStore store;
     ecs::GameplayRegistry registry;
@@ -570,6 +645,7 @@ int main() {
     testMobSpawnCreatesZombieReplica();
     testMobSpawnCreatesConfiguredHerobrineReplica();
     testMobSpawnCreatesConfiguredCreeperReplica();
+    testMobSpawnCreatesConfiguredPassiveAnimalReplicas();
     testProjectileSpawnCreatesAppleReplica();
     std::printf("All ClientEntityStore tests passed!\n");
     return 0;

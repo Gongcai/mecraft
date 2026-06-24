@@ -106,6 +106,28 @@ void applyMobVisual(entt::registry& registry,
     }
 }
 
+void applyMobAI(entt::registry& registry,
+                const entt::entity entity,
+                const ecs::MobEntityDefinition* definition) {
+    if (entity == entt::null || !registry.valid(entity) || definition == nullptr) {
+        return;
+    }
+
+    auto* ai = registry.try_get<ecs::MobAIComponent>(entity);
+    if (ai == nullptr) {
+        ai = &registry.emplace<ecs::MobAIComponent>(entity);
+    }
+    ai->wanderInterval = definition->ai.wanderInterval;
+    ai->wanderSpeed = definition->ai.wanderSpeed;
+    ai->pursueSpeed = definition->ai.pursueSpeed;
+    ai->acquisitionRange = definition->ai.acquisitionRange;
+    ai->loseTargetRange = definition->ai.loseTargetRange;
+    ai->attackRange = definition->ai.attackRange;
+    ai->attackCooldownSeconds = definition->ai.attackCooldownSeconds;
+    ai->attackDamage = definition->ai.attackDamage;
+    ai->targetsPlayers = definition->ai.targetsPlayers;
+}
+
 struct ImpactAudio {
     std::string soundId;
     float volume = 1.0f;
@@ -618,6 +640,7 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     m_registry->emplace<ecs::HurtEffectComponent>(entity);
     m_registry->emplace<ecs::EntityTypeComponent>(entity, entityId);
     applyMobVisual(*m_registry, entity, mobDefinition);
+    applyMobAI(*m_registry, entity, mobDefinition);
     applyMobHurtEffect(*m_registry, entity, mobDefinition);
     applyMobDeathEffect(*m_registry, entity, mobDefinition);
     m_registry->emplace<ecs::NetworkSyncTag>(entity);

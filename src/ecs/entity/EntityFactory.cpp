@@ -63,6 +63,7 @@ void applyMobDefinition(GameplayRegistry& registry,
         ai->attackRange = definition.ai.attackRange;
         ai->attackCooldownSeconds = definition.ai.attackCooldownSeconds;
         ai->attackDamage = definition.ai.attackDamage;
+        ai->targetsPlayers = definition.ai.targetsPlayers;
     }
 
     if (auto* physicsBody = reg.try_get<PhysicsBodyComponent>(entity)) {

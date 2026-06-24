@@ -50,6 +50,41 @@ static void testMobYawUsesCameraConvention() {
             "mob should move toward +X target");
 }
 
+static void testPassiveMobDoesNotTargetPlayer() {
+    ecs::GameplayRegistry registry;
+    ecs::GameplayServices services;
+    auto& raw = registry.registry();
+
+    const entt::entity player = raw.create();
+    raw.emplace<ecs::LocalPlayerTag>(player);
+    raw.emplace<ecs::TransformComponent>(player, glm::vec3(2.0f, 64.0f, 0.0f), 1.62f);
+    raw.emplace<ecs::HealthComponent>(player, 20, 20);
+
+    const entt::entity mob = raw.create();
+    raw.emplace<ecs::MobTag>(mob);
+    raw.emplace<ecs::TransformComponent>(mob, glm::vec3(0.0f, 64.0f, 0.0f), 1.1f);
+    auto& ai = raw.emplace<ecs::MobAIComponent>(mob);
+    ai.targetsPlayers = false;
+    ai.target = player;
+    ai.wanderTimer = 10.0f;
+    ai.wanderDir = glm::vec2(0.0f);
+    raw.emplace<ecs::MoveIntentComponent>(mob);
+
+    ecs::MobAISystem system;
+    auto ctx = makeContext(registry, services, 0.05f);
+    system.update(ctx);
+
+    const auto& updatedAi = raw.get<ecs::MobAIComponent>(mob);
+    const auto& move = raw.get<ecs::MoveIntentComponent>(mob);
+    require(updatedAi.target == entt::null,
+            "passive mob AI should clear player targets");
+    require(updatedAi.state != ecs::MobAIComponent::State::Pursue &&
+            updatedAi.state != ecs::MobAIComponent::State::Attack,
+            "passive mob AI should not pursue or attack players");
+    require(std::fabs(move.move.x) < 0.001f && std::fabs(move.move.y) < 0.001f,
+            "passive mob AI should not move toward a cleared player target");
+}
+
 static void testHurtEffectDecayClearsExpiredPendingState() {
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
@@ -73,6 +108,7 @@ static void testHurtEffectDecayClearsExpiredPendingState() {
 
 int main() {
     testMobYawUsesCameraConvention();
+    testPassiveMobDoesNotTargetPlayer();
     testHurtEffectDecayClearsExpiredPendingState();
     std::printf("All Mob AI / HurtEffect tests passed!\n");
     return 0;

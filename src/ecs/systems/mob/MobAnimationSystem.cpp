@@ -96,7 +96,8 @@ void updateGenericModelAnimation(entt::registry& reg,
         }
     }
 
-    if (model.animationId == "minecraft:creeper_walk") {
+    if (model.animationId == "minecraft:creeper_walk" ||
+        model.animationId == "minecraft:quadruped_walk") {
         const float swing = glm::sin(anim.walkCyclePhase) * 35.0f;
         setGenericPartRotationX(reg, entity, "right_hind_leg", swing);
         setGenericPartRotationX(reg, entity, "left_front_leg", swing);

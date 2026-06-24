@@ -98,7 +98,9 @@ void MobAISystem::update(SystemContext& ctx) {
         ai.attackCooldownRemaining = std::max(0.0f, ai.attackCooldownRemaining - dt);
         ai.wanderTimer -= dt;
 
-        if (!isTargetUsable(reg, ai.target, transform.position, ai.loseTargetRange)) {
+        if (!ai.targetsPlayers) {
+            ai.target = entt::null;
+        } else if (!isTargetUsable(reg, ai.target, transform.position, ai.loseTargetRange)) {
             ai.target = findNearestTarget(reg, transform.position, ai.acquisitionRange);
         }
 

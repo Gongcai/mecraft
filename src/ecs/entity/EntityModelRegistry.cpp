@@ -59,6 +59,23 @@ bool readFloat(const json& node,
     return true;
 }
 
+bool readOptionalFloat(const json& node,
+                       const char* key,
+                       float& out,
+                       const std::string& context,
+                       std::string* error) {
+    const auto it = node.find(key);
+    if (it == node.end()) {
+        return true;
+    }
+    if (!it->is_number()) {
+        setError(error, context + "." + key + " must be a number");
+        return false;
+    }
+    out = it->get<float>();
+    return true;
+}
+
 bool readVec2(const json& node,
               const char* key,
               glm::vec2& out,
@@ -107,6 +124,29 @@ bool readVec3(const json& node,
     return true;
 }
 
+bool readOptionalVec3(const json& node,
+                      const char* key,
+                      glm::vec3& out,
+                      const std::string& context,
+                      std::string* error) {
+    const auto it = node.find(key);
+    if (it == node.end()) {
+        return true;
+    }
+    if (!it->is_array() || it->size() != 3) {
+        setError(error, context + "." + key + " must be a 3-number array");
+        return false;
+    }
+    for (std::size_t i = 0; i < 3; ++i) {
+        if (!(*it)[i].is_number()) {
+            setError(error, context + "." + key + " must contain only numbers");
+            return false;
+        }
+    }
+    out = glm::vec3((*it)[0].get<float>(), (*it)[1].get<float>(), (*it)[2].get<float>());
+    return true;
+}
+
 std::array<EntityModelPixelRect, 6> buildCubeUvLayout(const glm::vec2& uv,
                                                        const glm::vec3& size) {
     const float u = uv.x;
@@ -137,7 +177,13 @@ bool parseBox(const json& node,
     glm::vec2 uv{0.0f};
     if (!readVec3(node, "origin", box.origin, context, error) ||
         !readVec3(node, "size", box.size, context, error) ||
-        !readVec2(node, "uv", uv, context, error)) {
+        !readVec2(node, "uv", uv, context, error) ||
+        !readOptionalFloat(node, "inflate", box.inflate, context, error)) {
+        return false;
+    }
+
+    glm::vec3 uvSize = box.size;
+    if (!readOptionalVec3(node, "uvSize", uvSize, context, error)) {
         return false;
     }
 
@@ -145,8 +191,18 @@ bool parseBox(const json& node,
         setError(error, context + ".size values must be positive");
         return false;
     }
+    if (uvSize.x <= 0.0f || uvSize.y <= 0.0f || uvSize.z <= 0.0f) {
+        setError(error, context + ".uvSize values must be positive");
+        return false;
+    }
+    if (box.size.x + box.inflate * 2.0f <= 0.0f ||
+        box.size.y + box.inflate * 2.0f <= 0.0f ||
+        box.size.z + box.inflate * 2.0f <= 0.0f) {
+        setError(error, context + ".inflate collapses the box geometry");
+        return false;
+    }
 
-    box.faceUvs = buildCubeUvLayout(uv, box.size);
+    box.faceUvs = buildCubeUvLayout(uv, uvSize);
     return true;
 }
 

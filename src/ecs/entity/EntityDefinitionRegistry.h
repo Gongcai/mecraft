@@ -25,6 +25,7 @@ struct MobAIDefinition {
     float attackRange = 1.35f;
     float attackCooldownSeconds = 1.1f;
     int attackDamage = 3;
+    bool targetsPlayers = true;
 };
 
 struct MobPhysicsDefinition {

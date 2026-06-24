@@ -182,12 +182,12 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
             uv[i] = pixelRectToUv(rect.x0, rect.y0, rect.x1, rect.y1, textureWidth, textureHeight);
         }
 
-        const float xmin = box.origin.x / 16.0f;
-        const float ymin = box.origin.y / 16.0f;
-        const float zmin = box.origin.z / 16.0f;
-        const float xmax = (box.origin.x + box.size.x) / 16.0f;
-        const float ymax = (box.origin.y + box.size.y) / 16.0f;
-        const float zmax = (box.origin.z + box.size.z) / 16.0f;
+        const float xmin = (box.origin.x - box.inflate) / 16.0f;
+        const float ymin = (box.origin.y - box.inflate) / 16.0f;
+        const float zmin = (box.origin.z - box.inflate) / 16.0f;
+        const float xmax = (box.origin.x + box.size.x + box.inflate) / 16.0f;
+        const float ymax = (box.origin.y + box.size.y + box.inflate) / 16.0f;
+        const float zmax = (box.origin.z + box.size.z + box.inflate) / 16.0f;
 
         struct FaceCorners {
             glm::vec3 pos[4];

@@ -2195,6 +2195,131 @@ static void testEntityFactoryCreatesConfiguredCreeper() {
     std::printf("[PASS] testEntityFactoryCreatesConfiguredCreeper\n");
 }
 
+static void testEntityFactoryCreatesConfiguredPassiveAnimals() {
+    ecs::EntityDefinitionRegistry::instance().clear();
+    ecs::EntityModelRegistry::instance().clear();
+    std::string error;
+    require(ecs::EntityDefinitionRegistry::instance().ensureLoaded(&error),
+            error.empty() ? "entity definitions should load" : error.c_str());
+    require(ecs::EntityModelRegistry::instance().ensureLoaded(&error),
+            error.empty() ? "entity model definitions should load" : error.c_str());
+
+    struct ExpectedAnimal {
+        const char* id;
+        const char* texture;
+        ItemID dropItem;
+        uint32_t minDrop;
+        uint32_t maxDrop;
+        int health;
+        float eyeHeight;
+        float textureHeight;
+        bool hasWoolLayer;
+    };
+
+    const ItemID beef = ItemRegistry::findByName("minecraft:beef");
+    const ItemID porkchop = ItemRegistry::findByName("minecraft:porkchop");
+    const ItemID whiteWool = ItemRegistry::findByName("minecraft:white_wool");
+    require(beef != ItemIds::AIR && porkchop != ItemIds::AIR && whiteWool != ItemIds::AIR,
+            "passive animal drops should resolve to registered items");
+
+    const ExpectedAnimal animals[] = {
+        {"minecraft:cow", "cow", beef, 1u, 3u, 10, 1.3f, 32.0f, false},
+        {"minecraft:pig", "pig", porkchop, 1u, 3u, 10, 0.9f, 32.0f, false},
+        {"minecraft:sheep", "sheep", whiteWool, 1u, 1u, 8, 1.1f, 64.0f, true},
+    };
+
+    for (const ExpectedAnimal& expected : animals) {
+        const ecs::EntityModelDefinition* model = ecs::EntityModelRegistry::instance().findModel(expected.id);
+        require(model != nullptr, "passive animal model definition should load");
+        require(model->parts.size() == 7, "passive animal model should define root, head, body, and four legs");
+        require(std::fabs(model->textureWidth - 64.0f) < 0.001f &&
+                std::fabs(model->textureHeight - expected.textureHeight) < 0.001f,
+                "passive animal model should use the expected texture dimensions");
+        require(model->animationId == "minecraft:quadruped_walk" && model->yawPartName == "root",
+                "passive animal model should use quadruped animation metadata");
+        const ecs::EntityModelPartDefinition* headPart = model->findPart("head");
+        const ecs::EntityModelPartDefinition* bodyPart = model->findPart("body");
+        const ecs::EntityModelPartDefinition* frontLegPart = model->findPart("right_front_leg");
+        const ecs::EntityModelPartDefinition* hindLegPart = model->findPart("right_hind_leg");
+        require(headPart != nullptr && bodyPart != nullptr && frontLegPart != nullptr && hindLegPart != nullptr,
+                "passive animal model should expose named body, head, and leg parts");
+        require(headPart->pivot.z > 0.0f &&
+                frontLegPart->pivot.z > 0.0f &&
+                hindLegPart->pivot.z < 0.0f,
+                "passive animal model should face local +Z");
+        for (const ecs::EntityModelPartDefinition& part : model->parts) {
+            for (const ecs::EntityModelBoxDefinition& box : part.boxes) {
+                for (const ecs::EntityModelPixelRect& rect : box.faceUvs) {
+                    require(rect.x0 >= 0.0f && rect.y0 >= 0.0f &&
+                            rect.x1 <= model->textureWidth && rect.y1 <= model->textureHeight &&
+                            rect.x0 <= rect.x1 && rect.y0 <= rect.y1,
+                            "passive animal model face UVs should stay inside the entity texture");
+                }
+            }
+        }
+        if (expected.hasWoolLayer) {
+            require(headPart->boxes.size() >= 2 && bodyPart->boxes.size() >= 2 &&
+                    frontLegPart->boxes.size() >= 2 && hindLegPart->boxes.size() >= 2,
+                    "wool sheep model should include outer wool boxes");
+            require(headPart->boxes[1].inflate > 0.0f &&
+                    bodyPart->boxes[1].inflate > 0.0f &&
+                    frontLegPart->boxes[1].inflate > 0.0f &&
+                    hindLegPart->boxes[1].inflate > 0.0f,
+                    "wool sheep model should inflate outer wool boxes");
+        }
+
+        ecs::GameplayRegistry registry;
+        const entt::entity animal =
+            ecs::EntityFactory::createMob(registry, expected.id, glm::vec3(3.0f, 64.0f, 2.0f));
+        require(animal != entt::null, "EntityFactory should create configured passive animal");
+
+        auto& raw = registry.registry();
+        require(raw.all_of<ecs::MobTag,
+                           ecs::TransformComponent,
+                           ecs::MobAIComponent,
+                           ecs::HealthComponent,
+                           ecs::MobVisualComponent,
+                           ecs::PhysicsBodyComponent,
+                           ecs::DropTableComponent,
+                           ecs::DeathEffectComponent,
+                           ecs::EntityTypeComponent,
+                           ecs::EntityModelComponent,
+                           ecs::ChildrenComponent,
+                           ecs::NetworkSyncTag>(animal),
+                "configured passive animal should have gameplay and generic model components");
+
+        const auto& transform = raw.get<ecs::TransformComponent>(animal);
+        const auto& ai = raw.get<ecs::MobAIComponent>(animal);
+        const auto& health = raw.get<ecs::HealthComponent>(animal);
+        const auto& drops = raw.get<ecs::DropTableComponent>(animal);
+        const auto& type = raw.get<ecs::EntityTypeComponent>(animal);
+        const auto& visual = raw.get<ecs::MobVisualComponent>(animal);
+        const auto& modelComponent = raw.get<ecs::EntityModelComponent>(animal);
+
+        require(type.entityId == expected.id, "configured passive animal should keep entity definition id");
+        require(visual.model == expected.id &&
+                visual.textureKey == expected.texture &&
+                std::fabs(visual.scale - 1.0f) < 0.001f,
+                "configured passive animal should apply visual data");
+        require(modelComponent.modelId == expected.id &&
+                modelComponent.animationId == "minecraft:quadruped_walk" &&
+                modelComponent.yawPartName == "root",
+                "configured passive animal should apply generic model metadata");
+        require(std::fabs(transform.eyeHeight - expected.eyeHeight) < 0.001f,
+                "configured passive animal should apply eye height");
+        require(health.current == expected.health && health.max == expected.health,
+                "configured passive animal should apply health");
+        require(!ai.targetsPlayers && ai.attackDamage == 0 && ai.target == entt::null,
+                "configured passive animal should not target players");
+        require(drops.itemId == expected.dropItem &&
+                drops.minCount == expected.minDrop &&
+                drops.maxCount == expected.maxDrop,
+                "configured passive animal should apply drop table");
+    }
+
+    std::printf("[PASS] testEntityFactoryCreatesConfiguredPassiveAnimals\n");
+}
+
 static void testPersistentZombieRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -3457,6 +3582,7 @@ int main() {
     testEntityFactoryCreatesConfiguredZombie();
     testEntityFactoryCreatesConfiguredHerobrine();
     testEntityFactoryCreatesConfiguredCreeper();
+    testEntityFactoryCreatesConfiguredPassiveAnimals();
     testPersistentZombieRestoresFromSave();
     testPersistentDropRestoresFromSave();
     testPersistentChestInventoryRestoresFromSave();

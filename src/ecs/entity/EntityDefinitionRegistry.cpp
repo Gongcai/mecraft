@@ -96,6 +96,23 @@ bool readFloat(const json& node,
     return true;
 }
 
+bool readBool(const json& node,
+              const char* key,
+              bool& out,
+              const std::string& context,
+              std::string* error) {
+    const auto it = node.find(key);
+    if (it == node.end()) {
+        return true;
+    }
+    if (!it->is_boolean()) {
+        setError(error, context + "." + key + " must be a boolean");
+        return false;
+    }
+    out = it->get<bool>();
+    return true;
+}
+
 bool readVec3(const json& node,
               const char* key,
               glm::vec3& out,
@@ -186,7 +203,8 @@ bool parseAI(const json& node,
            readFloat(*it, "loseTargetRange", definition.ai.loseTargetRange, context + ".ai", error) &&
            readFloat(*it, "attackRange", definition.ai.attackRange, context + ".ai", error) &&
            readFloat(*it, "attackCooldownSeconds", definition.ai.attackCooldownSeconds, context + ".ai", error) &&
-           readInt(*it, "attackDamage", definition.ai.attackDamage, context + ".ai", error);
+           readInt(*it, "attackDamage", definition.ai.attackDamage, context + ".ai", error) &&
+           readBool(*it, "targetsPlayers", definition.ai.targetsPlayers, context + ".ai", error);
 }
 
 bool parseDrops(const json& node,

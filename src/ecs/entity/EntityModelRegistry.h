@@ -24,6 +24,7 @@ struct EntityModelPixelRect {
 struct EntityModelBoxDefinition {
     glm::vec3 origin{0.0f};
     glm::vec3 size{0.0f};
+    float inflate = 0.0f;
     std::array<EntityModelPixelRect, 6> faceUvs{};
 };
 

@@ -33,6 +33,7 @@ struct MobAIComponent {
     float attackCooldownRemaining = 0.0f;
     int attackDamage = 3;
     float yaw = 0.0f;
+    bool targetsPlayers = true;
 };
 
 struct MobVisualComponent {
