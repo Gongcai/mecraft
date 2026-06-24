@@ -27,7 +27,7 @@
     },
     {
       "id": "minecraft:stone",
-      "drop": "minecraft:stone",
+      "drop": "minecraft:cobblestone",
       "timeToBreak": 1500,
       "textures": {
         "all": "stone"
@@ -177,6 +177,18 @@
       "timeToBreak": 1000,
       "textures": {
         "all": "oak_planks"
+      }
+    },
+    {
+      "id": "minecraft:crafting_table",
+      "drop": "minecraft:crafting_table",
+      "materialKind": "wood",
+      "timeToBreak": 2500,
+      "textures": {
+        "top": "crafting_table_top",
+        "bottom": "oak_planks",
+        "side": "crafting_table_side",
+        "front": "crafting_table_front"
       }
     },
     {

@@ -1,6 +1,7 @@
 #include "BlockBreakSystem.h"
 
 #include <algorithm>
+#include <string_view>
 
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/DropSpawnEventBuffer.h"
@@ -10,6 +11,7 @@
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../game/inventory/ChestInventoryLifecycle.h"
 #include "../../../client/GameClient.h"
+#include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
 #include "../../../world/World.h"
 
@@ -38,6 +40,64 @@ void resetBreakSession(BlockBreakComponent& blockBreak,
     blockBreak.progress01 = 0.0f;
 }
 
+std::string_view requiredToolKind(const BlockDef& blockDef) {
+    switch (blockDef.materialKind) {
+        case BlockMaterialKinds::STONE:
+        case BlockMaterialKinds::ORE:
+        case BlockMaterialKinds::METAL:
+            return "pickaxe";
+        case BlockMaterialKinds::WOOD:
+            return "axe";
+        case BlockMaterialKinds::DIRT:
+        case BlockMaterialKinds::GRASS:
+        case BlockMaterialKinds::SAND:
+            return "shovel";
+        default:
+            return {};
+    }
+}
+
+float survivalBreakDurationMs(const BlockID targetBlock, const ItemStack& heldStack) {
+    const BlockDef& blockDef = BlockRegistry::get(targetBlock);
+    const float baseDurationMs = std::max(1.0f, static_cast<float>(blockDef.timeToBreak));
+    const std::string_view requiredKind = requiredToolKind(blockDef);
+
+    if (heldStack.isEmpty() || requiredKind.empty()) {
+        return baseDurationMs;
+    }
+
+    const ItemDef& itemDef = ItemRegistry::get(heldStack.itemId);
+    if (!itemDef.isTool || itemDef.toolKind != requiredKind) {
+        return baseDurationMs;
+    }
+
+    return std::max(1.0f, baseDurationMs / itemDef.toolEfficiency);
+}
+
+void applyToolWear(Inventory& inventory) {
+    ItemStack heldStack = inventory.getSelectedStack();
+    if (heldStack.isEmpty()) {
+        return;
+    }
+
+    const ItemDef& itemDef = ItemRegistry::get(heldStack.itemId);
+    if (!itemDef.isTool || itemDef.maxDurability == 0) {
+        return;
+    }
+
+    if (heldStack.durability == 0) {
+        heldStack.durability = itemDef.maxDurability;
+    }
+
+    --heldStack.durability;
+    if (heldStack.durability == 0) {
+        inventory.setSlotStack(inventory.getSelectedSlot(), {});
+        return;
+    }
+
+    inventory.setSlotStack(inventory.getSelectedSlot(), heldStack);
+}
+
 } // namespace
 
 void BlockBreakSystem::update(SystemContext& ctx) {
@@ -57,6 +117,8 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                               BlockTargetComponent,
                               BlockBreakComponent,
                               BlockInteractionRuntimeComponent,
+                              InventoryComponent,
+                              InventoryDataComponent,
                               TransformComponent>();
     for (auto e : view) {
         auto& runtime = view.get<BlockInteractionRuntimeComponent>(e);
@@ -64,6 +126,10 @@ void BlockBreakSystem::update(SystemContext& ctx) {
         const auto& intent = view.get<BlockActionIntentComponent>(e);
         const auto& target = view.get<BlockTargetComponent>(e);
         const auto& transform = view.get<TransformComponent>(e);
+        const auto& inventoryState = view.get<InventoryComponent>(e);
+        auto& inventoryData = view.get<InventoryDataComponent>(e);
+
+        inventoryData.inventory.setSelectedSlot(inventoryState.selectedHotbarSlot);
 
         runtime.creativeBreakCooldownRemaining =
             std::max(0.0f, runtime.creativeBreakCooldownRemaining - dt);
@@ -125,13 +191,14 @@ void BlockBreakSystem::update(SystemContext& ctx) {
         }
 
         // Survival break with progress
-        const float requiredMs = modeRules.breakDurationMs(targetBlock);
+        const float requiredMs = survivalBreakDurationMs(targetBlock, inventoryData.inventory.getSelectedStack());
         if (!runtime.breakActive || runtime.breakBlockPos != hitBlock) {
             runtime.breakActive = true;
             runtime.breakBlockPos = hitBlock;
             runtime.breakElapsedMs = 0.0f;
             runtime.breakRequiredMs = requiredMs;
         }
+        runtime.breakRequiredMs = requiredMs;
 
         runtime.breakElapsedMs += dt * 1000.0f;
         blockBreak.active = true;
@@ -162,6 +229,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             dropBus.push({brokenBlock, hitBlock});
+            applyToolWear(inventoryData.inventory);
             ++runtime.heldItemSwingSequence;
             resetBreakSession(blockBreak, runtime);
         }

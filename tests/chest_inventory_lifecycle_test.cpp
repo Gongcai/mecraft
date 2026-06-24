@@ -98,6 +98,8 @@ int main() {
 
     registry.emplace<ecs::BlockBreakComponent>(player);
     registry.emplace<ecs::BlockInteractionRuntimeComponent>(player);
+    registry.emplace<ecs::InventoryComponent>(player);
+    registry.emplace<ecs::InventoryDataComponent>(player);
 
     ecs::TransformComponent transform;
     transform.position = glm::vec3(chestPos) + glm::vec3(0.5f, 0.5f, 2.5f);

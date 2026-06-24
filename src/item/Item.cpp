@@ -233,6 +233,23 @@ void ItemRegistry::init() {
             def.isTool = itemJson["isTool"].get<bool>();
         }
 
+        if (itemJson.contains("toolKind") && itemJson["toolKind"].is_string()) {
+            def.toolKind = itemJson["toolKind"].get<std::string>();
+            def.isTool = true;
+        }
+
+        if (itemJson.contains("toolTier") && itemJson["toolTier"].is_number_integer()) {
+            const int tier = itemJson["toolTier"].get<int>();
+            def.toolTier = static_cast<uint8_t>(std::max(0, std::min(tier, 255)));
+            def.isTool = true;
+        }
+
+        if (itemJson.contains("toolEfficiency") && itemJson["toolEfficiency"].is_number()) {
+            const float efficiency = itemJson["toolEfficiency"].get<float>();
+            def.toolEfficiency = std::max(0.1f, efficiency);
+            def.isTool = true;
+        }
+
         if (itemJson.contains("maxDurability") && itemJson["maxDurability"].is_number_integer()) {
             const int durability = itemJson["maxDurability"].get<int>();
             def.maxDurability = static_cast<uint16_t>(std::max(0, std::min(durability, 65535)));

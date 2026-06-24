@@ -31,6 +31,9 @@
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:iron_ore",
       "isTool": true,
+      "toolKind": "pickaxe",
+      "toolTier": 2,
+      "toolEfficiency": 6.0,
       "maxDurability": 250
     },
     {
@@ -233,6 +236,9 @@
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:air",
       "isTool": true,
+      "toolKind": "pickaxe",
+      "toolTier": 0,
+      "toolEfficiency": 2.0,
       "maxDurability": 59
     },
     {
@@ -243,6 +249,9 @@
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:air",
       "isTool": true,
+      "toolKind": "pickaxe",
+      "toolTier": 1,
+      "toolEfficiency": 4.0,
       "maxDurability": 131
     },
     {
@@ -253,6 +262,9 @@
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:air",
       "isTool": true,
+      "toolKind": "pickaxe",
+      "toolTier": 3,
+      "toolEfficiency": 8.0,
       "maxDurability": 1561
     },
     {
@@ -263,6 +275,9 @@
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:air",
       "isTool": true,
+      "toolKind": "shovel",
+      "toolTier": 2,
+      "toolEfficiency": 6.0,
       "maxDurability": 250
     },
     {
@@ -273,6 +288,9 @@
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:air",
       "isTool": true,
+      "toolKind": "axe",
+      "toolTier": 2,
+      "toolEfficiency": 6.0,
       "maxDurability": 250
     },
     {
@@ -283,6 +301,9 @@
       "placeBlock": "minecraft:air",
       "renderBlock": "minecraft:air",
       "isTool": true,
+      "toolKind": "sword",
+      "toolTier": 2,
+      "toolEfficiency": 1.5,
       "maxDurability": 250
     }
   ]

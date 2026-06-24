@@ -11,7 +11,7 @@ class BlockBreakSystem : public ISystem {
 public:
     using Dependencies = SystemDependency<
         std::tuple<LocalPlayerTag, BlockActionIntentComponent, BlockTargetComponent>,
-        std::tuple<BlockBreakComponent, BlockInteractionRuntimeComponent>
+        std::tuple<BlockBreakComponent, BlockInteractionRuntimeComponent, InventoryComponent, InventoryDataComponent>
     >;
 
     void update(SystemContext& ctx) override;

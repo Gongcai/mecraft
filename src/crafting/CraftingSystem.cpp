@@ -62,22 +62,24 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
     for (const auto& recipeJson : root["recipes"]) {
         CraftingRecipe recipe;
 
-        // 解析 result
         ItemID result = 0;
-        if (recipeJson.contains("result")) {
-            static_cast<void>(parseItemToken(recipeJson["result"], result));
+        if (!recipeJson.contains("result") || !parseItemToken(recipeJson["result"], result) || result == 0) {
+            continue;
         }
         recipe.result = result;
         recipe.resultCount = recipeJson.value("resultCount", 1);
-
-        // 解析 pattern：字符串数组，每个字符串代表一行
-        // 用字符串名称映射 ItemID（通过名称查找）
-        const auto& patternJson = recipeJson["pattern"];
-        if (!patternJson.is_array()) {
+        if (recipe.resultCount <= 0) {
             continue;
         }
 
-        // 建立键映射：key -> ItemID
+        if (!recipeJson.contains("pattern")) {
+            continue;
+        }
+        const auto& patternJson = recipeJson["pattern"];
+        if (!patternJson.is_array() || patternJson.empty()) {
+            continue;
+        }
+
         std::unordered_map<std::string, ItemID> keyMap;
         if (recipeJson.contains("key") && recipeJson["key"].is_object()) {
             for (const auto& [key, value] : recipeJson["key"].items()) {
@@ -92,18 +94,39 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
         recipe.width = 0;
         recipe.pattern.resize(recipe.height);
 
+        bool hasIngredient = false;
+        bool hasInvalidRow = false;
         for (int row = 0; row < recipe.height; ++row) {
+            if (!patternJson[row].is_string()) {
+                hasInvalidRow = true;
+                break;
+            }
             const std::string& rowStr = patternJson[row].get<std::string>();
             recipe.width = std::max(recipe.width, static_cast<int>(rowStr.size()));
             recipe.pattern[row].reserve(rowStr.size());
             for (char ch : rowStr) {
                 std::string key(1, ch);
-                if (ch == ' ' || keyMap.find(key) == keyMap.end()) {
+                if (ch == ' ') {
                     recipe.pattern[row].push_back(0);
-                } else {
-                    recipe.pattern[row].push_back(keyMap.at(key));
+                    continue;
                 }
+
+                const auto keyIt = keyMap.find(key);
+                if (keyIt == keyMap.end()) {
+                    hasInvalidRow = true;
+                    break;
+                }
+
+                recipe.pattern[row].push_back(keyIt->second);
+                hasIngredient = true;
             }
+            if (hasInvalidRow) {
+                break;
+            }
+        }
+
+        if (hasInvalidRow || !hasIngredient || recipe.width <= 0) {
+            continue;
         }
 
         m_recipes.push_back(std::move(recipe));
@@ -113,16 +136,13 @@ void CraftingSystem::loadRecipes(const std::string& configPath) {
 CraftingResult CraftingSystem::match(const std::vector<ItemID>& grid,
                                      int gridWidth,
                                      int gridHeight) const {
-    // 先裁剪输入网格
     std::vector<std::vector<ItemID>> trimmed;
     int trimmedW = 0, trimmedH = 0;
 
     if (!trimGrid(grid, gridWidth, gridHeight, trimmed, trimmedW, trimmedH)) {
-        // 空网格，无法合成
         return {0, 0, false};
     }
 
-    // 遍历所有配方，比较裁剪后的模式
     for (const auto& recipe : m_recipes) {
         if (recipe.width != trimmedW || recipe.height != trimmedH) {
             continue;
@@ -149,7 +169,13 @@ bool CraftingSystem::trimGrid(const std::vector<ItemID>& grid,
                                std::vector<std::vector<ItemID>>& outPattern,
                                int& outWidth,
                                int& outHeight) {
-    // 找到非空行列的范围
+    if (gridWidth <= 0 || gridHeight <= 0 ||
+        grid.size() < static_cast<size_t>(gridWidth) * static_cast<size_t>(gridHeight)) {
+        outWidth = 0;
+        outHeight = 0;
+        return false;
+    }
+
     int minRow = gridHeight, maxRow = -1;
     int minCol = gridWidth, maxCol = -1;
 

@@ -17,7 +17,7 @@ int main() {
 
     const ItemDef& dirtItem = ItemRegistry::get(ItemRegistry::fromBlock(BlockIds::DIRT));
     if (dirtItem.placeBlock != BlockIds::DIRT) {
-        return fail("dirt should place its source block via block fallback");
+        return fail("dirt should place its source block");
     }
     if (ItemRegistry::findByName("dirt") != ItemRegistry::fromBlock(BlockIds::DIRT)) {
         return fail("block name lookup should resolve dirt via BlockRegistry");
@@ -73,13 +73,27 @@ int main() {
     if (ItemRegistry::findByName("iron_pickaxe") != ItemIds::IRON_PICKAXE) {
         return fail("item name lookup should resolve iron_pickaxe from items.json");
     }
-    if (!ironPickaxe.isTool || ironPickaxe.maxStack != 1) {
+    if (!ironPickaxe.isTool || ironPickaxe.maxStack != 1 ||
+        ironPickaxe.toolKind != "pickaxe" || ironPickaxe.toolTier != 2 ||
+        ironPickaxe.toolEfficiency < 5.9f || ironPickaxe.toolEfficiency > 6.1f) {
         return fail("iron pickaxe should be a non-stackable tool");
+    }
+
+    const ItemID craftingTableItem = ItemRegistry::findByName("crafting_table");
+    const BlockID craftingTableBlock = BlockRegistry::findByName("crafting_table");
+    if (craftingTableItem == ItemIds::AIR || craftingTableBlock == BlockIds::AIR) {
+        return fail("crafting_table should register both block and item IDs");
+    }
+    if (ItemRegistry::toPlaceBlock(craftingTableItem) != craftingTableBlock) {
+        return fail("crafting_table item should place the crafting table block");
     }
 
     // BlockDropTable tests
     if (BlockDropTable::getDropItem(BlockIds::COAL_ORE) != ItemIds::COAL) {
         return fail("coal_ore should drop coal item");
+    }
+    if (BlockDropTable::getDropItem(BlockIds::STONE) != ItemRegistry::findByName("cobblestone")) {
+        return fail("stone should drop cobblestone");
     }
     if (BlockDropTable::getDropItem(BlockIds::DIRT) != ItemRegistry::fromBlock(BlockIds::DIRT)) {
         return fail("dirt should drop itself by default");

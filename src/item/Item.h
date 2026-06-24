@@ -42,6 +42,9 @@ struct ItemDef {
     BlockID placeBlock = 0; // AIR
     BlockID renderBlock = 0; // AIR
     bool isTool = false;
+    std::string toolKind;
+    uint8_t toolTier = 0;
+    float toolEfficiency = 1.0f;
     uint16_t maxDurability = 0;
 };
 
