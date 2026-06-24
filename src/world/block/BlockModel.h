@@ -31,6 +31,7 @@ struct ModelTransform {
     uint16_t rotY = 0;
     uint16_t rotX = 0;
     uint16_t rotZ = 0;
+    bool uvLock = false;
 };
 
 struct ModelVariant {

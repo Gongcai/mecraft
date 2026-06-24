@@ -85,12 +85,14 @@ struct ModelGeometryCacheKey {
     uint16_t rotX = 0;
     uint16_t rotY = 0;
     uint16_t rotZ = 0;
+    bool uvLock = false;
 
     bool operator==(const ModelGeometryCacheKey& other) const {
         return model == other.model &&
                rotX == other.rotX &&
                rotY == other.rotY &&
-               rotZ == other.rotZ;
+               rotZ == other.rotZ &&
+               uvLock == other.uvLock;
     }
 };
 
@@ -100,6 +102,7 @@ struct ModelGeometryCacheKeyHash {
         hash ^= static_cast<size_t>(key.rotX) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
         hash ^= static_cast<size_t>(key.rotY) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
         hash ^= static_cast<size_t>(key.rotZ) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
+        hash ^= static_cast<size_t>(key.uvLock ? 1u : 0u) + 0x9e3779b97f4a7c15ull + (hash << 6u) + (hash >> 2u);
         return hash;
     }
 };
@@ -1509,6 +1512,25 @@ std::array<glm::vec2, 4> buildModelFaceUv(const ModelFace& face) {
     }
 }
 
+std::array<glm::vec2, 4> applyHorizontalUvLock(std::array<glm::vec2, 4> uv,
+                                               const int face,
+                                               const ModelTransform& transform) {
+    if (!transform.uvLock || (face != FACE_TOP && face != FACE_BOTTOM)) {
+        return uv;
+    }
+
+    const uint16_t turns = static_cast<uint16_t>((transform.rotY / 90u) % 4u);
+    if (turns == 0) {
+        return uv;
+    }
+
+    std::array<glm::vec2, 4> locked{};
+    for (size_t i = 0; i < uv.size(); ++i) {
+        locked[i] = uv[(i + uv.size() - turns) % uv.size()];
+    }
+    return locked;
+}
+
 std::string resolveModelFaceTextureName(const BlockModel& model, const ModelFace& face) {
     const std::string textureKey = face.textureVar.substr(1);
     const auto it = model.textures.find(textureKey);
@@ -1545,7 +1567,7 @@ std::shared_ptr<const CachedModelGeometry> buildCachedModelGeometry(const ModelV
             for (glm::vec3& corner : cached.localCorners) {
                 corner = applyModelTransform(corner, variant.transform);
             }
-            cached.uv = buildModelFaceUv(face);
+            cached.uv = applyHorizontalUvLock(buildModelFaceUv(face), faceIndex, variant.transform);
             cached.textureName = resolveModelFaceTextureName(model, face);
             cached.transformedFace = transformFaceIndex(faceIndex, variant.transform);
             cached.cullfaceBits = transformCullfaceBits(face.cullfaceBits, variant.transform);
@@ -1568,6 +1590,7 @@ const CachedModelGeometry& getCachedModelGeometry(const ModelVariant& variant) {
         variant.transform.rotX,
         variant.transform.rotY,
         variant.transform.rotZ,
+        variant.transform.uvLock,
     };
 
     {

@@ -174,6 +174,13 @@ ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
     transform.rotX = readRotation("rotX");
     transform.rotY = readRotation("rotY");
     transform.rotZ = readRotation("rotZ");
+    const auto uvLockIt = variantJson.find("uvLock");
+    if (uvLockIt != variantJson.end()) {
+        if (!uvLockIt->is_boolean()) {
+            throw std::runtime_error("Model variant uvLock must be boolean");
+        }
+        transform.uvLock = uvLockIt->get<bool>();
+    }
     return transform;
 }
 

@@ -208,6 +208,25 @@ std::array<glm::vec2, 4> buildModelFaceUv(const ModelFace& face) {
     }
 }
 
+std::array<glm::vec2, 4> applyHorizontalUvLock(std::array<glm::vec2, 4> uv,
+                                               const int face,
+                                               const ModelTransform& transform) {
+    if (!transform.uvLock || (face != 0 && face != 1)) {
+        return uv;
+    }
+
+    const uint16_t turns = static_cast<uint16_t>((transform.rotY / 90u) % 4u);
+    if (turns == 0) {
+        return uv;
+    }
+
+    std::array<glm::vec2, 4> locked{};
+    for (size_t i = 0; i < uv.size(); ++i) {
+        locked[i] = uv[(i + uv.size() - turns) % uv.size()];
+    }
+    return locked;
+}
+
 std::string resolveModelFaceTextureName(const BlockModel& model, const ModelFace& face) {
     const std::string textureKey = face.textureVar.substr(1);
     const auto it = model.textures.find(textureKey);
@@ -342,7 +361,7 @@ void appendModelVertices(std::vector<BlockVertex>& vertices,
 
             emitFace(vertices,
                      corners,
-                     buildModelFaceUv(face),
+                     applyHorizontalUvLock(buildModelFaceUv(face), faceIndex, variant->transform),
                      static_cast<float>(transformFaceIndex(faceIndex, variant->transform)),
                      textureRef,
                      tintKind,
