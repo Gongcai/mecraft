@@ -1,11 +1,14 @@
 #include "GameplayState.h"
 
+#include <algorithm>
 #include <memory>
+#include <stdexcept>
 
 #include "GameStateMachine.h"
-#include "engine//input/InputContextManager.h"
+#include "engine/input/InputContextManager.h"
 #include "CommandState.h"
 #include "GameplayStateEcsBridge.h"
+#include "SleepingState.h"
 #include "../inventory/ChestInventoryState.h"
 #include "../inventory/CreativeInventoryState.h"
 #include "../inventory/FurnaceState.h"
@@ -18,9 +21,11 @@
 #include "../../ecs/components/Components.h"
 #include "../../ecs/util/GameplayRuntimeContext.h"
 #include "../../client/GameClient.h"
+#include "../../locale/LocaleManager.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../world/World.h"
+#include "../../world/block/BedBlock.h"
 #include "../../world/block/BlockStateRegistry.h"
 
 GameplayState::GameplayState(StateDependencies deps,
@@ -41,7 +46,8 @@ GameplayState::GameplayState(StateDependencies deps,
                   world.setRenderDistance(distance);
                   client.clientWorld().setRenderDistance(distance);
                   client.sendViewConfig(distance);
-              }
+              },
+              deps.isMultiplayer
           },
           InventoryStateContext{
               deps.fsm,
@@ -144,7 +150,7 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
                                        ecs::BlockInteractionRuntimeComponent>();
     for (auto entity : view) {
         const auto& target = view.get<ecs::BlockTargetComponent>(entity);
-        const auto& runtime = view.get<ecs::BlockInteractionRuntimeComponent>(entity);
+        auto& runtime = view.get<ecs::BlockInteractionRuntimeComponent>(entity);
         if (!target.hasTarget) {
             continue;
         }
@@ -154,6 +160,28 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
         }
 
         const BlockID targetBlock = BlockStateRegistry::getBlockId(target.targetState);
+        if (BedBlockLogic::isBedState(target.targetState)) {
+            runtime.placeCooldownRemaining = std::max(runtime.placeCooldownRemaining,
+                                                      m_modeRules.placeCooldownSeconds());
+            if (m_ctx.world == nullptr) {
+                throw std::runtime_error("Sleeping requires an active world context");
+            }
+            if (m_ctx.isMultiplayer) {
+                m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("sleep_singleplayer_only"));
+                return true;
+            }
+            if (!m_ctx.world->getDayNightSystem().isNightTime()) {
+                m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("sleep_night_only"));
+                return true;
+            }
+            m_ctx.fsm.pushState(std::make_unique<SleepingState>(
+                m_ctx.fsm,
+                m_ctx.context,
+                m_ctx.input,
+                *m_ctx.world));
+            return true;
+        }
+
         const BlockID craftingTableBlock = BlockRegistry::findByName("minecraft:crafting_table");
         if (targetBlock == craftingTableBlock) {
             m_ctx.fsm.pushState(std::make_unique<WorkbenchState>(m_inventoryCtx));

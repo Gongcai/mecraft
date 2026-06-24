@@ -320,9 +320,16 @@ int main() {
                face->uv[2] == 16.0f &&
                face->uv[3] == 9.0f;
     };
-    if (!bedBodyUvMatches(redBedFootVariant->model->elements.front().faces[3]) ||
+    const auto bedBodyNorthUvMatches = [](const std::unique_ptr<ModelFace>& face) {
+        return face != nullptr &&
+               face->uv[0] == 16.0f &&
+               face->uv[1] == 3.0f &&
+               face->uv[2] == 0.0f &&
+               face->uv[3] == 9.0f;
+    };
+    if (!bedBodyNorthUvMatches(redBedFootVariant->model->elements.front().faces[3]) ||
         !bedBodyUvMatches(redBedFootVariant->model->elements.front().faces[4]) ||
-        !bedBodyUvMatches(redBedHeadVariant->model->elements.front().faces[3]) ||
+        !bedBodyNorthUvMatches(redBedHeadVariant->model->elements.front().faces[3]) ||
         !bedBodyUvMatches(redBedHeadVariant->model->elements.front().faces[5])) {
         return fail("red_bed body side and end faces should use the visible strip of the legacy bed textures");
     }

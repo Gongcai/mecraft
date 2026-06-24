@@ -23,6 +23,12 @@ public:
     // Get the sun/sky light intensity multiplier [0.0, 1.0]
     float getSkyIntensity() const;
 
+    // Return whether the current sky curve is dark enough for bed sleep.
+    bool isNightTime() const;
+
+    // Return whether the current sky curve has reached full daytime brightness.
+    bool isFullDaytime() const;
+
     // Get current day progress in [0.0, 1.0)
     float getDayProgress01() const;
 

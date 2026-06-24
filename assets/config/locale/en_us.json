@@ -12,6 +12,8 @@
     "switched_creative": "Switched to Creative Mode",
     "switched_survival": "Switched to Survive Mode",
     "time_set_to": "Time set to ",
+    "sleep_night_only": "You can only sleep at night.",
+    "sleep_singleplayer_only": "Sleeping is only available in single-player worlds.",
     "spawned_zombie": "Spawned zombie",
     "spawned_mob": "Spawned ",
     "unknown_mob": "Unknown mob: ",

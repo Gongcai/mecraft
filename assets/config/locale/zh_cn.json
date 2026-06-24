@@ -12,6 +12,8 @@
     "switched_creative": "已切换到创造模式",
     "switched_survival": "已切换到生存模式",
     "time_set_to": "时间已设置为 ",
+    "sleep_night_only": "你只能在夜晚睡觉。",
+    "sleep_singleplayer_only": "睡觉当前仅支持单人世界。",
     "spawned_zombie": "已生成僵尸",
     "spawned_mob": "已生成 ",
     "unknown_mob": "未知生物: ",

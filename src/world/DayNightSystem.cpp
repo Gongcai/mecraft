@@ -74,6 +74,14 @@ float DayNightSystem::getSkyIntensity() const {
     return m_skyIntensity;
 }
 
+bool DayNightSystem::isNightTime() const {
+    return m_skyIntensity < 0.5f;
+}
+
+bool DayNightSystem::isFullDaytime() const {
+    return m_skyIntensity >= 1.0f;
+}
+
 float DayNightSystem::getDayProgress01() const {
     return std::clamp(m_timeOfDay / SECONDS_PER_DAY, 0.0f, 0.999999f);
 }

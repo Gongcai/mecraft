@@ -90,6 +90,7 @@ set(SRC_GAME
         src/game/states/GameStateMachine.cpp
         src/game/states/GameplayState.cpp
         src/game/states/GameplayStateEcsBridge.cpp
+        src/game/states/SleepingState.cpp
         src/game/states/CommandState.cpp
         src/game/states/StateDependencies.cpp
         src/game/presentation/GameplayPresentationBuilder.cpp
@@ -584,6 +585,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(projectile_definition_test tests/projectile_definition_test.cpp)
     add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
     add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
+    add_mecraft_test(sleeping_state_test tests/sleeping_state_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
 
     add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)

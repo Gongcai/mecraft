@@ -25,6 +25,19 @@ int main() {
     if (dayNight.getDayProgress01() < 0.499f || dayNight.getDayProgress01() > 0.501f) {
         return fail("midday progress should be 0.5");
     }
+    if (dayNight.isNightTime() || dayNight.isFullDaytime()) {
+        return fail("sunset transition should not be sleep night or full day");
+    }
+
+    dayNight.setTimeOfDay(900.0f);
+    if (!dayNight.isNightTime() || dayNight.isFullDaytime()) {
+        return fail("midnight should allow sleeping and should not be full day");
+    }
+
+    dayNight.setTimeOfDay(120.0f);
+    if (dayNight.isNightTime() || !dayNight.isFullDaytime()) {
+        return fail("morning should be full daytime and should not allow sleeping");
+    }
 
     for (int i = 0; i < 8; ++i) {
         dayNight.update(1200.0f);

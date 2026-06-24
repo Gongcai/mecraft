@@ -26,8 +26,9 @@ struct GameplayStateContext {
     Inventory& inventory;
     const LocaleManager& localeManager;
     RenderScene* renderScene = nullptr;  ///< Optional; for in-game settings screen
-    World* world = nullptr;              ///< Optional; for render distance control
+    World* world = nullptr;              ///< Optional; active world for settings and world interactions
     std::function<void(int)> renderDistanceSetter;
+    bool isMultiplayer = false;
 };
 
 #endif // MECRAFT_GAMEPLAY_STATE_CONTEXT_H
