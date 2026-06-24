@@ -33,6 +33,14 @@ int main() {
     if (PropIndices::LEVEL == PropIndices::INVALID || PropIndices::FALLING == PropIndices::INVALID) {
         return fail("water properties should be registered from blocks.json");
     }
+    if (PropIndices::SHAPE == PropIndices::INVALID ||
+        PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID ||
+        PropIndices::SHAPE_INNER_LEFT == PropIndices::INVALID ||
+        PropIndices::SHAPE_INNER_RIGHT == PropIndices::INVALID ||
+        PropIndices::SHAPE_OUTER_LEFT == PropIndices::INVALID ||
+        PropIndices::SHAPE_OUTER_RIGHT == PropIndices::INVALID) {
+        return fail("stair shape properties should be registered from blocks.json");
+    }
     if (PropIndices::NORTH == PropIndices::INVALID ||
         PropIndices::SOUTH == PropIndices::INVALID ||
         PropIndices::EAST == PropIndices::INVALID ||
@@ -130,7 +138,8 @@ int main() {
         oakStairs,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_SOUTH},
-            {PropIndices::HALF, PropIndices::HALF_BOTTOM}
+            {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+            {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}
         });
     const ModelVariant* oakStairsVariant = BlockStateRegistry::getModelVariant(oakStairsSouth);
     if (oakStairsVariant == nullptr || oakStairsVariant->model == nullptr ||
@@ -139,29 +148,62 @@ int main() {
         return fail("oak_stairs south state should resolve to the rotated oak stairs model");
     }
 
-    const std::vector<std::tuple<uint16_t, uint16_t, uint16_t, uint16_t>> oakStairsVariantCases = {
-        {PropIndices::FACING_EAST, PropIndices::HALF_BOTTOM, 0, 0},
-        {PropIndices::FACING_SOUTH, PropIndices::HALF_BOTTOM, 90, 0},
-        {PropIndices::FACING_WEST, PropIndices::HALF_BOTTOM, 180, 0},
-        {PropIndices::FACING_NORTH, PropIndices::HALF_BOTTOM, 270, 0},
-        {PropIndices::FACING_EAST, PropIndices::HALF_TOP, 0, 180},
-        {PropIndices::FACING_SOUTH, PropIndices::HALF_TOP, 90, 180},
-        {PropIndices::FACING_WEST, PropIndices::HALF_TOP, 180, 180},
-        {PropIndices::FACING_NORTH, PropIndices::HALF_TOP, 270, 180},
+    const std::vector<std::tuple<uint16_t, uint16_t, uint16_t, const char*, uint16_t, uint16_t>> oakStairsVariantCases = {
+        {PropIndices::FACING_EAST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 0, 0},
+        {PropIndices::FACING_EAST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 270, 0},
+        {PropIndices::FACING_EAST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 0, 0},
+        {PropIndices::FACING_EAST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 270, 0},
+        {PropIndices::FACING_EAST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 0, 0},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 90, 0},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 0, 0},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 90, 0},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 0, 0},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 90, 0},
+        {PropIndices::FACING_WEST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 180, 0},
+        {PropIndices::FACING_WEST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 90, 0},
+        {PropIndices::FACING_WEST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 180, 0},
+        {PropIndices::FACING_WEST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 90, 0},
+        {PropIndices::FACING_WEST, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 180, 0},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 270, 0},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 180, 0},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 270, 0},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 180, 0},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_BOTTOM, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 270, 0},
+        {PropIndices::FACING_EAST, PropIndices::HALF_TOP, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 0, 180},
+        {PropIndices::FACING_EAST, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 270, 180},
+        {PropIndices::FACING_EAST, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 0, 180},
+        {PropIndices::FACING_EAST, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 270, 180},
+        {PropIndices::FACING_EAST, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 0, 180},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_TOP, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 90, 180},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 0, 180},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 90, 180},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 0, 180},
+        {PropIndices::FACING_SOUTH, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 90, 180},
+        {PropIndices::FACING_WEST, PropIndices::HALF_TOP, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 180, 180},
+        {PropIndices::FACING_WEST, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 90, 180},
+        {PropIndices::FACING_WEST, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 180, 180},
+        {PropIndices::FACING_WEST, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 90, 180},
+        {PropIndices::FACING_WEST, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 180, 180},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_TOP, PropIndices::SHAPE_STRAIGHT, "block/oak_stairs", 270, 180},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_LEFT, "block/oak_stairs_inner", 180, 180},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_TOP, PropIndices::SHAPE_INNER_RIGHT, "block/oak_stairs_inner", 270, 180},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_LEFT, "block/oak_stairs_outer", 180, 180},
+        {PropIndices::FACING_NORTH, PropIndices::HALF_TOP, PropIndices::SHAPE_OUTER_RIGHT, "block/oak_stairs_outer", 270, 180},
     };
-    for (const auto& [facing, half, expectedRotY, expectedRotX] : oakStairsVariantCases) {
+    for (const auto& [facing, half, shape, expectedModel, expectedRotY, expectedRotX] : oakStairsVariantCases) {
         const StateID state = BlockStateRegistry::getState(
             oakStairs,
             std::vector<std::pair<uint16_t, uint16_t>>{
                 {PropIndices::FACING, facing},
-                {PropIndices::HALF, half}
+                {PropIndices::HALF, half},
+                {PropIndices::SHAPE, shape}
             });
         const ModelVariant* variant = BlockStateRegistry::getModelVariant(state);
         if (variant == nullptr || variant->model == nullptr ||
-            variant->model->name != "block/oak_stairs" ||
+            variant->model->name != expectedModel ||
             variant->transform.rotY != expectedRotY ||
             variant->transform.rotX != expectedRotX) {
-            return fail("all oak_stairs facing/half states should resolve to their JSON model transforms");
+            return fail("all oak_stairs facing/half/shape states should resolve to their JSON model transforms");
         }
     }
 
@@ -362,7 +404,8 @@ int main() {
     stairsNorthPlacement.hitNormal = {0, 1, 0};
     const StateID stairsPlacedNorth = stairsStrategy(stairsNorthPlacement);
     if (BlockStateRegistry::getPropertyIndex(stairsPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH ||
-        BlockStateRegistry::getPropertyIndex(stairsPlacedNorth, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+        BlockStateRegistry::getPropertyIndex(stairsPlacedNorth, PropIndices::HALF) != PropIndices::HALF_BOTTOM ||
+        BlockStateRegistry::getPropertyIndex(stairsPlacedNorth, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
         return fail("stairs placement should derive north-facing bottom stairs from camera yaw and top-face hits");
     }
 
@@ -382,7 +425,8 @@ int main() {
     stairsSideTopPlacement.hitPosition = {4.5f, 32.75f, 4.0f};
     const StateID stairsPlacedNorthTop = stairsStrategy(stairsSideTopPlacement);
     if (BlockStateRegistry::getPropertyIndex(stairsPlacedNorthTop, PropIndices::FACING) != PropIndices::FACING_NORTH ||
-        BlockStateRegistry::getPropertyIndex(stairsPlacedNorthTop, PropIndices::HALF) != PropIndices::HALF_TOP) {
+        BlockStateRegistry::getPropertyIndex(stairsPlacedNorthTop, PropIndices::HALF) != PropIndices::HALF_TOP ||
+        BlockStateRegistry::getPropertyIndex(stairsPlacedNorthTop, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
         return fail("stairs side placement should reverse the side normal for stair descent direction and derive half from hit position");
     }
 
@@ -400,7 +444,8 @@ int main() {
         sidePlacement.hitPosition = {4.5f, 32.25f, 4.0f};
         const StateID placed = stairsStrategy(sidePlacement);
         if (BlockStateRegistry::getPropertyIndex(placed, PropIndices::FACING) != expectedFacing ||
-            BlockStateRegistry::getPropertyIndex(placed, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+            BlockStateRegistry::getPropertyIndex(placed, PropIndices::HALF) != PropIndices::HALF_BOTTOM ||
+            BlockStateRegistry::getPropertyIndex(placed, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
             return fail("stairs side placement should reverse the clicked side normal for stair descent direction");
         }
     }

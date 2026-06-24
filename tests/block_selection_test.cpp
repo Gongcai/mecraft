@@ -125,7 +125,8 @@ int main() {
         oakStairs,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_NORTH},
-            {PropIndices::HALF, PropIndices::HALF_BOTTOM}
+            {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+            {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}
         });
     const std::vector<BlockCollisionBox> northStairCollision = BlockCollision::getBoxes(northBottomStairs);
     bool foundNorthUpperHalf = false;
@@ -255,6 +256,16 @@ int main() {
     loadChunks(world);
 
     const int baseY = world.getSurfaceY(0, 0) + 2;
+    const auto makeBottomStairs = [&](const uint16_t facing) {
+        return BlockStateRegistry::getState(
+            oakStairs,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, facing},
+                {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+                {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}
+            });
+    };
+
     world.setBlockState(2, baseY, 0, BlockIds::AIR);
     world.setBlockState(3, baseY, 0, BlockIds::AIR);
     world.setBlockState(2, baseY, 0, oakFence);
@@ -289,6 +300,33 @@ int main() {
     placedWall = world.getBlockState(4, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_FALSE) {
         return fail("cobblestone wall should disconnect when the north neighbor is removed");
+    }
+
+    world.setBlockState(6, baseY, 0, BlockIds::AIR);
+    world.setBlockState(7, baseY, 0, BlockIds::AIR);
+    world.setBlockState(6, baseY, 0, makeBottomStairs(PropIndices::FACING_EAST));
+    StateID placedStairs = world.getBlockState(6, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedStairs, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
+        return fail("isolated stairs should keep shape=straight");
+    }
+    world.setBlockState(7, baseY, 0, makeBottomStairs(PropIndices::FACING_SOUTH));
+    placedStairs = world.getBlockState(6, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedStairs, PropIndices::SHAPE) != PropIndices::SHAPE_OUTER_RIGHT) {
+        return fail("front perpendicular stairs should update the source stair to an outer-right corner");
+    }
+    world.setBlockState(7, baseY, 0, BlockIds::AIR);
+    placedStairs = world.getBlockState(6, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedStairs, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
+        return fail("stairs should return to shape=straight when the corner neighbor is removed");
+    }
+
+    world.setBlockState(8, baseY, 0, BlockIds::AIR);
+    world.setBlockState(9, baseY, 0, BlockIds::AIR);
+    world.setBlockState(9, baseY, 0, makeBottomStairs(PropIndices::FACING_EAST));
+    world.setBlockState(8, baseY, 0, makeBottomStairs(PropIndices::FACING_NORTH));
+    placedStairs = world.getBlockState(9, baseY, 0);
+    if (BlockStateRegistry::getPropertyIndex(placedStairs, PropIndices::SHAPE) != PropIndices::SHAPE_INNER_LEFT) {
+        return fail("back perpendicular stairs should update the source stair to an inner-left corner");
     }
 
     for (int y = baseY; y <= baseY + 4; ++y) {

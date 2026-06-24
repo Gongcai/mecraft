@@ -57,6 +57,10 @@ bool isConnectedBlockDef(const BlockDef& def) {
     return def.placementStrategy == "fence" || def.placementStrategy == "wall";
 }
 
+bool isStairsBlockDef(const BlockDef& def) {
+    return def.placementStrategy == "stairs";
+}
+
 bool canConnectedBlockAttachTo(const StateID stateId) {
     if (stateId == BlockIds::AIR) {
         return false;
@@ -82,6 +86,77 @@ void requireHorizontalConnectionProperties() {
         PropIndices::WEST_FALSE == PropIndices::INVALID) {
         throw std::runtime_error("Horizontal connection updates require north/south/east/west boolean properties");
     }
+}
+
+void requireStairShapeProperties() {
+    if (PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::HALF == PropIndices::INVALID ||
+        PropIndices::SHAPE == PropIndices::INVALID ||
+        PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID ||
+        PropIndices::SHAPE_INNER_LEFT == PropIndices::INVALID ||
+        PropIndices::SHAPE_INNER_RIGHT == PropIndices::INVALID ||
+        PropIndices::SHAPE_OUTER_LEFT == PropIndices::INVALID ||
+        PropIndices::SHAPE_OUTER_RIGHT == PropIndices::INVALID) {
+        throw std::runtime_error("Stair shape updates require facing, half, and shape properties");
+    }
+}
+
+glm::ivec3 offsetForHorizontalFacing(const uint16_t facing) {
+    if (facing == PropIndices::FACING_EAST) {
+        return {1, 0, 0};
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        return {-1, 0, 0};
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        return {0, 0, 1};
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        return {0, 0, -1};
+    }
+    throw std::runtime_error("Stair shape updates require a horizontal facing value");
+}
+
+uint16_t oppositeHorizontalFacing(const uint16_t facing) {
+    if (facing == PropIndices::FACING_EAST) {
+        return PropIndices::FACING_WEST;
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        return PropIndices::FACING_EAST;
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        return PropIndices::FACING_NORTH;
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        return PropIndices::FACING_SOUTH;
+    }
+    throw std::runtime_error("Stair shape updates require a horizontal facing value");
+}
+
+uint16_t counterClockwiseHorizontalFacing(const uint16_t facing) {
+    if (facing == PropIndices::FACING_EAST) {
+        return PropIndices::FACING_NORTH;
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        return PropIndices::FACING_WEST;
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        return PropIndices::FACING_SOUTH;
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        return PropIndices::FACING_EAST;
+    }
+    throw std::runtime_error("Stair shape updates require a horizontal facing value");
+}
+
+bool arePerpendicularHorizontalFacings(const uint16_t a, const uint16_t b) {
+    const bool aEastWest = a == PropIndices::FACING_EAST || a == PropIndices::FACING_WEST;
+    const bool bEastWest = b == PropIndices::FACING_EAST || b == PropIndices::FACING_WEST;
+    if ((aEastWest || a == PropIndices::FACING_NORTH || a == PropIndices::FACING_SOUTH) &&
+        (bEastWest || b == PropIndices::FACING_NORTH || b == PropIndices::FACING_SOUTH)) {
+        return aEastWest != bEastWest;
+    }
+    throw std::runtime_error("Stair shape updates require horizontal facing values");
 }
 
 bool isWithinChunkRenderDistance(const int cx,
@@ -662,39 +737,102 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
 
     const BlockID blockId = BlockStateRegistry::getBlockId(currentState);
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    if (!isConnectedBlockDef(def)) {
+    const bool isConnectedBlock = isConnectedBlockDef(def);
+    const bool isStairsBlock = isStairsBlockDef(def);
+    if (!isConnectedBlock && !isStairsBlock) {
         return;
     }
 
-    requireHorizontalConnectionProperties();
+    StateID updatedState = currentState;
+    if (isConnectedBlock) {
+        requireHorizontalConnectionProperties();
 
-    StateID connectedState = currentState;
-    connectedState = BlockStateRegistry::withProperty(
-        connectedState,
-        PropIndices::NORTH,
-        canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z - 1))
-            ? PropIndices::NORTH_TRUE
-            : PropIndices::NORTH_FALSE);
-    connectedState = BlockStateRegistry::withProperty(
-        connectedState,
-        PropIndices::SOUTH,
-        canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z + 1))
-            ? PropIndices::SOUTH_TRUE
-            : PropIndices::SOUTH_FALSE);
-    connectedState = BlockStateRegistry::withProperty(
-        connectedState,
-        PropIndices::EAST,
-        canConnectedBlockAttachTo(getBlockState(pos.x + 1, pos.y, pos.z))
-            ? PropIndices::EAST_TRUE
-            : PropIndices::EAST_FALSE);
-    connectedState = BlockStateRegistry::withProperty(
-        connectedState,
-        PropIndices::WEST,
-        canConnectedBlockAttachTo(getBlockState(pos.x - 1, pos.y, pos.z))
-            ? PropIndices::WEST_TRUE
-            : PropIndices::WEST_FALSE);
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::NORTH,
+            canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z - 1))
+                ? PropIndices::NORTH_TRUE
+                : PropIndices::NORTH_FALSE);
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::SOUTH,
+            canConnectedBlockAttachTo(getBlockState(pos.x, pos.y, pos.z + 1))
+                ? PropIndices::SOUTH_TRUE
+                : PropIndices::SOUTH_FALSE);
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::EAST,
+            canConnectedBlockAttachTo(getBlockState(pos.x + 1, pos.y, pos.z))
+                ? PropIndices::EAST_TRUE
+                : PropIndices::EAST_FALSE);
+        updatedState = BlockStateRegistry::withProperty(
+            updatedState,
+            PropIndices::WEST,
+            canConnectedBlockAttachTo(getBlockState(pos.x - 1, pos.y, pos.z))
+                ? PropIndices::WEST_TRUE
+                : PropIndices::WEST_FALSE);
+    } else if (isStairsBlock) {
+        requireStairShapeProperties();
 
-    if (connectedState == currentState) {
+        const uint16_t currentFacing = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::FACING);
+        const uint16_t currentHalf = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::HALF);
+        const uint16_t currentShape = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::SHAPE);
+        if (currentFacing == BlockStateRegistry::INVALID_INDEX ||
+            currentHalf == BlockStateRegistry::INVALID_INDEX ||
+            currentShape == BlockStateRegistry::INVALID_INDEX) {
+            throw std::runtime_error("Stair shape updates require state facing, half, and shape values");
+        }
+
+        const auto isStairWithSameHalf = [&](const StateID state) {
+            if (state == BlockIds::AIR) {
+                return false;
+            }
+            const BlockID otherBlockId = BlockStateRegistry::getBlockId(state);
+            const BlockDef& otherDef = BlockRegistry::getFast(otherBlockId);
+            if (!isStairsBlockDef(otherDef)) {
+                return false;
+            }
+            return BlockStateRegistry::getPropertyIndex(state, PropIndices::HALF) == currentHalf;
+        };
+        const auto canUseShapeSide = [&](const uint16_t sideFacing) {
+            const glm::ivec3 offset = offsetForHorizontalFacing(sideFacing);
+            const StateID sideState = getBlockState(pos.x + offset.x, pos.y, pos.z + offset.z);
+            if (!isStairWithSameHalf(sideState)) {
+                return true;
+            }
+            return BlockStateRegistry::getPropertyIndex(sideState, PropIndices::FACING) != currentFacing;
+        };
+        const auto stairNeighborFacing = [&](const glm::ivec3& offset, uint16_t& neighborFacing) {
+            const StateID neighborState = getBlockState(pos.x + offset.x, pos.y, pos.z + offset.z);
+            if (!isStairWithSameHalf(neighborState)) {
+                return false;
+            }
+            neighborFacing = BlockStateRegistry::getPropertyIndex(neighborState, PropIndices::FACING);
+            if (neighborFacing == BlockStateRegistry::INVALID_INDEX) {
+                throw std::runtime_error("Stair shape updates require neighbor facing values");
+            }
+            return arePerpendicularHorizontalFacings(currentFacing, neighborFacing);
+        };
+
+        uint16_t shapeValue = PropIndices::SHAPE_STRAIGHT;
+        uint16_t neighborFacing = PropIndices::INVALID;
+        const glm::ivec3 frontOffset = offsetForHorizontalFacing(currentFacing);
+        if (stairNeighborFacing(frontOffset, neighborFacing) &&
+            canUseShapeSide(oppositeHorizontalFacing(neighborFacing))) {
+            shapeValue = (neighborFacing == counterClockwiseHorizontalFacing(currentFacing))
+                ? PropIndices::SHAPE_OUTER_LEFT
+                : PropIndices::SHAPE_OUTER_RIGHT;
+        } else if (stairNeighborFacing(-frontOffset, neighborFacing) &&
+                   canUseShapeSide(neighborFacing)) {
+            shapeValue = (neighborFacing == counterClockwiseHorizontalFacing(currentFacing))
+                ? PropIndices::SHAPE_INNER_LEFT
+                : PropIndices::SHAPE_INNER_RIGHT;
+        }
+
+        updatedState = BlockStateRegistry::withProperty(updatedState, PropIndices::SHAPE, shapeValue);
+    }
+
+    if (updatedState == currentState) {
         return;
     }
 
@@ -712,9 +850,9 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
     Chunk& chunk = *it->second;
 
     if (m_lightService) {
-        chunk.setBlockWithoutMeshDirty(localX, pos.y, localZ, connectedState);
+        chunk.setBlockWithoutMeshDirty(localX, pos.y, localZ, updatedState);
     } else {
-        chunk.setBlock(localX, pos.y, localZ, connectedState);
+        chunk.setBlock(localX, pos.y, localZ, updatedState);
     }
 
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
@@ -736,7 +874,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
     }
 
     if (m_blockChangeCallback) {
-        m_blockChangeCallback(pos.x, pos.y, pos.z, connectedState);
+        m_blockChangeCallback(pos.x, pos.y, pos.z, updatedState);
     }
     markChunkSaveDirty(chunkX, chunkZ);
 }

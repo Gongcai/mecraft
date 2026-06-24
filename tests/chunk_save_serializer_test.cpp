@@ -261,7 +261,8 @@ static void testBlockStateRoundTrip() {
         oakStairs,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_NORTH},
-            {PropIndices::HALF, PropIndices::HALF_BOTTOM}
+            {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+            {PropIndices::SHAPE, PropIndices::SHAPE_OUTER_LEFT}
         });
     original->setBlock(4, 64, 4, northBottomStairs);
 
@@ -275,9 +276,10 @@ static void testBlockStateRoundTrip() {
     const StateID loadedState = loaded->getBlock(4, 64, 4);
     if (loadedState != northBottomStairs ||
         BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) != PropIndices::FACING_NORTH ||
-        BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::HALF) != PropIndices::HALF_BOTTOM) {
+        BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::HALF) != PropIndices::HALF_BOTTOM ||
+        BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::SHAPE) != PropIndices::SHAPE_OUTER_LEFT) {
         std::fprintf(stderr,
-                     "[FAIL] chunk serializer should preserve stair facing and half state: expected=%s loaded=%s\n",
+                     "[FAIL] chunk serializer should preserve full stair state: expected=%s loaded=%s\n",
                      BlockStateRegistry::stateToString(northBottomStairs).c_str(),
                      BlockStateRegistry::stateToString(loadedState).c_str());
         std::abort();

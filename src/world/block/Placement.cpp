@@ -135,6 +135,11 @@ StateID strategyAxisOriented(const PlacementContext& ctx) {
 }
 
 StateID strategyStairs(const PlacementContext& ctx) {
+    if (PropIndices::SHAPE == PropIndices::INVALID ||
+        PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID) {
+        throw std::runtime_error("Stair placement requires registered shape=straight property");
+    }
+
     const uint16_t facingValue = (ctx.hitNormal.y == 0)
         ? stairFacingFromSideNormal(ctx.hitNormal)
         : horizontalFacingFromYaw(ctx.playerYaw);
@@ -144,7 +149,8 @@ StateID strategyStairs(const PlacementContext& ctx) {
         ctx.blockId,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facingValue},
-            {PropIndices::HALF, halfValue}
+            {PropIndices::HALF, halfValue},
+            {PropIndices::SHAPE, PropIndices::SHAPE_STRAIGHT}
         });
 }
 

@@ -22,7 +22,7 @@
 //     varuint stateLength
 //     char[stateLength] block state string
 //       e.g. "minecraft:stone"
-//       e.g. "minecraft:oak_stairs[facing=north, half=bottom]"
+//       e.g. "minecraft:oak_stairs[facing=north, half=bottom, shape=straight]"
 //   uint8_t   bitsPerEntry
 //   uint32_t  packedDataSize (bytes)
 //   uint8_t[packedDataSize] packedIndices
