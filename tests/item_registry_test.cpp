@@ -119,6 +119,35 @@ int main() {
         return fail("oak_leaves should keep its tinted baked block icon");
     }
 
+    const ItemID wheatSeedsItem = ItemRegistry::findByName("wheat_seeds");
+    const BlockID wheatCropBlock = BlockRegistry::findByName("wheat");
+    if (wheatSeedsItem == ItemIds::AIR || wheatCropBlock == BlockIds::AIR) {
+        return fail("wheat seeds item and wheat crop block should be registered");
+    }
+    const ItemDef& wheatSeeds = ItemRegistry::get(wheatSeedsItem);
+    if (std::string(wheatSeeds.iconTextureName) != "wheat_seeds" ||
+        ItemRegistry::toPlaceBlock(wheatSeedsItem) != wheatCropBlock ||
+        ItemRegistry::toRenderBlock(wheatSeedsItem) != BlockIds::AIR) {
+        return fail("wheat seeds should place wheat while keeping its item icon");
+    }
+
+    const ItemID carrotItem = ItemRegistry::findByName("carrot");
+    const ItemID potatoItem = ItemRegistry::findByName("potato");
+    const BlockID carrotsBlock = BlockRegistry::findByName("carrots");
+    const BlockID potatoesBlock = BlockRegistry::findByName("potatoes");
+    if (carrotItem == ItemIds::AIR || potatoItem == ItemIds::AIR ||
+        carrotsBlock == BlockIds::AIR || potatoesBlock == BlockIds::AIR) {
+        return fail("carrot and potato crop items and blocks should be registered");
+    }
+    if (ItemRegistry::toPlaceBlock(carrotItem) != carrotsBlock ||
+        ItemRegistry::toRenderBlock(carrotItem) != BlockIds::AIR) {
+        return fail("carrot item should place carrots while keeping its item icon");
+    }
+    if (ItemRegistry::toPlaceBlock(potatoItem) != potatoesBlock ||
+        ItemRegistry::toRenderBlock(potatoItem) != BlockIds::AIR) {
+        return fail("potato item should place potatoes while keeping its item icon");
+    }
+
     // BlockDropTable tests
     if (BlockDropTable::getDropItem(BlockIds::COAL_ORE) != ItemIds::COAL) {
         return fail("coal_ore should drop coal item");
@@ -137,6 +166,13 @@ int main() {
     }
     if (BlockDropTable::getDropItem(BlockIds::AIR) != ItemIds::AIR) {
         return fail("air should drop air (nothing)");
+    }
+    if (BlockDropTable::getDropItem(wheatCropBlock) != ItemRegistry::findByName("wheat")) {
+        return fail("wheat crop should drop wheat item");
+    }
+    if (BlockDropTable::getDropItem(carrotsBlock) != carrotItem ||
+        BlockDropTable::getDropItem(potatoesBlock) != potatoItem) {
+        return fail("carrot and potato crops should drop their food items");
     }
 
     std::cout << "[item_registry_test] PASS\n";

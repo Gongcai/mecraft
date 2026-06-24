@@ -164,7 +164,11 @@
     "red_mushroom": "Red Mushroom",
     "short_grass": "Short Grass",
     "fern": "Fern",
-    "dead_bush": "Dead Bush"
+    "dead_bush": "Dead Bush",
+    "farmland": "Farmland",
+    "wheat": "Wheat Crops",
+    "carrots": "Carrots",
+    "potatoes": "Potatoes"
   },
   "items": {
     "coal": "Coal",
@@ -184,6 +188,7 @@
     "stick": "Stick",
     "flint": "Flint",
     "wheat": "Wheat",
+    "wheat_seeds": "Wheat Seeds",
     "bread": "Bread",
     "carrot": "Carrot",
     "potato": "Potato",

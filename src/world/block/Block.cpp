@@ -50,6 +50,26 @@ void setAllFaces(BlockDef& def, const AnimatedTextureRef& ref) {
     def.faceBack = ref;
 }
 
+BlockTextureFaces textureFacesFromBlock(const BlockDef& def) {
+    BlockTextureFaces faces;
+    faces.faceTop = def.faceTop;
+    faces.faceBottom = def.faceBottom;
+    faces.faceLeft = def.faceLeft;
+    faces.faceRight = def.faceRight;
+    faces.faceFront = def.faceFront;
+    faces.faceBack = def.faceBack;
+    return faces;
+}
+
+void setAllFaces(BlockTextureFaces& faces, const AnimatedTextureRef& ref) {
+    faces.faceTop = ref;
+    faces.faceBottom = ref;
+    faces.faceLeft = ref;
+    faces.faceRight = ref;
+    faces.faceFront = ref;
+    faces.faceBack = ref;
+}
+
 BlockID resolveDefinitionBlockId(const BlockID id) {
     if (id < BlockRegistry::getBlockCount()) {
         return id;
@@ -465,6 +485,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.revertPlacementFacing = false;
         def.supportRule.clear();
         def.namedTextureAnimations.clear();
+        def.stateTextureRules.clear();
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -543,63 +564,140 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         bool hasUntintedTexture = false;
         BiomeTintKind textureTint = BiomeTintKind::None;
 
-        if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
-            const auto& tex = blockJson["textures"];
-
-            auto resolveTexture = [&](const char* key) -> AnimatedTextureRef {
+        auto resolveTextureName = [&](const std::string& name) -> AnimatedTextureRef {
 #ifdef MECRAFT_NO_TEXTURES
-                return makeStaticWorldTexture(0);
+            static_cast<void>(name);
+            return makeStaticWorldTexture(0);
 #else
-                if (!tex.contains(key) || resourceMgr == nullptr) {
-                    return makeStaticWorldTexture(0);
-                }
-                if (!tex[key].is_string()) {
-                    throw std::runtime_error(std::string("Block texture key must be a string: ") +
-                                             def.namespacedId.full() + "." + key);
-                }
-                const std::string name = tex[key].get<std::string>();
-                const BiomeTintKind resolvedTint = biomeTintKindFromResourceTint(resourceMgr->getTextureTint(name));
-                if (resolvedTint == BiomeTintKind::None) {
+            if (resourceMgr == nullptr) {
+                return makeStaticWorldTexture(0);
+            }
+            const BiomeTintKind resolvedTint = biomeTintKindFromResourceTint(resourceMgr->getTextureTint(name));
+            if (resolvedTint == BiomeTintKind::None) {
+                hasUntintedTexture = true;
+            } else {
+                hasTintedTexture = true;
+                if (textureTint == BiomeTintKind::None) {
+                    textureTint = resolvedTint;
+                } else if (textureTint != resolvedTint) {
                     hasUntintedTexture = true;
-                } else {
-                    hasTintedTexture = true;
-                    if (textureTint == BiomeTintKind::None) {
-                        textureTint = resolvedTint;
-                    } else if (textureTint != resolvedTint) {
-                        hasUntintedTexture = true;
-                    }
                 }
-                return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name));
+            }
+            return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name));
 #endif
-            };
+        };
 
+        auto resolveTextureKey = [&](const nlohmann::json& tex,
+                                     const char* key,
+                                     const std::string& context) -> AnimatedTextureRef {
+            if (!tex.contains(key)) {
+                return makeStaticWorldTexture(0);
+            }
+            if (!tex[key].is_string()) {
+                throw std::runtime_error("Block texture key must be a string: " + context + "." + key);
+            }
+            return resolveTextureName(tex[key].get<std::string>());
+        };
+
+        auto applyTextureObjectToBlock = [&](const nlohmann::json& tex,
+                                             const std::string& context) {
             if (tex.contains("all")) {
-                setAllFaces(def, resolveTexture("all"));
+                setAllFaces(def, resolveTextureKey(tex, "all", context));
             }
             if (tex.contains("top")) {
-                def.faceTop = resolveTexture("top");
+                def.faceTop = resolveTextureKey(tex, "top", context);
             }
             if (tex.contains("bottom")) {
-                def.faceBottom = resolveTexture("bottom");
+                def.faceBottom = resolveTextureKey(tex, "bottom", context);
             }
             if (tex.contains("side")) {
-                const AnimatedTextureRef ref = resolveTexture("side");
+                const AnimatedTextureRef ref = resolveTextureKey(tex, "side", context);
                 def.faceLeft = ref;
                 def.faceRight = ref;
                 def.faceFront = ref;
                 def.faceBack = ref;
             }
             if (tex.contains("left")) {
-                def.faceLeft = resolveTexture("left");
+                def.faceLeft = resolveTextureKey(tex, "left", context);
             }
             if (tex.contains("right")) {
-                def.faceRight = resolveTexture("right");
+                def.faceRight = resolveTextureKey(tex, "right", context);
             }
             if (tex.contains("front")) {
-                def.faceFront = resolveTexture("front");
+                def.faceFront = resolveTextureKey(tex, "front", context);
             }
             if (tex.contains("back")) {
-                def.faceBack = resolveTexture("back");
+                def.faceBack = resolveTextureKey(tex, "back", context);
+            }
+        };
+
+        auto parseTextureFaces = [&](const nlohmann::json& tex,
+                                     const BlockDef& baseDef,
+                                     const std::string& context) -> BlockTextureFaces {
+            if (!tex.is_object()) {
+                throw std::runtime_error("State texture entry must be an object: " + context);
+            }
+
+            BlockTextureFaces faces = textureFacesFromBlock(baseDef);
+            if (tex.contains("all")) {
+                setAllFaces(faces, resolveTextureKey(tex, "all", context));
+            }
+            if (tex.contains("top")) {
+                faces.faceTop = resolveTextureKey(tex, "top", context);
+            }
+            if (tex.contains("bottom")) {
+                faces.faceBottom = resolveTextureKey(tex, "bottom", context);
+            }
+            if (tex.contains("side")) {
+                const AnimatedTextureRef ref = resolveTextureKey(tex, "side", context);
+                faces.faceLeft = ref;
+                faces.faceRight = ref;
+                faces.faceFront = ref;
+                faces.faceBack = ref;
+            }
+            if (tex.contains("left")) {
+                faces.faceLeft = resolveTextureKey(tex, "left", context);
+            }
+            if (tex.contains("right")) {
+                faces.faceRight = resolveTextureKey(tex, "right", context);
+            }
+            if (tex.contains("front")) {
+                faces.faceFront = resolveTextureKey(tex, "front", context);
+            }
+            if (tex.contains("back")) {
+                faces.faceBack = resolveTextureKey(tex, "back", context);
+            }
+            return faces;
+        };
+
+        if (blockJson.contains("textures") && blockJson["textures"].is_object()) {
+            const auto& tex = blockJson["textures"];
+            applyTextureObjectToBlock(tex, def.namespacedId.full());
+        }
+
+        if (blockJson.contains("stateTextures")) {
+            if (!blockJson["stateTextures"].is_object()) {
+                throw std::runtime_error("stateTextures must be an object for block: " + def.namespacedId.full());
+            }
+
+            for (auto propertyIt = blockJson["stateTextures"].begin();
+                 propertyIt != blockJson["stateTextures"].end();
+                 ++propertyIt) {
+                if (!propertyIt.value().is_object()) {
+                    throw std::runtime_error("stateTextures property entry must be an object: " +
+                                             def.namespacedId.full() + "." + propertyIt.key());
+                }
+
+                StateTextureRule rule;
+                rule.propertyName = propertyIt.key();
+                for (auto valueIt = propertyIt.value().begin(); valueIt != propertyIt.value().end(); ++valueIt) {
+                    rule.texturesByValue.emplace(
+                        valueIt.key(),
+                        parseTextureFaces(valueIt.value(),
+                                          def,
+                                          def.namespacedId.full() + "." + propertyIt.key() + "=" + valueIt.key()));
+                }
+                def.stateTextureRules.push_back(std::move(rule));
             }
         }
 

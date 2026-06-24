@@ -36,6 +36,11 @@ bool checkGround(const World& world, const glm::ivec3& pos) {
     return isSupportive(world, pos + glm::ivec3(0, -1, 0));
 }
 
+bool checkFarmland(const World& world, const glm::ivec3& pos) {
+    const BlockID id = world.getBlock(pos.x, pos.y - 1, pos.z);
+    return id != 0 && BlockRegistry::getFast(id).namespacedId.path() == "farmland";
+}
+
 /// Evaluate the "attached_face" support rule for torches.
 /// The torch has a `facing` property that indicates which face it's attached to.
 /// We look up the facing value and check if the block on that side is solid.
@@ -85,6 +90,9 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
 
     if (def.supportRule == "ground") {
         return checkGround(world, pos);
+    }
+    if (def.supportRule == "farmland") {
+        return checkFarmland(world, pos);
     }
     if (def.supportRule == "attached_face") {
         return checkAttachedFace(world, pos, stateId);

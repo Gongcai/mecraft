@@ -172,6 +172,104 @@
       }
     },
     {
+      "id": "minecraft:farmland",
+      "drop": "minecraft:dirt",
+      "timeToBreak": 600,
+      "textures": {
+        "top": "farmland",
+        "bottom": "dirt",
+        "side": "dirt"
+      }
+    },
+    {
+      "id": "minecraft:wheat",
+      "drop": "minecraft:wheat",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "farmland",
+      "biomeTint": "none",
+      "timeToBreak": 0,
+      "properties": {
+        "age": ["0", "1", "2", "3", "4", "5", "6", "7"]
+      },
+      "defaultState": {
+        "age": "0"
+      },
+      "textures": {
+        "all": "wheat_stage0"
+      },
+      "stateTextures": {
+        "age": {
+          "0": { "all": "wheat_stage0" },
+          "1": { "all": "wheat_stage1" },
+          "2": { "all": "wheat_stage2" },
+          "3": { "all": "wheat_stage3" },
+          "4": { "all": "wheat_stage4" },
+          "5": { "all": "wheat_stage5" },
+          "6": { "all": "wheat_stage6" },
+          "7": { "all": "wheat_stage7" }
+        }
+      }
+    },
+    {
+      "id": "minecraft:carrots",
+      "drop": "minecraft:carrot",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "farmland",
+      "biomeTint": "none",
+      "timeToBreak": 0,
+      "properties": {
+        "age": ["0", "1", "2", "3"]
+      },
+      "defaultState": {
+        "age": "0"
+      },
+      "textures": {
+        "all": "carrots_stage0"
+      },
+      "stateTextures": {
+        "age": {
+          "0": { "all": "carrots_stage0" },
+          "1": { "all": "carrots_stage1" },
+          "2": { "all": "carrots_stage2" },
+          "3": { "all": "carrots_stage3" }
+        }
+      }
+    },
+    {
+      "id": "minecraft:potatoes",
+      "drop": "minecraft:potato",
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "renderShape": "cross",
+      "supportRule": "farmland",
+      "biomeTint": "none",
+      "timeToBreak": 0,
+      "properties": {
+        "age": ["0", "1", "2", "3"]
+      },
+      "defaultState": {
+        "age": "0"
+      },
+      "textures": {
+        "all": "potatoes_stage0"
+      },
+      "stateTextures": {
+        "age": {
+          "0": { "all": "potatoes_stage0" },
+          "1": { "all": "potatoes_stage1" },
+          "2": { "all": "potatoes_stage2" },
+          "3": { "all": "potatoes_stage3" }
+        }
+      }
+    },
+    {
       "id": "minecraft:oak_planks",
       "drop": "minecraft:oak_planks",
       "timeToBreak": 1000,

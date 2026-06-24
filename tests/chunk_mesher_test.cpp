@@ -740,6 +740,30 @@ int main() {
     }
 
     {
+        const BlockID wheat = BlockRegistry::findByName("wheat");
+        if (wheat == BlockIds::AIR) {
+            return fail("wheat crop should be registered for meshing");
+        }
+        const uint16_t ageProperty = BlockStateRegistry::getPropertyNameIndex("age");
+        const StateID matureWheat = BlockStateRegistry::getState(
+            wheat,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {ageProperty, BlockStateRegistry::getPropertyValueIndex(ageProperty, "7")}
+        });
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(1, 32, 1, matureWheat);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (!meshData.opaqueVertices.empty() || !meshData.transparentVertices.empty()) {
+            return fail("wheat crop should not emit opaque or transparent cube geometry");
+        }
+        if (meshData.cutoutVertices.size() + meshData.cutoutDistanceVertices.size() != 12) {
+            return fail("wheat crop should emit two crossed cutout quads");
+        }
+    }
+
+    {
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, FluidState::makeWater(3, false));
         chunk.setBlock(1, 32, 0, FluidState::makeWater(0, false));

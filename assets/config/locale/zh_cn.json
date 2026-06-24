@@ -164,7 +164,11 @@
     "red_mushroom": "红色蘑菇",
     "short_grass": "矮草丛",
     "fern": "蕨",
-    "dead_bush": "枯萎的灌木"
+    "dead_bush": "枯萎的灌木",
+    "farmland": "耕地",
+    "wheat": "小麦作物",
+    "carrots": "胡萝卜作物",
+    "potatoes": "马铃薯作物"
   },
   "items": {
     "coal": "煤炭",
@@ -184,6 +188,7 @@
     "stick": "木棍",
     "flint": "燧石",
     "wheat": "小麦",
+    "wheat_seeds": "小麦种子",
     "bread": "面包",
     "carrot": "胡萝卜",
     "potato": "马铃薯",

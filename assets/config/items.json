@@ -165,6 +165,14 @@
       "renderBlock": "minecraft:air"
     },
     {
+      "id": "minecraft:wheat_seeds",
+      "iconTexture": "wheat_seeds",
+      "maxStack": 64,
+      "icon": "minecraft:wheat_seeds",
+      "placeBlock": "minecraft:wheat",
+      "renderBlock": "minecraft:air"
+    },
+    {
       "id": "minecraft:bread",
       "iconTexture": "bread",
       "maxStack": 64,
@@ -177,7 +185,7 @@
       "iconTexture": "carrot",
       "maxStack": 64,
       "icon": "minecraft:carrot",
-      "placeBlock": "minecraft:air",
+      "placeBlock": "minecraft:carrots",
       "renderBlock": "minecraft:air"
     },
     {
@@ -185,7 +193,7 @@
       "iconTexture": "potato",
       "maxStack": 64,
       "icon": "minecraft:potato",
-      "placeBlock": "minecraft:air",
+      "placeBlock": "minecraft:potatoes",
       "renderBlock": "minecraft:air"
     },
     {

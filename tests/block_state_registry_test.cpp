@@ -696,6 +696,62 @@ int main() {
         return fail("wall placement should start from the default disconnected state");
     }
 
+    const uint16_t ageProperty = BlockStateRegistry::getPropertyNameIndex("age");
+    if (ageProperty == BlockStateRegistry::INVALID_INDEX) {
+        return fail("crop age property should be registered from blocks.json");
+    }
+
+    const BlockID farmland = BlockRegistry::findByName("farmland");
+    if (farmland == BlockIds::AIR) {
+        return fail("farmland should be registered for crop support");
+    }
+
+    const BlockID wheat = BlockRegistry::findByName("wheat");
+    if (wheat == BlockIds::AIR) {
+        return fail("wheat crop block should be registered");
+    }
+    const BlockDef& wheatDef = BlockRegistry::get(wheat);
+    if (wheatDef.renderShapeName != "cross" ||
+        wheatDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("cross")) {
+        return fail("wheat crop should use cross rendering");
+    }
+    if (wheatDef.supportRule != "farmland") {
+        return fail("wheat crop should require farmland support");
+    }
+    if (wheatDef.stateTextureRules.size() != 1 ||
+        wheatDef.stateTextureRules.front().propertyName != "age" ||
+        wheatDef.stateTextureRules.front().texturesByValue.size() != 8) {
+        return fail("wheat crop should register age texture rules");
+    }
+    const StateID wheatDefault = BlockStateRegistry::getDefaultState(wheat);
+    if (BlockStateRegistry::getPropertyIndex(wheatDefault, ageProperty) !=
+        BlockStateRegistry::getPropertyValueIndex(ageProperty, "0")) {
+        return fail("wheat crop default age should be 0");
+    }
+    const StateID wheatMature = BlockStateRegistry::getState(
+        wheat,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {ageProperty, BlockStateRegistry::getPropertyValueIndex(ageProperty, "7")}
+        });
+    if (wheatMature == wheatDefault ||
+        BlockStateRegistry::getBlockId(wheatMature) != wheat) {
+        return fail("wheat crop age 7 should resolve to a distinct wheat state");
+    }
+
+    const BlockID carrots = BlockRegistry::findByName("carrots");
+    const BlockID potatoes = BlockRegistry::findByName("potatoes");
+    if (carrots == BlockIds::AIR || potatoes == BlockIds::AIR) {
+        return fail("carrot and potato crop blocks should be registered");
+    }
+    const BlockDef& carrotsDef = BlockRegistry::get(carrots);
+    const BlockDef& potatoesDef = BlockRegistry::get(potatoes);
+    if (carrotsDef.stateTextureRules.size() != 1 ||
+        potatoesDef.stateTextureRules.size() != 1 ||
+        carrotsDef.stateTextureRules.front().texturesByValue.size() != 4 ||
+        potatoesDef.stateTextureRules.front().texturesByValue.size() != 4) {
+        return fail("carrot and potato crops should register four age texture rules");
+    }
+
     const BlockID vine = BlockRegistry::findByName("vine");
     if (vine == BlockIds::AIR) {
         return fail("vine should be registered for placement tests");

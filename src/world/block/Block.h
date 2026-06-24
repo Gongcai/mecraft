@@ -215,6 +215,20 @@ struct NamedTextureAnimation {
     AnimatedTextureRef ref;
 };
 
+struct BlockTextureFaces {
+    AnimatedTextureRef faceTop;
+    AnimatedTextureRef faceBottom;
+    AnimatedTextureRef faceLeft;
+    AnimatedTextureRef faceRight;
+    AnimatedTextureRef faceFront;
+    AnimatedTextureRef faceBack;
+};
+
+struct StateTextureRule {
+    std::string propertyName;
+    std::unordered_map<std::string, BlockTextureFaces> texturesByValue;
+};
+
 struct BlockDef {
     NamespacedId namespacedId = NamespacedId("minecraft", "unknown");
     bool isSolid        = true;
@@ -246,6 +260,7 @@ struct BlockDef {
     AnimatedTextureRef faceFront;
     AnimatedTextureRef faceBack;
     std::unordered_map<std::string, NamedTextureAnimation> namedTextureAnimations;
+    std::vector<StateTextureRule> stateTextureRules;
 
     // Convenience: return the TextureArray first layer for a given face (0=top,1=bottom,2=front,3=back,4=left,5=right)
     [[nodiscard]] int getFaceLayer(int face) const {

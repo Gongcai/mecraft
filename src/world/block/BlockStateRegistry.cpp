@@ -54,6 +54,37 @@ StateTextureIndices makeTexturesForBlock(const BlockID blockId) {
     return textures;
 }
 
+void applyTextureFaces(StateTextureIndices& textures, const BlockTextureFaces& faces) {
+    textures.faceTop = faces.faceTop;
+    textures.faceBottom = faces.faceBottom;
+    textures.faceLeft = faces.faceLeft;
+    textures.faceRight = faces.faceRight;
+    textures.faceFront = faces.faceFront;
+    textures.faceBack = faces.faceBack;
+}
+
+void applyStateTextureRules(StateTextureIndices& textures,
+                            const BlockDef& def,
+                            const std::vector<PropertyKey>& props) {
+    if (def.stateTextureRules.empty()) {
+        return;
+    }
+
+    for (const PropertyKey& prop : props) {
+        const std::string& name = BlockStateRegistry::getPropertyName(prop.nameIndex);
+        const std::string& value = BlockStateRegistry::getPropertyValue(prop.nameIndex, prop.valueIndex);
+        for (const StateTextureRule& rule : def.stateTextureRules) {
+            if (rule.propertyName != name) {
+                continue;
+            }
+            const auto textureIt = rule.texturesByValue.find(value);
+            if (textureIt != rule.texturesByValue.end()) {
+                applyTextureFaces(textures, textureIt->second);
+            }
+        }
+    }
+}
+
 void applyFurnaceFacingTextures(StateTextureIndices& textures,
                                 const BlockDef& def,
                                 const std::vector<PropertyKey>& props) {
@@ -147,6 +178,7 @@ StateTextureIndices makeTexturesForState(const BlockID blockId,
     }
 
     applyFurnaceFacingTextures(textures, def, props);
+    applyStateTextureRules(textures, def, props);
 
     if (def.namespacedId == NamespacedId("minecraft", "water")) {
         bool isSource = true;
