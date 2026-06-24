@@ -460,6 +460,9 @@
       },
       "placementStrategy": "horizontal_facing",
       "revert": true,
+      "isTransparent": true,
+      "opacity": 0,
+      "renderShape": "block_entity",
       "materialKind": "wood",
       "timeToBreak": 2500,
       "textures": {

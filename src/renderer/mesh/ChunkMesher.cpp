@@ -3326,6 +3326,22 @@ void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
     }
 }
 
+void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData,
+                                         const SubChunkMeshingSnapshot& snapshot,
+                                         const BlockID blockId,
+                                         const BlockDef& def,
+                                         const int x,
+                                         const int y,
+                                         const int z) {
+    static_cast<void>(meshData);
+    static_cast<void>(snapshot);
+    static_cast<void>(blockId);
+    static_cast<void>(def);
+    static_cast<void>(x);
+    static_cast<void>(y);
+    static_cast<void>(z);
+}
+
 void buildWaterSkippingTop(ChunkMeshData& meshData,
                            const SubChunkMeshingSnapshot& snapshot,
                            const BlockID blockId,

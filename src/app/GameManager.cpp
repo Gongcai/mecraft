@@ -94,6 +94,7 @@ void GameManager::initResources() {
     m_resourceMgr.loadGuiTexture("creative_scroller", std::string(CREATIVE_TABS_PATH) + "/scroller.png", true);
     m_resourceMgr.loadGuiTexture("creative_scroller_disabled", std::string(CREATIVE_TABS_PATH) + "/scroller_disabled.png", true);
     m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
+    m_resourceMgr.loadGuiTexture("chest", CHEST_ENTITY_TEXTURE_PATH, true);
     m_resourceMgr.preloadEntityTexturesFromConfig(ENTITIES_CONFIG_PATH);
 
     m_resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);

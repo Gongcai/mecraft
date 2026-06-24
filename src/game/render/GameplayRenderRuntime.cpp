@@ -1,6 +1,7 @@
 #include "GameplayRenderRuntime.h"
 #include "../../renderer/core/RenderResourceHub.h"
 #include "../../renderer/core/RenderScene.h"
+#include "../../renderer/renderers/BlockEntityRenderer.h"
 #include "../../renderer/renderers/DropRenderer.h"
 #include "../../renderer/renderers/FallingBlockRenderer.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
@@ -30,6 +31,7 @@
 struct GameplayRenderRuntime::Impl {
     RenderResourceHub resourceHub;
     RenderScene scene;
+    BlockEntityRenderer blockEntityRenderer;
     DropRenderer dropRenderer;
     FallingBlockRenderer fallingBlockRenderer;
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
@@ -58,6 +60,7 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   ThreadPool& threadPool) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
+    auto& blockEntityRenderer = m_impl->blockEntityRenderer;
     auto& dropRenderer = m_impl->dropRenderer;
     auto& fallingBlockRenderer = m_impl->fallingBlockRenderer;
     auto& firstPersonHeldItemRenderer = m_impl->firstPersonHeldItemRenderer;
@@ -88,12 +91,14 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     renderer.setDebugService(&renderScene.debugService());
 
     // Entity renderers
+    blockEntityRenderer.init(resourceMgr);
     dropRenderer.init(resourceMgr);
     fallingBlockRenderer.init(resourceMgr);
     firstPersonHeldItemRenderer.init(resourceMgr);
     humanoidRenderer.init(resourceMgr);
 
     // Cross-wire renderers into RenderScene
+    renderScene.setBlockEntityRenderer(&blockEntityRenderer);
     renderScene.setHumanoidRenderer(&humanoidRenderer);
     renderScene.setDropRenderer(&dropRenderer);
     renderScene.setFallingBlockRenderer(&fallingBlockRenderer);
@@ -120,6 +125,7 @@ void GameplayRenderRuntime::shutdown() {
     m_impl->firstPersonHeldItemRenderer.shutdown();
     m_impl->fallingBlockRenderer.shutdown();
     m_impl->dropRenderer.shutdown();
+    m_impl->blockEntityRenderer.shutdown();
     m_impl->scene.shutdown();
     m_impl->resourceHub.shutdown();
 }

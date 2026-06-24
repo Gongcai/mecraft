@@ -8,6 +8,7 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class Shader;
+class BlockEntityRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
@@ -33,6 +34,13 @@ public:
                          HumanoidRenderer* humanoidRenderer,
                          ecs::GameplayRegistry* gameplayRegistry,
                          bool renderLocalPlayerModel);
+
+    /// Execute block entity GBuffer rendering.
+    /// Prerequisites: GBuffer FBO already bound from terrain pass.
+    void executeBlockEntities(const IWorldView& worldView, const FrameContext& ctx,
+                              const RenderSettings& settings,
+                              DeferredRenderTargets& targets,
+                              BlockEntityRenderer* blockEntityRenderer);
 
     /// Execute drop GBuffer rendering.
     /// Prerequisites: GBuffer FBO bound, per-object velocity attached from entities.

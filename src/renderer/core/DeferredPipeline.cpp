@@ -104,6 +104,7 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
     if (m_shadowPass) {
         m_shadowPass->setTerrainRenderer(shared.terrain);
         m_shadowPass->setWorldRenderBuffer(shared.worldRenderBuffer);
+        m_shadowPass->setBlockEntityRenderer(shared.blockEntityRenderer);
         m_shadowPass->setHumanoidRenderer(shared.humanoidRenderer);
         m_shadowPass->setDropRenderer(shared.dropRenderer);
         m_shadowPass->setFallingBlockRenderer(shared.fallingBlockRenderer);
@@ -205,6 +206,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
                                            m_shared->humanoidRenderer,
                                            m_shared->gameplayRegistry,
                                            ctx.renderLocalPlayerModel);
+            m_gbufferPass->executeBlockEntities(*ctx.worldView, ctx, m_currentSettings,
+                                                targets,
+                                                m_shared->blockEntityRenderer);
             m_gbufferPass->executeDrops(*ctx.worldView, ctx, m_currentSettings,
                                         targets,
                                         m_shared->dropRenderer, m_shared->dropSystem);

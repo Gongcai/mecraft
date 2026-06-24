@@ -55,6 +55,7 @@ void MeshBuilderRegistry::initBuiltinBuilders() {
     registerBuilder("torch", TORCH_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildTorch);
     registerBuilder("water", WATER_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildWater);
     registerBuilder("model", MODEL_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildModelBlock);
+    registerBuilder("block_entity", BLOCK_ENTITY_TAG, MeshShapeClass::Custom, &ChunkMeshBuilders::buildBlockEntity);
 
     g_initialized = true;
 }

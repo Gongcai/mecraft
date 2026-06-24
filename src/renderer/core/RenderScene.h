@@ -23,6 +23,7 @@ class Camera;
 class DayNightSystem;
 class WeatherSystem;
 class Window;
+class BlockEntityRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
@@ -74,6 +75,7 @@ struct SharedRenderResources {
     ThreadPool* threadPool = nullptr;
 
     // Sub-renderers (non-owning)
+    BlockEntityRenderer* blockEntityRenderer = nullptr;
     HumanoidRenderer* humanoidRenderer = nullptr;
     DropRenderer* dropRenderer = nullptr;
     FallingBlockRenderer* fallingBlockRenderer = nullptr;
@@ -130,6 +132,7 @@ public:
     void setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback);
 
     // Sub-renderer injection (temporary until ECS-driven)
+    void setBlockEntityRenderer(BlockEntityRenderer* ber);
     void setHumanoidRenderer(HumanoidRenderer* hr);
     void setDropRenderer(DropRenderer* dr);
     void setFallingBlockRenderer(FallingBlockRenderer* fbr);
@@ -258,6 +261,7 @@ private:
     bool m_activePipelineInitialized = false;
 
     // Sub-renderers (non-owning)
+    BlockEntityRenderer* m_blockEntityRenderer = nullptr;
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;

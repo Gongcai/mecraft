@@ -384,6 +384,14 @@ void RenderScene::setSettingsChangedCallback(std::function<void(const RenderSett
     m_settingsChangedCallback = std::move(callback);
 }
 
+void RenderScene::setBlockEntityRenderer(BlockEntityRenderer* ber) {
+    m_blockEntityRenderer = ber;
+    m_shared.blockEntityRenderer = ber;
+    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setBlockEntityRenderer(ber);
+    }
+}
+
 void RenderScene::setHumanoidRenderer(HumanoidRenderer* hr) {
     m_humanoidRenderer = hr;
     m_shared.humanoidRenderer = hr;

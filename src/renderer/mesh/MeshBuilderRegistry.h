@@ -30,6 +30,7 @@ public:
     static constexpr uint8_t TORCH_TAG = 2;
     static constexpr uint8_t WATER_TAG = 3;
     static constexpr uint8_t MODEL_TAG = 4;
+    static constexpr uint8_t BLOCK_ENTITY_TAG = 5;
 
     static void registerBuilder(const std::string& shapeName,
                                 uint8_t tag,

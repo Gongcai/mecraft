@@ -166,8 +166,14 @@ int main() {
         if (MeshBuilderRegistry::getShapeTag("water") == MeshBuilderRegistry::INVALID_TAG) {
             return fail("water shape alias should be registered");
         }
+        if (MeshBuilderRegistry::getShapeTag("block_entity") != MeshBuilderRegistry::BLOCK_ENTITY_TAG) {
+            return fail("block_entity shape should resolve to the builtin block entity tag");
+        }
         if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::CROSS_TAG) == nullptr) {
             return fail("cross shape should resolve to a mesh builder");
+        }
+        if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::BLOCK_ENTITY_TAG) == nullptr) {
+            return fail("block_entity shape should resolve to a mesh builder");
         }
         const BlockDef& torchDef = BlockRegistry::get(BlockIds::TORCH);
         if (torchDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("torch")) {
@@ -176,6 +182,10 @@ int main() {
         const BlockDef& waterDef = BlockRegistry::get(BlockIds::WATER);
         if (waterDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("water")) {
             return fail("water block should resolve renderShapeTag through the mesh builder registry");
+        }
+        const BlockDef& chestDef = BlockRegistry::get(BlockIds::CHEST);
+        if (chestDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("block_entity")) {
+            return fail("chest block should resolve renderShapeTag through the mesh builder registry");
         }
     }
 
@@ -337,6 +347,21 @@ int main() {
         }
         if (ChunkMesher::shouldSkipSubChunk(waterChunk, 1)) {
             return fail("uniform transparent sub-chunks should still mesh when exposed");
+        }
+    }
+
+    {
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockIds::CHEST));
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (!meshData.opaqueVertices.empty() ||
+            !meshData.cutoutVertices.empty() ||
+            !meshData.cutoutDistanceVertices.empty() ||
+            !meshData.transparentVertices.empty() ||
+            !meshData.waterVertices.empty() ||
+            meshData.hasBounds) {
+            return fail("chest block entities should not emit terrain mesh geometry");
         }
     }
 

@@ -60,6 +60,7 @@
 #define FONT_ASCII_PATH       FONT_TEXTURES_DIR "/ascii.png"
 #define TEST_TEXTURE_PATH     BLOCKS_TEXTURES_DIR "/test.png"
 #define STEVE_TEXTURE_PATH    ENTITY_TEXTURE_DIR  "/steve.png"
+#define CHEST_ENTITY_TEXTURE_PATH ENTITY_TEXTURE_DIR "/chest/normal.png"
 #define TITLE_TEXTURE_PATH     GUI_TEXTURES_DIR "/title.png"
 #define SUN_TEXTURE_PATH       ENVIRONMENT_TEXTURES_DIR "/sun.png"
 #define MOON_TEXTURE_PATH      ENVIRONMENT_TEXTURES_DIR "/moon_phases.png"

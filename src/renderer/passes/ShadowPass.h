@@ -15,6 +15,7 @@ class ResourceMgr;
 class Shader;
 class IWorldView;
 class World;
+class BlockEntityRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
@@ -38,6 +39,7 @@ public:
     void setShadowRenderer(shadow::ShadowRenderer* sr) { m_shadowRenderer = sr; }
     void setTerrainRenderer(TerrainRenderer* tr) { m_terrainRenderer = tr; }
     void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
+    void setBlockEntityRenderer(BlockEntityRenderer* ber) { m_blockEntityRenderer = ber; }
     void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
     void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
     void setFallingBlockRenderer(FallingBlockRenderer* fbr) { m_fallingBlockRenderer = fbr; }
@@ -72,6 +74,10 @@ private:
     void renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
                               const glm::vec3& cameraPos, float splitNear, float splitFar);
 
+    /// Render block entity models into the current shadow cascade layer.
+    void renderShadowBlockEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
+                                   const glm::vec3& cameraPos, float splitNear, float splitFar);
+
     /// Render dropped items/blocks into the current shadow cascade layer.
     void renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
                             const glm::mat4& shadowView, const glm::mat4& shadowProjection,
@@ -87,6 +93,7 @@ private:
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     TerrainRenderer* m_terrainRenderer = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
+    BlockEntityRenderer* m_blockEntityRenderer = nullptr;
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;

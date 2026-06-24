@@ -470,6 +470,13 @@ int main() {
     }
 
     const BlockDef& chestDef = BlockRegistry::get(BlockIds::CHEST);
+    if (chestDef.renderShapeName != "block_entity" ||
+        chestDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("block_entity")) {
+        return fail("chest should render through the block entity renderer shape");
+    }
+    if (!chestDef.isSolid || !chestDef.isTransparent || chestDef.opacity != 0) {
+        return fail("chest should keep collision while allowing neighboring terrain faces and light");
+    }
     if (chestDef.placementStrategy != "horizontal_facing") {
         return fail("chest should parse horizontal_facing placement strategy");
     }

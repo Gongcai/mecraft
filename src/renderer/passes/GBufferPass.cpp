@@ -2,6 +2,7 @@
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
 #include "../core/RenderSettings.h"
+#include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
@@ -47,6 +48,29 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
         ? HumanoidRenderer::kRenderAll
         : HumanoidRenderer::kRenderMobsOnly;
     humanoidRenderer->renderToGBuffer(worldView, *gameplayRegistry, viewProj, previousViewProj, mode);
+
+    glBindVertexArray(0);
+}
+
+void GBufferPass::executeBlockEntities(const IWorldView& worldView, const FrameContext& ctx,
+                                       const RenderSettings& settings,
+                                       DeferredRenderTargets& targets,
+                                       BlockEntityRenderer* blockEntityRenderer) {
+    if (blockEntityRenderer == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    targets.attachPerObjectVelocityToGBuffer();
+
+    const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProj;
+    blockEntityRenderer->renderToGBuffer(worldView, viewProj, previousViewProj);
 
     glBindVertexArray(0);
 }

@@ -178,6 +178,7 @@ set(SRC_RENDERER
         src/renderer/passes/Fsr1Pass.cpp
 
         # Sub-renderers
+        src/renderer/renderers/BlockEntityRenderer.cpp
         src/renderer/renderers/DropRenderer.cpp
         src/renderer/renderers/FallingBlockRenderer.cpp
         src/renderer/renderers/FirstPersonHeldItemRenderer.cpp

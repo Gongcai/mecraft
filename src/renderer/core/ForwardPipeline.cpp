@@ -4,6 +4,7 @@
 #include "../mesh/WorldRenderBuffer.h"
 #include "../targets/CommonFrameTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
+#include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../../resource/ResourceMgr.h"
@@ -185,6 +186,10 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
+
+    if (m_shared->blockEntityRenderer) {
+        m_shared->blockEntityRenderer->renderForward(*ctx.worldView, ctx.camera.viewProj, ctx.skyIntensity);
+    }
 
     if (m_shared->dropRenderer && m_shared->dropSystem) {
         m_shared->dropRenderer->render(*m_shared->dropSystem, *ctx.cameraPtr, *ctx.windowPtr);

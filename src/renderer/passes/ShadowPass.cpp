@@ -15,6 +15,7 @@
 #include "../../world/World.h"
 #include "../../world/chunk/Chunk.h"
 #include "../../world/chunk/SubChunk.h"
+#include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
@@ -120,6 +121,29 @@ void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::ma
     m_humanoidRenderer->renderToShadowMap(worldView, *m_gameplayRegistry,
                                           shadowViewProj, cameraPos, splitNear, splitFar,
                                           HumanoidRenderer::kRenderAll);
+
+    glBindVertexArray(0);
+}
+
+void ShadowPass::renderShadowBlockEntities(const IWorldView& worldView,
+                                           const glm::mat4& shadowViewProj,
+                                           const glm::vec3& cameraPos,
+                                           const float splitNear,
+                                           const float splitFar) {
+    if (m_blockEntityRenderer == nullptr || m_entityShadowShader == nullptr) {
+        return;
+    }
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    m_entityShadowShader->use();
+    m_entityShadowShader->setInt("uTexture", 0);
+
+    m_blockEntityRenderer->renderToShadowMap(worldView, shadowViewProj, cameraPos, splitNear, splitFar);
 
     glBindVertexArray(0);
 }
@@ -396,6 +420,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             glPolygonOffset(2.0f, 4.0f);
             m_terrainRenderer->renderCutoutChunks(cascadeCutoutEntries[cascade], *m_shadowDepthShader);
             glDisable(GL_POLYGON_OFFSET_FILL);
+            // Block entity shadow: render chest-style entity models into this cascade.
+            renderShadowBlockEntities(worldView, cascadeData.viewProj, ctx.camera.position,
+                                      cascadeData.splitNear, cascadeData.splitFar);
             // Entity shadow: render humanoid/mob depth into this cascade with distance/split culling.
             renderShadowEntities(worldView, cascadeData.viewProj, ctx.camera.position, cascadeData.splitNear, cascadeData.splitFar);
             // Drop shadow: render dropped items/blocks depth into this cascade.
