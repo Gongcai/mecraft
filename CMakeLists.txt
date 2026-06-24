@@ -306,6 +306,7 @@ set(SRC_ECS
         src/ecs/systems/combat/ProjectileSystem.cpp
         src/ecs/systems/interaction/BlockTargetSystem.cpp
         src/ecs/systems/interaction/BlockBreakSystem.cpp
+        src/ecs/systems/interaction/SoilTillingSystem.cpp
         src/ecs/systems/interaction/BlockPlaceSystem.cpp
         src/ecs/systems/item/ItemSpawnSystem.cpp
         src/ecs/systems/item/ItemPhysicsSystem.cpp
@@ -319,6 +320,7 @@ set(SRC_ECS
         src/ecs/systems/audio/AudioSyncSystem.cpp
         src/ecs/systems/audio/PlayerFootstepAudioSystem.cpp
         src/ecs/systems/world/FluidTickSystem.cpp
+        src/ecs/systems/world/FarmlandMoistureSystem.cpp
         src/ecs/systems/world/BlockSupportSystem.cpp
         src/ecs/systems/world/FallingBlockSpawnSystem.cpp
         src/ecs/systems/world/FallingBlockTickSystem.cpp
@@ -584,6 +586,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
     add_mecraft_test(death_system_test tests/death_system_test.cpp)
     add_mecraft_test(block_break_tool_test tests/block_break_tool_test.cpp)
+    add_mecraft_test(farmland_moisture_and_tilling_test tests/farmland_moisture_and_tilling_test.cpp)
     add_mecraft_test(mob_ai_hurt_effect_test tests/mob_ai_hurt_effect_test.cpp)
     add_mecraft_test(chest_inventory_lifecycle_test tests/chest_inventory_lifecycle_test.cpp)
     add_mecraft_test(keyboard_input_box_test tests/keyboard_input_box_test.cpp)

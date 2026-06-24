@@ -175,10 +175,28 @@
       "id": "minecraft:farmland",
       "drop": "minecraft:dirt",
       "timeToBreak": 600,
+      "properties": {
+        "moisture": ["0", "1", "2", "3", "4", "5", "6", "7"]
+      },
+      "defaultState": {
+        "moisture": "0"
+      },
       "textures": {
         "top": "farmland",
         "bottom": "dirt",
         "side": "dirt"
+      },
+      "stateTextures": {
+        "moisture": {
+          "0": { "top": "farmland", "bottom": "dirt", "side": "dirt" },
+          "1": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" },
+          "2": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" },
+          "3": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" },
+          "4": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" },
+          "5": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" },
+          "6": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" },
+          "7": { "top": "farmland_moist", "bottom": "dirt", "side": "dirt" }
+        }
       }
     },
     {

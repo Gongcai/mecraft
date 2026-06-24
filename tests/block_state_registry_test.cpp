@@ -705,6 +705,23 @@ int main() {
     if (farmland == BlockIds::AIR) {
         return fail("farmland should be registered for crop support");
     }
+    const uint16_t moistureProperty = BlockStateRegistry::getPropertyNameIndex("moisture");
+    if (moistureProperty == BlockStateRegistry::INVALID_INDEX) {
+        return fail("farmland moisture property should be registered from blocks.json");
+    }
+    const StateID farmlandDefault = BlockStateRegistry::getDefaultState(farmland);
+    if (BlockStateRegistry::getPropertyIndex(farmlandDefault, moistureProperty) !=
+        BlockStateRegistry::getPropertyValueIndex(moistureProperty, "0")) {
+        return fail("farmland default moisture should be 0");
+    }
+    const StateID farmlandMoist = BlockStateRegistry::withProperty(
+        farmlandDefault,
+        moistureProperty,
+        BlockStateRegistry::getPropertyValueIndex(moistureProperty, "7"));
+    if (farmlandMoist == farmlandDefault ||
+        BlockStateRegistry::getBlockId(farmlandMoist) != farmland) {
+        return fail("farmland moisture 7 should resolve to a distinct farmland state");
+    }
 
     const BlockID wheat = BlockRegistry::findByName("wheat");
     if (wheat == BlockIds::AIR) {

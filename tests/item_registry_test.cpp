@@ -80,6 +80,17 @@ int main() {
         return fail("iron pickaxe should be a non-stackable tool");
     }
 
+    const ItemDef& ironHoe = ItemRegistry::get(ItemIds::IRON_HOE);
+    if (ItemRegistry::findByName("iron_hoe") != ItemIds::IRON_HOE) {
+        return fail("item name lookup should resolve iron_hoe from items.json");
+    }
+    if (!ironHoe.isTool || ironHoe.maxStack != 1 ||
+        ironHoe.toolKind != "hoe" || ironHoe.toolTier != 2 ||
+        ironHoe.placeBlock != BlockIds::AIR || ironHoe.renderBlock != BlockIds::AIR ||
+        std::string(ironHoe.iconTextureName) != "iron_hoe") {
+        return fail("iron hoe should be a non-placeable hoe tool with an item texture");
+    }
+
     const ItemID craftingTableItem = ItemRegistry::findByName("crafting_table");
     const BlockID craftingTableBlock = BlockRegistry::findByName("crafting_table");
     if (craftingTableItem == ItemIds::AIR || craftingTableBlock == BlockIds::AIR) {

@@ -1340,6 +1340,20 @@ void GameServer::broadcastPlayerMode(const net::ClientId clientId, const net::Ne
     }
 }
 
+namespace {
+
+bool isServerTillableSoil(const BlockID blockId) {
+    return blockId == BlockIds::DIRT || blockId == BlockIds::GRASS;
+}
+
+bool hasServerEmptySpaceAbove(const World& world, const glm::ivec3& pos) {
+    const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
+    return world.getBlockState(above.x, above.y, above.z) == BlockIds::AIR &&
+           world.getFluidState(above.x, above.y, above.z) == BlockIds::AIR;
+}
+
+} // namespace
+
 void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
     constexpr float kMaxActionDistance = 6.5f;
     const glm::ivec3 actionBlock = action.action == net::ClientBlockActionType::Place
@@ -1388,6 +1402,32 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             static_cast<void>(discardedContents);
         }
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
+                           client.id,
+                           action.targetBlock.x,
+                           action.targetBlock.y,
+                           action.targetBlock.z);
+        MECRAFT_LOG_FLUSH(stdout);
+        return;
+    }
+
+    if (action.action == net::ClientBlockActionType::Till) {
+        const BlockID farmlandBlock = BlockRegistry::findByName("farmland");
+        if (farmlandBlock == BlockIds::AIR) {
+            return;
+        }
+
+        const StateID targetState =
+            m_world.getBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
+        const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
+        if (!isServerTillableSoil(targetBlock) || !hasServerEmptySpaceAbove(m_world, action.targetBlock)) {
+            return;
+        }
+
+        m_world.setBlockState(action.targetBlock.x,
+                              action.targetBlock.y,
+                              action.targetBlock.z,
+                              BlockStateRegistry::getDefaultState(farmlandBlock));
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction till client=%u block=(%d,%d,%d)\n",
                            client.id,
                            action.targetBlock.x,
                            action.targetBlock.y,

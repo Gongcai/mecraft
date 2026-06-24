@@ -24,6 +24,7 @@ void Inventory::initializeDefaultLoadout() {
     setSlotItem(6, BlockIds::COAL_ORE);
     setSlotItem(7, ItemIds::APPLE, 16);
     setSlotItem(8, ItemIds::IRON_PICKAXE, 1);
+    setSlotItem(18, ItemIds::IRON_HOE, 1);
     setSlotItem(13, BlockIds::TORCH, 64);
     setSlotItem(14, ItemRegistry::fromBlock(BlockIds::BLUE_WOOL), 64);
     setSlotItem(15,BlockIds::BIRCH_LEAVES,64);

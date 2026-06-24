@@ -10,6 +10,7 @@
 #include "systems/interaction/BlockBreakSystem.h"
 #include "systems/interaction/BlockPlaceSystem.h"
 #include "systems/interaction/BlockTargetSystem.h"
+#include "systems/interaction/SoilTillingSystem.h"
 #include "systems/item/ItemLifetimeSystem.h"
 #include "systems/item/ItemMergeSystem.h"
 #include "systems/item/ItemPhysicsSystem.h"
@@ -36,6 +37,7 @@
 #include "systems/world/FallingBlockSpawnSystem.h"
 #include "systems/world/FallingBlockTickSystem.h"
 #include "systems/world/FallingBlockInterpolateSystem.h"
+#include "systems/world/FarmlandMoistureSystem.h"
 #include "systems/world/FluidTickSystem.h"
 
 #ifdef MECRAFT_DEBUG
@@ -80,6 +82,7 @@ void GameplayPipeline::buildClientFixedUpdateSystems() {
     addFixedUpdateSystem<HurtEffectDecaySystem>();
     addFixedUpdateSystem<DeathSystem>();
     addFixedUpdateSystem<BlockBreakSystem>();
+    addFixedUpdateSystem<SoilTillingSystem>();
     addFixedUpdateSystem<BlockPlaceSystem>();
 
     // Item/drop lifecycle.
@@ -131,6 +134,7 @@ void GameplayPipeline::buildServerFixedUpdateSystems() {
 
 void GameplayPipeline::buildClientTickSystems() {
     addTickSystem<FluidTickSystem>();
+    addTickSystem<FarmlandMoistureSystem>();
     addTickSystem<BlockSupportSystem>();
     // Spawn falling-block entities from events emitted by BlockSupportSystem,
     // then advance each entity one cell per tick (Minecraft falling semantics).

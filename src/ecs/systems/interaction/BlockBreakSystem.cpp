@@ -7,6 +7,7 @@
 #include "../../util/DropSpawnEventBuffer.h"
 #include "../../util/ParticleEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
+#include "../../util/ToolDurability.h"
 #include "../../components/Components.h"
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../game/inventory/ChestInventoryLifecycle.h"
@@ -73,30 +74,6 @@ float survivalBreakDurationMs(const BlockID targetBlock, const ItemStack& heldSt
     }
 
     return std::max(1.0f, baseDurationMs / itemDef.toolEfficiency);
-}
-
-void applyToolWear(Inventory& inventory) {
-    ItemStack heldStack = inventory.getSelectedStack();
-    if (heldStack.isEmpty()) {
-        return;
-    }
-
-    const ItemDef& itemDef = ItemRegistry::get(heldStack.itemId);
-    if (!itemDef.isTool || itemDef.maxDurability == 0) {
-        return;
-    }
-
-    if (heldStack.durability == 0) {
-        heldStack.durability = itemDef.maxDurability;
-    }
-
-    --heldStack.durability;
-    if (heldStack.durability == 0) {
-        inventory.setSlotStack(inventory.getSelectedSlot(), {});
-        return;
-    }
-
-    inventory.setSlotStack(inventory.getSelectedSlot(), heldStack);
 }
 
 } // namespace
@@ -234,7 +211,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             particleBus.push({hitBlock, brokenBlock});
             dropBus.push({brokenBlock, hitBlock});
-            applyToolWear(inventoryData.inventory);
+            applySelectedToolDurabilityWear(inventoryData.inventory);
             ++runtime.heldItemSwingSequence;
             resetBreakSession(blockBreak, runtime);
         }

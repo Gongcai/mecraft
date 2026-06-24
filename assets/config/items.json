@@ -37,6 +37,19 @@
       "maxDurability": 250
     },
     {
+      "id": "minecraft:iron_hoe",
+      "iconTexture": "iron_hoe",
+      "maxStack": 1,
+      "icon": "minecraft:iron_hoe",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air",
+      "isTool": true,
+      "toolKind": "hoe",
+      "toolTier": 2,
+      "toolEfficiency": 6.0,
+      "maxDurability": 250
+    },
+    {
       "id": "minecraft:diamond",
       "iconTexture": "diamond",
       "maxStack": 64,

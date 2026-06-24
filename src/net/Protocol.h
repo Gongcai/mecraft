@@ -119,6 +119,7 @@ struct ClientViewConfig {
 enum class ClientBlockActionType : uint8_t {
     Break = 0,
     Place = 1,
+    Till = 2,
 };
 
 struct ClientBlockAction {
