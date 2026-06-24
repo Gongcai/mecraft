@@ -5,6 +5,7 @@
 #include "../../util/DamageEventBuffer.h"
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
+#include "../../util/SimulationDistance.h"
 
 namespace ecs {
 namespace {
@@ -44,6 +45,9 @@ void DamageSystem::update(SystemContext& ctx) {
             continue;
         }
         if (isCreativeLocalPlayer(registry, event.target)) {
+            continue;
+        }
+        if (!simulation::isEntityTicking(ctx, event.target)) {
             continue;
         }
 

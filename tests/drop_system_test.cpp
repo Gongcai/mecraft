@@ -163,6 +163,32 @@ int main() {
         return fail("collectNearbyDrops should add items into inventory stacks");
     }
 
+    world.setSimulationDistance(1);
+    world.ticketManager().updatePlayerPosition(0, 0);
+    DropSystem inactiveDropSystem;
+    ecs::GameplayRegistry inactiveDropRegistry;
+    inactiveDropSystem.bindRegistry(inactiveDropRegistry);
+    inactiveDropSystem.bindServices(services);
+    inactiveDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(48, 122, 0), 1);
+    auto inactiveView = inactiveDropRegistry.view<ecs::DropItemTag,
+                                                   ecs::TransformComponent,
+                                                   ecs::VelocityComponent,
+                                                   ecs::LifetimeComponent>();
+    if (inactiveView.begin() == inactiveView.end()) {
+        return fail("inactive simulation setup should spawn a drop entity");
+    }
+    const entt::entity inactiveEntity = *inactiveView.begin();
+    inactiveView.get<ecs::TransformComponent>(inactiveEntity).position = glm::vec3(48.5f, 122.42f, 0.5f);
+    inactiveView.get<ecs::VelocityComponent>(inactiveEntity).velocity = glm::vec3(0.0f, 5.0f, 0.0f);
+    inactiveView.get<ecs::LifetimeComponent>(inactiveEntity).ageSeconds = 4.0f;
+    inactiveDropSystem.update(1.0f, world);
+    const DropEntity& inactiveDrop = inactiveDropSystem.getDrops().front();
+    if (!nearlyEqual(inactiveDrop.position.y, 122.42f) ||
+        !nearlyEqual(inactiveDrop.velocity.y, 5.0f) ||
+        !nearlyEqual(inactiveDrop.ageSeconds, 4.0f)) {
+        return fail("drops outside simulation distance should not run physics or lifetime updates");
+    }
+
     DropSystem restoreDropSystem;
     ecs::GameplayRegistry restoreDropRegistry;
     restoreDropSystem.bindRegistry(restoreDropRegistry);

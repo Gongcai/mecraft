@@ -12,6 +12,7 @@
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../util/ParticleEventBuffer.h"
 #include "../../util/ProjectileDefinitions.h"
+#include "../../util/SimulationDistance.h"
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
 #include "../../../world/block/Block.h"
@@ -116,6 +117,7 @@ float distanceSqToAabb(const glm::vec3& point, const glm::vec3& minBounds, const
 }
 
 entt::entity findProjectileTarget(entt::registry& reg,
+                                  const SystemContext& ctx,
                                   const entt::entity projectile,
                                   const ProjectileComponent& projectileData,
                                   const glm::vec3& position) {
@@ -125,6 +127,9 @@ entt::entity findProjectileTarget(entt::registry& reg,
     auto mobView = reg.view<MobTag, TransformComponent, HealthComponent>();
     for (const entt::entity mob : mobView) {
         if (mob == projectile || mob == projectileData.owner) {
+            continue;
+        }
+        if (!simulation::isEntityTicking(ctx, mob)) {
             continue;
         }
 
@@ -242,6 +247,10 @@ void ProjectileSystem::update(SystemContext& ctx) {
                                   LifetimeComponent,
                                   SpinVisualComponent>();
     for (const entt::entity projectile : projectileView) {
+        if (!simulation::isEntityTicking(ctx, projectile)) {
+            continue;
+        }
+
         auto& projectileData = projectileView.get<ProjectileComponent>(projectile);
         auto& transform = projectileView.get<TransformComponent>(projectile);
         auto& velocity = projectileView.get<VelocityComponent>(projectile);
@@ -288,7 +297,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
                 break;
             }
 
-            const entt::entity target = findProjectileTarget(reg, projectile, projectileData, transform.position);
+            const entt::entity target = findProjectileTarget(reg, ctx, projectile, projectileData, transform.position);
             if (target != entt::null) {
                 ensureDamageEventBus(registry).push({target, projectileData.owner, projectileData.damage});
                 const BlockID impactBlock = projectileData.entityImpactParticleBlock != 0

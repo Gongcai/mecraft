@@ -8,6 +8,7 @@
 #include "../../components/NetworkComponents.h"
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/ParticleEventBuffer.h"
+#include "../../util/SimulationDistance.h"
 
 namespace ecs {
 namespace {
@@ -96,6 +97,9 @@ void DeathSystem::update(SystemContext& ctx) {
     auto view = reg.view<MobTag, HealthComponent>();
     for (const entt::entity entity : view) {
         if (reg.all_of<PendingNetworkDespawnTag>(entity)) {
+            continue;
+        }
+        if (!simulation::isEntityTicking(ctx, entity)) {
             continue;
         }
         const auto& health = view.get<HealthComponent>(entity);

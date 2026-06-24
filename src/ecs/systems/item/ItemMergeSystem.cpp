@@ -7,6 +7,7 @@
 
 #include "../../components/Components.h"
 #include "../../util/DropRuntimeState.h"
+#include "../../util/SimulationDistance.h"
 
 namespace ecs {
 
@@ -55,6 +56,9 @@ void ItemMergeSystem::update(SystemContext& ctx) {
 
     std::vector<entt::entity> entities;
     for (const entt::entity e : view) {
+        if (!simulation::isEntityTicking(ctx, e)) {
+            continue;
+        }
         entities.push_back(e);
     }
 

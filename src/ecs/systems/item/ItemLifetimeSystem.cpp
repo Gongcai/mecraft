@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "../../components/Components.h"
+#include "../../util/SimulationDistance.h"
 
 namespace ecs {
 
@@ -18,6 +19,10 @@ void ItemLifetimeSystem::update(SystemContext& ctx) {
     std::vector<entt::entity> removed;
 
     for (const entt::entity e : view) {
+        if (!simulation::isEntityTicking(ctx, e)) {
+            continue;
+        }
+
         auto& lifetime = view.get<LifetimeComponent>(e);
         lifetime.ageSeconds += dt;
         if (lifetime.ageSeconds >= lifetime.lifeTimeSeconds) {

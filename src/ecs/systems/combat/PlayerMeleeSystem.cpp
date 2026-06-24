@@ -5,6 +5,7 @@
 #include <limits>
 
 #include "../../util/DamageEventBuffer.h"
+#include "../../util/SimulationDistance.h"
 
 namespace ecs {
 namespace {
@@ -111,6 +112,9 @@ void PlayerMeleeSystem::update(SystemContext& ctx) {
         auto mobView = reg.view<MobTag, TransformComponent, HealthComponent>();
         for (const entt::entity mob : mobView) {
             if (mob == player) {
+                continue;
+            }
+            if (!simulation::isEntityTicking(ctx, mob)) {
                 continue;
             }
 

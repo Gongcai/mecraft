@@ -2,6 +2,7 @@
 
 #include "../../components/Components.h"
 #include "../../util/DamageEventBuffer.h"
+#include "../../util/SimulationDistance.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <algorithm>
@@ -91,6 +92,10 @@ void MobAISystem::update(SystemContext& ctx) {
     auto view = reg.view<MobTag, TransformComponent, MobAIComponent, MoveIntentComponent>();
 
     for (auto entity : view) {
+        if (!simulation::isEntityTicking(ctx, entity)) {
+            continue;
+        }
+
         const auto& transform = view.get<TransformComponent>(entity);
         auto& ai = view.get<MobAIComponent>(entity);
         auto& moveIntent = view.get<MoveIntentComponent>(entity);

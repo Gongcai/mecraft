@@ -4,6 +4,7 @@
 #include "ecs/components/Components.h"
 #include "ecs/systems/combat/HurtEffectDecaySystem.h"
 #include "ecs/systems/mob/MobAISystem.h"
+#include "world/World.h"
 
 #include <cmath>
 #include <cstdio>
@@ -85,6 +86,44 @@ static void testPassiveMobDoesNotTargetPlayer() {
             "passive mob AI should not move toward a cleared player target");
 }
 
+static void testMobAISkipsEntitiesOutsideSimulationDistance() {
+    World world;
+    world.setSimulationDistance(1);
+    world.ticketManager().updatePlayerPosition(0, 0);
+
+    ecs::GameplayRegistry registry;
+    ecs::GameplayServices services;
+    services.world = &world;
+    auto& raw = registry.registry();
+
+    const entt::entity player = raw.create();
+    raw.emplace<ecs::LocalPlayerTag>(player);
+    raw.emplace<ecs::TransformComponent>(player, glm::vec3(50.0f, 64.0f, 0.0f), 1.62f);
+    raw.emplace<ecs::HealthComponent>(player, 20, 20);
+
+    const entt::entity mob = raw.create();
+    raw.emplace<ecs::MobTag>(mob);
+    raw.emplace<ecs::TransformComponent>(mob, glm::vec3(48.0f, 64.0f, 0.0f), 1.62f);
+    auto& ai = raw.emplace<ecs::MobAIComponent>(mob);
+    ai.acquisitionRange = 32.0f;
+    ai.loseTargetRange = 40.0f;
+    ai.wanderTimer = -1.0f;
+    raw.emplace<ecs::MoveIntentComponent>(mob);
+
+    ecs::MobAISystem system;
+    auto ctx = makeContext(registry, services, 0.05f);
+    system.update(ctx);
+
+    const auto& updatedAi = raw.get<ecs::MobAIComponent>(mob);
+    const auto& move = raw.get<ecs::MoveIntentComponent>(mob);
+    require(updatedAi.target == entt::null,
+            "mob AI should not acquire targets outside simulation distance");
+    require(updatedAi.wanderTimer == -1.0f,
+            "mob AI timers should not advance outside simulation distance");
+    require(std::fabs(move.move.x) < 0.001f && std::fabs(move.move.y) < 0.001f,
+            "mob AI should not write movement outside simulation distance");
+}
+
 static void testHurtEffectDecayClearsExpiredPendingState() {
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
@@ -109,6 +148,7 @@ static void testHurtEffectDecayClearsExpiredPendingState() {
 int main() {
     testMobYawUsesCameraConvention();
     testPassiveMobDoesNotTargetPlayer();
+    testMobAISkipsEntitiesOutsideSimulationDistance();
     testHurtEffectDecayClearsExpiredPendingState();
     std::printf("All Mob AI / HurtEffect tests passed!\n");
     return 0;

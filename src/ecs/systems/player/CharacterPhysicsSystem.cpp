@@ -4,6 +4,7 @@
 
 #include "../../components/Components.h"
 #include "../../util/GameplayRuntimeContext.h"
+#include "../../util/SimulationDistance.h"
 #include "../../../physics/PhysicsSystem.h"
 
 namespace ecs {
@@ -57,6 +58,10 @@ void CharacterPhysicsSystem::update(SystemContext& ctx) {
 
     auto view = registry.view<MoveIntentComponent, TransformComponent, PhysicsBodyComponent>();
     for (const auto entity : view) {
+        if (!simulation::isEntityTicking(ctx, entity)) {
+            continue;
+        }
+
         const auto& moveIntent = view.get<MoveIntentComponent>(entity);
         auto& transform = view.get<TransformComponent>(entity);
         auto& physicsBody = view.get<PhysicsBodyComponent>(entity);

@@ -7,6 +7,7 @@
 
 #include "../../components/Components.h"
 #include "../../util/DropPhysicsHelpers.h"
+#include "../../util/SimulationDistance.h"
 #include "../../../world/World.h"
 
 namespace ecs {
@@ -35,6 +36,10 @@ void ItemPhysicsSystem::update(SystemContext& ctx) {
                               SpinVisualComponent,
                               GroundedStateComponent>();
     for (const entt::entity e : view) {
+        if (!simulation::isEntityTicking(ctx, e)) {
+            continue;
+        }
+
         auto& transform = view.get<TransformComponent>(e);
         auto& velocity = view.get<VelocityComponent>(e);
         const auto& bounds = view.get<BoundsComponent>(e);

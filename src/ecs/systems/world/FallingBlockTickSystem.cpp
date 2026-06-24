@@ -4,6 +4,7 @@
 
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/ParticleEventBuffer.h"
+#include "../../util/SimulationDistance.h"
 #include "../../components/Components.h"
 #include "../../../world/World.h"
 #include "../../../world/block/Block.h"
@@ -53,6 +54,9 @@ void FallingBlockTickSystem::update(SystemContext& ctx) {
     auto view = reg.view<FallingBlockTag, FallingBlockComponent>();
     for (const entt::entity entity : view) {
         auto& block = view.get<FallingBlockComponent>(entity);
+        if (!simulation::isBlockPositionTicking(ctx, block.gridPosition)) {
+            continue;
+        }
 
         // Snapshot current grid cell as the interpolation start for this tick.
         block.prevGridPosition = block.gridPosition;
