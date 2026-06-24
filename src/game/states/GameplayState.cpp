@@ -27,6 +27,102 @@
 #include "../../world/World.h"
 #include "../../world/block/BedBlock.h"
 #include "../../world/block/BlockStateRegistry.h"
+#include "../../world/block/PropIndices.h"
+
+namespace {
+
+bool isRedstoneControlBlock(const BlockID blockId)
+{
+    return blockId == BlockIds::REPEATER || blockId == BlockIds::COMPARATOR;
+}
+
+void requireRepeaterDelayProperties()
+{
+    if (PropIndices::DELAY == PropIndices::INVALID ||
+        PropIndices::DELAY_1 == PropIndices::INVALID ||
+        PropIndices::DELAY_2 == PropIndices::INVALID ||
+        PropIndices::DELAY_3 == PropIndices::INVALID ||
+        PropIndices::DELAY_4 == PropIndices::INVALID) {
+        throw std::runtime_error("Repeater interaction requires registered delay property values");
+    }
+}
+
+void requireComparatorModeProperties()
+{
+    if (PropIndices::MODE == PropIndices::INVALID ||
+        PropIndices::MODE_COMPARE == PropIndices::INVALID ||
+        PropIndices::MODE_SUBTRACT == PropIndices::INVALID) {
+        throw std::runtime_error("Comparator interaction requires registered mode property values");
+    }
+}
+
+uint16_t nextRepeaterDelayValue(const uint16_t currentDelay)
+{
+    if (currentDelay == PropIndices::DELAY_1) {
+        return PropIndices::DELAY_2;
+    }
+    if (currentDelay == PropIndices::DELAY_2) {
+        return PropIndices::DELAY_3;
+    }
+    if (currentDelay == PropIndices::DELAY_3) {
+        return PropIndices::DELAY_4;
+    }
+    if (currentDelay == PropIndices::DELAY_4) {
+        return PropIndices::DELAY_1;
+    }
+    throw std::runtime_error("Repeater state contains an unknown delay value");
+}
+
+uint16_t toggledComparatorModeValue(const uint16_t currentMode)
+{
+    if (currentMode == PropIndices::MODE_COMPARE) {
+        return PropIndices::MODE_SUBTRACT;
+    }
+    if (currentMode == PropIndices::MODE_SUBTRACT) {
+        return PropIndices::MODE_COMPARE;
+    }
+    throw std::runtime_error("Comparator state contains an unknown mode value");
+}
+
+StateID nextRedstoneControlState(const StateID currentState)
+{
+    const BlockID blockId = BlockStateRegistry::getBlockId(currentState);
+    if (blockId == BlockIds::REPEATER) {
+        requireRepeaterDelayProperties();
+        const uint16_t currentDelay = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::DELAY);
+        if (currentDelay == PropIndices::INVALID) {
+            throw std::runtime_error("Repeater state is missing the delay property");
+        }
+        const StateID updatedState = BlockStateRegistry::withProperty(
+            currentState,
+            PropIndices::DELAY,
+            nextRepeaterDelayValue(currentDelay));
+        if (updatedState == currentState) {
+            throw std::runtime_error("Repeater delay state transition failed");
+        }
+        return updatedState;
+    }
+
+    if (blockId == BlockIds::COMPARATOR) {
+        requireComparatorModeProperties();
+        const uint16_t currentMode = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::MODE);
+        if (currentMode == PropIndices::INVALID) {
+            throw std::runtime_error("Comparator state is missing the mode property");
+        }
+        const StateID updatedState = BlockStateRegistry::withProperty(
+            currentState,
+            PropIndices::MODE,
+            toggledComparatorModeValue(currentMode));
+        if (updatedState == currentState) {
+            throw std::runtime_error("Comparator mode state transition failed");
+        }
+        return updatedState;
+    }
+
+    throw std::runtime_error("Unsupported redstone control block interaction");
+}
+
+} // namespace
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -159,13 +255,30 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
             continue;
         }
 
-        const BlockID targetBlock = BlockStateRegistry::getBlockId(target.targetState);
-        if (BedBlockLogic::isBedState(target.targetState)) {
+        if (m_ctx.world == nullptr) {
+            throw std::runtime_error("Block interaction requires an active world context");
+        }
+
+        const StateID targetState = m_ctx.world->getBlockState(
+            target.targetBlock.x,
+            target.targetBlock.y,
+            target.targetBlock.z);
+        const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
+        if (isRedstoneControlBlock(targetBlock)) {
+            const StateID updatedState = nextRedstoneControlState(targetState);
+            m_ctx.world->setBlockState(
+                target.targetBlock.x,
+                target.targetBlock.y,
+                target.targetBlock.z,
+                updatedState);
             runtime.placeCooldownRemaining = std::max(runtime.placeCooldownRemaining,
                                                       m_modeRules.placeCooldownSeconds());
-            if (m_ctx.world == nullptr) {
-                throw std::runtime_error("Sleeping requires an active world context");
-            }
+            return true;
+        }
+
+        if (BedBlockLogic::isBedState(targetState)) {
+            runtime.placeCooldownRemaining = std::max(runtime.placeCooldownRemaining,
+                                                      m_modeRules.placeCooldownSeconds());
             if (m_ctx.isMultiplayer) {
                 m_ctx.uiRenderer.appendWarningLine(m_ctx.localeManager.tr("sleep_singleplayer_only"));
                 return true;

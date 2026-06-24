@@ -25,6 +25,8 @@ extern uint16_t WEST;
 extern uint16_t EXTENDED;
 extern uint16_t POWER;
 extern uint16_t TYPE;
+extern uint16_t DELAY;
+extern uint16_t MODE;
 
 extern uint16_t FACING_FLOOR;
 extern uint16_t FACING_NORTH;
@@ -99,6 +101,12 @@ extern uint16_t POWER_14;
 extern uint16_t POWER_15;
 extern uint16_t TYPE_NORMAL;
 extern uint16_t TYPE_STICKY;
+extern uint16_t DELAY_1;
+extern uint16_t DELAY_2;
+extern uint16_t DELAY_3;
+extern uint16_t DELAY_4;
+extern uint16_t MODE_COMPARE;
+extern uint16_t MODE_SUBTRACT;
 
 void init();
 

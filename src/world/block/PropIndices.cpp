@@ -22,6 +22,8 @@ uint16_t WEST = INVALID;
 uint16_t EXTENDED = INVALID;
 uint16_t POWER = INVALID;
 uint16_t TYPE = INVALID;
+uint16_t DELAY = INVALID;
+uint16_t MODE = INVALID;
 
 uint16_t FACING_FLOOR = INVALID;
 uint16_t FACING_NORTH = INVALID;
@@ -96,6 +98,12 @@ uint16_t POWER_14 = INVALID;
 uint16_t POWER_15 = INVALID;
 uint16_t TYPE_NORMAL = INVALID;
 uint16_t TYPE_STICKY = INVALID;
+uint16_t DELAY_1 = INVALID;
+uint16_t DELAY_2 = INVALID;
+uint16_t DELAY_3 = INVALID;
+uint16_t DELAY_4 = INVALID;
+uint16_t MODE_COMPARE = INVALID;
+uint16_t MODE_SUBTRACT = INVALID;
 
 namespace {
 uint16_t lookupName(const char* name) {
@@ -126,6 +134,8 @@ void init() {
     EXTENDED = lookupName("extended");
     POWER = lookupName("power");
     TYPE = lookupName("type");
+    DELAY = lookupName("delay");
+    MODE = lookupName("mode");
 
     FACING_FLOOR = lookupValue(FACING, "floor");
     FACING_NORTH = lookupValue(FACING, "north");
@@ -200,6 +210,12 @@ void init() {
     POWER_15 = lookupValue(POWER, "15");
     TYPE_NORMAL = lookupValue(TYPE, "normal");
     TYPE_STICKY = lookupValue(TYPE, "sticky");
+    DELAY_1 = lookupValue(DELAY, "1");
+    DELAY_2 = lookupValue(DELAY, "2");
+    DELAY_3 = lookupValue(DELAY, "3");
+    DELAY_4 = lookupValue(DELAY, "4");
+    MODE_COMPARE = lookupValue(MODE, "compare");
+    MODE_SUBTRACT = lookupValue(MODE, "subtract");
 }
 
 }

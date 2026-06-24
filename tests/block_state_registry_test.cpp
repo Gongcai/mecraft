@@ -994,6 +994,14 @@ int main() {
         PropIndices::TYPE == PropIndices::INVALID ||
         PropIndices::TYPE_NORMAL == PropIndices::INVALID ||
         PropIndices::TYPE_STICKY == PropIndices::INVALID ||
+        PropIndices::DELAY == PropIndices::INVALID ||
+        PropIndices::DELAY_1 == PropIndices::INVALID ||
+        PropIndices::DELAY_2 == PropIndices::INVALID ||
+        PropIndices::DELAY_3 == PropIndices::INVALID ||
+        PropIndices::DELAY_4 == PropIndices::INVALID ||
+        PropIndices::MODE == PropIndices::INVALID ||
+        PropIndices::MODE_COMPARE == PropIndices::INVALID ||
+        PropIndices::MODE_SUBTRACT == PropIndices::INVALID ||
         PropIndices::FACING_UP == PropIndices::INVALID ||
         PropIndices::FACING_DOWN == PropIndices::INVALID) {
         return fail("redstone support properties should be registered from blocks.json");
@@ -1093,6 +1101,18 @@ int main() {
     constexpr size_t modelFaceNorth = 3;
     constexpr size_t modelFaceWest = 4;
     constexpr size_t modelFaceEast = 5;
+    if (!modelFaceTextureMatches(BlockModelRegistry::get("block/repeater_1tick"), modelFaceDown, "smooth_stone") ||
+        !modelFaceTextureMatches(BlockModelRegistry::get("block/repeater_1tick"), modelFaceSouth, "smooth_stone") ||
+        !modelFaceTextureMatches(BlockModelRegistry::get("block/comparator"), modelFaceDown, "smooth_stone") ||
+        !modelFaceTextureMatches(BlockModelRegistry::get("block/comparator"), modelFaceSouth, "smooth_stone")) {
+        return fail("repeater and comparator models should use smooth_stone for their slab base");
+    }
+    const BlockModel* repeater4TickOnModel = BlockModelRegistry::get("block/repeater_4tick_on");
+    const BlockModel* comparatorSubtractPoweredModel = BlockModelRegistry::get("block/comparator_subtract_powered");
+    if (repeater4TickOnModel == nullptr || repeater4TickOnModel->elements.size() <= 3 ||
+        comparatorSubtractPoweredModel == nullptr || comparatorSubtractPoweredModel->elements.size() <= 4) {
+        return fail("powered repeater and subtract comparator models should include lit torch face elements");
+    }
     const auto pistonBodyFacesMatch = [&](const char* modelName, const char* frontTexture) {
         const BlockModel* model = BlockModelRegistry::get(modelName);
         return modelFaceTextureMatches(model, modelFaceUp, "piston_side") &&
@@ -1195,16 +1215,34 @@ int main() {
         return fail("oak_pressure_plate powered state should resolve to the pressed model");
     }
 
+    const StateID repeaterDefault = BlockStateRegistry::getDefaultState(BlockIds::REPEATER);
+    if (BlockStateRegistry::getPropertyIndex(repeaterDefault, PropIndices::DELAY) != PropIndices::DELAY_1) {
+        return fail("repeater default state should use delay 1");
+    }
     const StateID repeaterEastPowered = BlockStateRegistry::getState(
         BlockIds::REPEATER,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
         });
-    if (!modelVariantMatches(repeaterEastPowered, "block/repeater_powered", 270, 0)) {
-        return fail("repeater east powered state should resolve to the rotated powered model");
+    if (!modelVariantMatches(repeaterEastPowered, "block/repeater_1tick_on", 270, 0)) {
+        return fail("repeater east powered default-delay state should resolve to the rotated 1-tick powered model");
+    }
+    const StateID repeaterEastDelay4Powered = BlockStateRegistry::getState(
+        BlockIds::REPEATER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE},
+            {PropIndices::DELAY, PropIndices::DELAY_4}
+        });
+    if (!modelVariantMatches(repeaterEastDelay4Powered, "block/repeater_4tick_on", 270, 0)) {
+        return fail("repeater delay 4 powered state should resolve to the rotated 4-tick powered model");
     }
 
+    const StateID comparatorDefault = BlockStateRegistry::getDefaultState(BlockIds::COMPARATOR);
+    if (BlockStateRegistry::getPropertyIndex(comparatorDefault, PropIndices::MODE) != PropIndices::MODE_COMPARE) {
+        return fail("comparator default state should use compare mode");
+    }
     const StateID comparatorWestPowered = BlockStateRegistry::getState(
         BlockIds::COMPARATOR,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -1213,6 +1251,16 @@ int main() {
         });
     if (!modelVariantMatches(comparatorWestPowered, "block/comparator_powered", 90, 0)) {
         return fail("comparator west powered state should resolve to the rotated powered model");
+    }
+    const StateID comparatorWestSubtractPowered = BlockStateRegistry::getState(
+        BlockIds::COMPARATOR,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_WEST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE},
+            {PropIndices::MODE, PropIndices::MODE_SUBTRACT}
+        });
+    if (!modelVariantMatches(comparatorWestSubtractPowered, "block/comparator_subtract_powered", 90, 0)) {
+        return fail("comparator subtract powered state should resolve to the rotated subtract powered model");
     }
 
     const StateID pistonExtendedNorth = BlockStateRegistry::getState(

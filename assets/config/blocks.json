@@ -1085,11 +1085,13 @@
       "drop": "minecraft:repeater",
       "properties": {
         "facing": ["north", "south", "east", "west"],
-        "powered": ["false", "true"]
+        "powered": ["false", "true"],
+        "delay": ["1", "2", "3", "4"]
       },
       "defaultState": {
         "facing": "south",
-        "powered": "false"
+        "powered": "false",
+        "delay": "1"
       },
       "isSolid": false,
       "renderShape": "model",
@@ -1100,14 +1102,38 @@
         "all": "repeater"
       },
       "modelVariants": {
-        "facing=north,powered=false": { "model": "block/repeater", "transform": { "rotY": 180 } },
-        "facing=north,powered=true": { "model": "block/repeater_powered", "transform": { "rotY": 180 } },
-        "facing=south,powered=false": { "model": "block/repeater" },
-        "facing=south,powered=true": { "model": "block/repeater_powered" },
-        "facing=east,powered=false": { "model": "block/repeater", "transform": { "rotY": 270 } },
-        "facing=east,powered=true": { "model": "block/repeater_powered", "transform": { "rotY": 270 } },
-        "facing=west,powered=false": { "model": "block/repeater", "transform": { "rotY": 90 } },
-        "facing=west,powered=true": { "model": "block/repeater_powered", "transform": { "rotY": 90 } }
+        "facing=north,powered=false,delay=1": { "model": "block/repeater_1tick", "transform": { "rotY": 180 } },
+        "facing=north,powered=false,delay=2": { "model": "block/repeater_2tick", "transform": { "rotY": 180 } },
+        "facing=north,powered=false,delay=3": { "model": "block/repeater_3tick", "transform": { "rotY": 180 } },
+        "facing=north,powered=false,delay=4": { "model": "block/repeater_4tick", "transform": { "rotY": 180 } },
+        "facing=north,powered=true,delay=1": { "model": "block/repeater_1tick_on", "transform": { "rotY": 180 } },
+        "facing=north,powered=true,delay=2": { "model": "block/repeater_2tick_on", "transform": { "rotY": 180 } },
+        "facing=north,powered=true,delay=3": { "model": "block/repeater_3tick_on", "transform": { "rotY": 180 } },
+        "facing=north,powered=true,delay=4": { "model": "block/repeater_4tick_on", "transform": { "rotY": 180 } },
+        "facing=south,powered=false,delay=1": { "model": "block/repeater_1tick" },
+        "facing=south,powered=false,delay=2": { "model": "block/repeater_2tick" },
+        "facing=south,powered=false,delay=3": { "model": "block/repeater_3tick" },
+        "facing=south,powered=false,delay=4": { "model": "block/repeater_4tick" },
+        "facing=south,powered=true,delay=1": { "model": "block/repeater_1tick_on" },
+        "facing=south,powered=true,delay=2": { "model": "block/repeater_2tick_on" },
+        "facing=south,powered=true,delay=3": { "model": "block/repeater_3tick_on" },
+        "facing=south,powered=true,delay=4": { "model": "block/repeater_4tick_on" },
+        "facing=east,powered=false,delay=1": { "model": "block/repeater_1tick", "transform": { "rotY": 270 } },
+        "facing=east,powered=false,delay=2": { "model": "block/repeater_2tick", "transform": { "rotY": 270 } },
+        "facing=east,powered=false,delay=3": { "model": "block/repeater_3tick", "transform": { "rotY": 270 } },
+        "facing=east,powered=false,delay=4": { "model": "block/repeater_4tick", "transform": { "rotY": 270 } },
+        "facing=east,powered=true,delay=1": { "model": "block/repeater_1tick_on", "transform": { "rotY": 270 } },
+        "facing=east,powered=true,delay=2": { "model": "block/repeater_2tick_on", "transform": { "rotY": 270 } },
+        "facing=east,powered=true,delay=3": { "model": "block/repeater_3tick_on", "transform": { "rotY": 270 } },
+        "facing=east,powered=true,delay=4": { "model": "block/repeater_4tick_on", "transform": { "rotY": 270 } },
+        "facing=west,powered=false,delay=1": { "model": "block/repeater_1tick", "transform": { "rotY": 90 } },
+        "facing=west,powered=false,delay=2": { "model": "block/repeater_2tick", "transform": { "rotY": 90 } },
+        "facing=west,powered=false,delay=3": { "model": "block/repeater_3tick", "transform": { "rotY": 90 } },
+        "facing=west,powered=false,delay=4": { "model": "block/repeater_4tick", "transform": { "rotY": 90 } },
+        "facing=west,powered=true,delay=1": { "model": "block/repeater_1tick_on", "transform": { "rotY": 90 } },
+        "facing=west,powered=true,delay=2": { "model": "block/repeater_2tick_on", "transform": { "rotY": 90 } },
+        "facing=west,powered=true,delay=3": { "model": "block/repeater_3tick_on", "transform": { "rotY": 90 } },
+        "facing=west,powered=true,delay=4": { "model": "block/repeater_4tick_on", "transform": { "rotY": 90 } }
       }
     },
     {
@@ -1115,11 +1141,13 @@
       "drop": "minecraft:comparator",
       "properties": {
         "facing": ["north", "south", "east", "west"],
-        "powered": ["false", "true"]
+        "powered": ["false", "true"],
+        "mode": ["compare", "subtract"]
       },
       "defaultState": {
         "facing": "south",
-        "powered": "false"
+        "powered": "false",
+        "mode": "compare"
       },
       "isSolid": false,
       "renderShape": "model",
@@ -1130,14 +1158,22 @@
         "all": "comparator"
       },
       "modelVariants": {
-        "facing=north,powered=false": { "model": "block/comparator", "transform": { "rotY": 180 } },
-        "facing=north,powered=true": { "model": "block/comparator_powered", "transform": { "rotY": 180 } },
-        "facing=south,powered=false": { "model": "block/comparator" },
-        "facing=south,powered=true": { "model": "block/comparator_powered" },
-        "facing=east,powered=false": { "model": "block/comparator", "transform": { "rotY": 270 } },
-        "facing=east,powered=true": { "model": "block/comparator_powered", "transform": { "rotY": 270 } },
-        "facing=west,powered=false": { "model": "block/comparator", "transform": { "rotY": 90 } },
-        "facing=west,powered=true": { "model": "block/comparator_powered", "transform": { "rotY": 90 } }
+        "facing=north,powered=false,mode=compare": { "model": "block/comparator", "transform": { "rotY": 180 } },
+        "facing=north,powered=false,mode=subtract": { "model": "block/comparator_subtract", "transform": { "rotY": 180 } },
+        "facing=north,powered=true,mode=compare": { "model": "block/comparator_powered", "transform": { "rotY": 180 } },
+        "facing=north,powered=true,mode=subtract": { "model": "block/comparator_subtract_powered", "transform": { "rotY": 180 } },
+        "facing=south,powered=false,mode=compare": { "model": "block/comparator" },
+        "facing=south,powered=false,mode=subtract": { "model": "block/comparator_subtract" },
+        "facing=south,powered=true,mode=compare": { "model": "block/comparator_powered" },
+        "facing=south,powered=true,mode=subtract": { "model": "block/comparator_subtract_powered" },
+        "facing=east,powered=false,mode=compare": { "model": "block/comparator", "transform": { "rotY": 270 } },
+        "facing=east,powered=false,mode=subtract": { "model": "block/comparator_subtract", "transform": { "rotY": 270 } },
+        "facing=east,powered=true,mode=compare": { "model": "block/comparator_powered", "transform": { "rotY": 270 } },
+        "facing=east,powered=true,mode=subtract": { "model": "block/comparator_subtract_powered", "transform": { "rotY": 270 } },
+        "facing=west,powered=false,mode=compare": { "model": "block/comparator", "transform": { "rotY": 90 } },
+        "facing=west,powered=false,mode=subtract": { "model": "block/comparator_subtract", "transform": { "rotY": 90 } },
+        "facing=west,powered=true,mode=compare": { "model": "block/comparator_powered", "transform": { "rotY": 90 } },
+        "facing=west,powered=true,mode=subtract": { "model": "block/comparator_subtract_powered", "transform": { "rotY": 90 } }
       }
     },
     {
