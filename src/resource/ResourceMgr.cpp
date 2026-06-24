@@ -70,6 +70,18 @@ IconTint biomeIconTint(const BiomeTintKind tint) {
     }
 }
 
+IconTint resourceIconTint(const ResourceTextureTint tint) {
+    switch (tint) {
+        case ResourceTextureTint::Grass:
+            return biomeIconTint(BiomeTintKind::Grass);
+        case ResourceTextureTint::Foliage:
+            return biomeIconTint(BiomeTintKind::Foliage);
+        case ResourceTextureTint::None:
+        default:
+            return {};
+    }
+}
+
 glm::vec3 rotateIconPointX90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {p.x, 1.0f - p.z, p.y};
@@ -1899,6 +1911,8 @@ void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSi
             continue;
         }
 
+        const std::string textureName = imagePaths[i].stem().string();
+        const IconTint tint = resourceIconTint(getTextureTint(textureName));
         const int copyWidth = std::min(tileSize, width);
         const int copyHeight = std::min(tileSize, height);
 
@@ -1913,9 +1927,12 @@ void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSi
             for (int x = 0; x < copyWidth; ++x) {
                 const int dstIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
                 const int srcIndex = (y * width + x) * 4;
-                atlasPixels[dstIndex + 0] = data[srcIndex + 0];
-                atlasPixels[dstIndex + 1] = data[srcIndex + 1];
-                atlasPixels[dstIndex + 2] = data[srcIndex + 2];
+                atlasPixels[dstIndex + 0] = static_cast<unsigned char>(
+                    std::round(std::clamp(static_cast<float>(data[srcIndex + 0]) * tint.r, 0.0f, 255.0f)));
+                atlasPixels[dstIndex + 1] = static_cast<unsigned char>(
+                    std::round(std::clamp(static_cast<float>(data[srcIndex + 1]) * tint.g, 0.0f, 255.0f)));
+                atlasPixels[dstIndex + 2] = static_cast<unsigned char>(
+                    std::round(std::clamp(static_cast<float>(data[srcIndex + 2]) * tint.b, 0.0f, 255.0f)));
                 atlasPixels[dstIndex + 3] = data[srcIndex + 3];
             }
         }
@@ -1957,7 +1974,7 @@ void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSi
         }
 
         stbi_image_free(data);
-        m_itemTextureIndices[imagePaths[i].stem().string()] = i;
+        m_itemTextureIndices[textureName] = i;
     }
 
     if (m_itemTextureAtlas.textureID != 0) {

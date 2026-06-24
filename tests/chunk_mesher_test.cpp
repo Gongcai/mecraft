@@ -1068,11 +1068,13 @@ int main() {
             return fail("north-facing face plane should emit one cutout quad");
         }
         for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
             if (!approxEqual(vertex.normal, 3.0f) ||
+                tintKind != BlockTintKinds::FOLIAGE ||
                 vertex.x < 0.0f || vertex.x > 1.0f ||
                 vertex.y < 32.0f || vertex.y > 33.0f ||
                 !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
-                return fail("north-facing face plane should hug the attached wall boundary");
+                return fail("north-facing face plane should hug the attached wall boundary with foliage tint");
             }
         }
     }

@@ -57,6 +57,10 @@
       "tint": "grass"
     },
     {
+      "name": "vine",
+      "tint": "foliage"
+    },
+    {
       "name": "oak_leaves",
       "tint": "foliage"
     },

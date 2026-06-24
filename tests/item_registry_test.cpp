@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "../src/item/Item.h"
+#include "../src/ui/ItemIconPolicy.h"
 
 namespace {
 int fail(const char* message) {
@@ -95,6 +96,27 @@ int main() {
     }
     if (ItemRegistry::toPlaceBlock(furnaceItem) != furnaceBlock) {
         return fail("furnace item should place the furnace block");
+    }
+
+    const ItemID vineItem = ItemRegistry::findByName("vine");
+    const BlockID vineBlock = BlockRegistry::findByName("vine");
+    if (vineItem == ItemIds::AIR || vineBlock == BlockIds::AIR) {
+        return fail("vine should register both block and item IDs");
+    }
+    const ItemDef& vine = ItemRegistry::get(vineItem);
+    if (vine.renderBlock != vineBlock || std::string(vine.iconTextureName) != "vine") {
+        return fail("vine item should use its item texture and render block");
+    }
+    if (ui::shouldUseBakedBlockIcon(vine)) {
+        return fail("vine item icon should use its tinted item texture");
+    }
+
+    const ItemID oakLeavesItem = ItemRegistry::findByName("oak_leaves");
+    if (oakLeavesItem == ItemIds::AIR) {
+        return fail("oak_leaves should register a block-backed item");
+    }
+    if (!ui::shouldUseBakedBlockIcon(ItemRegistry::get(oakLeavesItem))) {
+        return fail("oak_leaves should keep its tinted baked block icon");
     }
 
     // BlockDropTable tests

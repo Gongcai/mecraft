@@ -3,6 +3,8 @@
 #include "../item/Item.h"
 #include "../world/block/Block.h"
 
+#include <string>
+
 namespace ui {
 
 inline bool shouldUseBakedBlockIcon(const ItemDef& itemDef) {
@@ -11,7 +13,9 @@ inline bool shouldUseBakedBlockIcon(const ItemDef& itemDef) {
     }
 
     const BlockDef& blockDef = BlockRegistry::get(itemDef.renderBlock);
-    return blockDef.renderShapeName == "model" || blockDef.biomeTint != BiomeTintKind::None;
+    const bool hasExplicitItemTexture = std::string(itemDef.iconTextureName) != "unknown";
+    return blockDef.renderShapeName == "model" ||
+           (blockDef.biomeTint != BiomeTintKind::None && !hasExplicitItemTexture);
 }
 
 }

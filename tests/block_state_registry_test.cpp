@@ -701,6 +701,9 @@ int main() {
         return fail("vine should be registered for placement tests");
     }
     const BlockDef& vineDef = BlockRegistry::get(vine);
+    if (vineDef.biomeTint != BiomeTintKind::Foliage) {
+        return fail("vine should use foliage biome tint");
+    }
     PlacementStrategyFn vineStrategy = PlacementStrategyRegistry::getStrategy(vineDef.placementStrategy);
     if (vineStrategy == nullptr) {
         return fail("vine placement strategy should be registered");

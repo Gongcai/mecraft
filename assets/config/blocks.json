@@ -566,6 +566,7 @@
       "supportRule": "attached_face",
       "renderShape": "face_plane",
       "materialKind": "plant",
+      "biomeTint": "foliage",
       "timeToBreak": 10,
       "textures": {
         "all": "vine"
