@@ -696,6 +696,50 @@ int main() {
         return fail("wall placement should start from the default disconnected state");
     }
 
+    const BlockID vine = BlockRegistry::findByName("vine");
+    if (vine == BlockIds::AIR) {
+        return fail("vine should be registered for placement tests");
+    }
+    const BlockDef& vineDef = BlockRegistry::get(vine);
+    PlacementStrategyFn vineStrategy = PlacementStrategyRegistry::getStrategy(vineDef.placementStrategy);
+    if (vineStrategy == nullptr) {
+        return fail("vine placement strategy should be registered");
+    }
+
+    PlacementContext vinePlacement;
+    vinePlacement.blockId = vine;
+    vinePlacement.hitNormal = glm::ivec3(0, 0, -1);
+    const StateID northVinePlaced = vineStrategy(vinePlacement);
+    if (BlockStateRegistry::getPropertyIndex(northVinePlaced, PropIndices::FACING) != PropIndices::FACING_NORTH) {
+        return fail("wall face plane placement should derive facing from the clicked side");
+    }
+    vinePlacement.hitNormal = glm::ivec3(0, 1, 0);
+    if (vineStrategy(vinePlacement) != BlockIds::AIR) {
+        return fail("wall face plane placement should reject floor hits");
+    }
+
+    const BlockID pinkPetals = BlockRegistry::findByName("pink_petals");
+    if (pinkPetals == BlockIds::AIR) {
+        return fail("pink_petals should be registered for placement tests");
+    }
+    const BlockDef& pinkPetalsDef = BlockRegistry::get(pinkPetals);
+    PlacementStrategyFn petalStrategy = PlacementStrategyRegistry::getStrategy(pinkPetalsDef.placementStrategy);
+    if (petalStrategy == nullptr) {
+        return fail("floor face plane placement strategy should be registered");
+    }
+
+    PlacementContext petalPlacement;
+    petalPlacement.blockId = pinkPetals;
+    petalPlacement.hitNormal = glm::ivec3(0, 1, 0);
+    const StateID floorPetalsPlaced = petalStrategy(petalPlacement);
+    if (BlockStateRegistry::getPropertyIndex(floorPetalsPlaced, PropIndices::FACING) != PropIndices::FACING_FLOOR) {
+        return fail("floor face plane placement should use the floor facing state");
+    }
+    petalPlacement.hitNormal = glm::ivec3(1, 0, 0);
+    if (petalStrategy(petalPlacement) != BlockIds::AIR) {
+        return fail("floor face plane placement should reject wall hits");
+    }
+
     if (BlockStateRegistry::getStateCount() <= BlockRegistry::getBlockCount()) {
         return fail("state registry should contain expanded states beyond raw block ids");
     }

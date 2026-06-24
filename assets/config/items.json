@@ -69,6 +69,22 @@
       "renderBlock": "minecraft:torch"
     },
     {
+      "id": "minecraft:vine",
+      "iconTexture": "vine",
+      "maxStack": 64,
+      "icon": "minecraft:vine",
+      "placeBlock": "minecraft:vine",
+      "renderBlock": "minecraft:vine"
+    },
+    {
+      "id": "minecraft:pink_petals",
+      "iconTexture": "pink_petals",
+      "maxStack": 64,
+      "icon": "minecraft:pink_petals",
+      "placeBlock": "minecraft:pink_petals",
+      "renderBlock": "minecraft:pink_petals"
+    },
+    {
       "id": "minecraft:redstone",
       "iconTexture": "redstone",
       "maxStack": 64,

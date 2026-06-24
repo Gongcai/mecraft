@@ -148,6 +148,13 @@ void buildBlockEntity(ChunkMeshData& meshData,
                       int x,
                       int y,
                       int z);
+void buildFacePlane(ChunkMeshData& meshData,
+                    const SubChunkMeshingSnapshot& snapshot,
+                    BlockID blockId,
+                    const BlockDef& def,
+                    int x,
+                    int y,
+                    int z);
 void buildUnitFaces(ChunkMeshData& meshData,
                     const SubChunkMeshingSnapshot& snapshot,
                     BlockID blockId,

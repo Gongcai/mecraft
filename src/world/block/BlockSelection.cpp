@@ -17,6 +17,7 @@ constexpr float kTorchCoreMin = 7.0f * kPixel;
 constexpr float kTorchCoreMax = 9.0f * kPixel;
 constexpr float kTorchCoreTop = 10.0f * kPixel;
 constexpr float kCrossInset = 0.1464f;
+constexpr float kFacePlaneSelectionThickness = 1.0f / 16.0f;
 
 void expand(BlockSelectionBox& box, const glm::vec3& point) {
     box.min.x = std::min(box.min.x, point.x);
@@ -182,6 +183,43 @@ BlockSelectionBox getModelBox(const StateID stateId) {
     return box;
 }
 
+uint16_t requireFacePlaneFacing(const StateID stateId) {
+    if (PropIndices::FACING == PropIndices::INVALID) {
+        throw std::runtime_error("Face plane selection requires the facing property");
+    }
+    const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
+    if (facing == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error("Face plane selection requires a facing state value");
+    }
+    return facing;
+}
+
+BlockSelectionBox getFacePlaneBox(const StateID stateId) {
+    const uint16_t facing = requireFacePlaneFacing(stateId);
+
+    if (facing == PropIndices::FACING_FLOOR) {
+        return {glm::vec3(0.0f, 0.0f, 0.0f),
+                glm::vec3(1.0f, kFacePlaneSelectionThickness, 1.0f)};
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        return {glm::vec3(0.0f, 0.0f, 1.0f - kFacePlaneSelectionThickness),
+                glm::vec3(1.0f, 1.0f, 1.0f)};
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        return {glm::vec3(0.0f, 0.0f, 0.0f),
+                glm::vec3(1.0f, 1.0f, kFacePlaneSelectionThickness)};
+    }
+    if (facing == PropIndices::FACING_EAST) {
+        return {glm::vec3(0.0f, 0.0f, 0.0f),
+                glm::vec3(kFacePlaneSelectionThickness, 1.0f, 1.0f)};
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        return {glm::vec3(1.0f - kFacePlaneSelectionThickness, 0.0f, 0.0f),
+                glm::vec3(1.0f, 1.0f, 1.0f)};
+    }
+    throw std::runtime_error("Face plane selection received an unsupported facing value");
+}
+
 } // namespace
 
 BlockSelectionBox BlockSelection::getBox(const StateID stateId) {
@@ -196,6 +234,9 @@ BlockSelectionBox BlockSelection::getBox(const StateID stateId) {
     }
     if (def.renderShapeName == "model") {
         return getModelBox(stateId);
+    }
+    if (def.renderShapeName == "face_plane") {
+        return getFacePlaneBox(stateId);
     }
 
     return {};

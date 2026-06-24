@@ -155,6 +155,51 @@ int main() {
         return fail("north vertical slab collision should cover the northern half");
     }
 
+    const BlockID vine = BlockRegistry::findByName("vine");
+    if (vine == BlockIds::AIR) {
+        return fail("vine should be registered for face plane selection tests");
+    }
+    const StateID northVine = BlockStateRegistry::getState(
+        vine,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_NORTH}
+        });
+    const BlockSelectionBox northVineBox = BlockSelection::getBox(northVine);
+    if (northVineBox.min.z != 0.9375f || northVineBox.max.z != 1.0f ||
+        northVineBox.min.x != 0.0f || northVineBox.max.x != 1.0f ||
+        northVineBox.min.y != 0.0f || northVineBox.max.y != 1.0f) {
+        return fail("north-facing vine selection should hug the attached wall boundary");
+    }
+    const StateID eastVine = BlockStateRegistry::getState(
+        vine,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST}
+        });
+    const BlockSelectionBox eastVineBox = BlockSelection::getBox(eastVine);
+    if (eastVineBox.min.x != 0.0f || eastVineBox.max.x != 0.0625f ||
+        eastVineBox.min.z != 0.0f || eastVineBox.max.z != 1.0f) {
+        return fail("east-facing vine selection should hug the attached wall boundary");
+    }
+    if (!BlockCollision::getBoxes(northVine).empty() ||
+        BlockCollision::intersects(northVine, glm::ivec3(0), glm::vec3(0.0f), glm::vec3(1.0f))) {
+        return fail("face plane blocks should not create movement collision");
+    }
+
+    const BlockID pinkPetals = BlockRegistry::findByName("pink_petals");
+    if (pinkPetals == BlockIds::AIR) {
+        return fail("pink_petals should be registered for face plane selection tests");
+    }
+    const StateID floorPetals = BlockStateRegistry::getDefaultState(pinkPetals);
+    const BlockSelectionBox floorPetalBox = BlockSelection::getBox(floorPetals);
+    if (floorPetalBox.min.y != 0.0f || floorPetalBox.max.y != 0.0625f ||
+        floorPetalBox.min.x != 0.0f || floorPetalBox.max.x != 1.0f ||
+        floorPetalBox.min.z != 0.0f || floorPetalBox.max.z != 1.0f) {
+        return fail("floor face plane selection should hug the ground boundary");
+    }
+    if (!BlockCollision::getBoxes(floorPetals).empty()) {
+        return fail("floor face plane blocks should not create movement collision");
+    }
+
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
     if (oakStairs == BlockIds::AIR) {
         return fail("oak_stairs should be registered for collision tests");

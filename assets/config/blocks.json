@@ -540,12 +540,35 @@
       "isLightSource": true,
       "lightLevel": 14,
       "allowsFluidCoexistence": true,
+      "cutoutDistanceCull": false,
       "placementStrategy": "attach_wall",
       "supportRule": "attached_face",
       "renderShape": "torch",
       "timeToBreak": 10,
       "textures": {
         "all": "torch_on"
+      }
+    },
+    {
+      "id": "minecraft:vine",
+      "drop": "minecraft:vine",
+      "properties": {
+        "facing": ["north", "south", "east", "west"]
+      },
+      "defaultState": {
+        "facing": "north"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "placementStrategy": "face_plane_wall",
+      "supportRule": "attached_face",
+      "renderShape": "face_plane",
+      "materialKind": "plant",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "vine"
       }
     },
     {
@@ -559,6 +582,28 @@
       "timeToBreak": 10,
       "textures": {
         "all": "brown_mushroom"
+      }
+    },
+    {
+      "id": "minecraft:pink_petals",
+      "drop": "minecraft:pink_petals",
+      "properties": {
+        "facing": ["floor"]
+      },
+      "defaultState": {
+        "facing": "floor"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "placementStrategy": "face_plane_floor",
+      "supportRule": "attached_face",
+      "renderShape": "face_plane",
+      "materialKind": "plant",
+      "timeToBreak": 10,
+      "textures": {
+        "all": "pink_petals"
       }
     },
     {

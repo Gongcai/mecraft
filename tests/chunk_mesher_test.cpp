@@ -169,11 +169,17 @@ int main() {
         if (MeshBuilderRegistry::getShapeTag("block_entity") != MeshBuilderRegistry::BLOCK_ENTITY_TAG) {
             return fail("block_entity shape should resolve to the builtin block entity tag");
         }
+        if (MeshBuilderRegistry::getShapeTag("face_plane") != MeshBuilderRegistry::FACE_PLANE_TAG) {
+            return fail("face_plane shape should resolve to the builtin face plane tag");
+        }
         if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::CROSS_TAG) == nullptr) {
             return fail("cross shape should resolve to a mesh builder");
         }
         if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::BLOCK_ENTITY_TAG) == nullptr) {
             return fail("block_entity shape should resolve to a mesh builder");
+        }
+        if (MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::FACE_PLANE_TAG) == nullptr) {
+            return fail("face_plane shape should resolve to a mesh builder");
         }
         const BlockDef& torchDef = BlockRegistry::get(BlockIds::TORCH);
         if (torchDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("torch")) {
@@ -186,6 +192,14 @@ int main() {
         const BlockDef& chestDef = BlockRegistry::get(BlockIds::CHEST);
         if (chestDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("block_entity")) {
             return fail("chest block should resolve renderShapeTag through the mesh builder registry");
+        }
+        const BlockID vine = BlockRegistry::findByName("vine");
+        if (vine == BlockIds::AIR) {
+            return fail("vine block should be registered");
+        }
+        const BlockDef& vineDef = BlockRegistry::get(vine);
+        if (vineDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("face_plane")) {
+            return fail("vine block should resolve renderShapeTag through the mesh builder registry");
         }
     }
 
@@ -1033,8 +1047,54 @@ int main() {
             minZ = std::min(minZ, vertex.z);
             maxZ = std::max(maxZ, vertex.z);
         }
-        if (minZ > 0.1f || maxZ < 0.45f) {
-            return fail("north wall torch should lean out from the north wall after rebuild");
+        if (minZ > 0.2f || maxZ < 1.0f) {
+            return fail("north wall torch should lean out from the attached wall boundary after rebuild");
+        }
+    }
+
+    {
+        const BlockID vine = BlockRegistry::findByName("vine");
+        const StateID northVine = BlockStateRegistry::getState(
+            vine,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, PropIndices::FACING_NORTH}
+            });
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, northVine);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("north-facing face plane should emit one cutout quad");
+        }
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            if (!approxEqual(vertex.normal, 3.0f) ||
+                vertex.x < 0.0f || vertex.x > 1.0f ||
+                vertex.y < 32.0f || vertex.y > 33.0f ||
+                !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
+                return fail("north-facing face plane should hug the attached wall boundary");
+            }
+        }
+    }
+
+    {
+        const BlockID pinkPetals = BlockRegistry::findByName("pink_petals");
+        const StateID floorPetals = BlockStateRegistry::getDefaultState(pinkPetals);
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, floorPetals);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("floor face plane should emit one cutout quad");
+        }
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            if (!approxEqual(vertex.normal, 0.0f) ||
+                vertex.x < 0.0f || vertex.x > 1.0f ||
+                !approxEqual(vertex.y, 32.0f + 1.0f / 128.0f) ||
+                vertex.z < 0.0f || vertex.z > 1.0f) {
+                return fail("floor face plane should hug the ground boundary");
+            }
         }
     }
 

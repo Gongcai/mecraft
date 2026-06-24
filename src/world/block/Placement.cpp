@@ -51,6 +51,39 @@ StateID strategyAttachWall(const PlacementContext& ctx) {
     return 0;
 }
 
+void requireWallFacePlanePlacementProperties() {
+    if (PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
+        PropIndices::FACING_EAST == PropIndices::INVALID ||
+        PropIndices::FACING_WEST == PropIndices::INVALID) {
+        throw std::runtime_error("Wall face plane placement requires facing=north/south/east/west properties");
+    }
+}
+
+void requireFloorFacePlanePlacementProperties() {
+    if (PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::FACING_FLOOR == PropIndices::INVALID) {
+        throw std::runtime_error("Floor face plane placement requires facing=floor properties");
+    }
+}
+
+uint16_t facePlaneFacingFromWallNormal(const glm::ivec3& normal) {
+    if (normal.z == -1) {
+        return PropIndices::FACING_NORTH;
+    }
+    if (normal.z == 1) {
+        return PropIndices::FACING_SOUTH;
+    }
+    if (normal.x == -1) {
+        return PropIndices::FACING_WEST;
+    }
+    if (normal.x == 1) {
+        return PropIndices::FACING_EAST;
+    }
+    throw std::runtime_error("Wall face plane placement requires a horizontal hit normal");
+}
+
 uint16_t horizontalFacingFromYaw(const float playerYaw) {
     const float angle = std::fmod(playerYaw + 360.0f, 360.0f);
 
@@ -310,6 +343,22 @@ StateID strategyWall(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
 }
 
+StateID strategyFacePlaneWall(const PlacementContext& ctx) {
+    requireWallFacePlanePlacementProperties();
+    if (ctx.hitNormal.y != 0) {
+        return BlockIds::AIR;
+    }
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, facePlaneFacingFromWallNormal(ctx.hitNormal));
+}
+
+StateID strategyFacePlaneFloor(const PlacementContext& ctx) {
+    requireFloorFacePlanePlacementProperties();
+    if (ctx.hitNormal.y != 1) {
+        return BlockIds::AIR;
+    }
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_FLOOR);
+}
+
 } // namespace
 
 bool tryMergePlacementStates(const StateID existingState,
@@ -374,4 +423,6 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("vertical_slab", strategyVerticalSlab);
     registerStrategy("fence", strategyFence);
     registerStrategy("wall", strategyWall);
+    registerStrategy("face_plane_wall", strategyFacePlaneWall);
+    registerStrategy("face_plane_floor", strategyFacePlaneFloor);
 }

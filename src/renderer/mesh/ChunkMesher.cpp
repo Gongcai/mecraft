@@ -3243,6 +3243,80 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                               def.derivativeMaterialId);
 }
 
+constexpr float kFacePlaneSurfaceOffset = 1.0f / 128.0f;
+
+uint16_t requireFacePlaneFacing(const BlockID blockId) {
+    if (PropIndices::FACING == PropIndices::INVALID) {
+        throw std::runtime_error("Face plane mesh requires the facing property");
+    }
+    const uint16_t facing = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+    if (facing == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error("Face plane mesh requires a facing state value");
+    }
+    return facing;
+}
+
+int facePlaneRenderFace(const uint16_t facing) {
+    if (facing == PropIndices::FACING_FLOOR) {
+        return FACE_TOP;
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        return FACE_BACK;
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        return FACE_FRONT;
+    }
+    if (facing == PropIndices::FACING_EAST) {
+        return FACE_RIGHT;
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        return FACE_LEFT;
+    }
+    throw std::runtime_error("Face plane mesh received an unsupported facing value");
+}
+
+std::array<glm::vec3, 4> buildFacePlaneCorners(const glm::vec3& pos, const uint16_t facing) {
+    const float nearMin = kFacePlaneSurfaceOffset;
+    const float nearMax = 1.0f - kFacePlaneSurfaceOffset;
+
+    if (facing == PropIndices::FACING_FLOOR) {
+        const float y = nearMin;
+        return {{{pos.x + 0.0f, pos.y + y, pos.z + 1.0f},
+                 {pos.x + 1.0f, pos.y + y, pos.z + 1.0f},
+                 {pos.x + 1.0f, pos.y + y, pos.z + 0.0f},
+                 {pos.x + 0.0f, pos.y + y, pos.z + 0.0f}}};
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        const float z = nearMax;
+        return {{{pos.x + 1.0f, pos.y + 0.0f, pos.z + z},
+                 {pos.x + 0.0f, pos.y + 0.0f, pos.z + z},
+                 {pos.x + 0.0f, pos.y + 1.0f, pos.z + z},
+                 {pos.x + 1.0f, pos.y + 1.0f, pos.z + z}}};
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        const float z = nearMin;
+        return {{{pos.x + 0.0f, pos.y + 0.0f, pos.z + z},
+                 {pos.x + 1.0f, pos.y + 0.0f, pos.z + z},
+                 {pos.x + 1.0f, pos.y + 1.0f, pos.z + z},
+                 {pos.x + 0.0f, pos.y + 1.0f, pos.z + z}}};
+    }
+    if (facing == PropIndices::FACING_EAST) {
+        const float x = nearMin;
+        return {{{pos.x + x, pos.y + 0.0f, pos.z + 1.0f},
+                 {pos.x + x, pos.y + 0.0f, pos.z + 0.0f},
+                 {pos.x + x, pos.y + 1.0f, pos.z + 0.0f},
+                 {pos.x + x, pos.y + 1.0f, pos.z + 1.0f}}};
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        const float x = nearMax;
+        return {{{pos.x + x, pos.y + 0.0f, pos.z + 0.0f},
+                 {pos.x + x, pos.y + 0.0f, pos.z + 1.0f},
+                 {pos.x + x, pos.y + 1.0f, pos.z + 1.0f},
+                 {pos.x + x, pos.y + 1.0f, pos.z + 0.0f}}};
+    }
+    throw std::runtime_error("Face plane mesh received an unsupported facing value");
+}
+
 } // anonymous namespace
 
 void ChunkMesher::setDebugDisableGreedyMeshing(const bool disabled) {
@@ -3340,6 +3414,24 @@ void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData,
     static_cast<void>(x);
     static_cast<void>(y);
     static_cast<void>(z);
+}
+
+void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
+                                       const SubChunkMeshingSnapshot& snapshot,
+                                       const BlockID blockId,
+                                       const BlockDef& def,
+                                       const int x,
+                                       const int y,
+                                       const int z) {
+    const uint16_t facing = requireFacePlaneFacing(blockId);
+    const int face = facePlaneRenderFace(facing);
+    const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+    const std::array<glm::vec3, 4> corners = buildFacePlaneCorners(blockOffset, facing);
+
+    FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+    const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
+    appendFaceVertices(selectModelVertexTarget(meshData, def), corners, faceUV, face, renderData);
+    expandBoundsForCorners(meshData, corners);
 }
 
 void buildWaterSkippingTop(ChunkMeshData& meshData,
