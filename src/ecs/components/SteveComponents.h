@@ -42,6 +42,16 @@ struct MobVisualComponent {
     float scale = 1.0f;
 };
 
+struct EntityModelComponent {
+    std::string modelId;
+    std::string animationId;
+    std::string yawPartName;
+};
+
+struct EntityModelPartComponent {
+    std::string partName;
+};
+
 enum class StevePartType : uint8_t {
     Torso,
     Head,

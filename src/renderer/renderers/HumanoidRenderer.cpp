@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cmath>
 #include <string>
+#include <utility>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -167,6 +168,89 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
     return mesh;
 }
 
+HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
+    const ecs::EntityModelPartDefinition& definition,
+    const float textureWidth,
+    const float textureHeight) const {
+    PartMesh mesh;
+
+    std::vector<SteveVertex> vertices;
+    for (const ecs::EntityModelBoxDefinition& box : definition.boxes) {
+        std::array<FaceUvRect, 6> uv{};
+        for (std::size_t i = 0; i < uv.size(); ++i) {
+            const ecs::EntityModelPixelRect& rect = box.faceUvs[i];
+            uv[i] = pixelRectToUv(rect.x0, rect.y0, rect.x1, rect.y1, textureWidth, textureHeight);
+        }
+
+        const float xmin = box.origin.x / 16.0f;
+        const float ymin = box.origin.y / 16.0f;
+        const float zmin = box.origin.z / 16.0f;
+        const float xmax = (box.origin.x + box.size.x) / 16.0f;
+        const float ymax = (box.origin.y + box.size.y) / 16.0f;
+        const float zmax = (box.origin.z + box.size.z) / 16.0f;
+
+        struct FaceCorners {
+            glm::vec3 pos[4];
+        };
+
+        const FaceCorners faces[6] = {
+            {{{xmin, ymax, zmax}, {xmax, ymax, zmax}, {xmax, ymax, zmin}, {xmin, ymax, zmin}}},
+            {{{xmin, ymin, zmin}, {xmax, ymin, zmin}, {xmax, ymin, zmax}, {xmin, ymin, zmax}}},
+            {{{xmin, ymin, zmax}, {xmax, ymin, zmax}, {xmax, ymax, zmax}, {xmin, ymax, zmax}}},
+            {{{xmax, ymin, zmin}, {xmin, ymin, zmin}, {xmin, ymax, zmin}, {xmax, ymax, zmin}}},
+            {{{xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}}},
+            {{{xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}}}
+        };
+
+        for (int f = 0; f < 6; ++f) {
+            const glm::vec2 faceUvs[4] = {
+                {uv[f].u0, uv[f].v0},
+                {uv[f].u1, uv[f].v0},
+                {uv[f].u1, uv[f].v1},
+                {uv[f].u0, uv[f].v1}
+            };
+
+            for (int idx : kQuadIndices) {
+                const auto& p = faces[f].pos[idx];
+                const auto& t = faceUvs[idx];
+                const auto& n = kFaceNormals[f];
+                vertices.push_back({p.x, p.y, p.z, t.x, t.y, n.x, n.y, n.z});
+            }
+        }
+    }
+
+    if (vertices.empty()) {
+        return mesh;
+    }
+
+    mesh.vertexCount = static_cast<uint32_t>(vertices.size());
+
+    glGenVertexArrays(1, &mesh.vao);
+    glGenBuffers(1, &mesh.vbo);
+
+    glBindVertexArray(mesh.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
+    glBufferData(GL_ARRAY_BUFFER,
+                 static_cast<GLsizeiptr>(vertices.size() * sizeof(SteveVertex)),
+                 vertices.data(),
+                 GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
+                          reinterpret_cast<void*>(offsetof(SteveVertex, x)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
+                          reinterpret_cast<void*>(offsetof(SteveVertex, u)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
+                          reinterpret_cast<void*>(offsetof(SteveVertex, nx)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
+    return mesh;
+}
+
 void HumanoidRenderer::destroyMesh(PartMesh& mesh) {
     if (mesh.vbo != 0) {
         glDeleteBuffers(1, &mesh.vbo);
@@ -183,6 +267,29 @@ HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForPart(ecs::StevePartType 
                                                               ecs::EntitySkinLayoutKind skinLayout) {
     return &m_skinLayoutMeshes[renderer::humanoidSkinLayoutIndex(skinLayout)]
                               [renderer::humanoidPartTypeIndex(partType)];
+}
+
+HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForEntityModelPart(const std::string& modelId,
+                                                                         const std::string& partName) {
+    const std::string key = modelId + "#" + partName;
+    const auto existing = m_entityModelPartMeshes.find(key);
+    if (existing != m_entityModelPartMeshes.end()) {
+        return &existing->second;
+    }
+
+    const ecs::EntityModelDefinition* model = ecs::EntityModelRegistry::instance().findModel(modelId);
+    if (model == nullptr) {
+        return nullptr;
+    }
+
+    const ecs::EntityModelPartDefinition* part = model->findPart(partName);
+    if (part == nullptr) {
+        return nullptr;
+    }
+
+    PartMesh mesh = buildEntityModelPartMesh(*part, model->textureWidth, model->textureHeight);
+    auto inserted = m_entityModelPartMeshes.emplace(key, std::move(mesh));
+    return &inserted.first->second;
 }
 
 void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
@@ -209,6 +316,10 @@ void HumanoidRenderer::shutdown() {
             destroyMesh(mesh);
         }
     }
+    for (auto& pair : m_entityModelPartMeshes) {
+        destroyMesh(pair.second);
+    }
+    m_entityModelPartMeshes.clear();
     if (m_fallbackShadowDepth != 0) {
         glDeleteTextures(1, &m_fallbackShadowDepth);
         m_fallbackShadowDepth = 0;
@@ -407,6 +518,59 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     // GL state (including scissor) restored by ScopedStateSnapshot destructor
 }
 
+void HumanoidRenderer::drawGenericMobParts(entt::registry& reg,
+                                           const entt::entity root,
+                                           const ecs::MobVisualComponent& visual,
+                                           const ecs::TransformComponent& rootTransform,
+                                           Shader& shader,
+                                           const int modelLoc,
+                                           const int prevModelLoc) {
+    const ecs::EntityModelComponent* modelComponent = reg.try_get<ecs::EntityModelComponent>(root);
+    const ecs::ChildrenComponent* rootChildren = reg.try_get<ecs::ChildrenComponent>(root);
+    if (modelComponent == nullptr || rootChildren == nullptr) {
+        return;
+    }
+
+    std::vector<entt::entity> queue;
+    queue.reserve(rootChildren->children.size());
+    for (const entt::entity child : rootChildren->children) {
+        queue.push_back(child);
+    }
+
+    std::size_t index = 0;
+    while (index < queue.size()) {
+        const entt::entity partEntity = queue[index++];
+        if (const auto* children = reg.try_get<ecs::ChildrenComponent>(partEntity)) {
+            for (const entt::entity child : children->children) {
+                queue.push_back(child);
+            }
+        }
+
+        if (!reg.all_of<ecs::EntityModelPartComponent, ecs::WorldTransformComponent>(partEntity)) {
+            continue;
+        }
+
+        const auto& part = reg.get<ecs::EntityModelPartComponent>(partEntity);
+        const auto& world = reg.get<ecs::WorldTransformComponent>(partEntity);
+        PartMesh* mesh = getMeshForEntityModelPart(modelComponent->modelId, part.partName);
+        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
+            continue;
+        }
+
+        const glm::mat4 model = applyMobVisualScale(world.worldMatrix,
+                                                    rootTransform.position,
+                                                    visual.scale);
+        if (prevModelLoc >= 0) {
+            const auto it = m_previousModelMatrices.find(partEntity);
+            shader.setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
+        }
+        shader.setMat4(modelLoc, model);
+        glBindVertexArray(mesh->vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+        m_previousModelMatrices[partEntity] = model;
+    }
+}
+
 void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,
                                      int modelLoc, int viewProjLoc, int prevModelLoc,
                                      const glm::mat4& viewProj, RenderMode mode) {
@@ -502,6 +666,10 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
 
         setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
         auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
+        if (reg.all_of<ecs::EntityModelComponent>(mobRoot)) {
+            drawGenericMobParts(reg, mobRoot, visual, rootTransform, shader, modelLoc, prevModelLoc);
+            continue;
+        }
 
         // Torso
         for (auto child : rootChildren.children) {
@@ -688,21 +856,29 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
 
         setHurtFlash(shader, hurtFlashForRoot(reg, mobRoot));
         auto& rootChildren = reg.get<ecs::ChildrenComponent>(mobRoot);
+        const bool genericModel = reg.all_of<ecs::EntityModelComponent>(mobRoot);
 
-        // Query world light at torso position for this entity.
-        glm::vec3 entityPos(0.0f);
+        // Query world light at the main visible volume for this entity.
+        glm::vec3 entityPos = rootTransform.position + glm::vec3(0.0f, rootTransform.eyeHeight * 0.5f, 0.0f);
         bool foundTorso = false;
-        for (auto child : rootChildren.children) {
-            if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
-            auto& part = reg.get<ecs::StevePartComponent>(child);
-            if (part.partType != ecs::StevePartType::Torso) continue;
-            auto& wt = reg.get<ecs::WorldTransformComponent>(child);
-            entityPos = glm::vec3(wt.worldMatrix[3]);
-            glm::vec2 light = queryWorldLight(worldView, entityPos);
+        if (genericModel) {
+            const glm::vec2 light = queryWorldLight(worldView, entityPos);
             shader.setFloat("uEntitySunlight", light.x);
             shader.setFloat("uEntityBlockLight", light.y);
             foundTorso = true;
-            break;
+        } else {
+            for (auto child : rootChildren.children) {
+                if (!reg.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) continue;
+                auto& part = reg.get<ecs::StevePartComponent>(child);
+                if (part.partType != ecs::StevePartType::Torso) continue;
+                auto& wt = reg.get<ecs::WorldTransformComponent>(child);
+                entityPos = glm::vec3(wt.worldMatrix[3]);
+                glm::vec2 light = queryWorldLight(worldView, entityPos);
+                shader.setFloat("uEntitySunlight", light.x);
+                shader.setFloat("uEntityBlockLight", light.y);
+                foundTorso = true;
+                break;
+            }
         }
 
         // Cascade Culling: skip rendering if entity is outside this cascade's bounds (plus a small buffer)
@@ -711,6 +887,11 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
             if (dist < splitNear - 4.0f || dist > splitFar + 4.0f) {
                 continue;
             }
+        }
+
+        if (genericModel) {
+            drawGenericMobParts(reg, mobRoot, visual, rootTransform, shader, modelLoc, prevModelLoc);
+            continue;
         }
 
         // Torso

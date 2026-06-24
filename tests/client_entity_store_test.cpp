@@ -362,6 +362,72 @@ static void testMobSpawnCreatesConfiguredHerobrineReplica() {
             "herobrine replica should initialize configured death effect");
 }
 
+static void testMobSpawnCreatesConfiguredCreeperReplica() {
+    client::ClientEntityStore store;
+    ecs::GameplayRegistry registry;
+    store.init(registry, nullptr);
+
+    net::EntitySpawnMessage spawn;
+    spawn.netId = 79;
+    spawn.kind = net::EntityKind::Mob;
+    spawn.entityId = "minecraft:creeper";
+    spawn.position = glm::vec3(4.0f, 64.0f, -5.0f);
+    spawn.velocity = glm::vec3(0.0f, 0.0f, 0.2f);
+    spawn.yaw = 120.0f;
+    store.handleSpawn(spawn);
+
+    require(store.remoteEntityCount() == 1, "creeper spawn was not tracked");
+    require(store.hasEntity(79), "creeper netId missing");
+
+    auto& raw = registry.registry();
+    auto view = raw.view<ecs::MobTag,
+                         ecs::MobVisualComponent,
+                         ecs::EntityModelComponent,
+                         ecs::ChildrenComponent,
+                         ecs::MobAIComponent,
+                         ecs::HealthComponent,
+                         ecs::DeathEffectComponent,
+                         ecs::EntityTypeComponent,
+                         ecs::EntityNetIdComponent>();
+    require(view.begin() != view.end(), "creeper replica components missing");
+    const entt::entity mob = *view.begin();
+    const auto& visual = raw.get<ecs::MobVisualComponent>(mob);
+    const auto& model = raw.get<ecs::EntityModelComponent>(mob);
+    const auto& ai = raw.get<ecs::MobAIComponent>(mob);
+    const auto& health = raw.get<ecs::HealthComponent>(mob);
+    const auto& deathEffect = raw.get<ecs::DeathEffectComponent>(mob);
+
+    require(raw.get<ecs::EntityTypeComponent>(mob).entityId == "minecraft:creeper",
+            "creeper replica should keep the network entity id");
+    require(visual.model == "minecraft:creeper" &&
+            visual.textureKey == "creeper" &&
+            std::fabs(visual.scale - 1.0f) < 0.001f,
+            "creeper replica should apply configured visual data");
+    require(model.modelId == "minecraft:creeper" &&
+            model.animationId == "minecraft:creeper_walk" &&
+            model.yawPartName == "root",
+            "creeper replica should apply generic model metadata");
+    require(std::fabs(ai.yaw - 120.0f) < 0.001f,
+            "creeper replica should initialize synced yaw");
+    require(health.current == 20 && health.max == 20,
+            "creeper replica should initialize configured synced health");
+    require(deathEffect.particleBlock == BlockIds::COAL_ORE &&
+            deathEffect.particleCount == 32 &&
+            deathEffect.soundId == "mob.zombie.death",
+            "creeper replica should initialize configured death effect");
+
+    int genericPartCount = 0;
+    auto partView = raw.view<ecs::EntityModelPartComponent,
+                             ecs::LocalTransformComponent,
+                             ecs::WorldTransformComponent,
+                             ecs::ParentComponent>();
+    for (const entt::entity partEntity : partView) {
+        static_cast<void>(partEntity);
+        ++genericPartCount;
+    }
+    require(genericPartCount == 7, "creeper replica should create generic model part entities");
+}
+
 static void testProjectileSpawnCreatesAppleReplica() {
     client::ClientEntityStore store;
     ecs::GameplayRegistry registry;
@@ -503,6 +569,7 @@ int main() {
     testExistingEntityStaysLocallyAuthoritative();
     testMobSpawnCreatesZombieReplica();
     testMobSpawnCreatesConfiguredHerobrineReplica();
+    testMobSpawnCreatesConfiguredCreeperReplica();
     testProjectileSpawnCreatesAppleReplica();
     std::printf("All ClientEntityStore tests passed!\n");
     return 0;

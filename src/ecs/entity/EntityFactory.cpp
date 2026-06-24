@@ -2,7 +2,7 @@
 
 #include "../../Diagnostics.h"
 #include "EntityDefinitionRegistry.h"
-#include "MobModelFactory.h"
+#include "EntityModelFactory.h"
 #include "../components/Components.h"
 #include "../components/NetworkComponents.h"
 #include "../util/DropRuntimeState.h"
@@ -183,14 +183,8 @@ entt::entity EntityFactory::createMob(GameplayRegistry& registry,
         return entt::null;
     }
 
-    entt::entity entity = entt::null;
-    if (definition->model == "humanoid") {
-        entity = MobModelFactory::createHumanoidMob(registry, position);
-    } else {
-        MECRAFT_LOG_PRINTF("[EntityFactory] Unsupported mob model '%s' for %s\n",
-                           definition->model.c_str(),
-                           definition->id.full().c_str());
-        MECRAFT_LOG_FLUSH(stdout);
+    entt::entity entity = EntityModelFactory::createMob(registry, *definition, position);
+    if (entity == entt::null) {
         return entt::null;
     }
 

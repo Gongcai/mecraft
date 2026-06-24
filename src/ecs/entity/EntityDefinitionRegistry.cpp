@@ -333,17 +333,30 @@ bool parseMobDefinition(const json& node,
     if (!readString(node, "id", id, context, error, true) ||
         !readString(node, "model", definition.model, context, error, true) ||
         !readString(node, "texture", definition.textureKey, context, error) ||
-        !readString(node, "skinLayout", skinLayoutId, context, error, true) ||
+        !readString(node, "skinLayout", skinLayoutId, context, error) ||
         !readFloat(node, "scale", definition.visualScale, context, error)) {
         return false;
     }
     definition.id = NamespacedId(id);
-    const std::optional<EntitySkinLayoutKind> skinLayout = tryParseEntitySkinLayoutId(skinLayoutId);
-    if (!skinLayout.has_value()) {
-        setError(error, context + ".skinLayout is unsupported: " + skinLayoutId);
-        return false;
+    if (definition.model == "humanoid") {
+        if (skinLayoutId.empty()) {
+            setError(error, context + ".skinLayout is required for humanoid models");
+            return false;
+        }
+        const std::optional<EntitySkinLayoutKind> skinLayout = tryParseEntitySkinLayoutId(skinLayoutId);
+        if (!skinLayout.has_value()) {
+            setError(error, context + ".skinLayout is unsupported: " + skinLayoutId);
+            return false;
+        }
+        definition.skinLayout = *skinLayout;
+    } else if (!skinLayoutId.empty()) {
+        const std::optional<EntitySkinLayoutKind> skinLayout = tryParseEntitySkinLayoutId(skinLayoutId);
+        if (!skinLayout.has_value()) {
+            setError(error, context + ".skinLayout is unsupported: " + skinLayoutId);
+            return false;
+        }
+        definition.skinLayout = *skinLayout;
     }
-    definition.skinLayout = *skinLayout;
     if (definition.visualScale <= 0.0f) {
         setError(error, context + ".scale must be positive");
         return false;

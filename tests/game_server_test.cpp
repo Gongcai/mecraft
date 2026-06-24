@@ -5,6 +5,7 @@
 #include "ecs/components/NetworkComponents.h"
 #include "ecs/entity/EntityDefinitionRegistry.h"
 #include "ecs/entity/EntityFactory.h"
+#include "ecs/entity/EntityModelRegistry.h"
 #include "ecs/entity/MobModelFactory.h"
 #include "ecs/systems/world/BlockSupportSystem.h"
 #include "game/inventory/ChestInventoryStore.h"
@@ -945,6 +946,61 @@ static void testSummonHerobrineUsesOwnedServerEcs() {
     require(sawCommandResult, "owned ECS herobrine summon should return a successful command result");
     require(sawMobSpawn, "owned ECS herobrine summon should send a mob spawn");
     std::printf("[PASS] testSummonHerobrineUsesOwnedServerEcs\n");
+}
+
+static void testSummonCreeperUsesOwnedServerEcs() {
+    ServerHarness harness;
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 22;
+    command.command = "/summon creeper";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawCommandResult = false;
+    bool sawMobSpawn = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type == net::MessageType::CommandResult && packet.inProcessPayload.has_value()) {
+            const auto& result = std::any_cast<const net::CommandResultMessage&>(packet.inProcessPayload);
+            if (result.sequence == 22 &&
+                result.success &&
+                result.message.find("Summoned creeper") != std::string::npos) {
+                sawCommandResult = true;
+            }
+        }
+        if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
+            const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
+            if (spawn.kind == net::EntityKind::Mob && spawn.netId != 0) {
+                require(spawn.entityId == "minecraft:creeper",
+                        "owned ECS creeper summon should include configured entity id in spawn packet");
+                sawMobSpawn = true;
+            }
+        }
+    }
+
+    require(sawCommandResult, "owned ECS creeper summon should return a successful command result");
+    require(sawMobSpawn, "owned ECS creeper summon should send a mob spawn");
+    std::printf("[PASS] testSummonCreeperUsesOwnedServerEcs\n");
 }
 
 static void testOwnedServerZombiePursuesPlayer() {
@@ -1986,6 +2042,90 @@ static void testEntityFactoryCreatesConfiguredHerobrine() {
             "configured herobrine should apply death effect");
 
     std::printf("[PASS] testEntityFactoryCreatesConfiguredHerobrine\n");
+}
+
+static void testEntityFactoryCreatesConfiguredCreeper() {
+    ecs::EntityDefinitionRegistry::instance().clear();
+    ecs::EntityModelRegistry::instance().clear();
+    std::string error;
+    require(ecs::EntityDefinitionRegistry::instance().ensureLoaded(&error),
+            error.empty() ? "entity definitions should load" : error.c_str());
+    require(ecs::EntityModelRegistry::instance().ensureLoaded(&error),
+            error.empty() ? "entity model definitions should load" : error.c_str());
+
+    const ecs::EntityModelDefinition* model = ecs::EntityModelRegistry::instance().findModel("minecraft:creeper");
+    require(model != nullptr, "creeper model definition should load");
+    require(model->parts.size() == 7, "creeper model should define root, head, body, and four legs");
+    require(model->textureWidth == 64.0f && model->textureHeight == 32.0f,
+            "creeper model should use the vanilla texture canvas");
+
+    ecs::GameplayRegistry registry;
+    const entt::entity creeper =
+        ecs::EntityFactory::createMob(registry, "minecraft:creeper", glm::vec3(3.0f, 64.0f, 2.0f));
+    require(creeper != entt::null, "EntityFactory should create configured creeper");
+
+    auto& raw = registry.registry();
+    require(raw.all_of<ecs::MobTag,
+                       ecs::TransformComponent,
+                       ecs::MobAIComponent,
+                       ecs::HealthComponent,
+                       ecs::MobVisualComponent,
+                       ecs::PhysicsBodyComponent,
+                       ecs::DropTableComponent,
+                       ecs::DeathEffectComponent,
+                       ecs::EntityTypeComponent,
+                       ecs::EntityModelComponent,
+                       ecs::ChildrenComponent,
+                       ecs::NetworkSyncTag>(creeper),
+            "configured creeper should have gameplay and generic model components");
+
+    const auto& transform = raw.get<ecs::TransformComponent>(creeper);
+    const auto& ai = raw.get<ecs::MobAIComponent>(creeper);
+    const auto& health = raw.get<ecs::HealthComponent>(creeper);
+    const auto& body = raw.get<ecs::PhysicsBodyComponent>(creeper);
+    const auto& drops = raw.get<ecs::DropTableComponent>(creeper);
+    const auto& deathEffect = raw.get<ecs::DeathEffectComponent>(creeper);
+    const auto& type = raw.get<ecs::EntityTypeComponent>(creeper);
+    const auto& visual = raw.get<ecs::MobVisualComponent>(creeper);
+    const auto& modelComponent = raw.get<ecs::EntityModelComponent>(creeper);
+
+    require(type.entityId == "minecraft:creeper", "configured creeper should keep entity definition id");
+    require(visual.model == "minecraft:creeper" &&
+            visual.textureKey == "creeper" &&
+            std::fabs(visual.scale - 1.0f) < 0.001f,
+            "configured creeper should apply visual data");
+    require(modelComponent.modelId == "minecraft:creeper" &&
+            modelComponent.animationId == "minecraft:creeper_walk" &&
+            modelComponent.yawPartName == "root",
+            "configured creeper should apply generic model metadata");
+    require(std::fabs(transform.eyeHeight - 1.44f) < 0.001f,
+            "configured creeper should apply eye height");
+    require(health.current == 20 && health.max == 20,
+            "configured creeper should apply health");
+    require(ai.attackDamage == 4 && std::fabs(ai.pursueSpeed - 0.85f) < 0.001f,
+            "configured creeper should apply AI tuning");
+    require(std::fabs(body.body.halfExtents.y - 0.85f) < 0.001f &&
+            std::fabs(body.body.colliderOffset.y - 0.85f) < 0.001f,
+            "configured creeper should apply physics bounds");
+    require(drops.itemId == ItemIds::COAL && drops.minCount == 1 && drops.maxCount == 1,
+            "configured creeper should apply drop table");
+    require(deathEffect.particleBlock == BlockIds::COAL_ORE &&
+            deathEffect.particleCount == 32 &&
+            deathEffect.soundId == "mob.zombie.death",
+            "configured creeper should apply death effect");
+
+    std::size_t genericPartCount = 0;
+    auto partView = raw.view<ecs::EntityModelPartComponent,
+                             ecs::LocalTransformComponent,
+                             ecs::WorldTransformComponent,
+                             ecs::ParentComponent>();
+    for (const entt::entity partEntity : partView) {
+        static_cast<void>(partEntity);
+        ++genericPartCount;
+    }
+    require(genericPartCount == 7, "configured creeper should create generic model part entities");
+
+    std::printf("[PASS] testEntityFactoryCreatesConfiguredCreeper\n");
 }
 
 static void testPersistentZombieRestoresFromSave() {
@@ -3088,6 +3228,7 @@ int main() {
     testSummonZombieSpawnsNetworkMob();
     testSummonZombieUsesOwnedServerEcs();
     testSummonHerobrineUsesOwnedServerEcs();
+    testSummonCreeperUsesOwnedServerEcs();
     testOwnedServerZombiePursuesPlayer();
     testOwnedServerZombieAttackSyncsPlayerHealth();
     testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest();
@@ -3098,6 +3239,7 @@ int main() {
     testCreativeAppleProjectileDoesNotConsumeInventory();
     testEntityFactoryCreatesConfiguredZombie();
     testEntityFactoryCreatesConfiguredHerobrine();
+    testEntityFactoryCreatesConfiguredCreeper();
     testPersistentZombieRestoresFromSave();
     testPersistentDropRestoresFromSave();
     testPersistentChestInventoryRestoresFromSave();

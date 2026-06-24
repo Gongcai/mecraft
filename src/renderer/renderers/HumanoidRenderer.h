@@ -4,12 +4,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include "../../ecs/components/Components.h"
 #include "../../ecs/entity/EntitySkinLayout.h"
+#include "../../ecs/entity/EntityModelRegistry.h"
 #include "HumanoidSkinLayoutCatalog.h"
 
 class Camera;
@@ -80,6 +82,7 @@ private:
     };
 
     std::array<std::array<PartMesh, renderer::kHumanoidPartTypeCount>, renderer::kHumanoidSkinLayoutCount> m_skinLayoutMeshes{};
+    std::unordered_map<std::string, PartMesh> m_entityModelPartMeshes;
 
     Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
     Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
@@ -99,11 +102,15 @@ private:
     PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition,
                            float textureWidth,
                            float textureHeight) const;
+    PartMesh buildEntityModelPartMesh(const ecs::EntityModelPartDefinition& definition,
+                                      float textureWidth,
+                                      float textureHeight) const;
 
     static FaceUvRect pixelRectToUv(float x0, float y0, float x1, float y1,
                                     float textureWidth, float textureHeight);
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
+    PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
     void ensureShadowFallbackTextures();
     void bindDisabledShadowFallback(Shader& shader);
 
@@ -124,6 +131,10 @@ private:
                       float splitFar = FLT_MAX);
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
     static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
+    void drawGenericMobParts(entt::registry& reg, entt::entity root,
+                             const ecs::MobVisualComponent& visual,
+                             const ecs::TransformComponent& rootTransform,
+                             Shader& shader, int modelLoc, int prevModelLoc);
 };
 
 #endif // MECRAFT_HUMANOID_RENDERER_H

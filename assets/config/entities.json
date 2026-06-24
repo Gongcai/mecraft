@@ -47,6 +47,51 @@
       }
     },
     {
+      "id": "minecraft:creeper",
+      "kind": "mob",
+      "model": "minecraft:creeper",
+      "texture": "creeper",
+      "scale": 1.0,
+      "health": {
+        "current": 20,
+        "max": 20
+      },
+      "eyeHeight": 1.44,
+      "physics": {
+        "halfExtents": [0.3, 0.85, 0.3],
+        "colliderOffset": [0.0, 0.85, 0.0],
+        "eyeOffsetY": 1.44
+      },
+      "ai": {
+        "wanderInterval": 3.0,
+        "wanderSpeed": 0.45,
+        "pursueSpeed": 0.85,
+        "acquisitionRange": 14.0,
+        "loseTargetRange": 20.0,
+        "attackRange": 1.35,
+        "attackCooldownSeconds": 1.1,
+        "attackDamage": 4
+      },
+      "drops": [
+        {
+          "item": "minecraft:coal",
+          "min": 1,
+          "max": 1
+        }
+      ],
+      "hurtEffect": {
+        "sound": "mob.zombie.hurt",
+        "volume": 1.0,
+        "flashDurationSeconds": 0.18
+      },
+      "deathEffect": {
+        "particleBlock": "minecraft:coal_ore",
+        "particleCount": 32,
+        "sound": "mob.zombie.death",
+        "volume": 1.0
+      }
+    },
+    {
       "id": "minecraft:herobrine",
       "kind": "mob",
       "model": "humanoid",

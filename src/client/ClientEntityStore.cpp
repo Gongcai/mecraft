@@ -2,8 +2,8 @@
 #include "../ecs/components/Components.h"
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/entity/SteveModelFactory.h"
-#include "../ecs/entity/MobModelFactory.h"
 #include "../ecs/entity/EntityDefinitionRegistry.h"
+#include "../ecs/entity/EntityModelFactory.h"
 #include "../ecs/util/AudioEventBuffer.h"
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../ecs/util/ProjectileDefinitions.h"
@@ -588,7 +588,6 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
     int initialMaxHealth = 20;
     const ecs::MobEntityDefinition* mobDefinition = nullptr;
     if (m_gameplayRegistry) {
-        bool useHumanoid = entityId == "minecraft:zombie";
         std::string error;
         ecs::EntityDefinitionRegistry& definitions = ecs::EntityDefinitionRegistry::instance();
         if (definitions.ensureLoaded(&error)) {
@@ -596,13 +595,15 @@ void ClientEntityStore::createMobEntity(const net::EntitySpawnMessage& msg) {
                 mobDefinition = definition;
                 initialHealth = definition->health;
                 initialMaxHealth = definition->maxHealth;
-                useHumanoid = definition->model == "humanoid";
             }
         }
-        if (!useHumanoid) {
+        if (mobDefinition == nullptr) {
             return;
         }
-        entity = ecs::MobModelFactory::createHumanoidMobReplica(*m_gameplayRegistry, msg.position, msg.yaw);
+        entity = ecs::EntityModelFactory::createMobReplica(*m_gameplayRegistry, *mobDefinition, msg.position, msg.yaw);
+        if (entity == entt::null) {
+            return;
+        }
     } else {
         entity = m_registry->create();
         m_registry->emplace<ecs::MobTag>(entity);

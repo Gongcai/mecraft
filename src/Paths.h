@@ -42,6 +42,7 @@
 #define FLUIDS_CONFIG_PATH    CONFIG_DIR "/fluids.json"
 #define ITEMS_CONFIG_PATH     CONFIG_DIR "/items.json"
 #define ENTITIES_CONFIG_PATH  CONFIG_DIR "/entities.json"
+#define ENTITY_MODELS_CONFIG_PATH CONFIG_DIR "/entity_models.json"
 #define PROJECTILES_CONFIG_PATH CONFIG_DIR "/projectiles.json"
 #define RECIPES_CONFIG_PATH   CONFIG_DIR "/recipes.json"
 #define KEYBINDINGS_PATH      CONFIG_DIR "/keybindings.txt"

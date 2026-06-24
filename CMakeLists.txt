@@ -283,6 +283,8 @@ set(SRC_ECS
         src/ecs/util/PlayerQuery.cpp
         src/ecs/util/ProjectileDefinitions.cpp
         src/ecs/entity/EntityDefinitionRegistry.cpp
+        src/ecs/entity/EntityModelRegistry.cpp
+        src/ecs/entity/EntityModelFactory.cpp
         src/ecs/entity/EntityFactory.cpp
         src/ecs/entity/SteveModelFactory.cpp
         src/ecs/entity/MobModelFactory.cpp
