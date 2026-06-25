@@ -102,49 +102,16 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
     return true;
 }
 
-} // namespace
+struct SupportEventSinks {
+    DropSpawnEventBus* dropBus = nullptr;
+    AudioEventBus* audioBus = nullptr;
+    ParticleEventBus* particleBus = nullptr;
+    FallingBlockSpawnEventBus* fallingBlockBus = nullptr;
+};
 
-void BlockSupportSystem::update(SystemContext& ctx) {
-    if (!ctx.services.world) return;
-    auto& world = *ctx.services.world;
-    auto& registry = ctx.registry;
-
-    auto& updateQueue = world.neighborUpdateQueue();
-    if (updateQueue.size() == 0) return;
-
-    auto& dropBus = ensureDropSpawnEventBus(registry);
-    auto& audioBus = ensureAudioEventBus(registry);
-    auto& particleBus = ensureParticleEventBus(registry);
-    auto& fallingBlockBus = ensureFallingBlockSpawnEventBus(registry);
-
-    // Drain up to 1024 positions per tick to avoid frame spikes.
-    std::vector<glm::ivec3> positions;
-    positions.reserve(1024);
-    updateQueue.drain(positions, 1024);
-
-    for (const glm::ivec3& pos : positions) {
-        if (canSurvive(world, pos)) {
-            continue;
-        }
-
-        const BlockID blockId = world.getBlock(pos.x, pos.y, pos.z);
-        const BlockDef& def = BlockRegistry::getFast(blockId);
-
-        if (def.affectedByGravity) {
-            // Gravity-affected block: clear the cell and spawn a falling entity
-            // (no item drop — the block continues to exist as a falling entity).
-            world.setBlock(pos.x, pos.y, pos.z, 0);
-            fallingBlockBus.push({blockId, pos});
-        } else {
-            world.setBlock(pos.x, pos.y, pos.z, 0);
-            dropBus.push({blockId, pos});
-            particleBus.push({pos, blockId});
-            audioBus.push({"block.generic.break", glm::vec3(pos), true, 1.0f});
-        }
-    }
-}
-
-size_t BlockSupportSystem::processWorldQueue(World& world, const size_t budget) {
+size_t processQueuedPositions(World& world,
+                              const size_t budget,
+                              const SupportEventSinks& sinks) {
     auto& updateQueue = world.neighborUpdateQueue();
     if (updateQueue.size() == 0 || budget == 0) {
         return 0;
@@ -155,12 +122,57 @@ size_t BlockSupportSystem::processWorldQueue(World& world, const size_t budget) 
     const size_t drained = updateQueue.drain(positions, budget);
 
     for (const glm::ivec3& pos : positions) {
-        if (!canSurvive(world, pos)) {
-            world.setBlock(pos.x, pos.y, pos.z, 0);
+        if (canSurvive(world, pos)) {
+            continue;
+        }
+
+        const BlockID blockId = world.getBlock(pos.x, pos.y, pos.z);
+        const BlockDef& def = BlockRegistry::getFast(blockId);
+
+        world.setBlock(pos.x, pos.y, pos.z, 0);
+        if (def.affectedByGravity) {
+            if (sinks.fallingBlockBus != nullptr) {
+                sinks.fallingBlockBus->push({blockId, pos});
+            }
+            continue;
+        }
+
+        if (sinks.dropBus != nullptr) {
+            sinks.dropBus->push({blockId, pos});
+        }
+        if (sinks.particleBus != nullptr) {
+            sinks.particleBus->push({pos, blockId});
+        }
+        if (sinks.audioBus != nullptr) {
+            sinks.audioBus->push({"block.generic.break", glm::vec3(pos), true, 1.0f});
         }
     }
 
     return drained;
+}
+
+} // namespace
+
+void BlockSupportSystem::update(SystemContext& ctx) {
+    if (!ctx.services.world) return;
+    if (ctx.services.gameClient) return;
+    auto& world = *ctx.services.world;
+    auto& registry = ctx.registry;
+
+    processWorldQueue(world, registry, 1024);
+}
+
+size_t BlockSupportSystem::processWorldQueue(World& world, const size_t budget) {
+    return processQueuedPositions(world, budget, {});
+}
+
+size_t BlockSupportSystem::processWorldQueue(World& world, GameplayRegistry& registry, const size_t budget) {
+    SupportEventSinks sinks;
+    sinks.dropBus = &ensureDropSpawnEventBus(registry);
+    sinks.audioBus = &ensureAudioEventBus(registry);
+    sinks.particleBus = &ensureParticleEventBus(registry);
+    sinks.fallingBlockBus = &ensureFallingBlockSpawnEventBus(registry);
+    return processQueuedPositions(world, budget, sinks);
 }
 
 } // namespace ecs

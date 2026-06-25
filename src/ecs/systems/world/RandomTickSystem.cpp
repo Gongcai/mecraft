@@ -48,6 +48,9 @@ void RandomTickSystem::update(SystemContext& ctx) {
     if (!ctx.services.world) {
         return;
     }
+    if (ctx.services.gameClient) {
+        return;
+    }
 
     processWorld(*ctx.services.world, ctx.tickIndex);
 }

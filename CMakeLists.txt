@@ -660,6 +660,7 @@ if(MECRAFT_BUILD_TESTS)
 
     # Multiplayer / C/S architecture tests
     add_mecraft_test(in_process_transport_test tests/in_process_transport_test.cpp)
+    add_mecraft_test(client_server_authority_test tests/client_server_authority_test.cpp)
     add_mecraft_test(client_world_test tests/client_world_test.cpp)
     add_mecraft_test(client_entity_store_test tests/client_entity_store_test.cpp)
     add_mecraft_test(network_interpolation_system_test tests/network_interpolation_system_test.cpp)

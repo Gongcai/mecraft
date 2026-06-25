@@ -3,13 +3,19 @@
 
 #include "../../ISystem.h"
 
+#include <cstddef>
+
 namespace ecs {
+
+class GameplayRegistry;
 
 /// Tick-rate system that consumes FallingBlockSpawnEvent events emitted by
 /// BlockSupportSystem and spawns falling-block entities into the registry.
 class FallingBlockSpawnSystem : public ISystem {
 public:
     void update(SystemContext& ctx) override;
+
+    static size_t processEvents(GameplayRegistry& registry);
 };
 
 } // namespace ecs

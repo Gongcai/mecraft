@@ -267,6 +267,9 @@ void PressurePlateSystem::update(SystemContext& ctx) {
     if (!ctx.services.world) {
         return;
     }
+    if (ctx.services.gameClient) {
+        return;
+    }
 
     processWorldEntities(*ctx.services.world, ctx.registry);
 }

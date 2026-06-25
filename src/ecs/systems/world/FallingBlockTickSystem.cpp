@@ -1,10 +1,10 @@
 #include "FallingBlockTickSystem.h"
 
+#include <cmath>
 #include <vector>
 
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/ParticleEventBuffer.h"
-#include "../../util/SimulationDistance.h"
 #include "../../components/Components.h"
 #include "../../../world/World.h"
 #include "../../../world/block/Block.h"
@@ -38,12 +38,23 @@ bool tryLandBlock(World& world, const glm::ivec3& pos, BlockID blockId) {
     return true;
 }
 
+bool isBlockPositionTicking(const World& world, const glm::ivec3& position) {
+    const int chunkX = static_cast<int>(std::floor(static_cast<float>(position.x) /
+                                                   static_cast<float>(Chunk::SIZE_X)));
+    const int chunkZ = static_cast<int>(std::floor(static_cast<float>(position.z) /
+                                                   static_cast<float>(Chunk::SIZE_Z)));
+    return world.ticketManager().shouldTick(chunkX, chunkZ);
+}
+
 } // namespace
 
 void FallingBlockTickSystem::update(SystemContext& ctx) {
     if (!ctx.services.world) return;
-    World& world = *ctx.services.world;
-    auto& registry = ctx.registry;
+    if (ctx.services.gameClient) return;
+    tickWorld(*ctx.services.world, ctx.registry);
+}
+
+size_t FallingBlockTickSystem::tickWorld(World& world, GameplayRegistry& registry) {
     auto& reg = registry.registry();
 
     auto& particleBus = ensureParticleEventBus(registry);
@@ -54,7 +65,7 @@ void FallingBlockTickSystem::update(SystemContext& ctx) {
     auto view = reg.view<FallingBlockTag, FallingBlockComponent>();
     for (const entt::entity entity : view) {
         auto& block = view.get<FallingBlockComponent>(entity);
-        if (!simulation::isBlockPositionTicking(ctx, block.gridPosition)) {
+        if (!isBlockPositionTicking(world, block.gridPosition)) {
             continue;
         }
 
@@ -90,6 +101,8 @@ void FallingBlockTickSystem::update(SystemContext& ctx) {
             registry.destroy(entity);
         }
     }
+
+    return destroyList.size();
 }
 
 } // namespace ecs

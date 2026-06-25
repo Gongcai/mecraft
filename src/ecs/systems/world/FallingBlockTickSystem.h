@@ -3,7 +3,13 @@
 
 #include "../../ISystem.h"
 
+#include <cstddef>
+
+class World;
+
 namespace ecs {
+
+class GameplayRegistry;
 
 /// Tick-rate (20 TPS) system that advances each falling-block entity one
 /// grid cell downward per tick (Minecraft falling-block semantics).
@@ -12,6 +18,8 @@ namespace ecs {
 class FallingBlockTickSystem : public ISystem {
 public:
     void update(SystemContext& ctx) override;
+
+    static size_t tickWorld(World& world, GameplayRegistry& registry);
 };
 
 } // namespace ecs

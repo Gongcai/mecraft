@@ -37,6 +37,9 @@ void FarmlandMoistureSystem::update(SystemContext& ctx) {
     if (!ctx.services.world) {
         return;
     }
+    if (ctx.services.gameClient) {
+        return;
+    }
 
     hydrateLoadedFarmland(*ctx.services.world);
 }

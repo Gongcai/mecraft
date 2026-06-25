@@ -13,6 +13,8 @@
 #include "../ecs/entity/EntityFactory.h"
 #include "../ecs/systems/item/ItemSpawnSystem.h"
 #include "../ecs/systems/world/BlockSupportSystem.h"
+#include "../ecs/systems/world/FallingBlockSpawnSystem.h"
+#include "../ecs/systems/world/FallingBlockTickSystem.h"
 #include "../ecs/systems/world/FarmlandMoistureSystem.h"
 #include "../ecs/systems/world/PressurePlateSystem.h"
 #include "../ecs/systems/world/RandomTickSystem.h"
@@ -809,11 +811,11 @@ void GameServer::tickWorldSystems() {
     m_world.fluidSystem().processScheduledBlockTicks(m_currentTick, 4096);
     ecs::FarmlandMoistureSystem::hydrateLoadedFarmland(m_world);
     ecs::RandomTickSystem::processWorld(m_world, m_currentTick);
-    // When the game session provides a shared GameplayRegistry, the client
-    // tick pipeline consumes this queue and emits falling-block entities for
-    // local rendering. The server-only fallback keeps dedicated/headless tests
-    // advancing support rules even without that presentation path.
-    if (m_gameplayRegistry == nullptr || usingOwnedEcsRegistry()) {
+    if (m_gameplayRegistry != nullptr) {
+        ecs::BlockSupportSystem::processWorldQueue(m_world, *m_gameplayRegistry, 1024);
+        ecs::FallingBlockSpawnSystem::processEvents(*m_gameplayRegistry);
+        ecs::FallingBlockTickSystem::tickWorld(m_world, *m_gameplayRegistry);
+    } else {
         ecs::BlockSupportSystem::processWorldQueue(m_world, 1024);
     }
     if (m_gameplayRegistry != nullptr) {
