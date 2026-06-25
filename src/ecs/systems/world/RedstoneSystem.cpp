@@ -30,6 +30,7 @@ constexpr uint64_t kStoneButtonPulseTicks = 10;
 constexpr uint64_t kWoodButtonPulseTicks = 15;
 constexpr uint64_t kObserverPulseDelayTicks = 1;
 constexpr uint64_t kObserverPulseDurationTicks = 1;
+constexpr size_t kMaxPistonPushBlocks = 12;
 constexpr glm::ivec3 kDirections[6] = {
     { 1,  0,  0},
     {-1,  0,  0},
@@ -98,6 +99,15 @@ struct TorchStateUpdate {
 struct ComparatorEvaluation {
     glm::ivec3 position;
     uint8_t outputPower = 0;
+};
+
+struct PistonMovedBlock {
+    glm::ivec3 position;
+    StateID state = BlockIds::AIR;
+};
+
+struct PistonPushPlan {
+    std::vector<PistonMovedBlock> movedBlocks;
 };
 
 bool isWireState(const StateID stateId) {
@@ -230,6 +240,31 @@ uint8_t sourceOutputPower(const StateID stateId) {
 
     if (def.redstoneBehavior == "power_block") {
         return def.redstonePowerOutput;
+    }
+
+    throw std::runtime_error("Unsupported redstone power source behavior: " + def.redstoneBehavior);
+}
+
+bool sourceCanPowerConductiveBlocks(const StateID stateId) {
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (!def.isRedstonePowerSource) {
+        return false;
+    }
+
+    if (def.redstoneBehavior == "lever" ||
+        def.redstoneBehavior == "button" ||
+        def.redstoneBehavior == "plate" ||
+        def.redstoneBehavior == "power_block") {
+        return true;
+    }
+
+    if (def.redstoneBehavior == "torch") {
+        return false;
     }
 
     throw std::runtime_error("Unsupported redstone power source behavior: " + def.redstoneBehavior);
@@ -550,6 +585,107 @@ bool isMatchingPistonHead(const StateID headState, const StateID pistonState) {
            getRequiredProperty(headState, PropIndices::FACING, "facing") ==
                getRequiredProperty(pistonState, PropIndices::FACING, "facing") &&
            getRequiredProperty(headState, PropIndices::TYPE, "type") == pistonHeadType(pistonState);
+}
+
+BlockID obsidianBlockId() {
+    static const BlockID blockId = BlockRegistry::findByName("obsidian");
+    return blockId;
+}
+
+bool isImmovablePistonBlock(const StateID stateId) {
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    if (blockId == BlockIds::BEDROCK ||
+        blockId == obsidianBlockId() ||
+        blockId == BlockIds::PISTON_HEAD) {
+        return true;
+    }
+    return isPistonState(stateId) && isExtendedPropertyTrue(stateId);
+}
+
+bool isMovablePistonBlock(const StateID stateId) {
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+    if (isImmovablePistonBlock(stateId)) {
+        return false;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    return def.isSolid;
+}
+
+bool buildPistonPushPlan(const World& world,
+                         const glm::ivec3& pistonPosition,
+                         const glm::ivec3& pushDirection,
+                         PistonPushPlan& plan) {
+    plan.movedBlocks.clear();
+
+    for (int distance = 1; distance <= static_cast<int>(kMaxPistonPushBlocks) + 1; ++distance) {
+        const glm::ivec3 position = pistonPosition + pushDirection * distance;
+        const StateID stateId = world.getBlockState(position.x, position.y, position.z);
+        if (stateId == BlockIds::AIR) {
+            return true;
+        }
+        if (!isMovablePistonBlock(stateId)) {
+            return false;
+        }
+        if (plan.movedBlocks.size() == kMaxPistonPushBlocks) {
+            return false;
+        }
+        plan.movedBlocks.push_back({position, stateId});
+    }
+
+    throw std::runtime_error("Piston push scan exceeded its configured maximum distance");
+}
+
+size_t applyPistonPush(World& world,
+                       const glm::ivec3& pistonPosition,
+                       const StateID pistonState,
+                       const glm::ivec3& pushDirection,
+                       const PistonPushPlan& plan) {
+    size_t changed = 0;
+    for (auto it = plan.movedBlocks.rbegin(); it != plan.movedBlocks.rend(); ++it) {
+        const glm::ivec3 target = it->position + pushDirection;
+        world.setBlockState(target.x, target.y, target.z, it->state);
+        ++changed;
+    }
+
+    const glm::ivec3 frontPosition = pistonPosition + pushDirection;
+    world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pistonHeadState(pistonState));
+    world.setBlockState(pistonPosition.x, pistonPosition.y, pistonPosition.z, withExtended(pistonState, true));
+    return changed + 2;
+}
+
+bool isStickyPistonState(const StateID stateId) {
+    return BlockStateRegistry::getBlockId(stateId) == BlockIds::STICKY_PISTON;
+}
+
+size_t applyPistonRetraction(World& world,
+                             const glm::ivec3& pistonPosition,
+                             const StateID pistonState,
+                             const glm::ivec3& facingDirection) {
+    size_t changed = 0;
+    const glm::ivec3 frontPosition = pistonPosition + facingDirection;
+    const StateID frontState = world.getBlockState(frontPosition.x, frontPosition.y, frontPosition.z);
+    const bool removedMatchingHead = isMatchingPistonHead(frontState, pistonState);
+    if (removedMatchingHead) {
+        world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, BlockIds::AIR);
+        ++changed;
+    }
+
+    if (removedMatchingHead && isStickyPistonState(pistonState)) {
+        const glm::ivec3 pullPosition = frontPosition + facingDirection;
+        const StateID pullState = world.getBlockState(pullPosition.x, pullPosition.y, pullPosition.z);
+        if (isMovablePistonBlock(pullState)) {
+            world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pullState);
+            world.setBlockState(pullPosition.x, pullPosition.y, pullPosition.z, BlockIds::AIR);
+            changed += 2;
+        }
+    }
+
+    world.setBlockState(pistonPosition.x, pistonPosition.y, pistonPosition.z, withExtended(pistonState, false));
+    return changed + 1;
 }
 
 void addLampIfPresent(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
@@ -1009,7 +1145,10 @@ void seedSourcePowerToward(const World& world,
                            const RedstoneSource& source,
                            const glm::ivec3& target) {
     seedTrackedWirePower(wirePowers, frontier, wires, target, source.power);
-    seedWiresPoweredByConductor(world, wirePowers, frontier, wires, target, source.position, source.power);
+    const StateID sourceState = world.getBlockState(source.position.x, source.position.y, source.position.z);
+    if (source.directional || sourceCanPowerConductiveBlocks(sourceState)) {
+        seedWiresPoweredByConductor(world, wirePowers, frontier, wires, target, source.position, source.power);
+    }
 }
 
 WirePowerMap propagateWirePower(const World& world,
@@ -1111,6 +1250,9 @@ uint8_t sourceOutputPowerToward(const World& world,
             ? kMaxRedstonePower
             : 0;
     }
+    if (isTorchState(sourceState) && targetPosition == attachedBlockForTorch(sourceState, sourcePosition)) {
+        return 0;
+    }
     return sourceOutputPower(sourceState);
 }
 
@@ -1126,6 +1268,30 @@ uint8_t directSignalPowerToward(const World& world,
             : wirePowerFromState(signalState);
     }
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
+}
+
+uint8_t conductiveBlockInputPowerToward(const World& world,
+                                        const WirePowerMap& wirePowers,
+                                        const glm::ivec3& signalPosition,
+                                        const glm::ivec3& conductorPosition) {
+    const StateID signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
+    if (isWireState(signalState)) {
+        const auto computedIt = wirePowers.find(signalPosition);
+        return computedIt != wirePowers.end()
+            ? computedIt->second
+            : wirePowerFromState(signalState);
+    }
+
+    if (isRepeaterState(signalState) ||
+        isObserverState(signalState) ||
+        isComparatorState(signalState)) {
+        return sourceOutputPowerToward(world, signalPosition, conductorPosition);
+    }
+
+    if (!sourceCanPowerConductiveBlocks(signalState)) {
+        return 0;
+    }
+    return sourceOutputPowerToward(world, signalPosition, conductorPosition);
 }
 
 uint8_t conductedSignalPowerToward(const World& world,
@@ -1144,9 +1310,36 @@ uint8_t conductedSignalPowerToward(const World& world,
         }
         conductedPower = std::max(
             conductedPower,
-            directSignalPowerToward(world, wirePowers, signalPosition, conductor));
+            conductiveBlockInputPowerToward(world, wirePowers, signalPosition, conductor));
     }
     return conductedPower;
+}
+
+uint8_t conductiveBlockPowerAt(const World& world,
+                               const WirePowerMap& wirePowers,
+                               const glm::ivec3& conductor,
+                               const glm::ivec3* excludedPosition = nullptr) {
+    if (!isConductiveBlockAt(world, conductor)) {
+        return 0;
+    }
+
+    uint8_t receivedPower = 0;
+    for (const glm::ivec3& direction : kDirections) {
+        const glm::ivec3 neighbor = conductor + direction;
+        if (excludedPosition != nullptr && neighbor == *excludedPosition) {
+            continue;
+        }
+
+        const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
+        uint8_t neighborPower = conductiveBlockInputPowerToward(world, wirePowers, neighbor, conductor);
+        if (isConductiveState(neighborState)) {
+            neighborPower = std::max(
+                neighborPower,
+                conductedSignalPowerToward(world, wirePowers, neighbor, conductor));
+        }
+        receivedPower = std::max(receivedPower, neighborPower);
+    }
+    return receivedPower;
 }
 
 uint8_t receivedPowerAt(const World& world,
@@ -1180,7 +1373,7 @@ bool shouldTorchBeLit(const World& world,
     if (!isConductiveBlockAt(world, attachedBlock)) {
         return true;
     }
-    return receivedPowerAt(world, inputWirePowers, attachedBlock, &torchPosition) == 0;
+    return conductiveBlockPowerAt(world, inputWirePowers, attachedBlock, &torchPosition) == 0;
 }
 
 size_t applyTorchStates(World& world,
@@ -1513,27 +1706,18 @@ size_t applyPistonStates(World& world, const std::vector<glm::ivec3>& pistons, c
             continue;
         }
 
-        const glm::ivec3 frontPosition = position + pistonFacingDirection(currentState);
+        const glm::ivec3 facingDirection = pistonFacingDirection(currentState);
         if (shouldExtend) {
-            const StateID frontState = world.getBlockState(frontPosition.x, frontPosition.y, frontPosition.z);
-            if (frontState != BlockIds::AIR) {
+            PistonPushPlan pushPlan;
+            if (!buildPistonPushPlan(world, position, facingDirection, pushPlan)) {
                 continue;
             }
 
-            world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pistonHeadState(currentState));
-            world.setBlockState(position.x, position.y, position.z, withExtended(currentState, true));
-            changed += 2;
+            changed += applyPistonPush(world, position, currentState, facingDirection, pushPlan);
             continue;
         }
 
-        const StateID frontState = world.getBlockState(frontPosition.x, frontPosition.y, frontPosition.z);
-        if (isMatchingPistonHead(frontState, currentState)) {
-            world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, BlockIds::AIR);
-            ++changed;
-        }
-
-        world.setBlockState(position.x, position.y, position.z, withExtended(currentState, false));
-        ++changed;
+        changed += applyPistonRetraction(world, position, currentState, facingDirection);
     }
     return changed;
 }

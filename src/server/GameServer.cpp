@@ -4,6 +4,7 @@
 #include "../world/WeatherSystem.h"
 #include "../world/block/Block.h"
 #include "../world/block/BedBlock.h"
+#include "../world/block/PistonBlock.h"
 #include "../world/block/Placement.h"
 #include "../thread/ThreadPool.h"
 #include "../save/SaveManager.h"
@@ -1375,6 +1376,9 @@ BlockID removeServerTargetBlock(World& world,
     const StateID targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (BedBlockLogic::isBedState(targetState)) {
         return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
+    }
+    if (PistonBlockLogic::isPistonAssemblyState(targetState)) {
+        return PistonBlockLogic::removePistonAssembly(world, hitBlock, &removedPositions);
     }
 
     world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, BlockIds::AIR);

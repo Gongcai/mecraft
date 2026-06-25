@@ -48,13 +48,17 @@ StateID leverState(const bool powered) {
     return leverState(PropIndices::FACING_FLOOR, powered);
 }
 
-StateID redstoneTorchState(const bool lit) {
+StateID redstoneTorchState(const uint16_t facing, const bool lit) {
     return BlockStateRegistry::getState(
         BlockIds::REDSTONE_TORCH,
         std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+            {PropIndices::FACING, facing},
             {PropIndices::LIT, lit ? PropIndices::LIT_TRUE : PropIndices::LIT_FALSE}
         });
+}
+
+StateID redstoneTorchState(const bool lit) {
+    return redstoneTorchState(PropIndices::FACING_FLOOR, lit);
 }
 
 StateID buttonState(const BlockID blockId, const uint16_t facing, const bool powered) {
@@ -242,6 +246,53 @@ int main() {
         if (buttonPowered(world, -1, conductorButtonY, 0) ||
             wirePower(world, 0, conductorButtonY + 1, 0) != 0) {
             return fail("wall button release should remove conducted power from redstone wire");
+        }
+    }
+
+    {
+        const int torchConductorY = 104;
+        prepareFlatTestLine(world, torchConductorY);
+        world.setBlockState(0, torchConductorY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(
+            0,
+            torchConductorY + 1,
+            0,
+            BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(-1, torchConductorY, 0, redstoneTorchState(PropIndices::FACING_WEST, true));
+        ecs::RedstoneSystem::processWorld(world, 31);
+
+        if (!torchLit(world, -1, torchConductorY, 0) ||
+            wirePower(world, 0, torchConductorY + 1, 0) != 0) {
+            return fail("wall redstone_torch should not power wire through its supporting conductor block");
+        }
+    }
+
+    {
+        const int sharedSupportTorchY = 88;
+        prepareFlatTestLine(world, sharedSupportTorchY);
+        world.setBlockState(0, sharedSupportTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(-1, sharedSupportTorchY, 0, redstoneTorchState(PropIndices::FACING_WEST, true));
+        world.setBlockState(1, sharedSupportTorchY, 0, redstoneTorchState(PropIndices::FACING_EAST, true));
+        ecs::RedstoneSystem::processWorld(world, 32);
+
+        if (!torchLit(world, -1, sharedSupportTorchY, 0) ||
+            !torchLit(world, 1, sharedSupportTorchY, 0)) {
+            return fail("redstone_torches on the same supporting block should not power that support block");
+        }
+    }
+
+    {
+        const int adjacentTorchY = 56;
+        prepareFlatTestLine(world, adjacentTorchY);
+        world.setBlockState(0, adjacentTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(1, adjacentTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, adjacentTorchY + 1, 0, redstoneTorchState(true));
+        world.setBlockState(1, adjacentTorchY + 1, 0, redstoneTorchState(true));
+        ecs::RedstoneSystem::processWorld(world, 33);
+
+        if (!torchLit(world, 0, adjacentTorchY + 1, 0) ||
+            !torchLit(world, 1, adjacentTorchY + 1, 0)) {
+            return fail("adjacent redstone_torches should not charge neighboring conductor blocks");
         }
     }
 
