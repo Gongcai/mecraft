@@ -459,19 +459,19 @@ int main() {
     world.setBlockState(11, wireY, 2, BlockIds::AIR);
     world.setBlockState(10, wireY, 2, BlockIds::REDSTONE_WIRE);
     StateID placedWire = world.getBlockState(10, wireY, 2);
-    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_FALSE) {
+    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_NONE) {
         return fail("isolated redstone_wire should start visually disconnected");
     }
     world.setBlockState(11, wireY, 2, BlockIds::REDSTONE_WIRE);
     placedWire = world.getBlockState(10, wireY, 2);
     const StateID eastWire = world.getBlockState(11, wireY, 2);
-    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_TRUE ||
-        BlockStateRegistry::getPropertyIndex(eastWire, PropIndices::WEST) != PropIndices::WEST_TRUE) {
+    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_SIDE ||
+        BlockStateRegistry::getPropertyIndex(eastWire, PropIndices::WEST) != PropIndices::WEST_SIDE) {
         return fail("adjacent redstone_wire blocks should refresh visual connection states");
     }
     world.setBlockState(11, wireY, 2, BlockIds::AIR);
     placedWire = world.getBlockState(10, wireY, 2);
-    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_FALSE) {
+    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_NONE) {
         return fail("redstone_wire should disconnect visually when its neighbor is removed");
     }
 

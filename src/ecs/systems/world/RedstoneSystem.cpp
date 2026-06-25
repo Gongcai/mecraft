@@ -73,7 +73,7 @@ struct RedstoneSource {
 
 struct RedstoneWorkSet {
     std::vector<glm::ivec3> wires;
-    std::vector<glm::ivec3> lamps;
+    std::vector<glm::ivec3> redstoneControlledBlocks;
     std::vector<glm::ivec3> torches;
     std::vector<glm::ivec3> repeaters;
     std::vector<glm::ivec3> observers;
@@ -81,7 +81,7 @@ struct RedstoneWorkSet {
     std::vector<glm::ivec3> pistons;
     std::vector<glm::ivec3> sourcePositions;
     PositionSet wireSet;
-    PositionSet lampSet;
+    PositionSet redstoneControlledSet;
     PositionSet torchSet;
     PositionSet repeaterSet;
     PositionSet observerSet;
@@ -421,13 +421,13 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
     }
 }
 
-bool isLampState(const StateID stateId) {
+bool isRedstoneControlledState(const StateID stateId) {
     if (stateId == BlockIds::AIR) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    return def.respondsToRedstone && def.redstoneBehavior == "lamp";
+    return def.respondsToRedstone && !def.redstoneControlledProperty.empty();
 }
 
 bool isTorchState(const StateID stateId) {
@@ -594,6 +594,49 @@ bool isPoweredPropertyTrue(const StateID stateId) {
     return hasBooleanPropertyValue(stateId, PropIndices::POWERED, PropIndices::POWERED_TRUE, "powered");
 }
 
+uint16_t redstoneControlledPropertyIndex(const StateID stateId) {
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (!def.respondsToRedstone || def.redstoneControlledProperty.empty()) {
+        throw std::runtime_error(
+            "Redstone controlled state requires respondsToRedstone and redstoneControlledProperty");
+    }
+
+    const uint16_t property = BlockStateRegistry::getPropertyNameIndex(def.redstoneControlledProperty);
+    if (property == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error(
+            "Redstone controlled property is not registered: " + def.redstoneControlledProperty);
+    }
+
+    const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(stateId, property);
+    if (currentValue == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error(
+            "Redstone controlled block state is missing property: " + def.redstoneControlledProperty);
+    }
+
+    const uint16_t falseValue = BlockStateRegistry::getPropertyValueIndex(property, "false");
+    const uint16_t trueValue = BlockStateRegistry::getPropertyValueIndex(property, "true");
+    if (falseValue == BlockStateRegistry::INVALID_INDEX || trueValue == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error(
+            "Redstone controlled property must define false and true values: " + def.redstoneControlledProperty);
+    }
+    if (currentValue != falseValue && currentValue != trueValue) {
+        throw std::runtime_error(
+            "Redstone controlled property state must be false or true: " + def.redstoneControlledProperty);
+    }
+    return property;
+}
+
+StateID withRedstoneControlledPower(const StateID stateId, const bool powered) {
+    const uint16_t property = redstoneControlledPropertyIndex(stateId);
+    const uint16_t value = BlockStateRegistry::getPropertyValueIndex(property, powered ? "true" : "false");
+    const StateID updatedState = BlockStateRegistry::withProperty(stateId, property, value);
+    if (BlockStateRegistry::getPropertyIndex(updatedState, property) != value) {
+        throw std::runtime_error("Redstone controlled state transition failed");
+    }
+    return updatedState;
+}
+
 bool isExtendedPropertyTrue(const StateID stateId) {
     return hasBooleanPropertyValue(stateId, PropIndices::EXTENDED, PropIndices::EXTENDED_TRUE, "extended");
 }
@@ -738,13 +781,13 @@ size_t applyPistonRetraction(World& world,
     return changed + 1;
 }
 
-void addLampIfPresent(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
+void addRedstoneControlledIfPresent(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
     const StateID stateId = world.getBlockState(position.x, position.y, position.z);
-    if (!isLampState(stateId)) {
+    if (!isRedstoneControlledState(stateId)) {
         return;
     }
-    if (workSet.lampSet.insert(position).second) {
-        workSet.lamps.push_back(position);
+    if (workSet.redstoneControlledSet.insert(position).second) {
+        workSet.redstoneControlledBlocks.push_back(position);
     }
 }
 
@@ -846,9 +889,7 @@ void collectWireComponent(const World& world, const glm::ivec3& start, RedstoneW
                 collectEndpointsAround(world, neighbor, workSet);
             }
 
-            if (isLampState(neighborState) && workSet.lampSet.insert(neighbor).second) {
-                workSet.lamps.push_back(neighbor);
-            }
+            addRedstoneControlledIfPresent(world, neighbor, workSet);
             if (isTorchState(neighborState)) {
                 addTorchIfPresent(world, neighbor, workSet);
             }
@@ -875,8 +916,8 @@ void collectEndpointIfPresent(const World& world, const glm::ivec3& position, Re
     const StateID stateId = world.getBlockState(position.x, position.y, position.z);
     if (isWireState(stateId)) {
         collectWireComponent(world, position, workSet);
-    } else if (isLampState(stateId) && workSet.lampSet.insert(position).second) {
-        workSet.lamps.push_back(position);
+    } else if (isRedstoneControlledState(stateId)) {
+        addRedstoneControlledIfPresent(world, position, workSet);
     } else if (isTorchState(stateId)) {
         addTorchIfPresent(world, position, workSet);
     } else if (isRepeaterState(stateId)) {
@@ -923,9 +964,7 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
         collectEndpointsAround(world, position, workSet);
     }
 
-    if (isLampState(stateId) && workSet.lampSet.insert(position).second) {
-        workSet.lamps.push_back(position);
-    }
+    addRedstoneControlledIfPresent(world, position, workSet);
 
     if (isTorchState(stateId)) {
         addTorchIfPresent(world, position, workSet);
@@ -938,8 +977,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
             const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
             if (isWireState(neighborState)) {
                 collectWireComponent(world, neighbor, workSet);
-            } else if (isLampState(neighborState) && workSet.lampSet.insert(neighbor).second) {
-                workSet.lamps.push_back(neighbor);
+            } else if (isRedstoneControlledState(neighborState)) {
+                addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
                 addTorchIfPresent(world, neighbor, workSet);
             } else if (isObserverState(neighborState)) {
@@ -963,8 +1002,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
             const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
             if (isWireState(neighborState)) {
                 collectWireComponent(world, neighbor, workSet);
-            } else if (isLampState(neighborState) && workSet.lampSet.insert(neighbor).second) {
-                workSet.lamps.push_back(neighbor);
+            } else if (isRedstoneControlledState(neighborState)) {
+                addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
                 addTorchIfPresent(world, neighbor, workSet);
             } else if (isRepeaterState(neighborState)) {
@@ -988,8 +1027,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
             const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
             if (isWireState(neighborState)) {
                 collectWireComponent(world, neighbor, workSet);
-            } else if (isLampState(neighborState) && workSet.lampSet.insert(neighbor).second) {
-                workSet.lamps.push_back(neighbor);
+            } else if (isRedstoneControlledState(neighborState)) {
+                addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
                 addTorchIfPresent(world, neighbor, workSet);
             } else if (isRepeaterState(neighborState)) {
@@ -1013,8 +1052,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
             const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
             if (isWireState(neighborState)) {
                 collectWireComponent(world, neighbor, workSet);
-            } else if (isLampState(neighborState) && workSet.lampSet.insert(neighbor).second) {
-                workSet.lamps.push_back(neighbor);
+            } else if (isRedstoneControlledState(neighborState)) {
+                addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
                 addTorchIfPresent(world, neighbor, workSet);
             } else if (isRepeaterState(neighborState)) {
@@ -1041,8 +1080,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
         const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
         if (isWireState(neighborState)) {
             collectWireComponent(world, neighbor, workSet);
-        } else if (isLampState(neighborState) && workSet.lampSet.insert(neighbor).second) {
-            workSet.lamps.push_back(neighbor);
+        } else if (isRedstoneControlledState(neighborState)) {
+            addRedstoneControlledIfPresent(world, neighbor, workSet);
         } else if (isTorchState(neighborState)) {
             addTorchIfPresent(world, neighbor, workSet);
         } else if (isRepeaterState(neighborState)) {
@@ -1789,16 +1828,18 @@ size_t applyPistonStates(World& world, const std::vector<glm::ivec3>& pistons, c
     return changed;
 }
 
-size_t applyLampStates(World& world, const std::vector<glm::ivec3>& lamps, const WirePowerMap& wirePowers) {
+size_t applyRedstoneControlledStates(World& world,
+                                     const std::vector<glm::ivec3>& positions,
+                                     const WirePowerMap& wirePowers) {
     size_t changed = 0;
-    for (const glm::ivec3& position : lamps) {
+    for (const glm::ivec3& position : positions) {
         const StateID currentState = world.getBlockState(position.x, position.y, position.z);
-        if (!isLampState(currentState)) {
+        if (!isRedstoneControlledState(currentState)) {
             continue;
         }
 
-        const bool shouldBeLit = receivedPowerAt(world, wirePowers, position) > 0;
-        const StateID updatedState = withLit(currentState, shouldBeLit);
+        const bool shouldBePowered = receivedPowerAt(world, wirePowers, position) > 0;
+        const StateID updatedState = withRedstoneControlledPower(currentState, shouldBePowered);
         if (updatedState != currentState) {
             world.setBlockState(position.x, position.y, position.z, updatedState);
             ++changed;
@@ -1852,7 +1893,7 @@ size_t processWorldWithContext(World& world,
     changed += applyComparatorStates(world, comparatorEvaluations);
     changed += applyPistonStates(world, workSet.pistons, wirePowers);
     scheduleRepeaterEvaluationUpdates(world, redstoneTick, workSet.repeaters, wirePowers);
-    changed += applyLampStates(world, workSet.lamps, wirePowers);
+    changed += applyRedstoneControlledStates(world, workSet.redstoneControlledBlocks, wirePowers);
     return changed;
 }
 

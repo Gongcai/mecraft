@@ -143,7 +143,9 @@ int main() {
     }
 
     const BlockDef& lampDef = BlockRegistry::get(BlockIds::REDSTONE_LAMP);
-    if (lampDef.redstoneBehavior != "lamp" || !lampDef.respondsToRedstone) {
+    if (lampDef.redstoneBehavior != "lamp" ||
+        !lampDef.respondsToRedstone ||
+        lampDef.redstoneControlledProperty != "lit") {
         return fail("redstone_lamp should parse its redstone consumer metadata");
     }
 

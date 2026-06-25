@@ -934,6 +934,7 @@
       "drop": "minecraft:redstone_lamp",
       "redstoneBehavior": "lamp",
       "respondsToRedstone": true,
+      "redstoneControlledProperty": "lit",
       "properties": {
         "lit": ["false", "true"]
       },

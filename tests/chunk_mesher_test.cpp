@@ -1160,10 +1160,10 @@ int main() {
             std::vector<std::pair<uint16_t, uint16_t>>{
                 {PropIndices::FACING, PropIndices::FACING_FLOOR},
                 {PropIndices::POWER, PropIndices::POWER_0},
-                {PropIndices::NORTH, PropIndices::NORTH_FALSE},
-                {PropIndices::SOUTH, PropIndices::SOUTH_FALSE},
-                {PropIndices::EAST, PropIndices::EAST_TRUE},
-                {PropIndices::WEST, PropIndices::WEST_FALSE}
+                {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                {PropIndices::EAST, PropIndices::EAST_SIDE},
+                {PropIndices::WEST, PropIndices::WEST_NONE}
             });
 
         Chunk chunk(0, 0);

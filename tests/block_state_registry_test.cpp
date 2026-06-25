@@ -1143,10 +1143,10 @@ int main() {
     const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE);
     if (BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR ||
         BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::POWER) != PropIndices::POWER_0 ||
-        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::NORTH) != PropIndices::NORTH_FALSE ||
-        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::SOUTH) != PropIndices::SOUTH_FALSE ||
-        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::EAST) != PropIndices::EAST_FALSE ||
-        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::WEST) != PropIndices::WEST_FALSE) {
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::NORTH) != PropIndices::NORTH_NONE ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::SOUTH) != PropIndices::SOUTH_NONE ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::EAST) != PropIndices::EAST_NONE ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::WEST) != PropIndices::WEST_NONE) {
         return fail("redstone_wire default state should be floor power 0 with no visual connections");
     }
     const StateID redstoneWirePower15 = BlockStateRegistry::withProperty(
@@ -1160,9 +1160,9 @@ int main() {
     const StateID redstoneWireEast = BlockStateRegistry::withProperty(
         redstoneWireDefault,
         PropIndices::EAST,
-        PropIndices::EAST_TRUE);
+        PropIndices::EAST_SIDE);
     if (redstoneWireEast == redstoneWireDefault ||
-        BlockStateRegistry::getPropertyIndex(redstoneWireEast, PropIndices::EAST) != PropIndices::EAST_TRUE) {
+        BlockStateRegistry::getPropertyIndex(redstoneWireEast, PropIndices::EAST) != PropIndices::EAST_SIDE) {
         return fail("redstone_wire should expose directional visual connection states");
     }
 
@@ -1182,6 +1182,10 @@ int main() {
         BlockIds::REDSTONE_LAMP,
         PropIndices::LIT,
         PropIndices::LIT_TRUE);
+    const BlockDef& redstoneLampDef = BlockRegistry::get(BlockIds::REDSTONE_LAMP);
+    if (!redstoneLampDef.respondsToRedstone || redstoneLampDef.redstoneControlledProperty != "lit") {
+        return fail("redstone_lamp should declare lit as its redstone controlled property");
+    }
     if (redstoneLampLit == BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP) ||
         BlockStateRegistry::getPropertyIndex(redstoneLampLit, PropIndices::LIT) != PropIndices::LIT_TRUE) {
         return fail("redstone_lamp should expose lit and unlit display states");

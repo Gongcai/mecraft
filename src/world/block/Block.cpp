@@ -46,6 +46,8 @@ bool isKnownRedstoneBehavior(const std::string_view behavior) {
         "plate",
         "lamp",
         "door",
+        "trapdoor",
+        "fence_gate",
         "power_block",
         "target",
         "dispenser",
@@ -438,6 +440,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].respondsToRedstone = false;
         s_blocks[i].redstonePowerOutput = 0;
         s_blocks[i].redstoneBehavior.clear();
+        s_blocks[i].redstoneControlledProperty.clear();
         setAllFaces(s_blocks[i], makeStaticWorldTexture(0));
         s_blockDropIds[i] = NamespacedId("minecraft", "air");
     }
@@ -543,6 +546,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.respondsToRedstone = false;
         def.redstonePowerOutput = 0;
         def.redstoneBehavior.clear();
+        def.redstoneControlledProperty.clear();
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -653,6 +657,18 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             def.redstoneBehavior = blockJson["redstoneBehavior"].get<std::string>();
             if (!isKnownRedstoneBehavior(def.redstoneBehavior)) {
                 throw std::runtime_error("Unknown redstoneBehavior '" + def.redstoneBehavior + "' for block: " + def.namespacedId.full());
+            }
+        }
+        if (blockJson.contains("redstoneControlledProperty")) {
+            if (!blockJson["redstoneControlledProperty"].is_string()) {
+                throw std::runtime_error("redstoneControlledProperty must be a string for block: " + def.namespacedId.full());
+            }
+            def.redstoneControlledProperty = blockJson["redstoneControlledProperty"].get<std::string>();
+            if (def.redstoneControlledProperty.empty()) {
+                throw std::runtime_error("redstoneControlledProperty must not be empty for block: " + def.namespacedId.full());
+            }
+            if (!def.respondsToRedstone) {
+                throw std::runtime_error("redstoneControlledProperty requires respondsToRedstone=true for block: " + def.namespacedId.full());
             }
         }
         const bool hasExplicitMaterialKind = parseMaterialKind(blockJson, def.materialKind);
@@ -883,6 +899,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             s_blockDropIds[id] = NamespacedId(blockJson["drop"].get<std::string>());
         }
 
+        bool redstoneControlledPropertyValidated = def.redstoneControlledProperty.empty();
         if (blockJson.contains("properties") && blockJson["properties"].is_object()) {
             std::vector<std::pair<std::string, std::vector<std::string>>> properties;
             std::map<std::string, std::string> defaultState;
@@ -905,6 +922,27 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 }
             }
 
+            if (!def.redstoneControlledProperty.empty()) {
+                const auto propertyIt = std::find_if(
+                    properties.begin(),
+                    properties.end(),
+                    [&](const auto& property) {
+                        return property.first == def.redstoneControlledProperty;
+                    });
+                if (propertyIt == properties.end()) {
+                    throw std::runtime_error("redstoneControlledProperty must be declared in properties for block: " +
+                                             def.namespacedId.full());
+                }
+                const auto& values = propertyIt->second;
+                if (std::find(values.begin(), values.end(), "false") == values.end() ||
+                    std::find(values.begin(), values.end(), "true") == values.end()) {
+                    throw std::runtime_error(
+                        "redstoneControlledProperty must declare false and true values for block: " +
+                        def.namespacedId.full());
+                }
+                redstoneControlledPropertyValidated = true;
+            }
+
             if (blockJson.contains("defaultState") && blockJson["defaultState"].is_object()) {
                 for (auto it = blockJson["defaultState"].begin(); it != blockJson["defaultState"].end(); ++it) {
                     if (it.value().is_string()) {
@@ -916,6 +954,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             if (!properties.empty()) {
                 BlockStateRegistry::registerBlockProperties(id, std::move(properties), std::move(defaultState));
             }
+        }
+        if (!redstoneControlledPropertyValidated) {
+            throw std::runtime_error("redstoneControlledProperty requires a properties object for block: " +
+                                     def.namespacedId.full());
         }
 
         if (blockJson.contains("modelVariants")) {
