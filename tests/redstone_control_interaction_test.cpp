@@ -23,15 +23,26 @@ StateID leverState(const bool powered) {
         });
 }
 
+StateID buttonState(const BlockID blockId, const bool powered) {
+    return BlockStateRegistry::getState(
+        blockId,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_NORTH},
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
+        });
+}
+
 } // namespace
 
 int main() {
     BlockRegistry::init(nullptr);
 
     if (!game::redstone::isControlBlock(BlockIds::LEVER) ||
+        !game::redstone::isControlBlock(BlockIds::STONE_BUTTON) ||
+        !game::redstone::isControlBlock(BlockIds::OAK_BUTTON) ||
         !game::redstone::isControlBlock(BlockIds::REPEATER) ||
         !game::redstone::isControlBlock(BlockIds::COMPARATOR)) {
-        return fail("lever, repeater, and comparator should be right-click redstone controls");
+        return fail("lever, buttons, repeater, and comparator should be right-click redstone controls");
     }
     if (game::redstone::isControlBlock(BlockIds::REDSTONE_LAMP)) {
         return fail("redstone lamp should not be treated as a direct right-click control");
@@ -58,6 +69,21 @@ int main() {
         leverOffVariant->model == nullptr ||
         leverOffVariant->model->name != "block/lever_wall") {
         return fail("unpowered lever state should resolve to the unpowered model variant");
+    }
+
+    const StateID stoneButtonOff = buttonState(BlockIds::STONE_BUTTON, false);
+    const StateID stoneButtonOn = game::redstone::nextControlState(stoneButtonOff);
+    if (BlockStateRegistry::getPropertyIndex(stoneButtonOn, PropIndices::POWERED) != PropIndices::POWERED_TRUE) {
+        return fail("right-clicking an unpowered stone button should switch powered to true");
+    }
+    const ModelVariant* buttonOnVariant = BlockStateRegistry::getModelVariant(stoneButtonOn);
+    if (buttonOnVariant == nullptr ||
+        buttonOnVariant->model == nullptr ||
+        buttonOnVariant->model->name != "block/stone_button_wall_pressed") {
+        return fail("powered stone button state should resolve to the pressed model variant");
+    }
+    if (game::redstone::nextControlState(stoneButtonOn) != stoneButtonOn) {
+        return fail("right-clicking an already powered button should keep the active pulse state");
     }
 
     const StateID repeaterDelay1 = BlockStateRegistry::getState(

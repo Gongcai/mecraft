@@ -14,7 +14,7 @@ void requirePoweredProperties() {
     if (PropIndices::POWERED == PropIndices::INVALID ||
         PropIndices::POWERED_TRUE == PropIndices::INVALID ||
         PropIndices::POWERED_FALSE == PropIndices::INVALID) {
-        throw std::runtime_error("Lever interaction requires registered powered boolean values");
+        throw std::runtime_error("Redstone control interaction requires registered powered boolean values");
     }
 }
 
@@ -44,6 +44,11 @@ uint16_t toggledPoweredValue(const uint16_t currentPowered) {
         return PropIndices::POWERED_FALSE;
     }
     throw std::runtime_error("Lever state contains an unknown powered value");
+}
+
+bool isButtonBlock(const BlockID blockId) {
+    return blockId == BlockIds::STONE_BUTTON ||
+           blockId == BlockIds::OAK_BUTTON;
 }
 
 uint16_t nextRepeaterDelayValue(const uint16_t currentDelay) {
@@ -87,6 +92,7 @@ StateID withRequiredProperty(const StateID currentState,
 
 bool isControlBlock(const BlockID blockId) {
     return blockId == BlockIds::LEVER ||
+           isButtonBlock(blockId) ||
            blockId == BlockIds::REPEATER ||
            blockId == BlockIds::COMPARATOR;
 }
@@ -105,6 +111,25 @@ StateID nextControlState(const StateID currentState) {
             PropIndices::POWERED,
             toggledPoweredValue(currentPowered),
             "Lever powered");
+    }
+
+    if (isButtonBlock(blockId)) {
+        requirePoweredProperties();
+        const uint16_t currentPowered = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::POWERED);
+        if (currentPowered == BlockStateRegistry::INVALID_INDEX) {
+            throw std::runtime_error("Button state is missing the powered property");
+        }
+        if (currentPowered == PropIndices::POWERED_TRUE) {
+            return currentState;
+        }
+        if (currentPowered != PropIndices::POWERED_FALSE) {
+            throw std::runtime_error("Button state contains an unknown powered value");
+        }
+        return withRequiredProperty(
+            currentState,
+            PropIndices::POWERED,
+            PropIndices::POWERED_TRUE,
+            "Button powered");
     }
 
     if (blockId == BlockIds::REPEATER) {

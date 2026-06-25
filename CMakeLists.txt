@@ -136,6 +136,7 @@ set(SRC_WORLD
         src/world/fluid/FluidFlow.cpp
         src/world/fluid/FluidSystem.cpp
         src/world/block/BlockNeighborUpdateQueue.cpp
+        src/world/redstone/RedstoneUpdateQueue.cpp
         src/world/gen/TerrainGenerator.cpp
         src/world/WorldRaycast.cpp
         src/world/World.cpp
@@ -328,6 +329,7 @@ set(SRC_ECS
         src/ecs/systems/world/FarmlandMoistureSystem.cpp
         src/ecs/systems/world/RandomTickSystem.cpp
         src/ecs/systems/world/BlockSupportSystem.cpp
+        src/ecs/systems/world/PressurePlateSystem.cpp
         src/ecs/systems/world/RedstoneSystem.cpp
         src/ecs/systems/world/FallingBlockSpawnSystem.cpp
         src/ecs/systems/world/FallingBlockTickSystem.cpp
@@ -627,6 +629,10 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
     add_mecraft_test(redstone_basic_test tests/redstone_basic_test.cpp)
     mecraft_copy_runtime_assets(redstone_basic_test)
+    add_mecraft_test(redstone_pressure_plate_test tests/redstone_pressure_plate_test.cpp)
+    mecraft_copy_runtime_assets(redstone_pressure_plate_test)
+    add_mecraft_test(redstone_repeater_test tests/redstone_repeater_test.cpp)
+    mecraft_copy_runtime_assets(redstone_repeater_test)
     add_mecraft_test(redstone_control_interaction_test tests/redstone_control_interaction_test.cpp)
     add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
     add_mecraft_test(fluid_flow_test tests/fluid_flow_test.cpp)

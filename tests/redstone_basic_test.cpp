@@ -44,6 +44,24 @@ StateID leverState(const bool powered) {
         });
 }
 
+StateID redstoneTorchState(const bool lit) {
+    return BlockStateRegistry::getState(
+        BlockIds::REDSTONE_TORCH,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+            {PropIndices::LIT, lit ? PropIndices::LIT_TRUE : PropIndices::LIT_FALSE}
+        });
+}
+
+StateID buttonState(const BlockID blockId, const bool powered) {
+    return BlockStateRegistry::getState(
+        blockId,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
+        });
+}
+
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
@@ -80,6 +98,16 @@ bool lampLit(const World& world, const int x, const int y, const int z) {
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::LIT) == PropIndices::LIT_TRUE;
 }
 
+bool torchLit(const World& world, const int x, const int y, const int z) {
+    const StateID state = world.getBlockState(x, y, z);
+    return BlockStateRegistry::getPropertyIndex(state, PropIndices::LIT) == PropIndices::LIT_TRUE;
+}
+
+bool buttonPowered(const World& world, const int x, const int y, const int z) {
+    const StateID state = world.getBlockState(x, y, z);
+    return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
+}
+
 } // namespace
 
 int main() {
@@ -105,6 +133,13 @@ int main() {
     const BlockDef& lampDef = BlockRegistry::get(BlockIds::REDSTONE_LAMP);
     if (lampDef.redstoneBehavior != "lamp" || !lampDef.respondsToRedstone) {
         return fail("redstone_lamp should parse its redstone consumer metadata");
+    }
+
+    const BlockDef& torchDef = BlockRegistry::get(BlockIds::REDSTONE_TORCH);
+    if (torchDef.redstoneBehavior != "torch" ||
+        !torchDef.isRedstonePowerSource ||
+        torchDef.redstonePowerOutput != 15) {
+        return fail("redstone_torch should parse its redstone power source metadata");
     }
 
     World world;
@@ -158,6 +193,66 @@ int main() {
     }
     if (lampLit(world, 6, y, 0)) {
         return fail("redstone lamp should turn off after adjacent wire loses power");
+    }
+
+    const int torchY = 80;
+    prepareFlatTestLine(world, torchY);
+
+    world.setBlockState(0, torchY, 0, redstoneTorchState(true));
+    world.setBlockState(1, torchY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+    world.setBlockState(2, torchY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+    ecs::RedstoneSystem::processWorld(world, 2);
+
+    if (!torchLit(world, 0, torchY, 0) ||
+        wirePower(world, 1, torchY, 0) != 15 ||
+        !lampLit(world, 2, torchY, 0)) {
+        return fail("lit redstone_torch should power adjacent wire and lamp");
+    }
+
+    world.setBlockState(-1, torchY - 1, 0, leverState(true));
+    ecs::RedstoneSystem::processWorld(world, 3);
+
+    if (torchLit(world, 0, torchY, 0) ||
+        wirePower(world, 1, torchY, 0) != 0 ||
+        lampLit(world, 2, torchY, 0)) {
+        return fail("powered support block should turn off the attached redstone_torch");
+    }
+
+    world.setBlockState(-1, torchY - 1, 0, leverState(false));
+    ecs::RedstoneSystem::processWorld(world, 4);
+
+    if (!torchLit(world, 0, torchY, 0) ||
+        wirePower(world, 1, torchY, 0) != 15 ||
+        !lampLit(world, 2, torchY, 0)) {
+        return fail("redstone_torch should relight after its support block loses power");
+    }
+
+    const int buttonY = 64;
+    prepareFlatTestLine(world, buttonY);
+
+    world.setBlockState(0, buttonY, 0, buttonState(BlockIds::STONE_BUTTON, true));
+    world.setBlockState(1, buttonY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+    world.setBlockState(2, buttonY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+    ecs::RedstoneSystem::processWorld(world, 5);
+
+    if (!buttonPowered(world, 0, buttonY, 0) ||
+        wirePower(world, 1, buttonY, 0) != 15 ||
+        !lampLit(world, 2, buttonY, 0)) {
+        return fail("powered stone_button should immediately power adjacent wire and lamp");
+    }
+
+    ecs::RedstoneSystem::processWorld(world, 14);
+    if (!buttonPowered(world, 0, buttonY, 0) ||
+        wirePower(world, 1, buttonY, 0) != 15 ||
+        !lampLit(world, 2, buttonY, 0)) {
+        return fail("stone_button pulse should stay active before its release tick");
+    }
+
+    ecs::RedstoneSystem::processWorld(world, 15);
+    if (buttonPowered(world, 0, buttonY, 0) ||
+        wirePower(world, 1, buttonY, 0) != 0 ||
+        lampLit(world, 2, buttonY, 0)) {
+        return fail("stone_button should release after ten redstone ticks and remove output power");
     }
 
     std::cout << "[redstone_basic_test] PASS\n";

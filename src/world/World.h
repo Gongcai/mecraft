@@ -17,6 +17,7 @@
 #include "../server/ChunkTicketManager.h"
 #include "fluid/FluidState.h"
 #include "fluid/FluidSystem.h"
+#include "redstone/RedstoneUpdateQueue.h"
 #include "WeatherSystem.h"
 #include "light/LightService.h"
 #include "gen/TerrainGenerator.h"
@@ -87,6 +88,8 @@ public:
     const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
     BlockNeighborUpdateQueue& redstoneUpdateQueue() { return m_redstoneUpdateQueue; }
     const BlockNeighborUpdateQueue& redstoneUpdateQueue() const { return m_redstoneUpdateQueue; }
+    RedstoneUpdateQueue& redstoneScheduledUpdateQueue() { return m_redstoneScheduledUpdateQueue; }
+    const RedstoneUpdateQueue& redstoneScheduledUpdateQueue() const { return m_redstoneScheduledUpdateQueue; }
 
     /// Access the chunk ticket manager (for GameServer per-client management).
     ChunkTicketManager& ticketManager() { return m_ticketManager; }
@@ -126,6 +129,7 @@ private:
     WeatherSystem m_weatherSystem;
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
     BlockNeighborUpdateQueue m_redstoneUpdateQueue;
+    RedstoneUpdateQueue m_redstoneScheduledUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;
     LightChangeCallback m_lightChangeCallback;
