@@ -41,6 +41,35 @@ void prepareFlatTestLine(World& world, const int y) {
     }
 }
 
+void prepareFlatTestArea(World& world,
+                         const int y,
+                         const int minX,
+                         const int maxX,
+                         const int minZ,
+                         const int maxZ) {
+    for (int x = minX; x <= maxX; ++x) {
+        for (int z = minZ; z <= maxZ; ++z) {
+            world.setBlock(x, y - 1, z, BlockIds::STONE);
+            world.setBlock(x, y, z, BlockIds::AIR);
+            world.setBlock(x, y + 1, z, BlockIds::AIR);
+            world.setBlock(x, y + 2, z, BlockIds::AIR);
+        }
+    }
+}
+
+void processRedstoneTicks(World& world, uint64_t& tick, const int count) {
+    for (int i = 0; i < count; ++i) {
+        ecs::RedstoneSystem::processWorld(world, tick);
+        ++tick;
+    }
+}
+
+struct BinaryGateCase {
+    bool inputA = false;
+    bool inputB = false;
+    bool expectedOutput = false;
+};
+
 StateID leverState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         BlockIds::LEVER,
@@ -78,6 +107,24 @@ StateID buttonState(const BlockID blockId, const uint16_t facing, const bool pow
 
 StateID buttonState(const BlockID blockId, const bool powered) {
     return buttonState(blockId, PropIndices::FACING_FLOOR, powered);
+}
+
+StateID pressurePlateState(const BlockID blockId, const bool powered) {
+    return BlockStateRegistry::getState(
+        blockId,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
+        });
+}
+
+StateID repeaterState(const uint16_t facing, const bool powered) {
+    return BlockStateRegistry::getState(
+        BlockIds::REPEATER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, facing},
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
+            {PropIndices::DELAY, PropIndices::DELAY_1}
+        });
 }
 
 StateID hopperState(const bool enabled) {
@@ -156,6 +203,11 @@ bool torchLit(const World& world, const int x, const int y, const int z) {
 }
 
 bool buttonPowered(const World& world, const int x, const int y, const int z) {
+    const StateID state = world.getBlockState(x, y, z);
+    return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
+}
+
+bool powered(const World& world, const int x, const int y, const int z) {
     const StateID state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
@@ -376,6 +428,54 @@ int main() {
     }
 
     {
+        const int torchBelowWireY = 116;
+        prepareFlatTestLine(world, torchBelowWireY);
+        world.setBlockState(0, torchBelowWireY - 2, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, torchBelowWireY - 1, 0, redstoneTorchState(true));
+        world.setBlockState(0, torchBelowWireY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(
+            0,
+            torchBelowWireY + 1,
+            0,
+            BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        ecs::RedstoneSystem::processWorld(world, 34);
+
+        if (!torchLit(world, 0, torchBelowWireY - 1, 0) ||
+            wirePower(world, 0, torchBelowWireY + 1, 0) != 15) {
+            return fail("redstone_torch below a conductor should power wire on top of that conductor");
+        }
+    }
+
+    {
+        const int verticalTorchY = 100;
+        prepareFlatTestLine(world, verticalTorchY);
+        world.setBlockState(0, verticalTorchY - 2, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, verticalTorchY - 1, 0, redstoneTorchState(true));
+        world.setBlockState(0, verticalTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, verticalTorchY + 1, 0, redstoneTorchState(true));
+        ecs::RedstoneSystem::processWorld(world, 35);
+
+        if (!torchLit(world, 0, verticalTorchY - 1, 0) ||
+            torchLit(world, 0, verticalTorchY + 1, 0)) {
+            return fail("redstone_torch above a conductor should turn off when a lower torch powers that conductor");
+        }
+    }
+
+    {
+        const int sideTorchY = 52;
+        prepareFlatTestLine(world, sideTorchY);
+        world.setBlockState(0, sideTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, sideTorchY + 1, 0, redstoneTorchState(true));
+        world.setBlockState(-1, sideTorchY, 0, redstoneTorchState(PropIndices::FACING_WEST, true));
+        ecs::RedstoneSystem::processWorld(world, 36);
+
+        if (!torchLit(world, -1, sideTorchY, 0) ||
+            !torchLit(world, 0, sideTorchY + 1, 0)) {
+            return fail("side redstone_torch should not power the block it is attached to");
+        }
+    }
+
+    {
         const int adjacentTorchY = 56;
         prepareFlatTestLine(world, adjacentTorchY);
         world.setBlockState(0, adjacentTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
@@ -387,6 +487,111 @@ int main() {
         if (!torchLit(world, 0, adjacentTorchY + 1, 0) ||
             !torchLit(world, 1, adjacentTorchY + 1, 0)) {
             return fail("adjacent redstone_torches should not charge neighboring conductor blocks");
+        }
+    }
+
+    {
+        const int linkedTorchesY = 72;
+        prepareFlatTestLine(world, linkedTorchesY);
+        world.setBlockState(0, linkedTorchesY - 1, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(3, linkedTorchesY - 1, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, linkedTorchesY, 0, redstoneTorchState(true));
+        world.setBlockState(1, linkedTorchesY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, linkedTorchesY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(3, linkedTorchesY, 0, redstoneTorchState(true));
+
+        for (uint64_t tick = 39; tick < 45; ++tick) {
+            ecs::RedstoneSystem::processWorld(world, tick);
+            if (!torchLit(world, 0, linkedTorchesY, 0) ||
+                !torchLit(world, 3, linkedTorchesY, 0) ||
+                wirePower(world, 1, linkedTorchesY, 0) != 15 ||
+                wirePower(world, 2, linkedTorchesY, 0) != 15) {
+                return fail("redstone_torches linked by dust should remain stable across redstone ticks");
+            }
+        }
+    }
+
+    {
+        const int repeaterTorchY = 44;
+        prepareFlatTestLine(world, repeaterTorchY);
+        world.setBlockState(0, repeaterTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, repeaterTorchY + 1, 0, redstoneTorchState(true));
+        world.setBlockState(-1, repeaterTorchY, 0, repeaterState(PropIndices::FACING_EAST, true));
+        ecs::RedstoneSystem::processWorld(world, 37);
+
+        if (torchLit(world, 0, repeaterTorchY + 1, 0)) {
+            return fail("repeater directly powering a torch support block should turn that torch off");
+        }
+    }
+
+    {
+        const int repeaterChainY = 28;
+        prepareFlatTestLine(world, repeaterChainY);
+        world.setBlockState(0, repeaterChainY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(1, repeaterChainY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(1, repeaterChainY + 1, 0, redstoneTorchState(true));
+        world.setBlockState(-1, repeaterChainY, 0, repeaterState(PropIndices::FACING_EAST, true));
+        ecs::RedstoneSystem::processWorld(world, 38);
+
+        if (!torchLit(world, 1, repeaterChainY + 1, 0)) {
+            return fail("repeater power should not chain through one conductor into another torch support block");
+        }
+    }
+
+    {
+        const int plateWireTorchY = 132;
+        prepareFlatTestLine(world, plateWireTorchY);
+        world.setBlockState(0, plateWireTorchY, 0, pressurePlateState(BlockIds::STONE_PRESSURE_PLATE, true));
+        world.setBlockState(1, plateWireTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, plateWireTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(3, plateWireTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(3, plateWireTorchY + 1, 0, redstoneTorchState(true));
+        ecs::RedstoneSystem::processWorld(world, 39);
+
+        if (!powered(world, 0, plateWireTorchY, 0) ||
+            wirePower(world, 2, plateWireTorchY, 0) == 0 ||
+            torchLit(world, 3, plateWireTorchY + 1, 0)) {
+            return fail("pressure plate power carried by redstone wire should turn off a torch support block");
+        }
+
+        world.setBlockState(0, plateWireTorchY, 0, pressurePlateState(BlockIds::STONE_PRESSURE_PLATE, false));
+        ecs::RedstoneSystem::processWorld(world, 40);
+        if (wirePower(world, 2, plateWireTorchY, 0) != 0 ||
+            !torchLit(world, 3, plateWireTorchY + 1, 0)) {
+            return fail("torch should relight when wire-carried pressure plate power is removed");
+        }
+    }
+
+    {
+        const int repeaterWireTorchY = 136;
+        prepareFlatTestLine(world, repeaterWireTorchY);
+        world.setBlockState(0, repeaterWireTorchY, 0, repeaterState(PropIndices::FACING_EAST, true));
+        world.setBlockState(1, repeaterWireTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, repeaterWireTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(3, repeaterWireTorchY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(3, repeaterWireTorchY + 1, 0, redstoneTorchState(true));
+        ecs::RedstoneSystem::processWorld(world, 41);
+
+        if (wirePower(world, 2, repeaterWireTorchY, 0) == 0 ||
+            torchLit(world, 3, repeaterWireTorchY + 1, 0)) {
+            return fail("repeater output carried by redstone wire should turn off a torch support block");
+        }
+    }
+
+    {
+        const int weakConductorY = 140;
+        prepareFlatTestLine(world, weakConductorY);
+        world.setBlockState(0, weakConductorY, 0, pressurePlateState(BlockIds::STONE_PRESSURE_PLATE, true));
+        world.setBlockState(1, weakConductorY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, weakConductorY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(3, weakConductorY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(4, weakConductorY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+        ecs::RedstoneSystem::processWorld(world, 42);
+
+        if (wirePower(world, 1, weakConductorY, 0) == 0 ||
+            wirePower(world, 3, weakConductorY, 0) != 0 ||
+            lampLit(world, 4, weakConductorY, 0)) {
+            return fail("wire weak-powered conductor should not strongly power redstone dust on another face");
         }
     }
 
@@ -420,6 +625,131 @@ int main() {
         wirePower(world, 1, torchY, 0) != 15 ||
         !lampLit(world, 2, torchY, 0)) {
         return fail("redstone_torch should relight after its support block loses power");
+    }
+
+    {
+        const int notGateY = 124;
+        prepareFlatTestArea(world, notGateY, -1, 5, -1, 1);
+        world.setBlockState(1, notGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(2, notGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, notGateY, 0, leverState(PropIndices::FACING_WEST, false));
+        world.setBlockState(1, notGateY + 1, 0, redstoneTorchState(true));
+        world.setBlockState(2, notGateY + 1, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(3, notGateY + 1, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        uint64_t logicTick = 70;
+        world.setBlockState(0, notGateY, 0, leverState(PropIndices::FACING_WEST, false));
+        processRedstoneTicks(world, logicTick, 1);
+        if (!torchLit(world, 1, notGateY + 1, 0) ||
+            wirePower(world, 2, notGateY + 1, 0) != 15 ||
+            !lampLit(world, 3, notGateY + 1, 0)) {
+            return fail("NOT gate should output high when the input is low");
+        }
+
+        world.setBlockState(0, notGateY, 0, leverState(PropIndices::FACING_WEST, true));
+        processRedstoneTicks(world, logicTick, 1);
+        if (torchLit(world, 1, notGateY + 1, 0) ||
+            wirePower(world, 2, notGateY + 1, 0) != 0 ||
+            lampLit(world, 3, notGateY + 1, 0)) {
+            return fail("NOT gate should output low when the input is high");
+        }
+    }
+
+    {
+        const int orGateY = 126;
+        prepareFlatTestArea(world, orGateY, -1, 5, -2, 2);
+        world.setBlockState(0, orGateY, -1, leverState(false));
+        world.setBlockState(0, orGateY, 1, leverState(false));
+        world.setBlockState(1, orGateY, -1, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(1, orGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(1, orGateY, 1, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, orGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(3, orGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        uint64_t logicTick = 80;
+        const std::array<BinaryGateCase, 4> truthTable = {{
+            {false, false, false},
+            {true, false, true},
+            {false, true, true},
+            {true, true, true},
+        }};
+        for (const BinaryGateCase& gateCase : truthTable) {
+            world.setBlockState(0, orGateY, -1, leverState(gateCase.inputA));
+            world.setBlockState(0, orGateY, 1, leverState(gateCase.inputB));
+            processRedstoneTicks(world, logicTick, 1);
+            const bool outputLit = lampLit(world, 3, orGateY, 0);
+            const bool outputWirePowered = wirePower(world, 2, orGateY, 0) > 0;
+            if (outputLit != gateCase.expectedOutput || outputWirePowered != gateCase.expectedOutput) {
+                return fail("OR gate truth table should match A OR B");
+            }
+        }
+    }
+
+    {
+        const int norGateY = 128;
+        prepareFlatTestArea(world, norGateY, 0, 5, -2, 1);
+        world.setBlockState(2, norGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(1, norGateY, 0, leverState(PropIndices::FACING_WEST, false));
+        world.setBlockState(2, norGateY, -1, leverState(PropIndices::FACING_NORTH, false));
+        world.setBlockState(3, norGateY, 0, redstoneTorchState(PropIndices::FACING_EAST, true));
+        world.setBlockState(4, norGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        uint64_t logicTick = 90;
+        const std::array<BinaryGateCase, 4> truthTable = {{
+            {false, false, true},
+            {true, false, false},
+            {false, true, false},
+            {true, true, false},
+        }};
+        for (const BinaryGateCase& gateCase : truthTable) {
+            world.setBlockState(1, norGateY, 0, leverState(PropIndices::FACING_WEST, gateCase.inputA));
+            world.setBlockState(2, norGateY, -1, leverState(PropIndices::FACING_NORTH, gateCase.inputB));
+            processRedstoneTicks(world, logicTick, 1);
+            const bool outputLit = lampLit(world, 4, norGateY, 0);
+            if (torchLit(world, 3, norGateY, 0) != gateCase.expectedOutput ||
+                outputLit != gateCase.expectedOutput) {
+                return fail("NOR gate truth table should match NOT (A OR B)");
+            }
+        }
+    }
+
+    {
+        const int andGateY = 130;
+        prepareFlatTestArea(world, andGateY, -2, 5, -2, 2);
+        world.setBlockState(0, andGateY, -1, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, andGateY, 1, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(1, andGateY, -1, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(1, andGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(1, andGateY, 1, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(-1, andGateY, -1, leverState(PropIndices::FACING_WEST, false));
+        world.setBlockState(-1, andGateY, 1, leverState(PropIndices::FACING_WEST, false));
+        world.setBlockState(0, andGateY + 1, -1, redstoneTorchState(true));
+        world.setBlockState(0, andGateY + 1, 1, redstoneTorchState(true));
+        world.setBlockState(1, andGateY + 1, -1, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(1, andGateY + 1, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(1, andGateY + 1, 1, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, andGateY, 0, redstoneTorchState(PropIndices::FACING_EAST, true));
+        world.setBlockState(3, andGateY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        uint64_t logicTick = 100;
+        const std::array<BinaryGateCase, 4> truthTable = {{
+            {false, false, false},
+            {true, false, false},
+            {false, true, false},
+            {true, true, true},
+        }};
+        for (const BinaryGateCase& gateCase : truthTable) {
+            world.setBlockState(-1, andGateY, -1, leverState(PropIndices::FACING_WEST, gateCase.inputA));
+            world.setBlockState(-1, andGateY, 1, leverState(PropIndices::FACING_WEST, gateCase.inputB));
+            processRedstoneTicks(world, logicTick, 2);
+            const bool outputLit = lampLit(world, 3, andGateY, 0);
+            const bool intermediateNandPowered = wirePower(world, 1, andGateY + 1, 0) > 0;
+            if (outputLit != gateCase.expectedOutput ||
+                torchLit(world, 2, andGateY, 0) != gateCase.expectedOutput ||
+                intermediateNandPowered != !gateCase.expectedOutput) {
+                return fail("AND gate truth table should match A AND B with a NAND intermediate line");
+            }
+        }
     }
 
     const int buttonY = 64;

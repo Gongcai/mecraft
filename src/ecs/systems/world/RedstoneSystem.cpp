@@ -102,11 +102,6 @@ struct PowerNode {
     }
 };
 
-struct TorchStateUpdate {
-    glm::ivec3 position;
-    StateID state = BlockIds::AIR;
-};
-
 struct ComparatorEvaluation {
     glm::ivec3 position;
     uint8_t outputPower = 0;
@@ -284,6 +279,31 @@ bool sourceCanPowerConductiveBlocks(const StateID stateId) {
     }
 
     throw std::runtime_error("Unsupported redstone power source behavior: " + def.redstoneBehavior);
+}
+
+bool isHorizontalDirection(const glm::ivec3& direction) {
+    return (direction == glm::ivec3(1, 0, 0)) ||
+           (direction == glm::ivec3(-1, 0, 0)) ||
+           (direction == glm::ivec3(0, 0, 1)) ||
+           (direction == glm::ivec3(0, 0, -1));
+}
+
+bool wirePowersConductorToward(const World& world,
+                               const glm::ivec3& wirePosition,
+                               const glm::ivec3& conductorPosition) {
+    const StateID wireState = world.getBlockState(wirePosition.x, wirePosition.y, wirePosition.z);
+    if (!isWireState(wireState)) {
+        return false;
+    }
+
+    const glm::ivec3 offset = conductorPosition - wirePosition;
+    if (offset == glm::ivec3(0, -1, 0)) {
+        return true;
+    }
+    if (!isHorizontalDirection(offset)) {
+        return false;
+    }
+    return true;
 }
 
 template <typename StackReader>
@@ -1242,6 +1262,21 @@ std::vector<RedstoneSource> collectPoweredObserverSources(const World& world,
     return sources;
 }
 
+std::vector<RedstoneSource> collectPoweredComparatorStateSources(
+    const World& world,
+    const std::vector<glm::ivec3>& comparatorPositions) {
+    std::vector<RedstoneSource> sources;
+    sources.reserve(comparatorPositions.size());
+    for (const glm::ivec3& position : comparatorPositions) {
+        const StateID stateId = world.getBlockState(position.x, position.y, position.z);
+        if (!isComparatorState(stateId) || !isPoweredPropertyTrue(stateId)) {
+            continue;
+        }
+        sources.push_back({position, kMaxRedstonePower, comparatorOutputDirection(stateId), true});
+    }
+    return sources;
+}
+
 std::vector<RedstoneSource> collectComparatorSources(const World& world,
                                                      const std::vector<ComparatorEvaluation>& evaluations) {
     std::vector<RedstoneSource> sources;
@@ -1324,7 +1359,11 @@ void seedSourcePowerToward(const World& world,
                            const glm::ivec3& target) {
     seedTrackedWirePower(wirePowers, frontier, wires, target, source.power);
     const StateID sourceState = world.getBlockState(source.position.x, source.position.y, source.position.z);
-    if (source.directional || sourceCanPowerConductiveBlocks(sourceState)) {
+    const bool stronglyPowersTarget =
+        source.directional ||
+        (isTorchState(sourceState) && target == source.position + glm::ivec3(0, 1, 0)) ||
+        sourceCanPowerConductiveBlocks(sourceState);
+    if (stronglyPowersTarget) {
         seedWiresPoweredByConductor(world, wirePowers, frontier, wires, target, source.position, source.power);
     }
 }
@@ -1339,9 +1378,8 @@ WirePowerMap propagateWirePower(const World& world,
     // connected component being evaluated. Wires not reached by any source are
     // unambiguously at 0 power; downstream readers can then distinguish "in the
     // work set, carries 0" from "outside the work set, stable stored state" by
-    // map membership alone. This makes the fallback to stored state in
-    // directSignalPowerToward / conductiveBlockInputPowerToward apply only to
-    // wires outside the work set, which is its intended design role.
+    // map membership alone. Readers use stored wire power only for positions
+    // outside the evaluated component boundary.
     wirePowers.reserve(wires.size());
     for (const glm::ivec3& wire : wires) {
         wirePowers.emplace(wire, uint8_t{0});
@@ -1459,28 +1497,53 @@ uint8_t directSignalPowerToward(const World& world,
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
 }
 
+uint8_t sourceStrongPowerTowardConductor(const World& world,
+                                         const glm::ivec3& sourcePosition,
+                                         const glm::ivec3& conductorPosition) {
+    const StateID sourceState = world.getBlockState(sourcePosition.x, sourcePosition.y, sourcePosition.z);
+    if (isWireState(sourceState) || isConductiveState(sourceState)) {
+        return 0;
+    }
+    if (isTorchState(sourceState)) {
+        if (conductorPosition != sourcePosition + glm::ivec3(0, 1, 0)) {
+            return 0;
+        }
+        return sourceOutputPower(sourceState);
+    }
+    if (isRepeaterState(sourceState) ||
+        isObserverState(sourceState) ||
+        isComparatorState(sourceState)) {
+        return sourceOutputPowerToward(world, sourcePosition, conductorPosition);
+    }
+    if (!sourceCanPowerConductiveBlocks(sourceState)) {
+        return 0;
+    }
+    return sourceOutputPowerToward(world, sourcePosition, conductorPosition);
+}
+
+uint8_t wirePowerTowardConductor(const World& world,
+                                 const WirePowerMap& wirePowers,
+                                 const glm::ivec3& wirePosition,
+                                 const glm::ivec3& conductorPosition) {
+    if (!wirePowersConductorToward(world, wirePosition, conductorPosition)) {
+        return 0;
+    }
+    const auto computedIt = wirePowers.find(wirePosition);
+    return computedIt != wirePowers.end()
+        ? computedIt->second
+        : redstonePowerFromState(world.getBlockState(wirePosition.x, wirePosition.y, wirePosition.z));
+}
+
 uint8_t conductiveBlockInputPowerToward(const World& world,
                                         const WirePowerMap& wirePowers,
                                         const glm::ivec3& signalPosition,
                                         const glm::ivec3& conductorPosition) {
     const StateID signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
     if (isWireState(signalState)) {
-        const auto computedIt = wirePowers.find(signalPosition);
-        return computedIt != wirePowers.end()
-            ? computedIt->second
-            : redstonePowerFromState(signalState);
+        return wirePowerTowardConductor(world, wirePowers, signalPosition, conductorPosition);
     }
 
-    if (isRepeaterState(signalState) ||
-        isObserverState(signalState) ||
-        isComparatorState(signalState)) {
-        return sourceOutputPowerToward(world, signalPosition, conductorPosition);
-    }
-
-    if (!sourceCanPowerConductiveBlocks(signalState)) {
-        return 0;
-    }
-    return sourceOutputPowerToward(world, signalPosition, conductorPosition);
+    return sourceStrongPowerTowardConductor(world, signalPosition, conductorPosition);
 }
 
 uint8_t conductedSignalPowerToward(const World& world,
@@ -1519,13 +1582,7 @@ uint8_t conductiveBlockPowerAt(const World& world,
             continue;
         }
 
-        const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-        uint8_t neighborPower = conductiveBlockInputPowerToward(world, wirePowers, neighbor, conductor);
-        if (isConductiveState(neighborState)) {
-            neighborPower = std::max(
-                neighborPower,
-                conductedSignalPowerToward(world, wirePowers, neighbor, conductor));
-        }
+        const uint8_t neighborPower = conductiveBlockInputPowerToward(world, wirePowers, neighbor, conductor);
         receivedPower = std::max(receivedPower, neighborPower);
     }
     return receivedPower;
@@ -1568,10 +1625,23 @@ bool shouldTorchBeLit(const World& world,
 size_t applyTorchStates(World& world,
                         const std::vector<glm::ivec3>& torches,
                         const PositionSet& wires,
-                        const std::vector<glm::ivec3>& sourcePositions) {
-    std::vector<TorchStateUpdate> updates;
-    updates.reserve(torches.size());
-    for (const glm::ivec3& position : torches) {
+                        const std::vector<glm::ivec3>& sourcePositions,
+                        const std::vector<glm::ivec3>& repeaterPositions,
+                        const std::vector<glm::ivec3>& observerPositions,
+                        const std::vector<glm::ivec3>& comparatorPositions) {
+    std::vector<glm::ivec3> orderedTorches = torches;
+    std::sort(orderedTorches.begin(), orderedTorches.end(), [](const glm::ivec3& lhs, const glm::ivec3& rhs) {
+        if (lhs.y != rhs.y) {
+            return lhs.y < rhs.y;
+        }
+        if (lhs.z != rhs.z) {
+            return lhs.z < rhs.z;
+        }
+        return lhs.x < rhs.x;
+    });
+
+    size_t changed = 0;
+    for (const glm::ivec3& position : orderedTorches) {
         const StateID currentState = world.getBlockState(position.x, position.y, position.z);
         if (!isTorchState(currentState)) {
             continue;
@@ -1579,28 +1649,20 @@ size_t applyTorchStates(World& world,
 
         PositionSet excludedSources;
         excludedSources.insert(position);
-        const std::vector<RedstoneSource> inputSources =
+        std::vector<RedstoneSource> inputSources =
             collectActiveSources(world, sourcePositions, &excludedSources);
+        appendSources(inputSources, collectPoweredRepeaterSources(world, repeaterPositions));
+        appendSources(inputSources, collectPoweredObserverSources(world, observerPositions));
+        appendSources(inputSources, collectPoweredComparatorStateSources(world, comparatorPositions));
         const WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
 
         const StateID updatedState = withLit(
             currentState,
             shouldTorchBeLit(world, inputWirePowers, position, currentState));
         if (updatedState != currentState) {
-            updates.push_back({position, updatedState});
+            world.setBlockState(position.x, position.y, position.z, updatedState);
+            ++changed;
         }
-    }
-
-    size_t changed = 0;
-    for (const TorchStateUpdate& update : updates) {
-        const glm::ivec3& position = update.position;
-        const StateID currentState = world.getBlockState(position.x, position.y, position.z);
-        if (currentState == update.state || !isTorchState(currentState)) {
-            continue;
-        }
-
-        world.setBlockState(position.x, position.y, position.z, update.state);
-        ++changed;
     }
     return changed;
 }
@@ -2025,7 +2087,14 @@ size_t processWorldWithContext(World& world,
 
     const RedstoneWorkSet workSet = collectRedstoneWorkSet(world, dirtyPositions);
 
-    changed += applyTorchStates(world, workSet.torches, workSet.wireSet, workSet.sourcePositions);
+    changed += applyTorchStates(
+        world,
+        workSet.torches,
+        workSet.wireSet,
+        workSet.sourcePositions,
+        workSet.repeaters,
+        workSet.observers,
+        workSet.comparators);
     scheduleButtonReleaseUpdates(world, redstoneTick, workSet.sourcePositions);
 
     std::vector<RedstoneSource> outputSources =
