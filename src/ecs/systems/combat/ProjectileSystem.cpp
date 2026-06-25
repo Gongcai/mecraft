@@ -25,7 +25,6 @@
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/chunk/Chunk.h"
 #include "../../../world/redstone/RedstoneUpdateQueue.h"
-#include "../../../Diagnostics.h"
 
 namespace ecs {
 namespace {
@@ -166,19 +165,6 @@ void activateTargetBlock(World& world,
         activationRedstoneTick + kTargetPulseTicks,
         blockPosition,
         RedstoneScheduledAction::ReleaseTargetPulse);
-    MECRAFT_LOG_PRINTF("[RedstoneTarget] projectile hit target pos=(%d,%d,%d) impact=(%.3f,%.3f,%.3f) power=%u activationRedstoneTick=%llu releaseRedstoneTick=%llu projectileTick=%llu lastProcessedRedstoneTick=%llu\n",
-                       blockPosition.x,
-                       blockPosition.y,
-                       blockPosition.z,
-                       impactPosition.x,
-                       impactPosition.y,
-                       impactPosition.z,
-                       static_cast<unsigned>(power),
-                       static_cast<unsigned long long>(activationRedstoneTick),
-                       static_cast<unsigned long long>(activationRedstoneTick + kTargetPulseTicks),
-                       static_cast<unsigned long long>(tickIndex),
-                       static_cast<unsigned long long>(world.lastProcessedRedstoneTick()));
-    MECRAFT_LOG_FLUSH(stdout);
 }
 
 void emitProjectileImpactParticles(GameplayRegistry& registry,

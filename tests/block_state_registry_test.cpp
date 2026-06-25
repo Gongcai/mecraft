@@ -1441,6 +1441,19 @@ int main() {
     if (!modelVariantMatches(hopperSouth, "block/hopper_side", 180, 0)) {
         return fail("hopper south state should resolve to the rotated side hopper model");
     }
+    if (BlockStateRegistry::getPropertyIndex(hopperSouth, PropIndices::ENABLED) != PropIndices::ENABLED_TRUE) {
+        return fail("hopper default state should keep enabled=true");
+    }
+
+    const StateID hopperDisabledSouth = BlockStateRegistry::getState(
+        BlockIds::HOPPER,
+        {
+            {PropIndices::FACING, PropIndices::FACING_SOUTH},
+            {PropIndices::ENABLED, PropIndices::ENABLED_FALSE}
+        });
+    if (!modelVariantMatches(hopperDisabledSouth, "block/hopper_side", 180, 0)) {
+        return fail("disabled hopper south state should resolve to the same rotated model");
+    }
 
     const BlockDef& pistonDef = BlockRegistry::get(BlockIds::PISTON);
     const BlockDef& stickyPistonDef = BlockRegistry::get(BlockIds::STICKY_PISTON);
@@ -1471,6 +1484,12 @@ int main() {
     }
 
     const BlockDef& hopperDef = BlockRegistry::get(BlockIds::HOPPER);
+    if (hopperDef.redstoneBehavior != "hopper" ||
+        !hopperDef.respondsToRedstone ||
+        hopperDef.redstoneControlledProperty != "enabled" ||
+        !hopperDef.redstoneControlledPowerInverted) {
+        return fail("hopper should declare inverted enabled redstone control metadata");
+    }
     PlacementStrategyFn hopperStrategy = PlacementStrategyRegistry::getStrategy(hopperDef.placementStrategy);
     if (hopperStrategy == nullptr) {
         return fail("hopper_facing placement strategy should be registered");

@@ -654,8 +654,11 @@ uint16_t redstoneControlledPropertyIndex(const StateID stateId) {
 }
 
 StateID withRedstoneControlledPower(const StateID stateId, const bool powered) {
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     const uint16_t property = redstoneControlledPropertyIndex(stateId);
-    const uint16_t value = BlockStateRegistry::getPropertyValueIndex(property, powered ? "true" : "false");
+    const bool propertyValue = powered != def.redstoneControlledPowerInverted;
+    const uint16_t value = BlockStateRegistry::getPropertyValueIndex(property, propertyValue ? "true" : "false");
     const StateID updatedState = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updatedState, property) != value) {
         throw std::runtime_error("Redstone controlled state transition failed");

@@ -441,6 +441,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].redstonePowerOutput = 0;
         s_blocks[i].redstoneBehavior.clear();
         s_blocks[i].redstoneControlledProperty.clear();
+        s_blocks[i].redstoneControlledPowerInverted = false;
         setAllFaces(s_blocks[i], makeStaticWorldTexture(0));
         s_blockDropIds[i] = NamespacedId("minecraft", "air");
     }
@@ -547,6 +548,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.redstonePowerOutput = 0;
         def.redstoneBehavior.clear();
         def.redstoneControlledProperty.clear();
+        def.redstoneControlledPowerInverted = false;
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -670,6 +672,18 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             if (!def.respondsToRedstone) {
                 throw std::runtime_error("redstoneControlledProperty requires respondsToRedstone=true for block: " + def.namespacedId.full());
             }
+        }
+        if (blockJson.contains("redstoneControlledPowerInverted")) {
+            if (!blockJson["redstoneControlledPowerInverted"].is_boolean()) {
+                throw std::runtime_error("redstoneControlledPowerInverted must be a boolean for block: " +
+                                         def.namespacedId.full());
+            }
+            if (def.redstoneControlledProperty.empty()) {
+                throw std::runtime_error(
+                    "redstoneControlledPowerInverted requires redstoneControlledProperty for block: " +
+                    def.namespacedId.full());
+            }
+            def.redstoneControlledPowerInverted = blockJson["redstoneControlledPowerInverted"].get<bool>();
         }
         const bool hasExplicitMaterialKind = parseMaterialKind(blockJson, def.materialKind);
         const bool hasExplicitDerivativeMaterialId = parseDerivativeMaterialId(blockJson, def.derivativeMaterialId);

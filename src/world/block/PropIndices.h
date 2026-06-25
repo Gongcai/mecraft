@@ -11,6 +11,7 @@ extern uint16_t FACING;
 extern uint16_t AXIS;
 extern uint16_t HALF;
 extern uint16_t OPEN;
+extern uint16_t ENABLED;
 extern uint16_t POWERED;
 extern uint16_t LIT;
 extern uint16_t WATERLOGGED;
@@ -50,6 +51,8 @@ extern uint16_t HALF_WEST;
 
 extern uint16_t OPEN_TRUE;
 extern uint16_t OPEN_FALSE;
+extern uint16_t ENABLED_TRUE;
+extern uint16_t ENABLED_FALSE;
 extern uint16_t POWERED_TRUE;
 extern uint16_t POWERED_FALSE;
 extern uint16_t LIT_TRUE;

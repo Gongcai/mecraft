@@ -80,6 +80,15 @@ StateID buttonState(const BlockID blockId, const bool powered) {
     return buttonState(blockId, PropIndices::FACING_FLOOR, powered);
 }
 
+StateID hopperState(const bool enabled) {
+    return BlockStateRegistry::getState(
+        BlockIds::HOPPER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_DOWN},
+            {PropIndices::ENABLED, enabled ? PropIndices::ENABLED_TRUE : PropIndices::ENABLED_FALSE}
+        });
+}
+
 StateID targetState(const uint8_t power) {
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
@@ -156,6 +165,11 @@ bool noteBlockPowered(const World& world, const int x, const int y, const int z)
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 
+bool hopperEnabled(const World& world, const int x, const int y, const int z) {
+    const StateID state = world.getBlockState(x, y, z);
+    return BlockStateRegistry::getPropertyIndex(state, PropIndices::ENABLED) == PropIndices::ENABLED_TRUE;
+}
+
 uint8_t targetPower(const World& world, const int x, const int y, const int z) {
     const StateID state = world.getBlockState(x, y, z);
     const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
@@ -224,6 +238,14 @@ int main() {
     const BlockDef& targetDef = BlockRegistry::get(BlockIds::TARGET);
     if (targetDef.redstoneBehavior != "target" || !targetDef.isRedstonePowerSource) {
         return fail("target should parse its variable redstone power source metadata");
+    }
+
+    const BlockDef& hopperDef = BlockRegistry::get(BlockIds::HOPPER);
+    if (hopperDef.redstoneBehavior != "hopper" ||
+        !hopperDef.respondsToRedstone ||
+        hopperDef.redstoneControlledProperty != "enabled" ||
+        !hopperDef.redstoneControlledPowerInverted) {
+        return fail("hopper should declare inverted enabled redstone control metadata");
     }
 
     World world;
@@ -462,6 +484,25 @@ int main() {
             wirePower(world, 1, targetY, 0) != 0 ||
             lampLit(world, 2, targetY, 0)) {
             return fail("target pulse release should clear its output power");
+        }
+    }
+
+    {
+        const int hopperY = 36;
+        prepareFlatTestLine(world, hopperY);
+        world.setBlockState(0, hopperY, 0, leverState(true));
+        world.setBlockState(1, hopperY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, hopperY, 0, hopperState(true));
+        ecs::RedstoneSystem::processWorld(world, 55);
+
+        if (hopperEnabled(world, 2, hopperY, 0)) {
+            return fail("powered hopper should set enabled=false through inverted redstone control");
+        }
+
+        world.setBlockState(0, hopperY, 0, leverState(false));
+        ecs::RedstoneSystem::processWorld(world, 56);
+        if (!hopperEnabled(world, 2, hopperY, 0)) {
+            return fail("unpowered hopper should restore enabled=true through inverted redstone control");
         }
     }
 

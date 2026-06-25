@@ -8,6 +8,7 @@ uint16_t FACING = INVALID;
 uint16_t AXIS = INVALID;
 uint16_t HALF = INVALID;
 uint16_t OPEN = INVALID;
+uint16_t ENABLED = INVALID;
 uint16_t POWERED = INVALID;
 uint16_t LIT = INVALID;
 uint16_t WATERLOGGED = INVALID;
@@ -47,6 +48,8 @@ uint16_t HALF_WEST = INVALID;
 
 uint16_t OPEN_TRUE = INVALID;
 uint16_t OPEN_FALSE = INVALID;
+uint16_t ENABLED_TRUE = INVALID;
+uint16_t ENABLED_FALSE = INVALID;
 uint16_t POWERED_TRUE = INVALID;
 uint16_t POWERED_FALSE = INVALID;
 uint16_t LIT_TRUE = INVALID;
@@ -132,6 +135,7 @@ void init() {
     AXIS = lookupName("axis");
     HALF = lookupName("half");
     OPEN = lookupName("open");
+    ENABLED = lookupName("enabled");
     POWERED = lookupName("powered");
     LIT = lookupName("lit");
     WATERLOGGED = lookupName("waterlogged");
@@ -171,6 +175,8 @@ void init() {
 
     OPEN_TRUE = lookupValue(OPEN, "true");
     OPEN_FALSE = lookupValue(OPEN, "false");
+    ENABLED_TRUE = lookupValue(ENABLED, "true");
+    ENABLED_FALSE = lookupValue(ENABLED, "false");
     POWERED_TRUE = lookupValue(POWERED, "true");
     POWERED_FALSE = lookupValue(POWERED, "false");
     LIT_TRUE = lookupValue(LIT, "true");

@@ -1414,11 +1414,15 @@
       "drop": "minecraft:hopper",
       "redstoneBehavior": "hopper",
       "respondsToRedstone": true,
+      "redstoneControlledProperty": "enabled",
+      "redstoneControlledPowerInverted": true,
       "properties": {
-        "facing": ["down", "north", "south", "east", "west"]
+        "facing": ["down", "north", "south", "east", "west"],
+        "enabled": ["false", "true"]
       },
       "defaultState": {
-        "facing": "down"
+        "facing": "down",
+        "enabled": "true"
       },
       "isSolid": false,
       "renderShape": "model",
@@ -1429,11 +1433,16 @@
         "side": "hopper_outside"
       },
       "modelVariants": {
-        "facing=down": { "model": "block/hopper_down" },
-        "facing=north": { "model": "block/hopper_side" },
-        "facing=south": { "model": "block/hopper_side", "transform": { "rotY": 180 } },
-        "facing=east": { "model": "block/hopper_side", "transform": { "rotY": 90 } },
-        "facing=west": { "model": "block/hopper_side", "transform": { "rotY": 270 } }
+        "facing=down,enabled=false": { "model": "block/hopper_down" },
+        "facing=down,enabled=true": { "model": "block/hopper_down" },
+        "facing=north,enabled=false": { "model": "block/hopper_side" },
+        "facing=north,enabled=true": { "model": "block/hopper_side" },
+        "facing=south,enabled=false": { "model": "block/hopper_side", "transform": { "rotY": 180 } },
+        "facing=south,enabled=true": { "model": "block/hopper_side", "transform": { "rotY": 180 } },
+        "facing=east,enabled=false": { "model": "block/hopper_side", "transform": { "rotY": 90 } },
+        "facing=east,enabled=true": { "model": "block/hopper_side", "transform": { "rotY": 90 } },
+        "facing=west,enabled=false": { "model": "block/hopper_side", "transform": { "rotY": 270 } },
+        "facing=west,enabled=true": { "model": "block/hopper_side", "transform": { "rotY": 270 } }
       }
     },
     {
