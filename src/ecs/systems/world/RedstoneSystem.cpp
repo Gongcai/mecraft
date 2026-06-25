@@ -1157,6 +1157,18 @@ WirePowerMap propagateWirePower(const World& world,
     WirePowerMap wirePowers;
     std::priority_queue<PowerNode> frontier;
 
+    // Pre-seed every wire in the work set with 0 so the map fully covers the
+    // connected component being evaluated. Wires not reached by any source are
+    // unambiguously at 0 power; downstream readers can then distinguish "in the
+    // work set, carries 0" from "outside the work set, stable stored state" by
+    // map membership alone. This makes the fallback to stored state in
+    // directSignalPowerToward / conductiveBlockInputPowerToward apply only to
+    // wires outside the work set, which is its intended design role.
+    wirePowers.reserve(wires.size());
+    for (const glm::ivec3& wire : wires) {
+        wirePowers.emplace(wire, uint8_t{0});
+    }
+
     for (const RedstoneSource& source : sources) {
         if (source.directional) {
             seedSourcePowerToward(
@@ -1392,17 +1404,7 @@ size_t applyTorchStates(World& world,
         excludedSources.insert(position);
         const std::vector<RedstoneSource> inputSources =
             collectActiveSources(world, sourcePositions, &excludedSources);
-        WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
-
-        // Ensure every wire in the work set appears in the power map. Wires not
-        // reached by any source (after excluding this torch) must read as 0 so
-        // the torch is never deactivated by its own signal lingering in stale
-        // wire state from the previous tick. Wires outside the work set are not
-        // touched here: their stored state remains valid because they were not
-        // affected by any change in this evaluation cycle.
-        for (const glm::ivec3& wirePosition : wires) {
-            inputWirePowers.try_emplace(wirePosition, uint8_t{0});
-        }
+        const WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
 
         const StateID updatedState = withLit(
             currentState,
