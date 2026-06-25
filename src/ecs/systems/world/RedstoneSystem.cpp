@@ -40,6 +40,14 @@ constexpr glm::ivec3 kDirections[6] = {
     { 0,  0, -1},
 };
 
+// The four horizontal directions used for redstone wire climbing checks.
+constexpr glm::ivec3 kHorizontalDirections[4] = {
+    { 1,  0,  0},
+    {-1,  0,  0},
+    { 0,  0,  1},
+    { 0,  0, -1},
+};
+
 struct IVec3Hash {
     std::size_t operator()(const glm::ivec3& value) const noexcept {
         std::size_t seed = 0;
@@ -369,6 +377,48 @@ bool isConductiveState(const StateID stateId) {
 
 bool isConductiveBlockAt(const World& world, const glm::ivec3& position) {
     return isConductiveState(world.getBlockState(position.x, position.y, position.z));
+}
+
+// Returns true when the given state is a solid block that redstone wire can
+// climb over. This mirrors the World.cpp climbing check: air and non-solid
+// blocks (including redstone wire itself) do not support climbing.
+bool isSolidBlockState(const StateID stateId) {
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    return def.isSolid;
+}
+
+// Calls fn for every wire position connected to the wire at pos, including
+// diagonal up/down connections where the wire climbs over a solid block or
+// descends through a non-solid block. The 6 cardinal directions cover same-
+// level and directly-above/below wire neighbors; the horizontal loop adds the
+// diagonal climbing/descending connections that vanilla redstone supports.
+template <typename Fn>
+void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
+    for (const glm::ivec3& direction : kDirections) {
+        const glm::ivec3 neighbor = pos + direction;
+        if (isWireState(world.getBlockState(neighbor.x, neighbor.y, neighbor.z))) {
+            fn(neighbor);
+        }
+    }
+    for (const glm::ivec3& hDir : kHorizontalDirections) {
+        const glm::ivec3 neighbor = pos + hDir;
+        const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
+        if (isSolidBlockState(neighborState)) {
+            const glm::ivec3 upPos = neighbor + glm::ivec3(0, 1, 0);
+            if (isWireState(world.getBlockState(upPos.x, upPos.y, upPos.z))) {
+                fn(upPos);
+            }
+        } else {
+            const glm::ivec3 downPos = neighbor + glm::ivec3(0, -1, 0);
+            if (isWireState(world.getBlockState(downPos.x, downPos.y, downPos.z))) {
+                fn(downPos);
+            }
+        }
+    }
 }
 
 bool isLampState(const StateID stateId) {
@@ -776,14 +826,20 @@ void collectWireComponent(const World& world, const glm::ivec3& start, RedstoneW
         const glm::ivec3 position = frontier.front();
         frontier.pop();
 
+        // Discover all connected wires, including diagonal up/down climbing
+        // connections that vanilla redstone wire supports.
+        forEachWireNeighbor(world, position, [&](const glm::ivec3& wireNeighbor) {
+            if (workSet.wireSet.insert(wireNeighbor).second) {
+                workSet.wires.push_back(wireNeighbor);
+                frontier.push(wireNeighbor);
+            }
+        });
+
+        // Check cardinal direction neighbors for non-wire redstone components.
         for (const glm::ivec3& direction : kDirections) {
             const glm::ivec3 neighbor = position + direction;
             const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
             if (isWireState(neighborState)) {
-                if (workSet.wireSet.insert(neighbor).second) {
-                    workSet.wires.push_back(neighbor);
-                    frontier.push(neighbor);
-                }
                 continue;
             }
             if (isConductiveState(neighborState)) {
@@ -1198,12 +1254,11 @@ WirePowerMap propagateWirePower(const World& world,
         }
 
         const uint8_t nextPower = static_cast<uint8_t>(node.power - 1);
-        for (const glm::ivec3& direction : kDirections) {
-            const glm::ivec3 neighbor = node.position + direction;
+        forEachWireNeighbor(world, node.position, [&](const glm::ivec3& neighbor) {
             if (wires.find(neighbor) != wires.end()) {
                 setBestWirePower(wirePowers, frontier, neighbor, nextPower);
             }
-        }
+        });
     }
 
     return wirePowers;

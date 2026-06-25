@@ -3333,14 +3333,18 @@ void requireRedstoneWireMeshProperties() {
         PropIndices::EAST == PropIndices::INVALID ||
         PropIndices::WEST == PropIndices::INVALID ||
         PropIndices::FACING_FLOOR == PropIndices::INVALID ||
-        PropIndices::NORTH_TRUE == PropIndices::INVALID ||
-        PropIndices::NORTH_FALSE == PropIndices::INVALID ||
-        PropIndices::SOUTH_TRUE == PropIndices::INVALID ||
-        PropIndices::SOUTH_FALSE == PropIndices::INVALID ||
-        PropIndices::EAST_TRUE == PropIndices::INVALID ||
-        PropIndices::EAST_FALSE == PropIndices::INVALID ||
-        PropIndices::WEST_TRUE == PropIndices::INVALID ||
-        PropIndices::WEST_FALSE == PropIndices::INVALID ||
+        PropIndices::NORTH_NONE == PropIndices::INVALID ||
+        PropIndices::NORTH_SIDE == PropIndices::INVALID ||
+        PropIndices::NORTH_UP == PropIndices::INVALID ||
+        PropIndices::SOUTH_NONE == PropIndices::INVALID ||
+        PropIndices::SOUTH_SIDE == PropIndices::INVALID ||
+        PropIndices::SOUTH_UP == PropIndices::INVALID ||
+        PropIndices::EAST_NONE == PropIndices::INVALID ||
+        PropIndices::EAST_SIDE == PropIndices::INVALID ||
+        PropIndices::EAST_UP == PropIndices::INVALID ||
+        PropIndices::WEST_NONE == PropIndices::INVALID ||
+        PropIndices::WEST_SIDE == PropIndices::INVALID ||
+        PropIndices::WEST_UP == PropIndices::INVALID ||
         PropIndices::POWER_0 == PropIndices::INVALID ||
         PropIndices::POWER_1 == PropIndices::INVALID ||
         PropIndices::POWER_2 == PropIndices::INVALID ||
@@ -3391,17 +3395,23 @@ uint8_t redstonePowerLevel(const StateID stateId) {
     throw std::runtime_error("Redstone wire mesh received an unsupported power value");
 }
 
-bool redstoneWireConnected(const StateID stateId,
-                           const uint16_t property,
-                           const uint16_t trueValue,
-                           const uint16_t falseValue,
-                           const char* propertyName) {
+// Returns 0 for "none", 1 for "side", 2 for "up".
+// Throws if the property value is not one of the three recognized connection states.
+uint8_t redstoneWireConnectionLevel(const StateID stateId,
+                                     const uint16_t property,
+                                     const uint16_t noneValue,
+                                     const uint16_t sideValue,
+                                     const uint16_t upValue,
+                                     const char* propertyName) {
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
-    if (value == trueValue) {
-        return true;
+    if (value == noneValue) {
+        return 0;
     }
-    if (value == falseValue) {
-        return false;
+    if (value == sideValue) {
+        return 1;
+    }
+    if (value == upValue) {
+        return 2;
     }
     throw std::runtime_error(std::string("Redstone wire mesh received an unsupported ") + propertyName + " value");
 }
@@ -3437,6 +3447,40 @@ std::array<glm::vec3, 4> buildRotatedFloorWireSegment(const glm::vec3& pos,
         corner = rotatePointY90(corner, rotY) + pos;
     }
     return corners;
+}
+
+// Builds the four corners of a vertical climbing wire quad on the given side of
+// the block. The quad spans the full block height (y=0..1) and the full width
+// along the perpendicular horizontal axis. A small offset from the block edge
+// prevents z-fighting with neighboring block faces.
+std::array<glm::vec3, 4> buildClimbingWireQuad(const glm::vec3& pos, const int face) {
+    const float y0 = pos.y;
+    const float y1 = pos.y + 1.0f;
+    const float off = kFacePlaneSurfaceOffset;
+    switch (face) {
+        case FACE_BACK: { // North wall: z near 0, spanning x=[0,1]
+            const float z = pos.z + off;
+            return {{{pos.x, y0, z}, {pos.x + 1.0f, y0, z},
+                     {pos.x + 1.0f, y1, z}, {pos.x, y1, z}}};
+        }
+        case FACE_FRONT: { // South wall: z near 1, spanning x=[0,1]
+            const float z = pos.z + 1.0f - off;
+            return {{{pos.x + 1.0f, y0, z}, {pos.x, y0, z},
+                     {pos.x, y1, z}, {pos.x + 1.0f, y1, z}}};
+        }
+        case FACE_RIGHT: { // East wall: x near 1, spanning z=[0,1]
+            const float x = pos.x + 1.0f - off;
+            return {{{x, y0, pos.z + 1.0f}, {x, y0, pos.z},
+                     {x, y1, pos.z}, {x, y1, pos.z + 1.0f}}};
+        }
+        case FACE_LEFT: { // West wall: x near 0, spanning z=[0,1]
+            const float x = pos.x + off;
+            return {{{x, y0, pos.z}, {x, y0, pos.z + 1.0f},
+                     {x, y1, pos.z + 1.0f}, {x, y1, pos.z}}};
+        }
+        default:
+            throw std::runtime_error("Redstone wire climbing quad requires a horizontal face direction");
+    }
 }
 
 std::array<glm::vec2, 4> buildUvRect(const float u0,
@@ -3577,27 +3621,33 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
         throw std::runtime_error("Redstone wire mesh requires facing=floor");
     }
 
-    const bool north = redstoneWireConnected(blockId,
-                                             PropIndices::NORTH,
-                                             PropIndices::NORTH_TRUE,
-                                             PropIndices::NORTH_FALSE,
-                                             "north");
-    const bool south = redstoneWireConnected(blockId,
-                                             PropIndices::SOUTH,
-                                             PropIndices::SOUTH_TRUE,
-                                             PropIndices::SOUTH_FALSE,
-                                             "south");
-    const bool east = redstoneWireConnected(blockId,
-                                            PropIndices::EAST,
-                                            PropIndices::EAST_TRUE,
-                                            PropIndices::EAST_FALSE,
-                                            "east");
-    const bool west = redstoneWireConnected(blockId,
-                                            PropIndices::WEST,
-                                            PropIndices::WEST_TRUE,
-                                            PropIndices::WEST_FALSE,
-                                            "west");
-    const bool isolated = !north && !south && !east && !west;
+    // Connection level per horizontal direction: 0 = none, 1 = side (flat or
+    // descending), 2 = up (climbing the side of a solid block).
+    const uint8_t north = redstoneWireConnectionLevel(blockId,
+                                                       PropIndices::NORTH,
+                                                       PropIndices::NORTH_NONE,
+                                                       PropIndices::NORTH_SIDE,
+                                                       PropIndices::NORTH_UP,
+                                                       "north");
+    const uint8_t south = redstoneWireConnectionLevel(blockId,
+                                                       PropIndices::SOUTH,
+                                                       PropIndices::SOUTH_NONE,
+                                                       PropIndices::SOUTH_SIDE,
+                                                       PropIndices::SOUTH_UP,
+                                                       "south");
+    const uint8_t east = redstoneWireConnectionLevel(blockId,
+                                                      PropIndices::EAST,
+                                                      PropIndices::EAST_NONE,
+                                                      PropIndices::EAST_SIDE,
+                                                      PropIndices::EAST_UP,
+                                                      "east");
+    const uint8_t west = redstoneWireConnectionLevel(blockId,
+                                                      PropIndices::WEST,
+                                                      PropIndices::WEST_NONE,
+                                                      PropIndices::WEST_SIDE,
+                                                      PropIndices::WEST_UP,
+                                                      "west");
+    const bool isolated = north == 0 && south == 0 && east == 0 && west == 0;
     const uint8_t power = redstonePowerLevel(blockId);
 
     const AnimatedTextureRef& dotTexture = requireNamedTextureRef(def, "dot");
@@ -3605,8 +3655,8 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
     std::vector<BlockVertex>& target = selectModelVertexTarget(meshData, def);
     const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
 
-    auto renderDataFor = [&](const AnimatedTextureRef& texture) {
-        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, FACE_TOP);
+    auto renderDataFor = [&](const AnimatedTextureRef& texture, const int face) {
+        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
         applyTextureRef(renderData, texture);
         renderData.tintKind = BlockTintKinds::REDSTONE;
         renderData.tintU = static_cast<uint8_t>(power << 4U);
@@ -3615,40 +3665,75 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
         return renderData;
     };
 
-    auto emitWireQuad = [&](const AnimatedTextureRef& texture,
-                            const std::array<glm::vec3, 4>& corners,
-                            const std::array<glm::vec2, 4>& uv) {
-        const FaceRenderData renderData = renderDataFor(texture);
+    auto emitFloorWireQuad = [&](const AnimatedTextureRef& texture,
+                                 const std::array<glm::vec3, 4>& corners,
+                                 const std::array<glm::vec2, 4>& uv) {
+        const FaceRenderData renderData = renderDataFor(texture, FACE_TOP);
         appendFaceVertices(target, corners, uv, FACE_TOP, renderData);
         expandBoundsForCorners(meshData, corners);
     };
 
+    // Emits a vertical climbing wire quad on both sides so it is visible from
+    // either direction, matching the vanilla redstone_dust_up model which
+    // renders both "north" and "south" faces of the thin wall element.
+    auto emitClimbingWireQuad = [&](const int primaryFace, const int oppositeFace) {
+        const std::array<glm::vec3, 4> primaryCorners = buildClimbingWireQuad(blockOffset, primaryFace);
+        const FaceRenderData primaryRenderData = renderDataFor(lineTexture, primaryFace);
+        appendFaceVertices(target, primaryCorners, buildUvRect(0.0f, 0.0f, 1.0f, 1.0f), primaryFace, primaryRenderData);
+        expandBoundsForCorners(meshData, primaryCorners);
+
+        // Reverse winding for the opposite face so both triangles face outward.
+        const std::array<glm::vec3, 4> oppositeCorners = {{
+            primaryCorners[3], primaryCorners[2], primaryCorners[1], primaryCorners[0]
+        }};
+        const FaceRenderData oppositeRenderData = renderDataFor(lineTexture, oppositeFace);
+        appendFaceVertices(target, oppositeCorners, buildUvRect(1.0f, 0.0f, 0.0f, 1.0f), oppositeFace, oppositeRenderData);
+    };
+
     if (isolated) {
-        emitWireQuad(dotTexture,
-                     buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 1.0f),
-                     buildUvRect(0.0f, 0.0f, 1.0f, 1.0f));
+        emitFloorWireQuad(dotTexture,
+                          buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 1.0f),
+                          buildUvRect(0.0f, 0.0f, 1.0f, 1.0f));
         return;
     }
 
-    if (north) {
-        emitWireQuad(lineTexture,
-                     buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 0.5f),
-                     buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
+    // Flat floor segments for "side" and "up" connections. Both connection
+    // types render a half-width floor line from the block center toward the
+    // connected side; the "up" connection additionally renders a vertical
+    // climbing segment below.
+    if (north >= 1) {
+        emitFloorWireQuad(lineTexture,
+                          buildFloorWireQuad(blockOffset, 0.0f, 0.0f, 1.0f, 0.5f),
+                          buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
     }
-    if (south) {
-        emitWireQuad(lineTexture,
-                     buildFloorWireQuad(blockOffset, 0.0f, 0.5f, 1.0f, 1.0f),
-                     buildUvRect(0.0f, 0.5f, 1.0f, 1.0f));
+    if (south >= 1) {
+        emitFloorWireQuad(lineTexture,
+                          buildFloorWireQuad(blockOffset, 0.0f, 0.5f, 1.0f, 1.0f),
+                          buildUvRect(0.0f, 0.5f, 1.0f, 1.0f));
     }
-    if (east) {
-        emitWireQuad(lineTexture,
-                     buildRotatedFloorWireSegment(blockOffset, 90),
-                     buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
+    if (east >= 1) {
+        emitFloorWireQuad(lineTexture,
+                          buildRotatedFloorWireSegment(blockOffset, 90),
+                          buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
     }
-    if (west) {
-        emitWireQuad(lineTexture,
-                     buildRotatedFloorWireSegment(blockOffset, 270),
-                     buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
+    if (west >= 1) {
+        emitFloorWireQuad(lineTexture,
+                          buildRotatedFloorWireSegment(blockOffset, 270),
+                          buildUvRect(0.0f, 0.0f, 1.0f, 0.5f));
+    }
+
+    // Vertical climbing segments for "up" connections.
+    if (north == 2) {
+        emitClimbingWireQuad(FACE_BACK, FACE_FRONT);
+    }
+    if (south == 2) {
+        emitClimbingWireQuad(FACE_FRONT, FACE_BACK);
+    }
+    if (east == 2) {
+        emitClimbingWireQuad(FACE_RIGHT, FACE_LEFT);
+    }
+    if (west == 2) {
+        emitClimbingWireQuad(FACE_LEFT, FACE_RIGHT);
     }
 }
 

@@ -864,18 +864,18 @@
       "properties": {
         "facing": ["floor"],
         "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
-        "north": ["false", "true"],
-        "south": ["false", "true"],
-        "east": ["false", "true"],
-        "west": ["false", "true"]
+        "north": ["none", "side", "up"],
+        "south": ["none", "side", "up"],
+        "east": ["none", "side", "up"],
+        "west": ["none", "side", "up"]
       },
       "defaultState": {
         "facing": "floor",
         "power": "0",
-        "north": "false",
-        "south": "false",
-        "east": "false",
-        "west": "false"
+        "north": "none",
+        "south": "none",
+        "east": "none",
+        "west": "none"
       },
       "isSolid": false,
       "isTransparent": true,
