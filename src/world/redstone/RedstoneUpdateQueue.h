@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <queue>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -14,7 +14,8 @@ enum class RedstoneScheduledAction : uint8_t {
     ReleaseButton,
     EvaluateRepeater,
     StartObserverPulse,
-    ReleaseObserverPulse
+    ReleaseObserverPulse,
+    ReleaseTargetPulse
 };
 
 /// A delayed redstone update scheduled for a specific redstone tick.
@@ -42,6 +43,15 @@ public:
     void schedule(uint64_t executionTick,
                   const glm::ivec3& position,
                   RedstoneScheduledAction action);
+
+    /// Schedule one delayed redstone action, replacing a later or earlier
+    /// pending action with the same position and action.
+    /// @param executionTick  Redstone tick at which the action becomes due.
+    /// @param position  World-space block position affected by the action.
+    /// @param action  Device action to execute when due.
+    void reschedule(uint64_t executionTick,
+                    const glm::ivec3& position,
+                    RedstoneScheduledAction action);
 
     /// Drain due actions in execution order.
     /// @param currentTick  Current redstone tick.
@@ -87,7 +97,7 @@ private:
         RedstoneScheduledUpdate,
         std::vector<RedstoneScheduledUpdate>,
         std::greater<>> m_queue;
-    std::unordered_set<ScheduledKey, ScheduledKeyHash> m_scheduledKeys;
+    std::unordered_map<ScheduledKey, uint32_t, ScheduledKeyHash> m_scheduledKeys;
     uint32_t m_sequenceCounter = 0;
 };
 

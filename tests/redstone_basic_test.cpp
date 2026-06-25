@@ -74,6 +74,31 @@ StateID buttonState(const BlockID blockId, const bool powered) {
     return buttonState(blockId, PropIndices::FACING_FLOOR, powered);
 }
 
+StateID targetState(const uint8_t power) {
+    static const std::array<uint16_t, 16> kPowerValues = {
+        PropIndices::POWER_0,
+        PropIndices::POWER_1,
+        PropIndices::POWER_2,
+        PropIndices::POWER_3,
+        PropIndices::POWER_4,
+        PropIndices::POWER_5,
+        PropIndices::POWER_6,
+        PropIndices::POWER_7,
+        PropIndices::POWER_8,
+        PropIndices::POWER_9,
+        PropIndices::POWER_10,
+        PropIndices::POWER_11,
+        PropIndices::POWER_12,
+        PropIndices::POWER_13,
+        PropIndices::POWER_14,
+        PropIndices::POWER_15,
+    };
+    if (power >= kPowerValues.size()) {
+        throw std::runtime_error("Target test power must be in the range 0 through 15");
+    }
+    return BlockStateRegistry::getState(BlockIds::TARGET, PropIndices::POWER, kPowerValues[power]);
+}
+
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
@@ -120,6 +145,35 @@ bool buttonPowered(const World& world, const int x, const int y, const int z) {
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 
+uint8_t targetPower(const World& world, const int x, const int y, const int z) {
+    const StateID state = world.getBlockState(x, y, z);
+    const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
+    static const std::array<uint16_t, 16> kPowerValues = {
+        PropIndices::POWER_0,
+        PropIndices::POWER_1,
+        PropIndices::POWER_2,
+        PropIndices::POWER_3,
+        PropIndices::POWER_4,
+        PropIndices::POWER_5,
+        PropIndices::POWER_6,
+        PropIndices::POWER_7,
+        PropIndices::POWER_8,
+        PropIndices::POWER_9,
+        PropIndices::POWER_10,
+        PropIndices::POWER_11,
+        PropIndices::POWER_12,
+        PropIndices::POWER_13,
+        PropIndices::POWER_14,
+        PropIndices::POWER_15,
+    };
+    for (uint8_t power = 0; power < kPowerValues.size(); ++power) {
+        if (value == kPowerValues[power]) {
+            return power;
+        }
+    }
+    throw std::runtime_error("Target state does not contain a valid power value");
+}
+
 } // namespace
 
 int main() {
@@ -154,6 +208,11 @@ int main() {
         !torchDef.isRedstonePowerSource ||
         torchDef.redstonePowerOutput != 15) {
         return fail("redstone_torch should parse its redstone power source metadata");
+    }
+
+    const BlockDef& targetDef = BlockRegistry::get(BlockIds::TARGET);
+    if (targetDef.redstoneBehavior != "target" || !targetDef.isRedstonePowerSource) {
+        return fail("target should parse its variable redstone power source metadata");
     }
 
     World world;
@@ -356,6 +415,43 @@ int main() {
         wirePower(world, 1, buttonY, 0) != 0 ||
         lampLit(world, 2, buttonY, 0)) {
         return fail("stone_button should release after ten redstone ticks and remove output power");
+    }
+
+    {
+        const int targetY = 40;
+        prepareFlatTestLine(world, targetY);
+        world.setBlockState(0, targetY, 0, targetState(12));
+        world.setBlockState(1, targetY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, targetY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+        world.redstoneScheduledUpdateQueue().schedule(
+            52,
+            glm::ivec3(0, targetY, 0),
+            RedstoneScheduledAction::ReleaseTargetPulse);
+        world.redstoneScheduledUpdateQueue().reschedule(
+            54,
+            glm::ivec3(0, targetY, 0),
+            RedstoneScheduledAction::ReleaseTargetPulse);
+
+        ecs::RedstoneSystem::processWorld(world, 50);
+        if (targetPower(world, 0, targetY, 0) != 12 ||
+            wirePower(world, 1, targetY, 0) != 12 ||
+            !lampLit(world, 2, targetY, 0)) {
+            return fail("target should output its stored variable redstone power");
+        }
+
+        ecs::RedstoneSystem::processWorld(world, 52);
+        if (targetPower(world, 0, targetY, 0) != 12 ||
+            wirePower(world, 1, targetY, 0) != 12 ||
+            !lampLit(world, 2, targetY, 0)) {
+            return fail("target pulse reschedule should ignore the stale release tick");
+        }
+
+        ecs::RedstoneSystem::processWorld(world, 54);
+        if (targetPower(world, 0, targetY, 0) != 0 ||
+            wirePower(world, 1, targetY, 0) != 0 ||
+            lampLit(world, 2, targetY, 0)) {
+            return fail("target pulse release should clear its output power");
+        }
     }
 
     std::cout << "[redstone_basic_test] PASS\n";

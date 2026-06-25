@@ -4,15 +4,31 @@ void RedstoneUpdateQueue::schedule(const uint64_t executionTick,
                                    const glm::ivec3& position,
                                    const RedstoneScheduledAction action) {
     const ScheduledKey key{position, action};
-    if (!m_scheduledKeys.insert(key).second) {
+    if (m_scheduledKeys.find(key) != m_scheduledKeys.end()) {
         return;
     }
 
+    const uint32_t sequence = m_sequenceCounter++;
+    m_scheduledKeys.emplace(key, sequence);
     m_queue.push(RedstoneScheduledUpdate{
         executionTick,
         position,
         action,
-        m_sequenceCounter++
+        sequence
+    });
+}
+
+void RedstoneUpdateQueue::reschedule(const uint64_t executionTick,
+                                     const glm::ivec3& position,
+                                     const RedstoneScheduledAction action) {
+    const ScheduledKey key{position, action};
+    const uint32_t sequence = m_sequenceCounter++;
+    m_scheduledKeys[key] = sequence;
+    m_queue.push(RedstoneScheduledUpdate{
+        executionTick,
+        position,
+        action,
+        sequence
     });
 }
 
@@ -27,7 +43,12 @@ size_t RedstoneUpdateQueue::drainDue(const uint64_t currentTick,
         }
 
         m_queue.pop();
-        m_scheduledKeys.erase(ScheduledKey{next.position, next.action});
+        const ScheduledKey key{next.position, next.action};
+        const auto keyIt = m_scheduledKeys.find(key);
+        if (keyIt == m_scheduledKeys.end() || keyIt->second != next.sequence) {
+            continue;
+        }
+        m_scheduledKeys.erase(keyIt);
         out.push_back(next);
         ++count;
     }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -15,30 +16,116 @@
 #include "../../util/SimulationDistance.h"
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
+#include "../../../world/World.h"
 #include "../../../world/block/Block.h"
 #include "../../../world/block/BlockCollision.h"
+#include "../../../world/block/BlockStateRegistry.h"
+#include "../../../world/block/PropIndices.h"
 #include "../../../world/chunk/Chunk.h"
+#include "../../../world/redstone/RedstoneUpdateQueue.h"
 
 namespace ecs {
 namespace {
 
 constexpr float kProjectileStepLength = 0.25f;
+constexpr uint64_t kTargetPulseTicks = 4;
 
-bool isCollisionBlockAt(const IWorldView& worldView, const glm::vec3& position, BlockID& outBlock) {
-    outBlock = 0;
+bool isCollisionBlockAt(const IWorldView& worldView,
+                        const glm::vec3& position,
+                        StateID& outState,
+                        glm::ivec3& outBlockPosition) {
+    outState = BlockIds::AIR;
     const int x = static_cast<int>(std::floor(position.x));
     const int y = static_cast<int>(std::floor(position.y));
     const int z = static_cast<int>(std::floor(position.z));
+    outBlockPosition = {x, y, z};
     if (y < 0 || y >= Chunk::SIZE_Y) {
         return true;
     }
 
     const StateID stateId = worldView.getBlockState(x, y, z);
     if (BlockCollision::containsPoint(stateId, glm::ivec3(x, y, z), position)) {
-        outBlock = stateId;
+        outState = stateId;
         return true;
     }
     return false;
+}
+
+StateID withPowerProperty(const StateID stateId, const uint8_t power) {
+    if (power > 15) {
+        throw std::runtime_error("Target block power exceeds 15");
+    }
+    const uint16_t value = BlockStateRegistry::getPropertyValueIndex(PropIndices::POWER, std::to_string(power));
+    if (value == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error("Target block requires registered power values 0 through 15");
+    }
+    const StateID updatedState = BlockStateRegistry::withProperty(stateId, PropIndices::POWER, value);
+    if (BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWER) != value) {
+        throw std::runtime_error("Target block power state transition failed");
+    }
+    return updatedState;
+}
+
+uint8_t targetPowerFromImpact(const glm::ivec3& blockPosition, const glm::vec3& impactPosition) {
+    const glm::vec3 local = glm::clamp(impactPosition - glm::vec3(blockPosition), glm::vec3(0.0f), glm::vec3(1.0f));
+    const float faceDistances[6] = {
+        local.x,
+        1.0f - local.x,
+        local.y,
+        1.0f - local.y,
+        local.z,
+        1.0f - local.z,
+    };
+    int nearestFace = 0;
+    for (int i = 1; i < 6; ++i) {
+        if (faceDistances[i] < faceDistances[nearestFace]) {
+            nearestFace = i;
+        }
+    }
+
+    float u = 0.0f;
+    float v = 0.0f;
+    switch (nearestFace) {
+    case 0:
+    case 1:
+        u = local.y - 0.5f;
+        v = local.z - 0.5f;
+        break;
+    case 2:
+    case 3:
+        u = local.x - 0.5f;
+        v = local.z - 0.5f;
+        break;
+    case 4:
+    case 5:
+        u = local.x - 0.5f;
+        v = local.y - 0.5f;
+        break;
+    default:
+        throw std::runtime_error("Target impact selected an invalid face");
+    }
+
+    constexpr float kMaxFaceDistance = 0.70710678118f;
+    const float distance = std::sqrt(u * u + v * v);
+    const float centered = 1.0f - std::min(distance / kMaxFaceDistance, 1.0f);
+    return static_cast<uint8_t>(std::max(1, static_cast<int>(std::ceil(centered * 15.0f))));
+}
+
+void activateTargetBlock(World& world,
+                         const uint64_t tickIndex,
+                         const glm::ivec3& blockPosition,
+                         const glm::vec3& impactPosition) {
+    const StateID currentState = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+    if (BlockStateRegistry::getBlockId(currentState) != BlockIds::TARGET) {
+        return;
+    }
+
+    const StateID updatedState = withPowerProperty(currentState, targetPowerFromImpact(blockPosition, impactPosition));
+    world.setBlockState(blockPosition.x, blockPosition.y, blockPosition.z, updatedState);
+    world.redstoneScheduledUpdateQueue().reschedule(
+        tickIndex / 2u + kTargetPulseTicks,
+        blockPosition,
+        RedstoneScheduledAction::ReleaseTargetPulse);
 }
 
 void emitProjectileImpactParticles(GameplayRegistry& registry,
@@ -280,17 +367,21 @@ void ProjectileSystem::update(SystemContext& ctx) {
         for (int i = 0; i < steps; ++i) {
             transform.position += step;
 
-            BlockID hitBlock = 0;
-            if (isCollisionBlockAt(worldView, transform.position, hitBlock)) {
+            StateID hitState = BlockIds::AIR;
+            glm::ivec3 hitBlockPosition{};
+            if (isCollisionBlockAt(worldView, transform.position, hitState, hitBlockPosition)) {
+                if (ctx.services.world) {
+                    activateTargetBlock(*ctx.services.world, ctx.tickIndex, hitBlockPosition, transform.position);
+                }
                 emitProjectileImpactParticles(registry,
                                               transform.position,
-                                              hitBlock,
+                                              hitState,
                                               projectileData.entityImpactParticleCount);
                 emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
                 queueProjectileImpactDespawn(reg,
                                              projectile,
                                              transform.position,
-                                             hitBlock,
+                                             hitState,
                                              projectileData.entityImpactParticleCount,
                                              destroyList);
                 destroyed = true;

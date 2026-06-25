@@ -1191,6 +1191,20 @@ int main() {
         return fail("redstone_lamp should expose lit and unlit display states");
     }
 
+    const BlockDef& targetDef = BlockRegistry::get(BlockIds::TARGET);
+    const StateID targetDefault = BlockStateRegistry::getDefaultState(BlockIds::TARGET);
+    const StateID targetPower15 = BlockStateRegistry::getState(
+        BlockIds::TARGET,
+        PropIndices::POWER,
+        PropIndices::POWER_15);
+    if (targetDef.redstoneBehavior != "target" ||
+        !targetDef.isRedstonePowerSource ||
+        BlockStateRegistry::getPropertyIndex(targetDefault, PropIndices::POWER) != PropIndices::POWER_0 ||
+        targetPower15 == targetDefault ||
+        BlockStateRegistry::getPropertyIndex(targetPower15, PropIndices::POWER) != PropIndices::POWER_15) {
+        return fail("target should expose variable redstone power states");
+    }
+
     const BlockDef& leverDef = BlockRegistry::get(BlockIds::LEVER);
     if (leverDef.renderShapeName != "model" ||
         leverDef.placementStrategy != "attach_wall" ||

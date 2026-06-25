@@ -183,7 +183,7 @@ uint16_t powerToPropertyValue(const uint8_t power) {
     return value;
 }
 
-uint8_t wirePowerFromState(const StateID stateId) {
+uint8_t redstonePowerFromState(const StateID stateId) {
     const uint16_t value = getRequiredProperty(stateId, PropIndices::POWER, "power");
     const auto values = powerPropertyValues();
     for (uint8_t power = 0; power < values.size(); ++power) {
@@ -191,10 +191,10 @@ uint8_t wirePowerFromState(const StateID stateId) {
             return power;
         }
     }
-    throw std::runtime_error("Redstone wire state contains an unknown power value");
+    throw std::runtime_error("Redstone state contains an unknown power value");
 }
 
-StateID withWirePower(const StateID stateId, const uint8_t power) {
+StateID withRedstonePower(const StateID stateId, const uint8_t power) {
     return withRequiredProperty(stateId, PropIndices::POWER, powerToPropertyValue(power), "power");
 }
 
@@ -250,6 +250,10 @@ uint8_t sourceOutputPower(const StateID stateId) {
         return def.redstonePowerOutput;
     }
 
+    if (def.redstoneBehavior == "target") {
+        return redstonePowerFromState(stateId);
+    }
+
     throw std::runtime_error("Unsupported redstone power source behavior: " + def.redstoneBehavior);
 }
 
@@ -267,7 +271,8 @@ bool sourceCanPowerConductiveBlocks(const StateID stateId) {
     if (def.redstoneBehavior == "lever" ||
         def.redstoneBehavior == "button" ||
         def.redstoneBehavior == "plate" ||
-        def.redstoneBehavior == "power_block") {
+        def.redstoneBehavior == "power_block" ||
+        def.redstoneBehavior == "target") {
         return true;
     }
 
@@ -482,6 +487,15 @@ bool isPistonState(const StateID stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     return def.redstoneBehavior == "piston";
+}
+
+bool isTargetState(const StateID stateId) {
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    return def.redstoneBehavior == "target";
 }
 
 bool isPistonHeadState(const StateID stateId) {
@@ -1371,7 +1385,7 @@ uint8_t directSignalPowerToward(const World& world,
         const auto computedIt = wirePowers.find(signalPosition);
         return computedIt != wirePowers.end()
             ? computedIt->second
-            : wirePowerFromState(signalState);
+            : redstonePowerFromState(signalState);
     }
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
 }
@@ -1385,7 +1399,7 @@ uint8_t conductiveBlockInputPowerToward(const World& world,
         const auto computedIt = wirePowers.find(signalPosition);
         return computedIt != wirePowers.end()
             ? computedIt->second
-            : wirePowerFromState(signalState);
+            : redstonePowerFromState(signalState);
     }
 
     if (isRepeaterState(signalState) ||
@@ -1735,6 +1749,20 @@ bool applyObserverPulseRelease(World& world, const glm::ivec3& position) {
     return true;
 }
 
+bool applyTargetPulseRelease(World& world, const glm::ivec3& position) {
+    const StateID currentState = world.getBlockState(position.x, position.y, position.z);
+    if (!isTargetState(currentState)) {
+        return false;
+    }
+    if (redstonePowerFromState(currentState) == 0) {
+        return false;
+    }
+
+    const StateID updatedState = withRedstonePower(currentState, 0);
+    world.setBlockState(position.x, position.y, position.z, updatedState);
+    return true;
+}
+
 bool applyRepeaterEvaluation(World& world, const glm::ivec3& position) {
     const StateID currentState = world.getBlockState(position.x, position.y, position.z);
     if (!isRepeaterState(currentState)) {
@@ -1776,6 +1804,11 @@ size_t applyScheduledUpdates(World& world, const std::vector<RedstoneScheduledUp
                 ++changed;
             }
             break;
+        case RedstoneScheduledAction::ReleaseTargetPulse:
+            if (applyTargetPulseRelease(world, update.position)) {
+                ++changed;
+            }
+            break;
         }
     }
     return changed;
@@ -1789,7 +1822,7 @@ size_t applyWirePowers(World& world, const std::vector<glm::ivec3>& wires, const
             continue;
         }
 
-        const StateID updatedState = withWirePower(currentState, computedWirePowerAt(wirePowers, position));
+        const StateID updatedState = withRedstonePower(currentState, computedWirePowerAt(wirePowers, position));
         if (updatedState != currentState) {
             world.setBlockState(position.x, position.y, position.z, updatedState);
             ++changed;
