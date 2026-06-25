@@ -92,6 +92,8 @@ public:
     const BlockNeighborUpdateQueue& redstoneChangedBlockQueue() const { return m_redstoneChangedBlockQueue; }
     RedstoneUpdateQueue& redstoneScheduledUpdateQueue() { return m_redstoneScheduledUpdateQueue; }
     const RedstoneUpdateQueue& redstoneScheduledUpdateQueue() const { return m_redstoneScheduledUpdateQueue; }
+    void setLastProcessedRedstoneTick(uint64_t redstoneTick) { m_lastProcessedRedstoneTick = redstoneTick; }
+    [[nodiscard]] uint64_t lastProcessedRedstoneTick() const { return m_lastProcessedRedstoneTick; }
 
     /// Access the chunk ticket manager (for GameServer per-client management).
     ChunkTicketManager& ticketManager() { return m_ticketManager; }
@@ -102,7 +104,7 @@ public:
 
     /// Callback invoked after any block state change (setBlockState / setFluidState).
     /// Used by GameServer to collect dirty blocks for BlockUpdateBatch messages.
-    using BlockChangeCallback = std::function<void(int x, int y, int z, BlockID newBlockId)>;
+    using BlockChangeCallback = std::function<void(int x, int y, int z, StateID newStateId)>;
     void setBlockChangeCallback(BlockChangeCallback callback) { m_blockChangeCallback = std::move(callback); }
 
     // --- Save system integration ---
@@ -133,6 +135,7 @@ private:
     BlockNeighborUpdateQueue m_redstoneUpdateQueue;
     BlockNeighborUpdateQueue m_redstoneChangedBlockQueue;
     RedstoneUpdateQueue m_redstoneScheduledUpdateQueue;
+    uint64_t m_lastProcessedRedstoneTick = 0;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;
     LightChangeCallback m_lightChangeCallback;

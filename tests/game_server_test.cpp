@@ -25,6 +25,7 @@
 #include "thread/ThreadPool.h"
 #include <cassert>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -79,6 +80,29 @@ static float horizontalDistanceSq(const glm::vec3& a, const glm::vec3& b) {
 static float distanceSq(const glm::vec3& a, const glm::vec3& b) {
     const glm::vec3 d = a - b;
     return glm::dot(d, d);
+}
+
+static StateID targetState(const uint8_t power) {
+    static const std::array<uint16_t, 16> kPowerValues = {
+        PropIndices::POWER_0,
+        PropIndices::POWER_1,
+        PropIndices::POWER_2,
+        PropIndices::POWER_3,
+        PropIndices::POWER_4,
+        PropIndices::POWER_5,
+        PropIndices::POWER_6,
+        PropIndices::POWER_7,
+        PropIndices::POWER_8,
+        PropIndices::POWER_9,
+        PropIndices::POWER_10,
+        PropIndices::POWER_11,
+        PropIndices::POWER_12,
+        PropIndices::POWER_13,
+        PropIndices::POWER_14,
+        PropIndices::POWER_15,
+    };
+    assert(power < kPowerValues.size());
+    return BlockStateRegistry::getState(BlockIds::TARGET, PropIndices::POWER, kPowerValues[power]);
 }
 
 static void require(const bool condition, const char* message) {
@@ -2732,7 +2756,7 @@ static void testServerBlockActionBreaksChestLifecycle() {
                 if (update.x == chestPos.x &&
                     update.y == chestPos.y &&
                     update.z == chestPos.z &&
-                    update.blockId == BlockIds::AIR) {
+                    update.stateId == BlockIds::AIR) {
                     sawAirBlockUpdate = true;
                 }
             }
@@ -3298,7 +3322,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     entry.x = 1;
     entry.y = 64;
     entry.z = -2;
-    entry.blockId = BlockIds::TORCH;
+    entry.stateId = BlockIds::TORCH;
     entry.packedLightPatch.resize(5 * 5 * 5);
     for (size_t i = 0; i < entry.packedLightPatch.size(); ++i) {
         entry.packedLightPatch[i] = static_cast<uint8_t>(i & 0x0F);
@@ -3319,6 +3343,59 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     }
 
     std::printf("[PASS] testBlockUpdateCodecKeepsVariableLightPatch\n");
+}
+
+static void testServerBlockUpdateCarriesStateId() {
+    server::GameServer server;
+    server.init(1234, nullptr, 2);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    server.acceptClient(std::move(clientTransport), 1);
+    const glm::ivec3 targetPos(0, Chunk::SIZE_Y - 8, 0);
+    for (int tick = 0;
+         tick < 240 && !server.world().isChunkLoadedForBlock(targetPos.x, targetPos.y, targetPos.z);
+         ++tick) {
+        server.tick(1.0f / 20.0f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(server.world().isChunkLoadedForBlock(targetPos.x, targetPos.y, targetPos.z),
+            "state-id block update test should load the target chunk");
+
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    const StateID poweredTarget = targetState(9);
+    server.world().setBlockState(targetPos.x, targetPos.y, targetPos.z, poweredTarget);
+    server.tick(1.0f / 20.0f);
+
+    bool sawPoweredTargetState = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type != net::MessageType::BlockUpdateBatch || !packet.inProcessPayload.has_value()) {
+            continue;
+        }
+        const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
+        for (const net::BlockUpdateEntry& update : batch.updates) {
+            if (update.x == targetPos.x &&
+                update.y == targetPos.y &&
+                update.z == targetPos.z &&
+                update.stateId == poweredTarget) {
+                sawPoweredTargetState = true;
+            }
+        }
+    }
+
+    require(sawPoweredTargetState, "server block updates should carry the exact block state id");
+    std::printf("[PASS] testServerBlockUpdateCarriesStateId\n");
 }
 
 static void testServerEmitsLightPatchAfterTorchPlacement() {
@@ -3394,7 +3471,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
                 if (update.x == placeBlock.x &&
                     update.y == placeBlock.y &&
                     update.z == placeBlock.z &&
-                    update.blockId == BlockIds::TORCH) {
+                    update.stateId == BlockIds::TORCH) {
                     sawTorchBlockUpdate = true;
                 }
                 for (const uint8_t packed : update.packedLightPatch) {
@@ -3603,6 +3680,7 @@ int main() {
     testDisconnectedPlayerDespawnsForOtherClients();
     testChunkDataDecodeMarksRenderableSubChunks();
     testBlockUpdateCodecKeepsVariableLightPatch();
+    testServerBlockUpdateCarriesStateId();
     testServerEmitsLightPatchAfterTorchPlacement();
     testENetChunkStreamingToClient();
     testENetChunkStreamingAfterPreconnectTicks();

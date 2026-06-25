@@ -1999,6 +1999,8 @@ size_t processWorldWithContext(World& world,
         return 0;
     }
 
+    world.setLastProcessedRedstoneTick(redstoneTick);
+
     size_t changed = 0;
     std::vector<RedstoneScheduledUpdate> scheduledUpdates;
     scheduledUpdates.reserve(std::min(budget, world.redstoneScheduledUpdateQueue().size()));
@@ -2045,6 +2047,9 @@ size_t processWorldWithContext(World& world,
 
 void RedstoneSystem::update(SystemContext& ctx) {
     if (!ctx.services.world) {
+        return;
+    }
+    if (ctx.services.gameClient) {
         return;
     }
     if ((ctx.tickIndex % 2u) != 0u) {

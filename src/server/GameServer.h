@@ -153,8 +153,8 @@ private:
     [[nodiscard]] std::vector<save::PersistentEntityData> snapshotPersistentEntities() const;
     [[nodiscard]] std::vector<save::BlockEntityData> snapshotBlockEntities() const;
     void checkSpawnChunksReady();
-    [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, BlockID blockId, int lightPatchRadius) const;
-    [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, BlockID blockId) const;
+    [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, StateID stateId, int lightPatchRadius) const;
+    [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, StateID stateId) const;
     [[nodiscard]] net::BlockUpdateEntry makeSubChunkLightUpdateEntry(int64_t chunkKey, int scy) const;
     void syncPlayersToClients();
 

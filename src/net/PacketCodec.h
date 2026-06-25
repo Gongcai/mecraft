@@ -227,7 +227,7 @@ public:
             pushI32(buf, u.x);
             pushI32(buf, u.y);
             pushI32(buf, u.z);
-            pushU16(buf, u.blockId);
+            pushU16(buf, u.stateId);
             pushU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
             buf.insert(buf.end(), u.packedLightPatch.begin(), u.packedLightPatch.end());
         }
@@ -608,7 +608,7 @@ public:
             out.updates[i].x = readI32(data, offset);
             out.updates[i].y = readI32(data, offset);
             out.updates[i].z = readI32(data, offset);
-            out.updates[i].blockId = readU16(data, offset);
+            out.updates[i].stateId = readU16(data, offset);
             if (hasLightPatches) {
                 if (offset + 4 > size) return false;
                 const uint32_t lightCount = readU32(data, offset);

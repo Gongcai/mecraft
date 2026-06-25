@@ -194,7 +194,7 @@ void GameClient::receiveMessages() {
                 const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
                 for (const auto& update : batch.updates) {
                     m_clientWorld.applyBlockUpdate(update.x, update.y, update.z,
-                                                   static_cast<BlockID>(update.blockId),
+                                                   static_cast<StateID>(update.stateId),
                                                    update.packedLightPatch);
                 }
             }

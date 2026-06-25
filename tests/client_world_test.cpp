@@ -1,6 +1,8 @@
 #include "client/ClientWorld.h"
 #include "world/chunk/Chunk.h"
 #include "world/block/Block.h"
+#include "world/block/BlockStateRegistry.h"
+#include "world/block/PropIndices.h"
 #include "world/WorldRaycast.h"
 #include "physics/PhysicsInfo.h"
 #include <cassert>
@@ -12,6 +14,10 @@ static void require(bool condition, const char* message) {
         std::fprintf(stderr, "[FAIL] %s\n", message);
         std::exit(EXIT_FAILURE);
     }
+}
+
+static StateID targetState(const uint16_t powerValue) {
+    return BlockStateRegistry::getState(BlockIds::TARGET, PropIndices::POWER, powerValue);
 }
 
 static void testInitialState() {
@@ -191,6 +197,21 @@ static void testApplyBlockUpdateAcceptsVariableLightPatch() {
     std::printf("[PASS] testApplyBlockUpdateAcceptsVariableLightPatch\n");
 }
 
+static void testApplyBlockUpdatePreservesStateId() {
+    client::ClientWorld cw;
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    cw.addChunk(chunk);
+
+    const StateID poweredTarget = targetState(PropIndices::POWER_9);
+    cw.applyBlockUpdate(5, 64, 5, poweredTarget);
+
+    require(cw.getBlockState(5, 64, 5) == poweredTarget,
+            "client block updates should preserve non-default block state ids");
+    require(BlockStateRegistry::getBlockId(cw.getBlockState(5, 64, 5)) == BlockIds::TARGET,
+            "client block updates should keep the state mapped to its block id");
+    std::printf("[PASS] testApplyBlockUpdatePreservesStateId\n");
+}
+
 static void testApplyBlockUpdateAcceptsLightSection() {
     client::ClientWorld cw;
     auto chunk = std::make_shared<Chunk>(0, 0);
@@ -258,6 +279,7 @@ int main() {
     testNeighborLinkingDirtiesExistingBorders();
     testClientWorldRaycastHitsBlocks();
     testApplyBlockUpdateAcceptsVariableLightPatch();
+    testApplyBlockUpdatePreservesStateId();
     testApplyBlockUpdateAcceptsLightSection();
     testApplyBlockUpdateAcceptsFullChunkLightSnapshot();
     testApplyBlockUpdateCanBeLightOnly();

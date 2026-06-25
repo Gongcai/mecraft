@@ -558,6 +558,71 @@ int main() {
     }
 
     {
+        const int projectileClockSkewY = 14;
+        prepareFlatTestLine(world, projectileClockSkewY);
+        world.redstoneUpdateQueue().clear();
+        world.redstoneChangedBlockQueue().clear();
+        world.redstoneScheduledUpdateQueue().clear();
+        world.setBlockState(2, projectileClockSkewY, 0, targetState(0));
+        world.setBlockState(3, projectileClockSkewY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(4, projectileClockSkewY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        ecs::RedstoneSystem::processWorld(world, 100);
+
+        ecs::GameplayRegistry registry;
+        ecs::GameplayServices services;
+        services.world = &world;
+        services.worldView = &world;
+
+        ecs::ProjectileDefinition appleProjectile;
+        appleProjectile.itemId = ItemIds::APPLE;
+        appleProjectile.gravity = 0.0f;
+        appleProjectile.throwSpeed = 0.0f;
+        appleProjectile.upwardBias = 0.0f;
+        appleProjectile.spawnForwardOffset = 0.0f;
+        appleProjectile.entityImpactParticleCount = 0;
+        appleProjectile.impactSoundId.clear();
+
+        ecs::EntityFactory::createProjectile(
+            registry,
+            entt::null,
+            glm::vec3(0.25f, static_cast<float>(projectileClockSkewY) + 0.5f, 0.5f),
+            glm::vec3(12.5f, 0.0f, 0.0f),
+            appleProjectile);
+
+        ecs::ProjectileSystem projectileSystem;
+        ecs::SystemContext projectileContext{registry, services, 0.2f, 0};
+        projectileSystem.update(projectileContext);
+        projectileSystem.update(projectileContext);
+
+        if (targetPower(world, 2, projectileClockSkewY, 0) == 0) {
+            return fail("target projectile impact should not be released by a stale gameplay tick");
+        }
+
+        services.gameClient = reinterpret_cast<client::GameClient*>(static_cast<uintptr_t>(1));
+        ecs::SystemContext clientRedstoneContext{registry, services, 0.0f, 10000};
+        ecs::RedstoneSystem clientRedstoneSystem;
+        clientRedstoneSystem.update(clientRedstoneContext);
+        if (targetPower(world, 2, projectileClockSkewY, 0) == 0) {
+            return fail("client redstone tick should not release server-authoritative target pulses");
+        }
+        services.gameClient = nullptr;
+
+        ecs::RedstoneSystem::processWorld(world, 101, registry);
+        if (wirePower(world, 3, projectileClockSkewY, 0) == 0 ||
+            !lampLit(world, 4, projectileClockSkewY, 0)) {
+            return fail("target projectile pulse should propagate when gameplay and redstone ticks are skewed");
+        }
+
+        ecs::RedstoneSystem::processWorld(world, 104, registry);
+        if (targetPower(world, 2, projectileClockSkewY, 0) != 0 ||
+            wirePower(world, 3, projectileClockSkewY, 0) != 0 ||
+            lampLit(world, 4, projectileClockSkewY, 0)) {
+            return fail("target projectile pulse should release on the redstone clock");
+        }
+    }
+
+    {
         const int noteY = 32;
         prepareFlatTestLine(world, noteY);
         world.setBlockState(0, noteY, 0, leverState(true));

@@ -48,8 +48,8 @@ public:
     void removeChunk(int cx, int cz);
 
     /// Apply a block update from the server.
-    void applyBlockUpdate(int x, int y, int z, BlockID blockId);
-    void applyBlockUpdate(int x, int y, int z, BlockID blockId, const std::vector<uint8_t>& packedLightPatch);
+    void applyBlockUpdate(int x, int y, int z, StateID stateId);
+    void applyBlockUpdate(int x, int y, int z, StateID stateId, const std::vector<uint8_t>& packedLightPatch);
 
     /// Set the render distance.
     void setRenderDistance(int distance);

@@ -180,7 +180,7 @@ struct BlockUpdateEntry {
     int32_t y = 0;
     int32_t z = 0;
     // 0xFFFF means this entry only carries light data and must not edit a block.
-    uint16_t blockId = 0;
+    uint16_t stateId = 0;
     // Optional light payload. A SubChunk::BLOCK_COUNT-sized payload is the
     // complete light section containing y. Odd-sized cubic patches are centered
     // on x/y/z and written in dy, dz, dx nested-loop order. A Chunk::BLOCK_COUNT

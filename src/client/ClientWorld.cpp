@@ -188,12 +188,12 @@ void ClientWorld::removeChunk(int cx, int cz) {
     }
 }
 
-void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId) {
+void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId) {
     static const std::vector<uint8_t> kNoLightPatch;
-    applyBlockUpdate(x, y, z, blockId, kNoLightPatch);
+    applyBlockUpdate(x, y, z, stateId, kNoLightPatch);
 }
 
-void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId, const std::vector<uint8_t>& packedLightPatch) {
+void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId, const std::vector<uint8_t>& packedLightPatch) {
     if (y < 0 || y >= 256) return;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
@@ -205,8 +205,8 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockID blockId, const s
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     Chunk& chunk = *it->second;
-    if (blockId != kLightOnlyBlockUpdate) {
-        chunk.setBlock(lx, y, lz, blockId);
+    if (stateId != kLightOnlyBlockUpdate) {
+        chunk.setBlock(lx, y, lz, stateId);
         chunk.recalcHeightMap(lx, lz);
         if (lx == 0 && chunk.neighbors[1]) {
             chunk.neighbors[1]->markSubChunkDirty(Chunk::toSubChunkIndex(y));
