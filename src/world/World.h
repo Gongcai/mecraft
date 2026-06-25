@@ -88,6 +88,8 @@ public:
     const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
     BlockNeighborUpdateQueue& redstoneUpdateQueue() { return m_redstoneUpdateQueue; }
     const BlockNeighborUpdateQueue& redstoneUpdateQueue() const { return m_redstoneUpdateQueue; }
+    BlockNeighborUpdateQueue& redstoneChangedBlockQueue() { return m_redstoneChangedBlockQueue; }
+    const BlockNeighborUpdateQueue& redstoneChangedBlockQueue() const { return m_redstoneChangedBlockQueue; }
     RedstoneUpdateQueue& redstoneScheduledUpdateQueue() { return m_redstoneScheduledUpdateQueue; }
     const RedstoneUpdateQueue& redstoneScheduledUpdateQueue() const { return m_redstoneScheduledUpdateQueue; }
 
@@ -129,6 +131,7 @@ private:
     WeatherSystem m_weatherSystem;
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
     BlockNeighborUpdateQueue m_redstoneUpdateQueue;
+    BlockNeighborUpdateQueue m_redstoneChangedBlockQueue;
     RedstoneUpdateQueue m_redstoneScheduledUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;

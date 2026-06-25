@@ -819,7 +819,11 @@ void GameServer::tickWorldSystems() {
         ecs::PressurePlateSystem::processWorldEntities(m_world, *m_gameplayRegistry);
     }
     if ((m_currentTick % 2u) == 0u) {
-        ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, 4096);
+        if (m_gameplayRegistry != nullptr) {
+            ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, *m_gameplayRegistry, 4096);
+        } else {
+            ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, 4096);
+        }
     }
 }
 

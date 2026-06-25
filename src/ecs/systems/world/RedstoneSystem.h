@@ -9,6 +9,8 @@ class World;
 
 namespace ecs {
 
+class GameplayRegistry;
+
 /// Tick-rate system that evaluates deterministic redstone power propagation.
 class RedstoneSystem : public ISystem {
 public:
@@ -20,6 +22,17 @@ public:
     /// @param budget  Maximum number of dirty positions drained from the redstone queue.
     /// @return Number of block states changed by this processing pass.
     static size_t processWorld(World& world, uint64_t redstoneTick, size_t budget = 4096);
+
+    /// Process dirty redstone positions with access to gameplay block-entity inventories.
+    /// @param world  Mutable world containing loaded chunks and block states.
+    /// @param redstoneTick  Redstone tick index used by delayed devices.
+    /// @param registry  Gameplay registry that owns block-entity inventory stores.
+    /// @param budget  Maximum number of dirty positions drained from the redstone queue.
+    /// @return Number of block states changed by this processing pass.
+    static size_t processWorld(World& world,
+                               uint64_t redstoneTick,
+                               const GameplayRegistry& registry,
+                               size_t budget = 4096);
 };
 
 } // namespace ecs

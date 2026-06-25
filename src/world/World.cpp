@@ -267,6 +267,7 @@ void World::init(uint32_t seed) {
     m_fluidSystem.reset();
     m_neighborUpdateQueue.clear();
     m_redstoneUpdateQueue.clear();
+    m_redstoneChangedBlockQueue.clear();
     m_redstoneScheduledUpdateQueue.clear();
     m_ticketManager.reset();
     m_ticketManager.setViewRadius(m_renderDistance);
@@ -739,6 +740,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     };
     m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z));
     m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z));
+    m_redstoneChangedBlockQueue.enqueue(glm::ivec3(x, y, z));
     for (const auto& off : kNeighborOffsets) {
         m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
         m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);

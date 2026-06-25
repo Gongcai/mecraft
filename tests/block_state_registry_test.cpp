@@ -1249,14 +1249,43 @@ int main() {
         return fail("lever west powered state should resolve to the rotated powered wall model");
     }
 
+    const BlockDef& stoneButtonDef = BlockRegistry::get(BlockIds::STONE_BUTTON);
+    if (stoneButtonDef.renderShapeName != "model" ||
+        stoneButtonDef.placementStrategy != "attach_wall" ||
+        stoneButtonDef.supportRule != "attached_face") {
+        return fail("stone_button should use model rendering and attach-wall placement");
+    }
+    PlacementStrategyFn stoneButtonStrategy = PlacementStrategyRegistry::getStrategy(stoneButtonDef.placementStrategy);
+    if (stoneButtonStrategy == nullptr) {
+        return fail("stone_button placement strategy should be registered");
+    }
+    PlacementContext stoneButtonWallPlacement;
+    stoneButtonWallPlacement.blockId = BlockIds::STONE_BUTTON;
+    stoneButtonWallPlacement.hitNormal = {0, 0, -1};
+    const StateID stoneButtonPlacedNorth = stoneButtonStrategy(stoneButtonWallPlacement);
+    if (BlockStateRegistry::getPropertyIndex(stoneButtonPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH ||
+        !modelVariantMatches(stoneButtonPlacedNorth, "block/stone_button_wall", 180, 0)) {
+        return fail("stone_button wall placement should face and render outward from the supporting wall");
+    }
+
     const StateID stoneButtonEastPressed = BlockStateRegistry::getState(
         BlockIds::STONE_BUTTON,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
         });
-    if (!modelVariantMatches(stoneButtonEastPressed, "block/stone_button_wall_pressed", 90, 0)) {
+    if (!modelVariantMatches(stoneButtonEastPressed, "block/stone_button_wall_pressed", 270, 0)) {
         return fail("stone_button east powered state should resolve to the rotated pressed wall model");
+    }
+
+    const StateID oakButtonWestPressed = BlockStateRegistry::getState(
+        BlockIds::OAK_BUTTON,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_WEST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(oakButtonWestPressed, "block/oak_button_wall_pressed", 90, 0)) {
+        return fail("oak_button west powered state should resolve to the rotated pressed wall model");
     }
 
     const StateID oakPressurePlatePressed = BlockStateRegistry::getState(

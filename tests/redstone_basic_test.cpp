@@ -35,13 +35,17 @@ void prepareFlatTestLine(World& world, const int y) {
     }
 }
 
-StateID leverState(const bool powered) {
+StateID leverState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         BlockIds::LEVER,
         std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+            {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
         });
+}
+
+StateID leverState(const bool powered) {
+    return leverState(PropIndices::FACING_FLOOR, powered);
 }
 
 StateID redstoneTorchState(const bool lit) {
@@ -53,13 +57,17 @@ StateID redstoneTorchState(const bool lit) {
         });
 }
 
-StateID buttonState(const BlockID blockId, const bool powered) {
+StateID buttonState(const BlockID blockId, const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         blockId,
         std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+            {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
         });
+}
+
+StateID buttonState(const BlockID blockId, const bool powered) {
+    return buttonState(blockId, PropIndices::FACING_FLOOR, powered);
 }
 
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
@@ -193,6 +201,48 @@ int main() {
     }
     if (lampLit(world, 6, y, 0)) {
         return fail("redstone lamp should turn off after adjacent wire loses power");
+    }
+
+    {
+        const int conductorY = 112;
+        prepareFlatTestLine(world, conductorY);
+        world.setBlockState(0, conductorY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, conductorY + 1, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(-1, conductorY, 0, leverState(PropIndices::FACING_WEST, true));
+        ecs::RedstoneSystem::processWorld(world, 20);
+
+        if (wirePower(world, 0, conductorY + 1, 0) != 15) {
+            return fail("wall lever should power redstone wire through its supporting conductor block");
+        }
+
+        world.setBlockState(-1, conductorY, 0, leverState(PropIndices::FACING_WEST, false));
+        ecs::RedstoneSystem::processWorld(world, 21);
+        if (wirePower(world, 0, conductorY + 1, 0) != 0) {
+            return fail("wall lever should remove conducted power from redstone wire when switched off");
+        }
+    }
+
+    {
+        const int conductorButtonY = 48;
+        prepareFlatTestLine(world, conductorButtonY);
+        world.setBlockState(0, conductorButtonY, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(0, conductorButtonY + 1, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(-1, conductorButtonY, 0, buttonState(
+            BlockIds::STONE_BUTTON,
+            PropIndices::FACING_WEST,
+            true));
+        ecs::RedstoneSystem::processWorld(world, 30);
+
+        if (!buttonPowered(world, -1, conductorButtonY, 0) ||
+            wirePower(world, 0, conductorButtonY + 1, 0) != 15) {
+            return fail("wall button should power redstone wire through its supporting conductor block");
+        }
+
+        ecs::RedstoneSystem::processWorld(world, 40);
+        if (buttonPowered(world, -1, conductorButtonY, 0) ||
+            wirePower(world, 0, conductorButtonY + 1, 0) != 0) {
+            return fail("wall button release should remove conducted power from redstone wire");
+        }
     }
 
     const int torchY = 80;

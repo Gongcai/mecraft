@@ -12,7 +12,9 @@
 
 enum class RedstoneScheduledAction : uint8_t {
     ReleaseButton,
-    EvaluateRepeater
+    EvaluateRepeater,
+    StartObserverPulse,
+    ReleaseObserverPulse
 };
 
 /// A delayed redstone update scheduled for a specific redstone tick.
