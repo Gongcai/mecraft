@@ -53,6 +53,10 @@
         { "file": "put5", "extension": ".wav" }
       ]
     },
+    "block.note_block.harp": {
+      "file": "foo",
+      "extension": ".ogg"
+    },
     "item.apple.throw": {
       "file": "foo",
       "extension": ".ogg"

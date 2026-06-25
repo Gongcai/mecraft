@@ -1,6 +1,7 @@
 #include "RedstoneSystem.h"
 
 #include "../../GameplayRegistry.h"
+#include "../../util/AudioEventBuffer.h"
 #include "../../../game/inventory/ChestInventoryStore.h"
 #include "../../../game/inventory/FurnaceInventoryStore.h"
 #include "../../../item/Item.h"
@@ -79,6 +80,7 @@ struct RedstoneWorkSet {
     std::vector<glm::ivec3> observers;
     std::vector<glm::ivec3> comparators;
     std::vector<glm::ivec3> pistons;
+    std::vector<glm::ivec3> edgeTriggeredDevices;
     std::vector<glm::ivec3> sourcePositions;
     PositionSet wireSet;
     PositionSet redstoneControlledSet;
@@ -87,6 +89,7 @@ struct RedstoneWorkSet {
     PositionSet observerSet;
     PositionSet comparatorSet;
     PositionSet pistonSet;
+    PositionSet edgeTriggeredDeviceSet;
     PositionSet sourceSet;
 };
 
@@ -489,6 +492,15 @@ bool isPistonState(const StateID stateId) {
     return def.redstoneBehavior == "piston";
 }
 
+bool isEdgeTriggeredDeviceState(const StateID stateId) {
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    return def.redstoneBehavior == "note_block";
+}
+
 bool isTargetState(const StateID stateId) {
     if (stateId == BlockIds::AIR) {
         return false;
@@ -855,6 +867,16 @@ void addPistonIfPresent(const World& world, const glm::ivec3& position, Redstone
     }
 }
 
+void addEdgeTriggeredDeviceIfPresent(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
+    const StateID stateId = world.getBlockState(position.x, position.y, position.z);
+    if (!isEdgeTriggeredDeviceState(stateId)) {
+        return;
+    }
+    if (workSet.edgeTriggeredDeviceSet.insert(position).second) {
+        workSet.edgeTriggeredDevices.push_back(position);
+    }
+}
+
 void addSourceIfPresent(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
     const StateID stateId = world.getBlockState(position.x, position.y, position.z);
     if (!isPotentialSourceState(stateId)) {
@@ -919,6 +941,9 @@ void collectWireComponent(const World& world, const glm::ivec3& start, RedstoneW
             if (isPistonState(neighborState)) {
                 addPistonIfPresent(world, neighbor, workSet);
             }
+            if (isEdgeTriggeredDeviceState(neighborState)) {
+                addEdgeTriggeredDeviceIfPresent(world, neighbor, workSet);
+            }
             if (isPotentialSourceState(neighborState)) {
                 addSourceIfPresent(world, neighbor, workSet);
             }
@@ -942,6 +967,8 @@ void collectEndpointIfPresent(const World& world, const glm::ivec3& position, Re
         addComparatorIfPresent(world, position, workSet);
     } else if (isPistonState(stateId)) {
         addPistonIfPresent(world, position, workSet);
+    } else if (isEdgeTriggeredDeviceState(stateId)) {
+        addEdgeTriggeredDeviceIfPresent(world, position, workSet);
     } else if (isPotentialSourceState(stateId)) {
         addSourceIfPresent(world, position, workSet);
     }
@@ -1001,6 +1028,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
                 addComparatorIfPresent(world, neighbor, workSet);
             } else if (isPistonState(neighborState)) {
                 addPistonIfPresent(world, neighbor, workSet);
+            } else if (isEdgeTriggeredDeviceState(neighborState)) {
+                addEdgeTriggeredDeviceIfPresent(world, neighbor, workSet);
             } else if (isPotentialSourceState(neighborState)) {
                 addSourceIfPresent(world, neighbor, workSet);
             }
@@ -1026,6 +1055,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
                 addComparatorIfPresent(world, neighbor, workSet);
             } else if (isPistonState(neighborState)) {
                 addPistonIfPresent(world, neighbor, workSet);
+            } else if (isEdgeTriggeredDeviceState(neighborState)) {
+                addEdgeTriggeredDeviceIfPresent(world, neighbor, workSet);
             } else if (isPotentialSourceState(neighborState)) {
                 addSourceIfPresent(world, neighbor, workSet);
             }
@@ -1051,6 +1082,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
                 addObserverIfPresent(world, neighbor, workSet);
             } else if (isPistonState(neighborState)) {
                 addPistonIfPresent(world, neighbor, workSet);
+            } else if (isEdgeTriggeredDeviceState(neighborState)) {
+                addEdgeTriggeredDeviceIfPresent(world, neighbor, workSet);
             } else if (isPotentialSourceState(neighborState)) {
                 addSourceIfPresent(world, neighbor, workSet);
             }
@@ -1076,6 +1109,37 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
                 addObserverIfPresent(world, neighbor, workSet);
             } else if (isComparatorState(neighborState)) {
                 addComparatorIfPresent(world, neighbor, workSet);
+            } else if (isEdgeTriggeredDeviceState(neighborState)) {
+                addEdgeTriggeredDeviceIfPresent(world, neighbor, workSet);
+            } else if (isPotentialSourceState(neighborState)) {
+                addSourceIfPresent(world, neighbor, workSet);
+            }
+        }
+        collectEndpointsAroundNeighborConductors(world, position, workSet);
+        return;
+    }
+
+    if (isEdgeTriggeredDeviceState(stateId)) {
+        addEdgeTriggeredDeviceIfPresent(world, position, workSet);
+        for (const glm::ivec3& direction : kDirections) {
+            const glm::ivec3 neighbor = position + direction;
+            const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
+            if (isWireState(neighborState)) {
+                collectWireComponent(world, neighbor, workSet);
+            } else if (isRedstoneControlledState(neighborState)) {
+                addRedstoneControlledIfPresent(world, neighbor, workSet);
+            } else if (isTorchState(neighborState)) {
+                addTorchIfPresent(world, neighbor, workSet);
+            } else if (isRepeaterState(neighborState)) {
+                addRepeaterIfPresent(world, neighbor, workSet);
+            } else if (isObserverState(neighborState)) {
+                addObserverIfPresent(world, neighbor, workSet);
+            } else if (isComparatorState(neighborState)) {
+                addComparatorIfPresent(world, neighbor, workSet);
+            } else if (isPistonState(neighborState)) {
+                addPistonIfPresent(world, neighbor, workSet);
+            } else if (isEdgeTriggeredDeviceState(neighborState)) {
+                addEdgeTriggeredDeviceIfPresent(world, neighbor, workSet);
             } else if (isPotentialSourceState(neighborState)) {
                 addSourceIfPresent(world, neighbor, workSet);
             }
@@ -1106,6 +1170,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
             addComparatorIfPresent(world, neighbor, workSet);
         } else if (isPistonState(neighborState)) {
             addPistonIfPresent(world, neighbor, workSet);
+        } else if (isEdgeTriggeredDeviceState(neighborState)) {
+            addEdgeTriggeredDeviceIfPresent(world, neighbor, workSet);
         }
     }
     collectEndpointsAroundNeighborConductors(world, position, workSet);
@@ -1881,8 +1947,52 @@ size_t applyRedstoneControlledStates(World& world,
     return changed;
 }
 
+void emitEdgeTriggeredDeviceEvent(GameplayRegistry& registry,
+                                  const StateID stateId,
+                                  const glm::ivec3& position) {
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (def.redstoneBehavior == "note_block") {
+        ensureAudioEventBus(registry).push({
+            "block.note_block.harp",
+            glm::vec3(position) + glm::vec3(0.5f),
+            true,
+            1.0f
+        });
+        return;
+    }
+    throw std::runtime_error("Unsupported redstone edge-triggered behavior: " + def.redstoneBehavior);
+}
+
+size_t applyEdgeTriggeredDeviceStates(World& world,
+                                      GameplayRegistry* registry,
+                                      const std::vector<glm::ivec3>& positions,
+                                      const WirePowerMap& wirePowers) {
+    size_t changed = 0;
+    for (const glm::ivec3& position : positions) {
+        const StateID currentState = world.getBlockState(position.x, position.y, position.z);
+        if (!isEdgeTriggeredDeviceState(currentState)) {
+            continue;
+        }
+
+        const bool currentlyPowered = isPoweredPropertyTrue(currentState);
+        const bool shouldBePowered = receivedPowerAt(world, wirePowers, position) > 0;
+        if (!currentlyPowered && shouldBePowered && registry != nullptr) {
+            emitEdgeTriggeredDeviceEvent(*registry, currentState, position);
+        }
+
+        const StateID updatedState = withPowered(currentState, shouldBePowered);
+        if (updatedState != currentState) {
+            world.setBlockState(position.x, position.y, position.z, updatedState);
+            ++changed;
+        }
+    }
+    return changed;
+}
+
 size_t processWorldWithContext(World& world,
                                const GameplayRegistry* registry,
+                               GameplayRegistry* eventRegistry,
                                const uint64_t redstoneTick,
                                const size_t budget) {
     if (budget == 0) {
@@ -1927,6 +2037,7 @@ size_t processWorldWithContext(World& world,
     changed += applyPistonStates(world, workSet.pistons, wirePowers);
     scheduleRepeaterEvaluationUpdates(world, redstoneTick, workSet.repeaters, wirePowers);
     changed += applyRedstoneControlledStates(world, workSet.redstoneControlledBlocks, wirePowers);
+    changed += applyEdgeTriggeredDeviceStates(world, eventRegistry, workSet.edgeTriggeredDevices, wirePowers);
     return changed;
 }
 
@@ -1940,18 +2051,18 @@ void RedstoneSystem::update(SystemContext& ctx) {
         return;
     }
 
-    processWorld(*ctx.services.world, ctx.tickIndex / 2u, ctx.registry);
+    processWorldWithContext(*ctx.services.world, &ctx.registry, &ctx.registry, ctx.tickIndex / 2u, 4096);
 }
 
 size_t RedstoneSystem::processWorld(World& world, const uint64_t redstoneTick, const size_t budget) {
-    return processWorldWithContext(world, nullptr, redstoneTick, budget);
+    return processWorldWithContext(world, nullptr, nullptr, redstoneTick, budget);
 }
 
 size_t RedstoneSystem::processWorld(World& world,
                                     const uint64_t redstoneTick,
                                     const GameplayRegistry& registry,
                                     const size_t budget) {
-    return processWorldWithContext(world, &registry, redstoneTick, budget);
+    return processWorldWithContext(world, &registry, nullptr, redstoneTick, budget);
 }
 
 } // namespace ecs

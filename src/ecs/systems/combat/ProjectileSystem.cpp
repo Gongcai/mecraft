@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include <glm/geometric.hpp>
+
 #include "../../entity/EntityFactory.h"
 #include "../../components/NetworkComponents.h"
 #include "../../util/AudioEventBuffer.h"
@@ -32,23 +34,58 @@ constexpr uint64_t kTargetPulseTicks = 4;
 
 bool isCollisionBlockAt(const IWorldView& worldView,
                         const glm::vec3& position,
+                        const glm::vec3& halfExtents,
                         StateID& outState,
                         glm::ivec3& outBlockPosition) {
     outState = BlockIds::AIR;
-    const int x = static_cast<int>(std::floor(position.x));
-    const int y = static_cast<int>(std::floor(position.y));
-    const int z = static_cast<int>(std::floor(position.z));
-    outBlockPosition = {x, y, z};
-    if (y < 0 || y >= Chunk::SIZE_Y) {
+    const glm::vec3 queryMin = position - halfExtents;
+    const glm::vec3 queryMax = position + halfExtents;
+    if (queryMin.y < 0.0f || queryMax.y >= static_cast<float>(Chunk::SIZE_Y)) {
+        outBlockPosition = {
+            static_cast<int>(std::floor(position.x)),
+            static_cast<int>(std::floor(position.y)),
+            static_cast<int>(std::floor(position.z))
+        };
         return true;
     }
 
-    const StateID stateId = worldView.getBlockState(x, y, z);
-    if (BlockCollision::containsPoint(stateId, glm::ivec3(x, y, z), position)) {
-        outState = stateId;
-        return true;
+    const int minX = static_cast<int>(std::floor(queryMin.x));
+    const int minY = static_cast<int>(std::floor(queryMin.y));
+    const int minZ = static_cast<int>(std::floor(queryMin.z));
+    const int maxX = static_cast<int>(std::floor(queryMax.x));
+    const int maxY = static_cast<int>(std::floor(queryMax.y));
+    const int maxZ = static_cast<int>(std::floor(queryMax.z));
+
+    bool found = false;
+    float bestDistanceSq = 0.0f;
+    glm::ivec3 bestPosition{};
+    StateID bestState = BlockIds::AIR;
+    for (int y = minY; y <= maxY; ++y) {
+        for (int z = minZ; z <= maxZ; ++z) {
+            for (int x = minX; x <= maxX; ++x) {
+                const glm::ivec3 blockPosition(x, y, z);
+                const StateID stateId = worldView.getBlockState(x, y, z);
+                if (!BlockCollision::intersects(stateId, blockPosition, queryMin, queryMax)) {
+                    continue;
+                }
+
+                const glm::vec3 centerDelta = position - (glm::vec3(blockPosition) + glm::vec3(0.5f));
+                const float distanceSq = glm::dot(centerDelta, centerDelta);
+                if (!found || distanceSq < bestDistanceSq) {
+                    found = true;
+                    bestDistanceSq = distanceSq;
+                    bestPosition = blockPosition;
+                    bestState = stateId;
+                }
+            }
+        }
     }
-    return false;
+
+    if (found) {
+        outBlockPosition = bestPosition;
+        outState = bestState;
+    }
+    return found;
 }
 
 StateID withPowerProperty(const StateID stateId, const uint8_t power) {
@@ -332,7 +369,8 @@ void ProjectileSystem::update(SystemContext& ctx) {
                                   TransformComponent,
                                   VelocityComponent,
                                   LifetimeComponent,
-                                  SpinVisualComponent>();
+                                  SpinVisualComponent,
+                                  BoundsComponent>();
     for (const entt::entity projectile : projectileView) {
         if (!simulation::isEntityTicking(ctx, projectile)) {
             continue;
@@ -343,6 +381,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
         auto& velocity = projectileView.get<VelocityComponent>(projectile);
         auto& lifetime = projectileView.get<LifetimeComponent>(projectile);
         auto& spin = projectileView.get<SpinVisualComponent>(projectile);
+        const auto& bounds = projectileView.get<BoundsComponent>(projectile);
 
         if (lifetime.ageSeconds <= 0.0f) {
             lifetime.ageSeconds += dt;
@@ -369,7 +408,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
 
             StateID hitState = BlockIds::AIR;
             glm::ivec3 hitBlockPosition{};
-            if (isCollisionBlockAt(worldView, transform.position, hitState, hitBlockPosition)) {
+            if (isCollisionBlockAt(worldView, transform.position, bounds.halfExtents, hitState, hitBlockPosition)) {
                 if (ctx.services.world) {
                     activateTargetBlock(*ctx.services.world, ctx.tickIndex, hitBlockPosition, transform.position);
                 }

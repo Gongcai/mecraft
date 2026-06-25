@@ -74,12 +74,12 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
 }
 
 void GameplayScene::runFixedUpdate(float dt) {
-    m_pipeline.runFixedUpdate(m_registry, m_services, dt, 0);
+    m_pipeline.runFixedUpdate(m_registry, m_services, dt, m_tickClock.tickIndex());
 }
 
 #ifdef MECRAFT_DEBUG
 GameplayScene::FixedUpdateProfile GameplayScene::runFixedUpdateProfiled(float dt) {
-    return m_pipeline.runFixedUpdateProfiled(m_registry, m_services, dt, 0);
+    return m_pipeline.runFixedUpdateProfiled(m_registry, m_services, dt, m_tickClock.tickIndex());
 }
 #endif
 

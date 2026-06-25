@@ -1035,6 +1035,22 @@ int main() {
         }
     }
 
+    const StateID noteBlockDefault = BlockStateRegistry::getDefaultState(BlockIds::NOTE_BLOCK);
+    if (BlockStateRegistry::getPropertyIndex(noteBlockDefault, PropIndices::POWERED) !=
+        PropIndices::POWERED_FALSE) {
+        return fail("note_block default state should be powered=false");
+    }
+    const StateID noteBlockPowered = BlockStateRegistry::withProperty(
+        noteBlockDefault,
+        PropIndices::POWERED,
+        PropIndices::POWERED_TRUE);
+    if (noteBlockPowered == noteBlockDefault ||
+        BlockStateRegistry::getBlockId(noteBlockPowered) != BlockIds::NOTE_BLOCK ||
+        BlockStateRegistry::getPropertyIndex(noteBlockPowered, PropIndices::POWERED) !=
+            PropIndices::POWERED_TRUE) {
+        return fail("note_block should expose a powered=true block state");
+    }
+
     const auto modelVariantMatches = [](const StateID state,
                                         const char* expectedModel,
                                         const uint16_t expectedRotY,

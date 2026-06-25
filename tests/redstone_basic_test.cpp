@@ -7,7 +7,13 @@
 
 #include <glm/vec3.hpp>
 
+#include "../src/ecs/GameplayRegistry.h"
+#include "../src/ecs/GameplayServices.h"
+#include "../src/ecs/SystemContext.h"
+#include "../src/ecs/entity/EntityFactory.h"
+#include "../src/ecs/systems/combat/ProjectileSystem.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
+#include "../src/ecs/util/AudioEventBuffer.h"
 #include "../src/world/World.h"
 #include "../src/world/block/Block.h"
 #include "../src/world/block/BlockStateRegistry.h"
@@ -141,6 +147,11 @@ bool torchLit(const World& world, const int x, const int y, const int z) {
 }
 
 bool buttonPowered(const World& world, const int x, const int y, const int z) {
+    const StateID state = world.getBlockState(x, y, z);
+    return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
+}
+
+bool noteBlockPowered(const World& world, const int x, const int y, const int z) {
     const StateID state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
@@ -451,6 +462,176 @@ int main() {
             wirePower(world, 1, targetY, 0) != 0 ||
             lampLit(world, 2, targetY, 0)) {
             return fail("target pulse release should clear its output power");
+        }
+    }
+
+    {
+        const int projectileTargetY = 24;
+        prepareFlatTestLine(world, projectileTargetY);
+        world.setBlockState(2, projectileTargetY, 0, targetState(0));
+        world.setBlockState(3, projectileTargetY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(4, projectileTargetY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        ecs::GameplayRegistry registry;
+        ecs::GameplayServices services;
+        services.world = &world;
+        services.worldView = &world;
+
+        ecs::ProjectileDefinition appleProjectile;
+        appleProjectile.itemId = ItemIds::APPLE;
+        appleProjectile.gravity = 0.0f;
+        appleProjectile.throwSpeed = 0.0f;
+        appleProjectile.upwardBias = 0.0f;
+        appleProjectile.spawnForwardOffset = 0.0f;
+        appleProjectile.entityImpactParticleCount = 0;
+        appleProjectile.impactSoundId.clear();
+
+        ecs::EntityFactory::createProjectile(
+            registry,
+            entt::null,
+            glm::vec3(0.25f, static_cast<float>(projectileTargetY) + 0.5f, 0.5f),
+            glm::vec3(12.5f, 0.0f, 0.0f),
+            appleProjectile);
+
+        ecs::ProjectileSystem projectileSystem;
+        ecs::SystemContext projectileContext{registry, services, 0.2f, 100};
+        projectileSystem.update(projectileContext);
+        projectileSystem.update(projectileContext);
+
+        if (targetPower(world, 2, projectileTargetY, 0) == 0) {
+            return fail("apple projectile impact should store redstone power in the target block");
+        }
+
+        ecs::RedstoneSystem::processWorld(world, 50, registry);
+        if (wirePower(world, 3, projectileTargetY, 0) == 0 ||
+            !lampLit(world, 4, projectileTargetY, 0)) {
+            return fail("target hit by an apple projectile should power adjacent redstone components");
+        }
+    }
+
+    {
+        const int projectileTargetEdgeY = 16;
+        prepareFlatTestLine(world, projectileTargetEdgeY);
+        for (int x = -1; x <= 8; ++x) {
+            world.setBlockState(x, projectileTargetEdgeY, -1, BlockIds::AIR);
+            world.setBlockState(x, projectileTargetEdgeY + 1, -1, BlockIds::AIR);
+        }
+        world.setBlockState(2, projectileTargetEdgeY, 0, targetState(0));
+        world.setBlockState(3, projectileTargetEdgeY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(4, projectileTargetEdgeY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        ecs::GameplayRegistry registry;
+        ecs::GameplayServices services;
+        services.world = &world;
+        services.worldView = &world;
+
+        ecs::ProjectileDefinition appleProjectile;
+        appleProjectile.itemId = ItemIds::APPLE;
+        appleProjectile.gravity = 0.0f;
+        appleProjectile.throwSpeed = 0.0f;
+        appleProjectile.upwardBias = 0.0f;
+        appleProjectile.spawnForwardOffset = 0.0f;
+        appleProjectile.entityImpactParticleCount = 0;
+        appleProjectile.impactSoundId.clear();
+
+        ecs::EntityFactory::createProjectile(
+            registry,
+            entt::null,
+            glm::vec3(0.25f, static_cast<float>(projectileTargetEdgeY) + 0.5f, -0.12f),
+            glm::vec3(12.5f, 0.0f, 0.0f),
+            appleProjectile);
+
+        ecs::ProjectileSystem projectileSystem;
+        ecs::SystemContext projectileContext{registry, services, 0.2f, 120};
+        projectileSystem.update(projectileContext);
+        projectileSystem.update(projectileContext);
+
+        if (targetPower(world, 2, projectileTargetEdgeY, 0) == 0) {
+            return fail("apple projectile body intersection should activate the target block");
+        }
+
+        ecs::RedstoneSystem::processWorld(world, 60, registry);
+        if (wirePower(world, 3, projectileTargetEdgeY, 0) == 0 ||
+            !lampLit(world, 4, projectileTargetEdgeY, 0)) {
+            return fail("edge hit on target should power adjacent redstone components");
+        }
+    }
+
+    {
+        const int noteY = 32;
+        prepareFlatTestLine(world, noteY);
+        world.setBlockState(0, noteY, 0, leverState(true));
+        world.setBlockState(1, noteY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, noteY, 0, BlockStateRegistry::getDefaultState(BlockIds::NOTE_BLOCK));
+        ecs::RedstoneSystem::processWorld(world, 60);
+
+        if (!noteBlockPowered(world, 2, noteY, 0)) {
+            return fail("note_block should store powered=true while receiving redstone power");
+        }
+
+        world.redstoneUpdateQueue().enqueue(glm::ivec3(2, noteY, 0));
+        ecs::RedstoneSystem::processWorld(world, 61);
+        if (!noteBlockPowered(world, 2, noteY, 0)) {
+            return fail("note_block should remain powered while the input stays high");
+        }
+
+        world.setBlockState(0, noteY, 0, leverState(false));
+        ecs::RedstoneSystem::processWorld(world, 62);
+        if (noteBlockPowered(world, 2, noteY, 0)) {
+            return fail("note_block should reset powered=false after redstone power is removed");
+        }
+
+        world.setBlockState(0, noteY, 0, leverState(true));
+        ecs::RedstoneSystem::processWorld(world, 63);
+        if (!noteBlockPowered(world, 2, noteY, 0)) {
+            return fail("note_block should accept a second rising redstone edge");
+        }
+    }
+
+    {
+        World audioWorld;
+        audioWorld.init(20260626);
+        loadOriginChunks(audioWorld);
+
+        const int noteAudioY = 72;
+        prepareFlatTestLine(audioWorld, noteAudioY);
+        audioWorld.setBlockState(0, noteAudioY, 0, leverState(true));
+        audioWorld.setBlockState(1, noteAudioY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        audioWorld.setBlockState(2, noteAudioY, 0, BlockStateRegistry::getDefaultState(BlockIds::NOTE_BLOCK));
+
+        ecs::GameplayRegistry registry;
+        ecs::GameplayServices services;
+        services.world = &audioWorld;
+        ecs::SystemContext ctx{registry, services, 1.0f / 60.0f, 200};
+        ecs::RedstoneSystem redstoneSystem;
+        redstoneSystem.update(ctx);
+
+        auto& audioEvents = ecs::ensureAudioEventBus(registry);
+        if (audioEvents.size() != 1 ||
+            audioEvents.peek().front().clipName != "block.note_block.harp") {
+            return fail("note_block should emit one harp sound on a rising redstone edge");
+        }
+
+        ctx.tickIndex = 202;
+        audioWorld.redstoneUpdateQueue().enqueue(glm::ivec3(2, noteAudioY, 0));
+        redstoneSystem.update(ctx);
+        if (audioEvents.size() != 1) {
+            return fail("note_block should not emit another sound while power remains high");
+        }
+
+        audioWorld.setBlockState(0, noteAudioY, 0, leverState(false));
+        ctx.tickIndex = 204;
+        redstoneSystem.update(ctx);
+        if (audioEvents.size() != 1 ||
+            noteBlockPowered(audioWorld, 2, noteAudioY, 0)) {
+            return fail("note_block falling edge should reset state without emitting sound");
+        }
+
+        audioWorld.setBlockState(0, noteAudioY, 0, leverState(true));
+        ctx.tickIndex = 206;
+        redstoneSystem.update(ctx);
+        if (audioEvents.size() != 2) {
+            return fail("note_block should emit again after power falls and rises");
         }
     }
 

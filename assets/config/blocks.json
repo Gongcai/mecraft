@@ -1441,6 +1441,12 @@
       "drop": "minecraft:note_block",
       "redstoneBehavior": "note_block",
       "respondsToRedstone": true,
+      "properties": {
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "powered": "false"
+      },
       "materialKind": "wood",
       "timeToBreak": 800,
       "textures": {

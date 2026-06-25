@@ -378,6 +378,26 @@ int main() {
         return fail("red_bed collision should include the mattress body");
     }
 
+    const StateID poweredTarget = BlockStateRegistry::getState(
+        BlockIds::TARGET,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::POWER, PropIndices::POWER_15}
+        });
+    const BlockSelectionBox poweredTargetBox = BlockSelection::getBox(poweredTarget);
+    if (poweredTargetBox.min != glm::vec3(0.0f) || poweredTargetBox.max != glm::vec3(1.0f)) {
+        return fail("powered target selection should keep the target block shape");
+    }
+    const std::vector<BlockCollisionBox> poweredTargetCollision = BlockCollision::getBoxes(poweredTarget);
+    if (poweredTargetCollision.size() != 1 ||
+        poweredTargetCollision.front().min != glm::vec3(0.0f) ||
+        poweredTargetCollision.front().max != glm::vec3(1.0f) ||
+        !BlockCollision::intersects(poweredTarget,
+                                    glm::ivec3(0),
+                                    glm::vec3(0.75f),
+                                    glm::vec3(1.25f))) {
+        return fail("powered target collision should resolve through its block definition");
+    }
+
     World world;
     world.init(20260507);
     loadChunks(world);

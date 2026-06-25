@@ -113,6 +113,10 @@ const ModelVariant& requireModelVariant(const StateID stateId) {
     return *variant;
 }
 
+const BlockDef& blockDefForState(const StateID stateId) {
+    return BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId));
+}
+
 } // namespace
 
 namespace BlockCollision {
@@ -123,7 +127,7 @@ std::vector<BlockCollisionBox> getBoxes(const StateID stateId) {
         return boxes;
     }
 
-    const BlockDef& def = BlockRegistry::getFast(stateId);
+    const BlockDef& def = blockDefForState(stateId);
     if (def.renderShapeName == "face_plane" || def.renderShapeName == "redstone_wire") {
         return boxes;
     }
@@ -153,7 +157,7 @@ bool intersects(const StateID stateId,
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::getFast(stateId);
+    const BlockDef& def = blockDefForState(stateId);
     if (def.renderShapeName == "face_plane" || def.renderShapeName == "redstone_wire") {
         return false;
     }
@@ -185,7 +189,7 @@ bool containsPoint(const StateID stateId,
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::getFast(stateId);
+    const BlockDef& def = blockDefForState(stateId);
     if (def.renderShapeName == "face_plane" || def.renderShapeName == "redstone_wire") {
         return false;
     }

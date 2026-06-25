@@ -223,7 +223,7 @@ BlockSelectionBox getFacePlaneBox(const StateID stateId) {
 } // namespace
 
 BlockSelectionBox BlockSelection::getBox(const StateID stateId) {
-    const BlockDef& def = BlockRegistry::getFast(stateId);
+    const BlockDef& def = BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId));
 
     if (def.renderShapeName == "torch") {
         return getTorchBox(stateId);
