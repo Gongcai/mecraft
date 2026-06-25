@@ -85,6 +85,8 @@ public:
 
     BlockNeighborUpdateQueue& neighborUpdateQueue() { return m_neighborUpdateQueue; }
     const BlockNeighborUpdateQueue& neighborUpdateQueue() const { return m_neighborUpdateQueue; }
+    BlockNeighborUpdateQueue& redstoneUpdateQueue() { return m_redstoneUpdateQueue; }
+    const BlockNeighborUpdateQueue& redstoneUpdateQueue() const { return m_redstoneUpdateQueue; }
 
     /// Access the chunk ticket manager (for GameServer per-client management).
     ChunkTicketManager& ticketManager() { return m_ticketManager; }
@@ -123,6 +125,7 @@ private:
     FluidSystem m_fluidSystem{*this};
     WeatherSystem m_weatherSystem;
     BlockNeighborUpdateQueue m_neighborUpdateQueue;
+    BlockNeighborUpdateQueue m_redstoneUpdateQueue;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;
     LightChangeCallback m_lightChangeCallback;

@@ -14,6 +14,7 @@
 #include "../ecs/systems/world/BlockSupportSystem.h"
 #include "../ecs/systems/world/FarmlandMoistureSystem.h"
 #include "../ecs/systems/world/RandomTickSystem.h"
+#include "../ecs/systems/world/RedstoneSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
 #include "../game/inventory/ChestInventoryLifecycle.h"
@@ -812,6 +813,9 @@ void GameServer::tickWorldSystems() {
     // advancing support rules even without that presentation path.
     if (m_gameplayRegistry == nullptr || usingOwnedEcsRegistry()) {
         ecs::BlockSupportSystem::processWorldQueue(m_world, 1024);
+    }
+    if ((m_currentTick % 2u) == 0u) {
+        ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, 4096);
     }
 }
 

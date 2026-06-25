@@ -77,7 +77,23 @@ bool canConnectedBlockAttachTo(const StateID stateId) {
 }
 
 bool canRedstoneWireAttachTo(const StateID stateId) {
-    return isRedstoneWireState(stateId);
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    if (blockId == BlockIds::REDSTONE_WIRE) {
+        return true;
+    }
+
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (def.isRedstonePowerSource) {
+        return true;
+    }
+
+    return def.redstoneBehavior == "repeater" ||
+           def.redstoneBehavior == "comparator" ||
+           def.redstoneBehavior == "observer";
 }
 
 void requireHorizontalConnectionProperties() {
@@ -250,6 +266,7 @@ void World::init(uint32_t seed) {
     }
     m_fluidSystem.reset();
     m_neighborUpdateQueue.clear();
+    m_redstoneUpdateQueue.clear();
     m_ticketManager.reset();
     m_ticketManager.setViewRadius(m_renderDistance);
     m_ticketManager.setSimulationRadius(8);
@@ -720,8 +737,10 @@ void World::setBlockState(int x, int y, int z, StateID id) {
         { 0,  0,  1}, { 0,  0, -1},
     };
     m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z));
+    m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z));
     for (const auto& off : kNeighborOffsets) {
         m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
+        m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
     }
 
     // Notify block change callback (used by GameServer for BlockUpdateBatch)

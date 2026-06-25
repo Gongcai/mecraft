@@ -93,6 +93,7 @@ set(SRC_GAME
         src/game/states/SleepingState.cpp
         src/game/states/CommandState.cpp
         src/game/states/StateDependencies.cpp
+        src/game/redstone/RedstoneControlInteraction.cpp
         src/game/presentation/GameplayPresentationBuilder.cpp
         src/game/presentation/GameplayHudPresenter.cpp
         src/game/audio/AudioListenerSyncSystem.cpp
@@ -327,6 +328,7 @@ set(SRC_ECS
         src/ecs/systems/world/FarmlandMoistureSystem.cpp
         src/ecs/systems/world/RandomTickSystem.cpp
         src/ecs/systems/world/BlockSupportSystem.cpp
+        src/ecs/systems/world/RedstoneSystem.cpp
         src/ecs/systems/world/FallingBlockSpawnSystem.cpp
         src/ecs/systems/world/FallingBlockTickSystem.cpp
         src/ecs/systems/world/FallingBlockInterpolateSystem.cpp
@@ -623,6 +625,9 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(crafting_system_test tests/crafting_system_test.cpp)
     add_mecraft_test(item_registry_test tests/item_registry_test.cpp)
     add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
+    add_mecraft_test(redstone_basic_test tests/redstone_basic_test.cpp)
+    mecraft_copy_runtime_assets(redstone_basic_test)
+    add_mecraft_test(redstone_control_interaction_test tests/redstone_control_interaction_test.cpp)
     add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
     add_mecraft_test(fluid_flow_test tests/fluid_flow_test.cpp)
     add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)

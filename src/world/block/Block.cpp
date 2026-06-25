@@ -32,6 +32,30 @@ bool BlockRegistry::s_initialized = false;
 namespace {
 constexpr const char* kBlocksConfigPath = BLOCKS_CONFIG_PATH;
 
+bool isKnownRedstoneBehavior(const std::string_view behavior) {
+    constexpr std::string_view kKnownBehaviors[] = {
+        "",
+        "wire",
+        "torch",
+        "repeater",
+        "comparator",
+        "piston",
+        "observer",
+        "lever",
+        "button",
+        "plate",
+        "lamp",
+        "door",
+        "power_block",
+        "target",
+        "dispenser",
+        "dropper",
+        "hopper",
+        "note_block",
+    };
+    return std::find(std::begin(kKnownBehaviors), std::end(kKnownBehaviors), behavior) != std::end(kKnownBehaviors);
+}
+
 AnimatedTextureRef makeStaticWorldTexture(const int layer) {
     AnimatedTextureRef ref;
     ref.firstLayer = layer;
@@ -409,6 +433,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].biomeTint = BiomeTintKind::None;
         s_blocks[i].lightLevel = 0;
         s_blocks[i].opacity = 15;
+        s_blocks[i].isRedstoneConductor = true;
+        s_blocks[i].isRedstonePowerSource = false;
+        s_blocks[i].respondsToRedstone = false;
+        s_blocks[i].redstonePowerOutput = 0;
+        s_blocks[i].redstoneBehavior.clear();
         setAllFaces(s_blocks[i], makeStaticWorldTexture(0));
         s_blockDropIds[i] = NamespacedId("minecraft", "air");
     }
@@ -419,6 +448,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     s_blocks[0].renderLayer = BlockRenderLayer::Transparent;
     s_blocks[0].isSelectable = false;
     s_blocks[0].opacity = 0;
+    s_blocks[0].isRedstoneConductor = false;
     setAllFaces(s_blocks[0], makeStaticWorldTexture(0));
 
     // Build idLookup map
@@ -508,6 +538,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.namedTextureRefs.clear();
         def.namedTextureAnimations.clear();
         def.stateTextureRules.clear();
+        def.isRedstoneConductor = false;
+        def.isRedstonePowerSource = false;
+        def.respondsToRedstone = false;
+        def.redstonePowerOutput = 0;
+        def.redstoneBehavior.clear();
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -579,6 +614,46 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("affectedByGravity") && blockJson["affectedByGravity"].is_boolean()) {
             def.affectedByGravity = blockJson["affectedByGravity"].get<bool>();
+        }
+        const bool hasExplicitRedstoneConductor = blockJson.contains("isRedstoneConductor");
+        if (hasExplicitRedstoneConductor) {
+            if (!blockJson["isRedstoneConductor"].is_boolean()) {
+                throw std::runtime_error("isRedstoneConductor must be a boolean for block: " + def.namespacedId.full());
+            }
+            def.isRedstoneConductor = blockJson["isRedstoneConductor"].get<bool>();
+        } else {
+            def.isRedstoneConductor = def.isSolid && def.renderShape == BlockRenderShape::Cube;
+        }
+        if (blockJson.contains("isRedstonePowerSource")) {
+            if (!blockJson["isRedstonePowerSource"].is_boolean()) {
+                throw std::runtime_error("isRedstonePowerSource must be a boolean for block: " + def.namespacedId.full());
+            }
+            def.isRedstonePowerSource = blockJson["isRedstonePowerSource"].get<bool>();
+        }
+        if (blockJson.contains("respondsToRedstone")) {
+            if (!blockJson["respondsToRedstone"].is_boolean()) {
+                throw std::runtime_error("respondsToRedstone must be a boolean for block: " + def.namespacedId.full());
+            }
+            def.respondsToRedstone = blockJson["respondsToRedstone"].get<bool>();
+        }
+        if (blockJson.contains("redstonePowerOutput")) {
+            if (!blockJson["redstonePowerOutput"].is_number_integer()) {
+                throw std::runtime_error("redstonePowerOutput must be an integer for block: " + def.namespacedId.full());
+            }
+            const int powerOutput = blockJson["redstonePowerOutput"].get<int>();
+            if (powerOutput < 0 || powerOutput > 15) {
+                throw std::runtime_error("redstonePowerOutput must be between 0 and 15 for block: " + def.namespacedId.full());
+            }
+            def.redstonePowerOutput = static_cast<uint8_t>(powerOutput);
+        }
+        if (blockJson.contains("redstoneBehavior")) {
+            if (!blockJson["redstoneBehavior"].is_string()) {
+                throw std::runtime_error("redstoneBehavior must be a string for block: " + def.namespacedId.full());
+            }
+            def.redstoneBehavior = blockJson["redstoneBehavior"].get<std::string>();
+            if (!isKnownRedstoneBehavior(def.redstoneBehavior)) {
+                throw std::runtime_error("Unknown redstoneBehavior '" + def.redstoneBehavior + "' for block: " + def.namespacedId.full());
+            }
         }
         const bool hasExplicitMaterialKind = parseMaterialKind(blockJson, def.materialKind);
         const bool hasExplicitDerivativeMaterialId = parseDerivativeMaterialId(blockJson, def.derivativeMaterialId);

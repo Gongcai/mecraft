@@ -64,6 +64,7 @@
       "id": "minecraft:glass",
       "drop": "minecraft:air",
       "isSolid": true,
+      "isRedstoneConductor": false,
       "isTransparent": true,
       "opacity": 0,
       "timeToBreak": 200,
@@ -858,6 +859,8 @@
     {
       "id": "minecraft:redstone_wire",
       "drop": "minecraft:redstone",
+      "redstoneBehavior": "wire",
+      "isRedstoneConductor": false,
       "properties": {
         "facing": ["floor"],
         "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
@@ -893,6 +896,10 @@
     {
       "id": "minecraft:redstone_torch",
       "drop": "minecraft:redstone_torch",
+      "redstoneBehavior": "torch",
+      "isRedstoneConductor": false,
+      "isRedstonePowerSource": true,
+      "redstonePowerOutput": 15,
       "properties": {
         "facing": ["floor", "north", "south", "east", "west"],
         "lit": ["false", "true"]
@@ -925,6 +932,8 @@
     {
       "id": "minecraft:redstone_lamp",
       "drop": "minecraft:redstone_lamp",
+      "redstoneBehavior": "lamp",
+      "respondsToRedstone": true,
       "properties": {
         "lit": ["false", "true"]
       },
@@ -945,6 +954,10 @@
     {
       "id": "minecraft:lever",
       "drop": "minecraft:lever",
+      "redstoneBehavior": "lever",
+      "isRedstoneConductor": false,
+      "isRedstonePowerSource": true,
+      "redstonePowerOutput": 15,
       "properties": {
         "facing": ["floor", "north", "south", "east", "west"],
         "powered": ["false", "true"]
@@ -964,19 +977,23 @@
       "modelVariants": {
         "facing=floor,powered=false": { "model": "block/lever_floor" },
         "facing=floor,powered=true": { "model": "block/lever_floor_powered" },
-        "facing=north,powered=false": { "model": "block/lever_wall" },
-        "facing=north,powered=true": { "model": "block/lever_wall_powered" },
-        "facing=south,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 180 } },
-        "facing=south,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 180 } },
-        "facing=east,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 90 } },
-        "facing=east,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 90 } },
-        "facing=west,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 270 } },
-        "facing=west,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 270 } }
+        "facing=north,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 180 } },
+        "facing=north,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 180 } },
+        "facing=south,powered=false": { "model": "block/lever_wall" },
+        "facing=south,powered=true": { "model": "block/lever_wall_powered" },
+        "facing=east,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 270 } },
+        "facing=east,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 270 } },
+        "facing=west,powered=false": { "model": "block/lever_wall", "transform": { "rotY": 90 } },
+        "facing=west,powered=true": { "model": "block/lever_wall_powered", "transform": { "rotY": 90 } }
       }
     },
     {
       "id": "minecraft:stone_button",
       "drop": "minecraft:stone_button",
+      "redstoneBehavior": "button",
+      "isRedstoneConductor": false,
+      "isRedstonePowerSource": true,
+      "redstonePowerOutput": 15,
       "properties": {
         "facing": ["floor", "north", "south", "east", "west"],
         "powered": ["false", "true"]
@@ -1009,6 +1026,10 @@
     {
       "id": "minecraft:oak_button",
       "drop": "minecraft:oak_button",
+      "redstoneBehavior": "button",
+      "isRedstoneConductor": false,
+      "isRedstonePowerSource": true,
+      "redstonePowerOutput": 15,
       "properties": {
         "facing": ["floor", "north", "south", "east", "west"],
         "powered": ["false", "true"]
@@ -1041,6 +1062,10 @@
     {
       "id": "minecraft:stone_pressure_plate",
       "drop": "minecraft:stone_pressure_plate",
+      "redstoneBehavior": "plate",
+      "isRedstoneConductor": false,
+      "isRedstonePowerSource": true,
+      "redstonePowerOutput": 15,
       "properties": {
         "powered": ["false", "true"]
       },
@@ -1062,6 +1087,10 @@
     {
       "id": "minecraft:oak_pressure_plate",
       "drop": "minecraft:oak_pressure_plate",
+      "redstoneBehavior": "plate",
+      "isRedstoneConductor": false,
+      "isRedstonePowerSource": true,
+      "redstonePowerOutput": 15,
       "properties": {
         "powered": ["false", "true"]
       },
@@ -1083,6 +1112,8 @@
     {
       "id": "minecraft:repeater",
       "drop": "minecraft:repeater",
+      "redstoneBehavior": "repeater",
+      "isRedstoneConductor": false,
       "properties": {
         "facing": ["north", "south", "east", "west"],
         "powered": ["false", "true"],
@@ -1139,6 +1170,8 @@
     {
       "id": "minecraft:comparator",
       "drop": "minecraft:comparator",
+      "redstoneBehavior": "comparator",
+      "isRedstoneConductor": false,
       "properties": {
         "facing": ["north", "south", "east", "west"],
         "powered": ["false", "true"],
@@ -1179,6 +1212,8 @@
     {
       "id": "minecraft:piston",
       "drop": "minecraft:piston",
+      "redstoneBehavior": "piston",
+      "respondsToRedstone": true,
       "properties": {
         "facing": ["down", "up", "north", "south", "west", "east"],
         "extended": ["false", "true"]
@@ -1214,6 +1249,8 @@
     {
       "id": "minecraft:sticky_piston",
       "drop": "minecraft:sticky_piston",
+      "redstoneBehavior": "piston",
+      "respondsToRedstone": true,
       "properties": {
         "facing": ["down", "up", "north", "south", "west", "east"],
         "extended": ["false", "true"]
@@ -1283,6 +1320,7 @@
     {
       "id": "minecraft:observer",
       "drop": "minecraft:observer",
+      "redstoneBehavior": "observer",
       "properties": {
         "facing": ["down", "up", "north", "south", "west", "east"],
         "powered": ["false", "true"]
@@ -1319,6 +1357,8 @@
     {
       "id": "minecraft:dispenser",
       "drop": "minecraft:dispenser",
+      "redstoneBehavior": "dispenser",
+      "respondsToRedstone": true,
       "properties": {
         "facing": ["down", "up", "north", "south", "west", "east"]
       },
@@ -1344,6 +1384,8 @@
     {
       "id": "minecraft:dropper",
       "drop": "minecraft:dropper",
+      "redstoneBehavior": "dropper",
+      "respondsToRedstone": true,
       "properties": {
         "facing": ["down", "up", "north", "south", "west", "east"]
       },
@@ -1369,6 +1411,8 @@
     {
       "id": "minecraft:hopper",
       "drop": "minecraft:hopper",
+      "redstoneBehavior": "hopper",
+      "respondsToRedstone": true,
       "properties": {
         "facing": ["down", "north", "south", "east", "west"]
       },
@@ -1394,6 +1438,8 @@
     {
       "id": "minecraft:note_block",
       "drop": "minecraft:note_block",
+      "redstoneBehavior": "note_block",
+      "respondsToRedstone": true,
       "materialKind": "wood",
       "timeToBreak": 800,
       "textures": {
@@ -1403,6 +1449,7 @@
     {
       "id": "minecraft:target",
       "drop": "minecraft:target",
+      "redstoneBehavior": "target",
       "timeToBreak": 500,
       "textures": {
         "top": "target_top",
@@ -1804,6 +1851,9 @@
     {
       "id": "minecraft:redstone_block",
       "drop": "minecraft:redstone_block",
+      "redstoneBehavior": "power_block",
+      "isRedstonePowerSource": true,
+      "redstonePowerOutput": 15,
       "timeToBreak": 5000,
       "textures": {
         "all": "redstone_block"

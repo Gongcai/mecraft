@@ -1187,13 +1187,65 @@ int main() {
         return fail("redstone_lamp should expose lit and unlit display states");
     }
 
+    const BlockDef& leverDef = BlockRegistry::get(BlockIds::LEVER);
+    if (leverDef.renderShapeName != "model" ||
+        leverDef.placementStrategy != "attach_wall" ||
+        leverDef.supportRule != "attached_face") {
+        return fail("lever should use model rendering and attach-wall placement");
+    }
+    PlacementStrategyFn leverStrategy = PlacementStrategyRegistry::getStrategy(leverDef.placementStrategy);
+    if (leverStrategy == nullptr) {
+        return fail("lever placement strategy should be registered");
+    }
+    PlacementContext leverWallPlacement;
+    leverWallPlacement.blockId = BlockIds::LEVER;
+    leverWallPlacement.hitNormal = {0, 0, -1};
+    const StateID leverPlacedNorth = leverStrategy(leverWallPlacement);
+    if (BlockStateRegistry::getPropertyIndex(leverPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH) {
+        return fail("lever wall placement should derive outward facing from hit normal");
+    }
+    PlacementContext leverFloorPlacement;
+    leverFloorPlacement.blockId = BlockIds::LEVER;
+    leverFloorPlacement.hitNormal = {0, 1, 0};
+    const StateID leverPlacedFloor = leverStrategy(leverFloorPlacement);
+    if (BlockStateRegistry::getPropertyIndex(leverPlacedFloor, PropIndices::FACING) != PropIndices::FACING_FLOOR) {
+        return fail("lever top-face placement should use the floor-facing state");
+    }
+
+    const StateID leverNorthUnpowered = BlockStateRegistry::getState(
+        BlockIds::LEVER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_NORTH},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    if (!modelVariantMatches(leverNorthUnpowered, "block/lever_wall", 180, 0)) {
+        return fail("lever north unpowered state should face out from the supporting wall");
+    }
+    const StateID leverSouthPowered = BlockStateRegistry::getState(
+        BlockIds::LEVER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_SOUTH},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(leverSouthPowered, "block/lever_wall_powered", 0, 0)) {
+        return fail("lever south powered state should use the unrotated powered wall model");
+    }
+    const StateID leverEastPowered = BlockStateRegistry::getState(
+        BlockIds::LEVER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(leverEastPowered, "block/lever_wall_powered", 270, 0)) {
+        return fail("lever east powered state should rotate the powered wall model outward");
+    }
     const StateID leverWestPowered = BlockStateRegistry::getState(
         BlockIds::LEVER,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_WEST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
         });
-    if (!modelVariantMatches(leverWestPowered, "block/lever_wall_powered", 270, 0)) {
+    if (!modelVariantMatches(leverWestPowered, "block/lever_wall_powered", 90, 0)) {
         return fail("lever west powered state should resolve to the rotated powered wall model");
     }
 

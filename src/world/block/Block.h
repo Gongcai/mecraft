@@ -271,6 +271,11 @@ struct BlockDef {
     std::unordered_map<std::string, NamedTextureAnimation> namedTextureAnimations;
     std::vector<StateTextureRule> stateTextureRules;
     BlockRandomTickRule randomTick;
+    bool isRedstoneConductor = false;      // True when this block can transfer redstone power through its body.
+    bool isRedstonePowerSource = false;    // True when this block can emit redstone power.
+    bool respondsToRedstone = false;       // True when this block changes state after receiving redstone power.
+    uint8_t redstonePowerOutput = 0;       // Fixed output strength in the inclusive range [0, 15].
+    std::string redstoneBehavior;          // Behavior tag used by redstone systems and device-specific logic.
 
     // Convenience: return the TextureArray first layer for a given face (0=top,1=bottom,2=front,3=back,4=left,5=right)
     [[nodiscard]] int getFaceLayer(int face) const {
