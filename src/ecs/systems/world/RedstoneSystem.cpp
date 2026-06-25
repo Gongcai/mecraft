@@ -1392,7 +1392,17 @@ size_t applyTorchStates(World& world,
         excludedSources.insert(position);
         const std::vector<RedstoneSource> inputSources =
             collectActiveSources(world, sourcePositions, &excludedSources);
-        const WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
+        WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
+
+        // Ensure every wire in the work set appears in the power map. Wires not
+        // reached by any source (after excluding this torch) must read as 0 so
+        // the torch is never deactivated by its own signal lingering in stale
+        // wire state from the previous tick. Wires outside the work set are not
+        // touched here: their stored state remains valid because they were not
+        // affected by any change in this evaluation cycle.
+        for (const glm::ivec3& wirePosition : wires) {
+            inputWirePowers.try_emplace(wirePosition, uint8_t{0});
+        }
 
         const StateID updatedState = withLit(
             currentState,
