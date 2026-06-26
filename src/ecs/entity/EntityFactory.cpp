@@ -147,6 +147,13 @@ void EntityFactory::ensureServerPlayerProxy(GameplayRegistry& registry,
     auto& velocityComponent = ensureComponentRef<VelocityComponent>(reg, entity);
     velocityComponent.velocity = velocity;
 
+    auto& physicsBody = ensureComponentRef<PhysicsBodyComponent>(reg, entity);
+    physicsBody.body.position = position;
+    physicsBody.body.velocity = velocity;
+    physicsBody.body.halfExtents = glm::vec3(0.3f, 0.9f, 0.3f);
+    physicsBody.body.colliderOffset = glm::vec3(0.0f, 0.9f, 0.0f);
+    physicsBody.body.eyeOffsetY = 1.62f;
+
     ensureComponent<CameraStateComponent>(reg, entity);
     ensureComponent<BlockActionIntentComponent>(reg, entity);
     ensureComponent<BlockTargetComponent>(reg, entity);

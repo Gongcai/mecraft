@@ -203,6 +203,7 @@ struct ServerSnapshot {
     bool playerHurt = false;
     bool playerRespawned = false;
     bool playerDead = false;
+    bool playerPoseCorrected = false;
 };
 
 // ===========================================================================

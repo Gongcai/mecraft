@@ -1,12 +1,14 @@
 #include "RedstoneSystem.h"
 
 #include "../../GameplayRegistry.h"
+#include "../../components/Components.h"
 #include "../../util/AudioEventBuffer.h"
 #include "../../../game/inventory/ChestInventoryStore.h"
 #include "../../../game/inventory/FurnaceInventoryStore.h"
 #include "../../../item/Item.h"
 #include "../../../world/World.h"
 #include "../../../world/block/Block.h"
+#include "../../../world/block/BlockCollision.h"
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/redstone/RedstoneUpdateQueue.h"
@@ -15,6 +17,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -32,6 +35,9 @@ constexpr uint64_t kWoodButtonPulseTicks = 15;
 constexpr uint64_t kObserverPulseDelayTicks = 1;
 constexpr uint64_t kObserverPulseDurationTicks = 1;
 constexpr size_t kMaxPistonPushBlocks = 12;
+constexpr float kPistonEntityPushEpsilon = 0.001f;
+constexpr float kPistonEntitySupportContactTolerance = 0.02f;
+constexpr int kMaxPistonEntityDepenetrationIterations = 12;
 constexpr glm::ivec3 kDirections[6] = {
     { 1,  0,  0},
     {-1,  0,  0},
@@ -114,6 +120,17 @@ struct PistonMovedBlock {
 
 struct PistonPushPlan {
     std::vector<PistonMovedBlock> movedBlocks;
+};
+
+struct CollisionAabb {
+    glm::vec3 min{0.0f};
+    glm::vec3 max{0.0f};
+};
+
+struct PistonMovementCollision {
+    CollisionAabb finalBox;
+    CollisionAabb sourceBox;
+    CollisionAabb sweptBox;
 };
 
 bool isWireState(const StateID stateId) {
@@ -757,6 +774,294 @@ bool isMovablePistonBlock(const StateID stateId) {
     return def.isSolid;
 }
 
+CollisionAabb physicsBodyAabb(const PhysicsBody& body) {
+    const glm::vec3 center = body.position + body.colliderOffset;
+    return {center - body.halfExtents, center + body.halfExtents};
+}
+
+bool aabbIntersects(const CollisionAabb& lhs, const CollisionAabb& rhs) {
+    return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x &&
+           lhs.min.y < rhs.max.y && lhs.max.y > rhs.min.y &&
+           lhs.min.z < rhs.max.z && lhs.max.z > rhs.min.z;
+}
+
+CollisionAabb translatedAabb(const CollisionAabb& box, const glm::vec3& delta) {
+    return {box.min + delta, box.max + delta};
+}
+
+glm::vec3 minVec3(const glm::vec3& lhs, const glm::vec3& rhs) {
+    return {
+        std::min(lhs.x, rhs.x),
+        std::min(lhs.y, rhs.y),
+        std::min(lhs.z, rhs.z),
+    };
+}
+
+glm::vec3 maxVec3(const glm::vec3& lhs, const glm::vec3& rhs) {
+    return {
+        std::max(lhs.x, rhs.x),
+        std::max(lhs.y, rhs.y),
+        std::max(lhs.z, rhs.z),
+    };
+}
+
+CollisionAabb mergedAabb(const CollisionAabb& lhs, const CollisionAabb& rhs) {
+    return {minVec3(lhs.min, rhs.min), maxVec3(lhs.max, rhs.max)};
+}
+
+float axisTranslationMagnitude(const glm::vec3& delta) {
+    return std::abs(delta.x) + std::abs(delta.y) + std::abs(delta.z);
+}
+
+bool rangesOverlap(const float aMin, const float aMax, const float bMin, const float bMax) {
+    return aMin < bMax && aMax > bMin;
+}
+
+template <typename Fn>
+void forEachWorldCollisionBox(const World& world, const glm::ivec3& blockPosition, Fn&& fn) {
+    const StateID stateId = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+    const glm::vec3 blockOffset(blockPosition);
+    for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
+        fn(CollisionAabb{blockOffset + localBox.min, blockOffset + localBox.max});
+    }
+}
+
+std::vector<PistonMovementCollision> collectPistonMovementCollisions(const World& world,
+                                                                     const glm::ivec3& blockPosition,
+                                                                     const glm::ivec3& movementDirection) {
+    std::vector<PistonMovementCollision> collisions;
+    const glm::vec3 movement(movementDirection);
+    forEachWorldCollisionBox(world, blockPosition, [&](const CollisionAabb& finalBox) {
+        const CollisionAabb sourceBox = translatedAabb(finalBox, -movement);
+        collisions.push_back({finalBox, sourceBox, mergedAabb(finalBox, sourceBox)});
+    });
+    return collisions;
+}
+
+template <typename Fn>
+void forEachIntersectingWorldCollisionBox(const World& world, const CollisionAabb& box, Fn&& fn) {
+    const int minX = static_cast<int>(std::floor(box.min.x));
+    const int maxX = static_cast<int>(std::floor(box.max.x - kPistonEntityPushEpsilon));
+    const int minY = static_cast<int>(std::floor(box.min.y));
+    const int maxY = static_cast<int>(std::floor(box.max.y - kPistonEntityPushEpsilon));
+    const int minZ = static_cast<int>(std::floor(box.min.z));
+    const int maxZ = static_cast<int>(std::floor(box.max.z - kPistonEntityPushEpsilon));
+
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                forEachWorldCollisionBox(world, glm::ivec3(x, y, z), [&](const CollisionAabb& obstacle) {
+                    if (aabbIntersects(box, obstacle)) {
+                        fn(obstacle);
+                    }
+                });
+            }
+        }
+    }
+}
+
+bool worldCollisionIntersects(const World& world, const CollisionAabb& box) {
+    bool intersects = false;
+    forEachIntersectingWorldCollisionBox(world, box, [&](const CollisionAabb&) {
+        intersects = true;
+    });
+    return intersects;
+}
+
+void appendSeparationCandidates(const CollisionAabb& body,
+                                const CollisionAabb& obstacle,
+                                std::vector<glm::vec3>& candidates) {
+    candidates.push_back(glm::vec3(obstacle.max.x - body.min.x + kPistonEntityPushEpsilon, 0.0f, 0.0f));
+    candidates.push_back(glm::vec3(obstacle.min.x - body.max.x - kPistonEntityPushEpsilon, 0.0f, 0.0f));
+    candidates.push_back(glm::vec3(0.0f, obstacle.max.y - body.min.y + kPistonEntityPushEpsilon, 0.0f));
+    candidates.push_back(glm::vec3(0.0f, obstacle.min.y - body.max.y - kPistonEntityPushEpsilon, 0.0f));
+    candidates.push_back(glm::vec3(0.0f, 0.0f, obstacle.max.z - body.min.z + kPistonEntityPushEpsilon));
+    candidates.push_back(glm::vec3(0.0f, 0.0f, obstacle.min.z - body.max.z - kPistonEntityPushEpsilon));
+}
+
+bool findWorldDepenetration(const World& world, const CollisionAabb& body, glm::vec3& outDelta) {
+    std::vector<glm::vec3> candidates;
+    forEachIntersectingWorldCollisionBox(world, body, [&](const CollisionAabb& obstacle) {
+        appendSeparationCandidates(body, obstacle, candidates);
+    });
+
+    if (candidates.empty()) {
+        outDelta = glm::vec3(0.0f);
+        return false;
+    }
+
+    bool foundAny = false;
+    glm::vec3 bestAny(0.0f);
+    float bestAnyMagnitude = std::numeric_limits<float>::max();
+    bool foundValid = false;
+    glm::vec3 bestValid(0.0f);
+    float bestValidMagnitude = std::numeric_limits<float>::max();
+
+    for (const glm::vec3& candidate : candidates) {
+        const float magnitude = axisTranslationMagnitude(candidate);
+        if (magnitude <= 0.0f) {
+            continue;
+        }
+
+        if (magnitude < bestAnyMagnitude) {
+            foundAny = true;
+            bestAny = candidate;
+            bestAnyMagnitude = magnitude;
+        }
+
+        if (magnitude >= bestValidMagnitude) {
+            continue;
+        }
+
+        if (!worldCollisionIntersects(world, translatedAabb(body, candidate))) {
+            foundValid = true;
+            bestValid = candidate;
+            bestValidMagnitude = magnitude;
+        }
+    }
+
+    if (foundValid) {
+        outDelta = bestValid;
+        return true;
+    }
+    if (foundAny) {
+        outDelta = bestAny;
+        return true;
+    }
+
+    outDelta = glm::vec3(0.0f);
+    return false;
+}
+
+void applyPhysicsBodyTranslation(PhysicsBody& body, const glm::vec3& delta) {
+    body.position += delta;
+    if ((delta.x > 0.0f && body.velocity.x < 0.0f) || (delta.x < 0.0f && body.velocity.x > 0.0f)) {
+        body.velocity.x = 0.0f;
+    }
+    if ((delta.y > 0.0f && body.velocity.y < 0.0f) || (delta.y < 0.0f && body.velocity.y > 0.0f)) {
+        body.velocity.y = 0.0f;
+    }
+    if ((delta.z > 0.0f && body.velocity.z < 0.0f) || (delta.z < 0.0f && body.velocity.z > 0.0f)) {
+        body.velocity.z = 0.0f;
+    }
+    if (delta.y > 0.0f) {
+        body.isGrounded = true;
+    }
+}
+
+void depenetratePhysicsBodyFromWorld(const World& world, PhysicsBody& body) {
+    for (int iteration = 0; iteration < kMaxPistonEntityDepenetrationIterations; ++iteration) {
+        glm::vec3 delta(0.0f);
+        if (!findWorldDepenetration(world, physicsBodyAabb(body), delta)) {
+            return;
+        }
+        applyPhysicsBodyTranslation(body, delta);
+    }
+}
+
+bool pushPhysicsBodyFromMovingCollision(PhysicsBody& body,
+                                        const PistonMovementCollision& collision,
+                                        const glm::ivec3& movementDirection) {
+    const CollisionAabb bodyBox = physicsBodyAabb(body);
+    if (!aabbIntersects(bodyBox, collision.sweptBox)) {
+        return false;
+    }
+
+    glm::vec3 delta(0.0f);
+    if (movementDirection.x > 0) {
+        delta.x = collision.finalBox.max.x - bodyBox.min.x + kPistonEntityPushEpsilon;
+    } else if (movementDirection.x < 0) {
+        delta.x = collision.finalBox.min.x - bodyBox.max.x - kPistonEntityPushEpsilon;
+    } else if (movementDirection.y > 0) {
+        delta.y = collision.finalBox.max.y - bodyBox.min.y + kPistonEntityPushEpsilon;
+    } else if (movementDirection.y < 0) {
+        delta.y = collision.finalBox.min.y - bodyBox.max.y - kPistonEntityPushEpsilon;
+    } else if (movementDirection.z > 0) {
+        delta.z = collision.finalBox.max.z - bodyBox.min.z + kPistonEntityPushEpsilon;
+    } else if (movementDirection.z < 0) {
+        delta.z = collision.finalBox.min.z - bodyBox.max.z - kPistonEntityPushEpsilon;
+    } else {
+        throw std::runtime_error("Piston entity push requires a non-zero movement direction");
+    }
+
+    applyPhysicsBodyTranslation(body, delta);
+    return true;
+}
+
+bool physicsBodyRidesMovingCollision(const PhysicsBody& body,
+                                     const PistonMovementCollision& collision,
+                                     const glm::ivec3& movementDirection) {
+    if (movementDirection.y != 0) {
+        return false;
+    }
+
+    const CollisionAabb bodyBox = physicsBodyAabb(body);
+    if (std::abs(bodyBox.min.y - collision.sourceBox.max.y) > kPistonEntitySupportContactTolerance) {
+        return false;
+    }
+
+    return rangesOverlap(bodyBox.min.x, bodyBox.max.x, collision.sourceBox.min.x, collision.sourceBox.max.x) &&
+           rangesOverlap(bodyBox.min.z, bodyBox.max.z, collision.sourceBox.min.z, collision.sourceBox.max.z);
+}
+
+bool carryPhysicsBodyOnMovingCollision(PhysicsBody& body,
+                                       const PistonMovementCollision& collision,
+                                       const glm::ivec3& movementDirection) {
+    if (!physicsBodyRidesMovingCollision(body, collision, movementDirection)) {
+        return false;
+    }
+
+    applyPhysicsBodyTranslation(body, glm::vec3(movementDirection));
+    return true;
+}
+
+void pushEntitiesFromMovedBlock(World& world,
+                                GameplayRegistry* registry,
+                                const glm::ivec3& blockPosition,
+                                const glm::ivec3& movementDirection) {
+    if (registry == nullptr) {
+        return;
+    }
+
+    const std::vector<PistonMovementCollision> collisions =
+        collectPistonMovementCollisions(world, blockPosition, movementDirection);
+    if (collisions.empty()) {
+        return;
+    }
+
+    auto view = registry->registry().view<TransformComponent, PhysicsBodyComponent>();
+    for (const entt::entity entity : view) {
+        auto& transform = view.get<TransformComponent>(entity);
+        auto& physicsBody = view.get<PhysicsBodyComponent>(entity);
+
+        physicsBody.body.position = transform.position;
+        bool moved = false;
+        for (const PistonMovementCollision& collision : collisions) {
+            if (pushPhysicsBodyFromMovingCollision(physicsBody.body, collision, movementDirection)) {
+                moved = true;
+            }
+        }
+        if (!moved) {
+            for (const PistonMovementCollision& collision : collisions) {
+                if (carryPhysicsBodyOnMovingCollision(physicsBody.body, collision, movementDirection)) {
+                    moved = true;
+                    break;
+                }
+            }
+        }
+
+        if (!moved) {
+            continue;
+        }
+
+        depenetratePhysicsBodyFromWorld(world, physicsBody.body);
+        transform.position = physicsBody.body.position;
+        if (auto* velocity = registry->try_get<VelocityComponent>(entity)) {
+            velocity->velocity = physicsBody.body.velocity;
+        }
+    }
+}
+
 bool buildPistonPushPlan(const World& world,
                          const glm::ivec3& pistonPosition,
                          const glm::ivec3& pushDirection,
@@ -782,6 +1087,7 @@ bool buildPistonPushPlan(const World& world,
 }
 
 size_t applyPistonPush(World& world,
+                       GameplayRegistry* registry,
                        const glm::ivec3& pistonPosition,
                        const StateID pistonState,
                        const glm::ivec3& pushDirection,
@@ -796,6 +1102,10 @@ size_t applyPistonPush(World& world,
     const glm::ivec3 frontPosition = pistonPosition + pushDirection;
     world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pistonHeadState(pistonState));
     world.setBlockState(pistonPosition.x, pistonPosition.y, pistonPosition.z, withExtended(pistonState, true));
+    for (const PistonMovedBlock& movedBlock : plan.movedBlocks) {
+        pushEntitiesFromMovedBlock(world, registry, movedBlock.position + pushDirection, pushDirection);
+    }
+    pushEntitiesFromMovedBlock(world, registry, frontPosition, pushDirection);
     return changed + 2;
 }
 
@@ -804,6 +1114,7 @@ bool isStickyPistonState(const StateID stateId) {
 }
 
 size_t applyPistonRetraction(World& world,
+                             GameplayRegistry* registry,
                              const glm::ivec3& pistonPosition,
                              const StateID pistonState,
                              const glm::ivec3& facingDirection) {
@@ -822,6 +1133,7 @@ size_t applyPistonRetraction(World& world,
         if (isMovablePistonBlock(pullState)) {
             world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pullState);
             world.setBlockState(pullPosition.x, pullPosition.y, pullPosition.z, BlockIds::AIR);
+            pushEntitiesFromMovedBlock(world, registry, frontPosition, -facingDirection);
             changed += 2;
         }
     }
@@ -1962,7 +2274,10 @@ size_t applyWirePowers(World& world, const std::vector<glm::ivec3>& wires, const
     return changed;
 }
 
-size_t applyPistonStates(World& world, const std::vector<glm::ivec3>& pistons, const WirePowerMap& wirePowers) {
+size_t applyPistonStates(World& world,
+                         GameplayRegistry* registry,
+                         const std::vector<glm::ivec3>& pistons,
+                         const WirePowerMap& wirePowers) {
     size_t changed = 0;
     for (const glm::ivec3& position : pistons) {
         const StateID currentState = world.getBlockState(position.x, position.y, position.z);
@@ -1983,11 +2298,11 @@ size_t applyPistonStates(World& world, const std::vector<glm::ivec3>& pistons, c
                 continue;
             }
 
-            changed += applyPistonPush(world, position, currentState, facingDirection, pushPlan);
+            changed += applyPistonPush(world, registry, position, currentState, facingDirection, pushPlan);
             continue;
         }
 
-        changed += applyPistonRetraction(world, position, currentState, facingDirection);
+        changed += applyPistonRetraction(world, registry, position, currentState, facingDirection);
     }
     return changed;
 }
@@ -2056,8 +2371,8 @@ size_t applyEdgeTriggeredDeviceStates(World& world,
 }
 
 size_t processWorldWithContext(World& world,
-                               const GameplayRegistry* registry,
-                               GameplayRegistry* eventRegistry,
+                               const GameplayRegistry* readRegistry,
+                               GameplayRegistry* mutableRegistry,
                                const uint64_t redstoneTick,
                                const size_t budget) {
     if (budget == 0) {
@@ -2103,15 +2418,15 @@ size_t processWorldWithContext(World& world,
     appendSources(outputSources, collectPoweredObserverSources(world, workSet.observers));
     const WirePowerMap inputWirePowers = propagateWirePower(world, workSet.wireSet, outputSources);
     const std::vector<ComparatorEvaluation> comparatorEvaluations =
-        evaluateComparators(world, registry, workSet.comparators, inputWirePowers);
+        evaluateComparators(world, readRegistry, workSet.comparators, inputWirePowers);
     appendSources(outputSources, collectComparatorSources(world, comparatorEvaluations));
     const WirePowerMap wirePowers = propagateWirePower(world, workSet.wireSet, outputSources);
     changed += applyWirePowers(world, workSet.wires, wirePowers);
     changed += applyComparatorStates(world, comparatorEvaluations);
-    changed += applyPistonStates(world, workSet.pistons, wirePowers);
+    changed += applyPistonStates(world, mutableRegistry, workSet.pistons, wirePowers);
     scheduleRepeaterEvaluationUpdates(world, redstoneTick, workSet.repeaters, wirePowers);
     changed += applyRedstoneControlledStates(world, workSet.redstoneControlledBlocks, wirePowers);
-    changed += applyEdgeTriggeredDeviceStates(world, eventRegistry, workSet.edgeTriggeredDevices, wirePowers);
+    changed += applyEdgeTriggeredDeviceStates(world, mutableRegistry, workSet.edgeTriggeredDevices, wirePowers);
     return changed;
 }
 
@@ -2140,6 +2455,13 @@ size_t RedstoneSystem::processWorld(World& world,
                                     const GameplayRegistry& registry,
                                     const size_t budget) {
     return processWorldWithContext(world, &registry, nullptr, redstoneTick, budget);
+}
+
+size_t RedstoneSystem::processWorld(World& world,
+                                    const uint64_t redstoneTick,
+                                    GameplayRegistry& registry,
+                                    const size_t budget) {
+    return processWorldWithContext(world, &registry, &registry, redstoneTick, budget);
 }
 
 } // namespace ecs

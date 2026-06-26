@@ -1,12 +1,16 @@
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
 #include <vector>
 
 #include <glm/vec3.hpp>
 
+#include "../src/ecs/GameplayRegistry.h"
+#include "../src/ecs/components/Components.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
 #include "../src/world/World.h"
 #include "../src/world/block/Block.h"
+#include "../src/world/block/BlockCollision.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/block/PistonBlock.h"
 #include "../src/world/block/PropIndices.h"
@@ -26,11 +30,12 @@ void loadOriginChunks(World& world) {
 }
 
 void preparePistonArea(World& world, const int y) {
-    for (int x = -1; x <= 18; ++x) {
+    for (int x = -3; x <= 18; ++x) {
         for (int z = -1; z <= 1; ++z) {
             world.setBlock(x, y - 1, z, BlockIds::STONE);
             world.setBlock(x, y, z, BlockIds::AIR);
             world.setBlock(x, y + 1, z, BlockIds::AIR);
+            world.setBlock(x, y + 2, z, BlockIds::AIR);
         }
     }
 }
@@ -44,13 +49,17 @@ StateID leverState(const bool powered) {
         });
 }
 
-StateID pistonState(const BlockID blockId, const bool extended) {
+StateID pistonState(const BlockID blockId, const uint16_t facing, const bool extended) {
     return BlockStateRegistry::getState(
         blockId,
         std::vector<std::pair<uint16_t, uint16_t>>{
-            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::FACING, facing},
             {PropIndices::EXTENDED, extended ? PropIndices::EXTENDED_TRUE : PropIndices::EXTENDED_FALSE}
         });
+}
+
+StateID pistonState(const BlockID blockId, const bool extended) {
+    return pistonState(blockId, PropIndices::FACING_EAST, extended);
 }
 
 bool pistonExtended(const World& world, const int x, const int y, const int z) {
@@ -62,15 +71,61 @@ bool matchingPistonHead(const World& world,
                         const int x,
                         const int y,
                         const int z,
+                        const uint16_t expectedFacing,
                         const uint16_t expectedType) {
     const StateID state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getBlockId(state) == BlockIds::PISTON_HEAD &&
-           BlockStateRegistry::getPropertyIndex(state, PropIndices::FACING) == PropIndices::FACING_EAST &&
+           BlockStateRegistry::getPropertyIndex(state, PropIndices::FACING) == expectedFacing &&
            BlockStateRegistry::getPropertyIndex(state, PropIndices::TYPE) == expectedType;
+}
+
+bool matchingPistonHead(const World& world,
+                        const int x,
+                        const int y,
+                        const int z,
+                        const uint16_t expectedType) {
+    return matchingPistonHead(world, x, y, z, PropIndices::FACING_EAST, expectedType);
 }
 
 bool blockIs(const World& world, const int x, const int y, const int z, const BlockID blockId) {
     return BlockStateRegistry::getBlockId(world.getBlockState(x, y, z)) == blockId;
+}
+
+entt::entity createPhysicsPlayer(ecs::GameplayRegistry& registry, const glm::vec3& feetPosition) {
+    entt::registry& raw = registry.registry();
+    const entt::entity player = raw.create();
+    auto& transform = raw.emplace<ecs::TransformComponent>(player);
+    transform.position = feetPosition;
+    transform.eyeHeight = 1.62f;
+    auto& physics = raw.emplace<ecs::PhysicsBodyComponent>(player);
+    physics.body.position = feetPosition;
+    physics.body.halfExtents = glm::vec3(0.3f, 0.9f, 0.3f);
+    physics.body.colliderOffset = glm::vec3(0.0f, 0.9f, 0.0f);
+    return player;
+}
+
+bool physicsBodyOverlapsWorld(const World& world, const ecs::PhysicsBodyComponent& physics) {
+    const glm::vec3 center = physics.body.position + physics.body.colliderOffset;
+    const glm::vec3 queryMin = center - physics.body.halfExtents;
+    const glm::vec3 queryMax = center + physics.body.halfExtents;
+    const int minX = static_cast<int>(std::floor(queryMin.x));
+    const int maxX = static_cast<int>(std::floor(queryMax.x - 0.001f));
+    const int minY = static_cast<int>(std::floor(queryMin.y));
+    const int maxY = static_cast<int>(std::floor(queryMax.y - 0.001f));
+    const int minZ = static_cast<int>(std::floor(queryMin.z));
+    const int maxZ = static_cast<int>(std::floor(queryMax.z - 0.001f));
+
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                const StateID state = world.getBlockState(x, y, z);
+                if (BlockCollision::intersects(state, glm::ivec3(x, y, z), queryMin, queryMax)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -240,6 +295,137 @@ int main() {
             !blockIs(world, 14, y, 0, BlockIds::STONE) ||
             world.getBlockState(15, y, 0) != BlockIds::AIR) {
             return fail("piston should not push more than twelve movable blocks");
+        }
+    }
+
+    {
+        const int y = 40;
+        preparePistonArea(world, y);
+        world.setBlockState(0, y, 0, leverState(true));
+        world.setBlockState(1, y, 0, pistonState(BlockIds::PISTON, false));
+
+        ecs::GameplayRegistry registry;
+        const entt::entity player = createPhysicsPlayer(
+            registry,
+            glm::vec3(2.5f, static_cast<float>(y), 0.5f));
+
+        ecs::RedstoneSystem::processWorld(world, 11, registry);
+        const auto& transform = registry.get<ecs::TransformComponent>(player);
+        const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
+        if (!pistonExtended(world, 1, y, 0) ||
+            !matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
+            transform.position.x <= 3.29f ||
+            physicsBodyOverlapsWorld(world, physics)) {
+            return fail("extending piston head should push an intersecting player out of the head block");
+        }
+    }
+
+    {
+        const int y = 36;
+        preparePistonArea(world, y);
+        world.setBlockState(0, y, 0, leverState(true));
+        world.setBlockState(1, y, 0, pistonState(BlockIds::PISTON, false));
+        world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+
+        ecs::GameplayRegistry registry;
+        const entt::entity player = createPhysicsPlayer(
+            registry,
+            glm::vec3(3.5f, static_cast<float>(y), 0.5f));
+
+        ecs::RedstoneSystem::processWorld(world, 12, registry);
+        const auto& transform = registry.get<ecs::TransformComponent>(player);
+        const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
+        if (!blockIs(world, 3, y, 0, BlockIds::STONE) ||
+            transform.position.x <= 4.29f ||
+            physicsBodyOverlapsWorld(world, physics)) {
+            return fail("piston-pushed block should push an intersecting player out of the target block");
+        }
+    }
+
+    {
+        const int y = 28;
+        preparePistonArea(world, y);
+        world.setBlockState(0, y, 0, leverState(true));
+        world.setBlockState(1, y, 0, pistonState(BlockIds::PISTON, false));
+
+        ecs::GameplayRegistry registry;
+        const entt::entity player = createPhysicsPlayer(
+            registry,
+            glm::vec3(2.1f, static_cast<float>(y), 0.05f));
+
+        ecs::RedstoneSystem::processWorld(world, 14, registry);
+        const auto& transform = registry.get<ecs::TransformComponent>(player);
+        const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
+        if (!matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
+            transform.position.x <= 3.29f ||
+            physicsBodyOverlapsWorld(world, physics)) {
+            return fail("extending piston head should push a player from the full swept head path");
+        }
+    }
+
+    {
+        const int y = 24;
+        preparePistonArea(world, y);
+        world.setBlockState(0, y, 0, leverState(true));
+        world.setBlockState(1, y, 0, pistonState(BlockIds::PISTON, false));
+        world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+
+        ecs::GameplayRegistry registry;
+        const entt::entity player = createPhysicsPlayer(
+            registry,
+            glm::vec3(2.5f, static_cast<float>(y + 1), 0.5f));
+
+        ecs::RedstoneSystem::processWorld(world, 15, registry);
+        const auto& transform = registry.get<ecs::TransformComponent>(player);
+        const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
+        if (!blockIs(world, 3, y, 0, BlockIds::STONE) ||
+            transform.position.x <= 3.29f ||
+            physicsBodyOverlapsWorld(world, physics)) {
+            return fail("horizontal piston-pushed block should carry a player standing on it");
+        }
+    }
+
+    {
+        const int y = 32;
+        preparePistonArea(world, y);
+        world.setBlockState(-2, y, 0, leverState(true));
+        world.setBlockState(-1, y, 0, pistonState(BlockIds::PISTON, PropIndices::FACING_EAST, false));
+        world.setBlockState(0, y, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(-2, y + 1, 0, leverState(true));
+        world.setBlockState(-1, y + 1, 0, pistonState(BlockIds::PISTON, PropIndices::FACING_EAST, false));
+        world.setBlockState(0, y + 1, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(5, y, 0, leverState(true));
+        world.setBlockState(4, y, 0, pistonState(BlockIds::PISTON, PropIndices::FACING_WEST, false));
+        world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+        world.setBlockState(5, y + 1, 0, leverState(true));
+        world.setBlockState(4, y + 1, 0, pistonState(BlockIds::PISTON, PropIndices::FACING_WEST, false));
+        world.setBlockState(3, y + 1, 0, BlockStateRegistry::getDefaultState(BlockIds::STONE));
+
+        ecs::GameplayRegistry registry;
+        const entt::entity player = createPhysicsPlayer(
+            registry,
+            glm::vec3(1.5f, static_cast<float>(y), 0.5f));
+
+        ecs::RedstoneSystem::processWorld(world, 16, registry);
+        const auto& transform = registry.get<ecs::TransformComponent>(player);
+        const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
+        const bool pushedOutsideDoorDepth = transform.position.z <= -0.29f || transform.position.z >= 1.29f ||
+                                            transform.position.x <= 0.69f || transform.position.x >= 3.31f;
+        if (!matchingPistonHead(world, 0, y, 0, PropIndices::FACING_EAST, PropIndices::TYPE_NORMAL) ||
+            !matchingPistonHead(world, 0, y + 1, 0, PropIndices::FACING_EAST, PropIndices::TYPE_NORMAL) ||
+            !matchingPistonHead(world, 3, y, 0, PropIndices::FACING_WEST, PropIndices::TYPE_NORMAL) ||
+            !matchingPistonHead(world, 3, y + 1, 0, PropIndices::FACING_WEST, PropIndices::TYPE_NORMAL) ||
+            !blockIs(world, 1, y, 0, BlockIds::STONE) ||
+            !blockIs(world, 1, y + 1, 0, BlockIds::STONE) ||
+            !blockIs(world, 2, y, 0, BlockIds::STONE) ||
+            !blockIs(world, 2, y + 1, 0, BlockIds::STONE)) {
+            return fail("two-high opposing piston door should close all pushed blocks");
+        }
+        if (!pushedOutsideDoorDepth) {
+            return fail("closing two-high opposing piston door should move the player outside the closed doorway depth");
+        }
+        if (physicsBodyOverlapsWorld(world, physics)) {
+            return fail("closing two-high opposing piston door should not leave the player intersecting block collision");
         }
     }
 

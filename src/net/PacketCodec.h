@@ -136,6 +136,7 @@ public:
         pushU8(buf, msg.playerHurt ? 1 : 0);
         pushU8(buf, msg.playerRespawned ? 1 : 0);
         pushU8(buf, msg.playerDead ? 1 : 0);
+        pushU8(buf, msg.playerPoseCorrected ? 1 : 0);
         return buf;
     }
 
@@ -492,16 +493,20 @@ public:
         out.playerHurt = false;
         out.playerRespawned = false;
         out.playerDead = false;
-        if (size >= offset + 5) {
+        out.playerPoseCorrected = false;
+        if (size >= 37) {
             out.playerHealth = readU16(data, offset);
             out.playerMaxHealth = readU16(data, offset);
             out.playerHurt = readU8(data, offset) != 0;
-            if (size >= offset + 1) {
-                out.playerRespawned = readU8(data, offset) != 0;
-            }
-            if (size >= offset + 1) {
-                out.playerDead = readU8(data, offset) != 0;
-            }
+        }
+        if (size >= 38) {
+            out.playerRespawned = readU8(data, offset) != 0;
+        }
+        if (size >= 39) {
+            out.playerDead = readU8(data, offset) != 0;
+        }
+        if (size >= 40) {
+            out.playerPoseCorrected = readU8(data, offset) != 0;
         }
         return true;
     }

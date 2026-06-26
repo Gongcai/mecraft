@@ -320,7 +320,7 @@ void GameClient::handleServerSnapshot(const net::ServerSnapshot& snapshot) {
         health.current = static_cast<int>(snapshot.playerHealth);
         health.max = static_cast<int>(snapshot.playerMaxHealth);
 
-        if (snapshot.playerRespawned) {
+        if (snapshot.playerRespawned || snapshot.playerPoseCorrected) {
             if (auto* transform = m_ecsRegistry->try_get<ecs::TransformComponent>(player)) {
                 transform->position = snapshot.authoritativePosition;
             }

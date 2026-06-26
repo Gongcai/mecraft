@@ -44,6 +44,8 @@ constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
 constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
 constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
+constexpr float kPlayerPoseSyncEpsilonSq = 0.000001f;
+constexpr float kPlayerPoseCorrectionAcceptDistanceSq = 0.1225f;
 
 BlockID furnaceBlockId() {
     return BlockRegistry::findByName("minecraft:furnace");
@@ -55,6 +57,15 @@ int blockToChunkCoord(const int value) {
 
 int64_t blockUpdateChunkKey(const net::BlockUpdateEntry& update) {
     return World::chunkKey(blockToChunkCoord(update.x), blockToChunkCoord(update.z));
+}
+
+float distanceSquared(const glm::vec3& a, const glm::vec3& b) {
+    const glm::vec3 delta = a - b;
+    return delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+}
+
+bool poseValueChanged(const glm::vec3& a, const glm::vec3& b) {
+    return distanceSquared(a, b) > kPlayerPoseSyncEpsilonSq;
 }
 
 std::string playerName(const net::ClientId id) {
@@ -281,6 +292,7 @@ void GameServer::destroyOwnedPlayerProxy(ConnectedClient& client) {
     client.ecsPlayerEntity = entt::null;
     client.awaitingRespawn = false;
     client.deathDropsSpawned = false;
+    client.playerPoseCorrectionPending = false;
     client.respawnSnapshotTicksRemaining = 0;
     client.hasLastInventorySnapshot = false;
     client.lastInventorySnapshotSlots.clear();
@@ -389,6 +401,7 @@ void GameServer::respawnPlayer(ConnectedClient& client) {
     auto& reg = *m_ecsRegistry;
     client.awaitingRespawn = false;
     client.deathDropsSpawned = false;
+    client.playerPoseCorrectionPending = false;
     client.respawnSnapshotTicksRemaining = kPlayerRespawnSnapshotRepeatTicks;
     client.lastPosition = m_spawnPosition;
     client.lastVelocity = glm::vec3(0.0f);
@@ -527,6 +540,47 @@ void GameServer::syncOwnedPlayerProxies() {
         auto& blockIntent = reg.get<ecs::BlockActionIntentComponent>(client.ecsPlayerEntity);
         blockIntent.wantsBreak = hasInputAction(client.pendingInputActions, net::ClientInputActions::Attack);
         blockIntent.wantsPlace = hasInputAction(client.pendingInputActions, net::ClientInputActions::UseItem);
+    }
+}
+
+void GameServer::syncClientsFromPlayerProxies() {
+    if (m_ecsRegistry == nullptr) {
+        return;
+    }
+
+    auto& reg = *m_ecsRegistry;
+    for (auto& client : m_clients) {
+        const bool active = client.receivedHello &&
+                            client.transport &&
+                            client.transport->hasActiveRemote();
+        if (!active || client.awaitingRespawn || client.respawnSnapshotTicksRemaining > 0) {
+            continue;
+        }
+
+        const entt::entity playerEntity = resolvePlayerEntity(client);
+        if (playerEntity == entt::null || !reg.valid(playerEntity)) {
+            continue;
+        }
+
+        const auto* transform = reg.try_get<ecs::TransformComponent>(playerEntity);
+        if (transform == nullptr) {
+            continue;
+        }
+
+        glm::vec3 velocity = client.lastVelocity;
+        if (const auto* physicsBody = reg.try_get<ecs::PhysicsBodyComponent>(playerEntity)) {
+            velocity = physicsBody->body.velocity;
+        } else if (const auto* velocityComponent = reg.try_get<ecs::VelocityComponent>(playerEntity)) {
+            velocity = velocityComponent->velocity;
+        }
+
+        const bool poseChanged = poseValueChanged(client.lastPosition, transform->position) ||
+                                 poseValueChanged(client.lastVelocity, velocity);
+        client.lastPosition = transform->position;
+        client.lastVelocity = velocity;
+        if (poseChanged) {
+            client.playerPoseCorrectionPending = true;
+        }
     }
 }
 
@@ -724,7 +778,11 @@ void GameServer::tick(float dt) {
     // participate in this tick's world/light update before snapshots are sent.
     processClientMessages();
     cleanupDisconnectedClients();
+    if (usingOwnedEcsRegistry()) {
+        syncOwnedPlayerProxies();
+    }
     tickWorldSystems();
+    syncClientsFromPlayerProxies();
 
     // Periodic autosave
     if (m_saveManager) {
@@ -753,8 +811,10 @@ void GameServer::tick(float dt) {
     }
     m_world.update(loadCenter, dt);
     tickServerEcs(dt);
+    syncClientsFromPlayerProxies();
     if (!usingOwnedEcsRegistry()) {
         updatePlayerLifecycle(dt);
+        syncClientsFromPlayerProxies();
     }
 
     // Send new chunks to clients
@@ -878,8 +938,15 @@ void GameServer::processClientMessages() {
                     client.selectedHotbarSlot = static_cast<uint8_t>(
                         std::clamp(static_cast<int>(input.selectedHotbarSlot), 0, Inventory::HOTBAR_SIZE - 1));
                     if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
-                        client.lastPosition = input.playerPosition;
-                        client.lastVelocity = input.playerVelocity;
+                        const bool acceptsReportedPose =
+                            !client.playerPoseCorrectionPending ||
+                            distanceSquared(input.playerPosition, client.lastPosition) <=
+                                kPlayerPoseCorrectionAcceptDistanceSq;
+                        if (acceptsReportedPose) {
+                            client.lastPosition = input.playerPosition;
+                            client.lastVelocity = input.playerVelocity;
+                            client.playerPoseCorrectionPending = false;
+                        }
                         client.pendingInputActions |= input.actions;
                     }
                 }
@@ -1604,6 +1671,7 @@ void GameServer::sendSnapshotsToClients() {
         snapshot.authoritativeVelocity = client.lastVelocity;
         snapshot.playerRespawned = client.respawnSnapshotTicksRemaining > 0;
         snapshot.playerDead = client.awaitingRespawn;
+        snapshot.playerPoseCorrected = client.playerPoseCorrectionPending;
 
         const entt::entity playerEntity = resolvePlayerEntity(client);
 

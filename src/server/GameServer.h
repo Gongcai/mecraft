@@ -41,6 +41,7 @@ struct ConnectedClient {
     bool isAdmin = false;
     bool awaitingRespawn = false;
     bool deathDropsSpawned = false;
+    bool playerPoseCorrectionPending = false;
     int respawnSnapshotTicksRemaining = 0;
     bool hasLastInventorySnapshot = false;
     uint8_t lastInventorySnapshotSelected = 0;
@@ -140,6 +141,7 @@ private:
     [[nodiscard]] bool usingOwnedEcsRegistry() const;
     void tickServerEcs(float dt);
     void syncOwnedPlayerProxies();
+    void syncClientsFromPlayerProxies();
     void updatePlayerLifecycle(float dt);
     void respawnPlayer(ConnectedClient& client);
     void dropPlayerInventory(ConnectedClient& client);

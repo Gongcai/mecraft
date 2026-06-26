@@ -105,6 +105,24 @@ static StateID targetState(const uint8_t power) {
     return BlockStateRegistry::getState(BlockIds::TARGET, PropIndices::POWER, kPowerValues[power]);
 }
 
+static StateID leverState(const bool powered) {
+    return BlockStateRegistry::getState(
+        BlockIds::LEVER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_FLOOR},
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
+        });
+}
+
+static StateID pistonState(const BlockID blockId, const uint16_t facing, const bool extended) {
+    return BlockStateRegistry::getState(
+        blockId,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, facing},
+            {PropIndices::EXTENDED, extended ? PropIndices::EXTENDED_TRUE : PropIndices::EXTENDED_FALSE}
+        });
+}
+
 static void require(const bool condition, const char* message) {
     if (!condition) {
         std::fprintf(stderr, "[FAIL] %s\n", message);
@@ -338,14 +356,38 @@ static void testClientAppliesPlayerHealthSnapshot() {
     require(raw.get<ecs::HealthComponent>(player).current == 0, "client should apply dead player health");
     require(client.isPlayerDead(), "client should retain dead state from server snapshot");
 
+    net::Packet poseCorrectionPacket;
+    poseCorrectionPacket.type = net::MessageType::ServerSnapshot;
+    snapshot.serverTick = 14;
+    snapshot.authoritativePosition = glm::vec3(8.0f, 65.0f, -4.0f);
+    snapshot.authoritativeVelocity = glm::vec3(0.0f, 0.5f, 0.0f);
+    snapshot.playerHealth = 20;
+    snapshot.playerDead = false;
+    snapshot.playerRespawned = false;
+    snapshot.playerPoseCorrected = true;
+    poseCorrectionPacket.inProcessPayload = snapshot;
+    transportPtr->pushIncoming(std::move(poseCorrectionPacket));
+
+    client.receiveMessages();
+
+    require(raw.get<ecs::TransformComponent>(player).position == snapshot.authoritativePosition,
+            "client should apply server-corrected player position");
+    require(raw.get<ecs::VelocityComponent>(player).velocity == snapshot.authoritativeVelocity,
+            "client should apply server-corrected player velocity");
+    require(raw.get<ecs::PhysicsBodyComponent>(player).body.position == snapshot.authoritativePosition,
+            "client should apply server-corrected physics body position");
+    require(raw.get<ecs::PhysicsBodyComponent>(player).body.velocity == snapshot.authoritativeVelocity,
+            "client should apply server-corrected physics body velocity");
+
     net::Packet respawnPacket;
     respawnPacket.type = net::MessageType::ServerSnapshot;
-    snapshot.serverTick = 14;
+    snapshot.serverTick = 15;
     snapshot.authoritativePosition = glm::vec3(2.0f, 64.0f, -3.0f);
     snapshot.authoritativeVelocity = glm::vec3(0.0f);
     snapshot.playerHealth = 20;
     snapshot.playerRespawned = true;
     snapshot.playerDead = false;
+    snapshot.playerPoseCorrected = false;
     respawnPacket.inProcessPayload = snapshot;
     transportPtr->pushIncoming(std::move(respawnPacket));
 
@@ -1250,6 +1292,109 @@ static void testOwnedServerZombieAttackSyncsPlayerHealth() {
     require(sawDamagedSnapshot, "zombie attack should lower player health in server snapshot");
     require(sawHurtEvent, "zombie attack should send a player hurt event");
     std::printf("[PASS] testOwnedServerZombieAttackSyncsPlayerHealth\n");
+}
+
+static void testOwnedServerPistonPushCorrectsPlayerPose() {
+    ServerHarness harness;
+    World& world = harness.server.world();
+
+    const int y = 80;
+    for (int i = 0; i < 8 && !world.isChunkLoadedForBlock(6, y, 0); ++i) {
+        world.update(glm::vec3(6.5f, static_cast<float>(y), 0.5f));
+    }
+    require(world.isChunkLoadedForBlock(6, y, 0), "piston correction test chunk should be loaded");
+
+    for (int x = 3; x <= 10; ++x) {
+        for (int z = 0; z <= 1; ++z) {
+            world.setBlock(x, y - 1, z, BlockIds::STONE);
+            world.setBlock(x, y, z, BlockIds::AIR);
+            world.setBlock(x, y + 1, z, BlockIds::AIR);
+            world.setBlock(x, y + 2, z, BlockIds::AIR);
+        }
+    }
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    const glm::vec3 intersectingPlayerPosition(6.5f, static_cast<float>(y), 0.5f);
+    net::Packet inputPacket;
+    inputPacket.type = net::MessageType::ClientInput;
+    net::ClientInput input;
+    input.sequence = 1;
+    input.playerPosition = intersectingPlayerPosition;
+    input.playerVelocity = glm::vec3(0.0f);
+    input.yaw = 0.0f;
+    input.pitch = 0.0f;
+    inputPacket.inProcessPayload = input;
+    clientPtr->pushIncoming(std::move(inputPacket));
+
+    world.setBlockState(4, y, 0, leverState(true));
+    world.setBlockState(5, y, 0, pistonState(BlockIds::PISTON, PropIndices::FACING_EAST, false));
+
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    bool sawPistonPoseCorrection = false;
+    glm::vec3 correctedPosition(0.0f);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type != net::MessageType::ServerSnapshot || !packet.inProcessPayload.has_value()) {
+            continue;
+        }
+
+        const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
+        if (snapshot.playerPoseCorrected) {
+            sawPistonPoseCorrection = true;
+            correctedPosition = snapshot.authoritativePosition;
+        }
+    }
+
+    require(sawPistonPoseCorrection, "piston push should emit an authoritative player pose correction");
+    require(correctedPosition.x > 7.29f, "piston push correction should move the player outside the piston head");
+
+    net::Packet staleInputPacket;
+    staleInputPacket.type = net::MessageType::ClientInput;
+    input.sequence = 2;
+    input.playerPosition = intersectingPlayerPosition;
+    staleInputPacket.inProcessPayload = input;
+    clientPtr->pushIncoming(std::move(staleInputPacket));
+
+    bool repeatedCorrection = false;
+    glm::vec3 repeatedPosition(0.0f);
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type != net::MessageType::ServerSnapshot || !packet.inProcessPayload.has_value()) {
+            continue;
+        }
+
+        const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
+        if (snapshot.playerPoseCorrected) {
+            repeatedCorrection = true;
+            repeatedPosition = snapshot.authoritativePosition;
+        }
+    }
+
+    require(repeatedCorrection, "server should keep piston pose correction pending after stale player input");
+    require(distanceSq(repeatedPosition, correctedPosition) < 0.01f,
+            "stale player input should not overwrite the corrected piston push position");
+    std::printf("[PASS] testOwnedServerPistonPushCorrectsPlayerPose\n");
 }
 
 static void testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest() {
@@ -3100,14 +3245,16 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     snapshot.playerHurt = true;
     snapshot.playerRespawned = true;
     snapshot.playerDead = true;
+    snapshot.playerPoseCorrected = true;
 
     const auto encoded = net::PacketCodec::encodeServerSnapshot(snapshot);
-    require(encoded.size() == 39, "server snapshot codec should include health, respawn, and dead payload bytes");
+    require(encoded.size() == 40, "server snapshot codec should include health, respawn, dead, and pose correction bytes");
     require(encoded[32] == 7 && encoded[33] == 0, "server snapshot codec should write player health after base payload");
     require(encoded[34] == 20 && encoded[35] == 0, "server snapshot codec should write max health after health");
     require(encoded[36] == 1, "server snapshot codec should write hurt flag after health values");
     require(encoded[37] == 1, "server snapshot codec should write respawn flag after hurt flag");
     require(encoded[38] == 1, "server snapshot codec should write dead flag after respawn flag");
+    require(encoded[39] == 1, "server snapshot codec should write pose correction flag after dead flag");
     net::ServerSnapshot decoded;
     require(net::PacketCodec::decodeServerSnapshot(encoded.data(), encoded.size(), decoded),
             "server snapshot codec should decode health payload");
@@ -3118,6 +3265,14 @@ static void testServerSnapshotCodecCarriesPlayerHealth() {
     require(decoded.playerHurt, "server snapshot codec should keep hurt event");
     require(decoded.playerRespawned, "server snapshot codec should keep respawn event");
     require(decoded.playerDead, "server snapshot codec should keep dead state");
+    require(decoded.playerPoseCorrected, "server snapshot codec should keep pose correction state");
+
+    net::ServerSnapshot legacyDeadDecoded;
+    require(net::PacketCodec::decodeServerSnapshot(encoded.data(), 39, legacyDeadDecoded),
+            "server snapshot codec should decode legacy dead payload");
+    require(legacyDeadDecoded.playerDead, "legacy dead payload should keep dead state");
+    require(!legacyDeadDecoded.playerPoseCorrected,
+            "legacy dead payload should default pose correction state off");
 
     net::ServerSnapshot legacyDecoded;
     require(net::PacketCodec::decodeServerSnapshot(encoded.data(), 38, legacyDecoded),
@@ -3650,6 +3805,7 @@ int main() {
     testSummonCreeperUsesOwnedServerEcs();
     testOwnedServerZombiePursuesPlayer();
     testOwnedServerZombieAttackSyncsPlayerHealth();
+    testOwnedServerPistonPushCorrectsPlayerPose();
     testOwnedServerPlayerDiesDropsItemsAndRespawnsOnRequest();
     testOwnedServerPlayerMeleeKillsZombieAndDropsItem();
     testOwnedServerMobSnapshotCarriesHealthAndHurt();
