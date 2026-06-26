@@ -44,14 +44,14 @@ int main() {
         ChestInventoryStore store;
         const glm::ivec3 pos(3, 64, -7);
         ChestInventory& chest = store.getOrCreate(pos);
-        chest.setSlotItem(0, ItemIds::APPLE, 4);
-        chest.setSlotItem(7, ItemIds::COAL, 2);
+        chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 4);
+        chest.setSlotItem(7, ItemRegistry::requireIdByName("minecraft:coal"), 2);
 
         const auto contents = store.extractAndErase(pos);
-        if (contents[0].itemId != ItemIds::APPLE || contents[0].count != 4) {
+        if (contents[0].itemId != ItemRegistry::requireIdByName("minecraft:apple") || contents[0].count != 4) {
             return fail("extractAndErase should preserve the first stored stack");
         }
-        if (contents[7].itemId != ItemIds::COAL || contents[7].count != 2) {
+        if (contents[7].itemId != ItemRegistry::requireIdByName("minecraft:coal") || contents[7].count != 2) {
             return fail("extractAndErase should preserve later stored stacks");
         }
         if (store.find(pos) != nullptr) {
@@ -67,9 +67,9 @@ int main() {
     }
 
     const glm::ivec3 chestPos(0, 122, 0);
-    const StateID chestState = BlockStateRegistry::getDefaultState(BlockIds::CHEST);
+    const StateID chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
     world.setBlock(chestPos.x, chestPos.y, chestPos.z, chestState);
-    if (BlockStateRegistry::getBlockId(world.getBlock(chestPos.x, chestPos.y, chestPos.z)) != BlockIds::CHEST) {
+    if (BlockStateRegistry::getBlockId(world.getBlock(chestPos.x, chestPos.y, chestPos.z)) != BlockRegistry::requireIdByName("minecraft:chest")) {
         return fail("test setup should place a chest block in the world");
     }
 
@@ -80,8 +80,8 @@ int main() {
 
     ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
     ChestInventory& chest = store.getOrCreate(chestPos);
-    chest.setSlotItem(0, ItemIds::APPLE, 5);
-    chest.setSlotItem(1, ItemIds::COAL, 3);
+    chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 5);
+    chest.setSlotItem(1, ItemRegistry::requireIdByName("minecraft:coal"), 3);
 
     const entt::entity player = registry.create();
     registry.emplace<ecs::LocalPlayerTag>(player);
@@ -112,19 +112,19 @@ int main() {
     ecs::ItemSpawnSystem itemSpawnSystem;
     itemSpawnSystem.update(ctx);
 
-    if (world.getBlock(chestPos.x, chestPos.y, chestPos.z) != BlockIds::AIR) {
+    if (world.getBlock(chestPos.x, chestPos.y, chestPos.z) != RUNTIME_ID_NULL) {
         return fail("breaking a chest should remove the block from the world");
     }
     if (store.find(chestPos) != nullptr) {
         return fail("breaking a chest should erase its stored inventory");
     }
-    if (countDroppedItems(registry, ItemIds::APPLE) != 5) {
+    if (countDroppedItems(registry, ItemRegistry::requireIdByName("minecraft:apple")) != 5) {
         return fail("breaking a chest should drop stored apple stacks");
     }
-    if (countDroppedItems(registry, ItemIds::COAL) != 3) {
+    if (countDroppedItems(registry, ItemRegistry::requireIdByName("minecraft:coal")) != 3) {
         return fail("breaking a chest should drop stored coal stacks");
     }
-    if (countDroppedItems(registry, ItemRegistry::fromBlock(BlockIds::CHEST)) != 1) {
+    if (countDroppedItems(registry, ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:chest"))) != 1) {
         return fail("survival chest break should still drop the chest item itself");
     }
 

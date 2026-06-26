@@ -88,7 +88,7 @@ int main() {
     }
 
     // Case 2: moving into a wall should stop horizontal movement.
-    world.setBlock(2, surfaceY + 1, 0, BlockIds::STONE);
+    world.setBlock(2, surfaceY + 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
 
     PhysicsBody runner;
     runner.position = glm::vec3(0.5f, expectedGroundY, 0.5f);
@@ -113,12 +113,12 @@ int main() {
     for (int x = -2; x <= 8; ++x) {
         for (int y = surfaceY + 1; y <= stripY + 2; ++y) {
             for (int z = 13; z <= 15; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
     for (int x = 0; x <= 5; ++x) {
-        world.setBlock(x, stripY, 14, BlockIds::STONE);
+        world.setBlock(x, stripY, 14, BlockRegistry::requireIdByName("minecraft:stone"));
     }
 
     const float stripTopY = static_cast<float>(stripY) + 1.0f + runner.halfExtents.y;
@@ -144,12 +144,12 @@ int main() {
     for (int x = -2; x <= 40; ++x) {
         for (int y = surfaceY + 1; y <= speedLaneY + 2; ++y) {
             for (int z = 16; z <= 18; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
     for (int x = 0; x <= 35; ++x) {
-        world.setBlock(x, speedLaneY, 17, BlockIds::STONE);
+        world.setBlock(x, speedLaneY, 17, BlockRegistry::requireIdByName("minecraft:stone"));
     }
 
     const float speedLaneTopY = static_cast<float>(speedLaneY) + 1.0f + runner.halfExtents.y;
@@ -190,13 +190,13 @@ int main() {
     for (int x = -5; x <= 20; ++x) {
         for (int y = surfaceY + 1; y <= platformY + 2; ++y) {
             for (int z = 5; z <= 12; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
-    world.setBlock(0, platformY, 8, BlockIds::STONE);
-    world.setBlock(1, platformY, 8, BlockIds::STONE);
-    world.setBlock(2, platformY, 8, BlockIds::STONE);
+    world.setBlock(0, platformY, 8, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(1, platformY, 8, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(2, platformY, 8, BlockRegistry::requireIdByName("minecraft:stone"));
 
     const float platformTopY = static_cast<float>(platformY) + 1.0f + runner.halfExtents.y;
 
@@ -242,7 +242,7 @@ int main() {
 
     // Case 6: model blocks should collide at their model element height.
     const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
-    if (oakSlab == BlockIds::AIR) {
+    if (oakSlab == RUNTIME_ID_NULL) {
         return fail("oak_slab should be registered for model collision physics");
     }
     const StateID bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
@@ -256,7 +256,7 @@ int main() {
     for (int x = -2; x <= 2; ++x) {
         for (int y = surfaceY + 1; y <= slabY + 4; ++y) {
             for (int z = 20; z <= 24; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
@@ -276,7 +276,7 @@ int main() {
         return fail("bottom slab collision should settle at half-block height");
     }
 
-    world.setBlock(0, slabY, 21, BlockIds::AIR);
+    world.setBlock(0, slabY, 21, RUNTIME_ID_NULL);
     world.setBlock(0, slabY, 23, topSlab);
     PhysicsBody topSlabBody;
     topSlabBody.position = glm::vec3(0.5f, static_cast<float>(slabY) + 4.0f, 23.5f);
@@ -297,12 +297,12 @@ int main() {
     for (int x = -2; x <= 14; ++x) {
         for (int y = surfaceY + 1; y <= stepLaneY + 4; ++y) {
             for (int z = 25; z <= 29; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
     for (int x = -1; x <= 13; ++x) {
-        world.setBlock(x, stepLaneY, 26, BlockIds::STONE);
+        world.setBlock(x, stepLaneY, 26, BlockRegistry::requireIdByName("minecraft:stone"));
     }
     for (int x = 1; x <= 12; ++x) {
         world.setBlock(x, stepLaneY + 1, 26, bottomSlab);
@@ -329,19 +329,19 @@ int main() {
     }
 
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
-    if (oakStairs == BlockIds::AIR) {
+    if (oakStairs == RUNTIME_ID_NULL) {
         return fail("oak_stairs should be registered for stair step physics");
     }
     const StateID eastStairs = BlockStateRegistry::getDefaultState(oakStairs);
     for (int x = -2; x <= 14; ++x) {
         for (int y = surfaceY + 1; y <= stepLaneY + 4; ++y) {
             for (int z = 30; z <= 34; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
     for (int x = -1; x <= 13; ++x) {
-        world.setBlock(x, stepLaneY, 31, BlockIds::STONE);
+        world.setBlock(x, stepLaneY, 31, BlockRegistry::requireIdByName("minecraft:stone"));
     }
     for (int x = 1; x <= 12; ++x) {
         world.setBlock(x, stepLaneY + 1, 31, eastStairs);
@@ -370,18 +370,18 @@ int main() {
     for (int x = -2; x <= 2; ++x) {
         for (int y = surfaceY + 1; y <= doorLowerY + 3; ++y) {
             for (int z = doorZ - 2; z <= doorZ + 3; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
     for (int x = -2; x <= 2; ++x) {
         for (int z = doorZ - 2; z <= doorZ + 3; ++z) {
-            world.setBlock(x, doorFloorY, z, BlockIds::STONE);
+            world.setBlock(x, doorFloorY, z, BlockRegistry::requireIdByName("minecraft:stone"));
         }
     }
 
     const StateID openDoorLower = BlockStateRegistry::getState(
-        BlockIds::OAK_DOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::HALF, PropIndices::HALF_LOWER},
@@ -390,7 +390,7 @@ int main() {
             {PropIndices::POWERED, PropIndices::POWERED_FALSE}
         });
     const StateID openDoorUpper = BlockStateRegistry::getState(
-        BlockIds::OAK_DOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::HALF, PropIndices::HALF_UPPER},
@@ -441,13 +441,13 @@ int main() {
     for (int x = -2; x <= 4; ++x) {
         for (int y = surfaceY + 1; y <= flowY + 2; ++y) {
             for (int z = -1; z <= 1; ++z) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
     for (int x = -2; x <= 4; ++x) {
         for (int z = -1; z <= 1; ++z) {
-            world.setBlock(x, flowY - 1, z, BlockIds::STONE);
+            world.setBlock(x, flowY - 1, z, BlockRegistry::requireIdByName("minecraft:stone"));
         }
     }
     world.setBlock(0, flowY, 0, FluidState::makeWater(0, false));

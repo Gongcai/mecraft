@@ -16,7 +16,7 @@ int fail(const char* message) {
 
 StateID leverState(const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::LEVER,
+        BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_NORTH},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
@@ -46,18 +46,18 @@ StateID openableState(const BlockID blockId, const bool open, const bool powered
 int main() {
     BlockRegistry::init(nullptr);
 
-    if (!game::redstone::isControlBlock(BlockIds::LEVER) ||
-        !game::redstone::isControlBlock(BlockIds::STONE_BUTTON) ||
-        !game::redstone::isControlBlock(BlockIds::OAK_BUTTON) ||
-        !game::redstone::isControlBlock(BlockIds::REPEATER) ||
-        !game::redstone::isControlBlock(BlockIds::COMPARATOR) ||
-        !game::redstone::isControlBlock(BlockIds::OAK_DOOR) ||
-        !game::redstone::isControlBlock(BlockIds::OAK_TRAPDOOR) ||
-        !game::redstone::isControlBlock(BlockIds::OAK_FENCE_GATE)) {
+    if (!game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:lever")) ||
+        !game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:stone_button")) ||
+        !game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:oak_button")) ||
+        !game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:repeater")) ||
+        !game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:comparator")) ||
+        !game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:oak_door")) ||
+        !game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:oak_trapdoor")) ||
+        !game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:oak_fence_gate"))) {
         return fail("lever, buttons, repeater, comparator, and openable blocks should be right-click redstone controls");
     }
-    if (game::redstone::isControlBlock(BlockIds::REDSTONE_LAMP) ||
-        game::redstone::isControlBlock(BlockIds::OAK_PLANKS)) {
+    if (game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:redstone_lamp")) ||
+        game::redstone::isControlBlock(BlockRegistry::requireIdByName("minecraft:oak_planks"))) {
         return fail("non-control blocks should not be treated as direct right-click controls");
     }
 
@@ -84,7 +84,7 @@ int main() {
         return fail("unpowered lever state should resolve to the unpowered model variant");
     }
 
-    const StateID stoneButtonOff = buttonState(BlockIds::STONE_BUTTON, false);
+    const StateID stoneButtonOff = buttonState(BlockRegistry::requireIdByName("minecraft:stone_button"), false);
     const StateID stoneButtonOn = game::redstone::nextControlState(stoneButtonOff);
     if (BlockStateRegistry::getPropertyIndex(stoneButtonOn, PropIndices::POWERED) != PropIndices::POWERED_TRUE) {
         return fail("right-clicking an unpowered stone button should switch powered to true");
@@ -100,7 +100,7 @@ int main() {
     }
 
     const StateID repeaterDelay1 = BlockStateRegistry::getState(
-        BlockIds::REPEATER,
+        BlockRegistry::requireIdByName("minecraft:repeater"),
         PropIndices::DELAY,
         PropIndices::DELAY_1);
     const StateID repeaterDelay2 = game::redstone::nextControlState(repeaterDelay1);
@@ -109,7 +109,7 @@ int main() {
     }
 
     const StateID comparatorCompare = BlockStateRegistry::getState(
-        BlockIds::COMPARATOR,
+        BlockRegistry::requireIdByName("minecraft:comparator"),
         PropIndices::MODE,
         PropIndices::MODE_COMPARE);
     const StateID comparatorSubtract = game::redstone::nextControlState(comparatorCompare);
@@ -117,7 +117,7 @@ int main() {
         return fail("right-clicking a comparator should toggle subtract mode");
     }
 
-    const StateID trapdoorClosedPowered = openableState(BlockIds::OAK_TRAPDOOR, false, true);
+    const StateID trapdoorClosedPowered = openableState(BlockRegistry::requireIdByName("minecraft:oak_trapdoor"), false, true);
     const StateID trapdoorOpenPowered = game::redstone::nextControlState(trapdoorClosedPowered);
     if (BlockStateRegistry::getPropertyIndex(trapdoorOpenPowered, PropIndices::OPEN) != PropIndices::OPEN_TRUE ||
         BlockStateRegistry::getPropertyIndex(trapdoorOpenPowered, PropIndices::POWERED) != PropIndices::POWERED_TRUE) {
@@ -129,14 +129,14 @@ int main() {
         return fail("right-clicking an open openable block should close it without changing powered");
     }
 
-    const StateID fenceGateClosed = openableState(BlockIds::OAK_FENCE_GATE, false, false);
+    const StateID fenceGateClosed = openableState(BlockRegistry::requireIdByName("minecraft:oak_fence_gate"), false, false);
     const StateID fenceGateOpen = game::redstone::nextControlState(fenceGateClosed);
     if (BlockStateRegistry::getPropertyIndex(fenceGateOpen, PropIndices::OPEN) != PropIndices::OPEN_TRUE ||
         BlockStateRegistry::getPropertyIndex(fenceGateOpen, PropIndices::POWERED) != PropIndices::POWERED_FALSE) {
         return fail("right-clicking a fence gate should use the generic open property interaction");
     }
 
-    const StateID doorClosed = BlockStateRegistry::getDefaultState(BlockIds::OAK_DOOR);
+    const StateID doorClosed = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:oak_door"));
     const StateID doorOpen = game::redstone::nextControlState(doorClosed);
     if (BlockStateRegistry::getPropertyIndex(doorOpen, PropIndices::OPEN) != PropIndices::OPEN_TRUE ||
         BlockStateRegistry::getPropertyIndex(doorOpen, PropIndices::POWERED) != PropIndices::POWERED_FALSE ||
@@ -147,7 +147,7 @@ int main() {
     bool unsupportedThrew = false;
     try {
         static_cast<void>(game::redstone::nextControlState(
-            BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP)));
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp"))));
     } catch (const std::exception&) {
         unsupportedThrew = true;
     }

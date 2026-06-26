@@ -81,7 +81,7 @@ size_t countStatesWithPropertyValue(World& world,
 
 StateID poweredPlateState(const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::OAK_PRESSURE_PLATE,
+        BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"),
         PropIndices::POWERED,
         powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE);
 }
@@ -108,7 +108,7 @@ int main() {
     }
 
     const BlockID farmland = BlockRegistry::findByName("farmland");
-    if (farmland == BlockIds::AIR) {
+    if (farmland == RUNTIME_ID_NULL) {
         return fail("farmland block should be registered");
     }
     const uint16_t moisture = BlockStateRegistry::getPropertyNameIndex("moisture");
@@ -166,18 +166,18 @@ int main() {
 
     world.neighborUpdateQueue().clear();
     const glm::ivec3 sandPos(0, 140, 0);
-    world.setBlock(sandPos.x, sandPos.y - 1, sandPos.z, BlockIds::AIR);
-    world.setBlock(sandPos.x, sandPos.y, sandPos.z, BlockIds::SAND);
+    world.setBlock(sandPos.x, sandPos.y - 1, sandPos.z, RUNTIME_ID_NULL);
+    world.setBlock(sandPos.x, sandPos.y, sandPos.z, BlockRegistry::requireIdByName("minecraft:sand"));
     const size_t queuedSupportUpdates = world.neighborUpdateQueue().size();
     ecs::BlockSupportSystem blockSupportSystem;
     blockSupportSystem.update(clientCtx);
     if (world.neighborUpdateQueue().size() != queuedSupportUpdates ||
-        world.getBlock(sandPos.x, sandPos.y, sandPos.z) != BlockIds::SAND) {
+        world.getBlock(sandPos.x, sandPos.y, sandPos.z) != BlockRegistry::requireIdByName("minecraft:sand")) {
         return fail("client block support tick must not drain authoritative support updates");
     }
 
     if (ecs::BlockSupportSystem::processWorldQueue(world, registry, 1024) == 0 ||
-        world.getBlock(sandPos.x, sandPos.y, sandPos.z) != BlockIds::AIR) {
+        world.getBlock(sandPos.x, sandPos.y, sandPos.z) != RUNTIME_ID_NULL) {
         return fail("server block support tick should clear unsupported gravity blocks");
     }
     if (!registry.ctxHas<ecs::FallingBlockSpawnEventBus>() ||

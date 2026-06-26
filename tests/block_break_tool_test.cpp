@@ -33,7 +33,7 @@ int main() {
     }
 
     const glm::ivec3 stonePos(0, 122, 0);
-    world.setBlock(stonePos.x, stonePos.y, stonePos.z, BlockIds::STONE);
+    world.setBlock(stonePos.x, stonePos.y, stonePos.z, BlockRegistry::requireIdByName("minecraft:stone"));
 
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
@@ -62,7 +62,7 @@ int main() {
 
     ecs::InventoryDataComponent inventoryData;
     ItemStack pickaxe;
-    pickaxe.itemId = ItemIds::IRON_PICKAXE;
+    pickaxe.itemId = ItemRegistry::requireIdByName("minecraft:iron_pickaxe");
     pickaxe.count = 1;
     pickaxe.durability = 2;
     inventoryData.inventory.setSlotStack(0, pickaxe);
@@ -76,12 +76,12 @@ int main() {
     ecs::BlockBreakSystem breakSystem;
     breakSystem.update(ctx);
 
-    if (world.getBlock(stonePos.x, stonePos.y, stonePos.z) != BlockIds::AIR) {
+    if (world.getBlock(stonePos.x, stonePos.y, stonePos.z) != RUNTIME_ID_NULL) {
         return fail("iron pickaxe should break stone within the accelerated duration");
     }
 
     const ItemStack held = registry.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0);
-    if (held.itemId != ItemIds::IRON_PICKAXE || held.count != 1 || held.durability != 1) {
+    if (held.itemId != ItemRegistry::requireIdByName("minecraft:iron_pickaxe") || held.count != 1 || held.durability != 1) {
         return fail("successful block break should consume one point of tool durability");
     }
 

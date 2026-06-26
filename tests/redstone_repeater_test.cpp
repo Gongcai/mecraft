@@ -29,18 +29,18 @@ void loadOriginChunks(World& world) {
 
 void prepareFlatTestLine(World& world, const int y) {
     for (int x = -1; x <= 5; ++x) {
-        world.setBlock(x, y - 1, 0, BlockIds::STONE);
-        world.setBlock(x, y, 0, BlockIds::AIR);
-        world.setBlock(x, y + 1, 0, BlockIds::AIR);
+        world.setBlock(x, y - 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(x, y, 0, RUNTIME_ID_NULL);
+        world.setBlock(x, y + 1, 0, RUNTIME_ID_NULL);
     }
-    world.setBlock(2, y - 1, 1, BlockIds::STONE);
-    world.setBlock(2, y, 1, BlockIds::AIR);
-    world.setBlock(2, y + 1, 1, BlockIds::AIR);
+    world.setBlock(2, y - 1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(2, y, 1, RUNTIME_ID_NULL);
+    world.setBlock(2, y + 1, 1, RUNTIME_ID_NULL);
 }
 
 StateID leverState(const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::LEVER,
+        BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
@@ -49,7 +49,7 @@ StateID leverState(const bool powered) {
 
 StateID repeaterState(const uint16_t delay, const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::REPEATER,
+        BlockRegistry::requireIdByName("minecraft:repeater"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
@@ -59,7 +59,7 @@ StateID repeaterState(const uint16_t delay, const bool powered) {
 
 StateID repeaterState(const uint16_t facing, const uint16_t delay, const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::REPEATER,
+        BlockRegistry::requireIdByName("minecraft:repeater"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
@@ -69,7 +69,7 @@ StateID repeaterState(const uint16_t facing, const uint16_t delay, const bool po
 
 StateID comparatorState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::COMPARATOR,
+        BlockRegistry::requireIdByName("minecraft:comparator"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
@@ -135,11 +135,11 @@ int main() {
     const int y = 96;
     prepareFlatTestLine(world, y);
     world.setBlockState(0, y, 0, leverState(true));
-    world.setBlockState(1, y, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+    world.setBlockState(1, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
     world.setBlockState(2, y, 0, repeaterState(PropIndices::DELAY_2, false));
-    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
-    world.setBlockState(4, y, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
-    world.setBlockState(2, y, 1, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(4, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+    world.setBlockState(2, y, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
     ecs::RedstoneSystem::processWorld(world, 0);
     if (wirePower(world, 1, y, 0) != 15 ||
@@ -191,13 +191,13 @@ int main() {
         const int lockY = 80;
         prepareFlatTestLine(world, lockY);
         world.setBlockState(0, lockY, 0, leverState(true));
-        world.setBlockState(1, lockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(1, lockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, lockY, 0, repeaterState(PropIndices::DELAY_1, false));
-        world.setBlockState(3, lockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
-        world.setBlockState(4, lockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+        world.setBlockState(3, lockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(4, lockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
-        world.setBlock(2, lockY - 1, 2, BlockIds::STONE);
-        world.setBlock(2, lockY, 2, BlockIds::AIR);
+        world.setBlock(2, lockY - 1, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(2, lockY, 2, RUNTIME_ID_NULL);
         world.setBlockState(2, lockY, 1, repeaterState(PropIndices::FACING_NORTH, PropIndices::DELAY_1, false));
         world.setBlockState(2, lockY, 2, leverState(false));
 
@@ -253,12 +253,12 @@ int main() {
         const int comparatorLockY = 72;
         prepareFlatTestLine(world, comparatorLockY);
         world.setBlockState(0, comparatorLockY, 0, leverState(true));
-        world.setBlockState(1, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(1, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, comparatorLockY, 0, repeaterState(PropIndices::DELAY_1, false));
-        world.setBlockState(3, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(3, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
-        world.setBlock(2, comparatorLockY - 1, 2, BlockIds::STONE);
-        world.setBlock(2, comparatorLockY, 2, BlockIds::AIR);
+        world.setBlock(2, comparatorLockY - 1, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(2, comparatorLockY, 2, RUNTIME_ID_NULL);
         world.setBlockState(2, comparatorLockY, 1, comparatorState(PropIndices::FACING_NORTH, false));
         world.setBlockState(2, comparatorLockY, 2, leverState(false));
 
@@ -282,12 +282,12 @@ int main() {
         const int wireSideY = 64;
         prepareFlatTestLine(world, wireSideY);
         world.setBlockState(0, wireSideY, 0, leverState(true));
-        world.setBlockState(1, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(1, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
         world.setBlockState(2, wireSideY, 0, repeaterState(PropIndices::DELAY_1, false));
-        world.setBlockState(3, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(3, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
         world.setBlockState(2, wireSideY, 2, leverState(true));
-        world.setBlockState(2, wireSideY, 1, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, wireSideY, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
 
         ecs::RedstoneSystem::processWorld(world, 40);
         ecs::RedstoneSystem::processWorld(world, 41);

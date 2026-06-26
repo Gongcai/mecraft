@@ -30,14 +30,14 @@ void loadChunks(World& world) {
 int main() {
     BlockRegistry::init(nullptr);
 
-    const StateID floorTorch = BlockStateRegistry::getDefaultState(BlockIds::TORCH);
+    const StateID floorTorch = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch"));
     const BlockSelectionBox floorBox = BlockSelection::getBox(floorTorch);
     if (floorBox.min.x >= 0.45f || floorBox.max.x <= 0.55f || floorBox.max.y >= 0.7f) {
         return fail("floor torch selection box should be a short narrow core");
     }
 
     const StateID northTorch = BlockStateRegistry::getState(
-        BlockIds::TORCH,
+        BlockRegistry::requireIdByName("minecraft:torch"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_NORTH}
         });
@@ -47,7 +47,7 @@ int main() {
     }
 
     const StateID southTorch = BlockStateRegistry::getState(
-        BlockIds::TORCH,
+        BlockRegistry::requireIdByName("minecraft:torch"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_SOUTH}
         });
@@ -57,7 +57,7 @@ int main() {
     }
 
     const StateID eastTorch = BlockStateRegistry::getState(
-        BlockIds::TORCH,
+        BlockRegistry::requireIdByName("minecraft:torch"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST}
         });
@@ -67,7 +67,7 @@ int main() {
     }
 
     const StateID westTorch = BlockStateRegistry::getState(
-        BlockIds::TORCH,
+        BlockRegistry::requireIdByName("minecraft:torch"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_WEST}
         });
@@ -76,14 +76,14 @@ int main() {
         return fail("west wall torch selection box should mirror the east wall model");
     }
 
-    const BlockSelectionBox crossBox = BlockSelection::getBox(BlockIds::TALL_GRASS);
+    const BlockSelectionBox crossBox = BlockSelection::getBox(BlockRegistry::requireIdByName("minecraft:tall_grass"));
     if (crossBox.min.x <= 0.1f || crossBox.max.x >= 0.9f ||
         crossBox.min.z <= 0.1f || crossBox.max.z >= 0.9f) {
         return fail("cross-shaped plants should not use a full horizontal voxel selection box");
     }
 
     const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
-    if (oakSlab == BlockIds::AIR) {
+    if (oakSlab == RUNTIME_ID_NULL) {
         return fail("oak_slab should be registered for selection tests");
     }
     const StateID bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
@@ -129,7 +129,7 @@ int main() {
     }
 
     const BlockID oakVerticalSlab = BlockRegistry::findByName("oak_vertical_slab");
-    if (oakVerticalSlab == BlockIds::AIR) {
+    if (oakVerticalSlab == RUNTIME_ID_NULL) {
         return fail("oak_vertical_slab should be registered for selection tests");
     }
     const StateID eastVerticalSlab = BlockStateRegistry::getState(
@@ -157,7 +157,7 @@ int main() {
     }
 
     const BlockID vine = BlockRegistry::findByName("vine");
-    if (vine == BlockIds::AIR) {
+    if (vine == RUNTIME_ID_NULL) {
         return fail("vine should be registered for face plane selection tests");
     }
     const StateID northVine = BlockStateRegistry::getState(
@@ -186,7 +186,7 @@ int main() {
         return fail("face plane blocks should not create movement collision");
     }
 
-    const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE);
+    const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     const BlockSelectionBox redstoneWireBox = BlockSelection::getBox(redstoneWireDefault);
     if (redstoneWireBox.min.y != 0.0f || redstoneWireBox.max.y != 0.0625f ||
         redstoneWireBox.min.x != 0.0f || redstoneWireBox.max.x != 1.0f ||
@@ -198,7 +198,7 @@ int main() {
     }
 
     const BlockID pinkPetals = BlockRegistry::findByName("pink_petals");
-    if (pinkPetals == BlockIds::AIR) {
+    if (pinkPetals == RUNTIME_ID_NULL) {
         return fail("pink_petals should be registered for face plane selection tests");
     }
     const StateID floorPetals = BlockStateRegistry::getDefaultState(pinkPetals);
@@ -213,7 +213,7 @@ int main() {
     }
 
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
-    if (oakStairs == BlockIds::AIR) {
+    if (oakStairs == RUNTIME_ID_NULL) {
         return fail("oak_stairs should be registered for collision tests");
     }
     const StateID defaultStairs = BlockStateRegistry::getDefaultState(oakStairs);
@@ -241,7 +241,7 @@ int main() {
         return fail("north-facing stairs collision should place the upper half on the north side");
     }
 
-    const StateID oakDoorClosedEast = BlockStateRegistry::getDefaultState(BlockIds::OAK_DOOR);
+    const StateID oakDoorClosedEast = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:oak_door"));
     const BlockSelectionBox oakDoorClosedBox = BlockSelection::getBox(oakDoorClosedEast);
     if (oakDoorClosedBox.min.x != 0.0f || oakDoorClosedBox.max.x != 0.1875f ||
         oakDoorClosedBox.min.y != 0.0f || oakDoorClosedBox.max.y != 1.0f ||
@@ -250,7 +250,7 @@ int main() {
     }
 
     const StateID oakDoorOpenLeftEast = BlockStateRegistry::getState(
-        BlockIds::OAK_DOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::HALF, PropIndices::HALF_LOWER},
@@ -275,7 +275,7 @@ int main() {
     }
 
     const StateID oakDoorOpenRightEast = BlockStateRegistry::getState(
-        BlockIds::OAK_DOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::HALF, PropIndices::HALF_LOWER},
@@ -294,7 +294,7 @@ int main() {
     }
 
     const BlockID cauldron = BlockRegistry::findByName("cauldron");
-    if (cauldron == BlockIds::AIR) {
+    if (cauldron == RUNTIME_ID_NULL) {
         return fail("cauldron should be registered for collision tests");
     }
     const StateID defaultCauldron = BlockStateRegistry::getDefaultState(cauldron);
@@ -327,7 +327,7 @@ int main() {
     }
 
     const BlockID oakFence = BlockRegistry::findByName("oak_fence");
-    if (oakFence == BlockIds::AIR) {
+    if (oakFence == RUNTIME_ID_NULL) {
         return fail("oak_fence should be registered for collision tests");
     }
     const StateID oakFenceEastWest = BlockStateRegistry::getState(
@@ -350,7 +350,7 @@ int main() {
     }
 
     const BlockID cobblestoneWall = BlockRegistry::findByName("cobblestone_wall");
-    if (cobblestoneWall == BlockIds::AIR) {
+    if (cobblestoneWall == RUNTIME_ID_NULL) {
         return fail("cobblestone_wall should be registered for collision tests");
     }
     const StateID cobblestoneWallNorthSouth = BlockStateRegistry::getState(
@@ -373,7 +373,7 @@ int main() {
     }
 
     const BlockID anvil = BlockRegistry::findByName("anvil");
-    if (anvil == BlockIds::AIR) {
+    if (anvil == RUNTIME_ID_NULL) {
         return fail("anvil should be registered for collision tests");
     }
     const StateID anvilEast = BlockStateRegistry::getState(
@@ -404,7 +404,7 @@ int main() {
     }
 
     const BlockID redBed = BlockRegistry::findByName("red_bed");
-    if (redBed == BlockIds::AIR) {
+    if (redBed == RUNTIME_ID_NULL) {
         return fail("red_bed should be registered for selection tests");
     }
     const StateID redBedFoot = BlockStateRegistry::getDefaultState(redBed);
@@ -431,7 +431,7 @@ int main() {
     }
 
     const StateID poweredTarget = BlockStateRegistry::getState(
-        BlockIds::TARGET,
+        BlockRegistry::requireIdByName("minecraft:target"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::POWER, PropIndices::POWER_15}
         });
@@ -455,8 +455,8 @@ int main() {
     loadChunks(world);
 
     const int baseY = world.getSurfaceY(0, 0) + 2;
-    world.setBlockState(12, baseY, 0, BlockIds::AIR);
-    world.setBlockState(13, baseY, 0, BlockIds::AIR);
+    world.setBlockState(12, baseY, 0, RUNTIME_ID_NULL);
+    world.setBlockState(13, baseY, 0, RUNTIME_ID_NULL);
     const BedBlockLogic::BedPlacement bedPlacement =
         BedBlockLogic::resolvePlacement(world, glm::ivec3(12, baseY, 0), redBedFoot);
     if (!bedPlacement.valid ||
@@ -472,8 +472,8 @@ int main() {
     std::vector<glm::ivec3> removedBedPositions;
     const BlockID removedBed = BedBlockLogic::removeBed(world, glm::ivec3(13, baseY, 0), &removedBedPositions);
     if (removedBed != redBed ||
-        world.getBlockState(12, baseY, 0) != BlockIds::AIR ||
-        world.getBlockState(13, baseY, 0) != BlockIds::AIR ||
+        world.getBlockState(12, baseY, 0) != RUNTIME_ID_NULL ||
+        world.getBlockState(13, baseY, 0) != RUNTIME_ID_NULL ||
         removedBedPositions.size() != 2) {
         return fail("breaking either red_bed half should remove both bed states");
     }
@@ -488,26 +488,26 @@ int main() {
             });
     };
 
-    world.setBlockState(2, baseY, 0, BlockIds::AIR);
-    world.setBlockState(3, baseY, 0, BlockIds::AIR);
+    world.setBlockState(2, baseY, 0, RUNTIME_ID_NULL);
+    world.setBlockState(3, baseY, 0, RUNTIME_ID_NULL);
     world.setBlockState(2, baseY, 0, oakFence);
     StateID placedFence = world.getBlockState(2, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedFence, PropIndices::EAST) != PropIndices::EAST_FALSE) {
         return fail("isolated oak fence should start disconnected");
     }
-    world.setBlockState(3, baseY, 0, BlockIds::STONE);
+    world.setBlockState(3, baseY, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     placedFence = world.getBlockState(2, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedFence, PropIndices::EAST) != PropIndices::EAST_TRUE) {
         return fail("oak fence should connect to a solid east neighbor after placement");
     }
-    world.setBlockState(3, baseY, 0, BlockIds::AIR);
+    world.setBlockState(3, baseY, 0, RUNTIME_ID_NULL);
     placedFence = world.getBlockState(2, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedFence, PropIndices::EAST) != PropIndices::EAST_FALSE) {
         return fail("oak fence should disconnect when the east neighbor is removed");
     }
 
-    world.setBlockState(4, baseY, 0, BlockIds::AIR);
-    world.setBlockState(4, baseY, -1, BlockIds::AIR);
+    world.setBlockState(4, baseY, 0, RUNTIME_ID_NULL);
+    world.setBlockState(4, baseY, -1, RUNTIME_ID_NULL);
     world.setBlockState(4, baseY, 0, cobblestoneWall);
     StateID placedWall = world.getBlockState(4, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_FALSE) {
@@ -518,37 +518,37 @@ int main() {
     if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_TRUE) {
         return fail("cobblestone wall should connect to a north fence neighbor after placement");
     }
-    world.setBlockState(4, baseY, -1, BlockIds::AIR);
+    world.setBlockState(4, baseY, -1, RUNTIME_ID_NULL);
     placedWall = world.getBlockState(4, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedWall, PropIndices::NORTH) != PropIndices::NORTH_FALSE) {
         return fail("cobblestone wall should disconnect when the north neighbor is removed");
     }
 
     const int wireY = baseY + 1;
-    world.setBlockState(10, baseY, 2, BlockIds::STONE);
-    world.setBlockState(11, baseY, 2, BlockIds::STONE);
-    world.setBlockState(10, wireY, 2, BlockIds::AIR);
-    world.setBlockState(11, wireY, 2, BlockIds::AIR);
-    world.setBlockState(10, wireY, 2, BlockIds::REDSTONE_WIRE);
+    world.setBlockState(10, baseY, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlockState(11, baseY, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlockState(10, wireY, 2, RUNTIME_ID_NULL);
+    world.setBlockState(11, wireY, 2, RUNTIME_ID_NULL);
+    world.setBlockState(10, wireY, 2, BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     StateID placedWire = world.getBlockState(10, wireY, 2);
     if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_NONE) {
         return fail("isolated redstone_wire should start visually disconnected");
     }
-    world.setBlockState(11, wireY, 2, BlockIds::REDSTONE_WIRE);
+    world.setBlockState(11, wireY, 2, BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     placedWire = world.getBlockState(10, wireY, 2);
     const StateID eastWire = world.getBlockState(11, wireY, 2);
     if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_SIDE ||
         BlockStateRegistry::getPropertyIndex(eastWire, PropIndices::WEST) != PropIndices::WEST_SIDE) {
         return fail("adjacent redstone_wire blocks should refresh visual connection states");
     }
-    world.setBlockState(11, wireY, 2, BlockIds::AIR);
+    world.setBlockState(11, wireY, 2, RUNTIME_ID_NULL);
     placedWire = world.getBlockState(10, wireY, 2);
     if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_NONE) {
         return fail("redstone_wire should disconnect visually when its neighbor is removed");
     }
 
-    world.setBlockState(6, baseY, 0, BlockIds::AIR);
-    world.setBlockState(7, baseY, 0, BlockIds::AIR);
+    world.setBlockState(6, baseY, 0, RUNTIME_ID_NULL);
+    world.setBlockState(7, baseY, 0, RUNTIME_ID_NULL);
     world.setBlockState(6, baseY, 0, makeBottomStairs(PropIndices::FACING_EAST));
     StateID placedStairs = world.getBlockState(6, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedStairs, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
@@ -559,14 +559,14 @@ int main() {
     if (BlockStateRegistry::getPropertyIndex(placedStairs, PropIndices::SHAPE) != PropIndices::SHAPE_OUTER_RIGHT) {
         return fail("front perpendicular stairs should update the source stair to an outer-right corner");
     }
-    world.setBlockState(7, baseY, 0, BlockIds::AIR);
+    world.setBlockState(7, baseY, 0, RUNTIME_ID_NULL);
     placedStairs = world.getBlockState(6, baseY, 0);
     if (BlockStateRegistry::getPropertyIndex(placedStairs, PropIndices::SHAPE) != PropIndices::SHAPE_STRAIGHT) {
         return fail("stairs should return to shape=straight when the corner neighbor is removed");
     }
 
-    world.setBlockState(8, baseY, 0, BlockIds::AIR);
-    world.setBlockState(9, baseY, 0, BlockIds::AIR);
+    world.setBlockState(8, baseY, 0, RUNTIME_ID_NULL);
+    world.setBlockState(9, baseY, 0, RUNTIME_ID_NULL);
     world.setBlockState(9, baseY, 0, makeBottomStairs(PropIndices::FACING_EAST));
     world.setBlockState(8, baseY, 0, makeBottomStairs(PropIndices::FACING_NORTH));
     placedStairs = world.getBlockState(9, baseY, 0);
@@ -575,9 +575,9 @@ int main() {
     }
 
     for (int y = baseY; y <= baseY + 4; ++y) {
-        world.setBlockState(0, y, 0, BlockIds::AIR);
+        world.setBlockState(0, y, 0, RUNTIME_ID_NULL);
     }
-    world.setBlockState(0, baseY, 0, BlockIds::STONE);
+    world.setBlockState(0, baseY, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     world.setBlockState(0, baseY + 1, 0, floorTorch);
 
     const PhysicsInfo missTorchRay(

@@ -8,24 +8,13 @@
 
 #include "../world/block/Block.h"
 #include "../engine/registry/NamespacedId.h"
-#include "../game/content/BuiltinIds.h"
 #include "../engine/registry/IdRegistry.h"
 
 // ItemID is now a separate RuntimeId from BlockID
 using ItemID = RuntimeId;
 
-// Item ID constants
-namespace ItemIds {
-    extern ItemID AIR;
-#define MECRAFT_DECLARE_PURE_ITEM_ID(symbol, path) extern ItemID symbol;
-    MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(MECRAFT_DECLARE_PURE_ITEM_ID)
-#undef MECRAFT_DECLARE_PURE_ITEM_ID
-
-    void init();  // Called after ItemRegistry::init()
-}
-
 struct ItemStack {
-    ItemID itemId = 0;  // Will be set to RUNTIME_ID_NULL after init
+    ItemID itemId = 0;  // AIR is RuntimeId 0.
     uint16_t count = 0;
     uint16_t durability = 0;
 

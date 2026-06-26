@@ -71,7 +71,7 @@ int main() {
     constexpr int y = 80;
     constexpr int z = 8;
     for (int x = 14; x <= 17; ++x) {
-        world.setBlock(x, y, z, BlockIds::STONE);
+        world.setBlock(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
     }
     tickWorld(world, playerPos, 20);
 
@@ -79,7 +79,7 @@ int main() {
 
     constexpr int torchX = 14;
     constexpr int torchY = y + 1;
-    world.setBlock(torchX, torchY, z, BlockIds::TORCH);
+    world.setBlock(torchX, torchY, z, BlockRegistry::requireIdByName("minecraft:torch"));
     tickWorld(world, playerPos, 2);
 
     const auto& chunksAfterPlace = world.getActiveChunks();
@@ -105,7 +105,7 @@ int main() {
 
     clearChunkDirtyFlags(world);
 
-    world.setBlock(torchX, torchY, z, BlockIds::AIR);
+    world.setBlock(torchX, torchY, z, RUNTIME_ID_NULL);
     tickWorld(world, playerPos, 2);
 
     const bool clearedInNeighbor = waitUntil(world, playerPos, 180, [&]() {

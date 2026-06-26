@@ -135,7 +135,7 @@ static void testExistingEntityStaysLocallyAuthoritative() {
     registry.emplace<ecs::EntityNetIdComponent>(drop, ecs::EntityNetId{55});
     registry.emplace<ecs::TransformComponent>(drop, glm::vec3(1.0f, 2.0f, 3.0f), 0.0f);
     registry.emplace<ecs::VelocityComponent>(drop, glm::vec3(0.25f, 0.5f, 0.75f));
-    registry.emplace<ecs::ItemComponent>(drop, ItemIds::COAL, 1u);
+    registry.emplace<ecs::ItemComponent>(drop, ItemRegistry::requireIdByName("minecraft:coal"), 1u);
     registry.emplace<ecs::NetworkSyncTag>(drop);
 
     net::EntitySpawnMessage spawn;
@@ -143,7 +143,7 @@ static void testExistingEntityStaysLocallyAuthoritative() {
     spawn.kind = net::EntityKind::Drop;
     spawn.position = glm::vec3(8.0f, 9.0f, 10.0f);
     spawn.velocity = glm::vec3(4.0f, 5.0f, 6.0f);
-    spawn.itemId = static_cast<uint16_t>(ItemIds::COAL);
+    spawn.itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:coal"));
     spawn.stackCount = 1;
     store.handleSpawn(spawn);
 
@@ -171,7 +171,7 @@ static void testExistingEntityStaysLocallyAuthoritative() {
     net::EntityImpactMessage impact;
     impact.netId = 55;
     impact.position = glm::vec3(1.5f, 2.5f, 3.5f);
-    impact.particleBlockId = static_cast<uint16_t>(BlockIds::STONE);
+    impact.particleBlockId = static_cast<uint16_t>(BlockRegistry::requireIdByName("minecraft:stone"));
     impact.particleCount = 12;
     store.handleImpact(impact);
 
@@ -222,7 +222,7 @@ static void testMobSpawnCreatesZombieReplica() {
     require(raw.get<ecs::HealthComponent>(mob).current == 20 &&
             raw.get<ecs::HealthComponent>(mob).max == 20,
             "mob replica should initialize configured synced health");
-    require(raw.get<ecs::DeathEffectComponent>(mob).particleBlock == BlockIds::ROSE &&
+    require(raw.get<ecs::DeathEffectComponent>(mob).particleBlock == BlockRegistry::requireIdByName("minecraft:rose") &&
             raw.get<ecs::DeathEffectComponent>(mob).particleCount == 28 &&
             raw.get<ecs::DeathEffectComponent>(mob).soundId == "mob.zombie.death",
             "mob replica should initialize configured death effect");
@@ -298,7 +298,7 @@ static void testMobSpawnCreatesZombieReplica() {
     net::EntityImpactMessage impact;
     impact.netId = 77;
     impact.position = glm::vec3(3.25f, 65.0f, -4.0f);
-    impact.particleBlockId = static_cast<uint16_t>(BlockIds::ROSE);
+    impact.particleBlockId = static_cast<uint16_t>(BlockRegistry::requireIdByName("minecraft:rose"));
     impact.particleCount = 28;
     store.handleImpact(impact);
 
@@ -309,7 +309,7 @@ static void testMobSpawnCreatesZombieReplica() {
             "mob death impact should queue exactly one particle event");
     require(particleBus.peek().front().particleCount == 28,
             "mob death impact should use server-provided particle count");
-    require(particleBus.peek().front().blockType == BlockIds::ROSE,
+    require(particleBus.peek().front().blockType == BlockRegistry::requireIdByName("minecraft:rose"),
             "mob death impact should use server-provided particle block");
     require(audioBus.size() == 3,
             "mob death impact should append one audio event after hurt audio");
@@ -356,7 +356,7 @@ static void testMobSpawnCreatesConfiguredHerobrineReplica() {
             "herobrine replica should apply configured visual data");
     require(health.current == 40 && health.max == 40,
             "herobrine replica should initialize configured synced health");
-    require(deathEffect.particleBlock == BlockIds::DIAMOND_ORE &&
+    require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:diamond_ore") &&
             deathEffect.particleCount == 36 &&
             deathEffect.soundId == "mob.zombie.death",
             "herobrine replica should initialize configured death effect");
@@ -411,7 +411,7 @@ static void testMobSpawnCreatesConfiguredCreeperReplica() {
             "creeper replica should initialize synced yaw");
     require(health.current == 20 && health.max == 20,
             "creeper replica should initialize configured synced health");
-    require(deathEffect.particleBlock == BlockIds::COAL_ORE &&
+    require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:coal_ore") &&
             deathEffect.particleCount == 32 &&
             deathEffect.soundId == "mob.zombie.death",
             "creeper replica should initialize configured death effect");
@@ -514,12 +514,12 @@ static void testProjectileSpawnCreatesAppleReplica() {
     spawn.position = glm::vec3(1.0f, 66.0f, 2.0f);
     spawn.velocity = glm::vec3(3.0f, 0.5f, 0.0f);
     spawn.yaw = 0.25f;
-    spawn.itemId = static_cast<uint16_t>(ItemIds::APPLE);
+    spawn.itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:apple"));
     spawn.stackCount = 1;
     store.handleSpawn(spawn);
 
     ecs::ProjectileDefinition appleDefinition;
-    require(ecs::getThrowableProjectileDefinition(ItemIds::APPLE, appleDefinition),
+    require(ecs::getThrowableProjectileDefinition(ItemRegistry::requireIdByName("minecraft:apple"), appleDefinition),
             "apple should have a throwable projectile definition");
 
     require(store.remoteEntityCount() == 1, "projectile spawn was not tracked");
@@ -534,7 +534,7 @@ static void testProjectileSpawnCreatesAppleReplica() {
                          ecs::NetworkInterpolationComponent>();
     require(view.begin() != view.end(), "projectile replica components missing");
     const entt::entity projectile = *view.begin();
-    require(raw.get<ecs::ItemComponent>(projectile).itemId == ItemIds::APPLE,
+    require(raw.get<ecs::ItemComponent>(projectile).itemId == ItemRegistry::requireIdByName("minecraft:apple"),
             "projectile replica should use apple item texture");
     const auto& projectileComponent = raw.get<ecs::ProjectileComponent>(projectile);
     require(projectileComponent.damage == appleDefinition.damage,

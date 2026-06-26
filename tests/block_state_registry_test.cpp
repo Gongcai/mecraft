@@ -64,11 +64,11 @@ int main() {
         return fail("door half and hinge properties should be registered from blocks.json");
     }
 
-    const StateID torchDefault = BlockStateRegistry::getDefaultState(BlockIds::TORCH);
-    if (torchDefault == BlockIds::TORCH) {
+    const StateID torchDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch"));
+    if (torchDefault == BlockRegistry::requireIdByName("minecraft:torch")) {
         return fail("torch should expand into dedicated state ids");
     }
-    if (BlockStateRegistry::getBlockId(torchDefault) != BlockIds::TORCH) {
+    if (BlockStateRegistry::getBlockId(torchDefault) != BlockRegistry::requireIdByName("minecraft:torch")) {
         return fail("expanded torch state should resolve back to torch block id");
     }
     if (BlockStateRegistry::getPropertyIndex(torchDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR) {
@@ -88,17 +88,17 @@ int main() {
     if (!BlockRegistry::get(torchNorth).isLightSource) {
         return fail("state ids should resolve through BlockRegistry to the owning block definition");
     }
-    if (BlockRegistry::getBlockDropId(torchNorth) != BlockRegistry::getBlockDropId(BlockIds::TORCH)) {
+    if (BlockRegistry::getBlockDropId(torchNorth) != BlockRegistry::getBlockDropId(BlockRegistry::requireIdByName("minecraft:torch"))) {
         return fail("state ids should reuse the owning block drop table entry");
     }
 
-    const StateID birchLogDefault = BlockStateRegistry::getDefaultState(BlockIds::BIRCH_LOG);
+    const StateID birchLogDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:birch_log"));
     if (BlockStateRegistry::getPropertyIndex(birchLogDefault, PropIndices::AXIS) != PropIndices::AXIS_Y) {
         return fail("birch log default state should be axis=y");
     }
 
     const StateID birchLogX = BlockStateRegistry::getState(
-        BlockIds::BIRCH_LOG,
+        BlockRegistry::requireIdByName("minecraft:birch_log"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::AXIS, PropIndices::AXIS_X}
         });
@@ -121,7 +121,7 @@ int main() {
     }
 
     const BlockID furnace = BlockRegistry::findByName("furnace");
-    if (furnace == BlockIds::AIR) {
+    if (furnace == RUNTIME_ID_NULL) {
         return fail("furnace should be registered from blocks.json");
     }
     const BlockDef& furnaceDef = BlockRegistry::get(furnace);
@@ -170,7 +170,7 @@ int main() {
         return fail("stateToString should include the resolved torch facing");
     }
 
-    const BlockDef& torchDef = BlockRegistry::get(BlockIds::TORCH);
+    const BlockDef& torchDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:torch"));
     if (torchDef.placementStrategy != "attach_wall") {
         return fail("torch should parse placementStrategy from blocks.json");
     }
@@ -184,13 +184,13 @@ int main() {
         return fail("torch should parse its registered render shape name from blocks.json");
     }
 
-    const BlockDef& birchLogDef = BlockRegistry::get(BlockIds::BIRCH_LOG);
+    const BlockDef& birchLogDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:birch_log"));
     if (birchLogDef.placementStrategy != "axis_oriented") {
         return fail("birch log should parse axis-oriented placement strategy");
     }
 
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
-    if (oakStairs == BlockIds::AIR) {
+    if (oakStairs == RUNTIME_ID_NULL) {
         return fail("oak_stairs should be registered from blocks.json");
     }
     const BlockDef& oakStairsDef = BlockRegistry::get(oakStairs);
@@ -277,7 +277,7 @@ int main() {
     }
 
     const BlockID redBed = BlockRegistry::findByName("red_bed");
-    if (redBed == BlockIds::AIR) {
+    if (redBed == RUNTIME_ID_NULL) {
         return fail("red_bed should be registered from blocks.json");
     }
     const BlockDef& redBedDef = BlockRegistry::get(redBed);
@@ -393,7 +393,7 @@ int main() {
     }
 
     const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
-    if (oakSlab == BlockIds::AIR) {
+    if (oakSlab == RUNTIME_ID_NULL) {
         return fail("oak_slab should be registered from blocks.json");
     }
     const BlockDef& oakSlabDef = BlockRegistry::get(oakSlab);
@@ -425,7 +425,7 @@ int main() {
     }
 
     const BlockID oakVerticalSlab = BlockRegistry::findByName("oak_vertical_slab");
-    if (oakVerticalSlab == BlockIds::AIR) {
+    if (oakVerticalSlab == RUNTIME_ID_NULL) {
         return fail("oak_vertical_slab should be registered from blocks.json");
     }
     const BlockDef& oakVerticalSlabDef = BlockRegistry::get(oakVerticalSlab);
@@ -475,7 +475,7 @@ int main() {
     }
 
     const BlockID cauldron = BlockRegistry::findByName("cauldron");
-    if (cauldron == BlockIds::AIR) {
+    if (cauldron == RUNTIME_ID_NULL) {
         return fail("cauldron should be registered from blocks.json");
     }
     const BlockDef& cauldronDef = BlockRegistry::get(cauldron);
@@ -492,7 +492,7 @@ int main() {
     }
 
     const BlockID oakFence = BlockRegistry::findByName("oak_fence");
-    if (oakFence == BlockIds::AIR) {
+    if (oakFence == RUNTIME_ID_NULL) {
         return fail("oak_fence should be registered from blocks.json");
     }
     const BlockDef& oakFenceDef = BlockRegistry::get(oakFence);
@@ -519,7 +519,7 @@ int main() {
     }
 
     const BlockID cobblestoneWall = BlockRegistry::findByName("cobblestone_wall");
-    if (cobblestoneWall == BlockIds::AIR) {
+    if (cobblestoneWall == RUNTIME_ID_NULL) {
         return fail("cobblestone_wall should be registered from blocks.json");
     }
     const BlockDef& cobblestoneWallDef = BlockRegistry::get(cobblestoneWall);
@@ -546,7 +546,7 @@ int main() {
     }
 
     const BlockID anvil = BlockRegistry::findByName("anvil");
-    if (anvil == BlockIds::AIR) {
+    if (anvil == RUNTIME_ID_NULL) {
         return fail("anvil should be registered from blocks.json");
     }
     const BlockDef& anvilDef = BlockRegistry::get(anvil);
@@ -576,7 +576,7 @@ int main() {
     }
 
     PlacementContext torchPlacement;
-    torchPlacement.blockId = BlockIds::TORCH;
+    torchPlacement.blockId = BlockRegistry::requireIdByName("minecraft:torch");
     torchPlacement.hitNormal = {0, 0, -1};
     const StateID torchPlacedNorth = torchStrategy(torchPlacement);
     if (BlockStateRegistry::getPropertyIndex(torchPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH) {
@@ -589,7 +589,7 @@ int main() {
     }
 
     PlacementContext logPlacement;
-    logPlacement.blockId = BlockIds::BIRCH_LOG;
+    logPlacement.blockId = BlockRegistry::requireIdByName("minecraft:birch_log");
     logPlacement.hitNormal = {1, 0, 0};
     const StateID birchLogPlacedX = logStrategy(logPlacement);
     if (BlockStateRegistry::getPropertyIndex(birchLogPlacedX, PropIndices::AXIS) != PropIndices::AXIS_X) {
@@ -617,7 +617,7 @@ int main() {
         return fail("slab placement should place top slabs on downward-facing hits");
     }
 
-    StateID slabMerged = BlockIds::AIR;
+    StateID slabMerged = RUNTIME_ID_NULL;
     if (!tryMergePlacementStates(slabPlacedBottom, slabPlacedTop, slabMerged) ||
         slabMerged != oakSlabDouble) {
         return fail("bottom and top slab placement states should merge into a double slab");
@@ -658,7 +658,7 @@ int main() {
         return fail("sneaking vertical slab placement should invert the selected horizontal half");
     }
 
-    StateID verticalSlabMerged = BlockIds::AIR;
+    StateID verticalSlabMerged = RUNTIME_ID_NULL;
     if (!tryMergePlacementStates(oakVerticalSlabEast, oakVerticalSlabWest, verticalSlabMerged) ||
         verticalSlabMerged != oakVerticalSlabDouble) {
         return fail("east and west vertical slab states should merge into a double slab");
@@ -752,18 +752,18 @@ int main() {
         }
     }
 
-    const StateID chestDefault = BlockStateRegistry::getDefaultState(BlockIds::CHEST);
-    if (chestDefault == BlockIds::CHEST) {
+    const StateID chestDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
+    if (chestDefault == BlockRegistry::requireIdByName("minecraft:chest")) {
         return fail("chest should expand into dedicated facing state ids");
     }
-    if (BlockStateRegistry::getBlockId(chestDefault) != BlockIds::CHEST) {
+    if (BlockStateRegistry::getBlockId(chestDefault) != BlockRegistry::requireIdByName("minecraft:chest")) {
         return fail("expanded chest state should resolve back to chest block id");
     }
     if (BlockStateRegistry::getPropertyIndex(chestDefault, PropIndices::FACING) != PropIndices::FACING_SOUTH) {
         return fail("chest default state should face south");
     }
 
-    const BlockDef& chestDef = BlockRegistry::get(BlockIds::CHEST);
+    const BlockDef& chestDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:chest"));
     if (chestDef.renderShapeName != "block_entity" ||
         chestDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("block_entity")) {
         return fail("chest should render through the block entity renderer shape");
@@ -784,7 +784,7 @@ int main() {
     }
 
     PlacementContext chestPlacement;
-    chestPlacement.blockId = BlockIds::CHEST;
+    chestPlacement.blockId = BlockRegistry::requireIdByName("minecraft:chest");
     chestPlacement.playerYaw = 180.0f;
     const StateID chestPlacedEast = chestStrategy(chestPlacement);
     if (BlockStateRegistry::getPropertyIndex(chestPlacedEast, PropIndices::FACING) != PropIndices::FACING_EAST) {
@@ -834,7 +834,7 @@ int main() {
     }
 
     const BlockID farmland = BlockRegistry::findByName("farmland");
-    if (farmland == BlockIds::AIR) {
+    if (farmland == RUNTIME_ID_NULL) {
         return fail("farmland should be registered for crop support");
     }
     const uint16_t moistureProperty = BlockStateRegistry::getPropertyNameIndex("moisture");
@@ -860,7 +860,7 @@ int main() {
     }
 
     const BlockID wheat = BlockRegistry::findByName("wheat");
-    if (wheat == BlockIds::AIR) {
+    if (wheat == RUNTIME_ID_NULL) {
         return fail("wheat crop block should be registered");
     }
     const BlockDef& wheatDef = BlockRegistry::get(wheat);
@@ -898,7 +898,7 @@ int main() {
 
     const BlockID carrots = BlockRegistry::findByName("carrots");
     const BlockID potatoes = BlockRegistry::findByName("potatoes");
-    if (carrots == BlockIds::AIR || potatoes == BlockIds::AIR) {
+    if (carrots == RUNTIME_ID_NULL || potatoes == RUNTIME_ID_NULL) {
         return fail("carrot and potato crop blocks should be registered");
     }
     const BlockDef& carrotsDef = BlockRegistry::get(carrots);
@@ -911,7 +911,7 @@ int main() {
     }
 
     const BlockID vine = BlockRegistry::findByName("vine");
-    if (vine == BlockIds::AIR) {
+    if (vine == RUNTIME_ID_NULL) {
         return fail("vine should be registered for placement tests");
     }
     const BlockDef& vineDef = BlockRegistry::get(vine);
@@ -931,12 +931,12 @@ int main() {
         return fail("wall face plane placement should derive facing from the clicked side");
     }
     vinePlacement.hitNormal = glm::ivec3(0, 1, 0);
-    if (vineStrategy(vinePlacement) != BlockIds::AIR) {
+    if (vineStrategy(vinePlacement) != RUNTIME_ID_NULL) {
         return fail("wall face plane placement should reject floor hits");
     }
 
     const BlockID pinkPetals = BlockRegistry::findByName("pink_petals");
-    if (pinkPetals == BlockIds::AIR) {
+    if (pinkPetals == RUNTIME_ID_NULL) {
         return fail("pink_petals should be registered for placement tests");
     }
     const BlockDef& pinkPetalsDef = BlockRegistry::get(pinkPetals);
@@ -953,14 +953,14 @@ int main() {
         return fail("floor face plane placement should use the floor facing state");
     }
     petalPlacement.hitNormal = glm::ivec3(1, 0, 0);
-    if (petalStrategy(petalPlacement) != BlockIds::AIR) {
+    if (petalStrategy(petalPlacement) != RUNTIME_ID_NULL) {
         return fail("floor face plane placement should reject wall hits");
     }
 
     const BlockID wildflowers = BlockRegistry::findByName("wildflowers");
     const BlockID leafLitter = BlockRegistry::findByName("leaf_litter");
     const BlockID glowLichen = BlockRegistry::findByName("glow_lichen");
-    if (wildflowers == BlockIds::AIR || leafLitter == BlockIds::AIR || glowLichen == BlockIds::AIR) {
+    if (wildflowers == RUNTIME_ID_NULL || leafLitter == RUNTIME_ID_NULL || glowLichen == RUNTIME_ID_NULL) {
         return fail("new face plane decoration blocks should be registered");
     }
 
@@ -986,10 +986,10 @@ int main() {
                                              PropIndices::FACING) != PropIndices::FACING_FLOOR) {
         return fail("floor face plane decorations should default to facing=floor");
     }
-    if (BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_NORTH) == BlockIds::AIR ||
-        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_SOUTH) == BlockIds::AIR ||
-        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_EAST) == BlockIds::AIR ||
-        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_WEST) == BlockIds::AIR) {
+    if (BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_NORTH) == RUNTIME_ID_NULL ||
+        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_SOUTH) == RUNTIME_ID_NULL ||
+        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_EAST) == RUNTIME_ID_NULL ||
+        BlockStateRegistry::getState(glowLichen, PropIndices::FACING, PropIndices::FACING_WEST) == RUNTIME_ID_NULL) {
         return fail("glow_lichen should expose all horizontal wall facing states");
     }
 
@@ -1016,34 +1016,34 @@ int main() {
     }
 
     const std::vector<std::pair<BlockID, const char*>> redstoneBlocks = {
-        {BlockIds::REDSTONE_WIRE, "redstone_wire"},
-        {BlockIds::REDSTONE_TORCH, "redstone_torch"},
-        {BlockIds::REDSTONE_LAMP, "redstone_lamp"},
-        {BlockIds::LEVER, "lever"},
-        {BlockIds::STONE_BUTTON, "stone_button"},
-        {BlockIds::OAK_BUTTON, "oak_button"},
-        {BlockIds::STONE_PRESSURE_PLATE, "stone_pressure_plate"},
-        {BlockIds::OAK_PRESSURE_PLATE, "oak_pressure_plate"},
-        {BlockIds::REPEATER, "repeater"},
-        {BlockIds::COMPARATOR, "comparator"},
-        {BlockIds::PISTON, "piston"},
-        {BlockIds::STICKY_PISTON, "sticky_piston"},
-        {BlockIds::PISTON_HEAD, "piston_head"},
-        {BlockIds::OBSERVER, "observer"},
-        {BlockIds::DISPENSER, "dispenser"},
-        {BlockIds::DROPPER, "dropper"},
-        {BlockIds::HOPPER, "hopper"},
-        {BlockIds::NOTE_BLOCK, "note_block"},
-        {BlockIds::TARGET, "target"},
+        {BlockRegistry::requireIdByName("minecraft:redstone_wire"), "redstone_wire"},
+        {BlockRegistry::requireIdByName("minecraft:redstone_torch"), "redstone_torch"},
+        {BlockRegistry::requireIdByName("minecraft:redstone_lamp"), "redstone_lamp"},
+        {BlockRegistry::requireIdByName("minecraft:lever"), "lever"},
+        {BlockRegistry::requireIdByName("minecraft:stone_button"), "stone_button"},
+        {BlockRegistry::requireIdByName("minecraft:oak_button"), "oak_button"},
+        {BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), "stone_pressure_plate"},
+        {BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"), "oak_pressure_plate"},
+        {BlockRegistry::requireIdByName("minecraft:repeater"), "repeater"},
+        {BlockRegistry::requireIdByName("minecraft:comparator"), "comparator"},
+        {BlockRegistry::requireIdByName("minecraft:piston"), "piston"},
+        {BlockRegistry::requireIdByName("minecraft:sticky_piston"), "sticky_piston"},
+        {BlockRegistry::requireIdByName("minecraft:piston_head"), "piston_head"},
+        {BlockRegistry::requireIdByName("minecraft:observer"), "observer"},
+        {BlockRegistry::requireIdByName("minecraft:dispenser"), "dispenser"},
+        {BlockRegistry::requireIdByName("minecraft:dropper"), "dropper"},
+        {BlockRegistry::requireIdByName("minecraft:hopper"), "hopper"},
+        {BlockRegistry::requireIdByName("minecraft:note_block"), "note_block"},
+        {BlockRegistry::requireIdByName("minecraft:target"), "target"},
     };
     for (const auto& [blockId, name] : redstoneBlocks) {
-        if (blockId == BlockIds::AIR) {
+        if (blockId == RUNTIME_ID_NULL) {
             std::cerr << "[block_state_registry_test] missing redstone block: " << name << '\n';
             return fail("redstone blocks should be registered from blocks.json");
         }
     }
 
-    const StateID noteBlockDefault = BlockStateRegistry::getDefaultState(BlockIds::NOTE_BLOCK);
+    const StateID noteBlockDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:note_block"));
     if (BlockStateRegistry::getPropertyIndex(noteBlockDefault, PropIndices::POWERED) !=
         PropIndices::POWERED_FALSE) {
         return fail("note_block default state should be powered=false");
@@ -1053,12 +1053,12 @@ int main() {
         PropIndices::POWERED,
         PropIndices::POWERED_TRUE);
     if (noteBlockPowered == noteBlockDefault ||
-        BlockStateRegistry::getBlockId(noteBlockPowered) != BlockIds::NOTE_BLOCK ||
+        BlockStateRegistry::getBlockId(noteBlockPowered) != BlockRegistry::requireIdByName("minecraft:note_block") ||
         BlockStateRegistry::getPropertyIndex(noteBlockPowered, PropIndices::POWERED) !=
             PropIndices::POWERED_TRUE) {
         return fail("note_block should expose a powered=true block state");
     }
-    const StateID dispenserDefault = BlockStateRegistry::getDefaultState(BlockIds::DISPENSER);
+    const StateID dispenserDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:dispenser"));
     if (BlockStateRegistry::getPropertyIndex(dispenserDefault, PropIndices::POWERED) !=
         PropIndices::POWERED_FALSE) {
         return fail("dispenser default state should be powered=false");
@@ -1068,12 +1068,12 @@ int main() {
         PropIndices::POWERED,
         PropIndices::POWERED_TRUE);
     if (dispenserPowered == dispenserDefault ||
-        BlockStateRegistry::getBlockId(dispenserPowered) != BlockIds::DISPENSER ||
+        BlockStateRegistry::getBlockId(dispenserPowered) != BlockRegistry::requireIdByName("minecraft:dispenser") ||
         BlockStateRegistry::getPropertyIndex(dispenserPowered, PropIndices::POWERED) !=
             PropIndices::POWERED_TRUE) {
         return fail("dispenser should expose a powered=true block state");
     }
-    const StateID dropperDefault = BlockStateRegistry::getDefaultState(BlockIds::DROPPER);
+    const StateID dropperDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:dropper"));
     if (BlockStateRegistry::getPropertyIndex(dropperDefault, PropIndices::POWERED) !=
         PropIndices::POWERED_FALSE) {
         return fail("dropper default state should be powered=false");
@@ -1083,7 +1083,7 @@ int main() {
         PropIndices::POWERED,
         PropIndices::POWERED_TRUE);
     if (dropperPowered == dropperDefault ||
-        BlockStateRegistry::getBlockId(dropperPowered) != BlockIds::DROPPER ||
+        BlockStateRegistry::getBlockId(dropperPowered) != BlockRegistry::requireIdByName("minecraft:dropper") ||
         BlockStateRegistry::getPropertyIndex(dropperPowered, PropIndices::POWERED) !=
             PropIndices::POWERED_TRUE) {
         return fail("dropper should expose a powered=true block state");
@@ -1124,23 +1124,23 @@ int main() {
     };
 
     const std::vector<BlockID> redstoneModelBlocks = {
-        BlockIds::LEVER,
-        BlockIds::STONE_BUTTON,
-        BlockIds::OAK_BUTTON,
-        BlockIds::STONE_PRESSURE_PLATE,
-        BlockIds::OAK_PRESSURE_PLATE,
-        BlockIds::REPEATER,
-        BlockIds::COMPARATOR,
-        BlockIds::PISTON,
-        BlockIds::STICKY_PISTON,
-        BlockIds::PISTON_HEAD,
-        BlockIds::OBSERVER,
-        BlockIds::DISPENSER,
-        BlockIds::DROPPER,
-        BlockIds::HOPPER,
-        BlockIds::OAK_DOOR,
-        BlockIds::OAK_TRAPDOOR,
-        BlockIds::OAK_FENCE_GATE,
+        BlockRegistry::requireIdByName("minecraft:lever"),
+        BlockRegistry::requireIdByName("minecraft:stone_button"),
+        BlockRegistry::requireIdByName("minecraft:oak_button"),
+        BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"),
+        BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"),
+        BlockRegistry::requireIdByName("minecraft:repeater"),
+        BlockRegistry::requireIdByName("minecraft:comparator"),
+        BlockRegistry::requireIdByName("minecraft:piston"),
+        BlockRegistry::requireIdByName("minecraft:sticky_piston"),
+        BlockRegistry::requireIdByName("minecraft:piston_head"),
+        BlockRegistry::requireIdByName("minecraft:observer"),
+        BlockRegistry::requireIdByName("minecraft:dispenser"),
+        BlockRegistry::requireIdByName("minecraft:dropper"),
+        BlockRegistry::requireIdByName("minecraft:hopper"),
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
+        BlockRegistry::requireIdByName("minecraft:oak_trapdoor"),
+        BlockRegistry::requireIdByName("minecraft:oak_fence_gate"),
     };
     for (const BlockID blockId : redstoneModelBlocks) {
         for (const StateID state : BlockStateRegistry::getStatesForBlock(blockId)) {
@@ -1196,7 +1196,7 @@ int main() {
                def.redstoneControlledMirrorProperties.size() == 1 &&
                def.redstoneControlledMirrorProperties.front() == "open";
     };
-    const BlockDef& oakDoorDef = BlockRegistry::get(BlockIds::OAK_DOOR);
+    const BlockDef& oakDoorDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:oak_door"));
     if (oakDoorDef.renderShapeName != "model" ||
         oakDoorDef.renderLayer != BlockRenderLayer::Cutout ||
         oakDoorDef.placementStrategy != "door" ||
@@ -1205,10 +1205,10 @@ int main() {
         !declaresPoweredOpenMirror(oakDoorDef)) {
         return fail("oak_door should declare model rendering, door placement, and powered open redstone control");
     }
-    if (!DoorBlockLogic::isDoorBlock(BlockIds::OAK_DOOR)) {
+    if (!DoorBlockLogic::isDoorBlock(BlockRegistry::requireIdByName("minecraft:oak_door"))) {
         return fail("oak_door should be recognized by door block logic through placementStrategy");
     }
-    const StateID oakDoorDefault = BlockStateRegistry::getDefaultState(BlockIds::OAK_DOOR);
+    const StateID oakDoorDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:oak_door"));
     if (!DoorBlockLogic::isLowerState(oakDoorDefault) ||
         BlockStateRegistry::getPropertyIndex(oakDoorDefault, PropIndices::FACING) != PropIndices::FACING_EAST ||
         BlockStateRegistry::getPropertyIndex(oakDoorDefault, PropIndices::HINGE) != PropIndices::HINGE_LEFT ||
@@ -1217,7 +1217,7 @@ int main() {
         return fail("oak_door default state should be an east-facing closed unpowered lower-left half");
     }
     const StateID oakDoorUpper = DoorBlockLogic::makeDoorState(
-        BlockIds::OAK_DOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
         PropIndices::FACING_EAST,
         PropIndices::HALF_UPPER,
         PropIndices::HINGE_LEFT,
@@ -1235,7 +1235,7 @@ int main() {
         return fail("oak_door powered=false/true lower-left states should share the closed model variant");
     }
     const StateID oakDoorOpenPowered = BlockStateRegistry::getState(
-        BlockIds::OAK_DOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
         {
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::HALF, PropIndices::HALF_LOWER},
@@ -1247,7 +1247,7 @@ int main() {
         return fail("oak_door open powered state should resolve through a partial model variant key");
     }
     const StateID oakDoorOpenRight = BlockStateRegistry::getState(
-        BlockIds::OAK_DOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_door"),
         {
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::HALF, PropIndices::HALF_LOWER},
@@ -1259,7 +1259,7 @@ int main() {
         return fail("oak_door right-hinge open state should rotate to the opposite side of the block");
     }
 
-    const BlockDef& oakTrapdoorDef = BlockRegistry::get(BlockIds::OAK_TRAPDOOR);
+    const BlockDef& oakTrapdoorDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:oak_trapdoor"));
     if (oakTrapdoorDef.renderShapeName != "model" ||
         oakTrapdoorDef.renderLayer != BlockRenderLayer::Cutout ||
         oakTrapdoorDef.placementStrategy != "trapdoor" ||
@@ -1269,7 +1269,7 @@ int main() {
         return fail("oak_trapdoor should declare model rendering, trapdoor placement, and powered open redstone control");
     }
     const StateID oakTrapdoorClosedPowered = BlockStateRegistry::getState(
-        BlockIds::OAK_TRAPDOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_trapdoor"),
         {
             {PropIndices::FACING, PropIndices::FACING_WEST},
             {PropIndices::HALF, PropIndices::HALF_BOTTOM},
@@ -1280,7 +1280,7 @@ int main() {
         return fail("oak_trapdoor closed powered state should resolve through a partial half/open model key");
     }
     const StateID oakTrapdoorOpenEast = BlockStateRegistry::getState(
-        BlockIds::OAK_TRAPDOOR,
+        BlockRegistry::requireIdByName("minecraft:oak_trapdoor"),
         {
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::HALF, PropIndices::HALF_TOP},
@@ -1291,7 +1291,7 @@ int main() {
         return fail("oak_trapdoor open east state should resolve through a partial facing/open model key");
     }
 
-    const BlockDef& oakFenceGateDef = BlockRegistry::get(BlockIds::OAK_FENCE_GATE);
+    const BlockDef& oakFenceGateDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:oak_fence_gate"));
     if (oakFenceGateDef.renderShapeName != "model" ||
         oakFenceGateDef.placementStrategy != "horizontal_facing" ||
         oakFenceGateDef.isSolid ||
@@ -1300,7 +1300,7 @@ int main() {
         return fail("oak_fence_gate should declare model rendering, horizontal placement, and powered open redstone control");
     }
     const StateID oakFenceGateEastPowered = BlockStateRegistry::getState(
-        BlockIds::OAK_FENCE_GATE,
+        BlockRegistry::requireIdByName("minecraft:oak_fence_gate"),
         {
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::OPEN, PropIndices::OPEN_FALSE},
@@ -1310,7 +1310,7 @@ int main() {
         return fail("oak_fence_gate powered states should resolve through partial facing/open model variants");
     }
     const StateID oakFenceGateWestOpen = BlockStateRegistry::getState(
-        BlockIds::OAK_FENCE_GATE,
+        BlockRegistry::requireIdByName("minecraft:oak_fence_gate"),
         {
             {PropIndices::FACING, PropIndices::FACING_WEST},
             {PropIndices::OPEN, PropIndices::OPEN_TRUE},
@@ -1320,14 +1320,14 @@ int main() {
         return fail("oak_fence_gate open west state should resolve to the rotated open gate model");
     }
 
-    const BlockDef& redstoneWireDef = BlockRegistry::get(BlockIds::REDSTONE_WIRE);
+    const BlockDef& redstoneWireDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     if (redstoneWireDef.renderShapeName != "redstone_wire" ||
         redstoneWireDef.renderShapeTag != MeshBuilderRegistry::REDSTONE_WIRE_TAG ||
         redstoneWireDef.placementStrategy != "face_plane_floor" ||
         redstoneWireDef.supportRule != "attached_face") {
         return fail("redstone_wire should use the custom wire render shape and floor support path");
     }
-    const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE);
+    const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     if (BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR ||
         BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::POWER) != PropIndices::POWER_0 ||
         BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::NORTH) != PropIndices::NORTH_NONE ||
@@ -1353,35 +1353,35 @@ int main() {
         return fail("redstone_wire should expose directional visual connection states");
     }
 
-    const BlockDef& redstoneTorchDef = BlockRegistry::get(BlockIds::REDSTONE_TORCH);
+    const BlockDef& redstoneTorchDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_torch"));
     if (redstoneTorchDef.renderShapeName != "torch" ||
         redstoneTorchDef.placementStrategy != "attach_wall" ||
         redstoneTorchDef.supportRule != "attached_face") {
         return fail("redstone_torch should use torch rendering and attach-wall placement");
     }
-    const StateID redstoneTorchDefault = BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_TORCH);
+    const StateID redstoneTorchDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_torch"));
     if (BlockStateRegistry::getPropertyIndex(redstoneTorchDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR ||
         BlockStateRegistry::getPropertyIndex(redstoneTorchDefault, PropIndices::LIT) != PropIndices::LIT_TRUE) {
         return fail("redstone_torch default state should be floor lit true");
     }
 
     const StateID redstoneLampLit = BlockStateRegistry::getState(
-        BlockIds::REDSTONE_LAMP,
+        BlockRegistry::requireIdByName("minecraft:redstone_lamp"),
         PropIndices::LIT,
         PropIndices::LIT_TRUE);
-    const BlockDef& redstoneLampDef = BlockRegistry::get(BlockIds::REDSTONE_LAMP);
+    const BlockDef& redstoneLampDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_lamp"));
     if (!redstoneLampDef.respondsToRedstone || redstoneLampDef.redstoneControlledProperty != "lit") {
         return fail("redstone_lamp should declare lit as its redstone controlled property");
     }
-    if (redstoneLampLit == BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP) ||
+    if (redstoneLampLit == BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")) ||
         BlockStateRegistry::getPropertyIndex(redstoneLampLit, PropIndices::LIT) != PropIndices::LIT_TRUE) {
         return fail("redstone_lamp should expose lit and unlit display states");
     }
 
-    const BlockDef& targetDef = BlockRegistry::get(BlockIds::TARGET);
-    const StateID targetDefault = BlockStateRegistry::getDefaultState(BlockIds::TARGET);
+    const BlockDef& targetDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:target"));
+    const StateID targetDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:target"));
     const StateID targetPower15 = BlockStateRegistry::getState(
-        BlockIds::TARGET,
+        BlockRegistry::requireIdByName("minecraft:target"),
         PropIndices::POWER,
         PropIndices::POWER_15);
     if (targetDef.redstoneBehavior != "target" ||
@@ -1392,7 +1392,7 @@ int main() {
         return fail("target should expose variable redstone power states");
     }
 
-    const BlockDef& leverDef = BlockRegistry::get(BlockIds::LEVER);
+    const BlockDef& leverDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:lever"));
     if (leverDef.renderShapeName != "model" ||
         leverDef.placementStrategy != "attach_wall" ||
         leverDef.supportRule != "attached_face") {
@@ -1403,14 +1403,14 @@ int main() {
         return fail("lever placement strategy should be registered");
     }
     PlacementContext leverWallPlacement;
-    leverWallPlacement.blockId = BlockIds::LEVER;
+    leverWallPlacement.blockId = BlockRegistry::requireIdByName("minecraft:lever");
     leverWallPlacement.hitNormal = {0, 0, -1};
     const StateID leverPlacedNorth = leverStrategy(leverWallPlacement);
     if (BlockStateRegistry::getPropertyIndex(leverPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH) {
         return fail("lever wall placement should derive outward facing from hit normal");
     }
     PlacementContext leverFloorPlacement;
-    leverFloorPlacement.blockId = BlockIds::LEVER;
+    leverFloorPlacement.blockId = BlockRegistry::requireIdByName("minecraft:lever");
     leverFloorPlacement.hitNormal = {0, 1, 0};
     const StateID leverPlacedFloor = leverStrategy(leverFloorPlacement);
     if (BlockStateRegistry::getPropertyIndex(leverPlacedFloor, PropIndices::FACING) != PropIndices::FACING_FLOOR) {
@@ -1418,7 +1418,7 @@ int main() {
     }
 
     const StateID leverNorthUnpowered = BlockStateRegistry::getState(
-        BlockIds::LEVER,
+        BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_NORTH},
             {PropIndices::POWERED, PropIndices::POWERED_FALSE}
@@ -1427,7 +1427,7 @@ int main() {
         return fail("lever north unpowered state should face out from the supporting wall");
     }
     const StateID leverSouthPowered = BlockStateRegistry::getState(
-        BlockIds::LEVER,
+        BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_SOUTH},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1436,7 +1436,7 @@ int main() {
         return fail("lever south powered state should use the unrotated powered wall model");
     }
     const StateID leverEastPowered = BlockStateRegistry::getState(
-        BlockIds::LEVER,
+        BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1445,7 +1445,7 @@ int main() {
         return fail("lever east powered state should rotate the powered wall model outward");
     }
     const StateID leverWestPowered = BlockStateRegistry::getState(
-        BlockIds::LEVER,
+        BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_WEST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1454,7 +1454,7 @@ int main() {
         return fail("lever west powered state should resolve to the rotated powered wall model");
     }
 
-    const BlockDef& stoneButtonDef = BlockRegistry::get(BlockIds::STONE_BUTTON);
+    const BlockDef& stoneButtonDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:stone_button"));
     if (stoneButtonDef.renderShapeName != "model" ||
         stoneButtonDef.placementStrategy != "attach_wall" ||
         stoneButtonDef.supportRule != "attached_face") {
@@ -1465,7 +1465,7 @@ int main() {
         return fail("stone_button placement strategy should be registered");
     }
     PlacementContext stoneButtonWallPlacement;
-    stoneButtonWallPlacement.blockId = BlockIds::STONE_BUTTON;
+    stoneButtonWallPlacement.blockId = BlockRegistry::requireIdByName("minecraft:stone_button");
     stoneButtonWallPlacement.hitNormal = {0, 0, -1};
     const StateID stoneButtonPlacedNorth = stoneButtonStrategy(stoneButtonWallPlacement);
     if (BlockStateRegistry::getPropertyIndex(stoneButtonPlacedNorth, PropIndices::FACING) != PropIndices::FACING_NORTH ||
@@ -1474,7 +1474,7 @@ int main() {
     }
 
     const StateID stoneButtonEastPressed = BlockStateRegistry::getState(
-        BlockIds::STONE_BUTTON,
+        BlockRegistry::requireIdByName("minecraft:stone_button"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1484,7 +1484,7 @@ int main() {
     }
 
     const StateID oakButtonWestPressed = BlockStateRegistry::getState(
-        BlockIds::OAK_BUTTON,
+        BlockRegistry::requireIdByName("minecraft:oak_button"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_WEST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1494,14 +1494,14 @@ int main() {
     }
 
     const StateID oakPressurePlatePressed = BlockStateRegistry::getState(
-        BlockIds::OAK_PRESSURE_PLATE,
+        BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"),
         PropIndices::POWERED,
         PropIndices::POWERED_TRUE);
     if (!modelVariantMatches(oakPressurePlatePressed, "block/oak_pressure_plate_pressed", 0, 0)) {
         return fail("oak_pressure_plate powered state should resolve to the pressed model");
     }
 
-    const StateID repeaterDefault = BlockStateRegistry::getDefaultState(BlockIds::REPEATER);
+    const StateID repeaterDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:repeater"));
     if (BlockStateRegistry::getPropertyIndex(repeaterDefault, PropIndices::DELAY) != PropIndices::DELAY_1) {
         return fail("repeater default state should use delay 1");
     }
@@ -1509,7 +1509,7 @@ int main() {
         return fail("repeater default state should not be locked");
     }
     const StateID repeaterEastPowered = BlockStateRegistry::getState(
-        BlockIds::REPEATER,
+        BlockRegistry::requireIdByName("minecraft:repeater"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1518,7 +1518,7 @@ int main() {
         return fail("repeater east powered default-delay state should resolve to the rotated 1-tick powered model");
     }
     const StateID repeaterEastDelay4Powered = BlockStateRegistry::getState(
-        BlockIds::REPEATER,
+        BlockRegistry::requireIdByName("minecraft:repeater"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE},
@@ -1528,7 +1528,7 @@ int main() {
         return fail("repeater delay 4 powered state should resolve to the rotated 4-tick powered model");
     }
     const StateID lockedRepeaterEastDelay4Powered = BlockStateRegistry::getState(
-        BlockIds::REPEATER,
+        BlockRegistry::requireIdByName("minecraft:repeater"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE},
@@ -1539,12 +1539,12 @@ int main() {
         return fail("locked repeater should resolve to the powered locked delay model variant");
     }
 
-    const StateID comparatorDefault = BlockStateRegistry::getDefaultState(BlockIds::COMPARATOR);
+    const StateID comparatorDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:comparator"));
     if (BlockStateRegistry::getPropertyIndex(comparatorDefault, PropIndices::MODE) != PropIndices::MODE_COMPARE) {
         return fail("comparator default state should use compare mode");
     }
     const StateID comparatorWestPowered = BlockStateRegistry::getState(
-        BlockIds::COMPARATOR,
+        BlockRegistry::requireIdByName("minecraft:comparator"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_WEST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1553,7 +1553,7 @@ int main() {
         return fail("comparator west powered state should resolve to the rotated powered model");
     }
     const StateID comparatorWestSubtractPowered = BlockStateRegistry::getState(
-        BlockIds::COMPARATOR,
+        BlockRegistry::requireIdByName("minecraft:comparator"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_WEST},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE},
@@ -1564,7 +1564,7 @@ int main() {
     }
 
     const StateID pistonExtendedNorth = BlockStateRegistry::getState(
-        BlockIds::PISTON,
+        BlockRegistry::requireIdByName("minecraft:piston"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_NORTH},
             {PropIndices::EXTENDED, PropIndices::EXTENDED_TRUE}
@@ -1574,7 +1574,7 @@ int main() {
     }
 
     const StateID stickyPistonUp = BlockStateRegistry::getState(
-        BlockIds::STICKY_PISTON,
+        BlockRegistry::requireIdByName("minecraft:sticky_piston"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_UP},
             {PropIndices::EXTENDED, PropIndices::EXTENDED_FALSE}
@@ -1584,7 +1584,7 @@ int main() {
     }
 
     const StateID stickyPistonHeadEast = BlockStateRegistry::getState(
-        BlockIds::PISTON_HEAD,
+        BlockRegistry::requireIdByName("minecraft:piston_head"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_EAST},
             {PropIndices::TYPE, PropIndices::TYPE_STICKY}
@@ -1594,7 +1594,7 @@ int main() {
     }
 
     const StateID observerDownPowered = BlockStateRegistry::getState(
-        BlockIds::OBSERVER,
+        BlockRegistry::requireIdByName("minecraft:observer"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_DOWN},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
@@ -1604,7 +1604,7 @@ int main() {
     }
 
     const StateID dispenserUp = BlockStateRegistry::getState(
-        BlockIds::DISPENSER,
+        BlockRegistry::requireIdByName("minecraft:dispenser"),
         PropIndices::FACING,
         PropIndices::FACING_UP);
     if (!modelVariantMatches(dispenserUp, "block/dispenser", 0, 270)) {
@@ -1619,7 +1619,7 @@ int main() {
     }
 
     const StateID dropperEast = BlockStateRegistry::getState(
-        BlockIds::DROPPER,
+        BlockRegistry::requireIdByName("minecraft:dropper"),
         PropIndices::FACING,
         PropIndices::FACING_EAST);
     if (!modelVariantMatches(dropperEast, "block/dropper", 270, 0)) {
@@ -1634,7 +1634,7 @@ int main() {
     }
 
     const StateID hopperSouth = BlockStateRegistry::getState(
-        BlockIds::HOPPER,
+        BlockRegistry::requireIdByName("minecraft:hopper"),
         PropIndices::FACING,
         PropIndices::FACING_SOUTH);
     if (!modelVariantMatches(hopperSouth, "block/hopper_side", 180, 0)) {
@@ -1645,7 +1645,7 @@ int main() {
     }
 
     const StateID hopperDisabledSouth = BlockStateRegistry::getState(
-        BlockIds::HOPPER,
+        BlockRegistry::requireIdByName("minecraft:hopper"),
         {
             {PropIndices::FACING, PropIndices::FACING_SOUTH},
             {PropIndices::ENABLED, PropIndices::ENABLED_FALSE}
@@ -1654,8 +1654,8 @@ int main() {
         return fail("disabled hopper south state should resolve to the same rotated model");
     }
 
-    const BlockDef& pistonDef = BlockRegistry::get(BlockIds::PISTON);
-    const BlockDef& stickyPistonDef = BlockRegistry::get(BlockIds::STICKY_PISTON);
+    const BlockDef& pistonDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:piston"));
+    const BlockDef& stickyPistonDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:sticky_piston"));
     if (!pistonDef.revertPlacementFacing || !stickyPistonDef.revertPlacementFacing) {
         return fail("pistons should parse placement facing revert from blocks.json");
     }
@@ -1664,7 +1664,7 @@ int main() {
         return fail("six_way_facing placement strategy should be registered");
     }
     PlacementContext pistonPlacement;
-    pistonPlacement.blockId = BlockIds::PISTON;
+    pistonPlacement.blockId = BlockRegistry::requireIdByName("minecraft:piston");
     pistonPlacement.hitNormal = glm::ivec3(0, 1, 0);
     const StateID pistonPlacedUp = pistonStrategy(pistonPlacement);
     if (BlockStateRegistry::getPropertyIndex(pistonPlacedUp, PropIndices::FACING) != PropIndices::FACING_UP) {
@@ -1682,7 +1682,7 @@ int main() {
         return fail("six_way_facing placement should apply the configured piston facing revert");
     }
 
-    const BlockDef& hopperDef = BlockRegistry::get(BlockIds::HOPPER);
+    const BlockDef& hopperDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:hopper"));
     if (hopperDef.redstoneBehavior != "hopper" ||
         !hopperDef.respondsToRedstone ||
         hopperDef.redstoneControlledProperty != "enabled" ||
@@ -1694,7 +1694,7 @@ int main() {
         return fail("hopper_facing placement strategy should be registered");
     }
     PlacementContext hopperPlacement;
-    hopperPlacement.blockId = BlockIds::HOPPER;
+    hopperPlacement.blockId = BlockRegistry::requireIdByName("minecraft:hopper");
     hopperPlacement.hitNormal = glm::ivec3(0, 1, 0);
     const StateID hopperPlacedDown = hopperStrategy(hopperPlacement);
     if (BlockStateRegistry::getPropertyIndex(hopperPlacedDown, PropIndices::FACING) != PropIndices::FACING_DOWN) {
@@ -1710,8 +1710,8 @@ int main() {
         return fail("state registry should contain expanded states beyond raw block ids");
     }
 
-    const StateID waterDefault = BlockStateRegistry::getDefaultState(BlockIds::WATER);
-    if (!FluidState::isWater(waterDefault) || waterDefault == BlockIds::WATER) {
+    const StateID waterDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:water"));
+    if (!FluidState::isWater(waterDefault) || waterDefault == BlockRegistry::requireIdByName("minecraft:water")) {
         return fail("water should expand into dedicated state ids");
     }
     if (!FluidState::isSource(waterDefault) || FluidState::level(waterDefault) != 0 || FluidState::isFalling(waterDefault)) {
@@ -1762,7 +1762,7 @@ int main() {
     }
 
     const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
-    if (waterDesc.blockId != BlockIds::WATER || waterDesc.tickDelay != 5 || waterDesc.maxLevel != 7) {
+    if (waterDesc.blockId != BlockRegistry::requireIdByName("minecraft:water") || waterDesc.tickDelay != 5 || waterDesc.maxLevel != 7) {
         return fail("fluid registry should load the configured water descriptor");
     }
     if (waterDesc.slopeSearchDistance != 5 || !waterDesc.canCreateInfiniteSource ||
@@ -1778,10 +1778,10 @@ int main() {
     if (FluidState::encode(decodedLevel3) != waterLevel3) {
         return fail("fluid encode should round-trip decoded water states");
     }
-    if (!FluidState::canReplace(waterDesc, BlockIds::AIR) || !FluidState::canReplace(waterDesc, waterLevel3)) {
+    if (!FluidState::canReplace(waterDesc, RUNTIME_ID_NULL) || !FluidState::canReplace(waterDesc, waterLevel3)) {
         return fail("water should be allowed to replace air and existing water");
     }
-    if (FluidState::canReplace(waterDesc, BlockIds::STONE) || FluidState::canCoexist(waterDesc, BlockIds::STONE)) {
+    if (FluidState::canReplace(waterDesc, BlockRegistry::requireIdByName("minecraft:stone")) || FluidState::canCoexist(waterDesc, BlockRegistry::requireIdByName("minecraft:stone"))) {
         return fail("waterlogging placeholder APIs should not allow solid coexistence yet");
     }
 

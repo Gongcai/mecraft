@@ -14,22 +14,12 @@
 
 #include "../../MecraftExport.h"
 #include "../../engine/registry/NamespacedId.h"
-#include "../../game/content/BuiltinIds.h"
 #include "../../engine/registry/IdRegistry.h"
 
 class ResourceMgr;
 
 // BlockID is now RuntimeId (uint16_t), allowing up to 65535 block types
 using BlockID = RuntimeId;
-
-// Block ID constants — initialized after BlockRegistry::init()
-namespace BlockIds {
-#define MECRAFT_DECLARE_BLOCK_ID(symbol, path) extern MECRAFT_API BlockID symbol;
-    MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_DECLARE_BLOCK_ID)
-#undef MECRAFT_DECLARE_BLOCK_ID
-
-    MECRAFT_API void init();  // Called after BlockRegistry::init()
-}
 
 namespace BlockMaterialKinds {
 // Legacy broad categories used by CPU-side gameplay helpers. The renderer

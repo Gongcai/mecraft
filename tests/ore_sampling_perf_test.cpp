@@ -28,7 +28,7 @@ struct OreSample {
     int x = 0;
     int y = 0;
     int z = 0;
-    BlockID baseBlock = BlockIds::STONE;
+    BlockID baseBlock = BlockRegistry::requireIdByName("minecraft:stone");
 };
 
 struct BenchmarkStats {
@@ -54,7 +54,7 @@ std::vector<OreSample> buildStoneOnlySamples(int sampleCount) {
         const int z = static_cast<int>(state & 8191U) - 4096;
         state = state * 1664525U + 1013904223U;
         const int y = 1 + static_cast<int>(state % 129U);
-        samples.push_back(OreSample{x, y, z, BlockIds::STONE});
+        samples.push_back(OreSample{x, y, z, BlockRegistry::requireIdByName("minecraft:stone")});
     }
 
     return samples;
@@ -75,15 +75,15 @@ std::vector<OreSample> buildMixedSamples(int sampleCount) {
 
         state = state * 1664525U + 1013904223U;
         const uint32_t bucket = state % 100U;
-        BlockID baseBlock = BlockIds::STONE;
+        BlockID baseBlock = BlockRegistry::requireIdByName("minecraft:stone");
         if (bucket < 74U) {
-            baseBlock = BlockIds::STONE;
+            baseBlock = BlockRegistry::requireIdByName("minecraft:stone");
         } else if (bucket < 84U) {
-            baseBlock = BlockIds::DIRT;
+            baseBlock = BlockRegistry::requireIdByName("minecraft:dirt");
         } else if (bucket < 93U) {
-            baseBlock = BlockIds::SAND;
+            baseBlock = BlockRegistry::requireIdByName("minecraft:sand");
         } else {
-            baseBlock = BlockIds::AIR;
+            baseBlock = RUNTIME_ID_NULL;
         }
 
         samples.push_back(OreSample{x, y, z, baseBlock});

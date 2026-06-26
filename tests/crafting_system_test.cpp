@@ -11,7 +11,7 @@ namespace {
 
 ItemID item(const char* name) {
     const ItemID id = ItemRegistry::findByName(name);
-    assert(id != ItemIds::AIR);
+    assert(id != RUNTIME_ID_NULL);
     return id;
 }
 
@@ -21,7 +21,7 @@ std::vector<ItemID> makeGrid(std::initializer_list<ItemID> cells) {
 
 void testEmptyGrid() {
     CraftingSystem sys;
-    const std::vector<ItemID> grid(9, ItemIds::AIR);
+    const std::vector<ItemID> grid(9, RUNTIME_ID_NULL);
     const CraftingResult result = sys.match(grid, 3, 3);
     assert(!result.matched);
     std::cout << "  PASS: empty grid returns no match\n";

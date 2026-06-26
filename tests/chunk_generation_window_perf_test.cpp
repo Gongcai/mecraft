@@ -43,7 +43,7 @@ int64_t chunkKey(const int cx, const int cz) {
 }
 
 std::vector<BlockID> snapshotBlocks(const Chunk& chunk) {
-    std::vector<BlockID> blocks(Chunk::BLOCK_COUNT, BlockIds::AIR);
+    std::vector<BlockID> blocks(Chunk::BLOCK_COUNT, RUNTIME_ID_NULL);
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {

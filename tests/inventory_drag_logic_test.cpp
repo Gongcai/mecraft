@@ -28,7 +28,7 @@ int main() {
     }
 
     const ItemID sourceItem = inventory.getSlotItem(0);
-    if (sourceItem == ItemIds::AIR) {
+    if (sourceItem == RUNTIME_ID_NULL) {
         return fail("expected non-empty default hotbar slot");
     }
 
@@ -37,8 +37,8 @@ int main() {
     if (picked != sourceItem) {
         return fail("getSlotStack should return the original item");
     }
-    inventory.setSlotItem(0, ItemIds::AIR, 0);
-    if (inventory.getSlotItem(0) != ItemIds::AIR) {
+    inventory.setSlotItem(0, RUNTIME_ID_NULL, 0);
+    if (inventory.getSlotItem(0) != RUNTIME_ID_NULL) {
         return fail("clearing slot should result in AIR");
     }
 

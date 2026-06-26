@@ -81,15 +81,15 @@ void testAdjacentChunksCanBeInFlightTogether() {
     constexpr int zA = 8;
     constexpr int zB = 10;
     for (int x = 13; x <= 18; ++x) {
-        world.setBlock(x, y, zA, BlockIds::STONE);
-        world.setBlock(x, y, zB, BlockIds::STONE);
+        world.setBlock(x, y, zA, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(x, y, zB, BlockRegistry::requireIdByName("minecraft:stone"));
     }
     tickWorld(world, playerPos, 20);
     settleLoadedArea(world, playerPos);
 
     constexpr int torchY = y + 1;
-    world.setBlock(14, torchY, zA, BlockIds::TORCH);
-    world.setBlock(17, torchY, zB, BlockIds::TORCH);
+    world.setBlock(14, torchY, zA, BlockRegistry::requireIdByName("minecraft:torch"));
+    world.setBlock(17, torchY, zB, BlockRegistry::requireIdByName("minecraft:torch"));
 
     bool sawConcurrentSubmit = false;
     bool bothCrossChunkLit = false;
@@ -152,8 +152,8 @@ void testUnloadDropsLateLightingResults() {
     };
 
     for (const Seed& seed : seeds) {
-        world.setBlock(seed.x, baseY, seed.z, BlockIds::STONE);
-        world.setBlock(seed.x, torchY, seed.z, BlockIds::TORCH);
+        world.setBlock(seed.x, baseY, seed.z, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(seed.x, torchY, seed.z, BlockRegistry::requireIdByName("minecraft:torch"));
     }
 
     world.update(nearPos);
@@ -193,7 +193,7 @@ void testUnloadDropsLateLightingResults() {
     const bool cleanReload = waitUntil(world, nearPos, 120, [&]() {
         Chunk* chunk = findChunk(world, 0, 0);
         return chunk != nullptr &&
-               world.getBlock(8, torchY, 8) != BlockIds::TORCH &&
+               world.getBlock(8, torchY, 8) != BlockRegistry::requireIdByName("minecraft:torch") &&
                chunk->getBlockLight(8, torchY, 8) == 0;
     });
     if (!cleanReload) {
@@ -221,28 +221,28 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
     constexpr int torchZ = 8;
     constexpr int helperX = 9;
 
-    world.setBlock(torchX, baseY, torchZ, BlockIds::STONE);
-    world.setBlock(helperX, baseY, torchZ, BlockIds::STONE);
-    world.setBlock(24, baseY, 8, BlockIds::STONE);
-    world.setBlock(24, torchY, 8, BlockIds::TORCH);
-    world.setBlock(8, baseY, 24, BlockIds::STONE);
-    world.setBlock(8, torchY, 24, BlockIds::TORCH);
-    world.setBlock(24, baseY, 24, BlockIds::STONE);
-    world.setBlock(24, torchY, 24, BlockIds::TORCH);
+    world.setBlock(torchX, baseY, torchZ, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(helperX, baseY, torchZ, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(24, baseY, 8, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(24, torchY, 8, BlockRegistry::requireIdByName("minecraft:torch"));
+    world.setBlock(8, baseY, 24, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(8, torchY, 24, BlockRegistry::requireIdByName("minecraft:torch"));
+    world.setBlock(24, baseY, 24, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(24, torchY, 24, BlockRegistry::requireIdByName("minecraft:torch"));
     tickWorld(world, playerPos, 10);
     settleLoadedArea(world, playerPos);
 
-    world.setBlock(torchX, torchY, torchZ, BlockIds::TORCH);
+    world.setBlock(torchX, torchY, torchZ, BlockRegistry::requireIdByName("minecraft:torch"));
     world.update(playerPos);
 
     bool sawRequeue = false;
     for (int i = 0; i < 48; ++i) {
-        world.setBlock(torchX, torchY, torchZ, (i % 2 == 0) ? BlockIds::TORCH : BlockIds::AIR);
-        world.setBlock(helperX, torchY, torchZ, (i % 3 == 0) ? BlockIds::STONE : BlockIds::AIR);
+        world.setBlock(torchX, torchY, torchZ, (i % 2 == 0) ? BlockRegistry::requireIdByName("minecraft:torch") : RUNTIME_ID_NULL);
+        world.setBlock(helperX, torchY, torchZ, (i % 3 == 0) ? BlockRegistry::requireIdByName("minecraft:stone") : RUNTIME_ID_NULL);
     }
 
-    world.setBlock(torchX, torchY, torchZ, BlockIds::AIR);
-    world.setBlock(helperX, torchY, torchZ, BlockIds::AIR);
+    world.setBlock(torchX, torchY, torchZ, RUNTIME_ID_NULL);
+    world.setBlock(helperX, torchY, torchZ, RUNTIME_ID_NULL);
 
     for (int i = 0; i < 180; ++i) {
         world.update(playerPos);
@@ -251,7 +251,7 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
         }
         Chunk* chunk = findChunk(world, 0, 0);
         const bool finalStateClean = chunk != nullptr &&
-            world.getBlock(torchX, torchY, torchZ) == BlockIds::AIR &&
+            world.getBlock(torchX, torchY, torchZ) == RUNTIME_ID_NULL &&
             chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
             chunk->getBlockLight(helperX, torchY, torchZ) == 0;
         if (sawRequeue && finalStateClean) {
@@ -265,7 +265,7 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
     }
     Chunk* chunk = findChunk(world, 0, 0);
     const bool finalStateClean = chunk != nullptr &&
-        world.getBlock(torchX, torchY, torchZ) == BlockIds::AIR &&
+        world.getBlock(torchX, torchY, torchZ) == RUNTIME_ID_NULL &&
         chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
         chunk->getBlockLight(helperX, torchY, torchZ) == 0;
     if (!finalStateClean) {
@@ -294,7 +294,7 @@ void testInteriorBlockChangeOnlyQueuesOwningChunk() {
         fail("loaded area should settle before testing a single interior edit");
     }
 
-    world.setBlock(8, 80, 8, BlockIds::STONE);
+    world.setBlock(8, 80, 8, BlockRegistry::requireIdByName("minecraft:stone"));
     const LightFrameStats stats = world.getLightFrameStats();
     if (stats.queued != 1 || stats.dirty != 1) {
         fail("interior block change should queue only the owning chunk");
@@ -326,8 +326,8 @@ void testInteractiveFlushAppliesBlockLightBeforeNextWorldTick() {
     constexpr int torchY = 81;
     constexpr int torchZ = 8;
     constexpr int sampleX = torchX + 1;
-    world.setBlock(torchX, torchY - 1, torchZ, BlockIds::STONE);
-    world.setBlock(torchX, torchY, torchZ, BlockIds::TORCH);
+    world.setBlock(torchX, torchY - 1, torchZ, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(torchX, torchY, torchZ, BlockRegistry::requireIdByName("minecraft:torch"));
 
     const bool torchLit = waitUntil(world, playerPos, 120, [&]() {
         Chunk* chunk = findChunk(world, 0, 0);
@@ -345,7 +345,7 @@ void testInteractiveFlushAppliesBlockLightBeforeNextWorldTick() {
         fail("torch placement should settle before testing immediate removal");
     }
 
-    world.setBlock(torchX, torchY, torchZ, BlockIds::AIR);
+    world.setBlock(torchX, torchY, torchZ, RUNTIME_ID_NULL);
     world.flushInteractiveLighting(playerPos);
 
     Chunk* chunk = findChunk(world, 0, 0);
@@ -371,7 +371,7 @@ void testBoundaryInboxDoesNotDirtyMeshBeforeLightApply() {
     constexpr int y = 80;
     constexpr int z = 8;
     for (int x = 14; x <= 17; ++x) {
-        world.setBlock(x, y, z, BlockIds::STONE);
+        world.setBlock(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
     }
     tickWorld(world, playerPos, 40);
     const bool settled = waitUntil(world, playerPos, 240, [&]() {
@@ -388,7 +388,7 @@ void testBoundaryInboxDoesNotDirtyMeshBeforeLightApply() {
     }
     rightChunk->markMeshClean();
 
-    world.setBlock(14, y + 1, z, BlockIds::TORCH);
+    world.setBlock(14, y + 1, z, BlockRegistry::requireIdByName("minecraft:torch"));
 
     bool sawBoundarySync = false;
     for (int i = 0; i < 120; ++i) {

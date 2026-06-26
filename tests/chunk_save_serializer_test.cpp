@@ -107,7 +107,7 @@ static void testEmptyChunkRoundTrip() {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                assert(loaded->getBlock(x, y, z) == BlockIds::AIR);
+                assert(loaded->getBlock(x, y, z) == RUNTIME_ID_NULL);
             }
         }
     }
@@ -121,7 +121,7 @@ static void testSingleSubchunkRoundTrip() {
     for (int y = 64; y < 80; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                original->setBlockFast(x, y, z, BlockIds::STONE);
+                original->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
     }
@@ -134,17 +134,17 @@ static void testSingleSubchunkRoundTrip() {
     for (int y = 64; y < 80; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                assert(loaded->getBlock(x, y, z) == BlockIds::STONE);
+                assert(loaded->getBlock(x, y, z) == BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
     }
 
     // Verify air elsewhere
     for (int y = 0; y < 64; ++y) {
-        assert(loaded->getBlock(0, y, 0) == BlockIds::AIR);
+        assert(loaded->getBlock(0, y, 0) == RUNTIME_ID_NULL);
     }
     for (int y = 80; y < Chunk::SIZE_Y; ++y) {
-        assert(loaded->getBlock(0, y, 0) == BlockIds::AIR);
+        assert(loaded->getBlock(0, y, 0) == RUNTIME_ID_NULL);
     }
     std::printf("[PASS] testSingleSubchunkRoundTrip\n");
 }
@@ -156,7 +156,7 @@ static void testMultipleSubchunksRoundTrip() {
     for (int y = 0; y < 16; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                original->setBlockFast(x, y, z, BlockIds::DIRT);
+                original->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:dirt"));
             }
         }
     }
@@ -165,7 +165,7 @@ static void testMultipleSubchunksRoundTrip() {
     for (int y = 64; y < 80; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                original->setBlockFast(x, y, z, BlockIds::STONE);
+                original->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
     }
@@ -174,7 +174,7 @@ static void testMultipleSubchunksRoundTrip() {
     for (int y = 112; y < 128; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                original->setBlockFast(x, y, z, BlockIds::GRASS);
+                original->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:grass_block"));
             }
         }
     }
@@ -185,18 +185,18 @@ static void testMultipleSubchunksRoundTrip() {
 
     // Verify each subchunk
     for (int y = 0; y < 16; ++y) {
-        assert(loaded->getBlock(5, y, 5) == BlockIds::DIRT);
+        assert(loaded->getBlock(5, y, 5) == BlockRegistry::requireIdByName("minecraft:dirt"));
     }
     for (int y = 64; y < 80; ++y) {
-        assert(loaded->getBlock(5, y, 5) == BlockIds::STONE);
+        assert(loaded->getBlock(5, y, 5) == BlockRegistry::requireIdByName("minecraft:stone"));
     }
     for (int y = 112; y < 128; ++y) {
-        assert(loaded->getBlock(5, y, 5) == BlockIds::GRASS);
+        assert(loaded->getBlock(5, y, 5) == BlockRegistry::requireIdByName("minecraft:grass_block"));
     }
 
     // Verify air between subchunks
-    assert(loaded->getBlock(5, 32, 5) == BlockIds::AIR);
-    assert(loaded->getBlock(5, 96, 5) == BlockIds::AIR);
+    assert(loaded->getBlock(5, 32, 5) == RUNTIME_ID_NULL);
+    assert(loaded->getBlock(5, 96, 5) == RUNTIME_ID_NULL);
     std::printf("[PASS] testMultipleSubchunksRoundTrip\n");
 }
 
@@ -206,7 +206,7 @@ static void testNegativeCoordinatesRoundTrip() {
     for (int y = 64; y < 80; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                original->setBlockFast(x, y, z, BlockIds::STONE);
+                original->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
     }
@@ -218,7 +218,7 @@ static void testNegativeCoordinatesRoundTrip() {
     assert(loaded->m_chunkZ == 5);
 
     for (int y = 64; y < 80; ++y) {
-        assert(loaded->getBlock(8, y, 8) == BlockIds::STONE);
+        assert(loaded->getBlock(8, y, 8) == BlockRegistry::requireIdByName("minecraft:stone"));
     }
     std::printf("[PASS] testNegativeCoordinatesRoundTrip\n");
 }
@@ -228,11 +228,11 @@ static void testMixedBlocksInSubchunk() {
 
     // Mix of different blocks in subchunk 4
     for (int x = 0; x < Chunk::SIZE_X; ++x) {
-        original->setBlockFast(x, 64, 0, BlockIds::STONE);
-        original->setBlockFast(x, 65, 0, BlockIds::DIRT);
-        original->setBlockFast(x, 66, 0, BlockIds::GRASS);
-        original->setBlockFast(x, 67, 0, BlockIds::STONE);
-        original->setBlockFast(x, 68, 0, BlockIds::OAK_PLANKS);
+        original->setBlockFast(x, 64, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+        original->setBlockFast(x, 65, 0, BlockRegistry::requireIdByName("minecraft:dirt"));
+        original->setBlockFast(x, 66, 0, BlockRegistry::requireIdByName("minecraft:grass_block"));
+        original->setBlockFast(x, 67, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+        original->setBlockFast(x, 68, 0, BlockRegistry::requireIdByName("minecraft:oak_planks"));
     }
 
     std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
@@ -240,11 +240,11 @@ static void testMixedBlocksInSubchunk() {
     assert(loaded != nullptr);
 
     for (int x = 0; x < Chunk::SIZE_X; ++x) {
-        assert(loaded->getBlock(x, 64, 0) == BlockIds::STONE);
-        assert(loaded->getBlock(x, 65, 0) == BlockIds::DIRT);
-        assert(loaded->getBlock(x, 66, 0) == BlockIds::GRASS);
-        assert(loaded->getBlock(x, 67, 0) == BlockIds::STONE);
-        assert(loaded->getBlock(x, 68, 0) == BlockIds::OAK_PLANKS);
+        assert(loaded->getBlock(x, 64, 0) == BlockRegistry::requireIdByName("minecraft:stone"));
+        assert(loaded->getBlock(x, 65, 0) == BlockRegistry::requireIdByName("minecraft:dirt"));
+        assert(loaded->getBlock(x, 66, 0) == BlockRegistry::requireIdByName("minecraft:grass_block"));
+        assert(loaded->getBlock(x, 67, 0) == BlockRegistry::requireIdByName("minecraft:stone"));
+        assert(loaded->getBlock(x, 68, 0) == BlockRegistry::requireIdByName("minecraft:oak_planks"));
     }
     std::printf("[PASS] testMixedBlocksInSubchunk\n");
 }
@@ -253,7 +253,7 @@ static void testBlockStateRoundTrip() {
     auto original = std::make_shared<Chunk>(0, 0);
 
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
-    if (oakStairs == BlockIds::AIR) {
+    if (oakStairs == RUNTIME_ID_NULL) {
         std::fprintf(stderr, "[FAIL] oak_stairs should be registered\n");
         std::abort();
     }
@@ -291,7 +291,7 @@ static void testChestBlockStateRoundTrip() {
     auto original = std::make_shared<Chunk>(0, 0);
 
     const StateID eastChest = BlockStateRegistry::getState(
-        BlockIds::CHEST,
+        BlockRegistry::requireIdByName("minecraft:chest"),
         PropIndices::FACING,
         PropIndices::FACING_EAST);
     original->setBlock(6, 70, 5, eastChest);
@@ -304,7 +304,7 @@ static void testChestBlockStateRoundTrip() {
     }
 
     const StateID loadedState = loaded->getBlock(6, 70, 5);
-    if (BlockStateRegistry::getBlockId(loadedState) != BlockIds::CHEST ||
+    if (BlockStateRegistry::getBlockId(loadedState) != BlockRegistry::requireIdByName("minecraft:chest") ||
         BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) != PropIndices::FACING_EAST) {
         std::fprintf(stderr,
                      "[FAIL] chunk serializer should preserve chest state: expected=%s loaded=%s\n",
@@ -318,7 +318,7 @@ static void testChestBlockStateRoundTrip() {
 
 static void testBareStateNameLoadsDefaultBlockState() {
     const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
-    if (oakStairs == BlockIds::AIR) {
+    if (oakStairs == RUNTIME_ID_NULL) {
         std::fprintf(stderr, "[FAIL] oak_stairs should be registered\n");
         std::abort();
     }
@@ -372,24 +372,24 @@ static void testFluidLayerRoundTrip() {
     auto original = std::make_shared<Chunk>(0, 0);
 
     // Place a stone block with water on top (waterlogged scenario)
-    original->setBlockFast(5, 64, 5, BlockIds::STONE);
+    original->setBlockFast(5, 64, 5, BlockRegistry::requireIdByName("minecraft:stone"));
 
     // Set fluid layer at (5, 65, 5) to water
     SubChunk* sub = original->getSubChunk(Chunk::toSubChunkIndex(65));
     if (!sub) {
         sub = original->getOrCreateSubChunk(Chunk::toSubChunkIndex(65));
     }
-    sub->setFluidLayer(5, Chunk::toSubChunkLocalY(65), 5, BlockIds::WATER);
+    sub->setFluidLayer(5, Chunk::toSubChunkLocalY(65), 5, BlockRegistry::requireIdByName("minecraft:water"));
 
     std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
     auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
     assert(loaded != nullptr);
 
-    assert(loaded->getBlock(5, 64, 5) == BlockIds::STONE);
+    assert(loaded->getBlock(5, 64, 5) == BlockRegistry::requireIdByName("minecraft:stone"));
 
     const SubChunk* loadedSub = loaded->getSubChunk(Chunk::toSubChunkIndex(65));
     assert(loadedSub != nullptr);
-    assert(loadedSub->getFluidLayer(5, Chunk::toSubChunkLocalY(65), 5) == BlockIds::WATER);
+    assert(loadedSub->getFluidLayer(5, Chunk::toSubChunkLocalY(65), 5) == BlockRegistry::requireIdByName("minecraft:water"));
     std::printf("[PASS] testFluidLayerRoundTrip\n");
 }
 
@@ -397,7 +397,7 @@ static void testPayloadSizeReasonable() {
     auto original = std::make_shared<Chunk>(0, 0);
 
     // A single block should produce a small payload
-    original->setBlockFast(0, 64, 0, BlockIds::STONE);
+    original->setBlockFast(0, 64, 0, BlockRegistry::requireIdByName("minecraft:stone"));
 
     std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
     // Header is 24 bytes, payload should be modest for a mostly-empty chunk.
@@ -497,7 +497,7 @@ static void testSaveManagerChunkRoundTrip() {
         for (int y = 64; y < 80; ++y) {
             for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                 for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                    chunk->setBlockFast(x, y, z, BlockIds::WOOD);
+                    chunk->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:oak_log"));
                 }
             }
         }
@@ -513,7 +513,7 @@ static void testSaveManagerChunkRoundTrip() {
     assert(loaded->m_chunkZ == -2);
 
     for (int y = 64; y < 80; ++y) {
-        assert(loaded->getBlock(8, y, 8) == BlockIds::WOOD);
+        assert(loaded->getBlock(8, y, 8) == BlockRegistry::requireIdByName("minecraft:oak_log"));
     }
 
     // Cleanup
@@ -561,7 +561,7 @@ static void testSaveManagerPersistentEntitiesRoundTrip() {
     drop.velZ = -0.6f;
     drop.yaw = 1.25f;
     drop.spinSpeed = 2.75f;
-    drop.itemId = ItemIds::COAL;
+    drop.itemId = ItemRegistry::requireIdByName("minecraft:coal");
     drop.stackCount = 4;
     drop.dropId = 42;
     drop.halfExtentX = 0.2f;
@@ -621,13 +621,13 @@ static void testSaveManagerBlockEntitiesRoundTrip() {
 
     save::BlockEntitySlotData apple;
     apple.slot = 0;
-    apple.itemId = ItemIds::APPLE;
+    apple.itemId = ItemRegistry::requireIdByName("minecraft:apple");
     apple.count = 5;
     chest.slots.push_back(apple);
 
     save::BlockEntitySlotData pickaxe;
     pickaxe.slot = 17;
-    pickaxe.itemId = ItemIds::IRON_PICKAXE;
+    pickaxe.itemId = ItemRegistry::requireIdByName("minecraft:iron_pickaxe");
     pickaxe.count = 1;
     pickaxe.durability = 93;
     chest.slots.push_back(pickaxe);
@@ -650,7 +650,7 @@ static void testSaveManagerBlockEntitiesRoundTrip() {
 
     save::BlockEntitySlotData fuel;
     fuel.slot = 1;
-    fuel.itemId = ItemIds::COAL;
+    fuel.itemId = ItemRegistry::requireIdByName("minecraft:coal");
     fuel.count = 2;
     furnace.slots.push_back(fuel);
 

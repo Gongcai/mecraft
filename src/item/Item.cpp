@@ -23,20 +23,6 @@ std::unordered_map<ItemID, BlockID> ItemRegistry::s_itemToRenderBlock{};
 std::unordered_map<BlockID, BlockDropEntry> BlockDropTable::s_drops{};
 bool BlockDropTable::s_initialized = false;
 
-namespace ItemIds {
-ItemID AIR = 0;
-#define MECRAFT_DEFINE_PURE_ITEM_ID(symbol, path) ItemID symbol = 0;
-MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(MECRAFT_DEFINE_PURE_ITEM_ID)
-#undef MECRAFT_DEFINE_PURE_ITEM_ID
-
-void init() {
-    AIR = ItemRegistry::getId(NamespacedId("minecraft", "air"));
-#define MECRAFT_INIT_PURE_ITEM_ID(symbol, path) symbol = ItemRegistry::getId(NamespacedId("minecraft", path));
-    MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(MECRAFT_INIT_PURE_ITEM_ID)
-#undef MECRAFT_INIT_PURE_ITEM_ID
-}
-}
-
 namespace {
 constexpr const char* kItemsConfigPath = ITEMS_CONFIG_PATH;
 
@@ -327,7 +313,6 @@ void ItemRegistry::init() {
 
     s_initializing = false;
     s_initialized = true;
-    ItemIds::init();
 }
 
 const ItemDef& ItemRegistry::get(const ItemID id) {

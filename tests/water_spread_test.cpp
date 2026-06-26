@@ -48,8 +48,8 @@ int main() {
     uint64_t currentTick = 0;
 
     const int baseY = 96;
-    fillBox(world, -6, 7, baseY, baseY + 2, -6, 6, BlockIds::AIR);
-    fillBox(world, -6, 7, baseY - 1, baseY - 1, -6, 6, BlockIds::STONE);
+    fillBox(world, -6, 7, baseY, baseY + 2, -6, 6, RUNTIME_ID_NULL);
+    fillBox(world, -6, 7, baseY - 1, baseY - 1, -6, 6, BlockRegistry::requireIdByName("minecraft:stone"));
     advanceTicks(world, currentTick, 12);
 
     const StateID source = FluidState::makeWater(0, false);
@@ -76,49 +76,49 @@ int main() {
         return fail("water should spread horizontally with level decay");
     }
 
-    world.setBlock(1, baseY - 1, 0, BlockIds::AIR);
+    world.setBlock(1, baseY - 1, 0, RUNTIME_ID_NULL);
     advanceTicks(world, currentTick, 6);
     const BlockID fallingBelow = world.getBlock(1, baseY - 1, 0);
     if (!FluidState::isWater(fallingBelow) || !FluidState::isFalling(fallingBelow)) {
         return fail("water should prioritize falling into newly opened space");
     }
-    world.setBlock(2, baseY - 1, 0, BlockIds::AIR);
-    world.setBlock(1, baseY - 2, 0, BlockIds::STONE);
-    world.setBlock(2, baseY - 2, 0, BlockIds::STONE);
+    world.setBlock(2, baseY - 1, 0, RUNTIME_ID_NULL);
+    world.setBlock(1, baseY - 2, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(2, baseY - 2, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     advanceTicks(world, currentTick, 12);
     if (!FluidState::isWater(world.getBlock(2, baseY - 1, 0))) {
         return fail("falling water should spread outward after landing on support");
     }
 
-    world.setBlock(0, baseY, 0, BlockIds::AIR);
+    world.setBlock(0, baseY, 0, RUNTIME_ID_NULL);
     advanceTicks(world, currentTick, 32);
-    if (world.getBlock(1, baseY, 0) != BlockIds::AIR || world.getBlock(1, baseY - 1, 0) != BlockIds::AIR) {
+    if (world.getBlock(1, baseY, 0) != RUNTIME_ID_NULL || world.getBlock(1, baseY - 1, 0) != RUNTIME_ID_NULL) {
         return fail("non-source water should retract after its source is removed and the update wave settles");
     }
 
     {
         const int seekY = 104;
-        fillBox(world, -4, 4, seekY, seekY + 2, -2, 2, BlockIds::AIR);
-        fillBox(world, -4, 4, seekY - 1, seekY - 1, -2, 2, BlockIds::STONE);
-        world.setBlock(1, seekY - 1, 0, BlockIds::AIR);
+        fillBox(world, -4, 4, seekY, seekY + 2, -2, 2, RUNTIME_ID_NULL);
+        fillBox(world, -4, 4, seekY - 1, seekY - 1, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(1, seekY - 1, 0, RUNTIME_ID_NULL);
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(0, seekY, 0, source);
         advanceTicks(world, currentTick, 8);
         if (!FluidState::isWater(world.getBlock(1, seekY, 0)) ||
-            world.getBlock(-1, seekY, 0) != BlockIds::AIR ||
-            world.getBlock(0, seekY, 1) != BlockIds::AIR ||
-            world.getBlock(0, seekY, -1) != BlockIds::AIR) {
+            world.getBlock(-1, seekY, 0) != RUNTIME_ID_NULL ||
+            world.getBlock(0, seekY, 1) != RUNTIME_ID_NULL ||
+            world.getBlock(0, seekY, -1) != RUNTIME_ID_NULL) {
             return fail("water should seek the nearest hole instead of spreading evenly across flat ground");
         }
     }
 
     {
         const int rerouteY = 160;
-        fillBox(world, -6, 6, rerouteY, rerouteY + 2, -6, 6, BlockIds::AIR);
-        fillBox(world, -6, 6, rerouteY - 1, rerouteY - 1, -6, 6, BlockIds::STONE);
-        world.setBlock(3, rerouteY - 1, 0, BlockIds::AIR);
-        world.setBlock(0, rerouteY - 1, 4, BlockIds::AIR);
+        fillBox(world, -6, 6, rerouteY, rerouteY + 2, -6, 6, RUNTIME_ID_NULL);
+        fillBox(world, -6, 6, rerouteY - 1, rerouteY - 1, -6, 6, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(3, rerouteY - 1, 0, RUNTIME_ID_NULL);
+        world.setBlock(0, rerouteY - 1, 4, RUNTIME_ID_NULL);
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(0, rerouteY, 0, source);
@@ -128,36 +128,36 @@ int main() {
             return fail("water should initially prefer the closest downhill hole");
         }
 
-        world.setBlock(3, rerouteY - 1, 0, BlockIds::STONE);
+        world.setBlock(3, rerouteY - 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
         advanceTicks(world, currentTick, 24);
         if (!FluidState::isWater(world.getBlock(0, rerouteY, 1)) ||
-            world.getBlock(1, rerouteY, 0) != BlockIds::AIR) {
+            world.getBlock(1, rerouteY, 0) != RUNTIME_ID_NULL) {
             return fail("water should reroute when the closest downhill hole is blocked");
         }
     }
 
     {
         const int forkY = 120;
-        fillBox(world, 8, 16, forkY, forkY + 2, -2, 2, BlockIds::AIR);
-        fillBox(world, 8, 16, forkY - 1, forkY - 1, -2, 2, BlockIds::STONE);
-        world.setBlock(10, forkY - 1, 0, BlockIds::AIR);
-        world.setBlock(12, forkY - 1, 0, BlockIds::AIR);
+        fillBox(world, 8, 16, forkY, forkY + 2, -2, 2, RUNTIME_ID_NULL);
+        fillBox(world, 8, 16, forkY - 1, forkY - 1, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(10, forkY - 1, 0, RUNTIME_ID_NULL);
+        world.setBlock(12, forkY - 1, 0, RUNTIME_ID_NULL);
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(11, forkY, 0, source);
         advanceTicks(world, currentTick, 8);
         if (!FluidState::isWater(world.getBlock(10, forkY, 0)) ||
             !FluidState::isWater(world.getBlock(12, forkY, 0)) ||
-            world.getBlock(11, forkY, 1) != BlockIds::AIR ||
-            world.getBlock(11, forkY, -1) != BlockIds::AIR) {
+            world.getBlock(11, forkY, 1) != RUNTIME_ID_NULL ||
+            world.getBlock(11, forkY, -1) != RUNTIME_ID_NULL) {
             return fail("equal-distance holes should allow water to split across the best directions only");
         }
     }
 
     {
         const int flatY = 136;
-        fillBox(world, 15, 27, flatY, flatY + 2, -6, 6, BlockIds::AIR);
-        fillBox(world, 15, 27, flatY - 1, flatY - 1, -6, 6, BlockIds::STONE);
+        fillBox(world, 15, 27, flatY, flatY + 2, -6, 6, RUNTIME_ID_NULL);
+        fillBox(world, 15, 27, flatY - 1, flatY - 1, -6, 6, BlockRegistry::requireIdByName("minecraft:stone"));
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(21, flatY, 0, source);
@@ -171,9 +171,9 @@ int main() {
 
     {
         const int naturalPoolY = 168;
-        fillBox(world, -4, 4, naturalPoolY - 1, naturalPoolY + 2, -2, 2, BlockIds::AIR);
-        fillBox(world, -4, 4, naturalPoolY - 2, naturalPoolY - 2, -2, 2, BlockIds::STONE);
-        fillBox(world, 1, 1, naturalPoolY, naturalPoolY + 1, 0, 0, BlockIds::STONE);
+        fillBox(world, -4, 4, naturalPoolY - 1, naturalPoolY + 2, -2, 2, RUNTIME_ID_NULL);
+        fillBox(world, -4, 4, naturalPoolY - 2, naturalPoolY - 2, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillBox(world, 1, 1, naturalPoolY, naturalPoolY + 1, 0, 0, BlockRegistry::requireIdByName("minecraft:stone"));
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(-1, naturalPoolY - 1, 0, source);
@@ -181,7 +181,7 @@ int main() {
         world.setBlock(0, naturalPoolY, 0, source);
         advanceTicks(world, currentTick, 8);
 
-        world.setBlock(1, naturalPoolY, 0, BlockIds::AIR);
+        world.setBlock(1, naturalPoolY, 0, RUNTIME_ID_NULL);
         advanceTicks(world, currentTick, 12);
         if (!FluidState::isWater(world.getBlock(1, naturalPoolY, 0))) {
             return fail("natural water should spread into newly exposed air instead of seeking filled water columns");
@@ -190,8 +190,8 @@ int main() {
 
     {
         const int infiniteY = 144;
-        fillBox(world, 19, 31, infiniteY, infiniteY + 2, -6, 6, BlockIds::AIR);
-        fillBox(world, 19, 31, infiniteY - 1, infiniteY - 1, -6, 6, BlockIds::STONE);
+        fillBox(world, 19, 31, infiniteY, infiniteY + 2, -6, 6, RUNTIME_ID_NULL);
+        fillBox(world, 19, 31, infiniteY - 1, infiniteY - 1, -6, 6, BlockRegistry::requireIdByName("minecraft:stone"));
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(24, infiniteY, 0, source);
@@ -204,9 +204,9 @@ int main() {
 
     {
         const int unsupportedInfiniteY = 152;
-        fillBox(world, 19, 31, unsupportedInfiniteY, unsupportedInfiniteY + 2, -6, 6, BlockIds::AIR);
-        fillBox(world, 19, 31, unsupportedInfiniteY - 1, unsupportedInfiniteY - 1, -6, 6, BlockIds::STONE);
-        world.setBlock(25, unsupportedInfiniteY - 1, 0, BlockIds::AIR);
+        fillBox(world, 19, 31, unsupportedInfiniteY, unsupportedInfiniteY + 2, -6, 6, RUNTIME_ID_NULL);
+        fillBox(world, 19, 31, unsupportedInfiniteY - 1, unsupportedInfiniteY - 1, -6, 6, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(25, unsupportedInfiniteY - 1, 0, RUNTIME_ID_NULL);
         advanceTicks(world, currentTick, 4);
 
         world.setBlock(24, unsupportedInfiniteY, 0, source);
@@ -220,9 +220,9 @@ int main() {
     const int edgeY = 112;
     for (int x = 14; x <= 17; ++x) {
         for (int y = edgeY; y <= edgeY + 1; ++y) {
-            world.setBlock(x, y, 0, BlockIds::AIR);
+            world.setBlock(x, y, 0, RUNTIME_ID_NULL);
         }
-        world.setBlock(x, edgeY - 1, 0, BlockIds::STONE);
+        world.setBlock(x, edgeY - 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     }
 
     world.setBlock(15, edgeY, 0, source);
@@ -235,11 +235,11 @@ int main() {
     for (int x = -2; x <= 2; ++x) {
         for (int z = -2; z <= 2; ++z) {
             for (int y = pillarY - 2; y <= pillarY + 1; ++y) {
-                world.setBlock(x, y, z, BlockIds::AIR);
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
             }
         }
     }
-    world.setBlock(0, pillarY - 1, 0, BlockIds::STONE);
+    world.setBlock(0, pillarY - 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     advanceTicks(world, currentTick, 8);
 
     world.setBlock(0, pillarY, 0, source);
@@ -251,7 +251,7 @@ int main() {
     if (FluidState::surfaceHeight(unsupportedEdge) >= 0.999f) {
         return fail("unsupported horizontal spill should still lower its top surface by level");
     }
-    if (world.getBlock(2, pillarY, 0) != BlockIds::AIR) {
+    if (world.getBlock(2, pillarY, 0) != RUNTIME_ID_NULL) {
         return fail("water on top of a single pillar should not keep spreading sideways without support");
     }
 

@@ -186,20 +186,20 @@ int main() {
             MeshBuilderRegistry::getBuilder(MeshBuilderRegistry::REDSTONE_WIRE_TAG) == nullptr) {
             return fail("redstone_wire shape should resolve to the custom wire mesh builder");
         }
-        const BlockDef& torchDef = BlockRegistry::get(BlockIds::TORCH);
+        const BlockDef& torchDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:torch"));
         if (torchDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("torch")) {
             return fail("torch block should resolve renderShapeTag through the mesh builder registry");
         }
-        const BlockDef& waterDef = BlockRegistry::get(BlockIds::WATER);
+        const BlockDef& waterDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:water"));
         if (waterDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("water")) {
             return fail("water block should resolve renderShapeTag through the mesh builder registry");
         }
-        const BlockDef& chestDef = BlockRegistry::get(BlockIds::CHEST);
+        const BlockDef& chestDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:chest"));
         if (chestDef.renderShapeTag != MeshBuilderRegistry::getShapeTag("block_entity")) {
             return fail("chest block should resolve renderShapeTag through the mesh builder registry");
         }
         const BlockID vine = BlockRegistry::findByName("vine");
-        if (vine == BlockIds::AIR) {
+        if (vine == RUNTIME_ID_NULL) {
             return fail("vine block should be registered");
         }
         const BlockDef& vineDef = BlockRegistry::get(vine);
@@ -214,36 +214,36 @@ int main() {
         constexpr int sampleY = 1;
         const BlockID generatedNeighbor = world.sampleGeneratedBlock(Chunk::SIZE_X, sampleY, 0);
         const BlockID generatedDiagonal = world.sampleGeneratedBlock(Chunk::SIZE_X, sampleY, Chunk::SIZE_Z);
-        if (generatedNeighbor == BlockIds::AIR || generatedDiagonal == BlockIds::AIR) {
+        if (generatedNeighbor == RUNTIME_ID_NULL || generatedDiagonal == RUNTIME_ID_NULL) {
             return fail("snapshot fallback test seed should generate solid missing neighbor samples");
         }
 
         Chunk center(0, 0);
-        center.setBlock(0, sampleY, 0, BlockIds::STONE);
+        center.setBlock(0, sampleY, 0, BlockRegistry::requireIdByName("minecraft:stone"));
         const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(
             center, 0, nullptr, nullptr, nullptr, nullptr, &world);
         if (!snapshot) {
             return fail("snapshot fallback test should capture a sub-chunk");
         }
-        if (snapshot->posXBorder[snapshotBorderIndex(sampleY, 0)] != BlockIds::AIR) {
+        if (snapshot->posXBorder[snapshotBorderIndex(sampleY, 0)] != RUNTIME_ID_NULL) {
             return fail("missing +X neighbor border should be air instead of generated terrain");
         }
-        if (snapshot->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] != BlockIds::AIR) {
+        if (snapshot->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] != RUNTIME_ID_NULL) {
             return fail("missing +X neighbor halo should be air instead of generated terrain");
         }
-        if (snapshot->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, Chunk::SIZE_Z)] != BlockIds::AIR) {
+        if (snapshot->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, Chunk::SIZE_Z)] != RUNTIME_ID_NULL) {
             return fail("missing diagonal neighbor halo should be air instead of generated terrain");
         }
 
         Chunk posX(1, 0);
-        posX.setBlock(0, sampleY, 0, BlockIds::DIRT);
+        posX.setBlock(0, sampleY, 0, BlockRegistry::requireIdByName("minecraft:dirt"));
         const SubChunkMeshingSnapshotPtr snapshotWithNeighbor = ChunkMesher::captureSubChunkSnapshot(
             center, 0, &posX, nullptr, nullptr, nullptr, &world);
         if (!snapshotWithNeighbor) {
             return fail("snapshot fallback test should capture with a held neighbor");
         }
-        if (snapshotWithNeighbor->posXBorder[snapshotBorderIndex(sampleY, 0)] != BlockIds::DIRT ||
-            snapshotWithNeighbor->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] != BlockIds::DIRT) {
+        if (snapshotWithNeighbor->posXBorder[snapshotBorderIndex(sampleY, 0)] != BlockRegistry::requireIdByName("minecraft:dirt") ||
+            snapshotWithNeighbor->haloBlocks[snapshotHaloIndex(Chunk::SIZE_X, sampleY, 0)] != BlockRegistry::requireIdByName("minecraft:dirt")) {
             return fail("held +X neighbor should still be sampled from the job snapshot");
         }
     }
@@ -254,7 +254,7 @@ int main() {
             return fail("empty sub-chunks should be skipped");
         }
 
-        chunk.setBlock(1, 1, 1, BlockIds::STONE);
+        chunk.setBlock(1, 1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
         SubChunk* sc = chunk.getSubChunk(0);
         if (!sc) {
             return fail("editing a block should create the owning sub-chunk");
@@ -266,13 +266,13 @@ int main() {
             return fail("partially filled sub-chunks should not be skipped");
         }
 
-        chunk.setBlock(2, 1, 1, BlockIds::DIRT);
+        chunk.setBlock(2, 1, 1, BlockRegistry::requireIdByName("minecraft:dirt"));
         if (sc->getType() != SubChunkType::Normal) {
             return fail("mixed edited sub-chunks should remain Normal");
         }
 
-        chunk.setBlock(1, 1, 1, BlockIds::AIR);
-        chunk.setBlock(2, 1, 1, BlockIds::AIR);
+        chunk.setBlock(1, 1, 1, RUNTIME_ID_NULL);
+        chunk.setBlock(2, 1, 1, RUNTIME_ID_NULL);
         if (chunk.getSubChunk(0) != nullptr) {
             return fail("cleared sub-chunks should recycle back to implicit air storage");
         }
@@ -335,13 +335,13 @@ int main() {
         posZ.neighbors[3] = &center;
         negZ.neighbors[2] = &center;
 
-        fillSubChunk(center, 0, BlockIds::STONE);
-        fillSubChunk(center, 1, BlockIds::STONE);
-        fillSubChunk(center, 2, BlockIds::STONE);
-        fillSubChunk(posX, 1, BlockIds::STONE);
-        fillSubChunk(negX, 1, BlockIds::STONE);
-        fillSubChunk(posZ, 1, BlockIds::STONE);
-        fillSubChunk(negZ, 1, BlockIds::STONE);
+        fillSubChunk(center, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(center, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(center, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(posX, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(negX, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(posZ, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(negZ, 1, BlockRegistry::requireIdByName("minecraft:stone"));
 
         const SubChunk* centerSolid = center.getSubChunk(1);
         if (!centerSolid || centerSolid->getType() != SubChunkType::Solid) {
@@ -351,7 +351,7 @@ int main() {
             return fail("fully occluded semantic-solid sub-chunks should be skipped");
         }
 
-        posX.setBlock(0, 16, 0, BlockIds::AIR);
+        posX.setBlock(0, 16, 0, RUNTIME_ID_NULL);
         if (ChunkMesher::shouldSkipSubChunk(center, 1)) {
             return fail("solid sub-chunks with any exposed border should not be skipped");
         }
@@ -359,7 +359,7 @@ int main() {
 
     {
         Chunk waterChunk(0, 0);
-        fillSubChunk(waterChunk, 1, BlockIds::WATER);
+        fillSubChunk(waterChunk, 1, BlockRegistry::requireIdByName("minecraft:water"));
         const SubChunk* water = waterChunk.getSubChunk(1);
         if (!water || water->getType() != SubChunkType::Normal) {
             return fail("uniform transparent sub-chunks should remain Normal");
@@ -371,7 +371,7 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockIds::CHEST));
+        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest")));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
         if (!meshData.opaqueVertices.empty() ||
@@ -402,15 +402,15 @@ int main() {
         posZ.neighbors[3] = &center;
         negZ.neighbors[2] = &center;
 
-        fillSubChunk(center, 0, BlockIds::STONE);
-        fillSubChunk(center, 1, BlockIds::STONE);
-        fillSubChunk(center, 2, BlockIds::STONE);
-        fillSubChunk(posX, 1, BlockIds::STONE);
-        fillSubChunk(negX, 1, BlockIds::STONE);
-        fillSubChunk(posZ, 1, BlockIds::STONE);
-        fillSubChunk(negZ, 1, BlockIds::STONE);
-        fillSubChunk(above, 1, BlockIds::STONE);
-        fillSubChunk(below, 1, BlockIds::STONE);
+        fillSubChunk(center, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(center, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(center, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(posX, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(negX, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(posZ, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(negZ, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(above, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        fillSubChunk(below, 1, BlockRegistry::requireIdByName("minecraft:stone"));
 
         SubChunk* centerSubChunk = center.getSubChunk(1);
         if (!centerSubChunk) {
@@ -455,7 +455,7 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 15, 0, BlockIds::STONE);
+        chunk.setBlock(0, 15, 0, BlockRegistry::requireIdByName("minecraft:stone"));
         chunk.recalcHeightMap(0, 0);
 
         if (chunk.getSubChunk(1) != nullptr) {
@@ -509,8 +509,8 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 1, 0, BlockIds::STONE);
-        chunk.setBlock(0, 33, 0, BlockIds::STONE);
+        chunk.setBlock(0, 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+        chunk.setBlock(0, 33, 0, BlockRegistry::requireIdByName("minecraft:stone"));
         chunk.recalcHeightMap(0, 0);
 
         SubChunk* bottom = chunk.getSubChunk(0);
@@ -537,8 +537,8 @@ int main() {
         left.neighbors[0] = &right;
         right.neighbors[1] = &left;
 
-        left.setBlock(Chunk::SIZE_X - 1, 63, 8, BlockIds::STONE);
-        right.setBlock(0, 64, 8, BlockIds::STONE);
+        left.setBlock(Chunk::SIZE_X - 1, 63, 8, BlockRegistry::requireIdByName("minecraft:stone"));
+        right.setBlock(0, 64, 8, BlockRegistry::requireIdByName("minecraft:stone"));
 
         const ChunkMeshData meshData = buildMeshDataFor(left);
         const auto faceVertices = collectTopFaceVertices(meshData, 15.0f, 16.0f, 64.0f, 8.0f, 9.0f);
@@ -561,7 +561,7 @@ int main() {
         left.neighbors[0] = &right;
         right.neighbors[1] = &left;
 
-        left.setBlock(Chunk::SIZE_X - 1, 63, 8, BlockIds::STONE);
+        left.setBlock(Chunk::SIZE_X - 1, 63, 8, BlockRegistry::requireIdByName("minecraft:stone"));
         right.setBlockLight(0, 64, 8, 12);
 
         const ChunkMeshData meshData = buildMeshDataFor(left);
@@ -582,7 +582,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         for (int x = 0; x < 4; ++x) {
-            chunk.setBlock(x, 32, 0, BlockIds::DIRT);
+            chunk.setBlock(x, 32, 0, BlockRegistry::requireIdByName("minecraft:dirt"));
         }
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
@@ -647,7 +647,7 @@ int main() {
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockIds::GLASS);
+        chunk.setBlock(0, 32, 0, BlockRegistry::requireIdByName("minecraft:glass"));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
 
@@ -671,7 +671,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
-        chunk.setBlock(1, 32, 0, BlockIds::GLASS);
+        chunk.setBlock(1, 32, 0, BlockRegistry::requireIdByName("minecraft:glass"));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
 
@@ -729,7 +729,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         chunk.setBlock(0, 32, 0, FluidState::makeWater(0, false));
-        chunk.setBlock(1, 32, 0, BlockIds::TALL_GRASS);
+        chunk.setBlock(1, 32, 0, BlockRegistry::requireIdByName("minecraft:tall_grass"));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
 
@@ -746,7 +746,7 @@ int main() {
 
     {
         const BlockID wheat = BlockRegistry::findByName("wheat");
-        if (wheat == BlockIds::AIR) {
+        if (wheat == RUNTIME_ID_NULL) {
             return fail("wheat crop should be registered for meshing");
         }
         const uint16_t ageProperty = BlockStateRegistry::getPropertyNameIndex("age");
@@ -956,7 +956,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         const StateID birchLogX = BlockStateRegistry::getState(
-            BlockIds::BIRCH_LOG,
+            BlockRegistry::requireIdByName("minecraft:birch_log"),
             std::vector<std::pair<uint16_t, uint16_t>>{
                 {PropIndices::AXIS, PropIndices::AXIS_X}
             });
@@ -994,7 +994,7 @@ int main() {
         constexpr float kTorchTopV1 = 1.0f - 6.0f / 16.0f;
 
         Chunk chunk(0, 0);
-        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockIds::TORCH));
+        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch")));
 
         const ChunkMeshData meshData = buildMeshDataFor(chunk);
         if (meshData.cutoutVertices.size() != 36) {
@@ -1059,7 +1059,7 @@ int main() {
     {
         Chunk chunk(0, 0);
         const StateID northTorch = BlockStateRegistry::getState(
-            BlockIds::TORCH,
+            BlockRegistry::requireIdByName("minecraft:torch"),
             std::vector<std::pair<uint16_t, uint16_t>>{
                 {PropIndices::FACING, PropIndices::FACING_NORTH}
             });
@@ -1131,7 +1131,7 @@ int main() {
 
     {
         const StateID redstoneWire = BlockStateRegistry::withProperty(
-            BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE),
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")),
             PropIndices::POWER,
             PropIndices::POWER_15);
 
@@ -1156,7 +1156,7 @@ int main() {
 
     {
         const StateID redstoneWireEast = BlockStateRegistry::getState(
-            BlockIds::REDSTONE_WIRE,
+            BlockRegistry::requireIdByName("minecraft:redstone_wire"),
             std::vector<std::pair<uint16_t, uint16_t>>{
                 {PropIndices::FACING, PropIndices::FACING_FLOOR},
                 {PropIndices::POWER, PropIndices::POWER_0},

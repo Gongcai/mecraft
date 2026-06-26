@@ -423,19 +423,6 @@ BlockRenderLayer parseRenderLayer(const nlohmann::json& blockJson, const bool is
 }
 }
 
-// Initialize BlockIds constants
-namespace BlockIds {
-#define MECRAFT_DEFINE_BLOCK_ID(symbol, path) MECRAFT_API BlockID symbol = 0;
-MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_DEFINE_BLOCK_ID)
-#undef MECRAFT_DEFINE_BLOCK_ID
-
-MECRAFT_API void init() {
-#define MECRAFT_INIT_BLOCK_ID(symbol, path) symbol = BlockRegistry::getId(NamespacedId("minecraft", path));
-    MECRAFT_FOR_EACH_BUILTIN_BLOCK(MECRAFT_INIT_BLOCK_ID)
-#undef MECRAFT_INIT_BLOCK_ID
-}
-}
-
 void BlockRegistry::init(ResourceMgr* resourceMgr) {
     if (s_initialized) {
         return;
@@ -448,33 +435,18 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
-#ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "[BlockRegistry] Failed to open config: " << kBlocksConfigPath << std::endl);
-#endif
-        s_initialized = true;
-        BlockIds::init();
-        return;
+        throw std::runtime_error(std::string("Failed to open blocks config: ") + kBlocksConfigPath);
     }
 
     nlohmann::json root;
     try {
         file >> root;
     } catch (const std::exception& e) {
-#ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "[BlockRegistry] Failed to parse blocks.json: " << e.what() << std::endl);
-#endif
-        s_initialized = true;
-        BlockIds::init();
-        return;
+        throw std::runtime_error(std::string("Failed to parse blocks config: ") + e.what());
     }
 
     if (!root.contains("blocks") || !root["blocks"].is_array()) {
-#ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "[BlockRegistry] Invalid blocks.json: missing 'blocks' array." << std::endl);
-#endif
-        s_initialized = true;
-        BlockIds::init();
-        return;
+        throw std::runtime_error("blocks.json requires a blocks array");
     }
 
     s_idLookup.clear();
@@ -1057,7 +1029,6 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     PropIndices::init();
 
     s_initialized = true;
-    BlockIds::init();
     FluidRegistry::init();
 }
 

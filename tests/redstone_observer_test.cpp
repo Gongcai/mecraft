@@ -30,16 +30,16 @@ void loadOriginChunks(World& world) {
 void prepareObserverTestArea(World& world, const int y) {
     for (int x = -1; x <= 4; ++x) {
         for (int z = -1; z <= 1; ++z) {
-            world.setBlock(x, y - 1, z, BlockIds::STONE);
-            world.setBlock(x, y, z, BlockIds::AIR);
-            world.setBlock(x, y + 1, z, BlockIds::AIR);
+            world.setBlock(x, y - 1, z, BlockRegistry::requireIdByName("minecraft:stone"));
+            world.setBlock(x, y, z, RUNTIME_ID_NULL);
+            world.setBlock(x, y + 1, z, RUNTIME_ID_NULL);
         }
     }
 }
 
 StateID observerState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::OBSERVER,
+        BlockRegistry::requireIdByName("minecraft:observer"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, facing},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
@@ -99,13 +99,13 @@ int main() {
     const int y = 96;
     prepareObserverTestArea(world, y);
     world.setBlockState(1, y, 0, observerState(PropIndices::FACING_WEST, false));
-    world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
-    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+    world.setBlockState(2, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(3, y, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
     world.redstoneUpdateQueue().clear();
     world.redstoneChangedBlockQueue().clear();
     world.redstoneScheduledUpdateQueue().clear();
 
-    world.setBlock(1, y, 1, BlockIds::STONE);
+    world.setBlock(1, y, 1, BlockRegistry::requireIdByName("minecraft:stone"));
     ecs::RedstoneSystem::processWorld(world, 0);
     ecs::RedstoneSystem::processWorld(world, 1);
     ecs::RedstoneSystem::processWorld(world, 2);
@@ -115,7 +115,7 @@ int main() {
         return fail("observer should ignore changes outside its facing direction");
     }
 
-    world.setBlock(0, y, 0, BlockIds::STONE);
+    world.setBlock(0, y, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     ecs::RedstoneSystem::processWorld(world, 3);
     if (powered(world, 1, y, 0) ||
         wirePower(world, 2, y, 0) != 0 ||

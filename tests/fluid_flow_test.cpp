@@ -5,8 +5,8 @@
 
 #include <glm/vec3.hpp>
 
-#include "../src/world/FluidFlow.h"
-#include "../src/world/FluidState.h"
+#include "../src/world/fluid/FluidFlow.h"
+#include "../src/world/fluid/FluidState.h"
 #include "../src/world/World.h"
 
 namespace {
@@ -47,8 +47,8 @@ const char* testSymmetricFlowReturnsZero() {
     loadChunks(world, 20260410);
 
     const int y = 96;
-    fillBox(world, -2, 2, y - 1, y - 1, -2, 2, BlockIds::STONE);
-    fillBox(world, -2, 2, y, y + 1, -2, 2, BlockIds::AIR);
+    fillBox(world, -2, 2, y - 1, y - 1, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+    fillBox(world, -2, 2, y, y + 1, -2, 2, RUNTIME_ID_NULL);
 
     world.setBlock(0, y, 0, FluidState::makeWater(3, false));
     world.setBlock(1, y, 0, FluidState::makeWater(3, false));
@@ -68,8 +68,8 @@ const char* testLowerNeighborBiasesDirection() {
     loadChunks(world, 20260411);
 
     const int y = 100;
-    fillBox(world, -2, 2, y - 1, y - 1, -1, 1, BlockIds::STONE);
-    fillBox(world, -2, 2, y, y + 1, -1, 1, BlockIds::AIR);
+    fillBox(world, -2, 2, y - 1, y - 1, -1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+    fillBox(world, -2, 2, y, y + 1, -1, 1, RUNTIME_ID_NULL);
 
     world.setBlock(0, y, 0, FluidState::makeWater(0, false));
     world.setBlock(1, y, 0, FluidState::makeWater(3, false));
@@ -86,7 +86,7 @@ const char* testFallingWaterAddsVerticalBias() {
     loadChunks(world, 20260412);
 
     const int y = 104;
-    fillBox(world, -1, 1, y - 2, y + 1, -1, 1, BlockIds::AIR);
+    fillBox(world, -1, 1, y - 2, y + 1, -1, 1, RUNTIME_ID_NULL);
     world.setBlock(0, y, 0, FluidState::makeWater(0, true));
     world.setBlock(1, y, 0, FluidState::makeWater(0, true));
     world.setBlock(-1, y, 0, FluidState::makeWater(0, true));
@@ -103,8 +103,8 @@ const char* testCappedColumnStaysStable() {
     loadChunks(world, 20260413);
 
     const int y = 108;
-    fillBox(world, -2, 2, y - 1, y - 1, -2, 2, BlockIds::STONE);
-    fillBox(world, -2, 2, y, y + 2, -2, 2, BlockIds::AIR);
+    fillBox(world, -2, 2, y - 1, y - 1, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+    fillBox(world, -2, 2, y, y + 2, -2, 2, RUNTIME_ID_NULL);
 
     world.setBlock(0, y, 0, FluidState::makeWater(3, false));
     world.setBlock(1, y, 0, FluidState::makeWater(3, false));

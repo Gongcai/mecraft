@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/world/Chunk.h"
+#include "../src/world/chunk/Chunk.h"
 
 namespace {
 [[noreturn]] void fail(const char* message) {
@@ -14,7 +14,7 @@ void testWaterColumnsArePreseeded() {
     Chunk chunk(0, 0);
 
     for (int y = 70; y <= 72; ++y) {
-        chunk.setBlockFast(3, y, 3, BlockIds::WATER);
+        chunk.setBlockFast(3, y, 3, BlockRegistry::requireIdByName("minecraft:water"));
     }
 
     chunk.seedInitialLightMap();
@@ -32,7 +32,7 @@ void testWaterColumnsArePreseeded() {
 
 void testLightSourcesSeedOwnVoxel() {
     Chunk chunk(0, 0);
-    chunk.setBlockFast(4, 80, 4, BlockIds::TORCH);
+    chunk.setBlockFast(4, 80, 4, BlockRegistry::requireIdByName("minecraft:torch"));
 
     chunk.seedInitialLightMap();
 

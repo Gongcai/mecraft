@@ -102,12 +102,12 @@ static StateID targetState(const uint8_t power) {
         PropIndices::POWER_15,
     };
     assert(power < kPowerValues.size());
-    return BlockStateRegistry::getState(BlockIds::TARGET, PropIndices::POWER, kPowerValues[power]);
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER, kPowerValues[power]);
 }
 
 static StateID leverState(const bool powered) {
     return BlockStateRegistry::getState(
-        BlockIds::LEVER,
+        BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, PropIndices::FACING_FLOOR},
             {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE}
@@ -426,7 +426,7 @@ static void testClientAppliesInventorySnapshot() {
     net::InventorySnapshotMessage snapshot;
     snapshot.selectedHotbarSlot = 2;
     snapshot.slots.resize(Inventory::INVENTORY_SIZE);
-    snapshot.slots[0].itemId = static_cast<uint16_t>(ItemIds::COAL);
+    snapshot.slots[0].itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:coal"));
     snapshot.slots[0].stackCount = 7;
     inventoryPacket.inProcessPayload = snapshot;
     transportPtr->pushIncoming(std::move(inventoryPacket));
@@ -437,7 +437,7 @@ static void testClientAppliesInventorySnapshot() {
             "client should apply authoritative selected hotbar slot");
     require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSelectedSlot() == 2,
             "client inventory data should apply selected hotbar slot");
-    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).itemId == ItemIds::COAL,
+    require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).itemId == ItemRegistry::requireIdByName("minecraft:coal"),
             "client should apply inventory snapshot item id");
     require(raw.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0).count == 7,
             "client should apply inventory snapshot stack count");
@@ -477,7 +477,7 @@ static void testClientBlockActionRoundTrip() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     assert(harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z));
-    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
+    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
 
     const glm::vec3 actionPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
     net::ClientBlockAction place;
@@ -485,13 +485,13 @@ static void testClientBlockActionRoundTrip() {
     place.action = net::ClientBlockActionType::Place;
     place.placeBlock = placeBlock;
     place.playerPosition = actionPosition;
-    place.blockState = BlockIds::STONE;
+    place.blockState = BlockRegistry::requireIdByName("minecraft:stone");
     client.sendBlockAction(place);
 
     harness.server.tick(1.0f / 20.0f);
     client.receiveMessages();
-    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::STONE);
-    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::STONE);
+    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockRegistry::requireIdByName("minecraft:stone"));
+    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockRegistry::requireIdByName("minecraft:stone"));
 
     net::ClientBlockAction breakAction;
     breakAction.sequence = 2;
@@ -502,8 +502,8 @@ static void testClientBlockActionRoundTrip() {
 
     harness.server.tick(1.0f / 20.0f);
     client.receiveMessages();
-    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
-    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
+    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
+    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
     std::printf("[PASS] testClientBlockActionRoundTrip\n");
 }
 
@@ -527,7 +527,7 @@ static void testClientBlockActionMergesStackedSlabs() {
             "slab merge test chunk should be loaded");
 
     const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
-    require(oakSlab != BlockIds::AIR, "oak_slab should be registered for server slab merge test");
+    require(oakSlab != RUNTIME_ID_NULL, "oak_slab should be registered for server slab merge test");
     const StateID bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
     const StateID topSlab = BlockStateRegistry::getState(
         oakSlab,
@@ -673,21 +673,21 @@ static void testGiveCommandAddsRuntimeBlockItem() {
     ServerHarness harness;
 
     const BlockID cauldronBlock = BlockRegistry::findByName("cauldron");
-    require(cauldronBlock != BlockIds::AIR, "cauldron should be registered from block config");
+    require(cauldronBlock != RUNTIME_ID_NULL, "cauldron should be registered from block config");
     const ItemID cauldronItem = ItemRegistry::fromBlock(cauldronBlock);
-    require(cauldronItem != ItemIds::AIR, "cauldron should have a runtime block item");
+    require(cauldronItem != RUNTIME_ID_NULL, "cauldron should have a runtime block item");
     const BlockID anvilBlock = BlockRegistry::findByName("anvil");
-    require(anvilBlock != BlockIds::AIR, "anvil should be registered from block config");
+    require(anvilBlock != RUNTIME_ID_NULL, "anvil should be registered from block config");
     const ItemID anvilItem = ItemRegistry::fromBlock(anvilBlock);
-    require(anvilItem != ItemIds::AIR, "anvil should have a runtime block item");
+    require(anvilItem != RUNTIME_ID_NULL, "anvil should have a runtime block item");
     const BlockID oakFenceBlock = BlockRegistry::findByName("oak_fence");
-    require(oakFenceBlock != BlockIds::AIR, "oak_fence should be registered from block config");
+    require(oakFenceBlock != RUNTIME_ID_NULL, "oak_fence should be registered from block config");
     const ItemID oakFenceItem = ItemRegistry::fromBlock(oakFenceBlock);
-    require(oakFenceItem != ItemIds::AIR, "oak_fence should have a runtime block item");
+    require(oakFenceItem != RUNTIME_ID_NULL, "oak_fence should have a runtime block item");
     const BlockID cobblestoneWallBlock = BlockRegistry::findByName("cobblestone_wall");
-    require(cobblestoneWallBlock != BlockIds::AIR, "cobblestone_wall should be registered from block config");
+    require(cobblestoneWallBlock != RUNTIME_ID_NULL, "cobblestone_wall should be registered from block config");
     const ItemID cobblestoneWallItem = ItemRegistry::fromBlock(cobblestoneWallBlock);
-    require(cobblestoneWallItem != ItemIds::AIR, "cobblestone_wall should have a runtime block item");
+    require(cobblestoneWallItem != RUNTIME_ID_NULL, "cobblestone_wall should have a runtime block item");
 
     auto clientTransport = std::make_unique<ManualTransport>();
     ManualTransport* clientPtr = clientTransport.get();
@@ -1306,10 +1306,10 @@ static void testOwnedServerPistonPushCorrectsPlayerPose() {
 
     for (int x = 3; x <= 10; ++x) {
         for (int z = 0; z <= 1; ++z) {
-            world.setBlock(x, y - 1, z, BlockIds::STONE);
-            world.setBlock(x, y, z, BlockIds::AIR);
-            world.setBlock(x, y + 1, z, BlockIds::AIR);
-            world.setBlock(x, y + 2, z, BlockIds::AIR);
+            world.setBlock(x, y - 1, z, BlockRegistry::requireIdByName("minecraft:stone"));
+            world.setBlock(x, y, z, RUNTIME_ID_NULL);
+            world.setBlock(x, y + 1, z, RUNTIME_ID_NULL);
+            world.setBlock(x, y + 2, z, RUNTIME_ID_NULL);
         }
     }
 
@@ -1340,7 +1340,7 @@ static void testOwnedServerPistonPushCorrectsPlayerPose() {
     clientPtr->pushIncoming(std::move(inputPacket));
 
     world.setBlockState(4, y, 0, leverState(true));
-    world.setBlockState(5, y, 0, pistonState(BlockIds::PISTON, PropIndices::FACING_EAST, false));
+    world.setBlockState(5, y, 0, pistonState(BlockRegistry::requireIdByName("minecraft:piston"), PropIndices::FACING_EAST, false));
 
     harness.server.tick(1.0f / 20.0f);
     while (!clientPtr->sent.empty()) {
@@ -1638,7 +1638,7 @@ static void testOwnedServerPlayerMeleeKillsZombieAndDropsItem() {
                 const auto& impact = std::any_cast<const net::EntityImpactMessage&>(packet.inProcessPayload);
                 sawZombieDeathImpact = sawZombieDeathImpact ||
                     (impact.netId == zombieNetId &&
-                     impact.particleBlockId == BlockIds::ROSE &&
+                     impact.particleBlockId == BlockRegistry::requireIdByName("minecraft:rose") &&
                      impact.particleCount == 28);
             }
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
@@ -1986,7 +1986,7 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
     harness.server.tick(1.0f / 20.0f);
     drainBeforeThrowPackets();
     require(sawInventoryBeforeThrow, "apple projectile test should receive initial inventory");
-    const uint32_t applesBeforeThrow = inventoryItemCount(inventoryBeforeThrow, ItemIds::APPLE);
+    const uint32_t applesBeforeThrow = inventoryItemCount(inventoryBeforeThrow, ItemRegistry::requireIdByName("minecraft:apple"));
     require(applesBeforeThrow > 0, "default loadout should include throwable apples");
 
     net::Packet commandPacket;
@@ -2024,7 +2024,7 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
             clientPtr->sent.pop();
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
-                if (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemIds::APPLE && spawn.netId != 0) {
+                if (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemRegistry::requireIdByName("minecraft:apple") && spawn.netId != 0) {
                     sawProjectileSpawn = true;
                     projectileNetIds.push_back(spawn.netId);
                 }
@@ -2047,7 +2047,7 @@ static void testOwnedServerPlayerThrowsAppleProjectileDamagesZombie() {
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
                 const auto& inventory = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
                 sawAppleConsumed = sawAppleConsumed ||
-                    inventoryItemCount(inventory, ItemIds::APPLE) < applesBeforeThrow;
+                    inventoryItemCount(inventory, ItemRegistry::requireIdByName("minecraft:apple")) < applesBeforeThrow;
             }
         }
     };
@@ -2101,7 +2101,7 @@ static void testCreativeAppleProjectileDoesNotConsumeInventory() {
     };
     drainInitialPackets();
     require(sawInitialInventory, "creative projectile test should receive initial inventory");
-    const uint32_t applesBeforeThrow = inventoryItemCount(initialInventory, ItemIds::APPLE);
+    const uint32_t applesBeforeThrow = inventoryItemCount(initialInventory, ItemRegistry::requireIdByName("minecraft:apple"));
     require(applesBeforeThrow > 0, "creative projectile test needs throwable apples");
 
     net::Packet commandPacket;
@@ -2142,7 +2142,7 @@ static void testCreativeAppleProjectileDoesNotConsumeInventory() {
             if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
                 sawProjectileSpawn = sawProjectileSpawn ||
-                    (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemIds::APPLE);
+                    (spawn.kind == net::EntityKind::Projectile && spawn.itemId == ItemRegistry::requireIdByName("minecraft:apple"));
             }
             if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
                 inventoryAfterThrow = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
@@ -2161,7 +2161,7 @@ static void testCreativeAppleProjectileDoesNotConsumeInventory() {
 
     require(sawProjectileSpawn, "creative apple use should still spawn a projectile");
     require(sawInventoryAfterThrow, "slot change should sync inventory after creative throw");
-    require(inventoryItemCount(inventoryAfterThrow, ItemIds::APPLE) == applesBeforeThrow,
+    require(inventoryItemCount(inventoryAfterThrow, ItemRegistry::requireIdByName("minecraft:apple")) == applesBeforeThrow,
             "creative apple projectile should not consume authoritative inventory");
     std::printf("[PASS] testCreativeAppleProjectileDoesNotConsumeInventory\n");
 }
@@ -2213,13 +2213,13 @@ static void testEntityFactoryCreatesConfiguredZombie() {
             "configured zombie should apply AI tuning");
     require(body.body.halfExtents.y == 0.9f && body.body.colliderOffset.y == 0.9f,
             "configured zombie should apply physics bounds");
-    require(drops.itemId == ItemIds::COAL && drops.minCount == 1 && drops.maxCount == 1,
+    require(drops.itemId == ItemRegistry::requireIdByName("minecraft:coal") && drops.minCount == 1 && drops.maxCount == 1,
             "configured zombie should apply drop table");
     require(hurtEffect.soundId == "mob.zombie.hurt" &&
             hurtEffect.soundVolume == 1.0f &&
             std::fabs(hurtEffect.flashDurationSeconds - 0.18f) < 0.001f,
             "configured zombie should apply hurt effect");
-    require(deathEffect.particleBlock == BlockIds::ROSE &&
+    require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:rose") &&
             deathEffect.particleCount == 28 &&
             deathEffect.soundId == "mob.zombie.death",
             "configured zombie should apply death effect");
@@ -2272,7 +2272,7 @@ static void testEntityFactoryCreatesConfiguredHerobrine() {
             drops.minCount == 1 &&
             drops.maxCount == 1,
             "configured herobrine should apply drop table");
-    require(deathEffect.particleBlock == BlockIds::DIAMOND_ORE &&
+    require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:diamond_ore") &&
             deathEffect.particleCount == 36 &&
             deathEffect.soundId == "mob.zombie.death",
             "configured herobrine should apply death effect");
@@ -2343,9 +2343,9 @@ static void testEntityFactoryCreatesConfiguredCreeper() {
     require(std::fabs(body.body.halfExtents.y - 0.85f) < 0.001f &&
             std::fabs(body.body.colliderOffset.y - 0.85f) < 0.001f,
             "configured creeper should apply physics bounds");
-    require(drops.itemId == ItemIds::COAL && drops.minCount == 1 && drops.maxCount == 1,
+    require(drops.itemId == ItemRegistry::requireIdByName("minecraft:coal") && drops.minCount == 1 && drops.maxCount == 1,
             "configured creeper should apply drop table");
-    require(deathEffect.particleBlock == BlockIds::COAL_ORE &&
+    require(deathEffect.particleBlock == BlockRegistry::requireIdByName("minecraft:coal_ore") &&
             deathEffect.particleCount == 32 &&
             deathEffect.soundId == "mob.zombie.death",
             "configured creeper should apply death effect");
@@ -2388,7 +2388,7 @@ static void testEntityFactoryCreatesConfiguredPassiveAnimals() {
     const ItemID beef = ItemRegistry::findByName("minecraft:beef");
     const ItemID porkchop = ItemRegistry::findByName("minecraft:porkchop");
     const ItemID whiteWool = ItemRegistry::findByName("minecraft:white_wool");
-    require(beef != ItemIds::AIR && porkchop != ItemIds::AIR && whiteWool != ItemIds::AIR,
+    require(beef != RUNTIME_ID_NULL && porkchop != RUNTIME_ID_NULL && whiteWool != RUNTIME_ID_NULL,
             "passive animal drops should resolve to registered items");
 
     const ExpectedAnimal animals[] = {
@@ -2558,7 +2558,7 @@ static void testPersistentDropRestoresFromSave() {
         server.setEcsRegistry(&registry);
 
         ecs::ItemDropSpawnParams params;
-        params.itemId = ItemIds::COAL;
+        params.itemId = ItemRegistry::requireIdByName("minecraft:coal");
         params.stackCount = 5;
         params.position = glm::vec3(6.5f, 66.25f, -4.0f);
         params.velocity = glm::vec3(0.25f, 0.5f, -0.75f);
@@ -2605,7 +2605,7 @@ static void testPersistentDropRestoresFromSave() {
         const auto& spin = registry.registry().get<ecs::SpinVisualComponent>(drop);
         const auto& grounded = registry.registry().get<ecs::GroundedStateComponent>(drop);
         require(id.dropId == 77, "persistent drop restore should keep drop id");
-        require(item.itemId == ItemIds::COAL && item.stackCount == 5,
+        require(item.itemId == ItemRegistry::requireIdByName("minecraft:coal") && item.stackCount == 5,
                 "persistent drop restore should keep item stack");
         require(transform.position.x == 6.5f && transform.position.z == -4.0f,
                 "persistent drop restore should keep position");
@@ -2639,10 +2639,10 @@ static void testPersistentChestInventoryRestoresFromSave() {
 
         ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
         ChestInventory& chest = store.getOrCreate(chestPos);
-        chest.setSlotItem(0, ItemIds::APPLE, 6);
+        chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 6);
 
         ItemStack pickaxe;
-        pickaxe.itemId = ItemIds::IRON_PICKAXE;
+        pickaxe.itemId = ItemRegistry::requireIdByName("minecraft:iron_pickaxe");
         pickaxe.count = 1;
         pickaxe.durability = 44;
         chest.setSlotStack(17, pickaxe);
@@ -2666,11 +2666,11 @@ static void testPersistentChestInventoryRestoresFromSave() {
         require(chest != nullptr, "persistent chest restore should recreate the chest inventory");
 
         const ItemStack apples = chest->getSlotStack(0);
-        require(apples.itemId == ItemIds::APPLE && apples.count == 6,
+        require(apples.itemId == ItemRegistry::requireIdByName("minecraft:apple") && apples.count == 6,
                 "persistent chest restore should keep stack item and count");
 
         const ItemStack pickaxe = chest->getSlotStack(17);
-        require(pickaxe.itemId == ItemIds::IRON_PICKAXE && pickaxe.count == 1 && pickaxe.durability == 44,
+        require(pickaxe.itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && pickaxe.count == 1 && pickaxe.durability == 44,
                 "persistent chest restore should keep tool durability");
 
         server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
@@ -2697,17 +2697,17 @@ static void testPersistentFurnaceInventoryRestoresFromSave() {
         FurnaceInventory& furnace = store.getOrCreate(furnacePos);
 
         ItemStack input;
-        input.itemId = ItemIds::APPLE;
+        input.itemId = ItemRegistry::requireIdByName("minecraft:apple");
         input.count = 3;
         furnace.setSlotStack(FurnaceInventory::INPUT_SLOT, input);
 
         ItemStack fuel;
-        fuel.itemId = ItemIds::COAL;
+        fuel.itemId = ItemRegistry::requireIdByName("minecraft:coal");
         fuel.count = 2;
         furnace.setSlotStack(FurnaceInventory::FUEL_SLOT, fuel);
 
         ItemStack output;
-        output.itemId = ItemIds::IRON_PICKAXE;
+        output.itemId = ItemRegistry::requireIdByName("minecraft:iron_pickaxe");
         output.count = 1;
         output.durability = 17;
         furnace.setSlotStack(FurnaceInventory::OUTPUT_SLOT, output);
@@ -2732,15 +2732,15 @@ static void testPersistentFurnaceInventoryRestoresFromSave() {
         require(furnace != nullptr, "persistent furnace restore should recreate the furnace inventory");
 
         const ItemStack input = furnace->getSlotStack(FurnaceInventory::INPUT_SLOT);
-        require(input.itemId == ItemIds::APPLE && input.count == 3,
+        require(input.itemId == ItemRegistry::requireIdByName("minecraft:apple") && input.count == 3,
                 "persistent furnace restore should keep the input slot");
 
         const ItemStack fuel = furnace->getSlotStack(FurnaceInventory::FUEL_SLOT);
-        require(fuel.itemId == ItemIds::COAL && fuel.count == 2,
+        require(fuel.itemId == ItemRegistry::requireIdByName("minecraft:coal") && fuel.count == 2,
                 "persistent furnace restore should keep the fuel slot");
 
         const ItemStack output = furnace->getSlotStack(FurnaceInventory::OUTPUT_SLOT);
-        require(output.itemId == ItemIds::IRON_PICKAXE && output.count == 1 && output.durability == 17,
+        require(output.itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && output.count == 1 && output.durability == 17,
                 "persistent furnace restore should keep the output slot");
 
         require(furnace->burnSecondsRemaining() == 4.0f &&
@@ -2762,7 +2762,7 @@ static void testPersistentChestBlockRestoresFromSave() {
     std::filesystem::remove_all(saveRoot);
     const glm::ivec3 chestPos(2, Chunk::SIZE_Y - 8, 3);
     const StateID eastChest = BlockStateRegistry::getState(
-        BlockIds::CHEST,
+        BlockRegistry::requireIdByName("minecraft:chest"),
         PropIndices::FACING,
         PropIndices::FACING_EAST);
 
@@ -2818,7 +2818,7 @@ static void testPersistentChestBlockRestoresFromSave() {
                 "test setup should load the saved chest chunk");
 
         const StateID loadedState = server.world().getBlock(chestPos.x, chestPos.y, chestPos.z);
-        require(BlockStateRegistry::getBlockId(loadedState) == BlockIds::CHEST,
+        require(BlockStateRegistry::getBlockId(loadedState) == BlockRegistry::requireIdByName("minecraft:chest"),
                 "persistent chest block save should restore the chest block from chunk data");
         require(BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) == PropIndices::FACING_EAST,
                 "persistent chest block save should preserve the chest facing state");
@@ -2855,13 +2855,13 @@ static void testServerBlockActionBreaksChestLifecycle() {
     require(harness.server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
             "test setup should load the target chest chunk");
 
-    const StateID chestState = BlockStateRegistry::getDefaultState(BlockIds::CHEST);
+    const StateID chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
     harness.server.world().setBlock(chestPos.x, chestPos.y, chestPos.z, chestState);
 
     ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
     ChestInventory& chest = store.getOrCreate(chestPos);
-    chest.setSlotItem(0, ItemIds::APPLE, 3);
-    chest.setSlotItem(5, ItemIds::COAL, 2);
+    chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 3);
+    chest.setSlotItem(5, ItemRegistry::requireIdByName("minecraft:coal"), 2);
 
     while (!clientPtr->sent.empty()) {
         clientPtr->sent.pop();
@@ -2879,15 +2879,15 @@ static void testServerBlockActionBreaksChestLifecycle() {
 
     harness.server.tick(1.0f / 20.0f);
 
-    require(harness.server.world().getBlock(chestPos.x, chestPos.y, chestPos.z) == BlockIds::AIR,
+    require(harness.server.world().getBlock(chestPos.x, chestPos.y, chestPos.z) == RUNTIME_ID_NULL,
             "server block break should remove the chest block");
     require(store.find(chestPos) == nullptr,
             "server block break should erase the chest inventory store entry");
-    require(ecsDroppedItemCount(registry, ItemIds::APPLE) == 3,
+    require(ecsDroppedItemCount(registry, ItemRegistry::requireIdByName("minecraft:apple")) == 3,
             "server chest break should spawn stored apple drops");
-    require(ecsDroppedItemCount(registry, ItemIds::COAL) == 2,
+    require(ecsDroppedItemCount(registry, ItemRegistry::requireIdByName("minecraft:coal")) == 2,
             "server chest break should spawn stored coal drops");
-    require(ecsDroppedItemCount(registry, ItemRegistry::fromBlock(BlockIds::CHEST)) == 1,
+    require(ecsDroppedItemCount(registry, ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:chest"))) == 1,
             "server survival chest break should spawn the chest item drop");
 
     bool sawAirBlockUpdate = false;
@@ -2901,7 +2901,7 @@ static void testServerBlockActionBreaksChestLifecycle() {
                 if (update.x == chestPos.x &&
                     update.y == chestPos.y &&
                     update.z == chestPos.z &&
-                    update.stateId == BlockIds::AIR) {
+                    update.stateId == RUNTIME_ID_NULL) {
                     sawAirBlockUpdate = true;
                 }
             }
@@ -2909,9 +2909,9 @@ static void testServerBlockActionBreaksChestLifecycle() {
         if (packet.type == net::MessageType::EntitySpawn && packet.inProcessPayload.has_value()) {
             const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
             if (spawn.kind == net::EntityKind::Drop &&
-                (spawn.itemId == ItemIds::APPLE ||
-                 spawn.itemId == ItemIds::COAL ||
-                 spawn.itemId == ItemRegistry::fromBlock(BlockIds::CHEST))) {
+                (spawn.itemId == ItemRegistry::requireIdByName("minecraft:apple") ||
+                 spawn.itemId == ItemRegistry::requireIdByName("minecraft:coal") ||
+                 spawn.itemId == ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:chest")))) {
                 ++sawDropSpawns;
             }
         }
@@ -3010,7 +3010,7 @@ static void testOwnedServerEcsRestoresPersistentDrop() {
         server.setEcsRegistry(&registry);
 
         ecs::ItemDropSpawnParams params;
-        params.itemId = ItemIds::COAL;
+        params.itemId = ItemRegistry::requireIdByName("minecraft:coal");
         params.stackCount = 3;
         params.position = glm::vec3(20.5f, 66.0f, 20.5f);
         params.velocity = glm::vec3(0.0f);
@@ -3045,7 +3045,7 @@ static void testOwnedServerEcsRestoresPersistentDrop() {
                 const auto& spawn = std::any_cast<const net::EntitySpawnMessage&>(packet.inProcessPayload);
                 sawDropSpawn = sawDropSpawn ||
                     (spawn.kind == net::EntityKind::Drop &&
-                     spawn.itemId == ItemIds::COAL &&
+                     spawn.itemId == ItemRegistry::requireIdByName("minecraft:coal") &&
                      spawn.stackCount == 3 &&
                      spawn.netId != 0);
             }
@@ -3151,7 +3151,7 @@ static void testEntityImpactCodecRoundTrip() {
     net::EntityImpactMessage impact;
     impact.netId = 123;
     impact.position = glm::vec3(1.25f, 64.5f, -3.75f);
-    impact.particleBlockId = static_cast<uint16_t>(BlockIds::STONE);
+    impact.particleBlockId = static_cast<uint16_t>(BlockRegistry::requireIdByName("minecraft:stone"));
     impact.particleCount = 28;
 
     const auto encoded = net::PacketCodec::encodeEntityImpact(impact);
@@ -3296,9 +3296,9 @@ static void testInventorySnapshotCodecRoundTrip() {
     net::InventorySnapshotMessage snapshot;
     snapshot.selectedHotbarSlot = 4;
     snapshot.slots.resize(3);
-    snapshot.slots[0].itemId = static_cast<uint16_t>(ItemIds::COAL);
+    snapshot.slots[0].itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:coal"));
     snapshot.slots[0].stackCount = 12;
-    snapshot.slots[2].itemId = static_cast<uint16_t>(ItemIds::IRON_PICKAXE);
+    snapshot.slots[2].itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:iron_pickaxe"));
     snapshot.slots[2].stackCount = 1;
 
     const auto encoded = net::PacketCodec::encodeInventorySnapshot(snapshot);
@@ -3309,11 +3309,11 @@ static void testInventorySnapshotCodecRoundTrip() {
             "inventory snapshot codec should decode payload");
     require(decoded.selectedHotbarSlot == 4, "inventory snapshot codec should keep selected slot");
     require(decoded.slots.size() == 3, "inventory snapshot codec should keep slot count");
-    require(decoded.slots[0].itemId == ItemIds::COAL && decoded.slots[0].stackCount == 12,
+    require(decoded.slots[0].itemId == ItemRegistry::requireIdByName("minecraft:coal") && decoded.slots[0].stackCount == 12,
             "inventory snapshot codec should keep first slot");
     require(decoded.slots[1].itemId == 0 && decoded.slots[1].stackCount == 0,
             "inventory snapshot codec should keep empty slot");
-    require(decoded.slots[2].itemId == ItemIds::IRON_PICKAXE && decoded.slots[2].stackCount == 1,
+    require(decoded.slots[2].itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && decoded.slots[2].stackCount == 1,
             "inventory snapshot codec should keep later slot");
 
     net::InventorySnapshotMessage truncated;
@@ -3330,13 +3330,13 @@ static void testServerTickBreaksUnsupportedPlant() {
     }
 
     const glm::ivec3 base(0, static_cast<int>(harness.server.getSpawnPosition().y), 0);
-    harness.server.world().setBlock(base.x, base.y, base.z, BlockIds::DIRT);
-    harness.server.world().setBlock(base.x, base.y + 1, base.z, BlockIds::TALL_GRASS);
-    harness.server.world().setBlock(base.x, base.y, base.z, BlockIds::AIR);
+    harness.server.world().setBlock(base.x, base.y, base.z, BlockRegistry::requireIdByName("minecraft:dirt"));
+    harness.server.world().setBlock(base.x, base.y + 1, base.z, BlockRegistry::requireIdByName("minecraft:tall_grass"));
+    harness.server.world().setBlock(base.x, base.y, base.z, RUNTIME_ID_NULL);
 
     harness.server.tick(1.0f / 20.0f);
 
-    assert(harness.server.world().getBlock(base.x, base.y + 1, base.z) == BlockIds::AIR);
+    assert(harness.server.world().getBlock(base.x, base.y + 1, base.z) == RUNTIME_ID_NULL);
     std::printf("[PASS] testServerTickBreaksUnsupportedPlant\n");
 }
 
@@ -3349,12 +3349,12 @@ static void testPlacedUnsupportedSandQueuesItself() {
 
     const int surfaceY = static_cast<int>(harness.server.getSpawnPosition().y) - 2;
     const glm::ivec3 sandPos(0, surfaceY + 4, 0);
-    harness.server.world().setBlock(sandPos.x, sandPos.y - 1, sandPos.z, BlockIds::AIR);
-    harness.server.world().setBlock(sandPos.x, sandPos.y, sandPos.z, BlockIds::SAND);
+    harness.server.world().setBlock(sandPos.x, sandPos.y - 1, sandPos.z, RUNTIME_ID_NULL);
+    harness.server.world().setBlock(sandPos.x, sandPos.y, sandPos.z, BlockRegistry::requireIdByName("minecraft:sand"));
 
     ecs::BlockSupportSystem::processWorldQueue(harness.server.world(), 1024);
 
-    assert(harness.server.world().getBlock(sandPos.x, sandPos.y, sandPos.z) == BlockIds::AIR);
+    assert(harness.server.world().getBlock(sandPos.x, sandPos.y, sandPos.z) == RUNTIME_ID_NULL);
     std::printf("[PASS] testPlacedUnsupportedSandQueuesItself\n");
 }
 
@@ -3418,7 +3418,7 @@ static void testChunkDataDecodeMarksRenderableSubChunks() {
     for (int y = 48; y < 56; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                source->setBlockFast(x, y, z, BlockIds::STONE);
+                source->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
     }
@@ -3477,7 +3477,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     entry.x = 1;
     entry.y = 64;
     entry.z = -2;
-    entry.stateId = BlockIds::TORCH;
+    entry.stateId = BlockRegistry::requireIdByName("minecraft:torch");
     entry.packedLightPatch.resize(5 * 5 * 5);
     for (size_t i = 0; i < entry.packedLightPatch.size(); ++i) {
         entry.packedLightPatch[i] = static_cast<uint8_t>(i & 0x0F);
@@ -3578,7 +3578,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     assert(server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z));
-    assert(server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockIds::AIR);
+    assert(server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
 
     bool lightSettled = false;
     for (int tick = 0; tick < 240; ++tick) {
@@ -3606,7 +3606,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
     action.action = net::ClientBlockActionType::Place;
     action.placeBlock = placeBlock;
     action.playerPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
-    action.blockState = BlockIds::TORCH;
+    action.blockState = BlockRegistry::requireIdByName("minecraft:torch");
     actionPacket.inProcessPayload = action;
     clientPtr->pushIncoming(std::move(actionPacket));
 
@@ -3626,7 +3626,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
                 if (update.x == placeBlock.x &&
                     update.y == placeBlock.y &&
                     update.z == placeBlock.z &&
-                    update.stateId == BlockIds::TORCH) {
+                    update.stateId == BlockRegistry::requireIdByName("minecraft:torch")) {
                     sawTorchBlockUpdate = true;
                 }
                 for (const uint8_t packed : update.packedLightPatch) {

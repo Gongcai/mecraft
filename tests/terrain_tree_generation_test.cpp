@@ -92,7 +92,7 @@ bool findTreeRoot(const TerrainGenerator& generator, TreeRoot& outRoot) {
     for (int z = -128; z <= 128; ++z) {
         for (int x = -128; x <= 128; ++x) {
             const int surfaceY = generator.sampleSurfaceY(x, z);
-            if (generator.sampleBlock(x, surfaceY, z) != BlockIds::GRASS) {
+            if (generator.sampleBlock(x, surfaceY, z) != BlockRegistry::requireIdByName("minecraft:grass_block")) {
                 continue;
             }
             if (isLog(generator.sampleBlock(x, surfaceY + 1, z))) {
@@ -219,7 +219,7 @@ int main() {
         BlockRegistry::findByName("deepslate_lapis_ore"),
     };
     for (const BlockID target : undergroundTargets) {
-        if (target == BlockIds::AIR) {
+        if (target == RUNTIME_ID_NULL) {
             return fail("expected new underground block ids to be registered from blocks.json");
         }
     }
@@ -236,7 +236,7 @@ int main() {
 
     const int waterY = waterSurfaceY + 1;
     const BlockID sampledWater = generator.sampleBlock(waterX, waterY, waterZ);
-    if (!FluidState::isWater(sampledWater) || sampledWater == BlockIds::WATER) {
+    if (!FluidState::isWater(sampledWater) || sampledWater == BlockRegistry::requireIdByName("minecraft:water")) {
         return fail("sampled natural water should use the canonical fluid state");
     }
     if (chunkBlockAt(generator, waterX, waterY, waterZ) != sampledWater) {

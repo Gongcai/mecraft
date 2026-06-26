@@ -17,7 +17,7 @@ static void require(bool condition, const char* message) {
 }
 
 static StateID targetState(const uint16_t powerValue) {
-    return BlockStateRegistry::getState(BlockIds::TARGET, PropIndices::POWER, powerValue);
+    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER, powerValue);
 }
 
 static void testInitialState() {
@@ -67,14 +67,14 @@ static void testGetBlockFromClientWorld() {
 
     // Default block should be air (0)
     BlockID block = cw.getBlock(0, 0, 0);
-    assert(block == BlockIds::AIR);
+    assert(block == RUNTIME_ID_NULL);
 
     // Out-of-range Y should return air
     block = cw.getBlock(0, -1, 0);
-    assert(block == BlockIds::AIR);
+    assert(block == RUNTIME_ID_NULL);
 
     block = cw.getBlock(0, 256, 0);
-    assert(block == BlockIds::AIR);
+    assert(block == RUNTIME_ID_NULL);
     std::printf("[PASS] testGetBlockFromClientWorld\n");
 }
 
@@ -135,8 +135,8 @@ static void testNeighborLinkingDirtiesExistingBorders() {
     auto left = std::make_shared<Chunk>(0, 0);
     auto right = std::make_shared<Chunk>(1, 0);
 
-    left->setBlock(15, 64, 0, BlockIds::STONE);
-    right->setBlock(0, 64, 0, BlockIds::STONE);
+    left->setBlock(15, 64, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+    right->setBlock(0, 64, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     left->markMeshClean();
     right->markMeshClean();
 
@@ -162,7 +162,7 @@ static void testNeighborLinkingDirtiesExistingBorders() {
 static void testClientWorldRaycastHitsBlocks() {
     client::ClientWorld cw;
     auto chunk = std::make_shared<Chunk>(0, 0);
-    chunk->setBlock(3, 64, 0, BlockIds::STONE);
+    chunk->setBlock(3, 64, 0, BlockRegistry::requireIdByName("minecraft:stone"));
     cw.addChunk(chunk);
 
     const PhysicsInfo ray(glm::vec3(0.5f, 64.5f, 0.5f), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -190,9 +190,9 @@ static void testApplyBlockUpdateAcceptsVariableLightPatch() {
         }
     }
 
-    cw.applyBlockUpdate(4, 64, 4, BlockIds::TORCH, lightPatch);
+    cw.applyBlockUpdate(4, 64, 4, BlockRegistry::requireIdByName("minecraft:torch"), lightPatch);
 
-    require(cw.getBlock(4, 64, 4) == BlockIds::TORCH, "block update should still apply the block state");
+    require(cw.getBlock(4, 64, 4) == BlockRegistry::requireIdByName("minecraft:torch"), "block update should still apply the block state");
     require(cw.getPackedLight(6, 64, 4) == 0x0C, "client should apply larger odd-cube light patches");
     std::printf("[PASS] testApplyBlockUpdateAcceptsVariableLightPatch\n");
 }
@@ -207,7 +207,7 @@ static void testApplyBlockUpdatePreservesStateId() {
 
     require(cw.getBlockState(5, 64, 5) == poweredTarget,
             "client block updates should preserve non-default block state ids");
-    require(BlockStateRegistry::getBlockId(cw.getBlockState(5, 64, 5)) == BlockIds::TARGET,
+    require(BlockStateRegistry::getBlockId(cw.getBlockState(5, 64, 5)) == BlockRegistry::requireIdByName("minecraft:target"),
             "client block updates should keep the state mapped to its block id");
     std::printf("[PASS] testApplyBlockUpdatePreservesStateId\n");
 }
@@ -240,9 +240,9 @@ static void testApplyBlockUpdateAcceptsFullChunkLightSnapshot() {
     std::vector<uint8_t> fullLight(Chunk::BLOCK_COUNT, 0);
     fullLight[Chunk::toIndex(15, 127, 15)] = 0xF0;
 
-    cw.applyBlockUpdate(4, 64, 4, BlockIds::STONE, fullLight);
+    cw.applyBlockUpdate(4, 64, 4, BlockRegistry::requireIdByName("minecraft:stone"), fullLight);
 
-    require(cw.getBlock(4, 64, 4) == BlockIds::STONE, "full light snapshot update should still apply the block state");
+    require(cw.getBlock(4, 64, 4) == BlockRegistry::requireIdByName("minecraft:stone"), "full light snapshot update should still apply the block state");
     require(cw.getPackedLight(15, 127, 15) == 0xF0, "client should apply full chunk light snapshots");
     std::printf("[PASS] testApplyBlockUpdateAcceptsFullChunkLightSnapshot\n");
 }
@@ -250,7 +250,7 @@ static void testApplyBlockUpdateAcceptsFullChunkLightSnapshot() {
 static void testApplyBlockUpdateCanBeLightOnly() {
     client::ClientWorld cw;
     auto chunk = std::make_shared<Chunk>(0, 0);
-    chunk->setBlock(4, 64, 4, BlockIds::STONE);
+    chunk->setBlock(4, 64, 4, BlockRegistry::requireIdByName("minecraft:stone"));
     cw.addChunk(chunk);
 
     std::vector<uint8_t> fullLight(Chunk::BLOCK_COUNT, 0);
@@ -258,7 +258,7 @@ static void testApplyBlockUpdateCanBeLightOnly() {
 
     cw.applyBlockUpdate(0, 0, 0, 0xFFFFu, fullLight);
 
-    require(cw.getBlock(4, 64, 4) == BlockIds::STONE, "light-only updates should not edit blocks");
+    require(cw.getBlock(4, 64, 4) == BlockRegistry::requireIdByName("minecraft:stone"), "light-only updates should not edit blocks");
     require(cw.getPackedLight(4, 64, 4) == 0x0A, "light-only updates should apply packed light");
     std::printf("[PASS] testApplyBlockUpdateCanBeLightOnly\n");
 }

@@ -61,13 +61,13 @@ int main() {
     constexpr int tunnelY = 80;
     constexpr int tunnelZ = 8;
     for (int x = 14; x <= 17; ++x) {
-        world.setBlock(x, tunnelY, tunnelZ, BlockIds::STONE);
+        world.setBlock(x, tunnelY, tunnelZ, BlockRegistry::requireIdByName("minecraft:stone"));
     }
     tickWorld(world, playerPos, 20);
 
     constexpr int torchX = 14;
     constexpr int torchY = tunnelY + 1;
-    world.setBlock(torchX, torchY, tunnelZ, BlockIds::TORCH);
+    world.setBlock(torchX, torchY, tunnelZ, BlockRegistry::requireIdByName("minecraft:torch"));
     tickWorld(world, playerPos, 2);
 
     const auto& chunks = world.getActiveChunks();
@@ -90,14 +90,14 @@ int main() {
     constexpr int perturbX = 20;
     constexpr int perturbY = 90;
     constexpr int perturbZ = 12;
-    world.setBlock(perturbX, perturbY, perturbZ, BlockIds::STONE);
+    world.setBlock(perturbX, perturbY, perturbZ, BlockRegistry::requireIdByName("minecraft:stone"));
     tickWorld(world, playerPos, 2);
 
     if (!waitUntil(world, playerPos, 120, rightTunnelLit)) {
         fail("neighbor chunk should keep cross-chunk block light after its own recompute");
     }
 
-    world.setBlock(torchX, torchY, tunnelZ, BlockIds::AIR);
+    world.setBlock(torchX, torchY, tunnelZ, RUNTIME_ID_NULL);
     tickWorld(world, playerPos, 2);
 
     const bool clearedInNeighbor = waitUntil(world, playerPos, 180, [&]() {

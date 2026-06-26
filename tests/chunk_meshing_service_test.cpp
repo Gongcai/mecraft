@@ -30,7 +30,7 @@ SubChunkMeshingJob makeDenseJob(const int64_t chunkKey,
                                 const int chunkX,
                                 const int chunkZ,
                                 const int scy,
-                                const BlockID blockId = BlockIds::DIRT) {
+                                const BlockID blockId = BlockRegistry::requireIdByName("minecraft:dirt")) {
     auto chunkPtr = std::make_shared<Chunk>(chunkX, chunkZ);
     const int yBase = scy * SubChunk::SIZE;
     for (int y = 0; y < SubChunk::SIZE; ++y) {

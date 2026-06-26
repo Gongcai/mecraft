@@ -51,9 +51,9 @@ int main() {
     }
 
     // Build a deterministic platform so the drop can land on a known height.
-    world.setBlock(0, 120, 0, BlockIds::STONE);
-    world.setBlock(0, 121, 0, BlockIds::AIR);
-    world.setBlock(0, 122, 0, BlockIds::AIR);
+    world.setBlock(0, 120, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+    world.setBlock(0, 121, 0, RUNTIME_ID_NULL);
+    world.setBlock(0, 122, 0, RUNTIME_ID_NULL);
 
     ecs::GameplayServices services;
     services.world = &world;
@@ -62,8 +62,8 @@ int main() {
     DropSystem dropSystem;
     dropSystem.bindRegistry(dropRegistry);
     dropSystem.bindServices(services);
-    dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
-    dropSystem.spawnBlockDrop(BlockIds::STONE, glm::ivec3(0, 122, 0));
+    dropSystem.spawnBlockDrop(BlockRegistry::requireIdByName("minecraft:stone"), glm::ivec3(0, 122, 0));
+    dropSystem.spawnBlockDrop(BlockRegistry::requireIdByName("minecraft:stone"), glm::ivec3(0, 122, 0));
 
     if (dropSystem.getDrops().empty()) {
         return fail("spawnBlockDrop should create one block drop");
@@ -77,7 +77,7 @@ int main() {
         return fail("merged drop should accumulate stack count");
     }
 
-    if (dropSystem.getDrops().front().itemId != BlockDropTable::getDropItem(BlockIds::STONE)) {
+    if (dropSystem.getDrops().front().itemId != BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:stone"))) {
         return fail("drop payload should preserve spawned item id from BlockDropTable");
     }
 
@@ -91,11 +91,11 @@ int main() {
     ecs::GameplayRegistry coalDropRegistry;
     DropSystem coalDropSystem;
     coalDropSystem.bindRegistry(coalDropRegistry);
-    coalDropSystem.spawnBlockDrop(BlockIds::COAL_ORE, glm::ivec3(0, 122, 0));
+    coalDropSystem.spawnBlockDrop(BlockRegistry::requireIdByName("minecraft:coal_ore"), glm::ivec3(0, 122, 0));
     if (coalDropSystem.getDrops().empty()) {
         return fail("coal_ore should spawn a drop");
     }
-    if (coalDropSystem.getDrops().front().itemId != ItemIds::COAL) {
+    if (coalDropSystem.getDrops().front().itemId != ItemRegistry::requireIdByName("minecraft:coal")) {
         return fail("coal_ore should drop coal item, not itself");
     }
 
@@ -103,7 +103,7 @@ int main() {
     DropSystem stateDropSystem;
     stateDropSystem.bindRegistry(stateDropRegistry);
     const StateID birchLogX = BlockStateRegistry::getState(
-        BlockIds::BIRCH_LOG,
+        BlockRegistry::requireIdByName("minecraft:birch_log"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::AXIS, PropIndices::AXIS_X}
         });
@@ -111,7 +111,7 @@ int main() {
     if (stateDropSystem.getDrops().empty()) {
         return fail("stateful blocks should still spawn drops");
     }
-    if (stateDropSystem.getDrops().front().itemId != ItemRegistry::fromBlock(BlockIds::BIRCH_LOG)) {
+    if (stateDropSystem.getDrops().front().itemId != ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:birch_log"))) {
         return fail("stateful blocks should resolve drops through their owning base block");
     }
 
@@ -119,12 +119,12 @@ int main() {
     DropSystem placementDropSystem;
     placementDropSystem.bindRegistry(placementDropRegistry);
     const glm::ivec3 placementCell(2, 130, 2);
-    placementDropSystem.spawnBlockDrop(BlockIds::STONE, placementCell);
+    placementDropSystem.spawnBlockDrop(BlockRegistry::requireIdByName("minecraft:stone"), placementCell);
     if (placementDropSystem.getDrops().empty()) {
         return fail("placement test setup failed to spawn drop");
     }
 
-    world.setBlock(placementCell.x, placementCell.y, placementCell.z, BlockIds::STONE);
+    world.setBlock(placementCell.x, placementCell.y, placementCell.z, BlockRegistry::requireIdByName("minecraft:stone"));
     placementDropSystem.onBlockPlaced(placementCell, world);
 
     const DropEntity& moved = placementDropSystem.getDrops().front();
@@ -140,8 +140,8 @@ int main() {
     DropSystem itemSpawnDropSystem;
     ecs::GameplayRegistry itemSpawnRegistry;
     itemSpawnDropSystem.bindRegistry(itemSpawnRegistry);
-    itemSpawnDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(4, 122, 4), 1);
-    itemSpawnDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(4, 122, 4), 2);
+    itemSpawnDropSystem.spawnItemDrop(ItemRegistry::requireIdByName("minecraft:coal"), glm::ivec3(4, 122, 4), 1);
+    itemSpawnDropSystem.spawnItemDrop(ItemRegistry::requireIdByName("minecraft:coal"), glm::ivec3(4, 122, 4), 2);
     if (itemSpawnDropSystem.getDrops().size() != 1 || itemSpawnDropSystem.getDrops().front().stackCount != 3) {
         return fail("spawnItemDrop should merge same-position same-item stacks");
     }
@@ -149,9 +149,9 @@ int main() {
     DropSystem collectDropSystem;
     ecs::GameplayRegistry collectDropRegistry;
     collectDropSystem.bindRegistry(collectDropRegistry);
-    collectDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(6, 122, 6), 2);
+    collectDropSystem.spawnItemDrop(ItemRegistry::requireIdByName("minecraft:coal"), glm::ivec3(6, 122, 6), 2);
     Inventory inventory;
-    const uint32_t coalBefore = inventoryItemCount(inventory, ItemIds::COAL);
+    const uint32_t coalBefore = inventoryItemCount(inventory, ItemRegistry::requireIdByName("minecraft:coal"));
     const uint32_t collected = collectDropSystem.collectNearbyDrops(glm::vec3(6.5f, 122.42f, 6.5f), 1.0f, inventory);
     if (collected != 2) {
         return fail("collectNearbyDrops should collect stacks within radius");
@@ -159,7 +159,7 @@ int main() {
     if (!collectDropSystem.getDrops().empty()) {
         return fail("collectNearbyDrops should remove fully collected drops");
     }
-    if (inventoryItemCount(inventory, ItemIds::COAL) != coalBefore + 2) {
+    if (inventoryItemCount(inventory, ItemRegistry::requireIdByName("minecraft:coal")) != coalBefore + 2) {
         return fail("collectNearbyDrops should add items into inventory stacks");
     }
 
@@ -169,7 +169,7 @@ int main() {
     ecs::GameplayRegistry inactiveDropRegistry;
     inactiveDropSystem.bindRegistry(inactiveDropRegistry);
     inactiveDropSystem.bindServices(services);
-    inactiveDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(48, 122, 0), 1);
+    inactiveDropSystem.spawnItemDrop(ItemRegistry::requireIdByName("minecraft:coal"), glm::ivec3(48, 122, 0), 1);
     auto inactiveView = inactiveDropRegistry.view<ecs::DropItemTag,
                                                    ecs::TransformComponent,
                                                    ecs::VelocityComponent,
@@ -195,7 +195,7 @@ int main() {
 
     DropEntity savedDrop;
     savedDrop.id = 42;
-    savedDrop.itemId = ItemIds::COAL;
+    savedDrop.itemId = ItemRegistry::requireIdByName("minecraft:coal");
     savedDrop.stackCount = 3;
     savedDrop.position = glm::vec3(8.25f, 123.0f, 8.75f);
     savedDrop.velocity = glm::vec3(0.1f, 0.2f, 0.3f);
@@ -230,7 +230,7 @@ int main() {
         return fail("restored drops should include required ECS and network sync components");
     }
 
-    restoreDropSystem.spawnItemDrop(ItemIds::COAL, glm::ivec3(20, 122, 20), 1);
+    restoreDropSystem.spawnItemDrop(ItemRegistry::requireIdByName("minecraft:coal"), glm::ivec3(20, 122, 20), 1);
     restoredDrops = restoreDropSystem.getDrops();
     bool sawFutureId = false;
     for (const DropEntity& drop : restoredDrops) {

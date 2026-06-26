@@ -46,8 +46,8 @@ int testLocalMobDeathSpawnsDropsAndDestroysEntity() {
     raw.emplace<ecs::HealthComponent>(mob, 0, 20);
 
     auto& drops = raw.emplace<ecs::DropTableComponent>(mob);
-    drops.entries.push_back(ecs::DropTableEntry{ItemIds::COAL, 1u, 1u});
-    drops.entries.push_back(ecs::DropTableEntry{ItemIds::APPLE, 2u, 4u});
+    drops.entries.push_back(ecs::DropTableEntry{ItemRegistry::requireIdByName("minecraft:coal"), 1u, 1u});
+    drops.entries.push_back(ecs::DropTableEntry{ItemRegistry::requireIdByName("minecraft:apple"), 2u, 4u});
 
     ecs::DeathSystem deathSystem;
     deathSystem.update(context);
@@ -56,12 +56,12 @@ int testLocalMobDeathSpawnsDropsAndDestroysEntity() {
         return fail("dead mob should be destroyed");
     }
 
-    const uint32_t coalCount = dropStackCount(registry, ItemIds::COAL);
+    const uint32_t coalCount = dropStackCount(registry, ItemRegistry::requireIdByName("minecraft:coal"));
     if (coalCount != 1) {
         return fail("death loot should spawn fixed-count entries");
     }
 
-    const uint32_t appleCount = dropStackCount(registry, ItemIds::APPLE);
+    const uint32_t appleCount = dropStackCount(registry, ItemRegistry::requireIdByName("minecraft:apple"));
     if (appleCount < 2 || appleCount > 4) {
         return fail("death loot should roll ranged entries within min/max");
     }
@@ -81,8 +81,8 @@ int testNetworkMobDeathQueuesFinalDespawnOnce() {
     raw.emplace<ecs::HealthComponent>(mob, 0, 20);
     raw.emplace<ecs::NetworkSyncTag>(mob);
     raw.emplace<ecs::EntityNetIdComponent>(mob, ecs::EntityNetId{42});
-    raw.emplace<ecs::DeathEffectComponent>(mob, BlockIds::ROSE, 28, "mob.zombie.death", 1.0f);
-    raw.emplace<ecs::DropTableComponent>(mob, ItemIds::COAL, 1u, 1u);
+    raw.emplace<ecs::DeathEffectComponent>(mob, BlockRegistry::requireIdByName("minecraft:rose"), 28, "mob.zombie.death", 1.0f);
+    raw.emplace<ecs::DropTableComponent>(mob, ItemRegistry::requireIdByName("minecraft:coal"), 1u, 1u);
 
     const entt::entity child = raw.create();
     raw.emplace<ecs::ChildrenComponent>(mob).children.push_back(child);
@@ -101,15 +101,15 @@ int testNetworkMobDeathQueuesFinalDespawnOnce() {
         return fail("networked dead mob should be marked for final network despawn");
     }
     const auto* impact = raw.try_get<ecs::EntityImpactComponent>(mob);
-    if (impact == nullptr || impact->particleBlock != BlockIds::ROSE || impact->particleCount != 28) {
+    if (impact == nullptr || impact->particleBlock != BlockRegistry::requireIdByName("minecraft:rose") || impact->particleCount != 28) {
         return fail("networked dead mob should carry final death impact data");
     }
-    if (dropStackCount(registry, ItemIds::COAL) != 1) {
+    if (dropStackCount(registry, ItemRegistry::requireIdByName("minecraft:coal")) != 1) {
         return fail("networked death should spawn loot exactly once on first update");
     }
 
     deathSystem.update(context);
-    if (dropStackCount(registry, ItemIds::COAL) != 1) {
+    if (dropStackCount(registry, ItemRegistry::requireIdByName("minecraft:coal")) != 1) {
         return fail("pending network death should not spawn duplicate loot");
     }
 

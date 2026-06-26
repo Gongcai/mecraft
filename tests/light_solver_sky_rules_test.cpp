@@ -3,7 +3,7 @@
 #include <memory>
 #include <vector>
 
-#include "../src/world/Chunk.h"
+#include "../src/world/chunk/Chunk.h"
 #include "../src/world/light/LightSolver.h"
 
 namespace {
@@ -55,15 +55,15 @@ void testWaterAttenuatesSky() {
     auto chunk = std::make_shared<Chunk>(0, 0);
 
     for (int y = 70; y <= 72; ++y) {
-        chunk->setBlockFast(3, y, 3, BlockIds::WATER);
+        chunk->setBlockFast(3, y, 3, BlockRegistry::requireIdByName("minecraft:water"));
     }
     // Keep lower water voxels from being refreshed by side skylight so we can
     // assert pure downward attenuation.
     for (int y = 0; y <= 71; ++y) {
-        chunk->setBlockFast(2, y, 3, BlockIds::STONE);
-        chunk->setBlockFast(4, y, 3, BlockIds::STONE);
-        chunk->setBlockFast(3, y, 2, BlockIds::STONE);
-        chunk->setBlockFast(3, y, 4, BlockIds::STONE);
+        chunk->setBlockFast(2, y, 3, BlockRegistry::requireIdByName("minecraft:stone"));
+        chunk->setBlockFast(4, y, 3, BlockRegistry::requireIdByName("minecraft:stone"));
+        chunk->setBlockFast(3, y, 2, BlockRegistry::requireIdByName("minecraft:stone"));
+        chunk->setBlockFast(3, y, 4, BlockRegistry::requireIdByName("minecraft:stone"));
     }
 
     const LightResult result = LightSolver::solve(buildJob(chunk));
@@ -88,7 +88,7 @@ void testSealedRoomBlocksSky() {
             for (int x = 7; x <= 9; ++x) {
                 const bool shell = (x == 7 || x == 9 || y == 59 || y == 61 || z == 7 || z == 9);
                 if (shell) {
-                    chunk->setBlockFast(x, y, z, BlockIds::STONE);
+                    chunk->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
                 }
             }
         }

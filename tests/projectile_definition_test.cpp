@@ -17,12 +17,12 @@ int main() {
     ItemRegistry::init();
 
     ecs::ProjectileDefinition apple;
-    if (!ecs::getThrowableProjectileDefinition(ItemIds::APPLE, apple)) {
+    if (!ecs::getThrowableProjectileDefinition(ItemRegistry::requireIdByName("minecraft:apple"), apple)) {
         return fail("apple should load as a throwable projectile from projectiles.json");
     }
-    if (apple.itemId != ItemIds::APPLE ||
+    if (apple.itemId != ItemRegistry::requireIdByName("minecraft:apple") ||
         apple.damage != 5 ||
-        apple.entityImpactParticleBlock != BlockIds::ROSE ||
+        apple.entityImpactParticleBlock != BlockRegistry::requireIdByName("minecraft:rose") ||
         apple.entityImpactParticleCount != 14 ||
         apple.throwSoundId != "item.apple.throw" ||
         apple.impactSoundId != "item.apple.impact") {
@@ -30,12 +30,12 @@ int main() {
     }
 
     ecs::ProjectileDefinition coal;
-    if (ecs::getThrowableProjectileDefinition(ItemIds::COAL, coal)) {
+    if (ecs::getThrowableProjectileDefinition(ItemRegistry::requireIdByName("minecraft:coal"), coal)) {
         return fail("coal should not be throwable without a projectile definition");
     }
 
-    const ecs::ProjectileDefinition fallback = ecs::projectileDefinitionForItemOrDefault(ItemIds::COAL);
-    if (fallback.itemId != ItemIds::COAL ||
+    const ecs::ProjectileDefinition fallback = ecs::projectileDefinitionForItemOrDefault(ItemRegistry::requireIdByName("minecraft:coal"));
+    if (fallback.itemId != ItemRegistry::requireIdByName("minecraft:coal") ||
         fallback.entityImpactParticleBlock != ecs::defaultProjectileEntityImpactParticleBlock() ||
         !fallback.throwSoundId.empty() ||
         !fallback.impactSoundId.empty()) {

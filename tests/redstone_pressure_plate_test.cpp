@@ -33,9 +33,9 @@ void loadOriginChunks(World& world) {
 
 void prepareFlatTestLine(World& world, const int y) {
     for (int x = -1; x <= 4; ++x) {
-        world.setBlock(x, y - 1, 0, BlockIds::STONE);
-        world.setBlock(x, y, 0, BlockIds::AIR);
-        world.setBlock(x, y + 1, 0, BlockIds::AIR);
+        world.setBlock(x, y - 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(x, y, 0, RUNTIME_ID_NULL);
+        world.setBlock(x, y + 1, 0, RUNTIME_ID_NULL);
     }
 }
 
@@ -106,7 +106,7 @@ entt::entity createDrop(ecs::GameplayRegistry& registry, const glm::vec3& center
     raw.emplace<ecs::DropItemTag>(drop);
     raw.emplace<ecs::TransformComponent>(drop, centerPosition, 0.0f);
     raw.emplace<ecs::BoundsComponent>(drop, glm::vec3(0.175f));
-    raw.emplace<ecs::ItemComponent>(drop, ItemIds::COAL, 1u);
+    raw.emplace<ecs::ItemComponent>(drop, ItemRegistry::requireIdByName("minecraft:coal"), 1u);
     return drop;
 }
 
@@ -124,9 +124,9 @@ int main() {
 
     const int stoneY = 96;
     prepareFlatTestLine(world, stoneY);
-    world.setBlockState(0, stoneY, 0, pressurePlateState(BlockIds::STONE_PRESSURE_PLATE, false));
-    world.setBlockState(1, stoneY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
-    world.setBlockState(2, stoneY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+    world.setBlockState(0, stoneY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), false));
+    world.setBlockState(1, stoneY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(2, stoneY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
     const entt::entity player = createStandingPlayer(
         registry,
@@ -155,7 +155,7 @@ int main() {
 
     const int itemStoneY = 80;
     prepareFlatTestLine(world, itemStoneY);
-    world.setBlockState(0, itemStoneY, 0, pressurePlateState(BlockIds::STONE_PRESSURE_PLATE, false));
+    world.setBlockState(0, itemStoneY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), false));
     const entt::entity stoneDrop = createDrop(
         registry,
         glm::vec3(0.5f, static_cast<float>(itemStoneY) + (1.0f / 16.0f) + 0.175f, 0.5f));
@@ -169,9 +169,9 @@ int main() {
 
     const int oakY = 64;
     prepareFlatTestLine(world, oakY);
-    world.setBlockState(0, oakY, 0, pressurePlateState(BlockIds::OAK_PRESSURE_PLATE, false));
-    world.setBlockState(1, oakY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
-    world.setBlockState(2, oakY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+    world.setBlockState(0, oakY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"), false));
+    world.setBlockState(1, oakY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+    world.setBlockState(2, oakY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
     createDrop(
         registry,
         glm::vec3(0.5f, static_cast<float>(oakY) + (1.0f / 16.0f) + 0.175f, 0.5f));

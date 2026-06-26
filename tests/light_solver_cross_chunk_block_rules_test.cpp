@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-#include "../src/world/Chunk.h"
+#include "../src/world/chunk/Chunk.h"
 #include "../src/world/light/LightSolver.h"
 #include "../src/world/World.h"
 
@@ -68,17 +68,17 @@ void buildSealedTunnel(const std::shared_ptr<Chunk>& left, const std::shared_ptr
     for (int iy = 0; iy <= 40; ++iy) {
         for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
             for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
-                left->setBlockFast(ix, iy, iz, BlockIds::STONE);
-                right->setBlockFast(ix, iy, iz, BlockIds::STONE);
+                left->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
+                right->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
     }
 
     for (int x = 13; x <= 15; ++x) {
-        left->setBlockFast(x, y, z, BlockIds::AIR);
+        left->setBlockFast(x, y, z, RUNTIME_ID_NULL);
     }
     for (int x = 0; x <= 2; ++x) {
-        right->setBlockFast(x, y, z, BlockIds::AIR);
+        right->setBlockFast(x, y, z, RUNTIME_ID_NULL);
     }
 }
 
@@ -90,7 +90,7 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     constexpr int z = 8;
     buildSealedTunnel(left, right, y, z);
 
-    left->setBlockFast(14, y, z, BlockIds::TORCH);
+    left->setBlockFast(14, y, z, BlockRegistry::requireIdByName("minecraft:torch"));
 
     LightJob leftLitJob = buildJob(left);
     leftLitJob.neighborPosX = right;
@@ -126,7 +126,7 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
         fail("neighbor chunk should stay lit when boundary contribution is reused");
     }
 
-    left->setBlockFast(14, y, z, BlockIds::AIR);
+    left->setBlockFast(14, y, z, RUNTIME_ID_NULL);
     LightJob leftRemovedJob = buildJob(left);
     leftRemovedJob.neighborPosX = right;
     const LightResult leftRemoved = LightSolver::solve(leftRemovedJob);
@@ -152,27 +152,27 @@ void testLocalEmitterRemovalUsesRemovePass() {
     for (int iy = 0; iy <= 40; ++iy) {
         for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
             for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
-                chunk->setBlockFast(ix, iy, iz, BlockIds::STONE);
+                chunk->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
     }
     for (int x = 6; x <= 10; ++x) {
-        chunk->setBlockFast(x, y, z, BlockIds::AIR);
+        chunk->setBlockFast(x, y, z, RUNTIME_ID_NULL);
     }
-    chunk->setBlockFast(8, y, z, BlockIds::TORCH);
+    chunk->setBlockFast(8, y, z, BlockRegistry::requireIdByName("minecraft:torch"));
 
     const LightResult lit = LightSolver::solve(buildJob(chunk));
     chunk->replacePackedLight(lit.selfDelta.packedLight.data(), lit.selfDelta.packedLight.size(), nullptr);
 
-    chunk->setBlockFast(8, y, z, BlockIds::AIR);
+    chunk->setBlockFast(8, y, z, RUNTIME_ID_NULL);
     LightJob removedJob = buildJob(chunk);
     removedJob.reason = LightDirtyReason::BlockChanged;
     removedJob.blockChanges.push_back({
         static_cast<uint8_t>(8),
         static_cast<uint8_t>(y),
         static_cast<uint8_t>(z),
-        BlockIds::TORCH,
-        BlockIds::AIR
+        BlockRegistry::requireIdByName("minecraft:torch"),
+        RUNTIME_ID_NULL
     });
 
     const LightResult cleared = LightSolver::solve(removedJob);

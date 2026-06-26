@@ -63,7 +63,7 @@ int main() {
     BlockDropTable::init();
 
     const BlockID farmland = BlockRegistry::findByName("farmland");
-    if (farmland == BlockIds::AIR) {
+    if (farmland == RUNTIME_ID_NULL) {
         return fail("farmland block should be registered");
     }
 
@@ -126,7 +126,7 @@ int main() {
     }
 
     const BlockID wheat = BlockRegistry::findByName("wheat");
-    if (wheat == BlockIds::AIR) {
+    if (wheat == RUNTIME_ID_NULL) {
         return fail("wheat block should be registered");
     }
     const StateID wheatAge0 = BlockStateRegistry::getDefaultState(wheat);
@@ -170,7 +170,7 @@ int main() {
         0
     };
     if (!BlockRandomTick::dispatch(BlockRegistry::get(farmland).randomTick, revertTickCtx) ||
-        hydrationWorld.getBlock(revertPos.x, revertPos.y, revertPos.z) != BlockIds::DIRT) {
+        hydrationWorld.getBlock(revertPos.x, revertPos.y, revertPos.z) != BlockRegistry::requireIdByName("minecraft:dirt")) {
         return fail("dry farmland random tick should revert to dirt when no crop is above");
     }
 
@@ -196,8 +196,8 @@ int main() {
     loadSpawnChunks(tillWorld);
 
     const glm::ivec3 dirtPos(0, 122, 0);
-    tillWorld.setBlockState(dirtPos.x, dirtPos.y, dirtPos.z, BlockIds::DIRT);
-    tillWorld.setBlockState(dirtPos.x, dirtPos.y + 1, dirtPos.z, BlockIds::AIR);
+    tillWorld.setBlockState(dirtPos.x, dirtPos.y, dirtPos.z, BlockRegistry::requireIdByName("minecraft:dirt"));
+    tillWorld.setBlockState(dirtPos.x, dirtPos.y + 1, dirtPos.z, RUNTIME_ID_NULL);
 
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
@@ -221,7 +221,7 @@ int main() {
 
     ecs::InventoryDataComponent inventoryData;
     ItemStack hoe;
-    hoe.itemId = ItemIds::IRON_HOE;
+    hoe.itemId = ItemRegistry::requireIdByName("minecraft:iron_hoe");
     hoe.count = 1;
     hoe.durability = 2;
     inventoryData.inventory.setSlotStack(0, hoe);
@@ -245,7 +245,7 @@ int main() {
     }
 
     const ItemStack held = registry.get<ecs::InventoryDataComponent>(player).inventory.getSlotStack(0);
-    if (held.itemId != ItemIds::IRON_HOE || held.count != 1 || held.durability != 1) {
+    if (held.itemId != ItemRegistry::requireIdByName("minecraft:iron_hoe") || held.count != 1 || held.durability != 1) {
         return fail("successful tilling should consume one point of hoe durability");
     }
 
