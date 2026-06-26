@@ -1,4 +1,4 @@
-#include "ChestInventoryLifecycle.h"
+#include "BlockEntityInventoryLifecycle.h"
 
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/systems/item/ItemSpawnSystem.h"
@@ -32,10 +32,10 @@ const ContainerBehaviorDef* storageBehaviorForBlock(const BlockID blockId) {
 }
 }
 
-bool handleChestInventoryBreak(ecs::GameplayRegistry& registry,
-                               const BlockID brokenBlock,
-                               const glm::ivec3& blockPos,
-                               const bool dropContents) {
+bool handleBlockEntityInventoryBreak(ecs::GameplayRegistry& registry,
+                                     const BlockID brokenBlock,
+                                     const glm::ivec3& blockPos,
+                                     const bool dropContents) {
     const ContainerBehaviorDef* behavior = storageBehaviorForBlock(brokenBlock);
     if (behavior == nullptr) {
         return false;

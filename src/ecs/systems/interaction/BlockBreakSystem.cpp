@@ -11,7 +11,7 @@
 #include "../../util/ToolDurability.h"
 #include "../../components/Components.h"
 #include "../../../game/modes/GameplayModeRules.h"
-#include "../../../game/inventory/ChestInventoryLifecycle.h"
+#include "../../../game/inventory/BlockEntityInventoryLifecycle.h"
 #include "../../../game/inventory/FurnaceInventoryLifecycle.h"
 #include "../../../client/GameClient.h"
 #include "../../../item/Item.h"
@@ -181,9 +181,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
 
             std::vector<glm::ivec3> removedPositions;
             const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
-            const bool handledChest = handleChestInventoryBreak(registry, brokenBlock, hitBlock, false);
+            const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, false);
             const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, false);
-            static_cast<void>(handledChest);
+            static_cast<void>(handledStorage);
             static_cast<void>(handledFurnace);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             for (const glm::ivec3& removedPos : removedPositions) {
@@ -229,9 +229,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             }
             std::vector<glm::ivec3> removedPositions;
             const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
-            const bool handledChest = handleChestInventoryBreak(registry, brokenBlock, hitBlock, true);
+            const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, true);
             const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, true);
-            static_cast<void>(handledChest);
+            static_cast<void>(handledStorage);
             static_cast<void>(handledFurnace);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             for (const glm::ivec3& removedPos : removedPositions) {

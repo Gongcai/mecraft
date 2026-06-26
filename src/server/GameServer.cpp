@@ -24,19 +24,21 @@
 #include "../ecs/components/NetworkComponents.h"
 #include "../game/interaction/BlockInteractionDispatcher.h"
 #include "../game/inventory/BlockEntityInventoryStore.h"
-#include "../game/inventory/ChestInventoryLifecycle.h"
+#include "../game/inventory/BlockEntityInventoryLifecycle.h"
 #include "../game/inventory/ContainerBehaviorRegistry.h"
 #include "../game/inventory/FurnaceInventoryLifecycle.h"
 #include "../game/inventory/FurnaceInventoryStore.h"
 #include "../item/Item.h"
 #include "../item/ItemUseDispatcher.h"
 #include "../physics/PhysicsSystem.h"
+#include "../ui/inventory/ContainerUiRegistry.h"
 #include "../world/block/BlockStateRegistry.h"
 #include "../world/fluid/FluidState.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
+#include <stdexcept>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -53,11 +55,6 @@ constexpr float kPlayerPoseCorrectionAcceptDistanceSq = 0.1225f;
 
 BlockID furnaceBlockId() {
     static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:furnace");
-    return blockId;
-}
-
-BlockID chestBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:chest");
     return blockId;
 }
 
@@ -205,6 +202,33 @@ bool inventorySnapshotSlotsEqual(const std::vector<net::InventorySlotData>& a,
             return false;
         }
     }
+    return true;
+}
+
+bool persistentBlockEntityTypeForBlock(const BlockID blockId, std::string& outType) {
+    if (blockId == RUNTIME_ID_NULL) {
+        return false;
+    }
+    if (blockId == furnaceBlockId()) {
+        outType = "minecraft:furnace";
+        return true;
+    }
+
+    const BlockDef& blockDef = BlockRegistry::getFast(blockId);
+    if (blockDef.containerUi.empty()) {
+        return false;
+    }
+
+    const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(blockDef.containerUi);
+    const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
+    if (behavior.handler != "storage") {
+        return false;
+    }
+    if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
+        throw std::runtime_error(behavior.id + " storage handler requires block_entity storage");
+    }
+
+    outType = behavior.id;
     return true;
 }
 
@@ -1501,14 +1525,14 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         std::vector<glm::ivec3> removedPositions;
         const BlockID brokenBlock = removeServerTargetBlock(m_world, action.targetBlock, removedPositions);
         const bool shouldDrop = client.gameplayMode != net::NetworkGameplayMode::Creative;
-        bool brokeChest = false;
+        bool brokeStorage = false;
         bool brokeFurnace = false;
         const bool brokeBed = BedBlockLogic::isBedBlock(brokenBlock);
         const bool brokeDoor = DoorBlockLogic::isDoorBlock(brokenBlock);
         if (m_gameplayRegistry != nullptr) {
-            brokeChest = handleChestInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
+            brokeStorage = handleBlockEntityInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
             brokeFurnace = handleFurnaceInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
-            if (brokeChest && shouldDrop) {
+            if (brokeStorage && shouldDrop) {
                 const ItemID storageItem = BlockDropTable::getDropItem(brokenBlock);
                 if (storageItem != RUNTIME_ID_NULL) {
                     ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, storageItem, action.targetBlock, 1);
@@ -2173,16 +2197,12 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
                     for (int x = 0; x < Chunk::SIZE_X; ++x) {
                         const StateID state = subChunk->getBlock(x, ly, z);
                         const BlockID blockId = BlockStateRegistry::getBlockId(state);
-                        if (blockId == chestBlockId()) {
+                        std::string blockEntityType;
+                        if (persistentBlockEntityTypeForBlock(blockId, blockEntityType)) {
                             ensureBlockEntityEntry(glm::ivec3(worldOffset.x + x,
                                                               yBase + ly,
                                                               worldOffset.z + z),
-                                                   "minecraft:chest");
-                        } else if (blockId == furnaceBlockId()) {
-                            ensureBlockEntityEntry(glm::ivec3(worldOffset.x + x,
-                                                              yBase + ly,
-                                                              worldOffset.z + z),
-                                                   "minecraft:furnace");
+                                                   blockEntityType);
                         }
                     }
                 }
@@ -2199,7 +2219,7 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
         store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position,
                                                  const std::string& typeId,
                                                  const int slotCount,
-                                                 const ChestInventory& inventory) {
+                                                 const BlockEntityInventory& inventory) {
             save::BlockEntityData& data = ensureBlockEntityEntry(position, typeId);
             data.type = typeId;
             data.slots.clear();
@@ -2380,7 +2400,7 @@ void GameServer::restoreBlockEntities() {
         BlockEntityInventoryStore& store = m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()
             ? m_ecsRegistry->ctx().get<BlockEntityInventoryStore>()
             : m_ecsRegistry->ctx().emplace<BlockEntityInventoryStore>();
-        ChestInventory& inventory = store.getOrCreate(
+        BlockEntityInventory& inventory = store.getOrCreate(
             glm::ivec3(data.x, data.y, data.z),
             behavior.id,
             behavior.storage.slots);

@@ -174,7 +174,7 @@ int main() {
         prepareComparatorArea(world, y);
         ecs::GameplayRegistry registry;
         BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
-        ChestInventory& chest = store.getOrCreate(chestPosition, "minecraft:chest", 27);
+        BlockEntityInventory& chest = store.getOrCreate(chestPosition, "minecraft:chest", 27);
         const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
         const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
         for (int slot = 0; slot < 14; ++slot) {
@@ -202,7 +202,7 @@ int main() {
         prepareComparatorArea(world, y);
         ecs::GameplayRegistry registry;
         BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
-        ChestInventory& barrel = store.getOrCreate(barrelPosition, "minecraft:barrel", 27);
+        BlockEntityInventory& barrel = store.getOrCreate(barrelPosition, "minecraft:barrel", 27);
         const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
         const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
         for (int slot = 0; slot < 14; ++slot) {

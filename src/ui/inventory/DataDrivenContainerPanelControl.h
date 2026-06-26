@@ -6,7 +6,7 @@
 #include "ItemGridControl.h"
 #include "../core/UIWidget.h"
 #include "../widgets/UITooltip.h"
-#include "../../game/inventory/ChestInventoryStore.h"
+#include "../../game/inventory/BlockEntityInventoryStore.h"
 #include "../../game/inventory/FurnaceInventoryStore.h"
 
 class Inventory;
@@ -21,7 +21,7 @@ public:
 
     void setVisible(bool isVisible);
     void setDefinition(const ui::ContainerUiDef& definition);
-    void setChestSource(const ChestInventory* chest);
+    void setStorageSource(const BlockEntityInventory* storageInventory);
     void setFurnaceSource(const FurnaceInventory* furnace);
     void setPlayerInventorySource(const Inventory* inventory);
     void setProgress(float burnFraction, float cookFraction);
@@ -68,7 +68,7 @@ private:
     void renderTooltip(const UIRenderContext& context) const;
 
     const ui::ContainerUiDef* m_definition = nullptr;
-    const ChestInventory* m_chest = nullptr;
+    const BlockEntityInventory* m_storageInventory = nullptr;
     const FurnaceInventory* m_furnace = nullptr;
     const Inventory* m_playerInventory = nullptr;
     ItemGridControl m_containerGrid;

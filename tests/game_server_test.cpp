@@ -2719,7 +2719,7 @@ static void testPersistentChestInventoryRestoresFromSave() {
         server.setEcsRegistry(&registry);
 
         BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
-        ChestInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
+        BlockEntityInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
         chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 6);
 
         ItemStack pickaxe;
@@ -2743,7 +2743,7 @@ static void testPersistentChestInventoryRestoresFromSave() {
         require(registry.ctxHas<BlockEntityInventoryStore>(),
                 "persistent chest restore should create a block entity inventory store");
         const BlockEntityInventoryStore& store = registry.ctxGet<BlockEntityInventoryStore>();
-        const ChestInventory* chest = store.find(chestPos);
+        const BlockEntityInventory* chest = store.find(chestPos);
         require(chest != nullptr, "persistent chest restore should recreate the chest inventory");
 
         const ItemStack apples = chest->getSlotStack(0);
@@ -2911,6 +2911,75 @@ static void testPersistentChestBlockRestoresFromSave() {
     std::printf("[PASS] testPersistentChestBlockRestoresFromSave\n");
 }
 
+static void testPersistentBarrelBlockRestoresFromSave() {
+    const std::filesystem::path saveRoot = "test_server_barrel_block_save";
+    std::filesystem::remove_all(saveRoot);
+    const glm::ivec3 barrelPos(4, Chunk::SIZE_Y - 8, 5);
+    const StateID barrelState =
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:barrel"));
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Barrel Block Save Test");
+
+        for (int tick = 0;
+             tick < 240 && !server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z);
+             ++tick) {
+            server.tick(1.0f / 20.0f);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        require(server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z),
+                "test setup should load the barrel chunk before placement");
+
+        server.world().setBlock(barrelPos.x, barrelPos.y, barrelPos.z, barrelState);
+        server.shutdown();
+    }
+
+    {
+        save::SaveManager mgr(saveRoot);
+        std::vector<save::BlockEntityData> blockEntities;
+        require(mgr.loadBlockEntities(blockEntities),
+                "persistent barrel block save should write block entity data");
+
+        bool sawEmptyBarrelEntity = false;
+        for (const save::BlockEntityData& entity : blockEntities) {
+            if (entity.type == "minecraft:barrel" &&
+                entity.x == barrelPos.x &&
+                entity.y == barrelPos.y &&
+                entity.z == barrelPos.z &&
+                entity.slots.empty()) {
+                sawEmptyBarrelEntity = true;
+                break;
+            }
+        }
+        require(sawEmptyBarrelEntity,
+                "persistent barrel block save should include an empty barrel block entity");
+    }
+
+    {
+        server::GameServer server;
+        server.init(1234, nullptr, 2, saveRoot, "Barrel Block Save Test");
+
+        for (int tick = 0;
+             tick < 240 && !server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z);
+             ++tick) {
+            server.tick(1.0f / 20.0f);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        require(server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z),
+                "test setup should load the saved barrel chunk");
+
+        const StateID loadedState = server.world().getBlock(barrelPos.x, barrelPos.y, barrelPos.z);
+        require(BlockStateRegistry::getBlockId(loadedState) == BlockRegistry::requireIdByName("minecraft:barrel"),
+                "persistent barrel block save should restore the barrel block from chunk data");
+
+        server.shutdown();
+    }
+
+    std::filesystem::remove_all(saveRoot);
+    std::printf("[PASS] testPersistentBarrelBlockRestoresFromSave\n");
+}
+
 static void testServerBlockActionBreaksChestLifecycle() {
     ServerHarness harness(2);
     ecs::GameplayRegistry registry;
@@ -2940,7 +3009,7 @@ static void testServerBlockActionBreaksChestLifecycle() {
     harness.server.world().setBlock(chestPos.x, chestPos.y, chestPos.z, chestState);
 
     BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
-    ChestInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
+    BlockEntityInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
     chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 3);
     chest.setSlotItem(5, ItemRegistry::requireIdByName("minecraft:coal"), 2);
 
@@ -3926,6 +3995,7 @@ int main() {
     testPersistentChestInventoryRestoresFromSave();
     testPersistentFurnaceInventoryRestoresFromSave();
     testPersistentChestBlockRestoresFromSave();
+    testPersistentBarrelBlockRestoresFromSave();
     testServerBlockActionBreaksChestLifecycle();
     testOwnedServerEcsRestoresPersistentZombie();
     testOwnedServerEcsRestoresPersistentDrop();

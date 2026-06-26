@@ -79,9 +79,9 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_inventoryPanel.visible = false;
     m_inventoryPanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
-    m_chestPanel.init(resourceMgr);
-    m_chestPanel.visible = false;
-    m_chestPanel.setScaleStrategy(UIScaleStrategy::Uniform);
+    m_storagePanel.init(resourceMgr);
+    m_storagePanel.visible = false;
+    m_storagePanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
     m_furnacePanel.init(resourceMgr);
     m_furnacePanel.visible = false;
@@ -108,7 +108,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
         &m_commandInput,
         &m_hotbar,
         &m_inventoryPanel,
-        &m_chestPanel,
+        &m_storagePanel,
         &m_furnacePanel,
         &m_creativeInventoryPanel,
     };
@@ -128,7 +128,7 @@ void UIRenderer::shutdown()
     m_text.shutdown();
     m_creativeInventoryPanel.shutdown();
     m_furnacePanel.shutdown();
-    m_chestPanel.shutdown();
+    m_storagePanel.shutdown();
     m_inventoryPanel.shutdown();
     m_deathPrompt.shutdown();
     m_deathTitle.shutdown();
@@ -406,7 +406,7 @@ void UIRenderer::setInventoryPanelVisible(bool visible)
 {
     m_inventoryPanel.setVisible(visible);
     if (visible) {
-        m_chestPanel.setVisible(false);
+        m_storagePanel.setVisible(false);
         m_furnacePanel.setVisible(false);
         m_creativeInventoryPanel.setVisible(false);
     }
@@ -438,9 +438,9 @@ int UIRenderer::getInventoryPanelHoveredSlot() const
     return m_inventoryPanel.itemGrid().getHoveredIndex();
 }
 
-void UIRenderer::setChestPanelVisible(const bool visible)
+void UIRenderer::setStoragePanelVisible(const bool visible)
 {
-    m_chestPanel.setVisible(visible);
+    m_storagePanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
         m_furnacePanel.setVisible(false);
@@ -448,39 +448,39 @@ void UIRenderer::setChestPanelVisible(const bool visible)
     }
 }
 
-void UIRenderer::setChestPanelDefinition(const ui::ContainerUiDef& definition)
+void UIRenderer::setStoragePanelDefinition(const ui::ContainerUiDef& definition)
 {
-    m_chestPanel.setDefinition(definition);
+    m_storagePanel.setDefinition(definition);
 }
 
-void UIRenderer::setChestPanelChestSource(const ChestInventory* chest)
+void UIRenderer::setStoragePanelSource(const BlockEntityInventory* storageInventory)
 {
-    m_chestPanel.setChestSource(chest);
+    m_storagePanel.setStorageSource(storageInventory);
 }
 
-int UIRenderer::getChestPanelLastActivatedSlot() const
+int UIRenderer::getStoragePanelLastActivatedSlot() const
 {
-    return m_chestPanel.getContainerLastActivatedSlot();
+    return m_storagePanel.getContainerLastActivatedSlot();
 }
 
-int UIRenderer::getChestPanelPlayerLastActivatedSlot() const
+int UIRenderer::getStoragePanelPlayerLastActivatedSlot() const
 {
-    return m_chestPanel.getPlayerLastActivatedSlot();
+    return m_storagePanel.getPlayerLastActivatedSlot();
 }
 
-int UIRenderer::getChestPanelHoveredSlot() const
+int UIRenderer::getStoragePanelHoveredSlot() const
 {
-    return m_chestPanel.getContainerHoveredSlot();
+    return m_storagePanel.getContainerHoveredSlot();
 }
 
-int UIRenderer::getChestPanelPlayerHoveredSlot() const
+int UIRenderer::getStoragePanelPlayerHoveredSlot() const
 {
-    return m_chestPanel.getPlayerHoveredSlot();
+    return m_storagePanel.getPlayerHoveredSlot();
 }
 
-void UIRenderer::clearChestPanelActivations()
+void UIRenderer::clearStoragePanelActivations()
 {
-    m_chestPanel.clearActivations();
+    m_storagePanel.clearActivations();
 }
 
 void UIRenderer::setFurnacePanelVisible(const bool visible)
@@ -488,7 +488,7 @@ void UIRenderer::setFurnacePanelVisible(const bool visible)
     m_furnacePanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
-        m_chestPanel.setVisible(false);
+        m_storagePanel.setVisible(false);
         m_creativeInventoryPanel.setVisible(false);
     }
 }
@@ -538,7 +538,7 @@ void UIRenderer::setCreativeInventoryVisible(const bool visible)
     m_creativeInventoryPanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
-        m_chestPanel.setVisible(false);
+        m_storagePanel.setVisible(false);
         m_furnacePanel.setVisible(false);
     }
 }
@@ -607,7 +607,7 @@ void UIRenderer::render(const Window& window,
 
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
-    m_chestPanel.setPlayerInventorySource(&inventory);
+    m_storagePanel.setPlayerInventorySource(&inventory);
     m_furnacePanel.setPlayerInventorySource(&inventory);
     m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible =(m_commandInputRequested);

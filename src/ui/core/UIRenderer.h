@@ -61,14 +61,14 @@ public:
     [[nodiscard]] int getInventoryPanelLastActivatedSlot() const;
     [[nodiscard]] int getInventoryPanelHoveredSlot() const;
 
-    void setChestPanelVisible(bool visible);
-    void setChestPanelDefinition(const ui::ContainerUiDef& definition);
-    void setChestPanelChestSource(const ChestInventory* chest);
-    [[nodiscard]] int getChestPanelLastActivatedSlot() const;
-    [[nodiscard]] int getChestPanelPlayerLastActivatedSlot() const;
-    [[nodiscard]] int getChestPanelHoveredSlot() const;
-    [[nodiscard]] int getChestPanelPlayerHoveredSlot() const;
-    void clearChestPanelActivations();
+    void setStoragePanelVisible(bool visible);
+    void setStoragePanelDefinition(const ui::ContainerUiDef& definition);
+    void setStoragePanelSource(const BlockEntityInventory* storageInventory);
+    [[nodiscard]] int getStoragePanelLastActivatedSlot() const;
+    [[nodiscard]] int getStoragePanelPlayerLastActivatedSlot() const;
+    [[nodiscard]] int getStoragePanelHoveredSlot() const;
+    [[nodiscard]] int getStoragePanelPlayerHoveredSlot() const;
+    void clearStoragePanelActivations();
 
     void setFurnacePanelVisible(bool visible);
     void setFurnacePanelDefinition(const ui::ContainerUiDef& definition);
@@ -173,7 +173,7 @@ private:
     UIText m_deathTitle;
     UIText m_deathPrompt;
     InventoryPanelControl m_inventoryPanel;
-    DataDrivenContainerPanelControl m_chestPanel;
+    DataDrivenContainerPanelControl m_storagePanel;
     DataDrivenContainerPanelControl m_furnacePanel;
     CreativeInventoryPanelControl m_creativeInventoryPanel;
     TextRenderer m_text;

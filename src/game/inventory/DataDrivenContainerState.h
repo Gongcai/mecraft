@@ -46,17 +46,17 @@ public:
 
         m_deps.context.pushContext(InputContextType::UI);
         m_deps.input.captureMouse(false);
-        m_deps.uiRenderer.setChestPanelDefinition(uiDef);
-        m_deps.uiRenderer.setChestPanelChestSource(m_storage);
-        m_deps.uiRenderer.setChestPanelVisible(true);
-        m_deps.uiRenderer.clearChestPanelActivations();
+        m_deps.uiRenderer.setStoragePanelDefinition(uiDef);
+        m_deps.uiRenderer.setStoragePanelSource(m_storage);
+        m_deps.uiRenderer.setStoragePanelVisible(true);
+        m_deps.uiRenderer.clearStoragePanelActivations();
         m_lastSecondaryPlaceSlot = -1;
     }
 
     void onExit() override {
         returnDraggedItemToStorage();
-        m_deps.uiRenderer.setChestPanelVisible(false);
-        m_deps.uiRenderer.setChestPanelChestSource(nullptr);
+        m_deps.uiRenderer.setStoragePanelVisible(false);
+        m_deps.uiRenderer.setStoragePanelSource(nullptr);
         m_deps.context.popContext();
         if (m_deps.context.getCurrentContext() == InputContextType::Gameplay) {
             m_deps.input.captureMouse(true);
@@ -96,7 +96,7 @@ public:
                 } else if (uiRouteResult.secondaryPressed) {
                     returnDraggedItemToStorage();
                 }
-                m_deps.uiRenderer.clearChestPanelActivations();
+                m_deps.uiRenderer.clearStoragePanelActivations();
                 return;
             }
         }
@@ -107,7 +107,7 @@ public:
         }
 
         handlePrimaryClick(activatedSlot());
-        m_deps.uiRenderer.clearChestPanelActivations();
+        m_deps.uiRenderer.clearStoragePanelActivations();
     }
 
 private:
@@ -139,7 +139,7 @@ private:
         if (!behavior.processors.empty()) {
             throw std::runtime_error(behavior.id + " storage behavior must not declare processors");
         }
-        if (behavior.storage.slots > ChestInventory::SLOT_COUNT) {
+        if (behavior.storage.slots > BlockEntityInventory::SLOT_COUNT) {
             throw std::runtime_error(behavior.id + " declares more storage slots than the backing store supports");
         }
 
@@ -174,12 +174,12 @@ private:
     }
 
     [[nodiscard]] SlotRef activatedSlot() const {
-        const int containerSlot = m_deps.uiRenderer.getChestPanelLastActivatedSlot();
+        const int containerSlot = m_deps.uiRenderer.getStoragePanelLastActivatedSlot();
         if (isContainerSlotValid(containerSlot)) {
             return {SlotSpace::Container, containerSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getChestPanelPlayerLastActivatedSlot();
+        const int playerGridSlot = m_deps.uiRenderer.getStoragePanelPlayerLastActivatedSlot();
         const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
@@ -189,12 +189,12 @@ private:
     }
 
     [[nodiscard]] SlotRef hoveredSlot() const {
-        const int containerSlot = m_deps.uiRenderer.getChestPanelHoveredSlot();
+        const int containerSlot = m_deps.uiRenderer.getStoragePanelHoveredSlot();
         if (isContainerSlotValid(containerSlot)) {
             return {SlotSpace::Container, containerSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getChestPanelPlayerHoveredSlot();
+        const int playerGridSlot = m_deps.uiRenderer.getStoragePanelPlayerHoveredSlot();
         const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
@@ -437,7 +437,7 @@ private:
     std::string m_containerUiId;
     std::string m_behaviorId;
     glm::ivec3 m_blockPosition{};
-    ChestInventory* m_storage = nullptr;
+    BlockEntityInventory* m_storage = nullptr;
     int m_storageSlotCount = 0;
     int m_lastSecondaryPlaceSlot = -1;
 };

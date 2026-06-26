@@ -14,11 +14,12 @@
 5. **方块交互分发已数据化**：lever、button、repeater、comparator、door、trapdoor、fence_gate 等交互经 `BlockInteractionDispatcher` 和 `assets/config/block_interaction/` 配置驱动。
 6. **客户端/服务器交互消费已改为服务端权威**：多人模式下客户端发送 `ClientBlockActionType::Interact` 后消费本地输入，但不直接改世界；服务器校验距离并执行交互，再广播结果，避免同一命中事件被客户端和服务器各消费一次导致随机行为。
 7. **红石部分数据尾巴已清理**：按钮脉冲时长由 `redstonePulseTicks` 数据驱动；活塞不可推动规则由 `pistonPushReaction` 数据驱动；比较器读取容器信号由 `ContainerBehaviorDef.comparatorSignal` 数据驱动；压力板接受实体类型由 `pressurePlateEntityFilter` 数据驱动。
+8. **通用 block-entity storage 已落地**：箱子、木桶等 `handler:"storage"` 容器共用 `BlockEntityInventoryStore`、`BlockEntityInventoryLifecycle` 和通用 storage 面板；服务器保存空容器时也按 `containerUi -> behavior` 数据判断 block entity 类型，已用 `minecraft:barrel` 保存/恢复测试验证。
 
 仍建议继续推进的剩余项：
 
 1. 活塞主体、活塞头、移动方块等结构性逻辑仍需要 C++，但可继续抽离可配置的规则字段。
-2. 容器底层存储仍分 `ChestInventoryStore` / `FurnaceInventoryStore`，若目标是新增任意容器完全不写 C++ 状态，需要设计统一的 block-entity inventory 存储。
+2. 熔炉仍保留专用 `FurnaceInventoryStore` 和处理器状态；若后续新增带处理流程的机器类容器，需要设计数据化 processor schema。
 3. 红石多色线仍停留在方案层面，尚未实现。
 
 ---
@@ -92,7 +93,7 @@ RuntimeId IdRegistry::registerId(const NamespacedId& namespacedId) {
 |------|--------|----------|
 | `src/world/block/` | 9 | DoorBlock、BedBlock、PistonBlock、FarmlandRules 等用 `BlockIds::` 识别方块类型 |
 | `src/ecs/systems/` | 6 | BlockBreakSystem、BlockPlaceSystem、BucketUseSystem、SoilTillingSystem 等 |
-| `src/game/` | 4 | GameplayState、RedstoneControlInteraction、ChestInventoryLifecycle 等 |
+| `src/game/` | 4 | GameplayState、RedstoneControlInteraction、BlockEntityInventoryLifecycle 等 |
 | `src/world/` | 8 | World、Chunk、SubChunk、TerrainGenerator、FluidSystem 等 |
 | `src/renderer/` | 2 | ChunkMesher、BlockEntityRenderer |
 | `src/server/`、`src/client/` | 2 | GameServer、ClientWorld |
@@ -718,9 +719,9 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 |------|------|----------|----------|
 | 阶段 1：BlockID/ItemID 运行时化 | **已完成** | `BuiltinIds`、`BlockIds::`、`ItemIds::` 已移除，方块/物品由 JSON 注册 | 保持新增内容只走 JSON 注册 |
 | 阶段 2：特殊操作数据化 | **已完成主要目标** | 锄地、水桶等 use-on-block 规则由 `ItemUseDispatcher` 驱动 | 新增规则时继续扩展数据 schema，而不是在入口写分支 |
-| 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态已落地；箱子、木桶、熔炉、合成台已迁移 | 统一容器 block-entity 存储，降低新增新容器的 C++ 成本 |
+| 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态和通用 block-entity storage 已落地；箱子、木桶、熔炉、合成台已迁移 | 为机器类容器继续评估 processor schema |
 | 阶段 4：方块状态切换数据化 | **已完成大部分常见交互** | lever/button/repeater/comparator/door/trapdoor/fence_gate 已通过交互配置分发；多人交互为服务端权威 | 继续评估活塞等红石子系统中的结构性规则 |
-| 阶段 5：红石数据尾巴清理 | **进行中** | 按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已数据化 | 多色红石线、活塞结构性规则、统一容器存储评估 |
+| 阶段 5：红石数据尾巴清理 | **进行中** | 按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已数据化 | 多色红石线、活塞结构性规则 |
 
 ### 5.3 性能总结
 
@@ -752,7 +753,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 
 2. **方向信息不适合 SoA 改造**，当前的 StateID 编码 + BitPackedArray + Palette 已是缓存友好的工业级设计，优于朴素 SoA。
 
-3. **HUD 声明式 UI 改造已完成主要目标**，容器 UI、容器行为和通用容器状态已经落地；箱子、木桶、熔炉、合成台已迁移到配置绑定。
+3. **HUD 声明式 UI 改造已完成主要目标**，容器 UI、容器行为、通用容器状态和通用 block-entity storage 已经落地；箱子、木桶、熔炉、合成台已迁移到配置绑定。
 
 4. **性能无显著影响**，方块交互是低频逻辑。但需确保热路径使用缓存 ID 而非每次哈希查询。
 

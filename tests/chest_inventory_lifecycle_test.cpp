@@ -43,7 +43,7 @@ int main() {
     {
         BlockEntityInventoryStore store;
         const glm::ivec3 pos(3, 64, -7);
-        ChestInventory& chest = store.getOrCreate(pos, "minecraft:chest", 27);
+        BlockEntityInventory& chest = store.getOrCreate(pos, "minecraft:chest", 27);
         chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 4);
         chest.setSlotItem(7, ItemRegistry::requireIdByName("minecraft:coal"), 2);
 
@@ -79,7 +79,7 @@ int main() {
     services.worldView = &world;
 
     BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
-    ChestInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
+    BlockEntityInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
     chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 5);
     chest.setSlotItem(1, ItemRegistry::requireIdByName("minecraft:coal"), 3);
 

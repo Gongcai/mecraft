@@ -414,7 +414,7 @@ uint8_t containerSignalPowerAt(const World& world,
             return 0;
         }
         const BlockEntityInventoryStore& store = registry->ctxGet<BlockEntityInventoryStore>();
-        const ChestInventory* inventory = store.find(position);
+        const BlockEntityInventory* inventory = store.find(position);
         if (inventory == nullptr) {
             return 0;
         }
