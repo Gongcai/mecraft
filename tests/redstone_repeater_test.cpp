@@ -57,6 +57,26 @@ StateID repeaterState(const uint16_t delay, const bool powered) {
         });
 }
 
+StateID repeaterState(const uint16_t facing, const uint16_t delay, const bool powered) {
+    return BlockStateRegistry::getState(
+        BlockIds::REPEATER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, facing},
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
+            {PropIndices::DELAY, delay}
+        });
+}
+
+StateID comparatorState(const uint16_t facing, const bool powered) {
+    return BlockStateRegistry::getState(
+        BlockIds::COMPARATOR,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, facing},
+            {PropIndices::POWERED, powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE},
+            {PropIndices::MODE, PropIndices::MODE_COMPARE}
+        });
+}
+
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
@@ -91,6 +111,11 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
 bool powered(const World& world, const int x, const int y, const int z) {
     const StateID state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
+}
+
+bool locked(const World& world, const int x, const int y, const int z) {
+    const StateID state = world.getBlockState(x, y, z);
+    return BlockStateRegistry::getPropertyIndex(state, PropIndices::LOCKED) == PropIndices::LOCKED_TRUE;
 }
 
 bool lampLit(const World& world, const int x, const int y, const int z) {
@@ -160,6 +185,117 @@ int main() {
         wirePower(world, 3, y, 0) != 0 ||
         lampLit(world, 4, y, 0)) {
         return fail("delay=2 repeater should turn off on the second redstone tick after input turns off");
+    }
+
+    {
+        const int lockY = 80;
+        prepareFlatTestLine(world, lockY);
+        world.setBlockState(0, lockY, 0, leverState(true));
+        world.setBlockState(1, lockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, lockY, 0, repeaterState(PropIndices::DELAY_1, false));
+        world.setBlockState(3, lockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(4, lockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_LAMP));
+
+        world.setBlock(2, lockY - 1, 2, BlockIds::STONE);
+        world.setBlock(2, lockY, 2, BlockIds::AIR);
+        world.setBlockState(2, lockY, 1, repeaterState(PropIndices::FACING_NORTH, PropIndices::DELAY_1, false));
+        world.setBlockState(2, lockY, 2, leverState(false));
+
+        ecs::RedstoneSystem::processWorld(world, 20);
+        ecs::RedstoneSystem::processWorld(world, 21);
+        if (!powered(world, 2, lockY, 0) ||
+            wirePower(world, 3, lockY, 0) != 15 ||
+            !lampLit(world, 4, lockY, 0) ||
+            locked(world, 2, lockY, 0)) {
+            return fail("repeater should power normally before side locking");
+        }
+
+        world.setBlockState(2, lockY, 2, leverState(true));
+        ecs::RedstoneSystem::processWorld(world, 22);
+        ecs::RedstoneSystem::processWorld(world, 23);
+        if (!powered(world, 2, lockY, 1) ||
+            !locked(world, 2, lockY, 0) ||
+            !powered(world, 2, lockY, 0)) {
+            return fail("powered side repeater should lock the main repeater without changing its output");
+        }
+
+        world.setBlockState(0, lockY, 0, leverState(false));
+        ecs::RedstoneSystem::processWorld(world, 24);
+        ecs::RedstoneSystem::processWorld(world, 25);
+        ecs::RedstoneSystem::processWorld(world, 26);
+        if (!locked(world, 2, lockY, 0) ||
+            !powered(world, 2, lockY, 0) ||
+            wirePower(world, 3, lockY, 0) != 15 ||
+            !lampLit(world, 4, lockY, 0)) {
+            return fail("locked repeater should keep its powered output after rear input turns off");
+        }
+
+        world.setBlockState(2, lockY, 2, leverState(false));
+        ecs::RedstoneSystem::processWorld(world, 27);
+        ecs::RedstoneSystem::processWorld(world, 28);
+        if (locked(world, 2, lockY, 0) ||
+            !powered(world, 2, lockY, 0) ||
+            wirePower(world, 3, lockY, 0) != 15 ||
+            !lampLit(world, 4, lockY, 0)) {
+            return fail("unlocked repeater should keep its output until its own delayed evaluation tick");
+        }
+
+        ecs::RedstoneSystem::processWorld(world, 29);
+        if (locked(world, 2, lockY, 0) ||
+            powered(world, 2, lockY, 0) ||
+            wirePower(world, 3, lockY, 0) != 0 ||
+            lampLit(world, 4, lockY, 0)) {
+            return fail("unlocked repeater should apply the delayed rear-input state");
+        }
+    }
+
+    {
+        const int comparatorLockY = 72;
+        prepareFlatTestLine(world, comparatorLockY);
+        world.setBlockState(0, comparatorLockY, 0, leverState(true));
+        world.setBlockState(1, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, comparatorLockY, 0, repeaterState(PropIndices::DELAY_1, false));
+        world.setBlockState(3, comparatorLockY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+
+        world.setBlock(2, comparatorLockY - 1, 2, BlockIds::STONE);
+        world.setBlock(2, comparatorLockY, 2, BlockIds::AIR);
+        world.setBlockState(2, comparatorLockY, 1, comparatorState(PropIndices::FACING_NORTH, false));
+        world.setBlockState(2, comparatorLockY, 2, leverState(false));
+
+        ecs::RedstoneSystem::processWorld(world, 30);
+        ecs::RedstoneSystem::processWorld(world, 31);
+        if (!powered(world, 2, comparatorLockY, 0) ||
+            locked(world, 2, comparatorLockY, 0)) {
+            return fail("main repeater should power normally before comparator side locking");
+        }
+
+        world.setBlockState(2, comparatorLockY, 2, leverState(true));
+        ecs::RedstoneSystem::processWorld(world, 32);
+        if (!powered(world, 2, comparatorLockY, 1) ||
+            !locked(world, 2, comparatorLockY, 0) ||
+            !powered(world, 2, comparatorLockY, 0)) {
+            return fail("powered side comparator output should lock the main repeater");
+        }
+    }
+
+    {
+        const int wireSideY = 64;
+        prepareFlatTestLine(world, wireSideY);
+        world.setBlockState(0, wireSideY, 0, leverState(true));
+        world.setBlockState(1, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        world.setBlockState(2, wireSideY, 0, repeaterState(PropIndices::DELAY_1, false));
+        world.setBlockState(3, wireSideY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+
+        world.setBlockState(2, wireSideY, 2, leverState(true));
+        world.setBlockState(2, wireSideY, 1, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+
+        ecs::RedstoneSystem::processWorld(world, 40);
+        ecs::RedstoneSystem::processWorld(world, 41);
+        if (!powered(world, 2, wireSideY, 0) ||
+            wirePower(world, 2, wireSideY, 1) == 0 ||
+            locked(world, 2, wireSideY, 0)) {
+            return fail("powered side redstone wire should not lock a repeater");
+        }
     }
 
     std::cout << "[redstone_repeater_test] PASS\n";

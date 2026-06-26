@@ -229,6 +229,14 @@ StateID withPowered(const StateID stateId, const bool powered) {
     return withRequiredProperty(stateId, PropIndices::POWERED, value, "powered");
 }
 
+StateID withLocked(const StateID stateId, const bool locked) {
+    const uint16_t value = locked ? PropIndices::LOCKED_TRUE : PropIndices::LOCKED_FALSE;
+    if (value == PropIndices::INVALID) {
+        throw std::runtime_error("Redstone requires registered locked boolean values");
+    }
+    return withRequiredProperty(stateId, PropIndices::LOCKED, value, "locked");
+}
+
 bool hasBooleanPropertyValue(const StateID stateId,
                              const uint16_t property,
                              const uint16_t expectedValue,
@@ -622,6 +630,14 @@ glm::ivec3 repeaterOutputDirection(const StateID stateId) {
     return horizontalDirectionFromFacing(getRequiredProperty(stateId, PropIndices::FACING, "facing"));
 }
 
+std::array<glm::ivec3, 2> repeaterSideDirections(const StateID stateId) {
+    const glm::ivec3 outputDirection = repeaterOutputDirection(stateId);
+    if (outputDirection.x != 0) {
+        return {glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1)};
+    }
+    return {glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0)};
+}
+
 glm::ivec3 comparatorOutputDirection(const StateID stateId) {
     return horizontalDirectionFromFacing(getRequiredProperty(stateId, PropIndices::FACING, "facing"));
 }
@@ -655,6 +671,10 @@ glm::ivec3 observerOutputDirection(const StateID stateId) {
 
 bool isPoweredPropertyTrue(const StateID stateId) {
     return hasBooleanPropertyValue(stateId, PropIndices::POWERED, PropIndices::POWERED_TRUE, "powered");
+}
+
+bool isLockedPropertyTrue(const StateID stateId) {
+    return hasBooleanPropertyValue(stateId, PropIndices::LOCKED, PropIndices::LOCKED_TRUE, "locked");
 }
 
 uint16_t redstoneControlledPropertyIndex(const StateID stateId) {
@@ -2006,6 +2026,22 @@ uint8_t signalPowerFromNeighbor(const World& world,
     return signalPower;
 }
 
+bool repeaterLockInputActive(const World& world,
+                             const glm::ivec3& repeaterPosition,
+                             const StateID repeaterState) {
+    for (const glm::ivec3& sideDirection : repeaterSideDirections(repeaterState)) {
+        const glm::ivec3 sidePosition = repeaterPosition + sideDirection;
+        const StateID sideState = world.getBlockState(sidePosition.x, sidePosition.y, sidePosition.z);
+        if (!isRepeaterState(sideState) && !isComparatorState(sideState)) {
+            continue;
+        }
+        if (sourceOutputPowerToward(world, sidePosition, repeaterPosition) > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 uint8_t comparatorOutputPower(const World& world,
                               const GameplayRegistry* registry,
                               const WirePowerMap& inputWirePowers,
@@ -2088,6 +2124,9 @@ void scheduleRepeaterEvaluationUpdates(World& world,
         if (!isRepeaterState(stateId)) {
             continue;
         }
+        if (isLockedPropertyTrue(stateId)) {
+            continue;
+        }
 
         const bool currentPowered = isPoweredPropertyTrue(stateId);
         const bool shouldBePowered = repeaterInputPower(world, wirePowers, position, stateId) > 0;
@@ -2144,6 +2183,25 @@ void scheduleButtonReleaseUpdates(World& world,
             position,
             RedstoneScheduledAction::ReleaseButton);
     }
+}
+
+size_t applyRepeaterLockStates(World& world, const std::vector<glm::ivec3>& repeaterPositions) {
+    size_t changed = 0;
+    for (const glm::ivec3& position : repeaterPositions) {
+        const StateID currentState = world.getBlockState(position.x, position.y, position.z);
+        if (!isRepeaterState(currentState)) {
+            continue;
+        }
+
+        const bool shouldBeLocked = repeaterLockInputActive(world, position, currentState);
+        if (isLockedPropertyTrue(currentState) == shouldBeLocked) {
+            continue;
+        }
+
+        world.setBlockState(position.x, position.y, position.z, withLocked(currentState, shouldBeLocked));
+        ++changed;
+    }
+    return changed;
 }
 
 bool applyButtonRelease(World& world, const glm::ivec3& position) {
@@ -2209,6 +2267,16 @@ bool applyTargetPulseRelease(World& world, const glm::ivec3& position) {
 bool applyRepeaterEvaluation(World& world, const glm::ivec3& position) {
     const StateID currentState = world.getBlockState(position.x, position.y, position.z);
     if (!isRepeaterState(currentState)) {
+        return false;
+    }
+
+    const bool currentlyLocked = isLockedPropertyTrue(currentState);
+    const bool shouldBeLocked = repeaterLockInputActive(world, position, currentState);
+    if (currentlyLocked || shouldBeLocked) {
+        if (currentlyLocked != shouldBeLocked) {
+            world.setBlockState(position.x, position.y, position.z, withLocked(currentState, shouldBeLocked));
+            return true;
+        }
         return false;
     }
 
@@ -2424,6 +2492,7 @@ size_t processWorldWithContext(World& world,
     changed += applyWirePowers(world, workSet.wires, wirePowers);
     changed += applyComparatorStates(world, comparatorEvaluations);
     changed += applyPistonStates(world, mutableRegistry, workSet.pistons, wirePowers);
+    changed += applyRepeaterLockStates(world, workSet.repeaters);
     scheduleRepeaterEvaluationUpdates(world, redstoneTick, workSet.repeaters, wirePowers);
     changed += applyRedstoneControlledStates(world, workSet.redstoneControlledBlocks, wirePowers);
     changed += applyEdgeTriggeredDeviceStates(world, mutableRegistry, workSet.edgeTriggeredDevices, wirePowers);

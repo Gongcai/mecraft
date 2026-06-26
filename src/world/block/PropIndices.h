@@ -28,6 +28,7 @@ extern uint16_t POWER;
 extern uint16_t TYPE;
 extern uint16_t DELAY;
 extern uint16_t MODE;
+extern uint16_t LOCKED;
 
 extern uint16_t FACING_FLOOR;
 extern uint16_t FACING_NORTH;
@@ -122,6 +123,8 @@ extern uint16_t DELAY_3;
 extern uint16_t DELAY_4;
 extern uint16_t MODE_COMPARE;
 extern uint16_t MODE_SUBTRACT;
+extern uint16_t LOCKED_TRUE;
+extern uint16_t LOCKED_FALSE;
 
 void init();
 

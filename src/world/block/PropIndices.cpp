@@ -25,6 +25,7 @@ uint16_t POWER = INVALID;
 uint16_t TYPE = INVALID;
 uint16_t DELAY = INVALID;
 uint16_t MODE = INVALID;
+uint16_t LOCKED = INVALID;
 
 uint16_t FACING_FLOOR = INVALID;
 uint16_t FACING_NORTH = INVALID;
@@ -119,6 +120,8 @@ uint16_t DELAY_3 = INVALID;
 uint16_t DELAY_4 = INVALID;
 uint16_t MODE_COMPARE = INVALID;
 uint16_t MODE_SUBTRACT = INVALID;
+uint16_t LOCKED_TRUE = INVALID;
+uint16_t LOCKED_FALSE = INVALID;
 
 namespace {
 uint16_t lookupName(const char* name) {
@@ -152,6 +155,7 @@ void init() {
     TYPE = lookupName("type");
     DELAY = lookupName("delay");
     MODE = lookupName("mode");
+    LOCKED = lookupName("locked");
 
     FACING_FLOOR = lookupValue(FACING, "floor");
     FACING_NORTH = lookupValue(FACING, "north");
@@ -246,6 +250,8 @@ void init() {
     DELAY_4 = lookupValue(DELAY, "4");
     MODE_COMPARE = lookupValue(MODE, "compare");
     MODE_SUBTRACT = lookupValue(MODE, "subtract");
+    LOCKED_TRUE = lookupValue(LOCKED, "true");
+    LOCKED_FALSE = lookupValue(LOCKED, "false");
 }
 
 }

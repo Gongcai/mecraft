@@ -1334,6 +1334,9 @@ int main() {
     if (BlockStateRegistry::getPropertyIndex(repeaterDefault, PropIndices::DELAY) != PropIndices::DELAY_1) {
         return fail("repeater default state should use delay 1");
     }
+    if (BlockStateRegistry::getPropertyIndex(repeaterDefault, PropIndices::LOCKED) != PropIndices::LOCKED_FALSE) {
+        return fail("repeater default state should not be locked");
+    }
     const StateID repeaterEastPowered = BlockStateRegistry::getState(
         BlockIds::REPEATER,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -1352,6 +1355,17 @@ int main() {
         });
     if (!modelVariantMatches(repeaterEastDelay4Powered, "block/repeater_4tick_on", 270, 0)) {
         return fail("repeater delay 4 powered state should resolve to the rotated 4-tick powered model");
+    }
+    const StateID lockedRepeaterEastDelay4Powered = BlockStateRegistry::getState(
+        BlockIds::REPEATER,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE},
+            {PropIndices::DELAY, PropIndices::DELAY_4},
+            {PropIndices::LOCKED, PropIndices::LOCKED_TRUE}
+        });
+    if (!modelVariantMatches(lockedRepeaterEastDelay4Powered, "block/repeater_4tick_on_locked", 270, 0)) {
+        return fail("locked repeater should resolve to the powered locked delay model variant");
     }
 
     const StateID comparatorDefault = BlockStateRegistry::getDefaultState(BlockIds::COMPARATOR);
