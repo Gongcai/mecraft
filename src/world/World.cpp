@@ -561,7 +561,7 @@ StateID World::getFluidState(const int x, const int y, const int z) const {
         return fluidLayer;
     }
 
-    // Fallback: block layer may contain fluid (pure water positions)
+    // Pure fluid cells store the fluid state directly in the block layer.
     return FluidState::getFluidState(sc->getBlock(localX, localY, localZ));
 }
 

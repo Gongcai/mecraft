@@ -17,6 +17,10 @@ else()
     set(MECRAFT_RUNTIME_ASSETS_DIR "assets")
 endif()
 file(TO_CMAKE_PATH "${MECRAFT_RUNTIME_ASSETS_DIR}" MECRAFT_ASSETS_DIR_COMPILE)
+file(GLOB_RECURSE MECRAFT_RUNTIME_ASSET_FILES
+        LIST_DIRECTORIES false
+        CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/assets/*")
 
 # 检查链接期优化支持
 include(CheckIPOSupported)
@@ -42,12 +46,21 @@ endfunction()
 
 function(mecraft_copy_runtime_assets TARGET_NAME)
     if(NOT MECRAFT_USE_SOURCE_ASSETS)
-        add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                        "${PROJECT_SOURCE_DIR}/assets"
-                        "$<TARGET_FILE_DIR:${TARGET_NAME}>/assets"
-                COMMENT "Copying runtime assets for ${TARGET_NAME}"
-        )
+        if(NOT TARGET mecraft_runtime_assets)
+            set(ASSET_STAMP "${CMAKE_CURRENT_BINARY_DIR}/mecraft_runtime_assets.stamp")
+            add_custom_command(
+                    OUTPUT "${ASSET_STAMP}"
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory
+                            "${PROJECT_SOURCE_DIR}/assets"
+                            "${CMAKE_CURRENT_BINARY_DIR}/assets"
+                    COMMAND ${CMAKE_COMMAND} -E touch "${ASSET_STAMP}"
+                    DEPENDS ${MECRAFT_RUNTIME_ASSET_FILES}
+                    COMMENT "Copying runtime assets"
+                    VERBATIM
+            )
+            add_custom_target(mecraft_runtime_assets DEPENDS "${ASSET_STAMP}")
+        endif()
+        add_dependencies(${TARGET_NAME} mecraft_runtime_assets)
     endif()
 endfunction()
 
@@ -576,13 +589,16 @@ if(MECRAFT_BUILD_TESTS)
     if(MECRAFT_ENABLE_PCH)
         target_precompile_headers(physics_mvp_test REUSE_FROM mecraft_pch)
     endif()
+    mecraft_copy_runtime_assets(physics_mvp_test)
     add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 
     # 测试列表
     add_mecraft_test(world_flat_test tests/world_flat_test.cpp)
     add_mecraft_test(terrain_tree_generation_test tests/terrain_tree_generation_test.cpp)
     add_mecraft_test(block_state_registry_test tests/block_state_registry_test.cpp)
+    mecraft_copy_runtime_assets(block_state_registry_test)
     add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
+    mecraft_copy_runtime_assets(block_selection_test)
     add_mecraft_test(camera_controller_test tests/camera_controller_test.cpp)
     add_mecraft_test(audio_asset_decode_test tests/audio_asset_decode_test.cpp)
     add_mecraft_test(audio_catalog_test tests/audio_catalog_test.cpp)
@@ -644,6 +660,7 @@ if(MECRAFT_BUILD_TESTS)
     mecraft_copy_runtime_assets(redstone_piston_test)
     add_mecraft_test(redstone_control_interaction_test tests/redstone_control_interaction_test.cpp)
     add_mecraft_test(bucket_use_test tests/bucket_use_test.cpp)
+    mecraft_copy_runtime_assets(bucket_use_test)
     add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
     add_mecraft_test(fluid_flow_test tests/fluid_flow_test.cpp)
     add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)

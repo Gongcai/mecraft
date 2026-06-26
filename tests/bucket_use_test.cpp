@@ -1,12 +1,14 @@
 #include <cstdlib>
 #include <iostream>
 
+#include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 
 #include "../src/ecs/GameplayRegistry.h"
 #include "../src/ecs/GameplayServices.h"
 #include "../src/ecs/SystemContext.h"
 #include "../src/ecs/components/Components.h"
+#include "../src/ecs/systems/interaction/BlockTargetSystem.h"
 #include "../src/ecs/systems/interaction/BucketUseSystem.h"
 #include "../src/item/Item.h"
 #include "../src/world/World.h"
@@ -31,6 +33,8 @@ struct BucketRunResult {
     ItemStack selectedStack{};
     float placeCooldownRemaining = 0.0f;
     uint32_t heldItemSwingSequence = 0;
+    bool hadTarget = false;
+    glm::ivec3 targetBlock{};
 };
 
 BucketRunResult runBucketUse(World& world,
@@ -80,7 +84,71 @@ BucketRunResult runBucketUse(World& world,
 
     const auto& updatedInventory = registry.get<ecs::InventoryDataComponent>(player).inventory;
     const auto& runtime = registry.get<ecs::BlockInteractionRuntimeComponent>(player);
-    return {updatedInventory.getSlotStack(0), runtime.placeCooldownRemaining, runtime.heldItemSwingSequence};
+    const auto& updatedTarget = registry.get<ecs::BlockTargetComponent>(player);
+    return {
+        updatedInventory.getSlotStack(0),
+        runtime.placeCooldownRemaining,
+        runtime.heldItemSwingSequence,
+        updatedTarget.hasTarget,
+        updatedTarget.targetBlock
+    };
+}
+
+BucketRunResult runBucketUseFromRaycast(World& world,
+                                        const ItemID selectedItem,
+                                        const glm::vec3& eyePosition,
+                                        const glm::vec3& viewDirection) {
+    ecs::GameplayRegistry registry;
+    ecs::GameplayServices services;
+    services.world = &world;
+    services.worldView = &world;
+
+    const entt::entity player = registry.create();
+    registry.emplace<ecs::LocalPlayerTag>(player);
+
+    ecs::BlockActionIntentComponent intent;
+    intent.wantsPlace = true;
+    registry.emplace<ecs::BlockActionIntentComponent>(player, intent);
+
+    ecs::TransformComponent transform;
+    transform.eyeHeight = 1.62f;
+    transform.position = eyePosition - glm::vec3(0.0f, transform.eyeHeight, 0.0f);
+    registry.emplace<ecs::TransformComponent>(player, transform);
+
+    ecs::CameraStateComponent camera;
+    camera.front = glm::normalize(viewDirection);
+    registry.emplace<ecs::CameraStateComponent>(player, camera);
+
+    ecs::InventoryComponent inventoryComponent;
+    inventoryComponent.selectedHotbarSlot = 0;
+    registry.emplace<ecs::InventoryComponent>(player, inventoryComponent);
+
+    ecs::InventoryDataComponent inventoryData;
+    ItemStack held;
+    held.itemId = selectedItem;
+    held.count = 1;
+    inventoryData.inventory.setSlotStack(0, held);
+    registry.emplace<ecs::InventoryDataComponent>(player, inventoryData);
+
+    registry.emplace<ecs::BlockTargetComponent>(player);
+    registry.emplace<ecs::BlockInteractionRuntimeComponent>(player);
+
+    ecs::SystemContext ctx{registry, services, 1.0f / 60.0f, 1};
+    ecs::BlockTargetSystem targetSystem;
+    targetSystem.update(ctx);
+    ecs::BucketUseSystem bucketSystem;
+    bucketSystem.update(ctx);
+
+    const auto& updatedInventory = registry.get<ecs::InventoryDataComponent>(player).inventory;
+    const auto& runtime = registry.get<ecs::BlockInteractionRuntimeComponent>(player);
+    const auto& updatedTarget = registry.get<ecs::BlockTargetComponent>(player);
+    return {
+        updatedInventory.getSlotStack(0),
+        runtime.placeCooldownRemaining,
+        runtime.heldItemSwingSequence,
+        updatedTarget.hasTarget,
+        updatedTarget.targetBlock
+    };
 }
 
 bool isSourceWaterAt(const World& world, const glm::ivec3& pos) {
@@ -114,6 +182,43 @@ int main() {
         pickupResult.placeCooldownRemaining <= 0.0f ||
         pickupResult.heldItemSwingSequence != 1) {
         return fail("empty bucket should pick up source water and become a water bucket");
+    }
+
+    const glm::ivec3 raycastSourcePos(1, 122, 0);
+    world.setBlockState(raycastSourcePos.x, raycastSourcePos.y, raycastSourcePos.z, BlockIds::AIR);
+    world.setFluidState(raycastSourcePos.x,
+                        raycastSourcePos.y,
+                        raycastSourcePos.z,
+                        FluidState::makeWater(0, false));
+    BucketRunResult raycastPickupResult = runBucketUseFromRaycast(
+        world,
+        ItemIds::BUCKET,
+        glm::vec3(raycastSourcePos) + glm::vec3(0.5f, 0.5f, 2.5f),
+        glm::vec3(0.0f, 0.0f, -1.0f));
+    if (!raycastPickupResult.hadTarget ||
+        raycastPickupResult.targetBlock != raycastSourcePos ||
+        world.getFluidState(raycastSourcePos.x, raycastSourcePos.y, raycastSourcePos.z) != BlockIds::AIR ||
+        raycastPickupResult.selectedStack.itemId != ItemIds::WATER_BUCKET ||
+        raycastPickupResult.heldItemSwingSequence != 1) {
+        return fail("empty bucket should pick up source water selected by world raycast");
+    }
+
+    const glm::ivec3 blockLayerSourcePos(4, 122, 0);
+    world.setBlockState(blockLayerSourcePos.x,
+                        blockLayerSourcePos.y,
+                        blockLayerSourcePos.z,
+                        FluidState::makeWater(0, false));
+    BucketRunResult blockLayerPickupResult = runBucketUseFromRaycast(
+        world,
+        ItemIds::BUCKET,
+        glm::vec3(blockLayerSourcePos) + glm::vec3(0.5f, 0.5f, 2.5f),
+        glm::vec3(0.0f, 0.0f, -1.0f));
+    if (!blockLayerPickupResult.hadTarget ||
+        blockLayerPickupResult.targetBlock != blockLayerSourcePos ||
+        world.getBlockState(blockLayerSourcePos.x, blockLayerSourcePos.y, blockLayerSourcePos.z) != BlockIds::AIR ||
+        blockLayerPickupResult.selectedStack.itemId != ItemIds::WATER_BUCKET ||
+        blockLayerPickupResult.heldItemSwingSequence != 1) {
+        return fail("empty bucket should pick up source water stored in the block layer");
     }
 
     const glm::ivec3 placePos(2, 122, 0);

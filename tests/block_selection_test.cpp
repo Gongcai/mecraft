@@ -241,6 +241,58 @@ int main() {
         return fail("north-facing stairs collision should place the upper half on the north side");
     }
 
+    const StateID oakDoorClosedEast = BlockStateRegistry::getDefaultState(BlockIds::OAK_DOOR);
+    const BlockSelectionBox oakDoorClosedBox = BlockSelection::getBox(oakDoorClosedEast);
+    if (oakDoorClosedBox.min.x != 0.0f || oakDoorClosedBox.max.x != 0.1875f ||
+        oakDoorClosedBox.min.y != 0.0f || oakDoorClosedBox.max.y != 1.0f ||
+        oakDoorClosedBox.min.z != 0.0f || oakDoorClosedBox.max.z != 1.0f) {
+        return fail("closed east-facing oak_door should occupy the west-side door slab");
+    }
+
+    const StateID oakDoorOpenLeftEast = BlockStateRegistry::getState(
+        BlockIds::OAK_DOOR,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::HALF, PropIndices::HALF_LOWER},
+            {PropIndices::HINGE, PropIndices::HINGE_LEFT},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    const BlockSelectionBox oakDoorOpenLeftBox = BlockSelection::getBox(oakDoorOpenLeftEast);
+    if (oakDoorOpenLeftBox.min.x != 0.0f || oakDoorOpenLeftBox.max.x != 1.0f ||
+        oakDoorOpenLeftBox.min.y != 0.0f || oakDoorOpenLeftBox.max.y != 1.0f ||
+        oakDoorOpenLeftBox.min.z != 0.0f || oakDoorOpenLeftBox.max.z != 0.1875f) {
+        return fail("left-hinge open east-facing oak_door selection should rotate onto the north-side slab");
+    }
+    const std::vector<BlockCollisionBox> oakDoorOpenLeftCollision =
+        BlockCollision::getBoxes(oakDoorOpenLeftEast);
+    if (oakDoorOpenLeftCollision.size() != 1 ||
+        oakDoorOpenLeftCollision.front().min.x != 0.0f ||
+        oakDoorOpenLeftCollision.front().max.x != 1.0f ||
+        oakDoorOpenLeftCollision.front().min.z != 0.0f ||
+        oakDoorOpenLeftCollision.front().max.z != 0.1875f) {
+        return fail("left-hinge open east-facing oak_door collision should follow the rotated model slab");
+    }
+
+    const StateID oakDoorOpenRightEast = BlockStateRegistry::getState(
+        BlockIds::OAK_DOOR,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::HALF, PropIndices::HALF_LOWER},
+            {PropIndices::HINGE, PropIndices::HINGE_RIGHT},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    const std::vector<BlockCollisionBox> oakDoorOpenRightCollision =
+        BlockCollision::getBoxes(oakDoorOpenRightEast);
+    if (oakDoorOpenRightCollision.size() != 1 ||
+        oakDoorOpenRightCollision.front().min.x != 0.0f ||
+        oakDoorOpenRightCollision.front().max.x != 1.0f ||
+        oakDoorOpenRightCollision.front().min.z != 0.8125f ||
+        oakDoorOpenRightCollision.front().max.z != 1.0f) {
+        return fail("right-hinge open east-facing oak_door collision should rotate onto the south-side slab");
+    }
+
     const BlockID cauldron = BlockRegistry::findByName("cauldron");
     if (cauldron == BlockIds::AIR) {
         return fail("cauldron should be registered for collision tests");

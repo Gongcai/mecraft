@@ -7,6 +7,11 @@
 
 namespace {
 
+BlockSelectionBox getFluidSelectionBox(const StateID fluidState) {
+    return {glm::vec3(0.0f),
+            glm::vec3(1.0f, FluidState::surfaceHeight(fluidState), 1.0f)};
+}
+
 bool rayIntersectsAabb(const glm::vec3& rayOrigin,
                        const glm::vec3& rayDir,
                        const glm::vec3& boxMin,
@@ -82,10 +87,15 @@ RayHit raycastWorldView(const IWorldView& worldView,
     glm::ivec3 hitNormal(0);
 
     while (dist <= maxDist) {
-        const BlockID block = worldView.getBlock(x, y, z);
-        if (block != BlockIds::AIR && !FluidState::isWater(block)) {
-            const StateID stateId = worldView.getBlockState(x, y, z);
-            const BlockSelectionBox selectionBox = BlockSelection::getBox(stateId);
+        const StateID blockState = worldView.getBlockState(x, y, z);
+        const bool hasSolidSelection = blockState != BlockIds::AIR && !FluidState::isWater(blockState);
+        const StateID fluidState = hasSolidSelection ? BlockIds::AIR : worldView.getFluidState(x, y, z);
+        const bool hasFluidSelection = FluidState::isWater(fluidState);
+
+        if (hasSolidSelection || hasFluidSelection) {
+            const BlockSelectionBox selectionBox = hasSolidSelection
+                ? BlockSelection::getBox(blockState)
+                : getFluidSelectionBox(fluidState);
             const glm::vec3 boxMin = glm::vec3(x, y, z) + selectionBox.min;
             const glm::vec3 boxMax = glm::vec3(x, y, z) + selectionBox.max;
 

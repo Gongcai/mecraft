@@ -6,6 +6,7 @@
 #include <glm/vec3.hpp>
 
 #include "../src/physics/PhysicsSystem.h"
+#include "../src/world/block/BlockCollision.h"
 #include "../src/world/fluid/FluidState.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/block/PropIndices.h"
@@ -25,6 +26,30 @@ void loadChunks(World& world) {
     for (int i = 0; i < 8; ++i) {
         world.update(glm::vec3(0.0f, 0.0f, 0.0f));
     }
+}
+
+bool bodyOverlapsWorld(const World& world, const PhysicsBody& body) {
+    const glm::vec3 center = body.position + body.colliderOffset;
+    const glm::vec3 queryMin = center - body.halfExtents;
+    const glm::vec3 queryMax = center + body.halfExtents;
+    const int minX = static_cast<int>(std::floor(queryMin.x));
+    const int maxX = static_cast<int>(std::floor(queryMax.x - 0.001f));
+    const int minY = static_cast<int>(std::floor(queryMin.y));
+    const int maxY = static_cast<int>(std::floor(queryMax.y - 0.001f));
+    const int minZ = static_cast<int>(std::floor(queryMin.z));
+    const int maxZ = static_cast<int>(std::floor(queryMax.z - 0.001f));
+
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                const StateID state = world.getBlockState(x, y, z);
+                if (BlockCollision::intersects(state, glm::ivec3(x, y, z), queryMin, queryMax)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -338,7 +363,80 @@ int main() {
         return fail("body should gain height while stepping through stairs");
     }
 
-    // Case 8: fluid flow should impart a repeatable horizontal push.
+    // Case 8: pre-existing block overlap should allow movement that exits the collision volume.
+    const int doorFloorY = surfaceY + 17;
+    const int doorLowerY = doorFloorY + 1;
+    const int doorZ = 37;
+    for (int x = -2; x <= 2; ++x) {
+        for (int y = surfaceY + 1; y <= doorLowerY + 3; ++y) {
+            for (int z = doorZ - 2; z <= doorZ + 3; ++z) {
+                world.setBlock(x, y, z, BlockIds::AIR);
+            }
+        }
+    }
+    for (int x = -2; x <= 2; ++x) {
+        for (int z = doorZ - 2; z <= doorZ + 3; ++z) {
+            world.setBlock(x, doorFloorY, z, BlockIds::STONE);
+        }
+    }
+
+    const StateID openDoorLower = BlockStateRegistry::getState(
+        BlockIds::OAK_DOOR,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::HALF, PropIndices::HALF_LOWER},
+            {PropIndices::HINGE, PropIndices::HINGE_LEFT},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    const StateID openDoorUpper = BlockStateRegistry::getState(
+        BlockIds::OAK_DOOR,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::HALF, PropIndices::HALF_UPPER},
+            {PropIndices::HINGE, PropIndices::HINGE_LEFT},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    world.setBlock(0, doorLowerY, doorZ, openDoorLower);
+    world.setBlock(0, doorLowerY + 1, doorZ, openDoorUpper);
+
+    PhysicsBody doorEscaper;
+    doorEscaper.position = glm::vec3(0.5f, static_cast<float>(doorLowerY) + doorEscaper.halfExtents.y, doorZ + 0.05f);
+    doorEscaper.isGrounded = true;
+    if (!bodyOverlapsWorld(world, doorEscaper)) {
+        return fail("door escape test body should start inside the opened door collision");
+    }
+
+    MoveIntent moveOutOfDoor{};
+    moveOutOfDoor.move = glm::vec2(0.0f, 1.0f);
+    for (int i = 0; i < 80; ++i) {
+        phys.updateBody(doorEscaper, moveOutOfDoor, kDt);
+    }
+    if (doorEscaper.position.z <= static_cast<float>(doorZ) + 0.49f ||
+        bodyOverlapsWorld(world, doorEscaper)) {
+        return fail("body starting inside an opened door should be able to move out of the door collision");
+    }
+
+    PhysicsBody doorBlockedWalker;
+    doorBlockedWalker.position =
+        glm::vec3(0.5f, static_cast<float>(doorLowerY) + doorBlockedWalker.halfExtents.y, doorZ + 0.55f);
+    doorBlockedWalker.isGrounded = true;
+    if (bodyOverlapsWorld(world, doorBlockedWalker)) {
+        return fail("door blocked-walker test body should start outside the opened door collision");
+    }
+
+    MoveIntent moveIntoDoor{};
+    moveIntoDoor.move = glm::vec2(0.0f, -1.0f);
+    for (int i = 0; i < 80; ++i) {
+        phys.updateBody(doorBlockedWalker, moveIntoDoor, kDt);
+    }
+    if (doorBlockedWalker.position.z < static_cast<float>(doorZ) + 0.48f ||
+        bodyOverlapsWorld(world, doorBlockedWalker)) {
+        return fail("body starting outside an opened door should still be blocked from entering its collision");
+    }
+
+    // Case 9: fluid flow should impart a repeatable horizontal push.
     const int flowY = surfaceY + 8;
     for (int x = -2; x <= 4; ++x) {
         for (int y = surfaceY + 1; y <= flowY + 2; ++y) {

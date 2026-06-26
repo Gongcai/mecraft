@@ -1243,8 +1243,20 @@ int main() {
             {PropIndices::OPEN, PropIndices::OPEN_TRUE},
             {PropIndices::POWERED, PropIndices::POWERED_TRUE}
         });
-    if (!modelVariantMatches(oakDoorOpenPowered, "block/oak_door_bottom_left_open", 0, 0)) {
+    if (!modelVariantMatches(oakDoorOpenPowered, "block/oak_door_bottom_left_open", 90, 0)) {
         return fail("oak_door open powered state should resolve through a partial model variant key");
+    }
+    const StateID oakDoorOpenRight = BlockStateRegistry::getState(
+        BlockIds::OAK_DOOR,
+        {
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::HALF, PropIndices::HALF_LOWER},
+            {PropIndices::HINGE, PropIndices::HINGE_RIGHT},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    if (!modelVariantMatches(oakDoorOpenRight, "block/oak_door_bottom_right_open", 270, 0)) {
+        return fail("oak_door right-hinge open state should rotate to the opposite side of the block");
     }
 
     const BlockDef& oakTrapdoorDef = BlockRegistry::get(BlockIds::OAK_TRAPDOOR);

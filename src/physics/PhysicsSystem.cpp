@@ -18,6 +18,7 @@ namespace {
 constexpr float kContactEpsilon = 0.0005f;
 constexpr float kAxisStepLength = 0.45f;
 constexpr float kStepLiftEpsilon = 0.001f;
+constexpr float kPenetrationScoreEpsilon = 0.000001f;
 
 struct AABB {
     glm::vec3 min{};
@@ -141,6 +142,34 @@ bool overlapsCollision(const IWorldView& world, const AABB& box) {
         }
     }
     return false;
+}
+
+float collisionOverlapScore(const IWorldView& world, const AABB& box) {
+    const int minX = static_cast<int>(std::floor(box.min.x));
+    const int maxX = static_cast<int>(std::floor(box.max.x - kContactEpsilon));
+    const int minY = static_cast<int>(std::floor(box.min.y));
+    const int maxY = static_cast<int>(std::floor(box.max.y - kContactEpsilon));
+    const int minZ = static_cast<int>(std::floor(box.min.z));
+    const int maxZ = static_cast<int>(std::floor(box.max.z - kContactEpsilon));
+
+    float score = 0.0f;
+    for (int x = minX; x <= maxX; ++x) {
+        for (int y = minY; y <= maxY; ++y) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                const StateID stateId = world.getBlockState(x, y, z);
+                const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
+                for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
+                    const glm::vec3 obstacleMin = blockOffset + localBox.min;
+                    const glm::vec3 obstacleMax = blockOffset + localBox.max;
+                    const float ox = overlapLen(box.min.x, box.max.x, obstacleMin.x, obstacleMax.x);
+                    const float oy = overlapLen(box.min.y, box.max.y, obstacleMin.y, obstacleMax.y);
+                    const float oz = overlapLen(box.min.z, box.max.z, obstacleMin.z, obstacleMax.z);
+                    score += ox * oy * oz;
+                }
+            }
+        }
+    }
+    return score;
 }
 
 bool aabbIntersects(const glm::vec3& aMin,
@@ -416,11 +445,20 @@ void moveAndCollideAxis(PhysicsBody& body,
 
         body.position[axis] += stepDelta;
 
-        if (!overlapsCollision(world, makeBodyAABBAt(body, body.position))) {
+        const AABB candidateBox = makeBodyAABBAt(body, body.position);
+        if (!overlapsCollision(world, candidateBox)) {
             continue;
         }
 
         if (axis != 1 && tryStepUp(body, world, intent, tuning.stepHeight)) {
+            continue;
+        }
+
+        const AABB previousBox = makeBodyAABBAt(body, prevPos);
+        const float previousPenetrationScore = collisionOverlapScore(world, previousBox);
+        const float candidatePenetrationScore = collisionOverlapScore(world, candidateBox);
+        if (previousPenetrationScore > kPenetrationScoreEpsilon &&
+            candidatePenetrationScore <= previousPenetrationScore + kPenetrationScoreEpsilon) {
             continue;
         }
 
