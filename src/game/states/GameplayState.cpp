@@ -26,6 +26,7 @@
 #include "../../locale/LocaleManager.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIRenderer.h"
+#include "../../ui/inventory/ContainerUiRegistry.h"
 #include "../../world/World.h"
 #include "../../world/block/BedBlock.h"
 #include "../../world/block/DoorBlock.h"
@@ -37,19 +38,20 @@ void pushContainerUiState(GameplayStateContext& gameplayCtx,
                           const InventoryStateContext& inventoryCtx,
                           const std::string& containerUi,
                           const glm::ivec3& blockPosition) {
-    if (containerUi == "minecraft:crafting_table") {
+    const ui::ContainerUiDef& def = ui::ContainerUiRegistry::require(containerUi);
+    if (def.behavior == "crafting_table") {
         gameplayCtx.fsm.pushState(std::make_unique<WorkbenchState>(inventoryCtx));
         return;
     }
-    if (containerUi == "minecraft:furnace") {
+    if (def.behavior == "furnace") {
         gameplayCtx.fsm.pushState(std::make_unique<FurnaceState>(inventoryCtx, blockPosition));
         return;
     }
-    if (containerUi == "minecraft:chest") {
+    if (def.behavior == "chest") {
         gameplayCtx.fsm.pushState(std::make_unique<ChestInventoryState>(inventoryCtx, blockPosition));
         return;
     }
-    throw std::runtime_error("Unknown containerUi for block interaction: " + containerUi);
+    throw std::runtime_error("Unknown container UI behavior for block interaction: " + def.behavior);
 }
 }
 

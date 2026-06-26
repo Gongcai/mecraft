@@ -1,0 +1,70 @@
+{
+  "id": "minecraft:crafting_table",
+  "behavior": "crafting_table",
+  "backgroundTexture": "crafting_table",
+  "width": 176,
+  "height": 166,
+  "textureWidth": 256,
+  "textureHeight": 256,
+  "anchorX": 0.5,
+  "anchorY": 0.5,
+  "offsetX": -176,
+  "offsetY": -166,
+  "scale": 2,
+  "showPlayerPreview": false,
+  "slotGroups": [
+    {
+      "id": "crafting_input",
+      "kind": "crafting_input",
+      "firstSlot": 0,
+      "columns": 3,
+      "rows": 3,
+      "x": 29.5,
+      "y": 16.5,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "crafting_result",
+      "kind": "crafting_result",
+      "firstSlot": 9,
+      "columns": 1,
+      "rows": 1,
+      "x": 123.5,
+      "y": 34.5,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "player_inventory",
+      "kind": "player_inventory",
+      "firstSlot": 9,
+      "columns": 9,
+      "rows": 3,
+      "x": 6.8,
+      "y": 84,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "hotbar",
+      "kind": "player_inventory",
+      "firstSlot": 0,
+      "columns": 9,
+      "rows": 1,
+      "x": 6.8,
+      "y": 142,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 4
+    }
+  ],
+  "progressBars": []
+}

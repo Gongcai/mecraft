@@ -286,6 +286,7 @@ set(SRC_UI
         # Inventory UI
         src/ui/inventory/ItemGridControl.cpp
         src/ui/inventory/CraftingGridControl.cpp
+        src/ui/inventory/ContainerUiRegistry.cpp
         src/ui/inventory/InventoryPanelControl.cpp
         src/ui/inventory/ChestPanelControl.cpp
         src/ui/inventory/FurnacePanelControl.cpp
@@ -627,6 +628,8 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(pickable_overlay_test tests/pickable_overlay_test.cpp)
     add_mecraft_test(item_grid_control_test tests/item_grid_control_test.cpp)
     add_mecraft_test(crafting_grid_control_test tests/crafting_grid_control_test.cpp)
+    add_mecraft_test(container_ui_registry_test tests/container_ui_registry_test.cpp)
+    mecraft_copy_runtime_assets(container_ui_registry_test)
     add_mecraft_test(smelting_system_test tests/smelting_system_test.cpp)
     add_mecraft_test(inventory_panel_control_test tests/inventory_panel_control_test.cpp)
     add_mecraft_test(creative_inventory_panel_control_test tests/creative_inventory_panel_control_test.cpp)

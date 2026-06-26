@@ -1,0 +1,106 @@
+{
+  "id": "minecraft:furnace",
+  "behavior": "furnace",
+  "backgroundTexture": "furnace",
+  "width": 176,
+  "height": 166,
+  "textureWidth": 176,
+  "textureHeight": 166,
+  "anchorX": 0.5,
+  "anchorY": 0.5,
+  "offsetX": -88,
+  "offsetY": -83,
+  "scale": 2,
+  "showPlayerPreview": false,
+  "slotGroups": [
+    {
+      "id": "input",
+      "kind": "container",
+      "firstSlot": 0,
+      "columns": 1,
+      "rows": 1,
+      "x": 56,
+      "y": 17,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "fuel",
+      "kind": "container",
+      "firstSlot": 1,
+      "columns": 1,
+      "rows": 1,
+      "x": 56,
+      "y": 53,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "output",
+      "kind": "container",
+      "firstSlot": 2,
+      "columns": 1,
+      "rows": 1,
+      "x": 116,
+      "y": 35,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "player_inventory",
+      "kind": "player_inventory",
+      "firstSlot": 9,
+      "columns": 9,
+      "rows": 3,
+      "x": 8,
+      "y": 84,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "hotbar",
+      "kind": "player_inventory",
+      "firstSlot": 0,
+      "columns": 9,
+      "rows": 1,
+      "x": 8,
+      "y": 142,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    }
+  ],
+  "progressBars": [
+    {
+      "id": "burn",
+      "kind": "burn",
+      "x": 56,
+      "y": 36,
+      "width": 14,
+      "height": 14,
+      "textureX": 176,
+      "textureY": 0,
+      "direction": "up"
+    },
+    {
+      "id": "cook",
+      "kind": "cook",
+      "x": 79,
+      "y": 34,
+      "width": 24,
+      "height": 17,
+      "textureX": 176,
+      "textureY": 14,
+      "direction": "right"
+    }
+  ]
+}
