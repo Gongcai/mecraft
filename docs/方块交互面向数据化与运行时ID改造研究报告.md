@@ -3,6 +3,24 @@
 > 研究范围：BlockID/ItemID 全运行时生成可行性、方向信息 SoA/AoS 优化、性能影响、初始化顺序、HUD 声明式 UI、方块状态切换、特殊操作、红石耦合点
 > 编写日期：2026-06-26
 
+## 当前实现进度（2026-06-26）
+
+本报告最初以研究和方案评估为主。当前代码已经完成了多轮落地改造，进度如下：
+
+1. **BlockID/ItemID 运行时化已完成**：生产代码和测试中已移除 `BuiltinIds`、`BlockIds::`、`ItemIds::` 依赖，方块和物品由 JSON 注册并在运行时分配 ID。
+2. **物品对方块使用规则已数据化**：锄地、水桶等逻辑迁移到 `ItemUseDispatcher` 和配置规则，新增同类 use-on-block 行为不再依赖硬编码 ID。
+3. **容器 UI 与容器行为已数据化**：`BlockDef.containerUi`、`ContainerUiRegistry`、`ContainerBehaviorRegistry`、`DataDrivenContainerPanelControl`、`DataDrivenContainerState` 已落地；箱子、木桶、熔炉、合成台已通过配置绑定界面和行为。
+4. **木桶已从原版素材接入并验证**：`minecraft:barrel` 已加入方块、物品、模型、纹理、容器 UI 和容器行为配置。
+5. **方块交互分发已数据化**：lever、button、repeater、comparator、door、trapdoor、fence_gate 等交互经 `BlockInteractionDispatcher` 和 `assets/config/block_interaction/` 配置驱动。
+6. **客户端/服务器交互消费已改为服务端权威**：多人模式下客户端发送 `ClientBlockActionType::Interact` 后消费本地输入，但不直接改世界；服务器校验距离并执行交互，再广播结果，避免同一命中事件被客户端和服务器各消费一次导致随机行为。
+7. **红石部分数据尾巴已清理**：按钮脉冲时长由 `redstonePulseTicks` 数据驱动；活塞不可推动规则由 `pistonPushReaction` 数据驱动；比较器读取容器信号由 `ContainerBehaviorDef.comparatorSignal` 数据驱动；压力板接受实体类型由 `pressurePlateEntityFilter` 数据驱动。
+
+仍建议继续推进的剩余项：
+
+1. 活塞主体、活塞头、移动方块等结构性逻辑仍需要 C++，但可继续抽离可配置的规则字段。
+2. 容器底层存储仍分 `ChestInventoryStore` / `FurnaceInventoryStore`，若目标是新增任意容器完全不写 C++ 状态，需要设计统一的 block-entity inventory 存储。
+3. 红石多色线仍停留在方案层面，尚未实现。
+
 ---
 
 ## 一、研究目标一：BlockID / ItemID 全运行时生成
@@ -694,30 +712,15 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 | 红石系统 | **⚠️ 谨慎** | 逻辑复杂且性能敏感，建议保留 C++，仅识别改为查表 |
 | 特殊操作（锄地/水桶） | **✅ 值得** | 逻辑简单，数据化收益明显 |
 
-### 5.2 改造优先级建议
+### 5.2 改造优先级与当前状态
 
-**阶段 1（低风险，高收益）：BlockID/ItemID 运行时化**
-1. 确保 `assets/config/blocks.json` 和 `items.json` 完整覆盖所有内置方块/物品
-2. 将 48 个文件的 `BlockIds::`/`ItemIds::` 替换为缓存查询或 `findByName`
-3. 移除 `BuiltinIds.h` 及相关 X-macro
-4. 验证启动顺序和系统初始化（开发阶段无存档兼容性负担，可自由调整 ID 顺序）
-
-**阶段 2（中风险，中收益）：特殊操作数据化**
-1. 在 `items.json` 中声明 `use_on_block` 规则
-2. 实现 `ItemUseDispatcher`
-3. 迁移锄地、水桶逻辑
-
-**阶段 3（中风险，高收益）：HUD 声明式 UI**
-1. 定义容器 UI JSON Schema
-2. 实现 `DataDrivenPanelControl`
-3. 迁移 Chest/Crafting/Furnace 界面
-4. 在 `blocks.json` 中关联 `container_ui`
-
-**阶段 4（高风险，中收益）：方块状态切换数据化**
-1. 在 `blocks.json` 中声明 `interaction` 规则
-2. 实现 `InteractionDispatcher`
-3. 迁移 lever/button/door 逻辑
-4. 红石系统保留 C++，方块识别改为查表
+| 阶段 | 状态 | 当前结果 | 后续重点 |
+|------|------|----------|----------|
+| 阶段 1：BlockID/ItemID 运行时化 | **已完成** | `BuiltinIds`、`BlockIds::`、`ItemIds::` 已移除，方块/物品由 JSON 注册 | 保持新增内容只走 JSON 注册 |
+| 阶段 2：特殊操作数据化 | **已完成主要目标** | 锄地、水桶等 use-on-block 规则由 `ItemUseDispatcher` 驱动 | 新增规则时继续扩展数据 schema，而不是在入口写分支 |
+| 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态已落地；箱子、木桶、熔炉、合成台已迁移 | 统一容器 block-entity 存储，降低新增新容器的 C++ 成本 |
+| 阶段 4：方块状态切换数据化 | **已完成大部分常见交互** | lever/button/repeater/comparator/door/trapdoor/fence_gate 已通过交互配置分发；多人交互为服务端权威 | 继续评估活塞等红石子系统中的结构性规则 |
+| 阶段 5：红石数据尾巴清理 | **进行中** | 按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已数据化 | 多色红石线、活塞结构性规则、统一容器存储评估 |
 
 ### 5.3 性能总结
 
@@ -745,16 +748,16 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 
 ## 六、结论
 
-1. **BlockID/ItemID 全运行时生成完全可行**，基础设施（`IdRegistry`、`BlockRegistry::findByName`、JSON 加载）已就绪，主要工作是机械替换 48 个文件的硬编码引用。
+1. **BlockID/ItemID 全运行时生成已落地**，生产代码和测试已不再依赖 `BuiltinIds`、`BlockIds::`、`ItemIds::`，新增方块/物品应继续通过 JSON 注册。
 
 2. **方向信息不适合 SoA 改造**，当前的 StateID 编码 + BitPackedArray + Palette 已是缓存友好的工业级设计，优于朴素 SoA。
 
-3. **HUD 声明式 UI 改造值得且必要**，这是实现方块交互完全面向数据化的前置条件。Minecraft 风格的容器界面（背景贴图 + 物品槽网格）结构简单，适合 JSON 声明式描述。
+3. **HUD 声明式 UI 改造已完成主要目标**，容器 UI、容器行为和通用容器状态已经落地；箱子、木桶、熔炉、合成台已迁移到配置绑定。
 
 4. **性能无显著影响**，方块交互是低频逻辑。但需确保热路径使用缓存 ID 而非每次哈希查询。
 
-5. **红石系统保留 C++ 实现**，仅将方块识别改为数据驱动查表。**多色红石线完全可行且成本低**——核心仅 2 个硬编码检查函数（`canRedstoneWireAttachTo`、`isWireState`）改为识别 `redstoneBehavior:"wire"` 家族 + 同色过滤，推荐"多 BlockID + JSON 驱动"方案，新增颜色纯数据化，与 BlockID 运行时化方向一致。
+5. **红石系统保留 C++ 实现**，但应继续把可配置规则移出 C++。按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已经数据化；多色红石线、活塞结构性规则仍是后续重点。**多色红石线完全可行且成本低**——核心仅 2 个硬编码检查函数（`canRedstoneWireAttachTo`、`isWireState`）改为识别 `redstoneBehavior:"wire"` 家族 + 同色过滤，推荐"多 BlockID + JSON 驱动"方案，新增颜色纯数据化，与 BlockID 运行时化方向一致。
 
-6. **改造应分阶段推进**，优先 BlockID 运行时化（阶段 1），再逐步数据化 UI、特殊操作、状态切换。
+6. **改造已进入尾部清理阶段**，当前重点不是继续扩大框架，而是逐个消除新增方块会碰到的小型硬编码规则。
 
 7. **存档兼容性无需考虑**，项目处于开发阶段无玩家存档，改造无后顾之忧。

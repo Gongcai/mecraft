@@ -91,16 +91,16 @@ bool isPressurePlateState(const StateID stateId) {
     return def.redstoneBehavior == "plate";
 }
 
-bool isWoodenPressurePlateState(const StateID stateId) {
-    static const BlockID oakPressurePlateBlock = BlockRegistry::requireIdByName("minecraft:oak_pressure_plate");
-    return BlockStateRegistry::getBlockId(stateId) == oakPressurePlateBlock;
-}
-
 bool pressurePlateAcceptsEntity(const StateID stateId, const PressurePlateEntityKind entityKind) {
-    if (entityKind == PressurePlateEntityKind::Living) {
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (def.pressurePlateEntityFilter == "all") {
         return true;
     }
-    return isWoodenPressurePlateState(stateId);
+    if (def.pressurePlateEntityFilter == "living") {
+        return entityKind == PressurePlateEntityKind::Living;
+    }
+    throw std::runtime_error("Pressure plate has unknown entity filter: " + def.pressurePlateEntityFilter);
 }
 
 bool horizontalFootprintIntersectsPlate(const EntityContactBox& box, const glm::ivec3& platePos) {

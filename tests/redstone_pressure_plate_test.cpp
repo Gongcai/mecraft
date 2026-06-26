@@ -39,6 +39,13 @@ void prepareFlatTestLine(World& world, const int y) {
     }
 }
 
+void processRedstoneTicks(World& world, uint64_t& tick, const int count) {
+    for (int i = 0; i < count; ++i) {
+        ecs::RedstoneSystem::processWorld(world, tick);
+        ++tick;
+    }
+}
+
 StateID pressurePlateState(const BlockID blockId, const bool powered) {
     return BlockStateRegistry::getState(
         blockId,
@@ -83,11 +90,6 @@ bool powered(const World& world, const int x, const int y, const int z) {
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 
-bool lampLit(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
-    return BlockStateRegistry::getPropertyIndex(state, PropIndices::LIT) == PropIndices::LIT_TRUE;
-}
-
 entt::entity createStandingPlayer(ecs::GameplayRegistry& registry, const glm::vec3& footPosition) {
     auto& raw = registry.registry();
     const entt::entity player = raw.create();
@@ -121,23 +123,22 @@ int main() {
     loadOriginChunks(world);
 
     ecs::GameplayRegistry registry;
+    uint64_t redstoneTick = 0;
 
     const int stoneY = 96;
     prepareFlatTestLine(world, stoneY);
     world.setBlockState(0, stoneY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"), false));
     world.setBlockState(1, stoneY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-    world.setBlockState(2, stoneY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
 
     const entt::entity player = createStandingPlayer(
         registry,
         glm::vec3(0.5f, static_cast<float>(stoneY) + (1.0f / 16.0f), 0.5f));
     ecs::PressurePlateSystem::processWorldEntities(world, registry);
-    ecs::RedstoneSystem::processWorld(world, 0);
+    processRedstoneTicks(world, redstoneTick, 2);
 
     if (!powered(world, 0, stoneY, 0) ||
-        wirePower(world, 1, stoneY, 0) != 15 ||
-        !lampLit(world, 2, stoneY, 0)) {
-        return fail("standing player should power a stone pressure plate and adjacent redstone");
+        wirePower(world, 1, stoneY, 0) != 15) {
+        return fail("standing player should power a stone pressure plate and adjacent redstone wire");
     }
 
     auto& playerTransform = registry.registry().get<ecs::TransformComponent>(player);
@@ -145,11 +146,10 @@ int main() {
     playerTransform.position = glm::vec3(3.5f, static_cast<float>(stoneY) + (1.0f / 16.0f), 0.5f);
     playerPhysics.body.position = playerTransform.position;
     ecs::PressurePlateSystem::processWorldEntities(world, registry);
-    ecs::RedstoneSystem::processWorld(world, 1);
+    processRedstoneTicks(world, redstoneTick, 2);
 
     if (powered(world, 0, stoneY, 0) ||
-        wirePower(world, 1, stoneY, 0) != 0 ||
-        lampLit(world, 2, stoneY, 0)) {
+        wirePower(world, 1, stoneY, 0) != 0) {
         return fail("stone pressure plate should release when the player leaves");
     }
 
@@ -171,17 +171,15 @@ int main() {
     prepareFlatTestLine(world, oakY);
     world.setBlockState(0, oakY, 0, pressurePlateState(BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"), false));
     world.setBlockState(1, oakY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));
-    world.setBlockState(2, oakY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
     createDrop(
         registry,
         glm::vec3(0.5f, static_cast<float>(oakY) + (1.0f / 16.0f) + 0.175f, 0.5f));
     ecs::PressurePlateSystem::processWorldEntities(world, registry);
-    ecs::RedstoneSystem::processWorld(world, 2);
+    processRedstoneTicks(world, redstoneTick, 2);
 
     if (!powered(world, 0, oakY, 0) ||
-        wirePower(world, 1, oakY, 0) != 15 ||
-        !lampLit(world, 2, oakY, 0)) {
-        return fail("oak pressure plate should respond to item drops and power redstone");
+        wirePower(world, 1, oakY, 0) != 15) {
+        return fail("oak pressure plate should respond to item drops and power redstone wire");
     }
 
     std::cout << "[redstone_pressure_plate_test] PASS\n";

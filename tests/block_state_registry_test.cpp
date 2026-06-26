@@ -810,6 +810,15 @@ int main() {
         return fail("button pulse durations should parse from blocks.json");
     }
 
+    const BlockDef& stonePressurePlateDef =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:stone_pressure_plate"));
+    const BlockDef& oakPressurePlateDef =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"));
+    if (stonePressurePlateDef.pressurePlateEntityFilter != "living" ||
+        oakPressurePlateDef.pressurePlateEntityFilter != "all") {
+        return fail("pressure plate entity filters should parse from blocks.json");
+    }
+
     const BlockDef& bedrockDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:bedrock"));
     const BlockDef& obsidianDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:obsidian"));
     const BlockDef& pistonHeadDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:piston_head"));

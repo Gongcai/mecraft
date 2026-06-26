@@ -62,6 +62,10 @@ bool isKnownPistonPushReaction(const std::string_view reaction) {
     return reaction == "normal" || reaction == "block";
 }
 
+bool isKnownPressurePlateEntityFilter(const std::string_view filter) {
+    return filter == "living" || filter == "all";
+}
+
 AnimatedTextureRef makeStaticWorldTexture(const int layer) {
     AnimatedTextureRef ref;
     ref.firstLayer = layer;
@@ -111,6 +115,7 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.redstonePowerOutput = 0;
     def.redstonePulseTicks = 0;
     def.redstoneBehavior.clear();
+    def.pressurePlateEntityFilter.clear();
     def.redstoneControlledProperty.clear();
     def.redstoneControlledMirrorProperties.clear();
     def.redstoneControlledPowerInverted = false;
@@ -532,6 +537,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.redstonePowerOutput = 0;
         def.redstonePulseTicks = 0;
         def.redstoneBehavior.clear();
+        def.pressurePlateEntityFilter.clear();
         def.redstoneControlledProperty.clear();
         def.redstoneControlledMirrorProperties.clear();
         def.redstoneControlledPowerInverted = false;
@@ -680,6 +686,25 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (def.redstoneBehavior == "button" && def.redstonePulseTicks == 0) {
             throw std::runtime_error("redstoneBehavior=button requires redstonePulseTicks for block: " +
+                                     def.namespacedId.full());
+        }
+        if (blockJson.contains("pressurePlateEntityFilter")) {
+            if (!blockJson["pressurePlateEntityFilter"].is_string()) {
+                throw std::runtime_error("pressurePlateEntityFilter must be a string for block: " +
+                                         def.namespacedId.full());
+            }
+            if (def.redstoneBehavior != "plate") {
+                throw std::runtime_error("pressurePlateEntityFilter requires redstoneBehavior=plate for block: " +
+                                         def.namespacedId.full());
+            }
+            def.pressurePlateEntityFilter = blockJson["pressurePlateEntityFilter"].get<std::string>();
+            if (!isKnownPressurePlateEntityFilter(def.pressurePlateEntityFilter)) {
+                throw std::runtime_error("Unknown pressurePlateEntityFilter '" + def.pressurePlateEntityFilter +
+                                         "' for block: " + def.namespacedId.full());
+            }
+        }
+        if (def.redstoneBehavior == "plate" && def.pressurePlateEntityFilter.empty()) {
+            throw std::runtime_error("redstoneBehavior=plate requires pressurePlateEntityFilter for block: " +
                                      def.namespacedId.full());
         }
         if (blockJson.contains("pistonPushReaction")) {
