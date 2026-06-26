@@ -32,6 +32,11 @@ namespace {
 constexpr float kProjectileStepLength = 0.25f;
 constexpr uint64_t kTargetPulseTicks = 4;
 
+BlockID targetBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:target");
+    return blockId;
+}
+
 bool isCollisionBlockAt(const IWorldView& worldView,
                         const glm::vec3& position,
                         const glm::vec3& halfExtents,
@@ -153,7 +158,7 @@ void activateTargetBlock(World& world,
                          const glm::ivec3& blockPosition,
                          const glm::vec3& impactPosition) {
     const StateID currentState = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
-    if (BlockStateRegistry::getBlockId(currentState) != BlockIds::TARGET) {
+    if (BlockStateRegistry::getBlockId(currentState) != targetBlockId()) {
         return;
     }
 

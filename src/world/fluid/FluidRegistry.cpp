@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <fstream>
+#include <stdexcept>
+#include <string>
 
 #include <nlohmann/json.hpp>
 
@@ -18,84 +20,118 @@ FluidKind parseFluidKind(const std::string& id) {
     if (id == "minecraft:water") {
         return FluidKind::Water;
     }
-    return FluidKind::None;
+    throw std::runtime_error("Unsupported fluid id in fluids.json: " + id);
 }
 
-void applyConfigValues(FluidDesc& desc, const nlohmann::json& fluidJson) {
-    if (fluidJson.contains("tickDelay") && fluidJson["tickDelay"].is_number_integer()) {
-        desc.tickDelay = std::max<uint64_t>(1, fluidJson["tickDelay"].get<uint64_t>());
+const nlohmann::json& requireField(const nlohmann::json& fluidJson,
+                                   const std::string& fluidId,
+                                   const char* fieldName) {
+    if (!fluidJson.contains(fieldName)) {
+        throw std::runtime_error("Fluid " + fluidId + " is missing required field: " + fieldName);
     }
-    if (fluidJson.contains("maxLevel") && fluidJson["maxLevel"].is_number_integer()) {
-        desc.maxLevel = static_cast<uint8_t>(std::clamp(fluidJson["maxLevel"].get<int>(), 0, 7));
+    return fluidJson[fieldName];
+}
+
+uint64_t requirePositiveInteger(const nlohmann::json& fluidJson,
+                                const std::string& fluidId,
+                                const char* fieldName) {
+    const nlohmann::json& value = requireField(fluidJson, fluidId, fieldName);
+    if (!value.is_number_integer()) {
+        throw std::runtime_error("Fluid " + fluidId + " requires integer field: " + fieldName);
     }
-    if (fluidJson.contains("slopeSearchDistance") && fluidJson["slopeSearchDistance"].is_number_integer()) {
-        desc.slopeSearchDistance = static_cast<uint8_t>(
-            std::clamp(fluidJson["slopeSearchDistance"].get<int>(), 0, 32));
+    const int64_t parsed = value.get<int64_t>();
+    if (parsed <= 0) {
+        throw std::runtime_error("Fluid " + fluidId + " requires positive field: " + fieldName);
     }
-    if (fluidJson.contains("canCreateInfiniteSource") && fluidJson["canCreateInfiniteSource"].is_boolean()) {
-        desc.canCreateInfiniteSource = fluidJson["canCreateInfiniteSource"].get<bool>();
+    return static_cast<uint64_t>(parsed);
+}
+
+uint8_t requireIntegerInRange(const nlohmann::json& fluidJson,
+                              const std::string& fluidId,
+                              const char* fieldName,
+                              const int minValue,
+                              const int maxValue) {
+    const nlohmann::json& value = requireField(fluidJson, fluidId, fieldName);
+    if (!value.is_number_integer()) {
+        throw std::runtime_error("Fluid " + fluidId + " requires integer field: " + fieldName);
     }
-    if (fluidJson.contains("infiniteSourceNeighborCount") && fluidJson["infiniteSourceNeighborCount"].is_number_integer()) {
-        desc.infiniteSourceNeighborCount = static_cast<uint8_t>(
-            std::clamp(fluidJson["infiniteSourceNeighborCount"].get<int>(), 0, 4));
+    const int parsed = value.get<int>();
+    if (parsed < minValue || parsed > maxValue) {
+        throw std::runtime_error("Fluid " + fluidId + " field is out of range: " + fieldName);
     }
-    if (fluidJson.contains("requiresSupportForInfiniteSource") &&
-        fluidJson["requiresSupportForInfiniteSource"].is_boolean()) {
-        desc.requiresSupportForInfiniteSource = fluidJson["requiresSupportForInfiniteSource"].get<bool>();
+    return static_cast<uint8_t>(parsed);
+}
+
+bool requireBoolean(const nlohmann::json& fluidJson,
+                    const std::string& fluidId,
+                    const char* fieldName) {
+    const nlohmann::json& value = requireField(fluidJson, fluidId, fieldName);
+    if (!value.is_boolean()) {
+        throw std::runtime_error("Fluid " + fluidId + " requires boolean field: " + fieldName);
     }
+    return value.get<bool>();
+}
+
+void applyConfigValues(FluidDesc& desc, const nlohmann::json& fluidJson, const std::string& fluidId) {
+    desc.tickDelay = requirePositiveInteger(fluidJson, fluidId, "tickDelay");
+    desc.maxLevel = requireIntegerInRange(fluidJson, fluidId, "maxLevel", 0, 7);
+    desc.slopeSearchDistance = requireIntegerInRange(fluidJson, fluidId, "slopeSearchDistance", 0, 32);
+    desc.canCreateInfiniteSource = requireBoolean(fluidJson, fluidId, "canCreateInfiniteSource");
+    desc.infiniteSourceNeighborCount =
+        requireIntegerInRange(fluidJson, fluidId, "infiniteSourceNeighborCount", 0, 4);
+    desc.requiresSupportForInfiniteSource =
+        requireBoolean(fluidJson, fluidId, "requiresSupportForInfiniteSource");
 }
 }
 
-void FluidRegistry::registerFallbackWater() {
+void FluidRegistry::init() {
+    if (s_initialized) {
+        return;
+    }
+
     s_none = FluidDesc{};
 
     s_water = FluidDesc{};
     s_water.kind = FluidKind::Water;
-    s_water.blockId = BlockIds::WATER;
-    s_water.tickDelay = 5;
-    s_water.maxLevel = 7;
-    s_water.slopeSearchDistance = 5;
-    s_water.canCreateInfiniteSource = true;
-    s_water.infiniteSourceNeighborCount = 2;
-    s_water.requiresSupportForInfiniteSource = true;
-}
-
-void FluidRegistry::init() {
-    registerFallbackWater();
+    s_water.blockId = BlockRegistry::requireIdByName("minecraft:water");
 
     std::ifstream file(kFluidsConfigPath);
     if (!file.is_open()) {
-        s_initialized = true;
-        return;
+        throw std::runtime_error(std::string("Failed to open fluids config: ") + kFluidsConfigPath);
     }
 
     nlohmann::json root;
     try {
         file >> root;
-    } catch (const std::exception&) {
-        s_initialized = true;
-        return;
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string("Failed to parse fluids config: ") + e.what());
     }
 
     if (!root.contains("fluids") || !root["fluids"].is_array()) {
-        s_initialized = true;
-        return;
+        throw std::runtime_error("fluids.json requires a fluids array");
     }
 
+    bool foundWater = false;
     for (const auto& fluidJson : root["fluids"]) {
         if (!fluidJson.contains("id") || !fluidJson["id"].is_string()) {
-            continue;
+            throw std::runtime_error("Every fluid entry requires a string id");
         }
 
-        const FluidKind kind = parseFluidKind(fluidJson["id"].get<std::string>());
+        const std::string fluidId = fluidJson["id"].get<std::string>();
+        const FluidKind kind = parseFluidKind(fluidId);
         switch (kind) {
             case FluidKind::Water:
-                applyConfigValues(s_water, fluidJson);
+                applyConfigValues(s_water, fluidJson, fluidId);
+                foundWater = true;
                 break;
             case FluidKind::None:
             default:
                 break;
         }
+    }
+
+    if (!foundWater) {
+        throw std::runtime_error("fluids.json requires minecraft:water");
     }
 
     s_initialized = true;
@@ -139,5 +175,5 @@ FluidKind FluidRegistry::kindForBlock(const BlockID blockId) {
 
 uint64_t FluidRegistry::defaultTickDelay() {
     ensureInitialized();
-    return s_water.tickDelay > 0 ? s_water.tickDelay : 1;
+    return s_water.tickDelay;
 }

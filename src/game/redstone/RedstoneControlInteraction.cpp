@@ -65,8 +65,10 @@ uint16_t toggledOpenValue(const uint16_t currentOpen) {
 }
 
 bool isButtonBlock(const BlockID blockId) {
-    return blockId == BlockIds::STONE_BUTTON ||
-           blockId == BlockIds::OAK_BUTTON;
+    static const BlockID stoneButtonBlock = BlockRegistry::requireIdByName("minecraft:stone_button");
+    static const BlockID oakButtonBlock = BlockRegistry::requireIdByName("minecraft:oak_button");
+    return blockId == stoneButtonBlock ||
+           blockId == oakButtonBlock;
 }
 
 bool isOpenableBlock(const BlockID blockId) {
@@ -118,17 +120,23 @@ StateID withRequiredProperty(const StateID currentState,
 } // namespace
 
 bool isControlBlock(const BlockID blockId) {
-    return blockId == BlockIds::LEVER ||
+    static const BlockID leverBlock = BlockRegistry::requireIdByName("minecraft:lever");
+    static const BlockID repeaterBlock = BlockRegistry::requireIdByName("minecraft:repeater");
+    static const BlockID comparatorBlock = BlockRegistry::requireIdByName("minecraft:comparator");
+    return blockId == leverBlock ||
            isButtonBlock(blockId) ||
-           blockId == BlockIds::REPEATER ||
-           blockId == BlockIds::COMPARATOR ||
+           blockId == repeaterBlock ||
+           blockId == comparatorBlock ||
            isOpenableBlock(blockId);
 }
 
 StateID nextControlState(const StateID currentState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(currentState);
+    static const BlockID leverBlock = BlockRegistry::requireIdByName("minecraft:lever");
+    static const BlockID repeaterBlock = BlockRegistry::requireIdByName("minecraft:repeater");
+    static const BlockID comparatorBlock = BlockRegistry::requireIdByName("minecraft:comparator");
 
-    if (blockId == BlockIds::LEVER) {
+    if (blockId == leverBlock) {
         requirePoweredProperties();
         const uint16_t currentPowered = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::POWERED);
         if (currentPowered == BlockStateRegistry::INVALID_INDEX) {
@@ -160,7 +168,7 @@ StateID nextControlState(const StateID currentState) {
             "Button powered");
     }
 
-    if (blockId == BlockIds::REPEATER) {
+    if (blockId == repeaterBlock) {
         requireRepeaterDelayProperties();
         const uint16_t currentDelay = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::DELAY);
         if (currentDelay == BlockStateRegistry::INVALID_INDEX) {
@@ -173,7 +181,7 @@ StateID nextControlState(const StateID currentState) {
             "Repeater delay");
     }
 
-    if (blockId == BlockIds::COMPARATOR) {
+    if (blockId == comparatorBlock) {
         requireComparatorModeProperties();
         const uint16_t currentMode = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::MODE);
         if (currentMode == BlockStateRegistry::INVALID_INDEX) {

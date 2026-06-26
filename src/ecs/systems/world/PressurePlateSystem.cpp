@@ -92,7 +92,8 @@ bool isPressurePlateState(const StateID stateId) {
 }
 
 bool isWoodenPressurePlateState(const StateID stateId) {
-    return BlockStateRegistry::getBlockId(stateId) == BlockIds::OAK_PRESSURE_PLATE;
+    static const BlockID oakPressurePlateBlock = BlockRegistry::requireIdByName("minecraft:oak_pressure_plate");
+    return BlockStateRegistry::getBlockId(stateId) == oakPressurePlateBlock;
 }
 
 bool pressurePlateAcceptsEntity(const StateID stateId, const PressurePlateEntityKind entityKind) {

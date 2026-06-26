@@ -32,8 +32,6 @@ public:
     [[nodiscard]] static uint64_t defaultTickDelay();
 
 private:
-    static void registerFallbackWater();
-
     static bool s_initialized;
     static FluidDesc s_none;
     static FluidDesc s_water;

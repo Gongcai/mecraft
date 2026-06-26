@@ -21,6 +21,21 @@ void requirePistonProperties() {
     }
 }
 
+BlockID pistonBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:piston");
+    return blockId;
+}
+
+BlockID stickyPistonBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:sticky_piston");
+    return blockId;
+}
+
+BlockID pistonHeadBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:piston_head");
+    return blockId;
+}
+
 glm::ivec3 directionFromFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_EAST) {
         return {1, 0, 0};
@@ -63,10 +78,10 @@ bool isExtendedValueTrue(const StateID stateId) {
 
 uint16_t headTypeForBaseState(const StateID baseState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(baseState);
-    if (blockId == BlockIds::PISTON) {
+    if (blockId == pistonBlockId()) {
         return PropIndices::TYPE_NORMAL;
     }
-    if (blockId == BlockIds::STICKY_PISTON) {
+    if (blockId == stickyPistonBlockId()) {
         return PropIndices::TYPE_STICKY;
     }
     throw std::runtime_error("Piston head type requested for a non-piston base");
@@ -88,12 +103,12 @@ bool isPistonBaseState(const StateID stateId) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    return blockId == BlockIds::PISTON || blockId == BlockIds::STICKY_PISTON;
+    return blockId == pistonBlockId() || blockId == stickyPistonBlockId();
 }
 
 bool isPistonHeadState(const StateID stateId) {
     return stateId != BlockIds::AIR &&
-           BlockStateRegistry::getBlockId(stateId) == BlockIds::PISTON_HEAD;
+           BlockStateRegistry::getBlockId(stateId) == pistonHeadBlockId();
 }
 
 bool isPistonAssemblyState(const StateID stateId) {

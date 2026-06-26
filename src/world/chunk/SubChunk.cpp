@@ -6,6 +6,7 @@
 #include <glad/glad.h>
 
 #include "../fluid/FluidState.h"
+#include "../fluid/FluidRegistry.h"
 
 namespace {
 uint8_t clampLight(const uint8_t level) {
@@ -13,7 +14,8 @@ uint8_t clampLight(const uint8_t level) {
 }
 
 BlockID normalizeStoredState(const BlockID id) {
-    if (BlockIds::WATER != BlockIds::AIR && id == BlockIds::WATER) {
+    const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
+    if (id == waterDesc.blockId) {
         return FluidState::makeWater(0, false);
     }
     return id;

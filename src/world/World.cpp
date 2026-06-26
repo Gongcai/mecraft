@@ -40,7 +40,8 @@ bool changesFluidPathing(const StateID oldState, const StateID newState) {
 }
 
 StateID normalizeFluidBlockState(const StateID stateId) {
-    if (BlockIds::WATER != BlockIds::AIR && stateId == BlockIds::WATER) {
+    const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
+    if (stateId == waterDesc.blockId) {
         return FluidState::makeWater(0, false);
     }
     return stateId;

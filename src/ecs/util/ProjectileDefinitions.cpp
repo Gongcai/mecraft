@@ -241,21 +241,16 @@ ProjectileDefinition defaultDefinitionForItem(const ItemID itemId) {
 } // namespace
 
 BlockID defaultProjectileEntityImpactParticleBlock() {
-    if (BlockIds::ROSE != 0) {
-        return BlockIds::ROSE;
-    }
-    if (BlockIds::DIRT != 0) {
-        return BlockIds::DIRT;
-    }
-    return BlockIds::STONE;
+    return BlockRegistry::requireIdByName("minecraft:rose");
 }
 
 ProjectileDefinition makeAppleProjectileDefinition() {
+    static const ItemID appleItem = ItemRegistry::requireIdByName("minecraft:apple");
     ProjectileDefinition definition;
-    if (getThrowableProjectileDefinition(ItemIds::APPLE, definition)) {
+    if (getThrowableProjectileDefinition(appleItem, definition)) {
         return definition;
     }
-    return defaultDefinitionForItem(ItemIds::APPLE);
+    return defaultDefinitionForItem(appleItem);
 }
 
 bool getThrowableProjectileDefinition(const ItemID itemId, ProjectileDefinition& outDefinition) {

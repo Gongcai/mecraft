@@ -135,6 +135,41 @@ struct PistonMovementCollision {
     CollisionAabb sweptBox;
 };
 
+BlockID stoneButtonBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:stone_button");
+    return blockId;
+}
+
+BlockID oakButtonBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:oak_button");
+    return blockId;
+}
+
+BlockID pistonBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:piston");
+    return blockId;
+}
+
+BlockID stickyPistonBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:sticky_piston");
+    return blockId;
+}
+
+BlockID pistonHeadBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:piston_head");
+    return blockId;
+}
+
+BlockID bedrockBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:bedrock");
+    return blockId;
+}
+
+BlockID obsidianBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:obsidian");
+    return blockId;
+}
+
 bool isWireState(const StateID stateId) {
     if (stateId == BlockIds::AIR) {
         return false;
@@ -580,15 +615,15 @@ bool isTargetState(const StateID stateId) {
 
 bool isPistonHeadState(const StateID stateId) {
     return stateId != BlockIds::AIR &&
-           BlockStateRegistry::getBlockId(stateId) == BlockIds::PISTON_HEAD;
+           BlockStateRegistry::getBlockId(stateId) == pistonHeadBlockId();
 }
 
 uint64_t buttonPulseTicks(const StateID stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    if (blockId == BlockIds::STONE_BUTTON) {
+    if (blockId == stoneButtonBlockId()) {
         return kStoneButtonPulseTicks;
     }
-    if (blockId == BlockIds::OAK_BUTTON) {
+    if (blockId == oakButtonBlockId()) {
         return kWoodButtonPulseTicks;
     }
     throw std::runtime_error("Redstone button has no registered pulse duration");
@@ -806,10 +841,10 @@ glm::ivec3 pistonFacingDirection(const StateID stateId) {
 
 uint16_t pistonHeadType(const StateID pistonState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(pistonState);
-    if (blockId == BlockIds::PISTON) {
+    if (blockId == pistonBlockId()) {
         return PropIndices::TYPE_NORMAL;
     }
-    if (blockId == BlockIds::STICKY_PISTON) {
+    if (blockId == stickyPistonBlockId()) {
         return PropIndices::TYPE_STICKY;
     }
     throw std::runtime_error("Piston head type requested for a non-piston block");
@@ -817,7 +852,7 @@ uint16_t pistonHeadType(const StateID pistonState) {
 
 StateID pistonHeadState(const StateID pistonState) {
     return BlockStateRegistry::getState(
-        BlockIds::PISTON_HEAD,
+        pistonHeadBlockId(),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::FACING, getRequiredProperty(pistonState, PropIndices::FACING, "facing")},
             {PropIndices::TYPE, pistonHeadType(pistonState)}
@@ -831,16 +866,11 @@ bool isMatchingPistonHead(const StateID headState, const StateID pistonState) {
            getRequiredProperty(headState, PropIndices::TYPE, "type") == pistonHeadType(pistonState);
 }
 
-BlockID obsidianBlockId() {
-    static const BlockID blockId = BlockRegistry::findByName("obsidian");
-    return blockId;
-}
-
 bool isImmovablePistonBlock(const StateID stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    if (blockId == BlockIds::BEDROCK ||
+    if (blockId == bedrockBlockId() ||
         blockId == obsidianBlockId() ||
-        blockId == BlockIds::PISTON_HEAD) {
+        blockId == pistonHeadBlockId()) {
         return true;
     }
     return isPistonState(stateId) && isExtendedPropertyTrue(stateId);
@@ -1195,7 +1225,7 @@ size_t applyPistonPush(World& world,
 }
 
 bool isStickyPistonState(const StateID stateId) {
-    return BlockStateRegistry::getBlockId(stateId) == BlockIds::STICKY_PISTON;
+    return BlockStateRegistry::getBlockId(stateId) == stickyPistonBlockId();
 }
 
 size_t applyPistonRetraction(World& world,

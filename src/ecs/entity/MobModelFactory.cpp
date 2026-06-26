@@ -23,9 +23,8 @@ entt::entity MobModelFactory::createHumanoidMob(GameplayRegistry& registry,
         reg.emplace<GroundedStateComponent>(root);
         reg.emplace<HealthComponent>(root, 20, 20);
         reg.emplace<HurtEffectComponent>(root);
-        if (ItemIds::COAL != 0) {
-            reg.emplace<DropTableComponent>(root, ItemIds::COAL, 1u, 1u);
-        }
+        static const ItemID coalItem = ItemRegistry::requireIdByName("minecraft:coal");
+        reg.emplace<DropTableComponent>(root, coalItem, 1u, 1u);
         reg.emplace<NetworkSyncTag>(root);
     }
     auto& rootChildren = reg.emplace<ChildrenComponent>(root);
