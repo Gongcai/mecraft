@@ -93,6 +93,14 @@ int main() {
         std::string(ironHoe.iconTextureName) != "iron_hoe") {
         return fail("iron hoe should be a non-placeable hoe tool with an item texture");
     }
+    const ItemUseRule* tillRule = ItemUseRules::findRule(ironHoe, ItemUseBehavior::TillSoil);
+    if (tillRule == nullptr ||
+        !ItemUseRules::matchesBlock(*tillRule, BlockRegistry::requireIdByName("minecraft:dirt")) ||
+        !ItemUseRules::matchesBlock(*tillRule, BlockRegistry::requireIdByName("minecraft:grass_block")) ||
+        tillRule->resultBlock != BlockRegistry::requireIdByName("minecraft:farmland") ||
+        tillRule->consumeDurability != 1) {
+        return fail("iron hoe should declare a data-driven tilling rule");
+    }
 
     const ItemID craftingTableItem = ItemRegistry::findByName("crafting_table");
     const BlockID craftingTableBlock = BlockRegistry::findByName("crafting_table");
@@ -219,6 +227,17 @@ int main() {
         std::string(bucket.iconTextureName) != "bucket" ||
         std::string(waterBucket.iconTextureName) != "water_bucket") {
         return fail("bucket items should be non-stackable non-placeable items with explicit item textures");
+    }
+    const ItemUseRule* pickupWaterRule = ItemUseRules::findRule(bucket, ItemUseBehavior::BucketPickupFluid);
+    const ItemUseRule* placeWaterRule = ItemUseRules::findRule(waterBucket, ItemUseBehavior::BucketPlaceFluid);
+    if (pickupWaterRule == nullptr ||
+        !ItemUseRules::matchesBlock(*pickupWaterRule, BlockRegistry::requireIdByName("minecraft:water")) ||
+        pickupWaterRule->resultBlock != RUNTIME_ID_NULL ||
+        pickupWaterRule->resultItem != waterBucketItem ||
+        placeWaterRule == nullptr ||
+        placeWaterRule->resultBlock != BlockRegistry::requireIdByName("minecraft:water") ||
+        placeWaterRule->resultItem != bucketItem) {
+        return fail("bucket items should declare data-driven fluid use rules");
     }
 
     const ItemID oakDoorItem = ItemRegistry::findByName("oak_door");

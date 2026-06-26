@@ -2,6 +2,7 @@
 #define MECRAFT_ITEM_H
 
 #include <vector>
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -12,6 +13,20 @@
 
 // ItemID is now a separate RuntimeId from BlockID
 using ItemID = RuntimeId;
+
+enum class ItemUseBehavior : uint8_t {
+    TillSoil = 0,
+    BucketPickupFluid = 1,
+    BucketPlaceFluid = 2
+};
+
+struct ItemUseRule {
+    ItemUseBehavior behavior = ItemUseBehavior::TillSoil;
+    std::vector<BlockID> matchBlocks;
+    BlockID resultBlock = RUNTIME_ID_NULL;
+    ItemID resultItem = RUNTIME_ID_NULL;
+    uint16_t consumeDurability = 0;
+};
 
 struct ItemStack {
     ItemID itemId = 0;  // AIR is RuntimeId 0.
@@ -36,7 +51,26 @@ struct ItemDef {
     float toolEfficiency = 1.0f;
     uint16_t maxDurability = 0;
     std::vector<NamespacedId> tags;
+    std::vector<ItemUseRule> useOnBlockRules;
 };
+
+namespace ItemUseRules {
+[[nodiscard]] inline const ItemUseRule* findRule(const ItemDef& itemDef, const ItemUseBehavior behavior) {
+    for (const ItemUseRule& rule : itemDef.useOnBlockRules) {
+        if (rule.behavior == behavior) {
+            return &rule;
+        }
+    }
+    return nullptr;
+}
+
+[[nodiscard]] inline bool matchesBlock(const ItemUseRule& rule, const BlockID blockId) {
+    if (rule.matchBlocks.empty()) {
+        return true;
+    }
+    return std::find(rule.matchBlocks.begin(), rule.matchBlocks.end(), blockId) != rule.matchBlocks.end();
+}
+}
 
 // Block drop table entry
 struct BlockDropEntry {

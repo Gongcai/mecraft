@@ -10,6 +10,8 @@
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
 #include "../../../world/World.h"
+#include "../../../world/block/BlockStateRegistry.h"
+#include "../../../world/fluid/FluidRegistry.h"
 #include "../../../world/fluid/FluidState.h"
 
 namespace ecs {
@@ -34,9 +36,14 @@ bool isWithinInteractionReach(const glm::vec3& playerPos, const glm::ivec3& bloc
     return distSq <= kMaxBucketDistance * kMaxBucketDistance;
 }
 
-bool isSourceWaterAt(const IWorldView& worldView, const glm::ivec3& pos) {
+bool isSourceFluidMatchingRule(const IWorldView& worldView, const glm::ivec3& pos, const ItemUseRule& rule) {
     const StateID fluidState = worldView.getFluidState(pos.x, pos.y, pos.z);
-    return FluidState::isWater(fluidState) && FluidState::isSource(fluidState);
+    if (!FluidState::isWater(fluidState) || !FluidState::isSource(fluidState)) {
+        return false;
+    }
+
+    const BlockID fluidBlock = BlockStateRegistry::getBlockId(fluidState);
+    return ItemUseRules::matchesBlock(rule, fluidBlock);
 }
 
 bool canPlaceSourceWaterAt(const IWorldView& worldView, const glm::ivec3& pos) {
@@ -51,6 +58,14 @@ bool canPlaceSourceWaterAt(const IWorldView& worldView, const glm::ivec3& pos) {
 
     const BlockID blockId = BlockStateRegistry::getBlockId(blockState);
     return BlockRegistry::getFast(blockId).allowsFluidCoexistence;
+}
+
+StateID makeSourceFluidState(const BlockID fluidBlock) {
+    const FluidKind fluidKind = FluidRegistry::kindForBlock(fluidBlock);
+    if (fluidKind == FluidKind::Water) {
+        return FluidState::makeWater(0, false);
+    }
+    throw std::runtime_error("Item use rule references unsupported fluid block.");
 }
 
 void replaceSelectedItem(Inventory& inventory, const ItemID itemId) {
@@ -91,8 +106,6 @@ void BucketUseSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
     auto& audioBus = ensureAudioEventBus(registry);
-    static const ItemID bucketItem = ItemRegistry::requireIdByName("minecraft:bucket");
-    static const ItemID waterBucketItem = ItemRegistry::requireIdByName("minecraft:water_bucket");
 
     auto view = registry.view<LocalPlayerTag,
                               BlockActionIntentComponent,
@@ -120,14 +133,19 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
         Inventory& inventory = inventoryData.inventory;
         const ItemID selectedItem = inventory.getSelectedItem();
-        if (selectedItem != bucketItem && selectedItem != waterBucketItem) {
+        const ItemDef& selectedItemDef = ItemRegistry::get(selectedItem);
+        const ItemUseRule* pickupRule =
+            ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPickupFluid);
+        const ItemUseRule* placeRule =
+            ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
+        if (pickupRule == nullptr && placeRule == nullptr) {
             continue;
         }
 
-        if (selectedItem == bucketItem) {
+        if (pickupRule != nullptr) {
             const glm::ivec3 pickupPos = target.targetBlock;
             if (!isWithinInteractionReach(transform.position, pickupPos) ||
-                !isSourceWaterAt(worldView, pickupPos)) {
+                !isSourceFluidMatchingRule(worldView, pickupPos, *pickupRule)) {
                 continue;
             }
 
@@ -149,7 +167,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
             mutableWorld->setFluidState(pickupPos.x, pickupPos.y, pickupPos.z, RUNTIME_ID_NULL);
             if (modeRules.shouldReportBreakProgress()) {
-                replaceSelectedItem(inventory, waterBucketItem);
+                replaceSelectedItem(inventory, pickupRule->resultItem);
             }
             runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
             audioBus.push({"item.bucket.fill", glm::vec3(pickupPos) + glm::vec3(0.5f), true, 1.0f});
@@ -163,7 +181,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        const StateID sourceWater = FluidState::makeWater(0, false);
+        const StateID sourceWater = makeSourceFluidState(placeRule->resultBlock);
         if (mutableWorld == nullptr) {
             if (ctx.services.gameClient) {
                 sendBucketAction(*ctx.services.gameClient,
@@ -182,7 +200,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
         mutableWorld->setFluidState(placePos.x, placePos.y, placePos.z, sourceWater);
         if (modeRules.shouldReportBreakProgress()) {
-            replaceSelectedItem(inventory, bucketItem);
+            replaceSelectedItem(inventory, placeRule->resultItem);
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
         audioBus.push({"item.bucket.empty", glm::vec3(placePos) + glm::vec3(0.5f), true, 1.0f});

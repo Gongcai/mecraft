@@ -25,21 +25,6 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
     return SurvivalModeRules::instance();
 }
 
-bool isHoe(const ItemStack& stack) {
-    if (stack.isEmpty()) {
-        return false;
-    }
-
-    const ItemDef& itemDef = ItemRegistry::get(stack.itemId);
-    return itemDef.isTool && itemDef.toolKind == "hoe";
-}
-
-bool isTillableSoil(const BlockID blockId) {
-    static const BlockID dirtBlock = BlockRegistry::requireIdByName("minecraft:dirt");
-    static const BlockID grassBlock = BlockRegistry::requireIdByName("minecraft:grass_block");
-    return blockId == dirtBlock || blockId == grassBlock;
-}
-
 bool hasEmptySpaceAbove(const IWorldView& worldView, const glm::ivec3& pos) {
     const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
     return worldView.getBlockState(above.x, above.y, above.z) == RUNTIME_ID_NULL &&
@@ -67,9 +52,6 @@ void SoilTillingSystem::update(SystemContext& ctx) {
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
     auto& audioBus = ensureAudioEventBus(registry);
 
-    const BlockID farmlandBlock = BlockRegistry::requireIdByName("minecraft:farmland");
-    const StateID farmlandState = BlockStateRegistry::getDefaultState(farmlandBlock);
-
     auto view = registry.view<LocalPlayerTag,
                               BlockActionIntentComponent,
                               TransformComponent,
@@ -95,7 +77,13 @@ void SoilTillingSystem::update(SystemContext& ctx) {
         }
 
         Inventory& inventory = inventoryData.inventory;
-        if (!isHoe(inventory.getSelectedStack())) {
+        const ItemStack selectedStack = inventory.getSelectedStack();
+        if (selectedStack.isEmpty()) {
+            continue;
+        }
+        const ItemDef& selectedItemDef = ItemRegistry::get(selectedStack.itemId);
+        const ItemUseRule* tillRule = ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::TillSoil);
+        if (tillRule == nullptr) {
             continue;
         }
 
@@ -106,10 +94,11 @@ void SoilTillingSystem::update(SystemContext& ctx) {
 
         const StateID targetState = worldView.getBlockState(tillPos.x, tillPos.y, tillPos.z);
         const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
-        if (!isTillableSoil(targetBlock) || !hasEmptySpaceAbove(worldView, tillPos)) {
+        if (!ItemUseRules::matchesBlock(*tillRule, targetBlock) || !hasEmptySpaceAbove(worldView, tillPos)) {
             continue;
         }
 
+        const StateID resultState = BlockStateRegistry::getDefaultState(tillRule->resultBlock);
         if (mutableWorld == nullptr) {
             if (ctx.services.gameClient) {
                 net::ClientBlockAction action;
@@ -119,7 +108,7 @@ void SoilTillingSystem::update(SystemContext& ctx) {
                 action.placeBlock = tillPos;
                 action.hitNormal = target.hitNormal;
                 action.playerPosition = transform.position;
-                action.blockState = static_cast<uint16_t>(farmlandState);
+                action.blockState = static_cast<uint16_t>(resultState);
                 ctx.services.gameClient->sendBlockAction(action);
             } else {
                 ++runtime.heldItemSwingSequence;
@@ -128,9 +117,11 @@ void SoilTillingSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        mutableWorld->setBlockState(tillPos.x, tillPos.y, tillPos.z, farmlandState);
+        mutableWorld->setBlockState(tillPos.x, tillPos.y, tillPos.z, resultState);
         if (modeRules.shouldReportBreakProgress()) {
-            applySelectedToolDurabilityWear(inventory);
+            for (uint16_t i = 0; i < tillRule->consumeDurability; ++i) {
+                applySelectedToolDurabilityWear(inventory);
+            }
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
         audioBus.push({"block.generic.place", glm::vec3(tillPos), true, 1.0f});

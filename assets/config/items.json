@@ -48,7 +48,15 @@
       "toolKind": "hoe",
       "toolTier": 2,
       "toolEfficiency": 6.0,
-      "maxDurability": 250
+      "maxDurability": 250,
+      "use_on_block": [
+        {
+          "behavior": "till_soil",
+          "match": { "block": ["minecraft:grass_block", "minecraft:dirt"] },
+          "result_block": "minecraft:farmland",
+          "consume_durability": 1
+        }
+      ]
     },
     {
       "id": "minecraft:bucket",
@@ -56,7 +64,15 @@
       "maxStack": 1,
       "icon": "minecraft:bucket",
       "placeBlock": "minecraft:air",
-      "renderBlock": "minecraft:air"
+      "renderBlock": "minecraft:air",
+      "use_on_block": [
+        {
+          "behavior": "bucket_pickup_fluid",
+          "match": { "block": "minecraft:water" },
+          "result_block": "minecraft:air",
+          "result_item": "minecraft:water_bucket"
+        }
+      ]
     },
     {
       "id": "minecraft:water_bucket",
@@ -64,7 +80,14 @@
       "maxStack": 1,
       "icon": "minecraft:water_bucket",
       "placeBlock": "minecraft:air",
-      "renderBlock": "minecraft:air"
+      "renderBlock": "minecraft:air",
+      "use_on_block": [
+        {
+          "behavior": "bucket_place_fluid",
+          "result_block": "minecraft:water",
+          "result_item": "minecraft:bucket"
+        }
+      ]
     },
     {
       "id": "minecraft:oak_door",

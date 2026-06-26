@@ -1,6 +1,7 @@
 #include "Item.h"
 #include "Paths.h"
 #include "../world/block/BlockStateRegistry.h"
+#include "../world/fluid/FluidRegistry.h"
 
 #include <algorithm>
 #include <array>
@@ -70,6 +71,142 @@ bool resolveBlockToken(const nlohmann::json& value, BlockID& outId) {
     }
 
     return BlockRegistry::tryGetIdByName(token, outId);
+}
+
+ItemID requireItemToken(const nlohmann::json& value, const std::string& context) {
+    ItemID itemId = RUNTIME_ID_NULL;
+    if (!resolveItemToken(value, itemId)) {
+        throw std::runtime_error("Unknown item id in " + context);
+    }
+    return itemId;
+}
+
+BlockID requireBlockToken(const nlohmann::json& value, const std::string& context) {
+    BlockID blockId = RUNTIME_ID_NULL;
+    if (!resolveBlockToken(value, blockId)) {
+        throw std::runtime_error("Unknown block id in " + context);
+    }
+    return blockId;
+}
+
+const nlohmann::json& requireObjectField(const nlohmann::json& owner,
+                                         const std::string& context,
+                                         const char* fieldName) {
+    const auto it = owner.find(fieldName);
+    if (it == owner.end()) {
+        throw std::runtime_error(context + " is missing required field: " + fieldName);
+    }
+    return *it;
+}
+
+ItemUseBehavior parseItemUseBehavior(const nlohmann::json& value, const std::string& context) {
+    if (!value.is_string()) {
+        throw std::runtime_error(context + ".behavior must be a string");
+    }
+
+    const std::string behavior = value.get<std::string>();
+    if (behavior == "till_soil") {
+        return ItemUseBehavior::TillSoil;
+    }
+    if (behavior == "bucket_pickup_fluid") {
+        return ItemUseBehavior::BucketPickupFluid;
+    }
+    if (behavior == "bucket_place_fluid") {
+        return ItemUseBehavior::BucketPlaceFluid;
+    }
+    throw std::runtime_error("Unknown item use behavior in " + context + ": " + behavior);
+}
+
+std::vector<BlockID> parseMatchBlocks(const nlohmann::json& ruleJson, const std::string& context) {
+    const nlohmann::json& matchJson = requireObjectField(ruleJson, context, "match");
+    if (!matchJson.is_object()) {
+        throw std::runtime_error(context + ".match must be an object");
+    }
+
+    const nlohmann::json& blockJson = requireObjectField(matchJson, context + ".match", "block");
+    std::vector<BlockID> blocks;
+    if (blockJson.is_string()) {
+        blocks.push_back(requireBlockToken(blockJson, context + ".match.block"));
+        return blocks;
+    }
+    if (!blockJson.is_array()) {
+        throw std::runtime_error(context + ".match.block must be a string or array");
+    }
+    if (blockJson.empty()) {
+        throw std::runtime_error(context + ".match.block must not be empty");
+    }
+    blocks.reserve(blockJson.size());
+    for (size_t i = 0; i < blockJson.size(); ++i) {
+        blocks.push_back(requireBlockToken(blockJson[i], context + ".match.block"));
+    }
+    return blocks;
+}
+
+uint16_t requireDurabilityCost(const nlohmann::json& ruleJson, const std::string& context) {
+    const nlohmann::json& value = requireObjectField(ruleJson, context, "consume_durability");
+    if (!value.is_number_integer()) {
+        throw std::runtime_error(context + ".consume_durability must be an integer");
+    }
+    const int parsed = value.get<int>();
+    if (parsed < 0 || parsed > 65535) {
+        throw std::runtime_error(context + ".consume_durability is out of range");
+    }
+    return static_cast<uint16_t>(parsed);
+}
+
+void requireFluidResultBlock(const ItemUseRule& rule, const std::string& context) {
+    if (FluidRegistry::tryGetByBlock(rule.resultBlock) == nullptr) {
+        throw std::runtime_error(context + ".result_block must reference a registered fluid block");
+    }
+}
+
+std::vector<ItemUseRule> parseUseOnBlockRules(const nlohmann::json& itemJson, const std::string& itemName) {
+    const auto rulesIt = itemJson.find("use_on_block");
+    if (rulesIt == itemJson.end()) {
+        return {};
+    }
+    if (!rulesIt->is_array()) {
+        throw std::runtime_error("use_on_block must be an array for item: " + itemName);
+    }
+
+    std::vector<ItemUseRule> rules;
+    rules.reserve(rulesIt->size());
+    for (size_t i = 0; i < rulesIt->size(); ++i) {
+        const nlohmann::json& ruleJson = (*rulesIt)[i];
+        const std::string context = itemName + ".use_on_block[" + std::to_string(i) + "]";
+        if (!ruleJson.is_object()) {
+            throw std::runtime_error(context + " must be an object");
+        }
+
+        ItemUseRule rule;
+        rule.behavior = parseItemUseBehavior(requireObjectField(ruleJson, context, "behavior"), context);
+
+        switch (rule.behavior) {
+            case ItemUseBehavior::TillSoil:
+                rule.matchBlocks = parseMatchBlocks(ruleJson, context);
+                rule.resultBlock = requireBlockToken(requireObjectField(ruleJson, context, "result_block"),
+                                                     context + ".result_block");
+                rule.consumeDurability = requireDurabilityCost(ruleJson, context);
+                break;
+            case ItemUseBehavior::BucketPickupFluid:
+                rule.matchBlocks = parseMatchBlocks(ruleJson, context);
+                rule.resultBlock = requireBlockToken(requireObjectField(ruleJson, context, "result_block"),
+                                                     context + ".result_block");
+                rule.resultItem = requireItemToken(requireObjectField(ruleJson, context, "result_item"),
+                                                   context + ".result_item");
+                break;
+            case ItemUseBehavior::BucketPlaceFluid:
+                rule.resultBlock = requireBlockToken(requireObjectField(ruleJson, context, "result_block"),
+                                                     context + ".result_block");
+                requireFluidResultBlock(rule, context);
+                rule.resultItem = requireItemToken(requireObjectField(ruleJson, context, "result_item"),
+                                                   context + ".result_item");
+                break;
+        }
+
+        rules.push_back(std::move(rule));
+    }
+    return rules;
 }
 
 std::vector<NamespacedId> parseItemTagList(const nlohmann::json& ownerJson, const std::string& ownerName) {
@@ -274,6 +411,7 @@ void ItemRegistry::init() {
         }
 
         appendUniqueTags(def.tags, parseItemTagList(itemJson, def.namespacedId.full()));
+        def.useOnBlockRules = parseUseOnBlockRules(itemJson, def.namespacedId.full());
 
         if (itemJson.contains("icon")) {
             ItemID iconId = def.iconItemId;

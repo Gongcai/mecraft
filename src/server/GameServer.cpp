@@ -29,6 +29,7 @@
 #include "../item/Item.h"
 #include "../physics/PhysicsSystem.h"
 #include "../world/block/BlockStateRegistry.h"
+#include "../world/fluid/FluidRegistry.h"
 #include "../world/fluid/FluidState.h"
 #include <cmath>
 #include <cstdio>
@@ -1436,21 +1437,20 @@ void GameServer::broadcastPlayerMode(const net::ClientId clientId, const net::Ne
 
 namespace {
 
-bool isServerTillableSoil(const BlockID blockId) {
-    static const BlockID dirtBlock = BlockRegistry::requireIdByName("minecraft:dirt");
-    static const BlockID grassBlock = BlockRegistry::requireIdByName("minecraft:grass_block");
-    return blockId == dirtBlock || blockId == grassBlock;
-}
-
 bool hasServerEmptySpaceAbove(const World& world, const glm::ivec3& pos) {
     const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
     return world.getBlockState(above.x, above.y, above.z) == RUNTIME_ID_NULL &&
            world.getFluidState(above.x, above.y, above.z) == RUNTIME_ID_NULL;
 }
 
-bool isServerSourceWaterAt(const World& world, const glm::ivec3& pos) {
+bool isServerSourceFluidMatchingRule(const World& world, const glm::ivec3& pos, const ItemUseRule& rule) {
     const StateID fluidState = world.getFluidState(pos.x, pos.y, pos.z);
-    return FluidState::isWater(fluidState) && FluidState::isSource(fluidState);
+    if (!FluidState::isWater(fluidState) || !FluidState::isSource(fluidState)) {
+        return false;
+    }
+
+    const BlockID fluidBlock = BlockStateRegistry::getBlockId(fluidState);
+    return ItemUseRules::matchesBlock(rule, fluidBlock);
 }
 
 bool canServerPlaceSourceWaterAt(const World& world, const glm::ivec3& pos) {
@@ -1475,14 +1475,12 @@ void replaceSelectedServerItem(ecs::InventoryDataComponent& inventoryData, const
     inventoryData.inventory.setSlotStack(inventoryData.inventory.getSelectedSlot(), replacement);
 }
 
-ItemID bucketItemId() {
-    static const ItemID itemId = ItemRegistry::requireIdByName("minecraft:bucket");
-    return itemId;
-}
-
-ItemID waterBucketItemId() {
-    static const ItemID itemId = ItemRegistry::requireIdByName("minecraft:water_bucket");
-    return itemId;
+StateID makeServerSourceFluidState(const BlockID fluidBlock) {
+    const FluidKind fluidKind = FluidRegistry::kindForBlock(fluidBlock);
+    if (fluidKind == FluidKind::Water) {
+        return FluidState::makeWater(0, false);
+    }
+    throw std::runtime_error("Item use rule references unsupported fluid block.");
 }
 
 BlockID removeServerTargetBlock(World& world,
@@ -1576,19 +1574,37 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     }
 
     if (action.action == net::ClientBlockActionType::Till) {
-        const BlockID farmlandBlock = BlockRegistry::requireIdByName("minecraft:farmland");
+        if (m_ecsRegistry == nullptr || !m_ecsRegistry->valid(client.ecsPlayerEntity)) {
+            return;
+        }
+        auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(client.ecsPlayerEntity);
+        auto* inventoryState = m_ecsRegistry->try_get<ecs::InventoryComponent>(client.ecsPlayerEntity);
+        if (inventoryData == nullptr || inventoryState == nullptr) {
+            return;
+        }
+
+        inventoryState->selectedHotbarSlot = std::clamp(static_cast<int>(client.selectedHotbarSlot),
+                                                        0,
+                                                        Inventory::HOTBAR_SIZE - 1);
+        inventoryData->inventory.setSelectedSlot(inventoryState->selectedHotbarSlot);
+
+        const ItemDef& selectedItemDef = ItemRegistry::get(inventoryData->inventory.getSelectedItem());
+        const ItemUseRule* tillRule = ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::TillSoil);
+        if (tillRule == nullptr) {
+            return;
+        }
 
         const StateID targetState =
             m_world.getBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
         const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
-        if (!isServerTillableSoil(targetBlock) || !hasServerEmptySpaceAbove(m_world, action.targetBlock)) {
+        if (!ItemUseRules::matchesBlock(*tillRule, targetBlock) || !hasServerEmptySpaceAbove(m_world, action.targetBlock)) {
             return;
         }
 
         m_world.setBlockState(action.targetBlock.x,
                               action.targetBlock.y,
                               action.targetBlock.z,
-                              BlockStateRegistry::getDefaultState(farmlandBlock));
+                              BlockStateRegistry::getDefaultState(tillRule->resultBlock));
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction till client=%u block=(%d,%d,%d)\n",
                            client.id,
                            action.targetBlock.x,
@@ -1614,9 +1630,12 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                                                         Inventory::HOTBAR_SIZE - 1);
         inventoryData->inventory.setSelectedSlot(inventoryState->selectedHotbarSlot);
 
+        const ItemDef& selectedItemDef = ItemRegistry::get(inventoryData->inventory.getSelectedItem());
         if (action.action == net::ClientBlockActionType::BucketPickupWater) {
-            if (inventoryData->inventory.getSelectedItem() != bucketItemId() ||
-                !isServerSourceWaterAt(m_world, action.targetBlock)) {
+            const ItemUseRule* pickupRule =
+                ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPickupFluid);
+            if (pickupRule == nullptr ||
+                !isServerSourceFluidMatchingRule(m_world, action.targetBlock, *pickupRule)) {
                 return;
             }
 
@@ -1625,7 +1644,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                                   action.targetBlock.z,
                                   RUNTIME_ID_NULL);
             if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
-                replaceSelectedServerItem(*inventoryData, waterBucketItemId());
+                replaceSelectedServerItem(*inventoryData, pickupRule->resultItem);
             }
             MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_pickup_water client=%u block=(%d,%d,%d)\n",
                                client.id,
@@ -1636,8 +1655,13 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             return;
         }
 
-        if (inventoryData->inventory.getSelectedItem() != waterBucketItemId() ||
-            action.blockState != FluidState::makeWater(0, false) ||
+        const ItemUseRule* placeRule =
+            ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
+        const StateID sourceFluid = placeRule != nullptr
+            ? makeServerSourceFluidState(placeRule->resultBlock)
+            : RUNTIME_ID_NULL;
+        if (placeRule == nullptr ||
+            action.blockState != sourceFluid ||
             !canServerPlaceSourceWaterAt(m_world, action.placeBlock)) {
             return;
         }
@@ -1645,9 +1669,9 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         m_world.setFluidState(action.placeBlock.x,
                               action.placeBlock.y,
                               action.placeBlock.z,
-                              FluidState::makeWater(0, false));
+                              sourceFluid);
         if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
-            replaceSelectedServerItem(*inventoryData, bucketItemId());
+            replaceSelectedServerItem(*inventoryData, placeRule->resultItem);
         }
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_place_water client=%u block=(%d,%d,%d)\n",
                            client.id,
