@@ -5,6 +5,7 @@
     "kind": "block_entity",
     "slots": 3
   },
+  "comparatorSignal": true,
   "slotRules": [
     {
       "id": "input",

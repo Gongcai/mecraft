@@ -37,6 +37,7 @@ int main() {
     if (chest.handler != "storage" ||
         chest.storage.kind != ContainerStorageKind::BlockEntity ||
         chest.storage.slots != 27 ||
+        !chest.comparatorSignal ||
         !chest.slotRules.empty() ||
         !chest.processors.empty()) {
         return fail("chest behavior should describe block-entity storage");
@@ -46,6 +47,7 @@ int main() {
     if (barrel.handler != "storage" ||
         barrel.storage.kind != ContainerStorageKind::BlockEntity ||
         barrel.storage.slots != 27 ||
+        !barrel.comparatorSignal ||
         !barrel.slotRules.empty() ||
         !barrel.processors.empty()) {
         return fail("barrel behavior should describe block-entity storage");
@@ -55,6 +57,7 @@ int main() {
     if (furnace.handler != "smelting" ||
         furnace.storage.kind != ContainerStorageKind::BlockEntity ||
         furnace.storage.slots != 3 ||
+        !furnace.comparatorSignal ||
         furnace.slotRules.size() != 3 ||
         furnace.processors.size() != 1) {
         return fail("furnace behavior should describe smelting storage and processor metadata");
@@ -84,7 +87,8 @@ int main() {
     const ContainerBehaviorDef& crafting = ContainerBehaviorRegistry::require("minecraft:crafting_table");
     if (crafting.handler != "crafting" ||
         crafting.storage.kind != ContainerStorageKind::Transient ||
-        crafting.storage.slots != 10) {
+        crafting.storage.slots != 10 ||
+        crafting.comparatorSignal) {
         return fail("crafting table behavior should describe transient crafting storage");
     }
     const ContainerProcessorDef* craftingProcessor = findProcessor(crafting, "crafting");

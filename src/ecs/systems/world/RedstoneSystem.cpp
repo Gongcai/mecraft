@@ -5,8 +5,10 @@
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/RedstoneEventBuffer.h"
 #include "../../../game/inventory/ChestInventoryStore.h"
+#include "../../../game/inventory/ContainerBehaviorRegistry.h"
 #include "../../../game/inventory/FurnaceInventoryStore.h"
 #include "../../../item/Item.h"
+#include "../../../ui/inventory/ContainerUiRegistry.h"
 #include "../../../world/World.h"
 #include "../../../world/block/Block.h"
 #include "../../../world/block/BlockCollision.h"
@@ -387,16 +389,6 @@ uint8_t inventorySignalPower(const int slotCount, StackReader&& stackReader) {
     return static_cast<uint8_t>(std::floor(fullness * 14.0) + 1.0);
 }
 
-BlockID furnaceBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:furnace");
-    return blockId;
-}
-
-BlockID chestBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:chest");
-    return blockId;
-}
-
 uint8_t containerSignalPowerAt(const World& world,
                                const GameplayRegistry* registry,
                                const glm::ivec3& position) {
@@ -406,7 +398,18 @@ uint8_t containerSignalPowerAt(const World& world,
     }
 
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    if (blockId == chestBlockId()) {
+    const BlockDef& blockDef = BlockRegistry::getFast(blockId);
+    if (blockDef.containerUi.empty()) {
+        return 0;
+    }
+
+    const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(blockDef.containerUi);
+    const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
+    if (!behavior.comparatorSignal) {
+        return 0;
+    }
+
+    if (behavior.handler == "storage") {
         if (registry == nullptr || !registry->ctxHas<ChestInventoryStore>()) {
             return 0;
         }
@@ -415,12 +418,12 @@ uint8_t containerSignalPowerAt(const World& world,
         if (chest == nullptr) {
             return 0;
         }
-        return inventorySignalPower(ChestInventory::SLOT_COUNT, [chest](const int slot) {
+        return inventorySignalPower(behavior.storage.slots, [chest](const int slot) {
             return chest->getSlotStack(slot);
         });
     }
 
-    if (blockId == furnaceBlockId()) {
+    if (behavior.handler == "smelting") {
         if (registry == nullptr || !registry->ctxHas<FurnaceInventoryStore>()) {
             return 0;
         }
@@ -429,12 +432,13 @@ uint8_t containerSignalPowerAt(const World& world,
         if (furnace == nullptr) {
             return 0;
         }
-        return inventorySignalPower(FurnaceInventory::SLOT_COUNT, [furnace](const int slot) {
+        return inventorySignalPower(behavior.storage.slots, [furnace](const int slot) {
             return furnace->getSlotStack(slot);
         });
     }
 
-    return 0;
+    throw std::runtime_error("Comparator signal is not implemented for container behavior handler: " +
+                             behavior.handler);
 }
 
 bool isPotentialSourceState(const StateID stateId) {

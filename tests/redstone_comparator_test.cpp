@@ -10,6 +10,7 @@
 #include "../src/ecs/GameplayRegistry.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
 #include "../src/game/inventory/ChestInventoryStore.h"
+#include "../src/game/inventory/FurnaceInventoryStore.h"
 #include "../src/item/Item.h"
 #include "../src/world/World.h"
 #include "../src/world/block/Block.h"
@@ -174,8 +175,10 @@ int main() {
         ecs::GameplayRegistry registry;
         ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
         ChestInventory& chest = store.getOrCreate(chestPosition);
-        for (int slot = 0; slot < ChestInventory::SLOT_COUNT / 2; ++slot) {
-            chest.setSlotItem(slot, ItemRegistry::requireIdByName("minecraft:coal"), ItemRegistry::get(ItemRegistry::requireIdByName("minecraft:coal")).maxStack);
+        const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
+        const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
+        for (int slot = 0; slot < 14; ++slot) {
+            chest.setSlotItem(slot, coalId, coalMaxStack);
         }
 
         world.setBlockState(
@@ -190,6 +193,60 @@ int main() {
             wirePower(world, 3, y, 0) != 8 ||
             !lampLit(world, 4, y, 0)) {
             return fail("compare mode should read half-full chest inventory as signal strength 8");
+        }
+    }
+
+    {
+        const int y = 40;
+        const glm::ivec3 barrelPosition(1, y, 0);
+        prepareComparatorArea(world, y);
+        ecs::GameplayRegistry registry;
+        ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
+        ChestInventory& barrel = store.getOrCreate(barrelPosition);
+        const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
+        const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
+        for (int slot = 0; slot < 14; ++slot) {
+            barrel.setSlotItem(slot, coalId, coalMaxStack);
+        }
+
+        world.setBlockState(
+            barrelPosition.x,
+            barrelPosition.y,
+            barrelPosition.z,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:barrel")));
+        placeComparatorOutput(world, y, PropIndices::MODE_COMPARE);
+
+        ecs::RedstoneSystem::processWorld(world, 4, registry);
+        if (!powered(world, 2, y, 0) ||
+            wirePower(world, 3, y, 0) != 8 ||
+            !lampLit(world, 4, y, 0)) {
+            return fail("compare mode should read data-driven barrel inventory as signal strength 8");
+        }
+    }
+
+    {
+        const int y = 32;
+        const glm::ivec3 furnacePosition(1, y, 0);
+        prepareComparatorArea(world, y);
+        ecs::GameplayRegistry registry;
+        FurnaceInventoryStore& store = registry.ctxSet<FurnaceInventoryStore>();
+        FurnaceInventory& furnace = store.getOrCreate(furnacePosition);
+        const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
+        const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
+        furnace.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{coalId, coalMaxStack, 0});
+
+        world.setBlockState(
+            furnacePosition.x,
+            furnacePosition.y,
+            furnacePosition.z,
+            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:furnace")));
+        placeComparatorOutput(world, y, PropIndices::MODE_COMPARE);
+
+        ecs::RedstoneSystem::processWorld(world, 5, registry);
+        if (!powered(world, 2, y, 0) ||
+            wirePower(world, 3, y, 0) != 5 ||
+            !lampLit(world, 4, y, 0)) {
+            return fail("compare mode should read data-driven furnace inventory as signal strength 5");
         }
     }
 

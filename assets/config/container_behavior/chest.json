@@ -5,6 +5,7 @@
     "kind": "block_entity",
     "slots": 27
   },
+  "comparatorSignal": true,
   "slotRules": [],
   "processors": []
 }

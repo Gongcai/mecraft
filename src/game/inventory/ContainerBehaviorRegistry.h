@@ -35,6 +35,7 @@ struct ContainerBehaviorDef {
     std::string id;
     std::string handler;
     ContainerStorageDef storage;
+    bool comparatorSignal = false;
     std::vector<ContainerSlotRuleDef> slotRules;
     std::vector<ContainerProcessorDef> processors;
 };

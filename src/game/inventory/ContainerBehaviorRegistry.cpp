@@ -189,6 +189,17 @@ ContainerBehaviorDef parseContainerBehaviorDef(const nlohmann::json& root, const
     def.handler = requireString(root, def.id, "handler");
     requireKnownHandler(def.handler, def.id);
     def.storage = parseStorage(requireField(root, def.id, "storage"), def.id);
+    const auto comparatorSignalIt = root.find("comparatorSignal");
+    if (comparatorSignalIt != root.end()) {
+        if (!comparatorSignalIt->is_boolean()) {
+            throw std::runtime_error(def.id + " requires boolean field: comparatorSignal");
+        }
+        def.comparatorSignal = comparatorSignalIt->get<bool>();
+        if (def.comparatorSignal &&
+            def.storage.kind != ContainerStorageKind::BlockEntity) {
+            throw std::runtime_error(def.id + " comparatorSignal requires block_entity storage");
+        }
+    }
 
     const nlohmann::json& slotRules = requireField(root, def.id, "slotRules");
     if (!slotRules.is_array()) {
