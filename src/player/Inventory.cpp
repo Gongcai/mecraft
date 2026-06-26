@@ -1,7 +1,24 @@
 #include "Inventory.h"
 #include "../item/Item.h"
 #include <algorithm>
+#include <stdexcept>
+#include <string>
 #include <utility>
+
+namespace {
+ItemID requiredBlockItem(const char* blockName) {
+    const BlockID blockId = BlockRegistry::requireIdByName(blockName);
+    const ItemID itemId = ItemRegistry::fromBlock(blockId);
+    if (itemId == 0) {
+        throw std::runtime_error(std::string("Required block item is not registered: ") + blockName);
+    }
+    return itemId;
+}
+
+ItemID requiredItem(const char* itemName) {
+    return ItemRegistry::requireIdByName(itemName);
+}
+}
 
 Inventory::Inventory() : m_slots{} {
     for (ItemStack& stack : m_slots) {
@@ -15,27 +32,27 @@ void Inventory::initializeDefaultLoadout() {
     }
 
     // Default hotbar content. Call only after block/item registries are initialized.
-    setSlotItem(0, BlockIds::DIRT,64);
-    setSlotItem(1, BlockIds::GRASS);
-    setSlotItem(2, BlockIds::STONE);
-    setSlotItem(3, BlockIds::SAND);
-    setSlotItem(4, BlockIds::WOOD);
-    setSlotItem(5, BlockIds::GLASS);
-    setSlotItem(6, BlockIds::COAL_ORE);
-    setSlotItem(7, ItemIds::APPLE, 16);
-    setSlotItem(8, ItemIds::IRON_PICKAXE, 1);
-    setSlotItem(18, ItemIds::IRON_HOE, 1);
-    setSlotItem(13, BlockIds::TORCH, 64);
-    setSlotItem(14, ItemRegistry::fromBlock(BlockIds::BLUE_WOOL), 64);
-    setSlotItem(15,BlockIds::BIRCH_LEAVES,64);
-    setSlotItem(17, ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:chest")), 64);
+    setSlotItem(0, requiredBlockItem("minecraft:dirt"), 64);
+    setSlotItem(1, requiredBlockItem("minecraft:grass_block"));
+    setSlotItem(2, requiredBlockItem("minecraft:stone"));
+    setSlotItem(3, requiredBlockItem("minecraft:sand"));
+    setSlotItem(4, requiredBlockItem("minecraft:oak_log"));
+    setSlotItem(5, requiredBlockItem("minecraft:glass"));
+    setSlotItem(6, requiredBlockItem("minecraft:coal_ore"));
+    setSlotItem(7, requiredItem("minecraft:apple"), 16);
+    setSlotItem(8, requiredItem("minecraft:iron_pickaxe"), 1);
+    setSlotItem(18, requiredItem("minecraft:iron_hoe"), 1);
+    setSlotItem(13, requiredBlockItem("minecraft:torch"), 64);
+    setSlotItem(14, requiredBlockItem("minecraft:blue_wool"), 64);
+    setSlotItem(15, requiredBlockItem("minecraft:birch_leaves"), 64);
+    setSlotItem(17, requiredBlockItem("minecraft:chest"), 64);
     // Default inventory content.
-    setSlotItem(9, BlockIds::IRON_ORE);
-    setSlotItem(10, BlockIds::DIAMOND_ORE);
-    setSlotItem(11, ItemIds::WATER_BUCKET, 1);
-    setSlotItem(12, BlockIds::BIRCH_LOG);
-    setSlotItem(16, ItemIds::COAL, 16);
-    setSlotItem(19, ItemIds::BUCKET, 1);
+    setSlotItem(9, requiredBlockItem("minecraft:iron_ore"));
+    setSlotItem(10, requiredBlockItem("minecraft:diamond_ore"));
+    setSlotItem(11, requiredItem("minecraft:water_bucket"), 1);
+    setSlotItem(12, requiredBlockItem("minecraft:birch_log"));
+    setSlotItem(16, requiredItem("minecraft:coal"), 16);
+    setSlotItem(19, requiredItem("minecraft:bucket"), 1);
 }
 
 void Inventory::setSelectedSlot(int slot) {

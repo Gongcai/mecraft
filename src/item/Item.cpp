@@ -348,6 +348,14 @@ ItemID ItemRegistry::findByName(const std::string& name) {
     return id;
 }
 
+ItemID ItemRegistry::requireIdByName(const std::string& name) {
+    ItemID id = 0;
+    if (!tryGetIdByName(name, id)) {
+        throw std::runtime_error("Required item is not registered: " + name);
+    }
+    return id;
+}
+
 bool ItemRegistry::tryGetIdByName(const std::string& name, ItemID& outId) {
     if (!s_initialized && !s_initializing) {
         init();

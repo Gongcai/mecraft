@@ -91,6 +91,8 @@ void BucketUseSystem::update(SystemContext& ctx) {
     auto& registry = ctx.registry;
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
     auto& audioBus = ensureAudioEventBus(registry);
+    static const ItemID bucketItem = ItemRegistry::requireIdByName("minecraft:bucket");
+    static const ItemID waterBucketItem = ItemRegistry::requireIdByName("minecraft:water_bucket");
 
     auto view = registry.view<LocalPlayerTag,
                               BlockActionIntentComponent,
@@ -118,11 +120,11 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
         Inventory& inventory = inventoryData.inventory;
         const ItemID selectedItem = inventory.getSelectedItem();
-        if (selectedItem != ItemIds::BUCKET && selectedItem != ItemIds::WATER_BUCKET) {
+        if (selectedItem != bucketItem && selectedItem != waterBucketItem) {
             continue;
         }
 
-        if (selectedItem == ItemIds::BUCKET) {
+        if (selectedItem == bucketItem) {
             const glm::ivec3 pickupPos = target.targetBlock;
             if (!isWithinInteractionReach(transform.position, pickupPos) ||
                 !isSourceWaterAt(worldView, pickupPos)) {
@@ -147,7 +149,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
             mutableWorld->setFluidState(pickupPos.x, pickupPos.y, pickupPos.z, BlockIds::AIR);
             if (modeRules.shouldReportBreakProgress()) {
-                replaceSelectedItem(inventory, ItemIds::WATER_BUCKET);
+                replaceSelectedItem(inventory, waterBucketItem);
             }
             runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
             audioBus.push({"item.bucket.fill", glm::vec3(pickupPos) + glm::vec3(0.5f), true, 1.0f});
@@ -180,7 +182,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
         mutableWorld->setFluidState(placePos.x, placePos.y, placePos.z, sourceWater);
         if (modeRules.shouldReportBreakProgress()) {
-            replaceSelectedItem(inventory, ItemIds::BUCKET);
+            replaceSelectedItem(inventory, bucketItem);
         }
         runtime.placeCooldownRemaining = modeRules.placeCooldownSeconds();
         audioBus.push({"item.bucket.empty", glm::vec3(placePos) + glm::vec3(0.5f), true, 1.0f});

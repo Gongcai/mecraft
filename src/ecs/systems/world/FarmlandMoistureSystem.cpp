@@ -45,10 +45,7 @@ void FarmlandMoistureSystem::update(SystemContext& ctx) {
 }
 
 size_t FarmlandMoistureSystem::hydrateLoadedFarmland(World& world) {
-    const BlockID farmlandBlock = BlockRegistry::findByName("farmland");
-    if (farmlandBlock == BlockIds::AIR) {
-        return 0;
-    }
+    const BlockID farmlandBlock = BlockRegistry::requireIdByName("minecraft:farmland");
 
     const FarmlandMoistureProperties props = getMoistureProperties();
     if (props.moisture == BlockStateRegistry::INVALID_INDEX ||

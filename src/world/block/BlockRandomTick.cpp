@@ -117,7 +117,8 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
         return false;
     }
 
-    ctx.world.setBlockState(ctx.pos.x, ctx.pos.y, ctx.pos.z, BlockIds::DIRT);
+    const BlockID dirtBlock = BlockRegistry::requireIdByName("minecraft:dirt");
+    ctx.world.setBlockState(ctx.pos.x, ctx.pos.y, ctx.pos.z, dirtBlock);
     return true;
 }
 

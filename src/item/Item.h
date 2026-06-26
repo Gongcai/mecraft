@@ -72,6 +72,7 @@ public:
     static void init();
     [[nodiscard]] static const ItemDef& get(ItemID id);
     [[nodiscard]] static ItemID findByName(const std::string& name);
+    [[nodiscard]] static ItemID requireIdByName(const std::string& name);
     [[nodiscard]] static bool tryGetIdByName(const std::string& name, ItemID& outId);
     [[nodiscard]] static ItemID getId(const NamespacedId& namespacedId);
     [[nodiscard]] static bool tryGetId(const NamespacedId& namespacedId, ItemID& outId);

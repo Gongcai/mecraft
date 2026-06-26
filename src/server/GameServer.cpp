@@ -1437,7 +1437,9 @@ void GameServer::broadcastPlayerMode(const net::ClientId clientId, const net::Ne
 namespace {
 
 bool isServerTillableSoil(const BlockID blockId) {
-    return blockId == BlockIds::DIRT || blockId == BlockIds::GRASS;
+    static const BlockID dirtBlock = BlockRegistry::requireIdByName("minecraft:dirt");
+    static const BlockID grassBlock = BlockRegistry::requireIdByName("minecraft:grass_block");
+    return blockId == dirtBlock || blockId == grassBlock;
 }
 
 bool hasServerEmptySpaceAbove(const World& world, const glm::ivec3& pos) {
@@ -1471,6 +1473,16 @@ void replaceSelectedServerItem(ecs::InventoryDataComponent& inventoryData, const
     replacement.count = 1;
     replacement.durability = 0;
     inventoryData.inventory.setSlotStack(inventoryData.inventory.getSelectedSlot(), replacement);
+}
+
+ItemID bucketItemId() {
+    static const ItemID itemId = ItemRegistry::requireIdByName("minecraft:bucket");
+    return itemId;
+}
+
+ItemID waterBucketItemId() {
+    static const ItemID itemId = ItemRegistry::requireIdByName("minecraft:water_bucket");
+    return itemId;
 }
 
 BlockID removeServerTargetBlock(World& world,
@@ -1564,10 +1576,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     }
 
     if (action.action == net::ClientBlockActionType::Till) {
-        const BlockID farmlandBlock = BlockRegistry::findByName("farmland");
-        if (farmlandBlock == BlockIds::AIR) {
-            return;
-        }
+        const BlockID farmlandBlock = BlockRegistry::requireIdByName("minecraft:farmland");
 
         const StateID targetState =
             m_world.getBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
@@ -1606,7 +1615,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         inventoryData->inventory.setSelectedSlot(inventoryState->selectedHotbarSlot);
 
         if (action.action == net::ClientBlockActionType::BucketPickupWater) {
-            if (inventoryData->inventory.getSelectedItem() != ItemIds::BUCKET ||
+            if (inventoryData->inventory.getSelectedItem() != bucketItemId() ||
                 !isServerSourceWaterAt(m_world, action.targetBlock)) {
                 return;
             }
@@ -1616,7 +1625,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                                   action.targetBlock.z,
                                   BlockIds::AIR);
             if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
-                replaceSelectedServerItem(*inventoryData, ItemIds::WATER_BUCKET);
+                replaceSelectedServerItem(*inventoryData, waterBucketItemId());
             }
             MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_pickup_water client=%u block=(%d,%d,%d)\n",
                                client.id,
@@ -1627,7 +1636,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             return;
         }
 
-        if (inventoryData->inventory.getSelectedItem() != ItemIds::WATER_BUCKET ||
+        if (inventoryData->inventory.getSelectedItem() != waterBucketItemId() ||
             action.blockState != FluidState::makeWater(0, false) ||
             !canServerPlaceSourceWaterAt(m_world, action.placeBlock)) {
             return;
@@ -1638,7 +1647,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                               action.placeBlock.z,
                               FluidState::makeWater(0, false));
         if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
-            replaceSelectedServerItem(*inventoryData, ItemIds::BUCKET);
+            replaceSelectedServerItem(*inventoryData, bucketItemId());
         }
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_place_water client=%u block=(%d,%d,%d)\n",
                            client.id,

@@ -35,7 +35,9 @@ bool isHoe(const ItemStack& stack) {
 }
 
 bool isTillableSoil(const BlockID blockId) {
-    return blockId == BlockIds::DIRT || blockId == BlockIds::GRASS;
+    static const BlockID dirtBlock = BlockRegistry::requireIdByName("minecraft:dirt");
+    static const BlockID grassBlock = BlockRegistry::requireIdByName("minecraft:grass_block");
+    return blockId == dirtBlock || blockId == grassBlock;
 }
 
 bool hasEmptySpaceAbove(const IWorldView& worldView, const glm::ivec3& pos) {
@@ -65,10 +67,7 @@ void SoilTillingSystem::update(SystemContext& ctx) {
     const IGameplayModeRules& modeRules = resolveModeRules(registry);
     auto& audioBus = ensureAudioEventBus(registry);
 
-    const BlockID farmlandBlock = BlockRegistry::findByName("farmland");
-    if (farmlandBlock == BlockIds::AIR) {
-        return;
-    }
+    const BlockID farmlandBlock = BlockRegistry::requireIdByName("minecraft:farmland");
     const StateID farmlandState = BlockStateRegistry::getDefaultState(farmlandBlock);
 
     auto view = registry.view<LocalPlayerTag,
