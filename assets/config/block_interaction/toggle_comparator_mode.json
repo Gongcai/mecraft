@@ -1,0 +1,6 @@
+{
+  "id": "minecraft:toggle_comparator_mode",
+  "action": "cycle_property",
+  "property": "mode",
+  "values": ["compare", "subtract"]
+}

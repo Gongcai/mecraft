@@ -1,0 +1,7 @@
+{
+  "id": "minecraft:toggle_powered",
+  "action": "toggle_boolean_property",
+  "property": "powered",
+  "falseValue": "false",
+  "trueValue": "true"
+}

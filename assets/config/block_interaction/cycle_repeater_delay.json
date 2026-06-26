@@ -1,0 +1,6 @@
+{
+  "id": "minecraft:cycle_repeater_delay",
+  "action": "cycle_property",
+  "property": "delay",
+  "values": ["1", "2", "3", "4"]
+}

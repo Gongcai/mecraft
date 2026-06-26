@@ -106,6 +106,8 @@ set(SRC_GAME
         src/game/states/SleepingState.cpp
         src/game/states/CommandState.cpp
         src/game/states/StateDependencies.cpp
+        src/game/interaction/BlockInteractionDispatcher.cpp
+        src/game/interaction/BlockInteractionRegistry.cpp
         src/game/redstone/RedstoneControlInteraction.cpp
         src/game/presentation/GameplayPresentationBuilder.cpp
         src/game/presentation/GameplayHudPresenter.cpp
@@ -631,6 +633,8 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(crafting_grid_control_test tests/crafting_grid_control_test.cpp)
     add_mecraft_test(container_behavior_registry_test tests/container_behavior_registry_test.cpp)
     mecraft_copy_runtime_assets(container_behavior_registry_test)
+    add_mecraft_test(block_interaction_registry_test tests/block_interaction_registry_test.cpp)
+    mecraft_copy_runtime_assets(block_interaction_registry_test)
     add_mecraft_test(container_state_factory_test tests/container_state_factory_test.cpp)
     mecraft_copy_runtime_assets(container_state_factory_test)
     add_mecraft_test(container_ui_registry_test tests/container_ui_registry_test.cpp)
@@ -667,6 +671,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(redstone_piston_test tests/redstone_piston_test.cpp)
     mecraft_copy_runtime_assets(redstone_piston_test)
     add_mecraft_test(redstone_control_interaction_test tests/redstone_control_interaction_test.cpp)
+    mecraft_copy_runtime_assets(redstone_control_interaction_test)
     add_mecraft_test(bucket_use_test tests/bucket_use_test.cpp)
     mecraft_copy_runtime_assets(bucket_use_test)
     add_mecraft_test(water_spread_test tests/water_spread_test.cpp)

@@ -1,0 +1,8 @@
+{
+  "id": "minecraft:toggle_door_open",
+  "action": "toggle_boolean_property",
+  "property": "open",
+  "falseValue": "false",
+  "trueValue": "true",
+  "partnerSync": "door_open"
+}

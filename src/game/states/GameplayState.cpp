@@ -10,7 +10,7 @@
 #include "CommandState.h"
 #include "GameplayStateEcsBridge.h"
 #include "SleepingState.h"
-#include "../redstone/RedstoneControlInteraction.h"
+#include "../interaction/BlockInteractionDispatcher.h"
 #include "../inventory/ContainerStateFactory.h"
 #include "../inventory/CreativeInventoryState.h"
 #include "../inventory/InventoryState.h"
@@ -26,9 +26,7 @@
 #include "../../ui/core/UIRenderer.h"
 #include "../../world/World.h"
 #include "../../world/block/BedBlock.h"
-#include "../../world/block/DoorBlock.h"
 #include "../../world/block/BlockStateRegistry.h"
-#include "../../world/block/PropIndices.h"
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -42,6 +40,7 @@ GameplayState::GameplayState(StateDependencies deps,
               deps.ecsRegistry,
               deps.inventory,
               deps.localeManager,
+              deps.gameClient,
               deps.renderScene,
               &deps.world,
               [&world = deps.world, &client = deps.gameClient](const int distance) {
@@ -148,9 +147,11 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
     }
 
     auto view = m_ctx.ecsRegistry.view<ecs::LocalPlayerTag,
+                                       ecs::TransformComponent,
                                        ecs::BlockTargetComponent,
                                        ecs::BlockInteractionRuntimeComponent>();
     for (auto entity : view) {
+        const auto& transform = view.get<ecs::TransformComponent>(entity);
         const auto& target = view.get<ecs::BlockTargetComponent>(entity);
         auto& runtime = view.get<ecs::BlockInteractionRuntimeComponent>(entity);
         if (!target.hasTarget) {
@@ -170,19 +171,15 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
             target.targetBlock.y,
             target.targetBlock.z);
         const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
-        if (game::redstone::isControlBlock(targetBlock)) {
-            const StateID updatedState = game::redstone::nextControlState(targetState);
-            if (DoorBlockLogic::isDoorState(targetState)) {
-                DoorBlockLogic::setDoorOpen(
-                    *m_ctx.world,
-                    target.targetBlock,
-                    BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::OPEN) == PropIndices::OPEN_TRUE);
+        if (game::interaction::hasBlockInteraction(targetBlock)) {
+            if (m_ctx.isMultiplayer) {
+                net::ClientBlockAction action;
+                action.action = net::ClientBlockActionType::Interact;
+                action.targetBlock = target.targetBlock;
+                action.playerPosition = transform.position;
+                m_ctx.gameClient.sendBlockAction(action);
             } else {
-                m_ctx.world->setBlockState(
-                    target.targetBlock.x,
-                    target.targetBlock.y,
-                    target.targetBlock.z,
-                    updatedState);
+                game::interaction::applyBlockInteraction(*m_ctx.world, target.targetBlock);
             }
             runtime.placeCooldownRemaining = std::max(runtime.placeCooldownRemaining,
                                                       m_modeRules.placeCooldownSeconds());

@@ -319,6 +319,7 @@
     {
       "id": "minecraft:oak_door",
       "drop": "minecraft:oak_door",
+      "interaction": "minecraft:toggle_door_open",
       "materialKind": "wood",
       "isSolid": false,
       "isRedstoneConductor": false,
@@ -388,6 +389,7 @@
     {
       "id": "minecraft:oak_trapdoor",
       "drop": "minecraft:oak_trapdoor",
+      "interaction": "minecraft:toggle_open",
       "materialKind": "wood",
       "isSolid": false,
       "isRedstoneConductor": false,
@@ -425,6 +427,7 @@
     {
       "id": "minecraft:oak_fence_gate",
       "drop": "minecraft:oak_fence_gate",
+      "interaction": "minecraft:toggle_open",
       "materialKind": "wood",
       "isSolid": false,
       "isRedstoneConductor": false,
@@ -1112,6 +1115,7 @@
     {
       "id": "minecraft:lever",
       "drop": "minecraft:lever",
+      "interaction": "minecraft:toggle_powered",
       "redstoneBehavior": "lever",
       "isRedstoneConductor": false,
       "isRedstonePowerSource": true,
@@ -1148,6 +1152,7 @@
     {
       "id": "minecraft:stone_button",
       "drop": "minecraft:stone_button",
+      "interaction": "minecraft:button_press",
       "redstoneBehavior": "button",
       "isRedstoneConductor": false,
       "isRedstonePowerSource": true,
@@ -1184,6 +1189,7 @@
     {
       "id": "minecraft:oak_button",
       "drop": "minecraft:oak_button",
+      "interaction": "minecraft:button_press",
       "redstoneBehavior": "button",
       "isRedstoneConductor": false,
       "isRedstonePowerSource": true,
@@ -1270,6 +1276,7 @@
     {
       "id": "minecraft:repeater",
       "drop": "minecraft:repeater",
+      "interaction": "minecraft:cycle_repeater_delay",
       "redstoneBehavior": "repeater",
       "isRedstoneConductor": false,
       "properties": {
@@ -1362,6 +1369,7 @@
     {
       "id": "minecraft:comparator",
       "drop": "minecraft:comparator",
+      "interaction": "minecraft:toggle_comparator_mode",
       "redstoneBehavior": "comparator",
       "isRedstoneConductor": false,
       "properties": {

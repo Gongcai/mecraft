@@ -22,6 +22,7 @@
 #include "../ecs/systems/world/RedstoneSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
+#include "../game/interaction/BlockInteractionDispatcher.h"
 #include "../game/inventory/ChestInventoryLifecycle.h"
 #include "../game/inventory/ChestInventoryStore.h"
 #include "../game/inventory/FurnaceInventoryLifecycle.h"
@@ -1477,6 +1478,19 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     }
 
     client.lastPosition = action.playerPosition;
+
+    if (action.action == net::ClientBlockActionType::Interact) {
+        if (!game::interaction::applyBlockInteraction(m_world, action.targetBlock)) {
+            return;
+        }
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction interact client=%u block=(%d,%d,%d)\n",
+                           client.id,
+                           action.targetBlock.x,
+                           action.targetBlock.y,
+                           action.targetBlock.z);
+        MECRAFT_LOG_FLUSH(stdout);
+        return;
+    }
 
     if (action.action == net::ClientBlockActionType::Break) {
         const BlockID target = m_world.getBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);

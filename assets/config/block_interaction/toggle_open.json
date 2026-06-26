@@ -1,0 +1,7 @@
+{
+  "id": "minecraft:toggle_open",
+  "action": "toggle_boolean_property",
+  "property": "open",
+  "falseValue": "false",
+  "trueValue": "true"
+}

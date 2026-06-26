@@ -571,6 +571,87 @@ static void testClientBlockActionMergesStackedSlabs() {
     std::printf("[PASS] testClientBlockActionMergesStackedSlabs\n");
 }
 
+static void testClientBlockActionInteractIsServerAuthoritative() {
+    ServerHarness harness;
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+
+    const glm::ivec3 targetBlock(2, Chunk::SIZE_Y - 8, 2);
+    for (int tick = 0;
+         tick < 240 && !harness.server.world().isChunkLoadedForBlock(targetBlock.x, targetBlock.y, targetBlock.z);
+         ++tick) {
+        harness.server.tick(1.0f / 20.0f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(harness.server.world().isChunkLoadedForBlock(targetBlock.x, targetBlock.y, targetBlock.z),
+            "interact authority test chunk should be loaded");
+
+    harness.server.world().setBlock(targetBlock.x,
+                                    targetBlock.y - 1,
+                                    targetBlock.z,
+                                    BlockRegistry::requireIdByName("minecraft:stone"));
+    harness.server.world().setBlockState(targetBlock.x, targetBlock.y, targetBlock.z, leverState(false));
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::ClientBlockAction interact;
+    interact.sequence = 1;
+    interact.action = net::ClientBlockActionType::Interact;
+    interact.targetBlock = targetBlock;
+    interact.playerPosition = glm::vec3(targetBlock) + glm::vec3(0.5f);
+
+    net::Packet interactPacket;
+    interactPacket.type = net::MessageType::ClientBlockAction;
+    interactPacket.inProcessPayload = interact;
+    clientPtr->pushIncoming(std::move(interactPacket));
+    harness.server.tick(1.0f / 20.0f);
+
+    require(harness.server.world().getBlockState(targetBlock.x, targetBlock.y, targetBlock.z) == leverState(true),
+            "server should toggle the lever after an in-reach interact request");
+    bool sawPoweredLeverUpdate = false;
+    while (!clientPtr->sent.empty()) {
+        net::Packet packet = std::move(clientPtr->sent.front());
+        clientPtr->sent.pop();
+        if (packet.type != net::MessageType::BlockUpdateBatch || !packet.inProcessPayload.has_value()) {
+            continue;
+        }
+        const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
+        for (const net::BlockUpdateEntry& update : batch.updates) {
+            if (update.x == targetBlock.x &&
+                update.y == targetBlock.y &&
+                update.z == targetBlock.z &&
+                update.stateId == leverState(true)) {
+                sawPoweredLeverUpdate = true;
+            }
+        }
+    }
+    require(sawPoweredLeverUpdate,
+            "server should broadcast the powered lever state after an interact request");
+
+    net::ClientBlockAction farInteract = interact;
+    farInteract.sequence = 2;
+    farInteract.playerPosition = glm::vec3(targetBlock) + glm::vec3(32.0f, 0.5f, 0.5f);
+
+    net::Packet farInteractPacket;
+    farInteractPacket.type = net::MessageType::ClientBlockAction;
+    farInteractPacket.inProcessPayload = farInteract;
+    clientPtr->pushIncoming(std::move(farInteractPacket));
+    harness.server.tick(1.0f / 20.0f);
+    require(harness.server.world().getBlockState(targetBlock.x, targetBlock.y, targetBlock.z) == leverState(true),
+            "server should reject out-of-reach interact requests");
+
+    std::printf("[PASS] testClientBlockActionInteractIsServerAuthoritative\n");
+}
+
 static void testChatBroadcastRoundTrip() {
     ServerHarness harness;
     client::GameClient clientA;
@@ -3114,6 +3195,29 @@ static void testClientInputCodecCarriesSelectedHotbarSlot() {
     std::printf("[PASS] testClientInputCodecCarriesSelectedHotbarSlot\n");
 }
 
+static void testClientBlockActionCodecCarriesInteract() {
+    net::ClientBlockAction action;
+    action.sequence = 42;
+    action.action = net::ClientBlockActionType::Interact;
+    action.targetBlock = glm::ivec3(4, 65, -2);
+    action.playerPosition = glm::vec3(4.5f, 65.5f, -1.5f);
+
+    const auto encoded = net::PacketCodec::encodeClientBlockAction(action);
+    net::ClientBlockAction decoded;
+    require(net::PacketCodec::decodeClientBlockAction(encoded.data(), encoded.size(), decoded),
+            "ClientBlockAction codec should decode interact action");
+    require(decoded.sequence == action.sequence,
+            "ClientBlockAction codec should preserve sequence");
+    require(decoded.action == net::ClientBlockActionType::Interact,
+            "ClientBlockAction codec should preserve interact action type");
+    require(decoded.targetBlock == action.targetBlock,
+            "ClientBlockAction codec should preserve interact target block");
+    require(decoded.playerPosition == action.playerPosition,
+            "ClientBlockAction codec should preserve interact player position");
+
+    std::printf("[PASS] testClientBlockActionCodecCarriesInteract\n");
+}
+
 static void testEntitySpawnCodecCarriesEntityId() {
     net::EntitySpawnMessage spawn;
     spawn.netId = 123;
@@ -3794,6 +3898,7 @@ int main() {
     testClientAppliesInventorySnapshot();
     testClientBlockActionRoundTrip();
     testClientBlockActionMergesStackedSlabs();
+    testClientBlockActionInteractIsServerAuthoritative();
     testChatBroadcastRoundTrip();
     testAdminCommandUpdatesWorldState();
     testNonAdminCommandDenied();
@@ -3826,6 +3931,7 @@ int main() {
     testOwnedServerEcsRestoresPersistentDrop();
     testChatCommandCodecRoundTrip();
     testClientInputCodecCarriesSelectedHotbarSlot();
+    testClientBlockActionCodecCarriesInteract();
     testEntitySpawnCodecCarriesEntityId();
     testEntityImpactCodecRoundTrip();
     testEntitySnapshotCodecCarriesHealthAndHurt();

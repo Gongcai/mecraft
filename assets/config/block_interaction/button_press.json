@@ -1,0 +1,6 @@
+{
+  "id": "minecraft:button_press",
+  "action": "set_property_once",
+  "property": "powered",
+  "value": "true"
+}

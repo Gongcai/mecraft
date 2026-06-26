@@ -95,6 +95,8 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.placementStrategy = "simple";
     def.revertPlacementFacing = false;
     def.supportRule.clear();
+    def.containerUi.clear();
+    def.interaction.clear();
     def.tags.clear();
     def.biomeTint = BiomeTintKind::None;
     def.lightLevel = 0;
@@ -513,6 +515,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.revertPlacementFacing = false;
         def.supportRule.clear();
         def.containerUi.clear();
+        def.interaction.clear();
         def.tags.clear();
         def.namedTextureRefs.clear();
         def.namedTextureAnimations.clear();
@@ -591,6 +594,16 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 throw std::runtime_error("containerUi must not be empty for block: " + def.namespacedId.full());
             }
             def.containerUi = containerUi.full();
+        }
+        if (blockJson.contains("interaction")) {
+            if (!blockJson["interaction"].is_string()) {
+                throw std::runtime_error("interaction must be a string for block: " + def.namespacedId.full());
+            }
+            const NamespacedId interaction(blockJson["interaction"].get<std::string>());
+            if (interaction.namespaceStr().empty() || interaction.path().empty()) {
+                throw std::runtime_error("interaction must not be empty for block: " + def.namespacedId.full());
+            }
+            def.interaction = interaction.full();
         }
         def.tags = parseTagList(blockJson, def.namespacedId.full());
         const bool hasExplicitBiomeTint =

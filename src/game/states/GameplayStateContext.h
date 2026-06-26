@@ -12,6 +12,10 @@ class LocaleManager;
 class RenderScene;
 class World;
 
+namespace client {
+class GameClient;
+}
+
 namespace ecs {
 class GameplayRegistry;
 }
@@ -25,6 +29,7 @@ struct GameplayStateContext {
     ecs::GameplayRegistry& ecsRegistry;
     Inventory& inventory;
     const LocaleManager& localeManager;
+    client::GameClient& gameClient;
     RenderScene* renderScene = nullptr;  ///< Optional; for in-game settings screen
     World* world = nullptr;              ///< Optional; active world for settings and world interactions
     std::function<void(int)> renderDistanceSetter;
