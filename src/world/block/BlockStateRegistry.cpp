@@ -260,10 +260,10 @@ ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
     return transform;
 }
 
-StateID parseModelVariantStateKey(const BlockID blockId, const std::string& key) {
+std::vector<std::pair<uint16_t, uint16_t>> parseModelVariantPropertyKey(const std::string& key) {
     const std::string trimmedKey = trimCopy(key);
     if (trimmedKey.empty()) {
-        return BlockStateRegistry::getDefaultState(blockId);
+        return {};
     }
 
     std::vector<std::pair<uint16_t, uint16_t>> props;
@@ -288,12 +288,17 @@ StateID parseModelVariantStateKey(const BlockID blockId, const std::string& key)
         }
         props.emplace_back(nameIndex, valueIndex);
     }
+    return props;
+}
 
-    const StateID stateId = BlockStateRegistry::getState(blockId, props);
-    if (BlockStateRegistry::getBlockId(stateId) != blockId) {
-        throw std::runtime_error("Model variant state key resolved to a different block");
+bool stateMatchesModelVariantProperties(const StateID stateId,
+                                        const std::vector<std::pair<uint16_t, uint16_t>>& props) {
+    for (const auto& [property, value] : props) {
+        if (BlockStateRegistry::getPropertyIndex(stateId, property) != value) {
+            return false;
+        }
     }
-    return stateId;
+    return true;
 }
 }
 
@@ -653,15 +658,25 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
             throw std::runtime_error("Unknown block model referenced by variant: " + modelName);
         }
 
-        const StateID stateId = parseModelVariantStateKey(blockId, it.key());
-        if (stateId >= s_stateModelVariants.size()) {
-            throw std::runtime_error("Model variant state id is outside state registry");
-        }
-
         ModelVariant variant;
         variant.model = model;
         variant.transform = parseModelTransform(it.value());
-        s_stateModelVariants[stateId] = variant;
+
+        const std::vector<std::pair<uint16_t, uint16_t>> props = parseModelVariantPropertyKey(it.key());
+        bool matchedState = false;
+        for (const StateID stateId : getStatesForBlock(blockId)) {
+            if (!stateMatchesModelVariantProperties(stateId, props)) {
+                continue;
+            }
+            if (stateId >= s_stateModelVariants.size()) {
+                throw std::runtime_error("Model variant state id is outside state registry");
+            }
+            s_stateModelVariants[stateId] = variant;
+            matchedState = true;
+        }
+        if (!matchedState) {
+            throw std::runtime_error("Model variant state key matched no states: " + it.key());
+        }
     }
 }
 

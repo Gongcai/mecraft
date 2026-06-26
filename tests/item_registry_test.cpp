@@ -205,6 +205,50 @@ int main() {
         return fail("redstone component item icons should use their item textures");
     }
 
+    const ItemID bucketItem = ItemRegistry::findByName("bucket");
+    const ItemID waterBucketItem = ItemRegistry::findByName("water_bucket");
+    if (bucketItem != ItemIds::BUCKET || waterBucketItem != ItemIds::WATER_BUCKET) {
+        return fail("bucket and water_bucket should resolve to their builtin item ids");
+    }
+    const ItemDef& bucket = ItemRegistry::get(ItemIds::BUCKET);
+    const ItemDef& waterBucket = ItemRegistry::get(ItemIds::WATER_BUCKET);
+    if (bucket.maxStack != 1 ||
+        waterBucket.maxStack != 1 ||
+        bucket.placeBlock != BlockIds::AIR ||
+        waterBucket.placeBlock != BlockIds::AIR ||
+        std::string(bucket.iconTextureName) != "bucket" ||
+        std::string(waterBucket.iconTextureName) != "water_bucket") {
+        return fail("bucket items should be non-stackable non-placeable items with explicit item textures");
+    }
+
+    const ItemID oakDoorItem = ItemRegistry::findByName("oak_door");
+    const ItemID oakTrapdoorItem = ItemRegistry::findByName("oak_trapdoor");
+    const ItemID oakFenceGateItem = ItemRegistry::findByName("oak_fence_gate");
+    if (oakDoorItem == ItemIds::AIR ||
+        oakTrapdoorItem == ItemIds::AIR ||
+        oakFenceGateItem == ItemIds::AIR) {
+        return fail("oak door, trapdoor, and fence gate items should be registered");
+    }
+    const ItemDef& oakDoor = ItemRegistry::get(oakDoorItem);
+    const ItemDef& oakTrapdoor = ItemRegistry::get(oakTrapdoorItem);
+    const ItemDef& oakFenceGate = ItemRegistry::get(oakFenceGateItem);
+    if (oakDoor.placeBlock != BlockIds::OAK_DOOR ||
+        oakTrapdoor.placeBlock != BlockIds::OAK_TRAPDOOR ||
+        oakFenceGate.placeBlock != BlockIds::OAK_FENCE_GATE ||
+        oakDoor.renderBlock != BlockIds::OAK_DOOR ||
+        oakTrapdoor.renderBlock != BlockIds::OAK_TRAPDOOR ||
+        oakFenceGate.renderBlock != BlockIds::OAK_FENCE_GATE ||
+        std::string(oakDoor.iconTextureName) != "oak_door" ||
+        std::string(oakTrapdoor.iconTextureName) != "oak_trapdoor" ||
+        std::string(oakFenceGate.iconTextureName) != "oak_planks") {
+        return fail("oak door, trapdoor, and fence gate items should place/render their blocks and use declared icons");
+    }
+    if (ui::shouldUseBakedBlockIcon(oakDoor) ||
+        ui::shouldUseBakedBlockIcon(oakTrapdoor) ||
+        ui::shouldUseBakedBlockIcon(oakFenceGate)) {
+        return fail("oak door, trapdoor, and fence gate item icons should use explicit item textures");
+    }
+
     const ItemID wildflowersItem = ItemRegistry::findByName("wildflowers");
     const ItemID leafLitterItem = ItemRegistry::findByName("leaf_litter");
     const ItemID glowLichenItem = ItemRegistry::findByName("glow_lichen");
@@ -310,6 +354,11 @@ int main() {
     }
     if (BlockDropTable::getDropItem(BlockRegistry::findByName("piston_head")) != ItemIds::AIR) {
         return fail("piston_head should not drop a block item");
+    }
+    if (BlockDropTable::getDropItem(BlockIds::OAK_DOOR) != oakDoorItem ||
+        BlockDropTable::getDropItem(BlockIds::OAK_TRAPDOOR) != oakTrapdoorItem ||
+        BlockDropTable::getDropItem(BlockIds::OAK_FENCE_GATE) != oakFenceGateItem) {
+        return fail("oak door, trapdoor, and fence gate should drop their own items");
     }
 
     std::cout << "[item_registry_test] PASS\n";

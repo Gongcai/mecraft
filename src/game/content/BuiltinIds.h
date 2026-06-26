@@ -53,10 +53,15 @@
     X(DROPPER, "dropper") \
     X(HOPPER, "hopper") \
     X(NOTE_BLOCK, "note_block") \
-    X(TARGET, "target")
+    X(TARGET, "target") \
+    X(OAK_DOOR, "oak_door") \
+    X(OAK_TRAPDOOR, "oak_trapdoor") \
+    X(OAK_FENCE_GATE, "oak_fence_gate")
 
 #define MECRAFT_FOR_EACH_BUILTIN_PURE_ITEM(X) \
     X(COAL, "coal") \
     X(APPLE, "apple") \
     X(IRON_PICKAXE, "iron_pickaxe") \
-    X(IRON_HOE, "iron_hoe")
+    X(IRON_HOE, "iron_hoe") \
+    X(BUCKET, "bucket") \
+    X(WATER_BUCKET, "water_bucket")

@@ -10,6 +10,7 @@
 #include "../src/world/block/BlockModelRegistry.h"
 #include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/block/BedBlock.h"
+#include "../src/world/block/DoorBlock.h"
 #include "../src/renderer/mesh/MeshBuilderRegistry.h"
 #include "../src/world/fluid/FluidRegistry.h"
 #include "../src/world/fluid/FluidState.h"
@@ -54,6 +55,13 @@ int main() {
         PropIndices::PART_HEAD == PropIndices::INVALID ||
         PropIndices::PART_FOOT == PropIndices::INVALID) {
         return fail("bed part properties should be registered from blocks.json");
+    }
+    if (PropIndices::HALF_LOWER == PropIndices::INVALID ||
+        PropIndices::HALF_UPPER == PropIndices::INVALID ||
+        PropIndices::HINGE == PropIndices::INVALID ||
+        PropIndices::HINGE_LEFT == PropIndices::INVALID ||
+        PropIndices::HINGE_RIGHT == PropIndices::INVALID) {
+        return fail("door half and hinge properties should be registered from blocks.json");
     }
 
     const StateID torchDefault = BlockStateRegistry::getDefaultState(BlockIds::TORCH);
@@ -1130,6 +1138,9 @@ int main() {
         BlockIds::DISPENSER,
         BlockIds::DROPPER,
         BlockIds::HOPPER,
+        BlockIds::OAK_DOOR,
+        BlockIds::OAK_TRAPDOOR,
+        BlockIds::OAK_FENCE_GATE,
     };
     for (const BlockID blockId : redstoneModelBlocks) {
         for (const StateID state : BlockStateRegistry::getStatesForBlock(blockId)) {
@@ -1177,6 +1188,124 @@ int main() {
         !pistonBodyFacesMatch("block/piston_extended", "piston_inner") ||
         !pistonBodyFacesMatch("block/sticky_piston_extended", "piston_inner")) {
         return fail("piston body models should orient side textures toward the local front face");
+    }
+
+    const auto declaresPoweredOpenMirror = [](const BlockDef& def) {
+        return def.respondsToRedstone &&
+               def.redstoneControlledProperty == "powered" &&
+               def.redstoneControlledMirrorProperties.size() == 1 &&
+               def.redstoneControlledMirrorProperties.front() == "open";
+    };
+    const BlockDef& oakDoorDef = BlockRegistry::get(BlockIds::OAK_DOOR);
+    if (oakDoorDef.renderShapeName != "model" ||
+        oakDoorDef.renderLayer != BlockRenderLayer::Cutout ||
+        oakDoorDef.placementStrategy != "door" ||
+        oakDoorDef.isSolid ||
+        oakDoorDef.isRedstoneConductor ||
+        !declaresPoweredOpenMirror(oakDoorDef)) {
+        return fail("oak_door should declare model rendering, door placement, and powered open redstone control");
+    }
+    if (!DoorBlockLogic::isDoorBlock(BlockIds::OAK_DOOR)) {
+        return fail("oak_door should be recognized by door block logic through placementStrategy");
+    }
+    const StateID oakDoorDefault = BlockStateRegistry::getDefaultState(BlockIds::OAK_DOOR);
+    if (!DoorBlockLogic::isLowerState(oakDoorDefault) ||
+        BlockStateRegistry::getPropertyIndex(oakDoorDefault, PropIndices::FACING) != PropIndices::FACING_EAST ||
+        BlockStateRegistry::getPropertyIndex(oakDoorDefault, PropIndices::HINGE) != PropIndices::HINGE_LEFT ||
+        BlockStateRegistry::getPropertyIndex(oakDoorDefault, PropIndices::OPEN) != PropIndices::OPEN_FALSE ||
+        BlockStateRegistry::getPropertyIndex(oakDoorDefault, PropIndices::POWERED) != PropIndices::POWERED_FALSE) {
+        return fail("oak_door default state should be an east-facing closed unpowered lower-left half");
+    }
+    const StateID oakDoorUpper = DoorBlockLogic::makeDoorState(
+        BlockIds::OAK_DOOR,
+        PropIndices::FACING_EAST,
+        PropIndices::HALF_UPPER,
+        PropIndices::HINGE_LEFT,
+        false,
+        false);
+    if (!DoorBlockLogic::isUpperState(oakDoorUpper) ||
+        !DoorBlockLogic::isMatchingOtherHalf(oakDoorDefault, oakDoorUpper)) {
+        return fail("door helper should construct a matching upper half for oak_door");
+    }
+    const StateID oakDoorPowered = BlockStateRegistry::withProperty(
+        oakDoorDefault,
+        PropIndices::POWERED,
+        PropIndices::POWERED_TRUE);
+    if (!modelVariantMatches(oakDoorPowered, "block/oak_door_bottom_left", 0, 0)) {
+        return fail("oak_door powered=false/true lower-left states should share the closed model variant");
+    }
+    const StateID oakDoorOpenPowered = BlockStateRegistry::getState(
+        BlockIds::OAK_DOOR,
+        {
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::HALF, PropIndices::HALF_LOWER},
+            {PropIndices::HINGE, PropIndices::HINGE_LEFT},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(oakDoorOpenPowered, "block/oak_door_bottom_left_open", 0, 0)) {
+        return fail("oak_door open powered state should resolve through a partial model variant key");
+    }
+
+    const BlockDef& oakTrapdoorDef = BlockRegistry::get(BlockIds::OAK_TRAPDOOR);
+    if (oakTrapdoorDef.renderShapeName != "model" ||
+        oakTrapdoorDef.renderLayer != BlockRenderLayer::Cutout ||
+        oakTrapdoorDef.placementStrategy != "trapdoor" ||
+        oakTrapdoorDef.isSolid ||
+        oakTrapdoorDef.isRedstoneConductor ||
+        !declaresPoweredOpenMirror(oakTrapdoorDef)) {
+        return fail("oak_trapdoor should declare model rendering, trapdoor placement, and powered open redstone control");
+    }
+    const StateID oakTrapdoorClosedPowered = BlockStateRegistry::getState(
+        BlockIds::OAK_TRAPDOOR,
+        {
+            {PropIndices::FACING, PropIndices::FACING_WEST},
+            {PropIndices::HALF, PropIndices::HALF_BOTTOM},
+            {PropIndices::OPEN, PropIndices::OPEN_FALSE},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(oakTrapdoorClosedPowered, "block/oak_trapdoor_bottom", 0, 0)) {
+        return fail("oak_trapdoor closed powered state should resolve through a partial half/open model key");
+    }
+    const StateID oakTrapdoorOpenEast = BlockStateRegistry::getState(
+        BlockIds::OAK_TRAPDOOR,
+        {
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::HALF, PropIndices::HALF_TOP},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    if (!modelVariantMatches(oakTrapdoorOpenEast, "block/oak_trapdoor_open", 270, 0)) {
+        return fail("oak_trapdoor open east state should resolve through a partial facing/open model key");
+    }
+
+    const BlockDef& oakFenceGateDef = BlockRegistry::get(BlockIds::OAK_FENCE_GATE);
+    if (oakFenceGateDef.renderShapeName != "model" ||
+        oakFenceGateDef.placementStrategy != "horizontal_facing" ||
+        oakFenceGateDef.isSolid ||
+        oakFenceGateDef.isRedstoneConductor ||
+        !declaresPoweredOpenMirror(oakFenceGateDef)) {
+        return fail("oak_fence_gate should declare model rendering, horizontal placement, and powered open redstone control");
+    }
+    const StateID oakFenceGateEastPowered = BlockStateRegistry::getState(
+        BlockIds::OAK_FENCE_GATE,
+        {
+            {PropIndices::FACING, PropIndices::FACING_EAST},
+            {PropIndices::OPEN, PropIndices::OPEN_FALSE},
+            {PropIndices::POWERED, PropIndices::POWERED_TRUE}
+        });
+    if (!modelVariantMatches(oakFenceGateEastPowered, "block/oak_fence_gate", 90, 0)) {
+        return fail("oak_fence_gate powered states should resolve through partial facing/open model variants");
+    }
+    const StateID oakFenceGateWestOpen = BlockStateRegistry::getState(
+        BlockIds::OAK_FENCE_GATE,
+        {
+            {PropIndices::FACING, PropIndices::FACING_WEST},
+            {PropIndices::OPEN, PropIndices::OPEN_TRUE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+    if (!modelVariantMatches(oakFenceGateWestOpen, "block/oak_fence_gate_open", 270, 0)) {
+        return fail("oak_fence_gate open west state should resolve to the rotated open gate model");
     }
 
     const BlockDef& redstoneWireDef = BlockRegistry::get(BlockIds::REDSTONE_WIRE);

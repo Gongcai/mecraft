@@ -2,6 +2,7 @@
 
 #include "BedBlock.h"
 #include "BlockCollision.h"
+#include "DoorBlock.h"
 #include "PropIndices.h"
 
 #include <algorithm>
@@ -388,6 +389,37 @@ StateID strategyBed(const PlacementContext& ctx) {
     return BedBlockLogic::makeBedState(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw), PropIndices::PART_FOOT);
 }
 
+StateID strategyDoor(const PlacementContext& ctx) {
+    return DoorBlockLogic::makeDoorState(
+        ctx.blockId,
+        horizontalFacingFromYaw(ctx.playerYaw),
+        PropIndices::HALF_LOWER,
+        PropIndices::HINGE_LEFT,
+        false,
+        false);
+}
+
+StateID strategyTrapdoor(const PlacementContext& ctx) {
+    if (PropIndices::OPEN == PropIndices::INVALID ||
+        PropIndices::OPEN_FALSE == PropIndices::INVALID ||
+        PropIndices::POWERED == PropIndices::INVALID ||
+        PropIndices::POWERED_FALSE == PropIndices::INVALID) {
+        throw std::runtime_error("Trapdoor placement requires open=false and powered=false properties");
+    }
+
+    const uint16_t facing = ctx.hitNormal.y == 0
+        ? facingFromSideNormal(ctx.hitNormal)
+        : horizontalFacingFromYaw(ctx.playerYaw);
+    return BlockStateRegistry::getState(
+        ctx.blockId,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, facing},
+            {PropIndices::HALF, halfFromHit(ctx)},
+            {PropIndices::OPEN, PropIndices::OPEN_FALSE},
+            {PropIndices::POWERED, PropIndices::POWERED_FALSE}
+        });
+}
+
 StateID strategyFence(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
 }
@@ -477,6 +509,8 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("slab", strategySlab);
     registerStrategy("vertical_slab", strategyVerticalSlab);
     registerStrategy("bed", strategyBed);
+    registerStrategy("door", strategyDoor);
+    registerStrategy("trapdoor", strategyTrapdoor);
     registerStrategy("fence", strategyFence);
     registerStrategy("wall", strategyWall);
     registerStrategy("face_plane_wall", strategyFacePlaneWall);

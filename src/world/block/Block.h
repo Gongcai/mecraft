@@ -277,6 +277,7 @@ struct BlockDef {
     uint8_t redstonePowerOutput = 0;       // Fixed output strength in the inclusive range [0, 15].
     std::string redstoneBehavior;          // Behavior tag used by redstone systems and device-specific logic.
     std::string redstoneControlledProperty; // Boolean state property driven by incoming redstone power.
+    std::vector<std::string> redstoneControlledMirrorProperties; // Boolean state properties updated when the controlled property changes.
     bool redstoneControlledPowerInverted = false; // True when powered blocks select the false property value.
 
     // Convenience: return the TextureArray first layer for a given face (0=top,1=bottom,2=front,3=back,4=left,5=right)

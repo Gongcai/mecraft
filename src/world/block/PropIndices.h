@@ -29,6 +29,7 @@ extern uint16_t TYPE;
 extern uint16_t DELAY;
 extern uint16_t MODE;
 extern uint16_t LOCKED;
+extern uint16_t HINGE;
 
 extern uint16_t FACING_FLOOR;
 extern uint16_t FACING_NORTH;
@@ -49,6 +50,8 @@ extern uint16_t HALF_NORTH;
 extern uint16_t HALF_SOUTH;
 extern uint16_t HALF_EAST;
 extern uint16_t HALF_WEST;
+extern uint16_t HALF_LOWER;
+extern uint16_t HALF_UPPER;
 
 extern uint16_t OPEN_TRUE;
 extern uint16_t OPEN_FALSE;
@@ -125,6 +128,8 @@ extern uint16_t MODE_COMPARE;
 extern uint16_t MODE_SUBTRACT;
 extern uint16_t LOCKED_TRUE;
 extern uint16_t LOCKED_FALSE;
+extern uint16_t HINGE_LEFT;
+extern uint16_t HINGE_RIGHT;
 
 void init();
 

@@ -26,6 +26,7 @@ uint16_t TYPE = INVALID;
 uint16_t DELAY = INVALID;
 uint16_t MODE = INVALID;
 uint16_t LOCKED = INVALID;
+uint16_t HINGE = INVALID;
 
 uint16_t FACING_FLOOR = INVALID;
 uint16_t FACING_NORTH = INVALID;
@@ -46,6 +47,8 @@ uint16_t HALF_NORTH = INVALID;
 uint16_t HALF_SOUTH = INVALID;
 uint16_t HALF_EAST = INVALID;
 uint16_t HALF_WEST = INVALID;
+uint16_t HALF_LOWER = INVALID;
+uint16_t HALF_UPPER = INVALID;
 
 uint16_t OPEN_TRUE = INVALID;
 uint16_t OPEN_FALSE = INVALID;
@@ -122,6 +125,8 @@ uint16_t MODE_COMPARE = INVALID;
 uint16_t MODE_SUBTRACT = INVALID;
 uint16_t LOCKED_TRUE = INVALID;
 uint16_t LOCKED_FALSE = INVALID;
+uint16_t HINGE_LEFT = INVALID;
+uint16_t HINGE_RIGHT = INVALID;
 
 namespace {
 uint16_t lookupName(const char* name) {
@@ -156,6 +161,7 @@ void init() {
     DELAY = lookupName("delay");
     MODE = lookupName("mode");
     LOCKED = lookupName("locked");
+    HINGE = lookupName("hinge");
 
     FACING_FLOOR = lookupValue(FACING, "floor");
     FACING_NORTH = lookupValue(FACING, "north");
@@ -176,6 +182,8 @@ void init() {
     HALF_SOUTH = lookupValue(HALF, "south");
     HALF_EAST = lookupValue(HALF, "east");
     HALF_WEST = lookupValue(HALF, "west");
+    HALF_LOWER = lookupValue(HALF, "lower");
+    HALF_UPPER = lookupValue(HALF, "upper");
 
     OPEN_TRUE = lookupValue(OPEN, "true");
     OPEN_FALSE = lookupValue(OPEN, "false");
@@ -252,6 +260,8 @@ void init() {
     MODE_SUBTRACT = lookupValue(MODE, "subtract");
     LOCKED_TRUE = lookupValue(LOCKED, "true");
     LOCKED_FALSE = lookupValue(LOCKED, "false");
+    HINGE_LEFT = lookupValue(HINGE, "left");
+    HINGE_RIGHT = lookupValue(HINGE, "right");
 }
 
 }

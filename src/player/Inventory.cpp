@@ -32,9 +32,10 @@ void Inventory::initializeDefaultLoadout() {
     // Default inventory content.
     setSlotItem(9, BlockIds::IRON_ORE);
     setSlotItem(10, BlockIds::DIAMOND_ORE);
-    setSlotItem(11, BlockIds::WATER);
+    setSlotItem(11, ItemIds::WATER_BUCKET, 1);
     setSlotItem(12, BlockIds::BIRCH_LOG);
     setSlotItem(16, ItemIds::COAL, 16);
+    setSlotItem(19, ItemIds::BUCKET, 1);
 }
 
 void Inventory::setSelectedSlot(int slot) {

@@ -18,6 +18,14 @@ void requirePoweredProperties() {
     }
 }
 
+void requireOpenProperties() {
+    if (PropIndices::OPEN == PropIndices::INVALID ||
+        PropIndices::OPEN_TRUE == PropIndices::INVALID ||
+        PropIndices::OPEN_FALSE == PropIndices::INVALID) {
+        throw std::runtime_error("Openable interaction requires registered open boolean values");
+    }
+}
+
 void requireRepeaterDelayProperties() {
     if (PropIndices::DELAY == PropIndices::INVALID ||
         PropIndices::DELAY_1 == PropIndices::INVALID ||
@@ -46,9 +54,28 @@ uint16_t toggledPoweredValue(const uint16_t currentPowered) {
     throw std::runtime_error("Lever state contains an unknown powered value");
 }
 
+uint16_t toggledOpenValue(const uint16_t currentOpen) {
+    if (currentOpen == PropIndices::OPEN_FALSE) {
+        return PropIndices::OPEN_TRUE;
+    }
+    if (currentOpen == PropIndices::OPEN_TRUE) {
+        return PropIndices::OPEN_FALSE;
+    }
+    throw std::runtime_error("Openable state contains an unknown open value");
+}
+
 bool isButtonBlock(const BlockID blockId) {
     return blockId == BlockIds::STONE_BUTTON ||
            blockId == BlockIds::OAK_BUTTON;
+}
+
+bool isOpenableBlock(const BlockID blockId) {
+    if (blockId == BlockIds::AIR || PropIndices::OPEN == PropIndices::INVALID) {
+        return false;
+    }
+    const StateID defaultState = BlockStateRegistry::getDefaultState(blockId);
+    const uint16_t currentOpen = BlockStateRegistry::getPropertyIndex(defaultState, PropIndices::OPEN);
+    return currentOpen == PropIndices::OPEN_FALSE || currentOpen == PropIndices::OPEN_TRUE;
 }
 
 uint16_t nextRepeaterDelayValue(const uint16_t currentDelay) {
@@ -94,7 +121,8 @@ bool isControlBlock(const BlockID blockId) {
     return blockId == BlockIds::LEVER ||
            isButtonBlock(blockId) ||
            blockId == BlockIds::REPEATER ||
-           blockId == BlockIds::COMPARATOR;
+           blockId == BlockIds::COMPARATOR ||
+           isOpenableBlock(blockId);
 }
 
 StateID nextControlState(const StateID currentState) {
@@ -156,6 +184,19 @@ StateID nextControlState(const StateID currentState) {
             PropIndices::MODE,
             toggledComparatorModeValue(currentMode),
             "Comparator mode");
+    }
+
+    if (isOpenableBlock(blockId)) {
+        requireOpenProperties();
+        const uint16_t currentOpen = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::OPEN);
+        if (currentOpen == BlockStateRegistry::INVALID_INDEX) {
+            throw std::runtime_error("Openable state is missing the open property");
+        }
+        return withRequiredProperty(
+            currentState,
+            PropIndices::OPEN,
+            toggledOpenValue(currentOpen),
+            "Openable open");
     }
 
     throw std::runtime_error("Unsupported redstone control block interaction");

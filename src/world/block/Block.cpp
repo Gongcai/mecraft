@@ -441,6 +441,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         s_blocks[i].redstonePowerOutput = 0;
         s_blocks[i].redstoneBehavior.clear();
         s_blocks[i].redstoneControlledProperty.clear();
+        s_blocks[i].redstoneControlledMirrorProperties.clear();
         s_blocks[i].redstoneControlledPowerInverted = false;
         setAllFaces(s_blocks[i], makeStaticWorldTexture(0));
         s_blockDropIds[i] = NamespacedId("minecraft", "air");
@@ -548,6 +549,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.redstonePowerOutput = 0;
         def.redstoneBehavior.clear();
         def.redstoneControlledProperty.clear();
+        def.redstoneControlledMirrorProperties.clear();
         def.redstoneControlledPowerInverted = false;
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
@@ -671,6 +673,38 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
             if (!def.respondsToRedstone) {
                 throw std::runtime_error("redstoneControlledProperty requires respondsToRedstone=true for block: " + def.namespacedId.full());
+            }
+        }
+        if (blockJson.contains("redstoneControlledMirrorProperties")) {
+            if (!blockJson["redstoneControlledMirrorProperties"].is_array()) {
+                throw std::runtime_error("redstoneControlledMirrorProperties must be an array for block: " +
+                                         def.namespacedId.full());
+            }
+            if (def.redstoneControlledProperty.empty()) {
+                throw std::runtime_error("redstoneControlledMirrorProperties requires redstoneControlledProperty for block: " +
+                                         def.namespacedId.full());
+            }
+            for (const nlohmann::json& mirrorJson : blockJson["redstoneControlledMirrorProperties"]) {
+                if (!mirrorJson.is_string()) {
+                    throw std::runtime_error("redstoneControlledMirrorProperties entries must be strings for block: " +
+                                             def.namespacedId.full());
+                }
+                const std::string mirrorProperty = mirrorJson.get<std::string>();
+                if (mirrorProperty.empty()) {
+                    throw std::runtime_error("redstoneControlledMirrorProperties entries must not be empty for block: " +
+                                             def.namespacedId.full());
+                }
+                if (mirrorProperty == def.redstoneControlledProperty) {
+                    throw std::runtime_error("redstoneControlledMirrorProperties must not repeat redstoneControlledProperty for block: " +
+                                             def.namespacedId.full());
+                }
+                if (std::find(def.redstoneControlledMirrorProperties.begin(),
+                              def.redstoneControlledMirrorProperties.end(),
+                              mirrorProperty) != def.redstoneControlledMirrorProperties.end()) {
+                    throw std::runtime_error("redstoneControlledMirrorProperties must not contain duplicates for block: " +
+                                             def.namespacedId.full());
+                }
+                def.redstoneControlledMirrorProperties.push_back(mirrorProperty);
             }
         }
         if (blockJson.contains("redstoneControlledPowerInverted")) {
@@ -914,6 +948,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
 
         bool redstoneControlledPropertyValidated = def.redstoneControlledProperty.empty();
+        bool redstoneControlledMirrorPropertiesValidated = def.redstoneControlledMirrorProperties.empty();
         if (blockJson.contains("properties") && blockJson["properties"].is_object()) {
             std::vector<std::pair<std::string, std::vector<std::string>>> properties;
             std::map<std::string, std::string> defaultState;
@@ -956,6 +991,28 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 }
                 redstoneControlledPropertyValidated = true;
             }
+            if (!def.redstoneControlledMirrorProperties.empty()) {
+                for (const std::string& mirrorProperty : def.redstoneControlledMirrorProperties) {
+                    const auto propertyIt = std::find_if(
+                        properties.begin(),
+                        properties.end(),
+                        [&](const auto& property) {
+                            return property.first == mirrorProperty;
+                        });
+                    if (propertyIt == properties.end()) {
+                        throw std::runtime_error("redstoneControlledMirrorProperties entry must be declared in properties for block: " +
+                                                 def.namespacedId.full() + "." + mirrorProperty);
+                    }
+                    const auto& values = propertyIt->second;
+                    if (std::find(values.begin(), values.end(), "false") == values.end() ||
+                        std::find(values.begin(), values.end(), "true") == values.end()) {
+                        throw std::runtime_error(
+                            "redstoneControlledMirrorProperties entries must declare false and true values for block: " +
+                            def.namespacedId.full() + "." + mirrorProperty);
+                    }
+                }
+                redstoneControlledMirrorPropertiesValidated = true;
+            }
 
             if (blockJson.contains("defaultState") && blockJson["defaultState"].is_object()) {
                 for (auto it = blockJson["defaultState"].begin(); it != blockJson["defaultState"].end(); ++it) {
@@ -971,6 +1028,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (!redstoneControlledPropertyValidated) {
             throw std::runtime_error("redstoneControlledProperty requires a properties object for block: " +
+                                     def.namespacedId.full());
+        }
+        if (!redstoneControlledMirrorPropertiesValidated) {
+            throw std::runtime_error("redstoneControlledMirrorProperties requires a properties object for block: " +
                                      def.namespacedId.full());
         }
 

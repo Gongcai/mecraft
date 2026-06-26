@@ -10,6 +10,7 @@
 #include "../../../world/World.h"
 #include "../../../world/block/Block.h"
 #include "../../../world/block/BlockCollision.h"
+#include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/redstone/RedstoneUpdateQueue.h"
@@ -714,17 +715,59 @@ uint16_t redstoneControlledPropertyIndex(const StateID stateId) {
     return property;
 }
 
+uint16_t requireBooleanStateProperty(const StateID stateId,
+                                     const std::string& propertyName,
+                                     const char* context) {
+    const uint16_t property = BlockStateRegistry::getPropertyNameIndex(propertyName);
+    if (property == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error(std::string(context) + " property is not registered: " + propertyName);
+    }
+
+    const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(stateId, property);
+    if (currentValue == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error(std::string(context) + " state is missing property: " + propertyName);
+    }
+
+    const uint16_t falseValue = BlockStateRegistry::getPropertyValueIndex(property, "false");
+    const uint16_t trueValue = BlockStateRegistry::getPropertyValueIndex(property, "true");
+    if (falseValue == BlockStateRegistry::INVALID_INDEX || trueValue == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error(std::string(context) + " property must define false and true values: " + propertyName);
+    }
+    if (currentValue != falseValue && currentValue != trueValue) {
+        throw std::runtime_error(std::string(context) + " property state must be false or true: " + propertyName);
+    }
+    return property;
+}
+
 StateID withRedstoneControlledPower(const StateID stateId, const bool powered) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     const uint16_t property = redstoneControlledPropertyIndex(stateId);
     const bool propertyValue = powered != def.redstoneControlledPowerInverted;
     const uint16_t value = BlockStateRegistry::getPropertyValueIndex(property, propertyValue ? "true" : "false");
+    if (BlockStateRegistry::getPropertyIndex(stateId, property) == value) {
+        return stateId;
+    }
+
     const StateID updatedState = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updatedState, property) != value) {
         throw std::runtime_error("Redstone controlled state transition failed");
     }
-    return updatedState;
+
+    StateID mirroredState = updatedState;
+    for (const std::string& mirrorPropertyName : def.redstoneControlledMirrorProperties) {
+        const uint16_t mirrorProperty = requireBooleanStateProperty(
+            mirroredState,
+            mirrorPropertyName,
+            "Redstone controlled mirror");
+        const uint16_t mirrorValue =
+            BlockStateRegistry::getPropertyValueIndex(mirrorProperty, propertyValue ? "true" : "false");
+        mirroredState = BlockStateRegistry::withProperty(mirroredState, mirrorProperty, mirrorValue);
+        if (BlockStateRegistry::getPropertyIndex(mirroredState, mirrorProperty) != mirrorValue) {
+            throw std::runtime_error("Redstone controlled mirror state transition failed");
+        }
+    }
+    return mirroredState;
 }
 
 bool isExtendedPropertyTrue(const StateID stateId) {
@@ -2392,7 +2435,14 @@ size_t applyRedstoneControlledStates(World& world,
         const bool shouldBePowered = receivedPowerAt(world, wirePowers, position) > 0;
         const StateID updatedState = withRedstoneControlledPower(currentState, shouldBePowered);
         if (updatedState != currentState) {
-            world.setBlockState(position.x, position.y, position.z, updatedState);
+            if (DoorBlockLogic::isDoorState(currentState)) {
+                const bool powered =
+                    BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWERED) ==
+                    PropIndices::POWERED_TRUE;
+                DoorBlockLogic::setDoorPoweredOpen(world, position, powered);
+            } else {
+                world.setBlockState(position.x, position.y, position.z, updatedState);
+            }
             ++changed;
         }
     }

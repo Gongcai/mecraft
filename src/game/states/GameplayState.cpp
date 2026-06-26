@@ -27,7 +27,9 @@
 #include "../../ui/core/UIRenderer.h"
 #include "../../world/World.h"
 #include "../../world/block/BedBlock.h"
+#include "../../world/block/DoorBlock.h"
 #include "../../world/block/BlockStateRegistry.h"
+#include "../../world/block/PropIndices.h"
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -171,11 +173,18 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
         const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
         if (game::redstone::isControlBlock(targetBlock)) {
             const StateID updatedState = game::redstone::nextControlState(targetState);
-            m_ctx.world->setBlockState(
-                target.targetBlock.x,
-                target.targetBlock.y,
-                target.targetBlock.z,
-                updatedState);
+            if (DoorBlockLogic::isDoorState(targetState)) {
+                DoorBlockLogic::setDoorOpen(
+                    *m_ctx.world,
+                    target.targetBlock,
+                    BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::OPEN) == PropIndices::OPEN_TRUE);
+            } else {
+                m_ctx.world->setBlockState(
+                    target.targetBlock.x,
+                    target.targetBlock.y,
+                    target.targetBlock.z,
+                    updatedState);
+            }
             runtime.placeCooldownRemaining = std::max(runtime.placeCooldownRemaining,
                                                       m_modeRules.placeCooldownSeconds());
             return true;

@@ -317,6 +317,148 @@
       }
     },
     {
+      "id": "minecraft:oak_door",
+      "drop": "minecraft:oak_door",
+      "materialKind": "wood",
+      "isSolid": false,
+      "isRedstoneConductor": false,
+      "respondsToRedstone": true,
+      "redstoneControlledProperty": "powered",
+      "redstoneControlledMirrorProperties": ["open"],
+      "renderShape": "model",
+      "renderLayer": "cutout",
+      "placementStrategy": "door",
+      "timeToBreak": 300,
+      "properties": {
+        "facing": ["east", "south", "west", "north"],
+        "half": ["lower", "upper"],
+        "hinge": ["left", "right"],
+        "open": ["false", "true"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "east",
+        "half": "lower",
+        "hinge": "left",
+        "open": "false",
+        "powered": "false"
+      },
+      "textures": {
+        "bottom": "oak_door_bottom",
+        "top": "oak_door_top"
+      },
+      "modelVariants": {
+        "facing=east,half=lower,hinge=left,open=false": { "model": "block/oak_door_bottom_left" },
+        "facing=east,half=upper,hinge=left,open=false": { "model": "block/oak_door_top_left" },
+        "facing=east,half=lower,hinge=right,open=false": { "model": "block/oak_door_bottom_right" },
+        "facing=east,half=upper,hinge=right,open=false": { "model": "block/oak_door_top_right" },
+        "facing=east,half=lower,hinge=left,open=true": { "model": "block/oak_door_bottom_left_open" },
+        "facing=east,half=upper,hinge=left,open=true": { "model": "block/oak_door_top_left_open" },
+        "facing=east,half=lower,hinge=right,open=true": { "model": "block/oak_door_bottom_right_open" },
+        "facing=east,half=upper,hinge=right,open=true": { "model": "block/oak_door_top_right_open" },
+
+        "facing=south,half=lower,hinge=left,open=false": { "model": "block/oak_door_bottom_left", "transform": { "rotY": 90 } },
+        "facing=south,half=upper,hinge=left,open=false": { "model": "block/oak_door_top_left", "transform": { "rotY": 90 } },
+        "facing=south,half=lower,hinge=right,open=false": { "model": "block/oak_door_bottom_right", "transform": { "rotY": 90 } },
+        "facing=south,half=upper,hinge=right,open=false": { "model": "block/oak_door_top_right", "transform": { "rotY": 90 } },
+        "facing=south,half=lower,hinge=left,open=true": { "model": "block/oak_door_bottom_left_open", "transform": { "rotY": 90 } },
+        "facing=south,half=upper,hinge=left,open=true": { "model": "block/oak_door_top_left_open", "transform": { "rotY": 90 } },
+        "facing=south,half=lower,hinge=right,open=true": { "model": "block/oak_door_bottom_right_open", "transform": { "rotY": 90 } },
+        "facing=south,half=upper,hinge=right,open=true": { "model": "block/oak_door_top_right_open", "transform": { "rotY": 90 } },
+
+        "facing=west,half=lower,hinge=left,open=false": { "model": "block/oak_door_bottom_left", "transform": { "rotY": 180 } },
+        "facing=west,half=upper,hinge=left,open=false": { "model": "block/oak_door_top_left", "transform": { "rotY": 180 } },
+        "facing=west,half=lower,hinge=right,open=false": { "model": "block/oak_door_bottom_right", "transform": { "rotY": 180 } },
+        "facing=west,half=upper,hinge=right,open=false": { "model": "block/oak_door_top_right", "transform": { "rotY": 180 } },
+        "facing=west,half=lower,hinge=left,open=true": { "model": "block/oak_door_bottom_left_open", "transform": { "rotY": 180 } },
+        "facing=west,half=upper,hinge=left,open=true": { "model": "block/oak_door_top_left_open", "transform": { "rotY": 180 } },
+        "facing=west,half=lower,hinge=right,open=true": { "model": "block/oak_door_bottom_right_open", "transform": { "rotY": 180 } },
+        "facing=west,half=upper,hinge=right,open=true": { "model": "block/oak_door_top_right_open", "transform": { "rotY": 180 } },
+
+        "facing=north,half=lower,hinge=left,open=false": { "model": "block/oak_door_bottom_left", "transform": { "rotY": 270 } },
+        "facing=north,half=upper,hinge=left,open=false": { "model": "block/oak_door_top_left", "transform": { "rotY": 270 } },
+        "facing=north,half=lower,hinge=right,open=false": { "model": "block/oak_door_bottom_right", "transform": { "rotY": 270 } },
+        "facing=north,half=upper,hinge=right,open=false": { "model": "block/oak_door_top_right", "transform": { "rotY": 270 } },
+        "facing=north,half=lower,hinge=left,open=true": { "model": "block/oak_door_bottom_left_open", "transform": { "rotY": 270 } },
+        "facing=north,half=upper,hinge=left,open=true": { "model": "block/oak_door_top_left_open", "transform": { "rotY": 270 } },
+        "facing=north,half=lower,hinge=right,open=true": { "model": "block/oak_door_bottom_right_open", "transform": { "rotY": 270 } },
+        "facing=north,half=upper,hinge=right,open=true": { "model": "block/oak_door_top_right_open", "transform": { "rotY": 270 } }
+      }
+    },
+    {
+      "id": "minecraft:oak_trapdoor",
+      "drop": "minecraft:oak_trapdoor",
+      "materialKind": "wood",
+      "isSolid": false,
+      "isRedstoneConductor": false,
+      "respondsToRedstone": true,
+      "redstoneControlledProperty": "powered",
+      "redstoneControlledMirrorProperties": ["open"],
+      "renderShape": "model",
+      "renderLayer": "cutout",
+      "placementStrategy": "trapdoor",
+      "timeToBreak": 300,
+      "properties": {
+        "facing": ["east", "south", "west", "north"],
+        "half": ["bottom", "top"],
+        "open": ["false", "true"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "east",
+        "half": "bottom",
+        "open": "false",
+        "powered": "false"
+      },
+      "textures": {
+        "all": "oak_trapdoor"
+      },
+      "modelVariants": {
+        "half=bottom,open=false": { "model": "block/oak_trapdoor_bottom" },
+        "half=top,open=false": { "model": "block/oak_trapdoor_top" },
+        "facing=east,open=true": { "model": "block/oak_trapdoor_open", "transform": { "rotY": 270 } },
+        "facing=south,open=true": { "model": "block/oak_trapdoor_open" },
+        "facing=west,open=true": { "model": "block/oak_trapdoor_open", "transform": { "rotY": 90 } },
+        "facing=north,open=true": { "model": "block/oak_trapdoor_open", "transform": { "rotY": 180 } }
+      }
+    },
+    {
+      "id": "minecraft:oak_fence_gate",
+      "drop": "minecraft:oak_fence_gate",
+      "materialKind": "wood",
+      "isSolid": false,
+      "isRedstoneConductor": false,
+      "respondsToRedstone": true,
+      "redstoneControlledProperty": "powered",
+      "redstoneControlledMirrorProperties": ["open"],
+      "renderShape": "model",
+      "placementStrategy": "horizontal_facing",
+      "timeToBreak": 300,
+      "properties": {
+        "facing": ["east", "south", "west", "north"],
+        "open": ["false", "true"],
+        "powered": ["false", "true"]
+      },
+      "defaultState": {
+        "facing": "east",
+        "open": "false",
+        "powered": "false"
+      },
+      "textures": {
+        "all": "oak_planks"
+      },
+      "modelVariants": {
+        "facing=east,open=false": { "model": "block/oak_fence_gate", "transform": { "rotY": 90 } },
+        "facing=south,open=false": { "model": "block/oak_fence_gate" },
+        "facing=west,open=false": { "model": "block/oak_fence_gate", "transform": { "rotY": 270 } },
+        "facing=north,open=false": { "model": "block/oak_fence_gate", "transform": { "rotY": 180 } },
+        "facing=east,open=true": { "model": "block/oak_fence_gate_open", "transform": { "rotY": 90 } },
+        "facing=south,open=true": { "model": "block/oak_fence_gate_open" },
+        "facing=west,open=true": { "model": "block/oak_fence_gate_open", "transform": { "rotY": 270 } },
+        "facing=north,open=true": { "model": "block/oak_fence_gate_open", "transform": { "rotY": 180 } }
+      }
+    },
+    {
       "id": "minecraft:red_bed",
       "drop": "minecraft:red_bed",
       "isSolid": false,

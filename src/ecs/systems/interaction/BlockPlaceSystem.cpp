@@ -1,6 +1,7 @@
 #include "BlockPlaceSystem.h"
 
 #include <algorithm>
+#include <stdexcept>
 
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
@@ -10,6 +11,7 @@
 #include "../../../world/IWorldView.h"
 #include "../../../world/block/BedBlock.h"
 #include "../../../world/block/BlockCollision.h"
+#include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/Placement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
@@ -105,6 +107,22 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         result.stateId = bedPlacement.footState;
         result.secondaryBlock = bedPlacement.headPos;
         result.secondaryStateId = bedPlacement.headState;
+        result.hasSecondaryBlock = true;
+        return result;
+    }
+
+    if (DoorBlockLogic::isDoorBlock(blockId)) {
+        const DoorBlockLogic::DoorPlacement doorPlacement =
+            DoorBlockLogic::resolvePlacement(worldView, result.placeBlock, result.stateId);
+        if (!doorPlacement.valid) {
+            result.stateId = BlockIds::AIR;
+            return result;
+        }
+
+        result.placeBlock = doorPlacement.lowerPos;
+        result.stateId = doorPlacement.lowerState;
+        result.secondaryBlock = doorPlacement.upperPos;
+        result.secondaryStateId = doorPlacement.upperState;
         result.hasSecondaryBlock = true;
         return result;
     }
@@ -232,13 +250,25 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         }
 
         if (placement.hasSecondaryBlock) {
-            BedBlockLogic::BedPlacement bedPlacement;
-            bedPlacement.valid = true;
-            bedPlacement.footPos = placement.placeBlock;
-            bedPlacement.headPos = placement.secondaryBlock;
-            bedPlacement.footState = placement.stateId;
-            bedPlacement.headState = placement.secondaryStateId;
-            BedBlockLogic::placeBed(*mutableWorld, bedPlacement);
+            if (BedBlockLogic::isBedState(placement.stateId)) {
+                BedBlockLogic::BedPlacement bedPlacement;
+                bedPlacement.valid = true;
+                bedPlacement.footPos = placement.placeBlock;
+                bedPlacement.headPos = placement.secondaryBlock;
+                bedPlacement.footState = placement.stateId;
+                bedPlacement.headState = placement.secondaryStateId;
+                BedBlockLogic::placeBed(*mutableWorld, bedPlacement);
+            } else if (DoorBlockLogic::isDoorState(placement.stateId)) {
+                DoorBlockLogic::DoorPlacement doorPlacement;
+                doorPlacement.valid = true;
+                doorPlacement.lowerPos = placement.placeBlock;
+                doorPlacement.upperPos = placement.secondaryBlock;
+                doorPlacement.lowerState = placement.stateId;
+                doorPlacement.upperState = placement.secondaryStateId;
+                DoorBlockLogic::placeDoor(*mutableWorld, doorPlacement);
+            } else {
+                throw std::runtime_error("Unsupported multi-block placement state");
+            }
         } else {
             mutableWorld->setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
         }

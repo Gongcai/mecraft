@@ -116,6 +116,7 @@ set(SRC_CORE
 set(SRC_WORLD
         src/world/block/Block.cpp
         src/world/block/BedBlock.cpp
+        src/world/block/DoorBlock.cpp
         src/world/block/PistonBlock.cpp
         src/world/block/BlockCollision.cpp
         src/world/block/BlockModelRegistry.cpp
@@ -314,6 +315,7 @@ set(SRC_ECS
         src/ecs/systems/interaction/BlockTargetSystem.cpp
         src/ecs/systems/interaction/BlockBreakSystem.cpp
         src/ecs/systems/interaction/SoilTillingSystem.cpp
+        src/ecs/systems/interaction/BucketUseSystem.cpp
         src/ecs/systems/interaction/BlockPlaceSystem.cpp
         src/ecs/systems/item/ItemSpawnSystem.cpp
         src/ecs/systems/item/ItemPhysicsSystem.cpp
@@ -641,6 +643,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(redstone_piston_test tests/redstone_piston_test.cpp)
     mecraft_copy_runtime_assets(redstone_piston_test)
     add_mecraft_test(redstone_control_interaction_test tests/redstone_control_interaction_test.cpp)
+    add_mecraft_test(bucket_use_test tests/bucket_use_test.cpp)
     add_mecraft_test(water_spread_test tests/water_spread_test.cpp)
     add_mecraft_test(fluid_flow_test tests/fluid_flow_test.cpp)
     add_mecraft_test(thread_pool_test tests/thread_pool_test.cpp)

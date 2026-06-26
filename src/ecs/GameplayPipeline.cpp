@@ -8,6 +8,7 @@
 #include "systems/combat/PlayerMeleeSystem.h"
 #include "systems/combat/ProjectileSystem.h"
 #include "systems/interaction/BlockBreakSystem.h"
+#include "systems/interaction/BucketUseSystem.h"
 #include "systems/interaction/BlockPlaceSystem.h"
 #include "systems/interaction/BlockTargetSystem.h"
 #include "systems/interaction/SoilTillingSystem.h"
@@ -86,6 +87,7 @@ void GameplayPipeline::buildClientFixedUpdateSystems() {
     addFixedUpdateSystem<DeathSystem>();
     addFixedUpdateSystem<BlockBreakSystem>();
     addFixedUpdateSystem<SoilTillingSystem>();
+    addFixedUpdateSystem<BucketUseSystem>();
     addFixedUpdateSystem<BlockPlaceSystem>();
 
     // Item/drop lifecycle.

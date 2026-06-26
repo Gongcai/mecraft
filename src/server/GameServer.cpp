@@ -4,6 +4,7 @@
 #include "../world/WeatherSystem.h"
 #include "../world/block/Block.h"
 #include "../world/block/BedBlock.h"
+#include "../world/block/DoorBlock.h"
 #include "../world/block/PistonBlock.h"
 #include "../world/block/Placement.h"
 #include "../thread/ThreadPool.h"
@@ -1439,12 +1440,42 @@ bool hasServerEmptySpaceAbove(const World& world, const glm::ivec3& pos) {
            world.getFluidState(above.x, above.y, above.z) == BlockIds::AIR;
 }
 
+bool isServerSourceWaterAt(const World& world, const glm::ivec3& pos) {
+    const StateID fluidState = world.getFluidState(pos.x, pos.y, pos.z);
+    return FluidState::isWater(fluidState) && FluidState::isSource(fluidState);
+}
+
+bool canServerPlaceSourceWaterAt(const World& world, const glm::ivec3& pos) {
+    if (!world.isChunkLoadedForBlock(pos.x, pos.y, pos.z)) {
+        return false;
+    }
+
+    const StateID blockState = world.getBlockState(pos.x, pos.y, pos.z);
+    if (FluidState::canWaterReplace(blockState)) {
+        return true;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(blockState);
+    return BlockRegistry::getFast(blockId).allowsFluidCoexistence;
+}
+
+void replaceSelectedServerItem(ecs::InventoryDataComponent& inventoryData, const ItemID itemId) {
+    ItemStack replacement;
+    replacement.itemId = itemId;
+    replacement.count = 1;
+    replacement.durability = 0;
+    inventoryData.inventory.setSlotStack(inventoryData.inventory.getSelectedSlot(), replacement);
+}
+
 BlockID removeServerTargetBlock(World& world,
                                 const glm::ivec3& hitBlock,
                                 std::vector<glm::ivec3>& removedPositions) {
     const StateID targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (BedBlockLogic::isBedState(targetState)) {
         return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
+    }
+    if (DoorBlockLogic::isDoorState(targetState)) {
+        return DoorBlockLogic::removeDoor(world, hitBlock, &removedPositions);
     }
     if (PistonBlockLogic::isPistonAssemblyState(targetState)) {
         return PistonBlockLogic::removePistonAssembly(world, hitBlock, &removedPositions);
@@ -1459,7 +1490,9 @@ BlockID removeServerTargetBlock(World& world,
 
 void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
     constexpr float kMaxActionDistance = 6.5f;
-    const glm::ivec3 actionBlock = action.action == net::ClientBlockActionType::Place
+    const glm::ivec3 actionBlock =
+        (action.action == net::ClientBlockActionType::Place ||
+         action.action == net::ClientBlockActionType::BucketPlaceWater)
         ? action.placeBlock
         : action.targetBlock;
     const glm::vec3 blockCenter = glm::vec3(actionBlock) + glm::vec3(0.5f);
@@ -1482,6 +1515,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         bool brokeChest = false;
         bool brokeFurnace = false;
         const bool brokeBed = BedBlockLogic::isBedBlock(brokenBlock);
+        const bool brokeDoor = DoorBlockLogic::isDoorBlock(brokenBlock);
         if (m_gameplayRegistry != nullptr) {
             brokeChest = handleChestInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
             brokeFurnace = handleFurnaceInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
@@ -1496,6 +1530,10 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             if (brokeBed && shouldDrop) {
                 const ItemID bedItem = BlockDropTable::getDropItem(brokenBlock);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, bedItem, action.targetBlock, 1);
+            }
+            if (brokeDoor && shouldDrop) {
+                const ItemID doorItem = BlockDropTable::getDropItem(brokenBlock);
+                ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, doorItem, action.targetBlock, 1);
             }
         } else if (BlockStateRegistry::getBlockId(target) == BlockIds::CHEST &&
                    m_ecsRegistry != nullptr &&
@@ -1545,6 +1583,66 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         return;
     }
 
+    if (action.action == net::ClientBlockActionType::BucketPickupWater ||
+        action.action == net::ClientBlockActionType::BucketPlaceWater) {
+        if (m_ecsRegistry == nullptr || !m_ecsRegistry->valid(client.ecsPlayerEntity)) {
+            return;
+        }
+        auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(client.ecsPlayerEntity);
+        auto* inventoryState = m_ecsRegistry->try_get<ecs::InventoryComponent>(client.ecsPlayerEntity);
+        if (inventoryData == nullptr || inventoryState == nullptr) {
+            return;
+        }
+
+        inventoryState->selectedHotbarSlot = std::clamp(static_cast<int>(client.selectedHotbarSlot),
+                                                        0,
+                                                        Inventory::HOTBAR_SIZE - 1);
+        inventoryData->inventory.setSelectedSlot(inventoryState->selectedHotbarSlot);
+
+        if (action.action == net::ClientBlockActionType::BucketPickupWater) {
+            if (inventoryData->inventory.getSelectedItem() != ItemIds::BUCKET ||
+                !isServerSourceWaterAt(m_world, action.targetBlock)) {
+                return;
+            }
+
+            m_world.setFluidState(action.targetBlock.x,
+                                  action.targetBlock.y,
+                                  action.targetBlock.z,
+                                  BlockIds::AIR);
+            if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
+                replaceSelectedServerItem(*inventoryData, ItemIds::WATER_BUCKET);
+            }
+            MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_pickup_water client=%u block=(%d,%d,%d)\n",
+                               client.id,
+                               action.targetBlock.x,
+                               action.targetBlock.y,
+                               action.targetBlock.z);
+            MECRAFT_LOG_FLUSH(stdout);
+            return;
+        }
+
+        if (inventoryData->inventory.getSelectedItem() != ItemIds::WATER_BUCKET ||
+            action.blockState != FluidState::makeWater(0, false) ||
+            !canServerPlaceSourceWaterAt(m_world, action.placeBlock)) {
+            return;
+        }
+
+        m_world.setFluidState(action.placeBlock.x,
+                              action.placeBlock.y,
+                              action.placeBlock.z,
+                              FluidState::makeWater(0, false));
+        if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
+            replaceSelectedServerItem(*inventoryData, ItemIds::BUCKET);
+        }
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction bucket_place_water client=%u block=(%d,%d,%d)\n",
+                           client.id,
+                           action.placeBlock.x,
+                           action.placeBlock.y,
+                           action.placeBlock.z);
+        MECRAFT_LOG_FLUSH(stdout);
+        return;
+    }
+
     if (action.blockState == BlockIds::AIR) {
         return;
     }
@@ -1564,6 +1662,25 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                            bedPlacement.headPos.x,
                            bedPlacement.headPos.y,
                            bedPlacement.headPos.z);
+        MECRAFT_LOG_FLUSH(stdout);
+        return;
+    }
+    if (DoorBlockLogic::isDoorState(action.blockState)) {
+        const DoorBlockLogic::DoorPlacement doorPlacement =
+            DoorBlockLogic::resolvePlacement(m_world, action.placeBlock, action.blockState);
+        if (!doorPlacement.valid) {
+            return;
+        }
+
+        DoorBlockLogic::placeDoor(m_world, doorPlacement);
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place door client=%u lower=(%d,%d,%d) upper=(%d,%d,%d)\n",
+                           client.id,
+                           doorPlacement.lowerPos.x,
+                           doorPlacement.lowerPos.y,
+                           doorPlacement.lowerPos.z,
+                           doorPlacement.upperPos.x,
+                           doorPlacement.upperPos.y,
+                           doorPlacement.upperPos.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }

@@ -120,6 +120,8 @@ enum class ClientBlockActionType : uint8_t {
     Break = 0,
     Place = 1,
     Till = 2,
+    BucketPickupWater = 3,
+    BucketPlaceWater = 4,
 };
 
 struct ClientBlockAction {

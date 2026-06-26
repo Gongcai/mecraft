@@ -17,6 +17,7 @@
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
 #include "../../../world/block/BedBlock.h"
+#include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/PistonBlock.h"
 #include "../../../world/World.h"
 
@@ -85,6 +86,9 @@ BlockID removeTargetBlock(World& world,
     const StateID targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (BedBlockLogic::isBedState(targetState)) {
         return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
+    }
+    if (DoorBlockLogic::isDoorState(targetState)) {
+        return DoorBlockLogic::removeDoor(world, hitBlock, &removedPositions);
     }
     if (PistonBlockLogic::isPistonAssemblyState(targetState)) {
         return PistonBlockLogic::removePistonAssembly(world, hitBlock, &removedPositions);

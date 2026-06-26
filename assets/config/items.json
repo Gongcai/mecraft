@@ -51,6 +51,46 @@
       "maxDurability": 250
     },
     {
+      "id": "minecraft:bucket",
+      "iconTexture": "bucket",
+      "maxStack": 1,
+      "icon": "minecraft:bucket",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:water_bucket",
+      "iconTexture": "water_bucket",
+      "maxStack": 1,
+      "icon": "minecraft:water_bucket",
+      "placeBlock": "minecraft:air",
+      "renderBlock": "minecraft:air"
+    },
+    {
+      "id": "minecraft:oak_door",
+      "iconTexture": "oak_door",
+      "maxStack": 64,
+      "icon": "minecraft:oak_door",
+      "placeBlock": "minecraft:oak_door",
+      "renderBlock": "minecraft:oak_door"
+    },
+    {
+      "id": "minecraft:oak_trapdoor",
+      "iconTexture": "oak_trapdoor",
+      "maxStack": 64,
+      "icon": "minecraft:oak_trapdoor",
+      "placeBlock": "minecraft:oak_trapdoor",
+      "renderBlock": "minecraft:oak_trapdoor"
+    },
+    {
+      "id": "minecraft:oak_fence_gate",
+      "iconTexture": "oak_planks",
+      "maxStack": 64,
+      "icon": "minecraft:oak_fence_gate",
+      "placeBlock": "minecraft:oak_fence_gate",
+      "renderBlock": "minecraft:oak_fence_gate"
+    },
+    {
       "id": "minecraft:diamond",
       "iconTexture": "diamond",
       "maxStack": 64,
