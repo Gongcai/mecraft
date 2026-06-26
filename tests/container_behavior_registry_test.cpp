@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "../src/game/inventory/ContainerBehaviorRegistry.h"
+#include "../src/game/inventory/SmeltingProcessorRuntime.h"
 #include "../src/ui/inventory/ContainerUiRegistry.h"
 
 namespace {
@@ -82,6 +83,13 @@ int main() {
         smelting->fuelSlot != 1 ||
         smelting->outputSlot != 2) {
         return fail("furnace behavior should declare smelting processor slots");
+    }
+    const SmeltingProcessorRuntime smeltingRuntime =
+        SmeltingProcessorRuntime::create(ui::ContainerUiRegistry::require("minecraft:furnace"), furnace, 3);
+    if (smeltingRuntime.processor().inputSlot != 0 ||
+        smeltingRuntime.processor().fuelSlot != 1 ||
+        smeltingRuntime.processor().outputSlot != 2) {
+        return fail("furnace smelting runtime should resolve processor slots from behavior metadata");
     }
 
     const ContainerBehaviorDef& crafting = ContainerBehaviorRegistry::require("minecraft:crafting_table");

@@ -3,10 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <stdexcept>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include <glm/vec3.hpp>
 
@@ -16,6 +14,7 @@
 #include "ContainerBehaviorRegistry.h"
 #include "FurnaceInventoryStore.h"
 #include "InventoryStateContext.h"
+#include "SmeltingProcessorRuntime.h"
 #include "../../crafting/SmeltingSystem.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/util/PlayerQuery.h"
@@ -40,7 +39,7 @@ public:
     void onEnter() override {
         const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(m_containerUiId);
         const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(m_behaviorId);
-        configureSmeltingBehavior(uiDef, behavior);
+        m_runtime = SmeltingProcessorRuntime::create(uiDef, behavior, FurnaceInventory::SLOT_COUNT);
 
         FurnaceInventoryStore& store = ensureStore();
         m_furnace = &store.getOrCreate(m_furnacePosition);
@@ -72,7 +71,7 @@ public:
         }
 
         SmeltingSystem& smelting = m_deps.ecsRegistry.ctxGet<SmeltingSystem>();
-        m_furnace->tick(dt, smelting, m_processor);
+        m_furnace->tick(dt, smelting, m_runtime.processor());
         m_deps.uiRenderer.setFurnacePanelProgress(m_furnace->burnFraction(), m_furnace->cookFraction());
 
         const UIInputRouteResult uiRouteResult =
@@ -131,84 +130,6 @@ private:
             return space != SlotSpace::None && index >= 0;
         }
     };
-
-    void configureSmeltingBehavior(const ui::ContainerUiDef& uiDef, const ContainerBehaviorDef& behavior) {
-        if (behavior.handler != "smelting") {
-            throw std::runtime_error(behavior.id + " requires smelting handler for furnace state");
-        }
-        if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-            throw std::runtime_error(behavior.id + " smelting handler requires block_entity storage");
-        }
-        if (behavior.storage.slots != FurnaceInventory::SLOT_COUNT) {
-            throw std::runtime_error(behavior.id + " storage slot count must match furnace inventory storage");
-        }
-
-        const ContainerProcessorDef* smeltingProcessor = nullptr;
-        for (const ContainerProcessorDef& processor : behavior.processors) {
-            if (processor.type != "smelting") {
-                throw std::runtime_error(behavior.id + " furnace state only supports smelting processors");
-            }
-            if (smeltingProcessor != nullptr) {
-                throw std::runtime_error(behavior.id + " furnace state requires exactly one smelting processor");
-            }
-            smeltingProcessor = &processor;
-        }
-        if (smeltingProcessor == nullptr) {
-            throw std::runtime_error(behavior.id + " furnace state requires a smelting processor");
-        }
-
-        m_processor.inputSlot = smeltingProcessor->inputSlot;
-        m_processor.fuelSlot = smeltingProcessor->fuelSlot;
-        m_processor.outputSlot = smeltingProcessor->outputSlot;
-        validateConfiguredSlot(uiDef, m_processor.inputSlot, "input");
-        validateConfiguredSlot(uiDef, m_processor.fuelSlot, "fuel");
-        validateConfiguredSlot(uiDef, m_processor.outputSlot, "output");
-
-        m_slotRules = behavior.slotRules;
-        requireSlotRule(m_processor.inputSlot, "smelting_input", false, behavior.id);
-        requireSlotRule(m_processor.fuelSlot, "fuel", false, behavior.id);
-        requireSlotRule(m_processor.outputSlot, "any", true, behavior.id);
-    }
-
-    static void validateConfiguredSlot(const ui::ContainerUiDef& uiDef,
-                                       const int slot,
-                                       const char* slotName) {
-        if (slot < 0 || slot >= FurnaceInventory::SLOT_COUNT) {
-            throw std::runtime_error(uiDef.id + " smelting processor has invalid " + std::string(slotName) + " slot");
-        }
-        for (const ui::ContainerSlotGroupDef& group : uiDef.slotGroups) {
-            if (group.kind != ui::ContainerSlotGroupKind::Container) {
-                continue;
-            }
-            const int groupEnd = group.firstSlot + group.columns * group.rows;
-            if (slot >= group.firstSlot && slot < groupEnd) {
-                return;
-            }
-        }
-        throw std::runtime_error(uiDef.id + " does not expose smelting processor " + std::string(slotName) + " slot");
-    }
-
-    void requireSlotRule(const int slot,
-                         const std::string& accepts,
-                         const bool outputOnly,
-                         const std::string& behaviorId) const {
-        const ContainerSlotRuleDef* rule = slotRuleFor(slot);
-        if (rule == nullptr) {
-            throw std::runtime_error(behaviorId + " is missing a required furnace slot rule");
-        }
-        if (rule->accepts != accepts || rule->outputOnly != outputOnly) {
-            throw std::runtime_error(behaviorId + " furnace slot rule does not match its smelting processor role");
-        }
-    }
-
-    [[nodiscard]] const ContainerSlotRuleDef* slotRuleFor(const int slot) const {
-        for (const ContainerSlotRuleDef& rule : m_slotRules) {
-            if (rule.slot == slot) {
-                return &rule;
-            }
-        }
-        return nullptr;
-    }
 
     FurnaceInventoryStore& ensureStore() {
         if (!m_deps.ecsRegistry.ctxHas<FurnaceInventoryStore>()) {
@@ -302,20 +223,7 @@ private:
         if (slot.space == SlotSpace::Player) {
             return true;
         }
-        const ContainerSlotRuleDef* rule = slotRuleFor(slot.index);
-        if (rule == nullptr || rule->outputOnly) {
-            return false;
-        }
-        if (rule->accepts == "smelting_input") {
-            return smelting.findRecipe(itemId) != nullptr;
-        }
-        if (rule->accepts == "fuel") {
-            return smelting.isFuel(itemId);
-        }
-        if (rule->accepts == "any") {
-            return true;
-        }
-        throw std::runtime_error("Furnace state found an unknown slot accepts rule: " + rule->accepts);
+        return m_runtime.acceptsItem(slot.index, itemId, smelting);
     }
 
     [[nodiscard]] uint32_t addToSlot(const SlotRef slot,
@@ -455,8 +363,7 @@ private:
     std::string m_containerUiId;
     std::string m_behaviorId;
     glm::ivec3 m_furnacePosition{};
-    FurnaceSmeltingProcessor m_processor;
-    std::vector<ContainerSlotRuleDef> m_slotRules;
+    SmeltingProcessorRuntime m_runtime;
     FurnaceInventory* m_furnace = nullptr;
     int m_lastSecondaryPlaceSlot = -1;
 };

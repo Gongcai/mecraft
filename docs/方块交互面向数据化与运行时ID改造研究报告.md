@@ -15,12 +15,12 @@
 6. **客户端/服务器交互消费已改为服务端权威**：多人模式下客户端发送 `ClientBlockActionType::Interact` 后消费本地输入，但不直接改世界；服务器校验距离并执行交互，再广播结果，避免同一命中事件被客户端和服务器各消费一次导致随机行为。
 7. **红石部分数据尾巴已清理**：按钮脉冲时长由 `redstonePulseTicks` 数据驱动；活塞不可推动规则由 `pistonPushReaction` 数据驱动；比较器读取容器信号由 `ContainerBehaviorDef.comparatorSignal` 数据驱动；压力板接受实体类型由 `pressurePlateEntityFilter` 数据驱动。
 8. **通用 block-entity storage 已落地**：箱子、木桶等 `handler:"storage"` 容器共用 `BlockEntityInventoryStore`、`BlockEntityInventoryLifecycle` 和通用 storage 面板；服务器保存空容器时也按 `containerUi -> behavior` 数据判断 block entity 类型，已用 `minecraft:barrel` 保存/恢复测试验证。
-9. **熔炉 smelting processor 已接入运行逻辑**：`FurnaceState` 从 `ContainerBehaviorRegistry` 读取 smelting processor 和 slotRules，`FurnaceInventory::tick` 使用预解析槽位驱动输入、燃料和输出处理，不在热路径解释 JSON。
+9. **熔炉 smelting processor runtime 已抽出并接入运行逻辑**：`SmeltingProcessorRuntime` 从 `ContainerBehaviorRegistry` 读取 smelting processor 和 slotRules，`FurnaceInventory::tick` 使用预解析槽位驱动输入、燃料和输出处理，不在热路径解释 JSON。
 
 仍建议继续推进的剩余项：
 
 1. 活塞主体、活塞头、移动方块等结构性逻辑仍需要 C++，但可继续抽离可配置的规则字段。
-2. 熔炉仍保留专用 `FurnaceInventoryStore` 和状态保存字段；若后续新增带处理流程的机器类容器，需要把 processor runtime 从熔炉专用实现泛化。
+2. 熔炉仍保留专用 `FurnaceInventoryStore` 和状态保存字段；若后续新增带处理流程的机器类容器，需要把库存存储与保存字段继续泛化。
 3. 红石多色线仍停留在方案层面，尚未实现。
 
 ---
