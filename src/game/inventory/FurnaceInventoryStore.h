@@ -5,12 +5,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <stdexcept>
 #include <unordered_map>
 
 #include <glm/vec3.hpp>
 
 #include "../../crafting/SmeltingSystem.h"
 #include "../../item/Item.h"
+
+struct FurnaceSmeltingProcessor {
+    int inputSlot = 0;
+    int fuelSlot = 1;
+    int outputSlot = 2;
+};
 
 class FurnaceInventory {
 public:
@@ -37,7 +44,7 @@ public:
         m_slots[static_cast<std::size_t>(slot)] = stack.isEmpty() ? ItemStack{} : stack;
     }
 
-    void tick(float dt, const SmeltingSystem& smeltingSystem) {
+    void tick(float dt, const SmeltingSystem& smeltingSystem, const FurnaceSmeltingProcessor& processor) {
         if (dt <= 0.0f) {
             return;
         }
@@ -46,25 +53,27 @@ public:
             m_burnSecondsRemaining = std::max(0.0f, m_burnSecondsRemaining - dt);
         }
 
-        const SmeltingRecipe* recipe = currentRecipe(smeltingSystem);
-        if (recipe == nullptr || !canReceiveResult(*recipe)) {
+        validateProcessor(processor);
+
+        const SmeltingRecipe* recipe = currentRecipe(smeltingSystem, processor);
+        if (recipe == nullptr || !canReceiveResult(*recipe, processor)) {
             m_cookSeconds = 0.0f;
             m_cookTargetSeconds = recipe ? recipe->cookSeconds : 0.0f;
             return;
         }
 
         m_cookTargetSeconds = recipe->cookSeconds;
-        if (m_burnSecondsRemaining <= 0.0f && !consumeFuel(smeltingSystem)) {
+        if (m_burnSecondsRemaining <= 0.0f && !consumeFuel(smeltingSystem, processor)) {
             return;
         }
 
         m_cookSeconds += dt;
-        while (m_cookSeconds >= m_cookTargetSeconds && currentRecipe(smeltingSystem) != nullptr) {
-            const SmeltingRecipe* activeRecipe = currentRecipe(smeltingSystem);
-            if (activeRecipe == nullptr || !canReceiveResult(*activeRecipe)) {
+        while (m_cookSeconds >= m_cookTargetSeconds && currentRecipe(smeltingSystem, processor) != nullptr) {
+            const SmeltingRecipe* activeRecipe = currentRecipe(smeltingSystem, processor);
+            if (activeRecipe == nullptr || !canReceiveResult(*activeRecipe, processor)) {
                 break;
             }
-            completeRecipe(*activeRecipe);
+            completeRecipe(*activeRecipe, processor);
             m_cookSeconds -= m_cookTargetSeconds;
             m_cookTargetSeconds = activeRecipe->cookSeconds;
         }
@@ -114,21 +123,39 @@ public:
     }
 
 private:
-    [[nodiscard]] const SmeltingRecipe* currentRecipe(const SmeltingSystem& smeltingSystem) const {
-        const ItemStack input = m_slots[INPUT_SLOT];
+    static void validateProcessor(const FurnaceSmeltingProcessor& processor) {
+        if (processor.inputSlot < 0 ||
+            processor.inputSlot >= SLOT_COUNT ||
+            processor.fuelSlot < 0 ||
+            processor.fuelSlot >= SLOT_COUNT ||
+            processor.outputSlot < 0 ||
+            processor.outputSlot >= SLOT_COUNT) {
+            throw std::runtime_error("Furnace smelting processor references a slot outside furnace storage");
+        }
+        if (processor.inputSlot == processor.fuelSlot ||
+            processor.inputSlot == processor.outputSlot ||
+            processor.fuelSlot == processor.outputSlot) {
+            throw std::runtime_error("Furnace smelting processor requires distinct input, fuel, and output slots");
+        }
+    }
+
+    [[nodiscard]] const SmeltingRecipe* currentRecipe(const SmeltingSystem& smeltingSystem,
+                                                      const FurnaceSmeltingProcessor& processor) const {
+        const ItemStack input = m_slots[static_cast<std::size_t>(processor.inputSlot)];
         if (input.isEmpty()) {
             return nullptr;
         }
         return smeltingSystem.findRecipe(input.itemId);
     }
 
-    [[nodiscard]] bool canReceiveResult(const SmeltingRecipe& recipe) const {
+    [[nodiscard]] bool canReceiveResult(const SmeltingRecipe& recipe,
+                                        const FurnaceSmeltingProcessor& processor) const {
         const ItemDef& resultDef = ItemRegistry::get(recipe.result);
         if (resultDef.maxStack == 0) {
             return false;
         }
 
-        const ItemStack output = m_slots[OUTPUT_SLOT];
+        const ItemStack output = m_slots[static_cast<std::size_t>(processor.outputSlot)];
         if (output.isEmpty()) {
             return recipe.resultCount <= resultDef.maxStack;
         }
@@ -138,8 +165,9 @@ private:
         return static_cast<uint32_t>(output.count) + recipe.resultCount <= resultDef.maxStack;
     }
 
-    [[nodiscard]] bool consumeFuel(const SmeltingSystem& smeltingSystem) {
-        ItemStack& fuel = m_slots[FUEL_SLOT];
+    [[nodiscard]] bool consumeFuel(const SmeltingSystem& smeltingSystem,
+                                   const FurnaceSmeltingProcessor& processor) {
+        ItemStack& fuel = m_slots[static_cast<std::size_t>(processor.fuelSlot)];
         if (fuel.isEmpty()) {
             return false;
         }
@@ -158,14 +186,14 @@ private:
         return true;
     }
 
-    void completeRecipe(const SmeltingRecipe& recipe) {
-        ItemStack& input = m_slots[INPUT_SLOT];
+    void completeRecipe(const SmeltingRecipe& recipe, const FurnaceSmeltingProcessor& processor) {
+        ItemStack& input = m_slots[static_cast<std::size_t>(processor.inputSlot)];
         --input.count;
         if (input.count == 0) {
             input = {};
         }
 
-        ItemStack& output = m_slots[OUTPUT_SLOT];
+        ItemStack& output = m_slots[static_cast<std::size_t>(processor.outputSlot)];
         if (output.isEmpty()) {
             output.itemId = recipe.result;
             output.count = recipe.resultCount;

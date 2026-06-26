@@ -45,10 +45,16 @@ int main() {
         return fail("coal should be an 80 second fuel");
     }
 
+    const FurnaceSmeltingProcessor processor{
+        FurnaceInventory::INPUT_SLOT,
+        FurnaceInventory::FUEL_SLOT,
+        FurnaceInventory::OUTPUT_SLOT,
+    };
+
     FurnaceInventory furnace;
     furnace.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{rawIron, 2, 0});
     furnace.setSlotStack(FurnaceInventory::FUEL_SLOT, ItemStack{coal, 1, 0});
-    furnace.tick(10.0f, smelting);
+    furnace.tick(10.0f, smelting, processor);
 
     const ItemStack firstOutput = furnace.getSlotStack(FurnaceInventory::OUTPUT_SLOT);
     if (firstOutput.itemId != ironIngot || firstOutput.count != 1) {
@@ -61,7 +67,7 @@ int main() {
         return fail("starting a burn should consume one coal item");
     }
 
-    furnace.tick(10.0f, smelting);
+    furnace.tick(10.0f, smelting, processor);
     const ItemStack secondOutput = furnace.getSlotStack(FurnaceInventory::OUTPUT_SLOT);
     if (secondOutput.itemId != ironIngot || secondOutput.count != 2) {
         return fail("remaining burn time should smelt the second raw iron");
@@ -71,7 +77,7 @@ int main() {
     blocked.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{sand, 1, 0});
     blocked.setSlotStack(FurnaceInventory::FUEL_SLOT, ItemStack{coal, 1, 0});
     blocked.setSlotStack(FurnaceInventory::OUTPUT_SLOT, ItemStack{ironIngot, 1, 0});
-    blocked.tick(10.0f, smelting);
+    blocked.tick(10.0f, smelting, processor);
     if (blocked.getSlotStack(FurnaceInventory::OUTPUT_SLOT).itemId != ironIngot ||
         blocked.getSlotStack(FurnaceInventory::OUTPUT_SLOT).count != 1) {
         return fail("blocked output should preserve the existing output stack");
@@ -83,7 +89,7 @@ int main() {
     FurnaceInventory sandFurnace;
     sandFurnace.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{sand, 1, 0});
     sandFurnace.setSlotStack(FurnaceInventory::FUEL_SLOT, ItemStack{coal, 1, 0});
-    sandFurnace.tick(10.0f, smelting);
+    sandFurnace.tick(10.0f, smelting, processor);
     const ItemStack glassOutput = sandFurnace.getSlotStack(FurnaceInventory::OUTPUT_SLOT);
     if (glassOutput.itemId != glass || glassOutput.count != 1) {
         return fail("sand should smelt into glass");

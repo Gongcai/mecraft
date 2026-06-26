@@ -25,9 +25,9 @@ std::unique_ptr<IGameState> createStorageState(InventoryStateContext deps,
 
 std::unique_ptr<IGameState> createSmeltingState(InventoryStateContext deps,
                                                 const ui::ContainerUiDef& def,
-                                                const ContainerBehaviorDef& /*behavior*/,
+                                                const ContainerBehaviorDef& behavior,
                                                 const glm::ivec3& blockPosition) {
-    return std::make_unique<FurnaceState>(deps, def.id, blockPosition);
+    return std::make_unique<FurnaceState>(deps, def.id, behavior.id, blockPosition);
 }
 
 std::unique_ptr<IGameState> createCraftingState(InventoryStateContext deps,

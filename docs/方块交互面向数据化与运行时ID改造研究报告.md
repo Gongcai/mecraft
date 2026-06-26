@@ -15,11 +15,12 @@
 6. **客户端/服务器交互消费已改为服务端权威**：多人模式下客户端发送 `ClientBlockActionType::Interact` 后消费本地输入，但不直接改世界；服务器校验距离并执行交互，再广播结果，避免同一命中事件被客户端和服务器各消费一次导致随机行为。
 7. **红石部分数据尾巴已清理**：按钮脉冲时长由 `redstonePulseTicks` 数据驱动；活塞不可推动规则由 `pistonPushReaction` 数据驱动；比较器读取容器信号由 `ContainerBehaviorDef.comparatorSignal` 数据驱动；压力板接受实体类型由 `pressurePlateEntityFilter` 数据驱动。
 8. **通用 block-entity storage 已落地**：箱子、木桶等 `handler:"storage"` 容器共用 `BlockEntityInventoryStore`、`BlockEntityInventoryLifecycle` 和通用 storage 面板；服务器保存空容器时也按 `containerUi -> behavior` 数据判断 block entity 类型，已用 `minecraft:barrel` 保存/恢复测试验证。
+9. **熔炉 smelting processor 已接入运行逻辑**：`FurnaceState` 从 `ContainerBehaviorRegistry` 读取 smelting processor 和 slotRules，`FurnaceInventory::tick` 使用预解析槽位驱动输入、燃料和输出处理，不在热路径解释 JSON。
 
 仍建议继续推进的剩余项：
 
 1. 活塞主体、活塞头、移动方块等结构性逻辑仍需要 C++，但可继续抽离可配置的规则字段。
-2. 熔炉仍保留专用 `FurnaceInventoryStore` 和处理器状态；若后续新增带处理流程的机器类容器，需要设计数据化 processor schema。
+2. 熔炉仍保留专用 `FurnaceInventoryStore` 和状态保存字段；若后续新增带处理流程的机器类容器，需要把 processor runtime 从熔炉专用实现泛化。
 3. 红石多色线仍停留在方案层面，尚未实现。
 
 ---
@@ -719,7 +720,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 |------|------|----------|----------|
 | 阶段 1：BlockID/ItemID 运行时化 | **已完成** | `BuiltinIds`、`BlockIds::`、`ItemIds::` 已移除，方块/物品由 JSON 注册 | 保持新增内容只走 JSON 注册 |
 | 阶段 2：特殊操作数据化 | **已完成主要目标** | 锄地、水桶等 use-on-block 规则由 `ItemUseDispatcher` 驱动 | 新增规则时继续扩展数据 schema，而不是在入口写分支 |
-| 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态和通用 block-entity storage 已落地；箱子、木桶、熔炉、合成台已迁移 | 为机器类容器继续评估 processor schema |
+| 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态、通用 block-entity storage、熔炉 smelting processor 槽位数据化已落地；箱子、木桶、熔炉、合成台已迁移 | 泛化机器类 processor runtime |
 | 阶段 4：方块状态切换数据化 | **已完成大部分常见交互** | lever/button/repeater/comparator/door/trapdoor/fence_gate 已通过交互配置分发；多人交互为服务端权威 | 继续评估活塞等红石子系统中的结构性规则 |
 | 阶段 5：红石数据尾巴清理 | **进行中** | 按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已数据化 | 多色红石线、活塞结构性规则 |
 
