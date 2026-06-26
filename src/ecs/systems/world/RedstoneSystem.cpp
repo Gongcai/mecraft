@@ -148,16 +148,6 @@ BlockID pistonHeadBlockId() {
     return blockId;
 }
 
-BlockID bedrockBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:bedrock");
-    return blockId;
-}
-
-BlockID obsidianBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:obsidian");
-    return blockId;
-}
-
 bool isWireState(const StateID stateId) {
     if (stateId == RUNTIME_ID_NULL) {
         return false;
@@ -858,9 +848,8 @@ bool isMatchingPistonHead(const StateID headState, const StateID pistonState) {
 
 bool isImmovablePistonBlock(const StateID stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    if (blockId == bedrockBlockId() ||
-        blockId == obsidianBlockId() ||
-        blockId == pistonHeadBlockId()) {
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (def.pistonPushReaction == "block") {
         return true;
     }
     return isPistonState(stateId) && isExtendedPropertyTrue(stateId);

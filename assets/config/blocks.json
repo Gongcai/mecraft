@@ -140,6 +140,7 @@
       "id": "minecraft:bedrock",
       "drop": "minecraft:air",
       "isSelectable": false,
+      "pistonPushReaction": "block",
       "timeToBreak": 65535,
       "textures": {
         "all": "bedrock"
@@ -1488,6 +1489,7 @@
     {
       "id": "minecraft:piston_head",
       "drop": "minecraft:air",
+      "pistonPushReaction": "block",
       "properties": {
         "facing": ["down", "up", "north", "south", "west", "east"],
         "type": ["normal", "sticky"]
@@ -1810,6 +1812,7 @@
     {
       "id": "minecraft:obsidian",
       "drop": "minecraft:obsidian",
+      "pistonPushReaction": "block",
       "timeToBreak": 50000,
       "textures": {
         "all": "obsidian"

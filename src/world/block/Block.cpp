@@ -58,6 +58,10 @@ bool isKnownRedstoneBehavior(const std::string_view behavior) {
     return std::find(std::begin(kKnownBehaviors), std::end(kKnownBehaviors), behavior) != std::end(kKnownBehaviors);
 }
 
+bool isKnownPistonPushReaction(const std::string_view reaction) {
+    return reaction == "normal" || reaction == "block";
+}
+
 AnimatedTextureRef makeStaticWorldTexture(const int layer) {
     AnimatedTextureRef ref;
     ref.firstLayer = layer;
@@ -110,6 +114,7 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.redstoneControlledProperty.clear();
     def.redstoneControlledMirrorProperties.clear();
     def.redstoneControlledPowerInverted = false;
+    def.pistonPushReaction = "normal";
     setAllFaces(def, makeStaticWorldTexture(0));
     return def;
 }
@@ -530,6 +535,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.redstoneControlledProperty.clear();
         def.redstoneControlledMirrorProperties.clear();
         def.redstoneControlledPowerInverted = false;
+        def.pistonPushReaction = "normal";
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -675,6 +681,17 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (def.redstoneBehavior == "button" && def.redstonePulseTicks == 0) {
             throw std::runtime_error("redstoneBehavior=button requires redstonePulseTicks for block: " +
                                      def.namespacedId.full());
+        }
+        if (blockJson.contains("pistonPushReaction")) {
+            if (!blockJson["pistonPushReaction"].is_string()) {
+                throw std::runtime_error("pistonPushReaction must be a string for block: " +
+                                         def.namespacedId.full());
+            }
+            def.pistonPushReaction = blockJson["pistonPushReaction"].get<std::string>();
+            if (!isKnownPistonPushReaction(def.pistonPushReaction)) {
+                throw std::runtime_error("Unknown pistonPushReaction '" + def.pistonPushReaction +
+                                         "' for block: " + def.namespacedId.full());
+            }
         }
         if (blockJson.contains("redstoneControlledProperty")) {
             if (!blockJson["redstoneControlledProperty"].is_string()) {

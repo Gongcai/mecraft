@@ -272,6 +272,7 @@ struct BlockDef {
     std::string redstoneControlledProperty; // Boolean state property driven by incoming redstone power.
     std::vector<std::string> redstoneControlledMirrorProperties; // Boolean state properties updated when the controlled property changes.
     bool redstoneControlledPowerInverted = false; // True when powered blocks select the false property value.
+    std::string pistonPushReaction = "normal"; // Controls how pistons treat this block during movement.
 
     // Convenience: return the TextureArray first layer for a given face (0=top,1=bottom,2=front,3=back,4=left,5=right)
     [[nodiscard]] int getFaceLayer(int face) const {

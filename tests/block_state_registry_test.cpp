@@ -810,6 +810,15 @@ int main() {
         return fail("button pulse durations should parse from blocks.json");
     }
 
+    const BlockDef& bedrockDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:bedrock"));
+    const BlockDef& obsidianDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:obsidian"));
+    const BlockDef& pistonHeadDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:piston_head"));
+    if (bedrockDef.pistonPushReaction != "block" ||
+        obsidianDef.pistonPushReaction != "block" ||
+        pistonHeadDef.pistonPushReaction != "block") {
+        return fail("immovable piston blocks should parse their piston push reaction from blocks.json");
+    }
+
     PlacementStrategyFn chestStrategy = PlacementStrategyRegistry::getStrategy(chestDef.placementStrategy);
     if (chestStrategy == nullptr) {
         return fail("chest placement strategy should be registered");
