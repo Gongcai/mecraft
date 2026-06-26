@@ -80,12 +80,10 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_inventoryPanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
     m_chestPanel.init(resourceMgr);
-    m_chestPanel.setDefinition(ui::ContainerUiRegistry::require("minecraft:chest"));
     m_chestPanel.visible = false;
     m_chestPanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
     m_furnacePanel.init(resourceMgr);
-    m_furnacePanel.setDefinition(ui::ContainerUiRegistry::require("minecraft:furnace"));
     m_furnacePanel.visible = false;
     m_furnacePanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
@@ -450,6 +448,11 @@ void UIRenderer::setChestPanelVisible(const bool visible)
     }
 }
 
+void UIRenderer::setChestPanelDefinition(const ui::ContainerUiDef& definition)
+{
+    m_chestPanel.setDefinition(definition);
+}
+
 void UIRenderer::setChestPanelChestSource(const ChestInventory* chest)
 {
     m_chestPanel.setChestSource(chest);
@@ -488,6 +491,11 @@ void UIRenderer::setFurnacePanelVisible(const bool visible)
         m_chestPanel.setVisible(false);
         m_creativeInventoryPanel.setVisible(false);
     }
+}
+
+void UIRenderer::setFurnacePanelDefinition(const ui::ContainerUiDef& definition)
+{
+    m_furnacePanel.setDefinition(definition);
 }
 
 void UIRenderer::setFurnacePanelSource(const FurnaceInventory* furnace)

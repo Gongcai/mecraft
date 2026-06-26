@@ -62,6 +62,7 @@ public:
     [[nodiscard]] int getInventoryPanelHoveredSlot() const;
 
     void setChestPanelVisible(bool visible);
+    void setChestPanelDefinition(const ui::ContainerUiDef& definition);
     void setChestPanelChestSource(const ChestInventory* chest);
     [[nodiscard]] int getChestPanelLastActivatedSlot() const;
     [[nodiscard]] int getChestPanelPlayerLastActivatedSlot() const;
@@ -70,6 +71,7 @@ public:
     void clearChestPanelActivations();
 
     void setFurnacePanelVisible(bool visible);
+    void setFurnacePanelDefinition(const ui::ContainerUiDef& definition);
     void setFurnacePanelSource(const FurnaceInventory* furnace);
     void setFurnacePanelProgress(float burnFraction, float cookFraction);
     [[nodiscard]] int getFurnacePanelLastActivatedSlot() const;

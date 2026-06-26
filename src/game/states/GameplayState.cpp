@@ -11,11 +11,9 @@
 #include "GameplayStateEcsBridge.h"
 #include "SleepingState.h"
 #include "../redstone/RedstoneControlInteraction.h"
-#include "../inventory/ChestInventoryState.h"
+#include "../inventory/ContainerStateFactory.h"
 #include "../inventory/CreativeInventoryState.h"
-#include "../inventory/FurnaceState.h"
 #include "../inventory/InventoryState.h"
-#include "../inventory/WorkbenchState.h"
 #include "../modes/CreativeModeState.h"
 #include "UIState.h"
 #include "UIStateContext.h"
@@ -26,34 +24,11 @@
 #include "../../locale/LocaleManager.h"
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIRenderer.h"
-#include "../../ui/inventory/ContainerUiRegistry.h"
 #include "../../world/World.h"
 #include "../../world/block/BedBlock.h"
 #include "../../world/block/DoorBlock.h"
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/block/PropIndices.h"
-
-namespace {
-void pushContainerUiState(GameplayStateContext& gameplayCtx,
-                          const InventoryStateContext& inventoryCtx,
-                          const std::string& containerUi,
-                          const glm::ivec3& blockPosition) {
-    const ui::ContainerUiDef& def = ui::ContainerUiRegistry::require(containerUi);
-    if (def.behavior == "crafting_table") {
-        gameplayCtx.fsm.pushState(std::make_unique<WorkbenchState>(inventoryCtx, def.id));
-        return;
-    }
-    if (def.behavior == "furnace") {
-        gameplayCtx.fsm.pushState(std::make_unique<FurnaceState>(inventoryCtx, blockPosition));
-        return;
-    }
-    if (def.behavior == "chest") {
-        gameplayCtx.fsm.pushState(std::make_unique<ChestInventoryState>(inventoryCtx, blockPosition));
-        return;
-    }
-    throw std::runtime_error("Unknown container UI behavior for block interaction: " + def.behavior);
-}
-}
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -235,7 +210,10 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
 
         const BlockDef& targetDef = BlockRegistry::getFast(targetBlock);
         if (!targetDef.containerUi.empty()) {
-            pushContainerUiState(m_ctx, m_inventoryCtx, targetDef.containerUi, target.targetBlock);
+            m_ctx.fsm.pushState(ContainerStateFactory::create(
+                m_inventoryCtx,
+                targetDef.containerUi,
+                target.targetBlock));
             return true;
         }
     }

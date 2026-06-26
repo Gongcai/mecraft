@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
+#include <utility>
 
 #include <glm/vec3.hpp>
 
@@ -18,12 +20,14 @@
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIInputAdapter.h"
 #include "../../ui/core/UIRenderer.h"
+#include "../../ui/inventory/ContainerUiRegistry.h"
 #include "../../world/DropSystem.h"
 
 class FurnaceState final : public IGameState {
 public:
-    FurnaceState(InventoryStateContext deps, const glm::ivec3 furnacePosition)
+    FurnaceState(InventoryStateContext deps, std::string containerUiId, const glm::ivec3 furnacePosition)
         : m_deps(deps),
+          m_containerUiId(std::move(containerUiId)),
           m_furnacePosition(furnacePosition) {}
 
     void onEnter() override {
@@ -32,6 +36,7 @@ public:
 
         m_deps.context.pushContext(InputContextType::UI);
         m_deps.input.captureMouse(false);
+        m_deps.uiRenderer.setFurnacePanelDefinition(ui::ContainerUiRegistry::require(m_containerUiId));
         m_deps.uiRenderer.setFurnacePanelSource(m_furnace);
         m_deps.uiRenderer.setFurnacePanelVisible(true);
         m_deps.uiRenderer.clearFurnacePanelActivations();
@@ -351,6 +356,7 @@ private:
     }
 
     InventoryStateContext m_deps;
+    std::string m_containerUiId;
     glm::ivec3 m_furnacePosition{};
     FurnaceInventory* m_furnace = nullptr;
     int m_lastSecondaryPlaceSlot = -1;

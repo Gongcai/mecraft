@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <string>
+#include <utility>
 
 #include <glm/vec3.hpp>
 
@@ -17,12 +19,14 @@
 #include "../../player/Inventory.h"
 #include "../../ui/core/UIInputAdapter.h"
 #include "../../ui/core/UIRenderer.h"
+#include "../../ui/inventory/ContainerUiRegistry.h"
 #include "../../world/DropSystem.h"
 
 class ChestInventoryState final : public IGameState {
 public:
-    ChestInventoryState(InventoryStateContext deps, const glm::ivec3 chestPosition)
+    ChestInventoryState(InventoryStateContext deps, std::string containerUiId, const glm::ivec3 chestPosition)
         : m_deps(deps),
+          m_containerUiId(std::move(containerUiId)),
           m_chestPosition(chestPosition) {}
 
     void onEnter() override {
@@ -31,6 +35,7 @@ public:
 
         m_deps.context.pushContext(InputContextType::UI);
         m_deps.input.captureMouse(false);
+        m_deps.uiRenderer.setChestPanelDefinition(ui::ContainerUiRegistry::require(m_containerUiId));
         m_deps.uiRenderer.setChestPanelChestSource(m_chest);
         m_deps.uiRenderer.setChestPanelVisible(true);
         m_deps.uiRenderer.clearChestPanelActivations();
@@ -333,6 +338,7 @@ private:
     }
 
     InventoryStateContext m_deps;
+    std::string m_containerUiId;
     glm::ivec3 m_chestPosition{};
     ChestInventory* m_chest = nullptr;
     int m_lastSecondaryPlaceSlot = -1;
