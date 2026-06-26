@@ -3,6 +3,7 @@
 #include "../../GameplayRegistry.h"
 #include "../../components/Components.h"
 #include "../../util/AudioEventBuffer.h"
+#include "../../util/RedstoneEventBuffer.h"
 #include "../../../game/inventory/ChestInventoryStore.h"
 #include "../../../game/inventory/FurnaceInventoryStore.h"
 #include "../../../item/Item.h"
@@ -543,7 +544,10 @@ bool isEdgeTriggeredDeviceState(const StateID stateId) {
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
-    return def.redstoneBehavior == "note_block";
+    return def.respondsToRedstone &&
+           (def.redstoneBehavior == "note_block" ||
+            def.redstoneBehavior == "dispenser" ||
+            def.redstoneBehavior == "dropper");
 }
 
 bool isTargetState(const StateID stateId) {
@@ -2397,9 +2401,16 @@ size_t applyRedstoneControlledStates(World& world,
 
 void emitEdgeTriggeredDeviceEvent(GameplayRegistry& registry,
                                   const StateID stateId,
-                                  const glm::ivec3& position) {
+                                  const glm::ivec3& position,
+                                  const uint64_t redstoneTick) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
+    ensureRedstoneDeviceActivationEventBus(registry).push({
+        position,
+        blockId,
+        stateId,
+        redstoneTick
+    });
     if (def.redstoneBehavior == "note_block") {
         ensureAudioEventBus(registry).push({
             "block.note_block.harp",
@@ -2409,13 +2420,17 @@ void emitEdgeTriggeredDeviceEvent(GameplayRegistry& registry,
         });
         return;
     }
+    if (def.redstoneBehavior == "dispenser" || def.redstoneBehavior == "dropper") {
+        return;
+    }
     throw std::runtime_error("Unsupported redstone edge-triggered behavior: " + def.redstoneBehavior);
 }
 
 size_t applyEdgeTriggeredDeviceStates(World& world,
                                       GameplayRegistry* registry,
                                       const std::vector<glm::ivec3>& positions,
-                                      const WirePowerMap& wirePowers) {
+                                      const WirePowerMap& wirePowers,
+                                      const uint64_t redstoneTick) {
     size_t changed = 0;
     for (const glm::ivec3& position : positions) {
         const StateID currentState = world.getBlockState(position.x, position.y, position.z);
@@ -2426,7 +2441,7 @@ size_t applyEdgeTriggeredDeviceStates(World& world,
         const bool currentlyPowered = isPoweredPropertyTrue(currentState);
         const bool shouldBePowered = receivedPowerAt(world, wirePowers, position) > 0;
         if (!currentlyPowered && shouldBePowered && registry != nullptr) {
-            emitEdgeTriggeredDeviceEvent(*registry, currentState, position);
+            emitEdgeTriggeredDeviceEvent(*registry, currentState, position, redstoneTick);
         }
 
         const StateID updatedState = withPowered(currentState, shouldBePowered);
@@ -2495,7 +2510,12 @@ size_t processWorldWithContext(World& world,
     changed += applyRepeaterLockStates(world, workSet.repeaters);
     scheduleRepeaterEvaluationUpdates(world, redstoneTick, workSet.repeaters, wirePowers);
     changed += applyRedstoneControlledStates(world, workSet.redstoneControlledBlocks, wirePowers);
-    changed += applyEdgeTriggeredDeviceStates(world, mutableRegistry, workSet.edgeTriggeredDevices, wirePowers);
+    changed += applyEdgeTriggeredDeviceStates(
+        world,
+        mutableRegistry,
+        workSet.edgeTriggeredDevices,
+        wirePowers,
+        redstoneTick);
     return changed;
 }
 

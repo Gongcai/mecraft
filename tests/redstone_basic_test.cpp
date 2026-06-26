@@ -14,6 +14,7 @@
 #include "../src/ecs/systems/combat/ProjectileSystem.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
 #include "../src/ecs/util/AudioEventBuffer.h"
+#include "../src/ecs/util/RedstoneEventBuffer.h"
 #include "../src/world/World.h"
 #include "../src/world/block/Block.h"
 #include "../src/world/block/BlockStateRegistry.h"
@@ -1068,6 +1069,69 @@ int main() {
         redstoneSystem.update(ctx);
         if (audioEvents.size() != 2) {
             return fail("note_block should emit again after power falls and rises");
+        }
+    }
+
+    {
+        World edgeWorld;
+        edgeWorld.init(20260626);
+        loadOriginChunks(edgeWorld);
+
+        const int dispenserY = 68;
+        prepareFlatTestLine(edgeWorld, dispenserY);
+        edgeWorld.setBlockState(0, dispenserY, 0, leverState(true));
+        edgeWorld.setBlockState(1, dispenserY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        edgeWorld.setBlockState(2, dispenserY, 0, BlockStateRegistry::getDefaultState(BlockIds::DISPENSER));
+
+        ecs::GameplayRegistry registry;
+        ecs::RedstoneSystem::processWorld(edgeWorld, 210, registry);
+        auto& activationEvents = ecs::ensureRedstoneDeviceActivationEventBus(registry);
+        if (!powered(edgeWorld, 2, dispenserY, 0) ||
+            activationEvents.size() != 1 ||
+            activationEvents.peek().front().blockId != BlockIds::DISPENSER ||
+            activationEvents.peek().front().position != glm::ivec3(2, dispenserY, 0) ||
+            activationEvents.peek().front().redstoneTick != 210) {
+            return fail("dispenser should store powered=true and emit one rising-edge redstone event");
+        }
+
+        edgeWorld.redstoneUpdateQueue().enqueue(glm::ivec3(2, dispenserY, 0));
+        ecs::RedstoneSystem::processWorld(edgeWorld, 211, registry);
+        if (!powered(edgeWorld, 2, dispenserY, 0) ||
+            activationEvents.size() != 1) {
+            return fail("dispenser should not emit another event while power remains high");
+        }
+
+        edgeWorld.setBlockState(0, dispenserY, 0, leverState(false));
+        ecs::RedstoneSystem::processWorld(edgeWorld, 212, registry);
+        if (powered(edgeWorld, 2, dispenserY, 0) ||
+            activationEvents.size() != 1) {
+            return fail("dispenser falling edge should reset powered state without emitting an event");
+        }
+
+        edgeWorld.setBlockState(0, dispenserY, 0, leverState(true));
+        ecs::RedstoneSystem::processWorld(edgeWorld, 213, registry);
+        if (!powered(edgeWorld, 2, dispenserY, 0) ||
+            activationEvents.size() != 2 ||
+            activationEvents.peek().back().blockId != BlockIds::DISPENSER ||
+            activationEvents.peek().back().redstoneTick != 213) {
+            return fail("dispenser should emit again after power falls and rises");
+        }
+
+        activationEvents.clear();
+
+        const int dropperY = 60;
+        prepareFlatTestLine(edgeWorld, dropperY);
+        edgeWorld.setBlockState(0, dropperY, 0, leverState(true));
+        edgeWorld.setBlockState(1, dropperY, 0, BlockStateRegistry::getDefaultState(BlockIds::REDSTONE_WIRE));
+        edgeWorld.setBlockState(2, dropperY, 0, BlockStateRegistry::getDefaultState(BlockIds::DROPPER));
+
+        ecs::RedstoneSystem::processWorld(edgeWorld, 220, registry);
+        if (!powered(edgeWorld, 2, dropperY, 0) ||
+            activationEvents.size() != 1 ||
+            activationEvents.peek().front().blockId != BlockIds::DROPPER ||
+            activationEvents.peek().front().position != glm::ivec3(2, dropperY, 0) ||
+            activationEvents.peek().front().redstoneTick != 220) {
+            return fail("dropper should store powered=true and emit one rising-edge redstone event");
         }
     }
 

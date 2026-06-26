@@ -1050,6 +1050,36 @@ int main() {
             PropIndices::POWERED_TRUE) {
         return fail("note_block should expose a powered=true block state");
     }
+    const StateID dispenserDefault = BlockStateRegistry::getDefaultState(BlockIds::DISPENSER);
+    if (BlockStateRegistry::getPropertyIndex(dispenserDefault, PropIndices::POWERED) !=
+        PropIndices::POWERED_FALSE) {
+        return fail("dispenser default state should be powered=false");
+    }
+    const StateID dispenserPowered = BlockStateRegistry::withProperty(
+        dispenserDefault,
+        PropIndices::POWERED,
+        PropIndices::POWERED_TRUE);
+    if (dispenserPowered == dispenserDefault ||
+        BlockStateRegistry::getBlockId(dispenserPowered) != BlockIds::DISPENSER ||
+        BlockStateRegistry::getPropertyIndex(dispenserPowered, PropIndices::POWERED) !=
+            PropIndices::POWERED_TRUE) {
+        return fail("dispenser should expose a powered=true block state");
+    }
+    const StateID dropperDefault = BlockStateRegistry::getDefaultState(BlockIds::DROPPER);
+    if (BlockStateRegistry::getPropertyIndex(dropperDefault, PropIndices::POWERED) !=
+        PropIndices::POWERED_FALSE) {
+        return fail("dropper default state should be powered=false");
+    }
+    const StateID dropperPowered = BlockStateRegistry::withProperty(
+        dropperDefault,
+        PropIndices::POWERED,
+        PropIndices::POWERED_TRUE);
+    if (dropperPowered == dropperDefault ||
+        BlockStateRegistry::getBlockId(dropperPowered) != BlockIds::DROPPER ||
+        BlockStateRegistry::getPropertyIndex(dropperPowered, PropIndices::POWERED) !=
+            PropIndices::POWERED_TRUE) {
+        return fail("dropper should expose a powered=true block state");
+    }
 
     const auto modelVariantMatches = [](const StateID state,
                                         const char* expectedModel,
@@ -1439,6 +1469,13 @@ int main() {
     if (!modelVariantMatches(dispenserUp, "block/dispenser", 0, 270)) {
         return fail("dispenser up state should resolve to the rotated dispenser model");
     }
+    const StateID dispenserUpPowered = BlockStateRegistry::withProperty(
+        dispenserUp,
+        PropIndices::POWERED,
+        PropIndices::POWERED_TRUE);
+    if (!modelVariantMatches(dispenserUpPowered, "block/dispenser", 0, 270)) {
+        return fail("powered dispenser up state should resolve to the rotated dispenser model");
+    }
 
     const StateID dropperEast = BlockStateRegistry::getState(
         BlockIds::DROPPER,
@@ -1446,6 +1483,13 @@ int main() {
         PropIndices::FACING_EAST);
     if (!modelVariantMatches(dropperEast, "block/dropper", 270, 0)) {
         return fail("dropper east state should resolve to the rotated dropper model");
+    }
+    const StateID dropperEastPowered = BlockStateRegistry::withProperty(
+        dropperEast,
+        PropIndices::POWERED,
+        PropIndices::POWERED_TRUE);
+    if (!modelVariantMatches(dropperEastPowered, "block/dropper", 270, 0)) {
+        return fail("powered dropper east state should resolve to the rotated dropper model");
     }
 
     const StateID hopperSouth = BlockStateRegistry::getState(

@@ -1395,10 +1395,12 @@
       "redstoneBehavior": "dispenser",
       "respondsToRedstone": true,
       "properties": {
-        "facing": ["down", "up", "north", "south", "west", "east"]
+        "facing": ["down", "up", "north", "south", "west", "east"],
+        "powered": ["false", "true"]
       },
       "defaultState": {
-        "facing": "south"
+        "facing": "south",
+        "powered": "false"
       },
       "renderShape": "model",
       "placementStrategy": "six_way_facing",
@@ -1413,7 +1415,13 @@
         "facing=north": { "model": "block/dispenser", "transform": { "rotY": 180 } },
         "facing=south": { "model": "block/dispenser" },
         "facing=west": { "model": "block/dispenser", "transform": { "rotY": 90 } },
-        "facing=east": { "model": "block/dispenser", "transform": { "rotY": 270 } }
+        "facing=east": { "model": "block/dispenser", "transform": { "rotY": 270 } },
+        "facing=down,powered=true": { "model": "block/dispenser", "transform": { "rotX": 90 } },
+        "facing=up,powered=true": { "model": "block/dispenser", "transform": { "rotX": 270 } },
+        "facing=north,powered=true": { "model": "block/dispenser", "transform": { "rotY": 180 } },
+        "facing=south,powered=true": { "model": "block/dispenser" },
+        "facing=west,powered=true": { "model": "block/dispenser", "transform": { "rotY": 90 } },
+        "facing=east,powered=true": { "model": "block/dispenser", "transform": { "rotY": 270 } }
       }
     },
     {
@@ -1422,10 +1430,12 @@
       "redstoneBehavior": "dropper",
       "respondsToRedstone": true,
       "properties": {
-        "facing": ["down", "up", "north", "south", "west", "east"]
+        "facing": ["down", "up", "north", "south", "west", "east"],
+        "powered": ["false", "true"]
       },
       "defaultState": {
-        "facing": "south"
+        "facing": "south",
+        "powered": "false"
       },
       "renderShape": "model",
       "placementStrategy": "six_way_facing",
@@ -1440,7 +1450,13 @@
         "facing=north": { "model": "block/dropper", "transform": { "rotY": 180 } },
         "facing=south": { "model": "block/dropper" },
         "facing=west": { "model": "block/dropper", "transform": { "rotY": 90 } },
-        "facing=east": { "model": "block/dropper", "transform": { "rotY": 270 } }
+        "facing=east": { "model": "block/dropper", "transform": { "rotY": 270 } },
+        "facing=down,powered=true": { "model": "block/dropper", "transform": { "rotX": 90 } },
+        "facing=up,powered=true": { "model": "block/dropper", "transform": { "rotX": 270 } },
+        "facing=north,powered=true": { "model": "block/dropper", "transform": { "rotY": 180 } },
+        "facing=south,powered=true": { "model": "block/dropper" },
+        "facing=west,powered=true": { "model": "block/dropper", "transform": { "rotY": 90 } },
+        "facing=east,powered=true": { "model": "block/dropper", "transform": { "rotY": 270 } }
       }
     },
     {
