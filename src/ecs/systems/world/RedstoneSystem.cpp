@@ -4,7 +4,7 @@
 #include "../../components/Components.h"
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/RedstoneEventBuffer.h"
-#include "../../../game/inventory/ChestInventoryStore.h"
+#include "../../../game/inventory/BlockEntityInventoryStore.h"
 #include "../../../game/inventory/ContainerBehaviorRegistry.h"
 #include "../../../game/inventory/FurnaceInventoryStore.h"
 #include "../../../item/Item.h"
@@ -410,16 +410,16 @@ uint8_t containerSignalPowerAt(const World& world,
     }
 
     if (behavior.handler == "storage") {
-        if (registry == nullptr || !registry->ctxHas<ChestInventoryStore>()) {
+        if (registry == nullptr || !registry->ctxHas<BlockEntityInventoryStore>()) {
             return 0;
         }
-        const ChestInventoryStore& store = registry->ctxGet<ChestInventoryStore>();
-        const ChestInventory* chest = store.find(position);
-        if (chest == nullptr) {
+        const BlockEntityInventoryStore& store = registry->ctxGet<BlockEntityInventoryStore>();
+        const ChestInventory* inventory = store.find(position);
+        if (inventory == nullptr) {
             return 0;
         }
-        return inventorySignalPower(behavior.storage.slots, [chest](const int slot) {
-            return chest->getSlotStack(slot);
+        return inventorySignalPower(behavior.storage.slots, [inventory](const int slot) {
+            return inventory->getSlotStack(slot);
         });
     }
 

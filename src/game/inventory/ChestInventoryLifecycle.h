@@ -8,8 +8,8 @@ namespace ecs {
 class GameplayRegistry;
 }
 
-/// Removes chest inventory data when a chest block is destroyed.
-/// Returns true when the destroyed block is a chest, even if it had no stored inventory yet.
+/// Removes data-driven storage inventory data when a storage container block is destroyed.
+/// Returns true when the destroyed block uses a storage container behavior.
 [[nodiscard]] bool handleChestInventoryBreak(ecs::GameplayRegistry& registry,
                                              BlockID brokenBlock,
                                              const glm::ivec3& blockPos,

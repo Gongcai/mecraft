@@ -12,7 +12,7 @@
 #include "../states/GameStateMachine.h"
 #include "../states/IGameState.h"
 #include "engine/input/InputContextManager.h"
-#include "ChestInventoryStore.h"
+#include "BlockEntityInventoryStore.h"
 #include "ContainerBehaviorRegistry.h"
 #include "InventoryStateContext.h"
 #include "../../ecs/GameplayRegistry.h"
@@ -41,8 +41,8 @@ public:
         validateStorageBehavior(uiDef, behavior);
         m_storageSlotCount = behavior.storage.slots;
 
-        ChestInventoryStore& store = ensureStore();
-        m_storage = &store.getOrCreate(m_blockPosition);
+        BlockEntityInventoryStore& store = ensureStore();
+        m_storage = &store.getOrCreate(m_blockPosition, behavior.id, behavior.storage.slots);
 
         m_deps.context.pushContext(InputContextType::UI);
         m_deps.input.captureMouse(false);
@@ -166,11 +166,11 @@ private:
                m_storage->isValidSlot(slot);
     }
 
-    ChestInventoryStore& ensureStore() {
-        if (!m_deps.ecsRegistry.ctxHas<ChestInventoryStore>()) {
-            m_deps.ecsRegistry.ctxSet<ChestInventoryStore>();
+    BlockEntityInventoryStore& ensureStore() {
+        if (!m_deps.ecsRegistry.ctxHas<BlockEntityInventoryStore>()) {
+            m_deps.ecsRegistry.ctxSet<BlockEntityInventoryStore>();
         }
-        return m_deps.ecsRegistry.ctxGet<ChestInventoryStore>();
+        return m_deps.ecsRegistry.ctxGet<BlockEntityInventoryStore>();
     }
 
     [[nodiscard]] SlotRef activatedSlot() const {

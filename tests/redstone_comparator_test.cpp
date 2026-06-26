@@ -9,7 +9,7 @@
 
 #include "../src/ecs/GameplayRegistry.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
-#include "../src/game/inventory/ChestInventoryStore.h"
+#include "../src/game/inventory/BlockEntityInventoryStore.h"
 #include "../src/game/inventory/FurnaceInventoryStore.h"
 #include "../src/item/Item.h"
 #include "../src/world/World.h"
@@ -173,8 +173,8 @@ int main() {
         const glm::ivec3 chestPosition(1, y, 0);
         prepareComparatorArea(world, y);
         ecs::GameplayRegistry registry;
-        ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
-        ChestInventory& chest = store.getOrCreate(chestPosition);
+        BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
+        ChestInventory& chest = store.getOrCreate(chestPosition, "minecraft:chest", 27);
         const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
         const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
         for (int slot = 0; slot < 14; ++slot) {
@@ -201,8 +201,8 @@ int main() {
         const glm::ivec3 barrelPosition(1, y, 0);
         prepareComparatorArea(world, y);
         ecs::GameplayRegistry registry;
-        ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
-        ChestInventory& barrel = store.getOrCreate(barrelPosition);
+        BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
+        ChestInventory& barrel = store.getOrCreate(barrelPosition, "minecraft:barrel", 27);
         const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
         const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
         for (int slot = 0; slot < 14; ++slot) {

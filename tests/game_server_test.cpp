@@ -8,7 +8,7 @@
 #include "ecs/entity/EntityModelRegistry.h"
 #include "ecs/entity/MobModelFactory.h"
 #include "ecs/systems/world/BlockSupportSystem.h"
-#include "game/inventory/ChestInventoryStore.h"
+#include "game/inventory/BlockEntityInventoryStore.h"
 #include "game/inventory/FurnaceInventoryStore.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
@@ -2718,8 +2718,8 @@ static void testPersistentChestInventoryRestoresFromSave() {
         ecs::GameplayRegistry registry;
         server.setEcsRegistry(&registry);
 
-        ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
-        ChestInventory& chest = store.getOrCreate(chestPos);
+        BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
+        ChestInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
         chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 6);
 
         ItemStack pickaxe;
@@ -2740,9 +2740,9 @@ static void testPersistentChestInventoryRestoresFromSave() {
         ecs::GameplayRegistry registry;
         server.setEcsRegistry(&registry);
 
-        require(registry.ctxHas<ChestInventoryStore>(),
-                "persistent chest restore should create a chest inventory store");
-        const ChestInventoryStore& store = registry.ctxGet<ChestInventoryStore>();
+        require(registry.ctxHas<BlockEntityInventoryStore>(),
+                "persistent chest restore should create a block entity inventory store");
+        const BlockEntityInventoryStore& store = registry.ctxGet<BlockEntityInventoryStore>();
         const ChestInventory* chest = store.find(chestPos);
         require(chest != nullptr, "persistent chest restore should recreate the chest inventory");
 
@@ -2939,8 +2939,8 @@ static void testServerBlockActionBreaksChestLifecycle() {
     const StateID chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
     harness.server.world().setBlock(chestPos.x, chestPos.y, chestPos.z, chestState);
 
-    ChestInventoryStore& store = registry.ctxSet<ChestInventoryStore>();
-    ChestInventory& chest = store.getOrCreate(chestPos);
+    BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
+    ChestInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
     chest.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 3);
     chest.setSlotItem(5, ItemRegistry::requireIdByName("minecraft:coal"), 2);
 
