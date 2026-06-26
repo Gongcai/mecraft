@@ -312,6 +312,7 @@ public:
     [[nodiscard]] static uint8_t getLightLevelFast(BlockID id);
     [[nodiscard]] static bool isLightSourceFast(BlockID id);
     [[nodiscard]] static BlockID findByName(const std::string& name);
+    [[nodiscard]] static BlockID requireIdByName(const std::string& name);
     [[nodiscard]] static bool tryGetIdByName(const std::string& name, BlockID& outId);
     [[nodiscard]] static BlockID getId(const NamespacedId& namespacedId);
     [[nodiscard]] static bool tryGetId(const NamespacedId& namespacedId, BlockID& outId);

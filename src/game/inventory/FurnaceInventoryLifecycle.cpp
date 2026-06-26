@@ -7,7 +7,8 @@
 
 namespace {
 BlockID furnaceBlockId() {
-    return BlockRegistry::findByName("minecraft:furnace");
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:furnace");
+    return blockId;
 }
 }
 

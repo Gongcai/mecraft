@@ -10,7 +10,8 @@ bool handleChestInventoryBreak(ecs::GameplayRegistry& registry,
                                const BlockID brokenBlock,
                                const glm::ivec3& blockPos,
                                const bool dropContents) {
-    if (BlockStateRegistry::getBlockId(brokenBlock) != BlockIds::CHEST) {
+    static const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
+    if (BlockStateRegistry::getBlockId(brokenBlock) != chestBlock) {
         return false;
     }
     if (!registry.ctxHas<ChestInventoryStore>()) {

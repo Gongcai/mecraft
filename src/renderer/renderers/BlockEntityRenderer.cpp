@@ -11,6 +11,7 @@
 #include "../core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
+#include "../../world/block/Block.h"
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/block/PropIndices.h"
 #include "../../world/chunk/Chunk.h"
@@ -149,9 +150,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     m_shadowShader = resourceMgr.getShader("entity_shadow");
     m_forwardShader = resourceMgr.getShader("steve_forward");
 
-    if (BlockIds::CHEST == BlockIds::AIR) {
-        throw std::runtime_error("BlockEntityRenderer requires initialized block ids");
-    }
+    const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
 
     ModelDefinition chest = makeChestDefinition();
     const GLuint chestTexture = resourceMgr.getGuiTexture(chest.textureKey);
@@ -163,7 +162,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     entry.mesh = buildMesh(chest);
     entry.texture = chestTexture;
     entry.usesHorizontalFacing = chest.usesHorizontalFacing;
-    m_models.emplace(BlockIds::CHEST, entry);
+    m_models.emplace(chestBlock, entry);
 }
 
 void BlockEntityRenderer::shutdown() {

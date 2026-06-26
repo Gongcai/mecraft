@@ -1097,6 +1097,14 @@ BlockID BlockRegistry::findByName(const std::string& name) {
     return outId;
 }
 
+BlockID BlockRegistry::requireIdByName(const std::string& name) {
+    BlockID outId = 0;
+    if (!tryGetIdByName(name, outId)) {
+        throw std::runtime_error("Required block is not registered: " + name);
+    }
+    return outId;
+}
+
 bool BlockRegistry::tryGetIdByName(const std::string& name, BlockID& outId) {
     ensureInitialized();
 

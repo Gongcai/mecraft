@@ -136,8 +136,15 @@ struct PistonMovementCollision {
 };
 
 bool isWireState(const StateID stateId) {
-    return stateId != BlockIds::AIR &&
-           BlockStateRegistry::getBlockId(stateId) == BlockIds::REDSTONE_WIRE;
+    if (stateId == BlockIds::AIR) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).redstoneBehavior == "wire";
+}
+
+bool isMatchingWireState(const StateID stateId, const BlockID wireBlockId) {
+    return isWireState(stateId) && BlockStateRegistry::getBlockId(stateId) == wireBlockId;
 }
 
 uint16_t getRequiredProperty(const StateID stateId, const uint16_t property, const char* propertyName) {
@@ -368,7 +375,12 @@ uint8_t inventorySignalPower(const int slotCount, StackReader&& stackReader) {
 }
 
 BlockID furnaceBlockId() {
-    static const BlockID blockId = BlockRegistry::findByName("furnace");
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:furnace");
+    return blockId;
+}
+
+BlockID chestBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:chest");
     return blockId;
 }
 
@@ -381,7 +393,7 @@ uint8_t containerSignalPowerAt(const World& world,
     }
 
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    if (blockId == BlockIds::CHEST) {
+    if (blockId == chestBlockId()) {
         if (registry == nullptr || !registry->ctxHas<ChestInventoryStore>()) {
             return 0;
         }
@@ -453,9 +465,15 @@ bool isSolidBlockState(const StateID stateId) {
 // diagonal climbing/descending connections that vanilla redstone supports.
 template <typename Fn>
 void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
+    const StateID selfState = world.getBlockState(pos.x, pos.y, pos.z);
+    if (!isWireState(selfState)) {
+        return;
+    }
+    const BlockID wireBlockId = BlockStateRegistry::getBlockId(selfState);
+
     for (const glm::ivec3& direction : kDirections) {
         const glm::ivec3 neighbor = pos + direction;
-        if (isWireState(world.getBlockState(neighbor.x, neighbor.y, neighbor.z))) {
+        if (isMatchingWireState(world.getBlockState(neighbor.x, neighbor.y, neighbor.z), wireBlockId)) {
             fn(neighbor);
         }
     }
@@ -464,12 +482,12 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
         const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
         if (isSolidBlockState(neighborState)) {
             const glm::ivec3 upPos = neighbor + glm::ivec3(0, 1, 0);
-            if (isWireState(world.getBlockState(upPos.x, upPos.y, upPos.z))) {
+            if (isMatchingWireState(world.getBlockState(upPos.x, upPos.y, upPos.z), wireBlockId)) {
                 fn(upPos);
             }
         } else {
             const glm::ivec3 downPos = neighbor + glm::ivec3(0, -1, 0);
-            if (isWireState(world.getBlockState(downPos.x, downPos.y, downPos.z))) {
+            if (isMatchingWireState(world.getBlockState(downPos.x, downPos.y, downPos.z), wireBlockId)) {
                 fn(downPos);
             }
         }

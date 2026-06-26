@@ -209,19 +209,20 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
             return true;
         }
 
-        const BlockID craftingTableBlock = BlockRegistry::findByName("minecraft:crafting_table");
+        const BlockID craftingTableBlock = BlockRegistry::requireIdByName("minecraft:crafting_table");
         if (targetBlock == craftingTableBlock) {
             m_ctx.fsm.pushState(std::make_unique<WorkbenchState>(m_inventoryCtx));
             return true;
         }
 
-        const BlockID furnaceBlock = BlockRegistry::findByName("minecraft:furnace");
+        const BlockID furnaceBlock = BlockRegistry::requireIdByName("minecraft:furnace");
         if (targetBlock == furnaceBlock) {
             m_ctx.fsm.pushState(std::make_unique<FurnaceState>(m_inventoryCtx, target.targetBlock));
             return true;
         }
 
-        if (targetBlock == BlockIds::CHEST) {
+        const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
+        if (targetBlock == chestBlock) {
             m_ctx.fsm.pushState(std::make_unique<ChestInventoryState>(m_inventoryCtx, target.targetBlock));
             return true;
         }

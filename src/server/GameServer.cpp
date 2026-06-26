@@ -49,7 +49,13 @@ constexpr float kPlayerPoseSyncEpsilonSq = 0.000001f;
 constexpr float kPlayerPoseCorrectionAcceptDistanceSq = 0.1225f;
 
 BlockID furnaceBlockId() {
-    return BlockRegistry::findByName("minecraft:furnace");
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:furnace");
+    return blockId;
+}
+
+BlockID chestBlockId() {
+    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:chest");
+    return blockId;
 }
 
 int blockToChunkCoord(const int value) {
@@ -1520,7 +1526,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             brokeChest = handleChestInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
             brokeFurnace = handleFurnaceInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
             if (brokeChest && shouldDrop) {
-                const ItemID chestItem = BlockDropTable::getDropItem(BlockIds::CHEST);
+                const ItemID chestItem = BlockDropTable::getDropItem(chestBlockId());
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, chestItem, action.targetBlock, 1);
             }
             if (brokeFurnace && shouldDrop) {
@@ -1535,7 +1541,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                 const ItemID doorItem = BlockDropTable::getDropItem(brokenBlock);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, doorItem, action.targetBlock, 1);
             }
-        } else if (BlockStateRegistry::getBlockId(target) == BlockIds::CHEST &&
+        } else if (BlockStateRegistry::getBlockId(target) == chestBlockId() &&
                    m_ecsRegistry != nullptr &&
                    m_ecsRegistry->ctx().contains<ChestInventoryStore>()) {
             const auto discardedContents =
@@ -2163,7 +2169,7 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
                     for (int x = 0; x < Chunk::SIZE_X; ++x) {
                         const StateID state = subChunk->getBlock(x, ly, z);
                         const BlockID blockId = BlockStateRegistry::getBlockId(state);
-                        if (blockId == BlockIds::CHEST) {
+                        if (blockId == chestBlockId()) {
                             ensureBlockEntityEntry(glm::ivec3(worldOffset.x + x,
                                                               yBase + ly,
                                                               worldOffset.z + z),
