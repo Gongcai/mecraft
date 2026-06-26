@@ -287,9 +287,8 @@ set(SRC_UI
         src/ui/inventory/ItemGridControl.cpp
         src/ui/inventory/CraftingGridControl.cpp
         src/ui/inventory/ContainerUiRegistry.cpp
+        src/ui/inventory/DataDrivenContainerPanelControl.cpp
         src/ui/inventory/InventoryPanelControl.cpp
-        src/ui/inventory/ChestPanelControl.cpp
-        src/ui/inventory/FurnacePanelControl.cpp
         src/ui/inventory/CreativeInventoryPanelControl.cpp
 
         # Screens

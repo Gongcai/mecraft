@@ -14,8 +14,7 @@
 #include "../hud/CrosshairControl.h"
 #include "../hud/HotbarControl.h"
 #include "../hud/HudControl.h"
-#include "../inventory/ChestPanelControl.h"
-#include "../inventory/FurnacePanelControl.h"
+#include "../inventory/DataDrivenContainerPanelControl.h"
 #include "../inventory/InventoryPanelControl.h"
 #include "../hud/Pickable.h"
 #include "../font/TextRenderer.h"
@@ -172,8 +171,8 @@ private:
     UIText m_deathTitle;
     UIText m_deathPrompt;
     InventoryPanelControl m_inventoryPanel;
-    ChestPanelControl m_chestPanel;
-    FurnacePanelControl m_furnacePanel;
+    DataDrivenContainerPanelControl m_chestPanel;
+    DataDrivenContainerPanelControl m_furnacePanel;
     CreativeInventoryPanelControl m_creativeInventoryPanel;
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;

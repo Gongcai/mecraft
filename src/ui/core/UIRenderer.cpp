@@ -80,10 +80,12 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_inventoryPanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
     m_chestPanel.init(resourceMgr);
+    m_chestPanel.setDefinition(ui::ContainerUiRegistry::require("minecraft:chest"));
     m_chestPanel.visible = false;
     m_chestPanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
     m_furnacePanel.init(resourceMgr);
+    m_furnacePanel.setDefinition(ui::ContainerUiRegistry::require("minecraft:furnace"));
     m_furnacePanel.visible = false;
     m_furnacePanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
@@ -455,7 +457,7 @@ void UIRenderer::setChestPanelChestSource(const ChestInventory* chest)
 
 int UIRenderer::getChestPanelLastActivatedSlot() const
 {
-    return m_chestPanel.getChestLastActivatedSlot();
+    return m_chestPanel.getContainerLastActivatedSlot();
 }
 
 int UIRenderer::getChestPanelPlayerLastActivatedSlot() const
@@ -465,7 +467,7 @@ int UIRenderer::getChestPanelPlayerLastActivatedSlot() const
 
 int UIRenderer::getChestPanelHoveredSlot() const
 {
-    return m_chestPanel.getChestHoveredSlot();
+    return m_chestPanel.getContainerHoveredSlot();
 }
 
 int UIRenderer::getChestPanelPlayerHoveredSlot() const
@@ -500,7 +502,7 @@ void UIRenderer::setFurnacePanelProgress(const float burnFraction, const float c
 
 int UIRenderer::getFurnacePanelLastActivatedSlot() const
 {
-    return m_furnacePanel.getFurnaceLastActivatedSlot();
+    return m_furnacePanel.getContainerLastActivatedSlot();
 }
 
 int UIRenderer::getFurnacePanelPlayerLastActivatedSlot() const
@@ -510,7 +512,7 @@ int UIRenderer::getFurnacePanelPlayerLastActivatedSlot() const
 
 int UIRenderer::getFurnacePanelHoveredSlot() const
 {
-    return m_furnacePanel.getFurnaceHoveredSlot();
+    return m_furnacePanel.getContainerHoveredSlot();
 }
 
 int UIRenderer::getFurnacePanelPlayerHoveredSlot() const

@@ -1,38 +1,18 @@
 #pragma once
 
-#include <array>
+#include <vector>
 
+#include "ContainerUiRegistry.h"
 #include "ItemGridControl.h"
 #include "../core/UIWidget.h"
 #include "../widgets/UITooltip.h"
+#include "../../game/inventory/ChestInventoryStore.h"
 #include "../../game/inventory/FurnaceInventoryStore.h"
 
 class Inventory;
 class Shader;
 
-struct FurnacePanelLayout {
-    static constexpr float kTextureWidth = 176.0f;
-    static constexpr float kTextureHeight = 166.0f;
-
-    float anchorX = 0.5f;
-    float anchorY = 0.5f;
-    float offsetX = -88.0f;
-    float offsetY = -83.0f;
-    float panelScale = 2.0f;
-
-    float inputSlotX = 56.0f;
-    float inputSlotY = 17.0f;
-    float fuelSlotX = 56.0f;
-    float fuelSlotY = 53.0f;
-    float outputSlotX = 116.0f;
-    float outputSlotY = 35.0f;
-    float playerGridOffsetX = 8.0f;
-    float playerGridOffsetY = 84.0f;
-    float hotbarOffsetY = 142.0f;
-    float slotSize = 18.0f;
-};
-
-class FurnacePanelControl final : public UIWidget {
+class DataDrivenContainerPanelControl final : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
     void shutdown() override;
@@ -40,13 +20,15 @@ public:
     UIEventResult onInput(const UIInputEvent& event, const UIRenderContext& ctx) override;
 
     void setVisible(bool isVisible);
+    void setDefinition(const ui::ContainerUiDef& definition);
+    void setChestSource(const ChestInventory* chest);
     void setFurnaceSource(const FurnaceInventory* furnace);
     void setPlayerInventorySource(const Inventory* inventory);
     void setProgress(float burnFraction, float cookFraction);
 
-    [[nodiscard]] int getFurnaceLastActivatedSlot() const;
+    [[nodiscard]] int getContainerLastActivatedSlot() const;
     [[nodiscard]] int getPlayerLastActivatedSlot() const;
-    [[nodiscard]] int getFurnaceHoveredSlot() const;
+    [[nodiscard]] int getContainerHoveredSlot() const;
     [[nodiscard]] int getPlayerHoveredSlot() const;
     void clearActivations();
 
@@ -62,12 +44,17 @@ private:
         float scale = 1.0f;
     };
 
+    [[nodiscard]] const ui::ContainerUiDef& requireDefinition() const;
     [[nodiscard]] ResolvedPanelRect resolvePanelRect(int screenWidth, int screenHeight) const;
+    [[nodiscard]] int mapContainerGridIndex(int gridIndex) const;
     void syncSlots();
+    void appendSlotsForGroup(const ui::ContainerSlotGroupDef& group,
+                             const ResolvedPanelRect& panelRect,
+                             bool containerGroup,
+                             std::vector<Pickable::SlotInfo>& outSlots,
+                             std::vector<int>* outSlotMapping) const;
     void renderBackground(const UIRenderContext& context) const;
-    void renderProgress(const UIRenderContext& context) const;
-    void renderDraggedItem(const UIRenderContext& context) const;
-    void renderTooltip(const UIRenderContext& context) const;
+    void renderProgressBars(const UIRenderContext& context) const;
     void drawTextureQuad(const UIRenderContext& context,
                          float x0,
                          float y0,
@@ -77,12 +64,16 @@ private:
                          float v0,
                          float u1,
                          float v1) const;
+    void renderDraggedItem(const UIRenderContext& context) const;
+    void renderTooltip(const UIRenderContext& context) const;
 
+    const ui::ContainerUiDef* m_definition = nullptr;
+    const ChestInventory* m_chest = nullptr;
     const FurnaceInventory* m_furnace = nullptr;
     const Inventory* m_playerInventory = nullptr;
-    FurnacePanelLayout m_layout;
-    ItemGridControl m_furnaceGrid;
+    ItemGridControl m_containerGrid;
     ItemGridControl m_playerGrid;
+    std::vector<int> m_containerSlotMapping;
 
     ResourceMgr* m_resourceMgr = nullptr;
     Shader* m_inventoryShader = nullptr;
