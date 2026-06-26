@@ -51,6 +51,24 @@ int main() {
         return fail("chest UI should declare the chest slot grid");
     }
 
+    const ui::ContainerUiDef& barrel = ui::ContainerUiRegistry::require("minecraft:barrel");
+    if (barrel.behavior != "minecraft:barrel" ||
+        barrel.backgroundTexture != "chest_generic_54" ||
+        barrel.width != 177.0f ||
+        barrel.height != 222.0f ||
+        barrel.slotGroups.size() != 3 ||
+        !barrel.progressBars.empty()) {
+        return fail("barrel UI should parse its static storage layout definition");
+    }
+    const ui::ContainerSlotGroupDef* barrelSlots = findSlotGroup(barrel, "barrel");
+    if (barrelSlots == nullptr ||
+        barrelSlots->kind != ui::ContainerSlotGroupKind::Container ||
+        barrelSlots->columns != 9 ||
+        barrelSlots->rows != 3 ||
+        barrelSlots->firstSlot != 0) {
+        return fail("barrel UI should declare the barrel slot grid");
+    }
+
     const ui::ContainerUiDef& furnace = ui::ContainerUiRegistry::require("minecraft:furnace");
     if (furnace.behavior != "minecraft:furnace" ||
         furnace.backgroundTexture != "furnace" ||
@@ -113,9 +131,11 @@ int main() {
     }
 
     const BlockDef& chestBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:chest"));
+    const BlockDef& barrelBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:barrel"));
     const BlockDef& furnaceBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:furnace"));
     const BlockDef& craftingBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:crafting_table"));
     if (&ui::ContainerUiRegistry::require(chestBlock.containerUi) != &chest ||
+        &ui::ContainerUiRegistry::require(barrelBlock.containerUi) != &barrel ||
         &ui::ContainerUiRegistry::require(furnaceBlock.containerUi) != &furnace ||
         &ui::ContainerUiRegistry::require(craftingBlock.containerUi) != &crafting) {
         return fail("block containerUi bindings should resolve to registered UI definitions");

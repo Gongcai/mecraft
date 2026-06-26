@@ -1,0 +1,10 @@
+{
+  "id": "minecraft:barrel",
+  "handler": "storage",
+  "storage": {
+    "kind": "block_entity",
+    "slots": 27
+  },
+  "slotRules": [],
+  "processors": []
+}

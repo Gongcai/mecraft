@@ -48,6 +48,18 @@ int main() {
         return fail("chest item should render and place chest block");
     }
 
+    const ItemID barrelItem = ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:barrel"));
+    if (barrelItem == RUNTIME_ID_NULL) {
+        return fail("barrel should synthesize a block-backed item");
+    }
+    if (ItemRegistry::findByName("barrel") != barrelItem) {
+        return fail("block name lookup should resolve barrel item");
+    }
+    if (ItemRegistry::toPlaceBlock(barrelItem) != BlockRegistry::requireIdByName("minecraft:barrel") ||
+        ItemRegistry::toRenderBlock(barrelItem) != BlockRegistry::requireIdByName("minecraft:barrel")) {
+        return fail("barrel item should render and place barrel block");
+    }
+
     const ItemDef& coal = ItemRegistry::get(ItemRegistry::requireIdByName("minecraft:coal"));
     if (ItemRegistry::findByName("coal") != ItemRegistry::requireIdByName("minecraft:coal")) {
         return fail("item name lookup should resolve coal from items.json");
@@ -354,6 +366,9 @@ int main() {
     }
     if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:chest")) != chestItem) {
         return fail("chest should drop itself by default");
+    }
+    if (BlockDropTable::getDropItem(BlockRegistry::requireIdByName("minecraft:barrel")) != barrelItem) {
+        return fail("barrel should drop itself by default");
     }
     if (BlockDropTable::getDropItem(RUNTIME_ID_NULL) != RUNTIME_ID_NULL) {
         return fail("air should drop air (nothing)");

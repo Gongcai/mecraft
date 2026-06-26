@@ -99,6 +99,16 @@
       "resultCount": 1
     },
     {
+      "comment": "Barrel",
+      "pattern": ["SPS", "P P", "SPS"],
+      "key": {
+        "P": "#minecraft:planks",
+        "S": "minecraft:oak_slab"
+      },
+      "result": "minecraft:barrel",
+      "resultCount": 1
+    },
+    {
       "comment": "Torch",
       "pattern": ["C", "S"],
       "key": {

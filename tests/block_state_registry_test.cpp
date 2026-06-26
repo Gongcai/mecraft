@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -782,6 +783,20 @@ int main() {
     }
     if (chestDef.containerUi != "minecraft:chest") {
         return fail("chest should parse its container UI binding from blocks.json");
+    }
+
+    const BlockID barrel = BlockRegistry::requireIdByName("minecraft:barrel");
+    const BlockDef& barrelDef = BlockRegistry::get(barrel);
+    if (barrelDef.containerUi != "minecraft:barrel") {
+        return fail("barrel should parse its container UI binding from blocks.json");
+    }
+    if (!barrelDef.isSolid || barrelDef.isTransparent || barrelDef.materialKind != BlockMaterialKinds::WOOD) {
+        return fail("barrel should be a solid wooden storage block");
+    }
+    if (!std::filesystem::exists("assets/textures/blocks/barrel_top.png") ||
+        !std::filesystem::exists("assets/textures/blocks/barrel_bottom.png") ||
+        !std::filesystem::exists("assets/textures/blocks/barrel_side.png")) {
+        return fail("barrel should provide top, bottom, and side block textures");
     }
 
     const BlockDef& craftingTableDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:crafting_table"));

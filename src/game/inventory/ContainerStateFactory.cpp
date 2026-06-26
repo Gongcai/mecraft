@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 #include "ContainerBehaviorRegistry.h"
-#include "ChestInventoryState.h"
+#include "DataDrivenContainerState.h"
 #include "FurnaceState.h"
 #include "WorkbenchState.h"
 #include "../../ui/inventory/ContainerUiRegistry.h"
@@ -16,32 +16,32 @@ using ContainerStateCreator = std::unique_ptr<IGameState> (*)(
     const ContainerBehaviorDef&,
     const glm::ivec3&);
 
-std::unique_ptr<IGameState> createCraftingTableState(InventoryStateContext deps,
-                                                     const ui::ContainerUiDef& def,
-                                                     const ContainerBehaviorDef& /*behavior*/,
-                                                     const glm::ivec3& /*blockPosition*/) {
-    return std::make_unique<WorkbenchState>(deps, def.id);
+std::unique_ptr<IGameState> createStorageState(InventoryStateContext deps,
+                                               const ui::ContainerUiDef& def,
+                                               const ContainerBehaviorDef& behavior,
+                                               const glm::ivec3& blockPosition) {
+    return std::make_unique<DataDrivenContainerState>(deps, def.id, behavior.id, blockPosition);
 }
 
-std::unique_ptr<IGameState> createFurnaceState(InventoryStateContext deps,
-                                               const ui::ContainerUiDef& def,
-                                               const ContainerBehaviorDef& /*behavior*/,
-                                               const glm::ivec3& blockPosition) {
+std::unique_ptr<IGameState> createSmeltingState(InventoryStateContext deps,
+                                                const ui::ContainerUiDef& def,
+                                                const ContainerBehaviorDef& /*behavior*/,
+                                                const glm::ivec3& blockPosition) {
     return std::make_unique<FurnaceState>(deps, def.id, blockPosition);
 }
 
-std::unique_ptr<IGameState> createChestState(InventoryStateContext deps,
-                                             const ui::ContainerUiDef& def,
-                                             const ContainerBehaviorDef& /*behavior*/,
-                                             const glm::ivec3& blockPosition) {
-    return std::make_unique<ChestInventoryState>(deps, def.id, blockPosition);
+std::unique_ptr<IGameState> createCraftingState(InventoryStateContext deps,
+                                                const ui::ContainerUiDef& def,
+                                                const ContainerBehaviorDef& /*behavior*/,
+                                                const glm::ivec3& /*blockPosition*/) {
+    return std::make_unique<WorkbenchState>(deps, def.id);
 }
 
 const std::unordered_map<std::string, ContainerStateCreator>& containerStateCreators() {
     static const std::unordered_map<std::string, ContainerStateCreator> creators = {
-        {"crafting_table", &createCraftingTableState},
-        {"furnace", &createFurnaceState},
-        {"chest", &createChestState},
+        {"storage", &createStorageState},
+        {"smelting", &createSmeltingState},
+        {"crafting", &createCraftingState},
     };
     return creators;
 }

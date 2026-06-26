@@ -1,0 +1,57 @@
+{
+  "id": "minecraft:barrel",
+  "behavior": "minecraft:barrel",
+  "backgroundTexture": "chest_generic_54",
+  "width": 177,
+  "height": 222,
+  "textureWidth": 256,
+  "textureHeight": 256,
+  "anchorX": 0.5,
+  "anchorY": 0.5,
+  "offsetX": -88.5,
+  "offsetY": -111,
+  "scale": 1,
+  "showPlayerPreview": false,
+  "slotGroups": [
+    {
+      "id": "barrel",
+      "kind": "container",
+      "firstSlot": 0,
+      "columns": 9,
+      "rows": 3,
+      "x": 8,
+      "y": 18,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "player_inventory",
+      "kind": "player_inventory",
+      "firstSlot": 9,
+      "columns": 9,
+      "rows": 3,
+      "x": 8,
+      "y": 140,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "hotbar",
+      "kind": "player_inventory",
+      "firstSlot": 0,
+      "columns": 9,
+      "rows": 1,
+      "x": 8,
+      "y": 198,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    }
+  ],
+  "progressBars": []
+}

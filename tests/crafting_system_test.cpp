@@ -95,6 +95,19 @@ void testLoadAndMatch() {
 
     {
         const std::vector<ItemID> grid = makeGrid({
+            item("minecraft:oak_slab"), item("minecraft:oak_planks"), item("minecraft:oak_slab"),
+            item("minecraft:birch_planks"), 0, item("minecraft:spruce_planks"),
+            item("minecraft:oak_slab"), item("minecraft:cherry_planks"), item("minecraft:oak_slab")
+        });
+        const CraftingResult result = sys.match(grid, 3, 3);
+        assert(result.matched);
+        assert(result.itemId == item("minecraft:barrel"));
+        assert(result.count == 1);
+        std::cout << "  PASS: planks + oak slabs -> barrel\n";
+    }
+
+    {
+        const std::vector<ItemID> grid = makeGrid({
             item("minecraft:coal"), 0,
             item("minecraft:stick"), 0
         });

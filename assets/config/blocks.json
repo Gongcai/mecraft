@@ -853,6 +853,18 @@
       }
     },
     {
+      "id": "minecraft:barrel",
+      "drop": "minecraft:barrel",
+      "containerUi": "minecraft:barrel",
+      "materialKind": "wood",
+      "timeToBreak": 2500,
+      "textures": {
+        "top": "barrel_top",
+        "bottom": "barrel_bottom",
+        "side": "barrel_side"
+      }
+    },
+    {
       "id": "minecraft:torch",
       "drop": "minecraft:torch",
       "properties": {
