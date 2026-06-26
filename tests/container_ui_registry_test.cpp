@@ -86,8 +86,30 @@ int main() {
     if (craftingInput == nullptr ||
         craftingInput->kind != ui::ContainerSlotGroupKind::CraftingInput ||
         craftingInput->columns != 3 ||
-        craftingInput->rows != 3) {
+        craftingInput->rows != 3 ||
+        craftingInput->x != 29.5f ||
+        craftingInput->y != 16.5f) {
         return fail("crafting table UI should declare a 3x3 crafting input");
+    }
+    const ui::ContainerSlotGroupDef* craftingResult = findSlotGroup(crafting, "crafting_result");
+    if (craftingResult == nullptr ||
+        craftingResult->kind != ui::ContainerSlotGroupKind::CraftingResult ||
+        craftingResult->firstSlot != 9 ||
+        craftingResult->x != 123.5f ||
+        craftingResult->y != 34.5f) {
+        return fail("crafting table UI should declare the result slot position");
+    }
+    const ui::ContainerSlotGroupDef* craftingPlayerInventory = findSlotGroup(crafting, "player_inventory");
+    const ui::ContainerSlotGroupDef* craftingHotbar = findSlotGroup(crafting, "hotbar");
+    if (craftingPlayerInventory == nullptr ||
+        craftingHotbar == nullptr ||
+        craftingPlayerInventory->kind != ui::ContainerSlotGroupKind::PlayerInventory ||
+        craftingHotbar->kind != ui::ContainerSlotGroupKind::PlayerInventory ||
+        craftingPlayerInventory->firstSlot != 9 ||
+        craftingHotbar->firstSlot != 0 ||
+        craftingPlayerInventory->y != 84.0f ||
+        craftingHotbar->y != 142.0f) {
+        return fail("crafting table UI should declare player inventory and hotbar positions");
     }
 
     const BlockDef& chestBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:chest"));

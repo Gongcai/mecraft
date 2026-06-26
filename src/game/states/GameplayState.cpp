@@ -40,7 +40,7 @@ void pushContainerUiState(GameplayStateContext& gameplayCtx,
                           const glm::ivec3& blockPosition) {
     const ui::ContainerUiDef& def = ui::ContainerUiRegistry::require(containerUi);
     if (def.behavior == "crafting_table") {
-        gameplayCtx.fsm.pushState(std::make_unique<WorkbenchState>(inventoryCtx));
+        gameplayCtx.fsm.pushState(std::make_unique<WorkbenchState>(inventoryCtx, def.id));
         return;
     }
     if (def.behavior == "furnace") {
