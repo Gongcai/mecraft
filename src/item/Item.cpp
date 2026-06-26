@@ -123,10 +123,37 @@ void ItemRegistry::init() {
     // Ensure block registry is initialized first
     BlockRegistry::init(nullptr);
 
-    // Step 1: Register all built-in item IDs
-    s_idRegistry.initBuiltinItemIds();
+    nlohmann::json root;
+    bool hasItemConfig = false;
+    std::ifstream file(kItemsConfigPath);
+    if (file.is_open()) {
+        try {
+            file >> root;
+            hasItemConfig = root.contains("items") && root["items"].is_array();
+        } catch (const std::exception& e) {
+            throw std::runtime_error(std::string("Failed to parse items.json: ") + e.what());
+        }
+    }
 
-    // Step 2: Create default ItemDef entries
+    if (!hasItemConfig) {
+        throw std::runtime_error("items.json must contain an items array.");
+    }
+
+    if (hasItemConfig) {
+        for (const auto& itemJson : root["items"]) {
+            if (!itemJson.contains("id") || !itemJson["id"].is_string()) {
+                continue;
+            }
+            const NamespacedId nsId(itemJson["id"].get<std::string>());
+            s_idRegistry.registerId(nsId);
+        }
+    }
+
+    if (s_idRegistry.size() == 0 || s_idRegistry.getNamespacedId(RUNTIME_ID_NULL) != NamespacedId("minecraft", "air")) {
+        throw std::runtime_error("items.json must register minecraft:air as RuntimeId 0.");
+    }
+
+    // Step 1: Create default ItemDef entries for JSON-declared items.
     s_items.resize(s_idRegistry.size());
     s_itemIconTextureNames.resize(s_idRegistry.size());
 
@@ -175,8 +202,8 @@ void ItemRegistry::init() {
         registerBlockItem(blockId, itemId);
     };
 
-    // Step 3: Every registered block gets a default block-backed item.
-    // Built-in block items keep their stable IDs; JSON-only blocks get synthesized items on demand.
+    // Step 2: Every registered block gets a default block-backed item.
+    // JSON-declared item IDs keep their data-file order; remaining block items are synthesized after them.
     for (size_t i = 1; i < BlockRegistry::getBlockCount(); ++i) {
         const BlockID blockId = static_cast<BlockID>(i);
         const NamespacedId& blockNsId = BlockRegistry::getNamespacedId(blockId);
@@ -193,31 +220,7 @@ void ItemRegistry::init() {
         configureBlockBackedItem(blockId, itemId);
     }
 
-    // Step 4: Load items.json to override defaults
-    std::ifstream file(kItemsConfigPath);
-    if (!file.is_open()) {
-        s_initializing = false;
-        s_initialized = true;
-        ItemIds::init();
-        return;
-    }
-
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (...) {
-        s_initializing = false;
-        s_initialized = true;
-        ItemIds::init();
-        return;
-    }
-
-    if (!root.contains("items") || !root["items"].is_array()) {
-        s_initializing = false;
-        s_initialized = true;
-        ItemIds::init();
-        return;
-    }
+    // Step 3: Load items.json to override defaults.
 
     for (const auto& itemJson : root["items"]) {
         ItemID id = 0;

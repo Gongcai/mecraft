@@ -76,6 +76,41 @@ void setAllFaces(BlockDef& def, const AnimatedTextureRef& ref) {
     def.faceBack = ref;
 }
 
+BlockDef makeDefaultBlockDef(const NamespacedId& id) {
+    BlockDef def{};
+    def.namespacedId = id;
+    def.isSolid = true;
+    def.isTransparent = false;
+    def.isLightSource = false;
+    def.isSelectable = true;
+    def.allowsFluidCoexistence = false;
+    def.affectedByGravity = false;
+    def.renderShape = BlockRenderShape::Cube;
+    def.renderLayer = BlockRenderLayer::Opaque;
+    def.cutoutDistanceCull = true;
+    def.renderShapeName = "cube";
+    def.renderShapeTag = 0;
+    def.materialKind = BlockMaterialKinds::DEFAULT;
+    def.derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
+    def.placementStrategy = "simple";
+    def.revertPlacementFacing = false;
+    def.supportRule.clear();
+    def.tags.clear();
+    def.biomeTint = BiomeTintKind::None;
+    def.lightLevel = 0;
+    def.opacity = 15;
+    def.isRedstoneConductor = true;
+    def.isRedstonePowerSource = false;
+    def.respondsToRedstone = false;
+    def.redstonePowerOutput = 0;
+    def.redstoneBehavior.clear();
+    def.redstoneControlledProperty.clear();
+    def.redstoneControlledMirrorProperties.clear();
+    def.redstoneControlledPowerInverted = false;
+    setAllFaces(def, makeStaticWorldTexture(0));
+    return def;
+}
+
 BlockTextureFaces textureFacesFromBlock(const BlockDef& def) {
     BlockTextureFaces faces;
     faces.faceTop = def.faceTop;
@@ -406,63 +441,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         return;
     }
 
-    // Step 1: Register all built-in block IDs in stable order
-    s_idRegistry.initBuiltinBlockIds();
-
-    // Step 2: Create default BlockDef entries for each registered ID
-    s_blocks.resize(s_idRegistry.size());
-    s_blockDropIds.resize(s_idRegistry.size());
-
-    for (size_t i = 0; i < s_blocks.size(); ++i) {
-        s_blocks[i] = BlockDef{};
-        s_blocks[i].namespacedId = s_idRegistry.getNamespacedId(static_cast<BlockID>(i));
-        s_blocks[i].isSolid = true;
-        s_blocks[i].isTransparent = false;
-        s_blocks[i].isLightSource = false;
-        s_blocks[i].allowsFluidCoexistence = false;
-        s_blocks[i].affectedByGravity = false;
-        s_blocks[i].renderShape = BlockRenderShape::Cube;
-        s_blocks[i].renderLayer = BlockRenderLayer::Opaque;
-        s_blocks[i].cutoutDistanceCull = true;
-        s_blocks[i].renderShapeName = "cube";
-        s_blocks[i].renderShapeTag = 0;
-        s_blocks[i].materialKind = BlockMaterialKinds::DEFAULT;
-        s_blocks[i].derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
-        s_blocks[i].placementStrategy = "simple";
-        s_blocks[i].revertPlacementFacing = false;
-        s_blocks[i].supportRule.clear();
-        s_blocks[i].tags.clear();
-        s_blocks[i].biomeTint = BiomeTintKind::None;
-        s_blocks[i].lightLevel = 0;
-        s_blocks[i].opacity = 15;
-        s_blocks[i].isRedstoneConductor = true;
-        s_blocks[i].isRedstonePowerSource = false;
-        s_blocks[i].respondsToRedstone = false;
-        s_blocks[i].redstonePowerOutput = 0;
-        s_blocks[i].redstoneBehavior.clear();
-        s_blocks[i].redstoneControlledProperty.clear();
-        s_blocks[i].redstoneControlledMirrorProperties.clear();
-        s_blocks[i].redstoneControlledPowerInverted = false;
-        setAllFaces(s_blocks[i], makeStaticWorldTexture(0));
-        s_blockDropIds[i] = NamespacedId("minecraft", "air");
-    }
-
-    // Override AIR defaults
-    s_blocks[0].isSolid = false;
-    s_blocks[0].isTransparent = true;
-    s_blocks[0].renderLayer = BlockRenderLayer::Transparent;
-    s_blocks[0].isSelectable = false;
-    s_blocks[0].opacity = 0;
-    s_blocks[0].isRedstoneConductor = false;
-    setAllFaces(s_blocks[0], makeStaticWorldTexture(0));
-
-    // Build idLookup map
-    s_idLookup.clear();
-    for (size_t i = 0; i < s_idRegistry.size(); ++i) {
-        s_idLookup[s_idRegistry.getNamespacedId(static_cast<BlockID>(i))] = static_cast<BlockID>(i);
-    }
-
-    // Step 3: Load config from JSON
+    // Load config from JSON before registering blocks so RuntimeId order follows the data file.
     PlacementStrategyRegistry::initBuiltinStrategies();
     MeshBuilderRegistry::initBuiltinBuilders();
     BlockModelRegistry::init(resourceMgr);
@@ -497,6 +476,28 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         BlockIds::init();
         return;
     }
+
+    s_idLookup.clear();
+    for (const auto& blockJson : root["blocks"]) {
+        if (!blockJson.contains("id") || !blockJson["id"].is_string()) {
+            continue;
+        }
+        const NamespacedId nsId(blockJson["id"].get<std::string>());
+        registerBlock(nsId, makeDefaultBlockDef(nsId));
+    }
+
+    const NamespacedId airId("minecraft", "air");
+    if (s_blocks.empty() || s_blocks[0].namespacedId != airId) {
+        throw std::runtime_error("blocks.json must register minecraft:air as RuntimeId 0.");
+    }
+
+    s_blocks[0].isSolid = false;
+    s_blocks[0].isTransparent = true;
+    s_blocks[0].renderLayer = BlockRenderLayer::Transparent;
+    s_blocks[0].isSelectable = false;
+    s_blocks[0].opacity = 0;
+    s_blocks[0].isRedstoneConductor = false;
+    setAllFaces(s_blocks[0], makeStaticWorldTexture(0));
 
     std::vector<std::pair<BlockID, nlohmann::json>> pendingModelVariants;
 
