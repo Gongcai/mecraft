@@ -1,6 +1,6 @@
 {
   "id": "minecraft:chest",
-  "behavior": "chest",
+  "behavior": "minecraft:chest",
   "backgroundTexture": "chest_generic_54",
   "width": 177,
   "height": 222,

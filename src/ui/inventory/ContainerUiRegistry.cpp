@@ -182,7 +182,7 @@ ContainerUiDef parseContainerUiDef(const nlohmann::json& root, const std::string
 
     ContainerUiDef def;
     def.id = parseNamespacedField(root, sourceName, "id");
-    def.behavior = requireString(root, def.id, "behavior");
+    def.behavior = parseNamespacedField(root, def.id, "behavior");
     def.backgroundTexture = requireString(root, def.id, "backgroundTexture");
     def.width = requireNumber(root, def.id, "width");
     def.height = requireNumber(root, def.id, "height");

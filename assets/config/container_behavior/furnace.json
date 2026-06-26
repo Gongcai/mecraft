@@ -1,0 +1,37 @@
+{
+  "id": "minecraft:furnace",
+  "handler": "smelting",
+  "storage": {
+    "kind": "block_entity",
+    "slots": 3
+  },
+  "slotRules": [
+    {
+      "id": "input",
+      "slot": 0,
+      "accepts": "smelting_input",
+      "outputOnly": false
+    },
+    {
+      "id": "fuel",
+      "slot": 1,
+      "accepts": "fuel",
+      "outputOnly": false
+    },
+    {
+      "id": "output",
+      "slot": 2,
+      "accepts": "any",
+      "outputOnly": true
+    }
+  ],
+  "processors": [
+    {
+      "id": "smelting",
+      "type": "smelting",
+      "inputSlot": 0,
+      "fuelSlot": 1,
+      "outputSlot": 2
+    }
+  ]
+}

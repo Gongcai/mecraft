@@ -1,6 +1,6 @@
 {
   "id": "minecraft:furnace",
-  "behavior": "furnace",
+  "behavior": "minecraft:furnace",
   "backgroundTexture": "furnace",
   "width": 176,
   "height": 166,

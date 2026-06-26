@@ -110,6 +110,7 @@ set(SRC_GAME
         src/game/presentation/GameplayPresentationBuilder.cpp
         src/game/presentation/GameplayHudPresenter.cpp
         src/game/audio/AudioListenerSyncSystem.cpp
+        src/game/inventory/ContainerBehaviorRegistry.cpp
         src/game/inventory/ContainerStateFactory.cpp
         src/game/inventory/ChestInventoryLifecycle.cpp
         src/game/inventory/FurnaceInventoryLifecycle.cpp
@@ -628,6 +629,8 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(pickable_overlay_test tests/pickable_overlay_test.cpp)
     add_mecraft_test(item_grid_control_test tests/item_grid_control_test.cpp)
     add_mecraft_test(crafting_grid_control_test tests/crafting_grid_control_test.cpp)
+    add_mecraft_test(container_behavior_registry_test tests/container_behavior_registry_test.cpp)
+    mecraft_copy_runtime_assets(container_behavior_registry_test)
     add_mecraft_test(container_ui_registry_test tests/container_ui_registry_test.cpp)
     mecraft_copy_runtime_assets(container_ui_registry_test)
     add_mecraft_test(smelting_system_test tests/smelting_system_test.cpp)

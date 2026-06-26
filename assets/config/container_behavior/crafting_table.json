@@ -1,0 +1,30 @@
+{
+  "id": "minecraft:crafting_table",
+  "handler": "crafting",
+  "storage": {
+    "kind": "transient",
+    "slots": 10
+  },
+  "slotRules": [
+    {
+      "id": "crafting_input",
+      "slot": 0,
+      "accepts": "any",
+      "outputOnly": false
+    },
+    {
+      "id": "crafting_result",
+      "slot": 9,
+      "accepts": "any",
+      "outputOnly": true
+    }
+  ],
+  "processors": [
+    {
+      "id": "crafting",
+      "type": "crafting",
+      "gridSize": 3,
+      "resultSlot": 9
+    }
+  ]
+}

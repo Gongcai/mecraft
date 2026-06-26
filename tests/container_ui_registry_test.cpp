@@ -34,7 +34,7 @@ int main() {
     ui::ContainerUiRegistry::init();
 
     const ui::ContainerUiDef& chest = ui::ContainerUiRegistry::require("minecraft:chest");
-    if (chest.behavior != "chest" ||
+    if (chest.behavior != "minecraft:chest" ||
         chest.backgroundTexture != "chest_generic_54" ||
         chest.width != 177.0f ||
         chest.height != 222.0f ||
@@ -52,7 +52,7 @@ int main() {
     }
 
     const ui::ContainerUiDef& furnace = ui::ContainerUiRegistry::require("minecraft:furnace");
-    if (furnace.behavior != "furnace" ||
+    if (furnace.behavior != "minecraft:furnace" ||
         furnace.backgroundTexture != "furnace" ||
         furnace.slotGroups.size() != 5 ||
         furnace.progressBars.size() != 2) {
@@ -75,7 +75,7 @@ int main() {
     }
 
     const ui::ContainerUiDef& crafting = ui::ContainerUiRegistry::require("minecraft:crafting_table");
-    if (crafting.behavior != "crafting_table" ||
+    if (crafting.behavior != "minecraft:crafting_table" ||
         crafting.backgroundTexture != "crafting_table" ||
         crafting.textureWidth != 256.0f ||
         crafting.textureHeight != 256.0f ||

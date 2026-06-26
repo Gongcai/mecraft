@@ -1,6 +1,6 @@
 {
   "id": "minecraft:crafting_table",
-  "behavior": "crafting_table",
+  "behavior": "minecraft:crafting_table",
   "backgroundTexture": "crafting_table",
   "width": 176,
   "height": 166,

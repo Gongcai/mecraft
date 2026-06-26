@@ -50,6 +50,7 @@
 #define LOCALE_DIR            CONFIG_DIR "/locale"
 #define SETTINGS_PATH         CONFIG_DIR "/settings.json"
 #define CONTAINER_UI_CONFIG_DIR CONFIG_DIR "/container_ui"
+#define CONTAINER_BEHAVIOR_CONFIG_DIR CONFIG_DIR "/container_behavior"
 #define FIRST_PERSON_HELD_ITEM_CONFIG_PATH CONFIG_DIR "/first_person_held_item.json"
 #define SOUNDS_CATALOG_PATH SOUNDS_DIR "/sounds.json"
 #define BGM_CATALOG_PATH    BGM_DIR "/bgm.json"
