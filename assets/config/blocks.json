@@ -493,6 +493,7 @@
     {
       "id": "minecraft:crafting_table",
       "drop": "minecraft:crafting_table",
+      "containerUi": "minecraft:crafting_table",
       "materialKind": "wood",
       "timeToBreak": 2500,
       "textures": {
@@ -505,6 +506,7 @@
     {
       "id": "minecraft:furnace",
       "drop": "minecraft:furnace",
+      "containerUi": "minecraft:furnace",
       "materialKind": "stone",
       "placementStrategy": "horizontal_facing",
       "revert": true,
@@ -832,6 +834,7 @@
     {
       "id": "minecraft:chest",
       "drop": "minecraft:chest",
+      "containerUi": "minecraft:chest",
       "properties": {
         "facing": ["north", "south", "east", "west"]
       },

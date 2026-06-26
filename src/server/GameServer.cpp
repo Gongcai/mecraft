@@ -27,9 +27,9 @@
 #include "../game/inventory/FurnaceInventoryLifecycle.h"
 #include "../game/inventory/FurnaceInventoryStore.h"
 #include "../item/Item.h"
+#include "../item/ItemUseDispatcher.h"
 #include "../physics/PhysicsSystem.h"
 #include "../world/block/BlockStateRegistry.h"
-#include "../world/fluid/FluidRegistry.h"
 #include "../world/fluid/FluidState.h"
 #include <cmath>
 #include <cstdio>
@@ -1437,61 +1437,12 @@ void GameServer::broadcastPlayerMode(const net::ClientId clientId, const net::Ne
 
 namespace {
 
-bool hasServerEmptySpaceAbove(const World& world, const glm::ivec3& pos) {
-    const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
-    return world.getBlockState(above.x, above.y, above.z) == RUNTIME_ID_NULL &&
-           world.getFluidState(above.x, above.y, above.z) == RUNTIME_ID_NULL;
-}
-
-bool isServerFluidMatchingPickupRule(const World& world, const glm::ivec3& pos, const ItemUseRule& rule) {
-    const StateID fluidState = world.getFluidState(pos.x, pos.y, pos.z);
-    if (!FluidState::isWater(fluidState)) {
-        return false;
-    }
-    if (rule.requiresSourceFluid && !FluidState::isSource(fluidState)) {
-        return false;
-    }
-
-    const BlockID fluidBlock = BlockStateRegistry::getBlockId(fluidState);
-    return ItemUseRules::matchesBlock(rule, fluidBlock);
-}
-
-bool canServerPlaceWaterAt(const World& world, const glm::ivec3& pos) {
-    if (!world.isChunkLoadedForBlock(pos.x, pos.y, pos.z)) {
-        return false;
-    }
-
-    const StateID blockState = world.getBlockState(pos.x, pos.y, pos.z);
-    if (FluidState::canWaterReplace(blockState)) {
-        return true;
-    }
-
-    const BlockID blockId = BlockStateRegistry::getBlockId(blockState);
-    return BlockRegistry::getFast(blockId).allowsFluidCoexistence;
-}
-
-bool canServerPlaceRuleFluidAt(const World& world, const glm::ivec3& pos, const ItemUseRule& rule) {
-    const FluidKind fluidKind = FluidRegistry::kindForBlock(rule.resultBlock);
-    if (fluidKind == FluidKind::Water) {
-        return canServerPlaceWaterAt(world, pos);
-    }
-    throw std::runtime_error("Item use rule references unsupported fluid block.");
-}
-
 void replaceSelectedServerItem(ecs::InventoryDataComponent& inventoryData, const ItemID itemId) {
     ItemStack replacement;
     replacement.itemId = itemId;
     replacement.count = 1;
     replacement.durability = 0;
     inventoryData.inventory.setSlotStack(inventoryData.inventory.getSelectedSlot(), replacement);
-}
-
-StateID makeServerSourceFluidState(const BlockID fluidBlock) {
-    const FluidKind fluidKind = FluidRegistry::kindForBlock(fluidBlock);
-    if (fluidKind == FluidKind::Water) {
-        return FluidState::makeWater(0, false);
-    }
-    throw std::runtime_error("Item use rule references unsupported fluid block.");
 }
 
 BlockID removeServerTargetBlock(World& world,
@@ -1516,16 +1467,12 @@ BlockID removeServerTargetBlock(World& world,
 } // namespace
 
 void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
-    constexpr float kMaxActionDistance = 6.5f;
     const glm::ivec3 actionBlock =
         (action.action == net::ClientBlockActionType::Place ||
          action.action == net::ClientBlockActionType::BucketPlaceWater)
         ? action.placeBlock
         : action.targetBlock;
-    const glm::vec3 blockCenter = glm::vec3(actionBlock) + glm::vec3(0.5f);
-    const glm::vec3 diff = action.playerPosition - blockCenter;
-    const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
-    if (distSq > kMaxActionDistance * kMaxActionDistance) {
+    if (!ItemUseDispatcher::isWithinReach(action.playerPosition, actionBlock)) {
         return;
     }
 
@@ -1605,11 +1552,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             return;
         }
 
-        const StateID targetState =
-            m_world.getBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
-        const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
-        if (!ItemUseRules::matchesBlock(*tillRule, targetBlock) ||
-            (tillRule->requiresEmptyAbove && !hasServerEmptySpaceAbove(m_world, action.targetBlock))) {
+        if (!ItemUseDispatcher::canApplyBlockRule(m_world, action.targetBlock, *tillRule)) {
             return;
         }
 
@@ -1647,7 +1590,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             const ItemUseRule* pickupRule =
                 ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPickupFluid);
             if (pickupRule == nullptr ||
-                !isServerFluidMatchingPickupRule(m_world, action.targetBlock, *pickupRule)) {
+                !ItemUseDispatcher::canPickupFluid(m_world, action.targetBlock, *pickupRule)) {
                 return;
             }
 
@@ -1670,11 +1613,11 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         const ItemUseRule* placeRule =
             ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
         const StateID sourceFluid = placeRule != nullptr
-            ? makeServerSourceFluidState(placeRule->resultBlock)
+            ? ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock)
             : RUNTIME_ID_NULL;
         if (placeRule == nullptr ||
             action.blockState != sourceFluid ||
-            (placeRule->requiresFluidPlacement && !canServerPlaceRuleFluidAt(m_world, action.placeBlock, *placeRule))) {
+            !ItemUseDispatcher::canPlaceFluid(m_world, action.placeBlock, *placeRule)) {
             return;
         }
 

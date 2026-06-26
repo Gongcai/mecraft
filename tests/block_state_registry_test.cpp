@@ -125,6 +125,9 @@ int main() {
         return fail("furnace should be registered from blocks.json");
     }
     const BlockDef& furnaceDef = BlockRegistry::get(furnace);
+    if (furnaceDef.containerUi != "minecraft:furnace") {
+        return fail("furnace should parse its container UI binding from blocks.json");
+    }
     if (furnaceDef.placementStrategy != "horizontal_facing") {
         return fail("furnace should parse horizontal_facing placement strategy");
     }
@@ -776,6 +779,14 @@ int main() {
     }
     if (!chestDef.revertPlacementFacing) {
         return fail("chest should parse placement facing revert from blocks.json");
+    }
+    if (chestDef.containerUi != "minecraft:chest") {
+        return fail("chest should parse its container UI binding from blocks.json");
+    }
+
+    const BlockDef& craftingTableDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:crafting_table"));
+    if (craftingTableDef.containerUi != "minecraft:crafting_table") {
+        return fail("crafting table should parse its container UI binding from blocks.json");
     }
 
     PlacementStrategyFn chestStrategy = PlacementStrategyRegistry::getStrategy(chestDef.placementStrategy);

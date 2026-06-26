@@ -1,18 +1,14 @@
 #include "BucketUseSystem.h"
 
-#include <algorithm>
-
 #include "../../components/Components.h"
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../../client/GameClient.h"
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../item/Item.h"
+#include "../../../item/ItemUseDispatcher.h"
 #include "../../../world/IWorldView.h"
 #include "../../../world/World.h"
-#include "../../../world/block/BlockStateRegistry.h"
-#include "../../../world/fluid/FluidRegistry.h"
-#include "../../../world/fluid/FluidState.h"
 
 namespace ecs {
 
@@ -26,57 +22,6 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
         }
     }
     return SurvivalModeRules::instance();
-}
-
-bool isWithinInteractionReach(const glm::vec3& playerPos, const glm::ivec3& blockPos) {
-    constexpr float kMaxBucketDistance = 6.5f;
-    const glm::vec3 blockCenter = glm::vec3(blockPos) + glm::vec3(0.5f);
-    const glm::vec3 diff = playerPos - blockCenter;
-    const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
-    return distSq <= kMaxBucketDistance * kMaxBucketDistance;
-}
-
-bool isFluidMatchingPickupRule(const IWorldView& worldView, const glm::ivec3& pos, const ItemUseRule& rule) {
-    const StateID fluidState = worldView.getFluidState(pos.x, pos.y, pos.z);
-    if (!FluidState::isWater(fluidState)) {
-        return false;
-    }
-    if (rule.requiresSourceFluid && !FluidState::isSource(fluidState)) {
-        return false;
-    }
-
-    const BlockID fluidBlock = BlockStateRegistry::getBlockId(fluidState);
-    return ItemUseRules::matchesBlock(rule, fluidBlock);
-}
-
-bool canPlaceWaterAt(const IWorldView& worldView, const glm::ivec3& pos) {
-    if (!worldView.isChunkLoadedForBlock(pos.x, pos.y, pos.z)) {
-        return false;
-    }
-
-    const StateID blockState = worldView.getBlockState(pos.x, pos.y, pos.z);
-    if (FluidState::canWaterReplace(blockState)) {
-        return true;
-    }
-
-    const BlockID blockId = BlockStateRegistry::getBlockId(blockState);
-    return BlockRegistry::getFast(blockId).allowsFluidCoexistence;
-}
-
-bool canPlaceRuleFluidAt(const IWorldView& worldView, const glm::ivec3& pos, const ItemUseRule& rule) {
-    const FluidKind fluidKind = FluidRegistry::kindForBlock(rule.resultBlock);
-    if (fluidKind == FluidKind::Water) {
-        return canPlaceWaterAt(worldView, pos);
-    }
-    throw std::runtime_error("Item use rule references unsupported fluid block.");
-}
-
-StateID makeSourceFluidState(const BlockID fluidBlock) {
-    const FluidKind fluidKind = FluidRegistry::kindForBlock(fluidBlock);
-    if (fluidKind == FluidKind::Water) {
-        return FluidState::makeWater(0, false);
-    }
-    throw std::runtime_error("Item use rule references unsupported fluid block.");
 }
 
 void replaceSelectedItem(Inventory& inventory, const ItemID itemId) {
@@ -155,8 +100,8 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
         if (pickupRule != nullptr) {
             const glm::ivec3 pickupPos = target.targetBlock;
-            if (!isWithinInteractionReach(transform.position, pickupPos) ||
-                !isFluidMatchingPickupRule(worldView, pickupPos, *pickupRule)) {
+            if (!ItemUseDispatcher::isWithinReach(transform.position, pickupPos) ||
+                !ItemUseDispatcher::canPickupFluid(worldView, pickupPos, *pickupRule)) {
                 continue;
             }
 
@@ -187,12 +132,12 @@ void BucketUseSystem::update(SystemContext& ctx) {
         }
 
         const glm::ivec3 placePos = target.placeBlock;
-        if (!isWithinInteractionReach(transform.position, placePos) ||
-            (placeRule->requiresFluidPlacement && !canPlaceRuleFluidAt(worldView, placePos, *placeRule))) {
+        if (!ItemUseDispatcher::isWithinReach(transform.position, placePos) ||
+            !ItemUseDispatcher::canPlaceFluid(worldView, placePos, *placeRule)) {
             continue;
         }
 
-        const StateID sourceWater = makeSourceFluidState(placeRule->resultBlock);
+        const StateID sourceFluid = ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock);
         if (mutableWorld == nullptr) {
             if (ctx.services.gameClient) {
                 sendBucketAction(*ctx.services.gameClient,
@@ -201,7 +146,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
                                  target,
                                  placePos,
                                  transform.position,
-                                 sourceWater);
+                                 sourceFluid);
             } else {
                 ++runtime.heldItemSwingSequence;
             }
@@ -209,7 +154,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        mutableWorld->setFluidState(placePos.x, placePos.y, placePos.z, sourceWater);
+        mutableWorld->setFluidState(placePos.x, placePos.y, placePos.z, sourceFluid);
         if (modeRules.shouldReportBreakProgress()) {
             replaceSelectedItem(inventory, placeRule->resultItem);
         }

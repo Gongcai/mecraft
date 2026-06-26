@@ -512,6 +512,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.placementStrategy = "simple";
         def.revertPlacementFacing = false;
         def.supportRule.clear();
+        def.containerUi.clear();
         def.tags.clear();
         def.namedTextureRefs.clear();
         def.namedTextureAnimations.clear();
@@ -580,6 +581,16 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("supportRule") && blockJson["supportRule"].is_string()) {
             def.supportRule = blockJson["supportRule"].get<std::string>();
+        }
+        if (blockJson.contains("containerUi")) {
+            if (!blockJson["containerUi"].is_string()) {
+                throw std::runtime_error("containerUi must be a string for block: " + def.namespacedId.full());
+            }
+            const NamespacedId containerUi(blockJson["containerUi"].get<std::string>());
+            if (containerUi.namespaceStr().empty() || containerUi.path().empty()) {
+                throw std::runtime_error("containerUi must not be empty for block: " + def.namespacedId.full());
+            }
+            def.containerUi = containerUi.full();
         }
         def.tags = parseTagList(blockJson, def.namespacedId.full());
         const bool hasExplicitBiomeTint =

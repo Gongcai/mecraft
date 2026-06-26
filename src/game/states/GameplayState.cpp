@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include "GameStateMachine.h"
 #include "engine/input/InputContextManager.h"
@@ -30,6 +31,27 @@
 #include "../../world/block/DoorBlock.h"
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/block/PropIndices.h"
+
+namespace {
+void pushContainerUiState(GameplayStateContext& gameplayCtx,
+                          const InventoryStateContext& inventoryCtx,
+                          const std::string& containerUi,
+                          const glm::ivec3& blockPosition) {
+    if (containerUi == "minecraft:crafting_table") {
+        gameplayCtx.fsm.pushState(std::make_unique<WorkbenchState>(inventoryCtx));
+        return;
+    }
+    if (containerUi == "minecraft:furnace") {
+        gameplayCtx.fsm.pushState(std::make_unique<FurnaceState>(inventoryCtx, blockPosition));
+        return;
+    }
+    if (containerUi == "minecraft:chest") {
+        gameplayCtx.fsm.pushState(std::make_unique<ChestInventoryState>(inventoryCtx, blockPosition));
+        return;
+    }
+    throw std::runtime_error("Unknown containerUi for block interaction: " + containerUi);
+}
+}
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -209,21 +231,9 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
             return true;
         }
 
-        const BlockID craftingTableBlock = BlockRegistry::requireIdByName("minecraft:crafting_table");
-        if (targetBlock == craftingTableBlock) {
-            m_ctx.fsm.pushState(std::make_unique<WorkbenchState>(m_inventoryCtx));
-            return true;
-        }
-
-        const BlockID furnaceBlock = BlockRegistry::requireIdByName("minecraft:furnace");
-        if (targetBlock == furnaceBlock) {
-            m_ctx.fsm.pushState(std::make_unique<FurnaceState>(m_inventoryCtx, target.targetBlock));
-            return true;
-        }
-
-        const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
-        if (targetBlock == chestBlock) {
-            m_ctx.fsm.pushState(std::make_unique<ChestInventoryState>(m_inventoryCtx, target.targetBlock));
+        const BlockDef& targetDef = BlockRegistry::getFast(targetBlock);
+        if (!targetDef.containerUi.empty()) {
+            pushContainerUiState(m_ctx, m_inventoryCtx, targetDef.containerUi, target.targetBlock);
             return true;
         }
     }

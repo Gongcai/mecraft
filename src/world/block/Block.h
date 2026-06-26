@@ -244,6 +244,7 @@ struct BlockDef {
     std::string placementStrategy = "simple";
     bool revertPlacementFacing = false;
     std::string supportRule;
+    std::string containerUi;
     std::vector<NamespacedId> tags;
     BiomeTintKind biomeTint = BiomeTintKind::None;
     uint8_t lightLevel  = 0;

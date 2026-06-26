@@ -7,6 +7,7 @@
 #include "../../../client/GameClient.h"
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../item/Item.h"
+#include "../../../item/ItemUseDispatcher.h"
 #include "../../../world/IWorldView.h"
 #include "../../../world/World.h"
 #include "../../../world/block/BlockStateRegistry.h"
@@ -23,20 +24,6 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
         }
     }
     return SurvivalModeRules::instance();
-}
-
-bool hasEmptySpaceAbove(const IWorldView& worldView, const glm::ivec3& pos) {
-    const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
-    return worldView.getBlockState(above.x, above.y, above.z) == RUNTIME_ID_NULL &&
-           worldView.getFluidState(above.x, above.y, above.z) == RUNTIME_ID_NULL;
-}
-
-bool isWithinInteractionReach(const glm::vec3& playerPos, const glm::ivec3& blockPos) {
-    constexpr float kMaxTillDistance = 6.5f;
-    const glm::vec3 blockCenter = glm::vec3(blockPos) + glm::vec3(0.5f);
-    const glm::vec3 diff = playerPos - blockCenter;
-    const float distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z;
-    return distSq <= kMaxTillDistance * kMaxTillDistance;
 }
 
 } // namespace
@@ -88,14 +75,11 @@ void SoilTillingSystem::update(SystemContext& ctx) {
         }
 
         const glm::ivec3 tillPos = target.targetBlock;
-        if (!isWithinInteractionReach(transform.position, tillPos)) {
+        if (!ItemUseDispatcher::isWithinReach(transform.position, tillPos)) {
             continue;
         }
 
-        const StateID targetState = worldView.getBlockState(tillPos.x, tillPos.y, tillPos.z);
-        const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
-        if (!ItemUseRules::matchesBlock(*tillRule, targetBlock) ||
-            (tillRule->requiresEmptyAbove && !hasEmptySpaceAbove(worldView, tillPos))) {
+        if (!ItemUseDispatcher::canApplyBlockRule(worldView, tillPos, *tillRule)) {
             continue;
         }
 

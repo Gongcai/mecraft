@@ -365,7 +365,7 @@ set(SRC_PLAYER
 )
 set(SRC_PHYSICS src/physics/PhysicsSystem.cpp)
 set(SRC_PARTICLE src/particle/ParticleSystem.cpp src/particle/RainRenderer.cpp)
-set(SRC_ITEM src/item/Item.cpp)
+set(SRC_ITEM src/item/Item.cpp src/item/ItemUseDispatcher.cpp)
 set(SRC_CRAFTING src/crafting/CraftingSystem.cpp src/crafting/SmeltingSystem.cpp)
 set(SRC_AUDIO
         src/audio/AudioCatalog.cpp
