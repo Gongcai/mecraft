@@ -41,8 +41,8 @@ struct LocalLightChange {
     uint8_t localX = 0;
     uint8_t y = 0;
     uint8_t localZ = 0;
-    BlockID oldBlock = BlockIds::AIR;
-    BlockID newBlock = BlockIds::AIR;
+    BlockID oldBlock = RUNTIME_ID_NULL;
+    BlockID newBlock = RUNTIME_ID_NULL;
 };
 
 struct LightJob {
@@ -96,8 +96,8 @@ struct LightFrameStats {
     int lastBlockChangeX = 0;
     int lastBlockChangeY = 0;
     int lastBlockChangeZ = 0;
-    BlockID lastBlockChangeOld = BlockIds::AIR;
-    BlockID lastBlockChangeNew = BlockIds::AIR;
+    BlockID lastBlockChangeOld = RUNTIME_ID_NULL;
+    BlockID lastBlockChangeNew = RUNTIME_ID_NULL;
     int boundarySync = 0;
     int nodesVisited = 0;
     int staleDropped = 0;

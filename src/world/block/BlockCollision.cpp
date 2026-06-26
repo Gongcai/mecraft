@@ -123,7 +123,7 @@ namespace BlockCollision {
 
 std::vector<BlockCollisionBox> getBoxes(const StateID stateId) {
     std::vector<BlockCollisionBox> boxes;
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return boxes;
     }
 
@@ -153,7 +153,7 @@ bool intersects(const StateID stateId,
                 const glm::vec3& queryMax) {
     const glm::vec3 blockOffset(blockPos);
 
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
 
@@ -185,7 +185,7 @@ bool containsPoint(const StateID stateId,
                    const glm::vec3& point) {
     const glm::vec3 blockOffset(blockPos);
 
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
 

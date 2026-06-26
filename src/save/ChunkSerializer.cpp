@@ -73,7 +73,7 @@ std::string trimCopy(const std::string& value) {
 bool parseStoredRuntimeId(const std::string& encoded, RuntimeId& outId) {
     const size_t propsBegin = encoded.find('[');
     if (propsBegin == std::string::npos) {
-        BlockID blockId = BlockIds::AIR;
+        BlockID blockId = RUNTIME_ID_NULL;
         if (!BlockRegistry::tryGetId(NamespacedId(encoded), blockId)) {
             return false;
         }
@@ -85,7 +85,7 @@ bool parseStoredRuntimeId(const std::string& encoded, RuntimeId& outId) {
         return false;
     }
 
-    BlockID blockId = BlockIds::AIR;
+    BlockID blockId = RUNTIME_ID_NULL;
     if (!BlockRegistry::tryGetId(NamespacedId(encoded.substr(0, propsBegin)), blockId)) {
         return false;
     }
@@ -239,7 +239,7 @@ bool deserializeLayer(
         std::string name;
         if (!readString(cursor, end, name)) return false;
 
-        RuntimeId rid = BlockIds::AIR;
+        RuntimeId rid = RUNTIME_ID_NULL;
         if (!parseStoredRuntimeId(name, rid)) {
             MECRAFT_LOG_FPRINTF(stderr, "[Save] Unknown block state '%s' in chunk data\n",
                                 name.c_str());

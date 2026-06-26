@@ -23,7 +23,7 @@ bool hasHydrationWater(const World& world, const glm::ivec3& farmlandPos) {
 bool hasCropAbove(const World& world, const glm::ivec3& farmlandPos) {
     const glm::ivec3 above = farmlandPos + glm::ivec3(0, 1, 0);
     const StateID aboveState = world.getBlockState(above.x, above.y, above.z);
-    if (aboveState == BlockIds::AIR) {
+    if (aboveState == RUNTIME_ID_NULL) {
         return false;
     }
 

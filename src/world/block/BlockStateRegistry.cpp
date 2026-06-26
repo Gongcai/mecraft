@@ -534,7 +534,7 @@ BlockID BlockStateRegistry::getBlockId(const StateID stateId) {
     if (stateId < s_states.size()) {
         return s_states[stateId].blockId;
     }
-    return BlockIds::AIR;
+    return RUNTIME_ID_NULL;
 }
 
 uint16_t BlockStateRegistry::getPropertyIndex(const StateID stateId, const uint16_t nameIndex) {
@@ -721,7 +721,7 @@ const std::string& BlockStateRegistry::getPropertyValue(const uint16_t nameIndex
 
 std::string BlockStateRegistry::stateToString(const StateID stateId) {
     if (stateId >= s_states.size()) {
-        return BlockRegistry::getNamespacedId(BlockIds::AIR).full();
+        return BlockRegistry::getNamespacedId(RUNTIME_ID_NULL).full();
     }
 
     const BlockStateEntry& entry = s_states[stateId];

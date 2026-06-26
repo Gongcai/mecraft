@@ -431,7 +431,7 @@ StateID strategyWall(const PlacementContext& ctx) {
 StateID strategyFacePlaneWall(const PlacementContext& ctx) {
     requireWallFacePlanePlacementProperties();
     if (ctx.hitNormal.y != 0) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, facePlaneFacingFromWallNormal(ctx.hitNormal));
 }
@@ -439,7 +439,7 @@ StateID strategyFacePlaneWall(const PlacementContext& ctx) {
 StateID strategyFacePlaneFloor(const PlacementContext& ctx) {
     requireFloorFacePlanePlacementProperties();
     if (ctx.hitNormal.y != 1) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_FLOOR);
 }
@@ -450,7 +450,7 @@ bool tryMergePlacementStates(const StateID existingState,
                              const StateID incomingState,
                              StateID& mergedState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
-    if (blockId == BlockIds::AIR || blockId != BlockStateRegistry::getBlockId(incomingState)) {
+    if (blockId == RUNTIME_ID_NULL || blockId != BlockStateRegistry::getBlockId(incomingState)) {
         return false;
     }
 
@@ -484,12 +484,12 @@ bool tryMergePlacementStates(const StateID existingState,
 bool canReplaceWithMergedPlacementResult(const StateID existingState,
                                          const StateID resultState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
-    if (blockId == BlockIds::AIR || blockId != BlockStateRegistry::getBlockId(resultState)) {
+    if (blockId == RUNTIME_ID_NULL || blockId != BlockStateRegistry::getBlockId(resultState)) {
         return false;
     }
 
     for (const StateID incomingState : BlockStateRegistry::getStatesForBlock(blockId)) {
-        StateID mergedState = BlockIds::AIR;
+        StateID mergedState = RUNTIME_ID_NULL;
         if (tryMergePlacementStates(existingState, incomingState, mergedState) &&
             mergedState == resultState) {
             return true;

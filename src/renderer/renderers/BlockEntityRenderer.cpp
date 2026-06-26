@@ -265,7 +265,7 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
         for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
             for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
                 const StateID stateId = static_cast<StateID>(subChunk.getBlock(lx, ly, lz));
-                if (stateId == BlockIds::AIR) {
+                if (stateId == RUNTIME_ID_NULL) {
                     continue;
                 }
 

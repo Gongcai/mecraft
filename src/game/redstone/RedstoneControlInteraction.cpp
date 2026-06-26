@@ -72,7 +72,7 @@ bool isButtonBlock(const BlockID blockId) {
 }
 
 bool isOpenableBlock(const BlockID blockId) {
-    if (blockId == BlockIds::AIR || PropIndices::OPEN == PropIndices::INVALID) {
+    if (blockId == RUNTIME_ID_NULL || PropIndices::OPEN == PropIndices::INVALID) {
         return false;
     }
     const StateID defaultState = BlockStateRegistry::getDefaultState(blockId);

@@ -88,8 +88,8 @@ RayHit raycastWorldView(const IWorldView& worldView,
 
     while (dist <= maxDist) {
         const StateID blockState = worldView.getBlockState(x, y, z);
-        const bool hasSolidSelection = blockState != BlockIds::AIR && !FluidState::isWater(blockState);
-        const StateID fluidState = hasSolidSelection ? BlockIds::AIR : worldView.getFluidState(x, y, z);
+        const bool hasSolidSelection = blockState != RUNTIME_ID_NULL && !FluidState::isWater(blockState);
+        const StateID fluidState = hasSolidSelection ? RUNTIME_ID_NULL : worldView.getFluidState(x, y, z);
         const bool hasFluidSelection = FluidState::isWater(fluidState);
 
         if (hasSolidSelection || hasFluidSelection) {

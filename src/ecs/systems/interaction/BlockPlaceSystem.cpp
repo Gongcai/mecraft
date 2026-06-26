@@ -64,25 +64,25 @@ StateID resolvePlacementState(const BlockID blockId,
     pctx.isSneaking = moveIntent.wantsCrouch;
 
     const StateID stateId = strategy(pctx);
-    return stateId != 0 ? stateId : BlockIds::AIR;
+    return stateId != 0 ? stateId : RUNTIME_ID_NULL;
 }
 
 struct PlacementResolution {
     glm::ivec3 placeBlock{};
-    StateID stateId = BlockIds::AIR;
+    StateID stateId = RUNTIME_ID_NULL;
     glm::ivec3 secondaryBlock{};
-    StateID secondaryStateId = BlockIds::AIR;
+    StateID secondaryStateId = RUNTIME_ID_NULL;
     bool hasSecondaryBlock = false;
     bool replacesExisting = false;
 };
 
 bool wouldOverlapPlacement(const PhysicsBody& body, const PlacementResolution& placement) {
-    if (placement.stateId != BlockIds::AIR &&
+    if (placement.stateId != RUNTIME_ID_NULL &&
         wouldOverlapPlacedState(body, placement.placeBlock, placement.stateId)) {
         return true;
     }
     return placement.hasSecondaryBlock &&
-           placement.secondaryStateId != BlockIds::AIR &&
+           placement.secondaryStateId != RUNTIME_ID_NULL &&
            wouldOverlapPlacedState(body, placement.secondaryBlock, placement.secondaryStateId);
 }
 
@@ -99,7 +99,7 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         const BedBlockLogic::BedPlacement bedPlacement =
             BedBlockLogic::resolvePlacement(worldView, result.placeBlock, result.stateId);
         if (!bedPlacement.valid) {
-            result.stateId = BlockIds::AIR;
+            result.stateId = RUNTIME_ID_NULL;
             return result;
         }
 
@@ -115,7 +115,7 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         const DoorBlockLogic::DoorPlacement doorPlacement =
             DoorBlockLogic::resolvePlacement(worldView, result.placeBlock, result.stateId);
         if (!doorPlacement.valid) {
-            result.stateId = BlockIds::AIR;
+            result.stateId = RUNTIME_ID_NULL;
             return result;
         }
 
@@ -132,7 +132,7 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
     const StateID inCellState =
         resolvePlacementState(blockId, camera, moveIntent, -target.hitNormal, target.hitPosition);
 
-    StateID mergedState = BlockIds::AIR;
+    StateID mergedState = RUNTIME_ID_NULL;
     if (tryMergePlacementStates(existingTargetState, inCellState, mergedState)) {
         result.placeBlock = target.targetBlock;
         result.stateId = mergedState;
@@ -227,7 +227,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        if (placedState == BlockIds::AIR) {
+        if (placedState == RUNTIME_ID_NULL) {
             continue;
         }
         if (mutableWorld == nullptr) {

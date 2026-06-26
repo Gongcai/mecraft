@@ -114,8 +114,8 @@ uint16_t oppositeHalfValue(const uint16_t half) {
 
 bool isEmptyDoorCell(const IWorldView& worldView, const glm::ivec3& pos) {
     return worldView.isChunkLoadedForBlock(pos.x, pos.y, pos.z) &&
-           worldView.getBlockState(pos.x, pos.y, pos.z) == BlockIds::AIR &&
-           worldView.getFluidState(pos.x, pos.y, pos.z) == BlockIds::AIR;
+           worldView.getBlockState(pos.x, pos.y, pos.z) == RUNTIME_ID_NULL &&
+           worldView.getFluidState(pos.x, pos.y, pos.z) == RUNTIME_ID_NULL;
 }
 
 bool tryGetDoorHalves(World& world,
@@ -146,7 +146,7 @@ bool tryGetDoorHalves(World& world,
 } // namespace
 
 bool isDoorBlock(const BlockID blockId) {
-    if (blockId == BlockIds::AIR) {
+    if (blockId == RUNTIME_ID_NULL) {
         return false;
     }
     return BlockRegistry::getFast(blockId).placementStrategy == "door";
@@ -275,8 +275,8 @@ void placeDoor(World& world, const DoorPlacement& placement) {
 void setDoorOpen(World& world, const glm::ivec3& hitPos, const bool open) {
     glm::ivec3 lowerPos{};
     glm::ivec3 upperPos{};
-    StateID lowerState = BlockIds::AIR;
-    StateID upperState = BlockIds::AIR;
+    StateID lowerState = RUNTIME_ID_NULL;
+    StateID upperState = RUNTIME_ID_NULL;
     if (!tryGetDoorHalves(world, hitPos, lowerPos, lowerState, upperPos, upperState)) {
         return;
     }
@@ -302,8 +302,8 @@ void setDoorOpen(World& world, const glm::ivec3& hitPos, const bool open) {
 void setDoorPoweredOpen(World& world, const glm::ivec3& hitPos, const bool powered) {
     glm::ivec3 lowerPos{};
     glm::ivec3 upperPos{};
-    StateID lowerState = BlockIds::AIR;
-    StateID upperState = BlockIds::AIR;
+    StateID lowerState = RUNTIME_ID_NULL;
+    StateID upperState = RUNTIME_ID_NULL;
     if (!tryGetDoorHalves(world, hitPos, lowerPos, lowerState, upperPos, upperState)) {
         return;
     }
@@ -329,7 +329,7 @@ void setDoorPoweredOpen(World& world, const glm::ivec3& hitPos, const bool power
 BlockID removeDoor(World& world, const glm::ivec3& hitPos, std::vector<glm::ivec3>* removedPositions) {
     const StateID stateId = world.getBlockState(hitPos.x, hitPos.y, hitPos.z);
     if (!isDoorState(stateId)) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -337,16 +337,16 @@ BlockID removeDoor(World& world, const glm::ivec3& hitPos, std::vector<glm::ivec
     const bool hasOtherPos = tryGetOtherHalfPosition(hitPos, stateId, otherPos);
     const StateID otherState = hasOtherPos
         ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z)
-        : BlockIds::AIR;
+        : RUNTIME_ID_NULL;
     const bool removeOther = hasOtherPos && isMatchingOtherHalf(stateId, otherState);
 
-    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, BlockIds::AIR);
+    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, RUNTIME_ID_NULL);
     if (removedPositions != nullptr) {
         removedPositions->push_back(hitPos);
     }
 
     if (removeOther) {
-        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, BlockIds::AIR);
+        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, RUNTIME_ID_NULL);
         if (removedPositions != nullptr) {
             removedPositions->push_back(otherPos);
         }

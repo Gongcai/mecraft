@@ -139,7 +139,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
                                      target,
                                      pickupPos,
                                      transform.position,
-                                     BlockIds::AIR);
+                                     RUNTIME_ID_NULL);
                 } else {
                     ++runtime.heldItemSwingSequence;
                 }
@@ -147,7 +147,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
                 continue;
             }
 
-            mutableWorld->setFluidState(pickupPos.x, pickupPos.y, pickupPos.z, BlockIds::AIR);
+            mutableWorld->setFluidState(pickupPos.x, pickupPos.y, pickupPos.z, RUNTIME_ID_NULL);
             if (modeRules.shouldReportBreakProgress()) {
                 replaceSelectedItem(inventory, waterBucketItem);
             }

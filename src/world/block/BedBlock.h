@@ -16,8 +16,8 @@ struct BedPlacement {
     bool valid = false;
     glm::ivec3 footPos{};
     glm::ivec3 headPos{};
-    StateID footState = BlockIds::AIR;
-    StateID headState = BlockIds::AIR;
+    StateID footState = RUNTIME_ID_NULL;
+    StateID headState = RUNTIME_ID_NULL;
 };
 
 [[nodiscard]] bool isBedBlock(BlockID blockId);

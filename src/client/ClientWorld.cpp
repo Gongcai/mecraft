@@ -46,14 +46,14 @@ uint64_t ClientWorld::getActiveChunkRevision() const {
 }
 
 BlockID ClientWorld::getBlock(int x, int y, int z) const {
-    if (y < 0 || y >= 256) return BlockIds::AIR;
+    if (y < 0 || y >= 256) return RUNTIME_ID_NULL;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
     const int64_t key = chunkKey(cx, cz);
 
     std::lock_guard lock(m_chunksMutex);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end() || !it->second) return BlockIds::AIR;
+    if (it == m_chunks.end() || !it->second) return RUNTIME_ID_NULL;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     return it->second->getBlock(lx, y, lz);

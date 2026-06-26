@@ -416,7 +416,7 @@ public:
                         const int y = yBase + ly;
                         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                                if (blocks[index] != BlockIds::AIR) {
+                                if (blocks[index] != RUNTIME_ID_NULL) {
                                     chunk->setBlockFast(x, y, z, blocks[index]);
                                 }
                                 packedLight[Chunk::toIndex(x, y, z)] = lights[index];

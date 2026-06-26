@@ -117,7 +117,7 @@ struct ComparatorEvaluation {
 
 struct PistonMovedBlock {
     glm::ivec3 position;
-    StateID state = BlockIds::AIR;
+    StateID state = RUNTIME_ID_NULL;
 };
 
 struct PistonPushPlan {
@@ -171,7 +171,7 @@ BlockID obsidianBlockId() {
 }
 
 bool isWireState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -289,7 +289,7 @@ bool hasBooleanPropertyValue(const StateID stateId,
 }
 
 uint8_t sourceOutputPower(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return 0;
     }
 
@@ -325,7 +325,7 @@ uint8_t sourceOutputPower(const StateID stateId) {
 }
 
 bool sourceCanPowerConductiveBlocks(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
 
@@ -423,7 +423,7 @@ uint8_t containerSignalPowerAt(const World& world,
                                const GameplayRegistry* registry,
                                const glm::ivec3& position) {
     const StateID stateId = world.getBlockState(position.x, position.y, position.z);
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return 0;
     }
 
@@ -460,7 +460,7 @@ uint8_t containerSignalPowerAt(const World& world,
 }
 
 bool isPotentialSourceState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -469,7 +469,7 @@ bool isPotentialSourceState(const StateID stateId) {
 }
 
 bool isConductiveState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -485,7 +485,7 @@ bool isConductiveBlockAt(const World& world, const glm::ivec3& position) {
 // climb over. This mirrors the World.cpp climbing check: air and non-solid
 // blocks (including redstone wire itself) do not support climbing.
 bool isSolidBlockState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -530,7 +530,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 }
 
 bool isRedstoneControlledState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -539,7 +539,7 @@ bool isRedstoneControlledState(const StateID stateId) {
 }
 
 bool isTorchState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -548,7 +548,7 @@ bool isTorchState(const StateID stateId) {
 }
 
 bool isButtonState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -557,7 +557,7 @@ bool isButtonState(const StateID stateId) {
 }
 
 bool isRepeaterState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -566,7 +566,7 @@ bool isRepeaterState(const StateID stateId) {
 }
 
 bool isObserverState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -575,7 +575,7 @@ bool isObserverState(const StateID stateId) {
 }
 
 bool isComparatorState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -584,7 +584,7 @@ bool isComparatorState(const StateID stateId) {
 }
 
 bool isPistonState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -593,7 +593,7 @@ bool isPistonState(const StateID stateId) {
 }
 
 bool isEdgeTriggeredDeviceState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -605,7 +605,7 @@ bool isEdgeTriggeredDeviceState(const StateID stateId) {
 }
 
 bool isTargetState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -614,7 +614,7 @@ bool isTargetState(const StateID stateId) {
 }
 
 bool isPistonHeadState(const StateID stateId) {
-    return stateId != BlockIds::AIR &&
+    return stateId != RUNTIME_ID_NULL &&
            BlockStateRegistry::getBlockId(stateId) == pistonHeadBlockId();
 }
 
@@ -877,7 +877,7 @@ bool isImmovablePistonBlock(const StateID stateId) {
 }
 
 bool isMovablePistonBlock(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     if (isImmovablePistonBlock(stateId)) {
@@ -1186,7 +1186,7 @@ bool buildPistonPushPlan(const World& world,
     for (int distance = 1; distance <= static_cast<int>(kMaxPistonPushBlocks) + 1; ++distance) {
         const glm::ivec3 position = pistonPosition + pushDirection * distance;
         const StateID stateId = world.getBlockState(position.x, position.y, position.z);
-        if (stateId == BlockIds::AIR) {
+        if (stateId == RUNTIME_ID_NULL) {
             return true;
         }
         if (!isMovablePistonBlock(stateId)) {
@@ -1238,7 +1238,7 @@ size_t applyPistonRetraction(World& world,
     const StateID frontState = world.getBlockState(frontPosition.x, frontPosition.y, frontPosition.z);
     const bool removedMatchingHead = isMatchingPistonHead(frontState, pistonState);
     if (removedMatchingHead) {
-        world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, BlockIds::AIR);
+        world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, RUNTIME_ID_NULL);
         ++changed;
     }
 
@@ -1247,7 +1247,7 @@ size_t applyPistonRetraction(World& world,
         const StateID pullState = world.getBlockState(pullPosition.x, pullPosition.y, pullPosition.z);
         if (isMovablePistonBlock(pullState)) {
             world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pullState);
-            world.setBlockState(pullPosition.x, pullPosition.y, pullPosition.z, BlockIds::AIR);
+            world.setBlockState(pullPosition.x, pullPosition.y, pullPosition.z, RUNTIME_ID_NULL);
             pushEntitiesFromMovedBlock(world, registry, frontPosition, -facingDirection);
             changed += 2;
         }

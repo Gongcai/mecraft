@@ -94,7 +94,7 @@ BlockID removeTargetBlock(World& world,
         return PistonBlockLogic::removePistonAssembly(world, hitBlock, &removedPositions);
     }
 
-    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, BlockIds::AIR);
+    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, RUNTIME_ID_NULL);
     removedPositions.push_back(hitBlock);
     return BlockStateRegistry::getBlockId(targetState);
 }

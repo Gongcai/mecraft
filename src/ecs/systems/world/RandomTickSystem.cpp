@@ -90,7 +90,7 @@ size_t RandomTickSystem::processWorld(World& world, const uint64_t tickIndex, co
                 const int localZ = static_cast<int>(zBits & 0x0Fu);
 
                 const StateID state = subChunk->getBlock(localX, localY, localZ);
-                if (state == BlockIds::AIR) {
+                if (state == RUNTIME_ID_NULL) {
                     continue;
                 }
 

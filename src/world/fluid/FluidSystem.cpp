@@ -61,7 +61,7 @@ bool canFluidReplaceAt(const World& world, const glm::ivec3& pos, const FluidDes
     if (FluidState::decode(cell.fluidState).kind == desc.kind) {
         return true;
     }
-    if (cell.hasBlock() && cell.fluidState == BlockIds::AIR &&
+    if (cell.hasBlock() && cell.fluidState == RUNTIME_ID_NULL &&
         FluidState::canCoexist(desc, cell.blockState)) {
         return true;
     }
@@ -347,20 +347,20 @@ void FluidSystem::updateFluidCell(const glm::ivec3& pos) {
     const FluidCellView cell = m_world.getCombinedCell(pos.x, pos.y, pos.z);
     const StateID currentFluidState = cell.fluidState;
     const StateID currentBlockState = cell.blockState;
-    const BlockID effectiveCurrentId = (currentFluidState != BlockIds::AIR) ? currentFluidState : currentBlockState;
+    const BlockID effectiveCurrentId = (currentFluidState != RUNTIME_ID_NULL) ? currentFluidState : currentBlockState;
 
     const FluidKind targetKind = resolveTargetFluidKind(m_world, pos, effectiveCurrentId);
     if (targetKind == FluidKind::None) {
-        if (currentFluidState != BlockIds::AIR) {
+        if (currentFluidState != RUNTIME_ID_NULL) {
             // Fluid should retract — clear the fluid layer
-            m_world.setFluidState(pos.x, pos.y, pos.z, BlockIds::AIR);
+            m_world.setFluidState(pos.x, pos.y, pos.z, RUNTIME_ID_NULL);
         }
         return;
     }
 
     const FluidDesc& desc = FluidRegistry::get(targetKind);
     // Check if this cell can accept fluid
-    if (cell.hasBlock() && currentFluidState == BlockIds::AIR) {
+    if (cell.hasBlock() && currentFluidState == RUNTIME_ID_NULL) {
         // Non-fluid block — can only accept fluid if it allows coexistence
         if (!FluidState::canCoexist(desc, currentBlockState)) {
             return;
@@ -378,7 +378,7 @@ void FluidSystem::updateFluidCell(const glm::ivec3& pos) {
 StateID FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockID currentId) const {
     const FluidKind kind = resolveTargetFluidKind(m_world, pos, currentId);
     if (kind == FluidKind::None) {
-        return FluidState::decode(currentId).kind == FluidKind::None ? currentId : BlockIds::AIR;
+        return FluidState::decode(currentId).kind == FluidKind::None ? currentId : RUNTIME_ID_NULL;
     }
 
     const FluidDesc& desc = FluidRegistry::get(kind);
@@ -401,7 +401,7 @@ StateID FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockI
     const glm::ivec3 abovePos = pos + glm::ivec3(0, 1, 0);
     const StateID aboveState = isPositionLoaded(m_world, abovePos)
         ? m_world.getFluidState(abovePos.x, abovePos.y, abovePos.z)
-        : BlockIds::AIR;
+        : RUNTIME_ID_NULL;
     const DecodedFluid above = FluidState::decode(aboveState);
 
     if (above.kind == kind) {
@@ -445,7 +445,7 @@ StateID FluidSystem::computeTargetFluidState(const glm::ivec3& pos, const BlockI
     }
 
     if (!foundHorizontalSource || minNeighborLevel >= desc.maxLevel) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     return FluidState::encode(DecodedFluid{

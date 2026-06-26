@@ -62,7 +62,7 @@ bool isPlacementSolid(const World& world, const int x, const int y, const int z)
         return true;
     }
     const BlockID id = world.getBlock(x, y, z);
-    return id != BlockIds::AIR && BlockRegistry::getFast(id).isSolid;
+    return id != RUNTIME_ID_NULL && BlockRegistry::getFast(id).isSolid;
 }
 
 bool arePlacementChunksLoaded(const World& world, const PlayerPlacementBox& box) {

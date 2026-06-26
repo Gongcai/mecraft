@@ -62,12 +62,12 @@ DecodedFluid decode(const StateID id) {
 
 StateID encode(const DecodedFluid& fluid) {
     if (fluid.kind == FluidKind::None) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     const FluidDesc& desc = FluidRegistry::get(fluid.kind);
-    if (desc.blockId == BlockIds::AIR) {
-        return BlockIds::AIR;
+    if (desc.blockId == RUNTIME_ID_NULL) {
+        return RUNTIME_ID_NULL;
     }
 
     if (PropIndices::LEVEL == PropIndices::INVALID || PropIndices::FALLING == PropIndices::INVALID) {
@@ -122,11 +122,11 @@ StateID makeWater(const uint8_t requestedLevel, const bool falling) {
 }
 
 bool canReplace(const FluidDesc& desc, const StateID occupant) {
-    return occupant == BlockIds::AIR || decode(occupant).kind == desc.kind;
+    return occupant == RUNTIME_ID_NULL || decode(occupant).kind == desc.kind;
 }
 
 bool canCoexist(const FluidDesc& desc, const StateID occupant) {
-    if (desc.kind == FluidKind::None || occupant == BlockIds::AIR) {
+    if (desc.kind == FluidKind::None || occupant == RUNTIME_ID_NULL) {
         return false;
     }
     if (decode(occupant).kind != FluidKind::None) {
@@ -144,14 +144,14 @@ bool isSameWater(const BlockID a, const BlockID b) {
 }
 
 StateID getFluidState(const StateID cellState) {
-    return decode(cellState).kind == FluidKind::None ? BlockIds::AIR : cellState;
+    return decode(cellState).kind == FluidKind::None ? RUNTIME_ID_NULL : cellState;
 }
 
 FluidCellView getCombinedCell(const StateID cellState) {
     if (decode(cellState).kind != FluidKind::None) {
-        return FluidCellView{BlockIds::AIR, cellState};
+        return FluidCellView{RUNTIME_ID_NULL, cellState};
     }
-    return FluidCellView{cellState, BlockIds::AIR};
+    return FluidCellView{cellState, RUNTIME_ID_NULL};
 }
 
 }

@@ -17,7 +17,7 @@ constexpr std::array<glm::ivec3, 4> kHorizontalOffsets = {{
 
 BlockID sampleSnapshotBlock(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
     if (x < -1 || x > SubChunk::SIZE || y < -1 || y > SubChunk::SIZE || z < -1 || z > SubChunk::SIZE) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     const int haloX = x + 1;
@@ -36,14 +36,14 @@ BlockID sampleSnapshotFluid(const SubChunkMeshingSnapshot& snapshot, const int x
                                 static_cast<std::size_t>(z) * SubChunk::SIZE +
                                 static_cast<std::size_t>(y) * SubChunk::SIZE * SubChunk::SIZE;
         const BlockID fluidId = snapshot.fluidBlocks[idx];
-        if (fluidId != BlockIds::AIR) {
+        if (fluidId != RUNTIME_ID_NULL) {
             return fluidId;
         }
     }
 
     // Fall back to halo or block data for border positions
     if (x < -1 || x > SubChunk::SIZE || y < -1 || y > SubChunk::SIZE || z < -1 || z > SubChunk::SIZE) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     const int haloX = x + 1;
@@ -53,7 +53,7 @@ BlockID sampleSnapshotFluid(const SubChunkMeshingSnapshot& snapshot, const int x
                               static_cast<std::size_t>(haloZ) * SC_HALO_SIZE +
                               static_cast<std::size_t>(haloY) * SC_HALO_SIZE * SC_HALO_SIZE;
     const BlockID haloFluid = snapshot.haloFluidBlocks[index];
-    if (haloFluid != BlockIds::AIR) {
+    if (haloFluid != RUNTIME_ID_NULL) {
         return haloFluid;
     }
 

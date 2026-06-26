@@ -82,7 +82,7 @@ StateID withPowered(const StateID stateId, const bool powered) {
 }
 
 bool isPressurePlateState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
 

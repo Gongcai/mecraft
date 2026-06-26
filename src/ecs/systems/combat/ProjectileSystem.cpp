@@ -42,7 +42,7 @@ bool isCollisionBlockAt(const IWorldView& worldView,
                         const glm::vec3& halfExtents,
                         StateID& outState,
                         glm::ivec3& outBlockPosition) {
-    outState = BlockIds::AIR;
+    outState = RUNTIME_ID_NULL;
     const glm::vec3 queryMin = position - halfExtents;
     const glm::vec3 queryMax = position + halfExtents;
     if (queryMin.y < 0.0f || queryMax.y >= static_cast<float>(Chunk::SIZE_Y)) {
@@ -64,7 +64,7 @@ bool isCollisionBlockAt(const IWorldView& worldView,
     bool found = false;
     float bestDistanceSq = 0.0f;
     glm::ivec3 bestPosition{};
-    StateID bestState = BlockIds::AIR;
+    StateID bestState = RUNTIME_ID_NULL;
     for (int y = minY; y <= maxY; ++y) {
         for (int z = minZ; z <= maxZ; ++z) {
             for (int x = minX; x <= maxX; ++x) {
@@ -413,7 +413,7 @@ void ProjectileSystem::update(SystemContext& ctx) {
         for (int i = 0; i < steps; ++i) {
             transform.position += step;
 
-            StateID hitState = BlockIds::AIR;
+            StateID hitState = RUNTIME_ID_NULL;
             glm::ivec3 hitBlockPosition{};
             if (isCollisionBlockAt(worldView, transform.position, bounds.halfExtents, hitState, hitBlockPosition)) {
                 if (ctx.services.world) {

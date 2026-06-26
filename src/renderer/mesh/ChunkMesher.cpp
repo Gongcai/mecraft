@@ -727,7 +727,7 @@ MeshBlockInfo buildMeshBlockInfo(const BlockID id) {
         info.faces[static_cast<size_t>(face)] = buildMeshFaceInfo(id, face);
     }
 
-    if (id == BlockIds::AIR) {
+    if (id == RUNTIME_ID_NULL) {
         info.cubeClass = MeshCubeClass::Air;
     } else if (def.renderShape != BlockRenderShape::Cube) {
         info.cubeClass = MeshCubeClass::Other;
@@ -1115,10 +1115,10 @@ void captureSubChunkBorders(const Chunk& chunk,
             const auto idx = toBorderXZIndex(ly, lz);
             snapshot.posXBorder[idx] = neighborPosX
                 ? neighborPosX->getBlock(0, columnY, lz)
-                : BlockIds::AIR;
+                : RUNTIME_ID_NULL;
             snapshot.negXBorder[idx] = neighborNegX
                 ? neighborNegX->getBlock(Chunk::SIZE_X - 1, columnY, lz)
-                : BlockIds::AIR;
+                : RUNTIME_ID_NULL;
             snapshot.posXLightBorder[idx] = neighborPosX
                 ? neighborPosX->getPackedLight(0, columnY, lz) : 0;
             snapshot.negXLightBorder[idx] = neighborNegX
@@ -1128,10 +1128,10 @@ void captureSubChunkBorders(const Chunk& chunk,
             const auto idx = toBorderXZIndex(ly, lx);
             snapshot.posZBorder[idx] = neighborPosZ
                 ? neighborPosZ->getBlock(lx, columnY, 0)
-                : BlockIds::AIR;
+                : RUNTIME_ID_NULL;
             snapshot.negZBorder[idx] = neighborNegZ
                 ? neighborNegZ->getBlock(lx, columnY, Chunk::SIZE_Z - 1)
-                : BlockIds::AIR;
+                : RUNTIME_ID_NULL;
             snapshot.posZLightBorder[idx] = neighborPosZ
                 ? neighborPosZ->getPackedLight(lx, columnY, 0) : 0;
             snapshot.negZLightBorder[idx] = neighborNegZ
@@ -1750,7 +1750,7 @@ bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
         FluidState::decode(neighborFluidId).kind == currentFluid.kind) {
         return false;
     }
-    if (neighborId == BlockIds::AIR && neighborFluidId == 0) {
+    if (neighborId == RUNTIME_ID_NULL && neighborFluidId == 0) {
         return true;
     }
 
@@ -1779,7 +1779,7 @@ float sampleWaterColumnSurfaceHeight(const SubChunkMeshingSnapshot& snapshot,
 }
 
 bool isOpenWaterSurfaceSample(const BlockID id) {
-    if (id == BlockIds::AIR) {
+    if (id == RUNTIME_ID_NULL) {
         return true;
     }
 

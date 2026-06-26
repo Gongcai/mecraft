@@ -16,8 +16,8 @@ struct DoorPlacement {
     bool valid = false;
     glm::ivec3 lowerPos{};
     glm::ivec3 upperPos{};
-    StateID lowerState = BlockIds::AIR;
-    StateID upperState = BlockIds::AIR;
+    StateID lowerState = RUNTIME_ID_NULL;
+    StateID upperState = RUNTIME_ID_NULL;
 };
 
 [[nodiscard]] bool isDoorBlock(BlockID blockId);

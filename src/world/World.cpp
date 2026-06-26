@@ -67,7 +67,7 @@ bool isRedstoneWireBlockDef(const BlockDef& def) {
 }
 
 bool isRedstoneWireState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -79,7 +79,7 @@ bool isMatchingRedstoneWireState(const StateID stateId, const BlockID wireBlockI
 }
 
 bool canConnectedBlockAttachTo(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
 
@@ -89,7 +89,7 @@ bool canConnectedBlockAttachTo(const StateID stateId) {
 }
 
 bool canRedstoneWireAttachTo(const StateID stateId, const BlockID wireBlockId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
 
@@ -111,7 +111,7 @@ bool canRedstoneWireAttachTo(const StateID stateId, const BlockID wireBlockId) {
 // Returns true when the given state is a solid block that redstone wire can
 // climb over. Redstone wire itself, non-solid blocks, and air are excluded.
 bool isSolidBlockForRedstoneClimb(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -550,13 +550,13 @@ StateID World::getBlockState(const int x, const int y, const int z) const {
 }
 
 StateID World::getFluidState(const int x, const int y, const int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return BlockIds::AIR;
+    if (y < 0 || y >= Chunk::SIZE_Y) return RUNTIME_ID_NULL;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
     const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
     if (it == m_chunks.end()) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     const int localX = x - chunkX * Chunk::SIZE_X;
@@ -564,13 +564,13 @@ StateID World::getFluidState(const int x, const int y, const int z) const {
     const int scy = Chunk::toSubChunkIndex(y);
     const SubChunk* sc = it->second->getSubChunk(scy);
     if (!sc) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     // First check the dedicated fluid layer
     const int localY = Chunk::toSubChunkLocalY(y);
     const BlockID fluidLayer = sc->getFluidLayer(localX, localY, localZ);
-    if (fluidLayer != BlockIds::AIR) {
+    if (fluidLayer != RUNTIME_ID_NULL) {
         return fluidLayer;
     }
 
@@ -603,7 +603,7 @@ FluidCellView World::getCombinedCell(const int x, const int y, const int z) cons
     const DecodedFluid blockFluid = FluidState::decode(blockState);
     if (blockFluid.kind != FluidKind::None) {
         // Pure fluid position (block layer IS the fluid)
-        return FluidCellView{BlockIds::AIR, blockState};
+        return FluidCellView{RUNTIME_ID_NULL, blockState};
     }
     // Block position (possibly waterlogged)
     return FluidCellView{blockState, fluidLayer};
@@ -652,7 +652,7 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
         // If new state is air/no-fluid, clear block layer to air.
         const StateID targetBlockState = (newFluid.kind != FluidKind::None)
             ? normalizedStateId
-            : BlockIds::AIR;
+            : RUNTIME_ID_NULL;
         setBlockState(x, y, z, targetBlockState);
         return;
     }
@@ -661,10 +661,10 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
     if (newFluid.kind == FluidKind::None) {
         // Removing fluid from this cell
         const BlockID oldFluid = sc->getFluidLayer(localX, localY, localZ);
-        if (oldFluid == BlockIds::AIR) {
+        if (oldFluid == RUNTIME_ID_NULL) {
             return;  // Nothing to do
         }
-        sc->setFluidLayer(localX, localY, localZ, BlockIds::AIR);
+        sc->setFluidLayer(localX, localY, localZ, RUNTIME_ID_NULL);
     } else {
         // Adding/updating fluid in a waterlogged cell
         if (BlockRegistry::getFast(currentBlock).allowsFluidCoexistence) {
@@ -741,12 +741,12 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     const BlockID oldId = chunk.getBlock(localX, y, localZ);
     const BlockID oldFluidLayer = existingSubChunk
         ? existingSubChunk->getFluidLayer(localX, localY, localZ)
-        : BlockIds::AIR;
+        : RUNTIME_ID_NULL;
 
     StateID targetState = id;
     const bool uncoverFluidLayer =
-        id == BlockIds::AIR &&
-        oldFluidLayer != BlockIds::AIR &&
+        id == RUNTIME_ID_NULL &&
+        oldFluidLayer != RUNTIME_ID_NULL &&
         FluidState::decode(oldId).kind == FluidKind::None &&
         FluidState::decode(oldFluidLayer).kind != FluidKind::None;
     if (uncoverFluidLayer) {
@@ -767,7 +767,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
 
     if (uncoverFluidLayer) {
         if (SubChunk* sc = chunk.getSubChunk(editedScy)) {
-            sc->setFluidLayer(localX, localY, localZ, BlockIds::AIR);
+            sc->setFluidLayer(localX, localY, localZ, RUNTIME_ID_NULL);
         }
     }
 
@@ -825,7 +825,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
     }
 
     const StateID currentState = getBlockState(pos.x, pos.y, pos.z);
-    if (currentState == BlockIds::AIR) {
+    if (currentState == RUNTIME_ID_NULL) {
         return;
     }
 
@@ -930,7 +930,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         }
 
         const auto isStairWithSameHalf = [&](const StateID state) {
-            if (state == BlockIds::AIR) {
+            if (state == RUNTIME_ID_NULL) {
                 return false;
             }
             const BlockID otherBlockId = BlockStateRegistry::getBlockId(state);

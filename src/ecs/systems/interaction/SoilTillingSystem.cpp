@@ -42,8 +42,8 @@ bool isTillableSoil(const BlockID blockId) {
 
 bool hasEmptySpaceAbove(const IWorldView& worldView, const glm::ivec3& pos) {
     const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
-    return worldView.getBlockState(above.x, above.y, above.z) == BlockIds::AIR &&
-           worldView.getFluidState(above.x, above.y, above.z) == BlockIds::AIR;
+    return worldView.getBlockState(above.x, above.y, above.z) == RUNTIME_ID_NULL &&
+           worldView.getFluidState(above.x, above.y, above.z) == RUNTIME_ID_NULL;
 }
 
 bool isWithinInteractionReach(const glm::vec3& playerPos, const glm::ivec3& blockPos) {

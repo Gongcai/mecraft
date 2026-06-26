@@ -99,7 +99,7 @@ uint16_t headTypeValue(const StateID headState) {
 } // namespace
 
 bool isPistonBaseState(const StateID stateId) {
-    if (stateId == BlockIds::AIR) {
+    if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -107,7 +107,7 @@ bool isPistonBaseState(const StateID stateId) {
 }
 
 bool isPistonHeadState(const StateID stateId) {
-    return stateId != BlockIds::AIR &&
+    return stateId != RUNTIME_ID_NULL &&
            BlockStateRegistry::getBlockId(stateId) == pistonHeadBlockId();
 }
 
@@ -154,7 +154,7 @@ BlockID removePistonAssembly(World& world,
                              std::vector<glm::ivec3>* removedPositions) {
     const StateID stateId = world.getBlockState(hitPos.x, hitPos.y, hitPos.z);
     if (!isPistonAssemblyState(stateId)) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
 
     BlockID droppedBlockId = BlockStateRegistry::getBlockId(stateId);
@@ -162,19 +162,19 @@ BlockID removePistonAssembly(World& world,
     const bool hasOtherPos = tryGetOtherPartPosition(hitPos, stateId, otherPos);
     const StateID otherState = hasOtherPos
         ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z)
-        : BlockIds::AIR;
+        : RUNTIME_ID_NULL;
     const bool removeOther = hasOtherPos && isMatchingAssemblyPart(stateId, otherState);
     if (removeOther && isPistonHeadState(stateId)) {
         droppedBlockId = BlockStateRegistry::getBlockId(otherState);
     }
 
-    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, BlockIds::AIR);
+    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, RUNTIME_ID_NULL);
     if (removedPositions != nullptr) {
         removedPositions->push_back(hitPos);
     }
 
     if (removeOther) {
-        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, BlockIds::AIR);
+        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, RUNTIME_ID_NULL);
         if (removedPositions != nullptr) {
             removedPositions->push_back(otherPos);
         }

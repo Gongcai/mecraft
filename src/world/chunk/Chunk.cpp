@@ -504,7 +504,7 @@ void Chunk::seedInitialLightMap() {
                 const int scy = toSubChunkIndex(y);
                 SubChunk* sc = getSubChunk(scy);
 
-                BlockID blockId = BlockIds::AIR;
+                BlockID blockId = RUNTIME_ID_NULL;
                 if (sc) {
                     blockId = sc->getBlock(x, toSubChunkLocalY(y), z);
                 }

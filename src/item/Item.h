@@ -25,7 +25,7 @@ namespace ItemIds {
 }
 
 struct ItemStack {
-    ItemID itemId = 0;  // Will be set to ItemIds::AIR after init
+    ItemID itemId = 0;  // Will be set to RUNTIME_ID_NULL after init
     uint16_t count = 0;
     uint16_t durability = 0;
 

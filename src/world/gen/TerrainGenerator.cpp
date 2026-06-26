@@ -229,7 +229,7 @@ BlockID requireFacingState(const char* path, const uint16_t facing) {
     }
     const BlockID blockId = requireBlockId(path);
     const StateID state = BlockStateRegistry::getState(blockId, PropIndices::FACING, facing);
-    if (state == BlockIds::AIR || BlockStateRegistry::getBlockId(state) != blockId) {
+    if (state == RUNTIME_ID_NULL || BlockStateRegistry::getBlockId(state) != blockId) {
         throw std::runtime_error(std::string("Missing required facing state for world generation block: minecraft:") + path);
     }
     return state;

@@ -181,12 +181,12 @@ SolverContext makeSolverContext(const LightJob& job) {
 
 BlockID getBlockId(const SolverContext& context, const int x, const int y, const int z) {
     if (!isInside(x, y, z)) {
-        return BlockIds::AIR;
+        return RUNTIME_ID_NULL;
     }
     if (context.hasBlockSnapshot) {
         return context.job.blockSnapshot[packedIndex(x, y, z)];
     }
-    return BlockIds::AIR;
+    return RUNTIME_ID_NULL;
 }
 
 MECRAFT_FORCEINLINE uint8_t getOpacityAtIndex(const SolverContext& context, const std::size_t idx) {

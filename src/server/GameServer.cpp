@@ -1241,7 +1241,7 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
         }
 
         const ItemID itemId = ItemRegistry::findByName(itemName);
-        if (itemId == ItemIds::AIR) {
+        if (itemId == RUNTIME_ID_NULL) {
             sendCommandResult(client, request.sequence, false, "Unknown item: " + itemName);
             return;
         }
@@ -1444,8 +1444,8 @@ bool isServerTillableSoil(const BlockID blockId) {
 
 bool hasServerEmptySpaceAbove(const World& world, const glm::ivec3& pos) {
     const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
-    return world.getBlockState(above.x, above.y, above.z) == BlockIds::AIR &&
-           world.getFluidState(above.x, above.y, above.z) == BlockIds::AIR;
+    return world.getBlockState(above.x, above.y, above.z) == RUNTIME_ID_NULL &&
+           world.getFluidState(above.x, above.y, above.z) == RUNTIME_ID_NULL;
 }
 
 bool isServerSourceWaterAt(const World& world, const glm::ivec3& pos) {
@@ -1499,7 +1499,7 @@ BlockID removeServerTargetBlock(World& world,
         return PistonBlockLogic::removePistonAssembly(world, hitBlock, &removedPositions);
     }
 
-    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, BlockIds::AIR);
+    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, RUNTIME_ID_NULL);
     removedPositions.push_back(hitBlock);
     return BlockStateRegistry::getBlockId(targetState);
 }
@@ -1524,7 +1524,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
 
     if (action.action == net::ClientBlockActionType::Break) {
         const BlockID target = m_world.getBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
-        if (target == BlockIds::AIR || !BlockRegistry::get(target).isSelectable) {
+        if (target == RUNTIME_ID_NULL || !BlockRegistry::get(target).isSelectable) {
             return;
         }
         std::vector<glm::ivec3> removedPositions;
@@ -1623,7 +1623,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             m_world.setFluidState(action.targetBlock.x,
                                   action.targetBlock.y,
                                   action.targetBlock.z,
-                                  BlockIds::AIR);
+                                  RUNTIME_ID_NULL);
             if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
                 replaceSelectedServerItem(*inventoryData, waterBucketItemId());
             }
@@ -1658,7 +1658,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         return;
     }
 
-    if (action.blockState == BlockIds::AIR) {
+    if (action.blockState == RUNTIME_ID_NULL) {
         return;
     }
     if (BedBlockLogic::isBedState(action.blockState)) {
@@ -1701,7 +1701,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     }
     const StateID existingPlaceState =
         m_world.getBlockState(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z);
-    if (existingPlaceState != BlockIds::AIR &&
+    if (existingPlaceState != RUNTIME_ID_NULL &&
         !FluidState::isWater(existingPlaceState) &&
         !canReplaceWithMergedPlacementResult(existingPlaceState, action.blockState)) {
         return;

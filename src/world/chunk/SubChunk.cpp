@@ -209,10 +209,10 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
         m_blockData.set(index, paletteIndices[index]);
     }
 
-    m_fluidPalette.getOrCreateIndex(BlockIds::AIR);
+    m_fluidPalette.getOrCreateIndex(RUNTIME_ID_NULL);
     m_fluidData = BitPackedArray(BLOCK_COUNT, 1);
     m_fluidData.fill(0);
-    m_fluidCounts.emplace(BlockIds::AIR, static_cast<uint16_t>(BLOCK_COUNT));
+    m_fluidCounts.emplace(RUNTIME_ID_NULL, static_cast<uint16_t>(BLOCK_COUNT));
 
     inferType();
     m_dirty = true;
@@ -356,7 +356,7 @@ void SubChunk::setBlockLight(const int x, const int y, const int z, const uint8_
 }
 
 void SubChunk::inferType() {
-    if (m_fluidCounts.size() > 1 || m_fluidCounts.find(BlockIds::AIR) == m_fluidCounts.end()) {
+    if (m_fluidCounts.size() > 1 || m_fluidCounts.find(RUNTIME_ID_NULL) == m_fluidCounts.end()) {
         m_type = SubChunkType::Normal;
         return;
     }

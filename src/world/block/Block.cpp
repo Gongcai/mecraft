@@ -140,7 +140,7 @@ BlockID resolveDefinitionBlockId(const BlockID id) {
         return BlockStateRegistry::getBlockId(id);
     }
 
-    return BlockIds::AIR;
+    return RUNTIME_ID_NULL;
 }
 
 BiomeTintKind parseBiomeTintKind(const nlohmann::json& blockJson) {

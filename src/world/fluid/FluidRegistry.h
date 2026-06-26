@@ -11,7 +11,7 @@ enum class FluidKind : uint8_t {
 
 struct FluidDesc {
     FluidKind kind = FluidKind::None;
-    BlockID blockId = BlockIds::AIR;
+    BlockID blockId = RUNTIME_ID_NULL;
     uint64_t tickDelay = 0;
     uint8_t maxLevel = 0;
     uint8_t slopeSearchDistance = 0;
