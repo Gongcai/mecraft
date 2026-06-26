@@ -328,7 +328,7 @@ const ItemDef& ItemRegistry::get(const ItemID id) {
 ItemID ItemRegistry::findByName(const std::string& name) {
     ItemID id = 0;
     if (!tryGetIdByName(name, id)) {
-        return 0;
+        throw std::runtime_error("Item is not registered: " + name);
     }
     return id;
 }
@@ -363,7 +363,7 @@ ItemID ItemRegistry::getId(const NamespacedId& namespacedId) {
     if (it != s_idLookup.end()) {
         return it->second;
     }
-    return 0;
+    throw std::runtime_error("Item is not registered: " + namespacedId.full());
 }
 
 bool ItemRegistry::tryGetId(const NamespacedId& namespacedId, ItemID& outId) {

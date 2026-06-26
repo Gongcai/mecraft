@@ -1063,7 +1063,7 @@ bool BlockRegistry::isLightSourceFast(const BlockID id) {
 BlockID BlockRegistry::findByName(const std::string& name) {
     BlockID outId = 0;
     if (!tryGetIdByName(name, outId)) {
-        return 0;  // AIR
+        throw std::runtime_error("Block is not registered: " + name);
     }
     return outId;
 }
@@ -1096,7 +1096,7 @@ BlockID BlockRegistry::getId(const NamespacedId& namespacedId) {
     if (it != s_idLookup.end()) {
         return it->second;
     }
-    return 0;  // AIR
+    throw std::runtime_error("Block is not registered: " + namespacedId.full());
 }
 
 bool BlockRegistry::tryGetId(const NamespacedId& namespacedId, BlockID& outId) {

@@ -912,7 +912,7 @@ void GameSession::loadLocalPlayer() {
             for (size_t i = 0; i < data.inventory.size() && i < Inventory::INVENTORY_SIZE; ++i) {
                 const auto& slot = data.inventory[i];
                 if (!slot.item.empty() && slot.count > 0) {
-                    ItemID itemId = ItemRegistry::getId(NamespacedId(slot.item));
+                    const ItemID itemId = ItemRegistry::getId(NamespacedId(slot.item));
                     inv.setSlotItem(static_cast<int>(i), itemId, slot.count);
                 }
             }

@@ -1240,8 +1240,8 @@ void GameServer::executeServerCommand(ConnectedClient& client, const net::Client
             targetId = static_cast<net::ClientId>(parsed);
         }
 
-        const ItemID itemId = ItemRegistry::findByName(itemName);
-        if (itemId == RUNTIME_ID_NULL) {
+        ItemID itemId = RUNTIME_ID_NULL;
+        if (!ItemRegistry::tryGetIdByName(itemName, itemId) || itemId == RUNTIME_ID_NULL) {
             sendCommandResult(client, request.sequence, false, "Unknown item: " + itemName);
             return;
         }
