@@ -98,7 +98,8 @@ int main() {
         !ItemUseRules::matchesBlock(*tillRule, BlockRegistry::requireIdByName("minecraft:dirt")) ||
         !ItemUseRules::matchesBlock(*tillRule, BlockRegistry::requireIdByName("minecraft:grass_block")) ||
         tillRule->resultBlock != BlockRegistry::requireIdByName("minecraft:farmland") ||
-        tillRule->consumeDurability != 1) {
+        tillRule->consumeDurability != 1 ||
+        !tillRule->requiresEmptyAbove) {
         return fail("iron hoe should declare a data-driven tilling rule");
     }
 
@@ -234,9 +235,11 @@ int main() {
         !ItemUseRules::matchesBlock(*pickupWaterRule, BlockRegistry::requireIdByName("minecraft:water")) ||
         pickupWaterRule->resultBlock != RUNTIME_ID_NULL ||
         pickupWaterRule->resultItem != waterBucketItem ||
+        !pickupWaterRule->requiresSourceFluid ||
         placeWaterRule == nullptr ||
         placeWaterRule->resultBlock != BlockRegistry::requireIdByName("minecraft:water") ||
-        placeWaterRule->resultItem != bucketItem) {
+        placeWaterRule->resultItem != bucketItem ||
+        !placeWaterRule->requiresFluidPlacement) {
         return fail("bucket items should declare data-driven fluid use rules");
     }
 

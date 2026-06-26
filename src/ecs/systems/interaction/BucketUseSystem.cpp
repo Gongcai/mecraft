@@ -36,9 +36,12 @@ bool isWithinInteractionReach(const glm::vec3& playerPos, const glm::ivec3& bloc
     return distSq <= kMaxBucketDistance * kMaxBucketDistance;
 }
 
-bool isSourceFluidMatchingRule(const IWorldView& worldView, const glm::ivec3& pos, const ItemUseRule& rule) {
+bool isFluidMatchingPickupRule(const IWorldView& worldView, const glm::ivec3& pos, const ItemUseRule& rule) {
     const StateID fluidState = worldView.getFluidState(pos.x, pos.y, pos.z);
-    if (!FluidState::isWater(fluidState) || !FluidState::isSource(fluidState)) {
+    if (!FluidState::isWater(fluidState)) {
+        return false;
+    }
+    if (rule.requiresSourceFluid && !FluidState::isSource(fluidState)) {
         return false;
     }
 
@@ -46,7 +49,7 @@ bool isSourceFluidMatchingRule(const IWorldView& worldView, const glm::ivec3& po
     return ItemUseRules::matchesBlock(rule, fluidBlock);
 }
 
-bool canPlaceSourceWaterAt(const IWorldView& worldView, const glm::ivec3& pos) {
+bool canPlaceWaterAt(const IWorldView& worldView, const glm::ivec3& pos) {
     if (!worldView.isChunkLoadedForBlock(pos.x, pos.y, pos.z)) {
         return false;
     }
@@ -58,6 +61,14 @@ bool canPlaceSourceWaterAt(const IWorldView& worldView, const glm::ivec3& pos) {
 
     const BlockID blockId = BlockStateRegistry::getBlockId(blockState);
     return BlockRegistry::getFast(blockId).allowsFluidCoexistence;
+}
+
+bool canPlaceRuleFluidAt(const IWorldView& worldView, const glm::ivec3& pos, const ItemUseRule& rule) {
+    const FluidKind fluidKind = FluidRegistry::kindForBlock(rule.resultBlock);
+    if (fluidKind == FluidKind::Water) {
+        return canPlaceWaterAt(worldView, pos);
+    }
+    throw std::runtime_error("Item use rule references unsupported fluid block.");
 }
 
 StateID makeSourceFluidState(const BlockID fluidBlock) {
@@ -145,7 +156,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
         if (pickupRule != nullptr) {
             const glm::ivec3 pickupPos = target.targetBlock;
             if (!isWithinInteractionReach(transform.position, pickupPos) ||
-                !isSourceFluidMatchingRule(worldView, pickupPos, *pickupRule)) {
+                !isFluidMatchingPickupRule(worldView, pickupPos, *pickupRule)) {
                 continue;
             }
 
@@ -177,7 +188,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
         const glm::ivec3 placePos = target.placeBlock;
         if (!isWithinInteractionReach(transform.position, placePos) ||
-            !canPlaceSourceWaterAt(worldView, placePos)) {
+            (placeRule->requiresFluidPlacement && !canPlaceRuleFluidAt(worldView, placePos, *placeRule))) {
             continue;
         }
 

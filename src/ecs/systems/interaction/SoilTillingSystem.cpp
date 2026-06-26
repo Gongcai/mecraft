@@ -94,7 +94,8 @@ void SoilTillingSystem::update(SystemContext& ctx) {
 
         const StateID targetState = worldView.getBlockState(tillPos.x, tillPos.y, tillPos.z);
         const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
-        if (!ItemUseRules::matchesBlock(*tillRule, targetBlock) || !hasEmptySpaceAbove(worldView, tillPos)) {
+        if (!ItemUseRules::matchesBlock(*tillRule, targetBlock) ||
+            (tillRule->requiresEmptyAbove && !hasEmptySpaceAbove(worldView, tillPos))) {
             continue;
         }
 

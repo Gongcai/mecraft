@@ -53,6 +53,7 @@
         {
           "behavior": "till_soil",
           "match": { "block": ["minecraft:grass_block", "minecraft:dirt"] },
+          "conditions": { "empty_above": true },
           "result_block": "minecraft:farmland",
           "consume_durability": 1
         }
@@ -69,6 +70,7 @@
         {
           "behavior": "bucket_pickup_fluid",
           "match": { "block": "minecraft:water" },
+          "conditions": { "source_fluid": true },
           "result_block": "minecraft:air",
           "result_item": "minecraft:water_bucket"
         }
@@ -84,6 +86,7 @@
       "use_on_block": [
         {
           "behavior": "bucket_place_fluid",
+          "conditions": { "can_place_fluid": true },
           "result_block": "minecraft:water",
           "result_item": "minecraft:bucket"
         }

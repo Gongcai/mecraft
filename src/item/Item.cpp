@@ -160,6 +160,20 @@ void requireFluidResultBlock(const ItemUseRule& rule, const std::string& context
     }
 }
 
+bool requireConditionFlag(const nlohmann::json& ruleJson,
+                          const std::string& context,
+                          const char* conditionName) {
+    const nlohmann::json& conditionsJson = requireObjectField(ruleJson, context, "conditions");
+    if (!conditionsJson.is_object()) {
+        throw std::runtime_error(context + ".conditions must be an object");
+    }
+    const nlohmann::json& conditionJson = requireObjectField(conditionsJson, context + ".conditions", conditionName);
+    if (!conditionJson.is_boolean()) {
+        throw std::runtime_error(context + ".conditions." + conditionName + " must be a boolean");
+    }
+    return conditionJson.get<bool>();
+}
+
 std::vector<ItemUseRule> parseUseOnBlockRules(const nlohmann::json& itemJson, const std::string& itemName) {
     const auto rulesIt = itemJson.find("use_on_block");
     if (rulesIt == itemJson.end()) {
@@ -187,6 +201,7 @@ std::vector<ItemUseRule> parseUseOnBlockRules(const nlohmann::json& itemJson, co
                 rule.resultBlock = requireBlockToken(requireObjectField(ruleJson, context, "result_block"),
                                                      context + ".result_block");
                 rule.consumeDurability = requireDurabilityCost(ruleJson, context);
+                rule.requiresEmptyAbove = requireConditionFlag(ruleJson, context, "empty_above");
                 break;
             case ItemUseBehavior::BucketPickupFluid:
                 rule.matchBlocks = parseMatchBlocks(ruleJson, context);
@@ -194,6 +209,7 @@ std::vector<ItemUseRule> parseUseOnBlockRules(const nlohmann::json& itemJson, co
                                                      context + ".result_block");
                 rule.resultItem = requireItemToken(requireObjectField(ruleJson, context, "result_item"),
                                                    context + ".result_item");
+                rule.requiresSourceFluid = requireConditionFlag(ruleJson, context, "source_fluid");
                 break;
             case ItemUseBehavior::BucketPlaceFluid:
                 rule.resultBlock = requireBlockToken(requireObjectField(ruleJson, context, "result_block"),
@@ -201,6 +217,7 @@ std::vector<ItemUseRule> parseUseOnBlockRules(const nlohmann::json& itemJson, co
                 requireFluidResultBlock(rule, context);
                 rule.resultItem = requireItemToken(requireObjectField(ruleJson, context, "result_item"),
                                                    context + ".result_item");
+                rule.requiresFluidPlacement = requireConditionFlag(ruleJson, context, "can_place_fluid");
                 break;
         }
 

@@ -26,6 +26,9 @@ struct ItemUseRule {
     BlockID resultBlock = RUNTIME_ID_NULL;
     ItemID resultItem = RUNTIME_ID_NULL;
     uint16_t consumeDurability = 0;
+    bool requiresEmptyAbove = false;
+    bool requiresSourceFluid = false;
+    bool requiresFluidPlacement = false;
 };
 
 struct ItemStack {
