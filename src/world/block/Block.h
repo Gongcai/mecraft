@@ -267,6 +267,7 @@ struct BlockDef {
     bool isRedstonePowerSource = false;    // True when this block can emit redstone power.
     bool respondsToRedstone = false;       // True when this block changes state after receiving redstone power.
     uint8_t redstonePowerOutput = 0;       // Fixed output strength in the inclusive range [0, 15].
+    uint64_t redstonePulseTicks = 0;       // Scheduled pulse duration for momentary redstone devices.
     std::string redstoneBehavior;          // Behavior tag used by redstone systems and device-specific logic.
     std::string redstoneControlledProperty; // Boolean state property driven by incoming redstone power.
     std::vector<std::string> redstoneControlledMirrorProperties; // Boolean state properties updated when the controlled property changes.

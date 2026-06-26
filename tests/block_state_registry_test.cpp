@@ -804,6 +804,12 @@ int main() {
         return fail("crafting table should parse its container UI binding from blocks.json");
     }
 
+    const BlockDef& stoneButtonPulseDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:stone_button"));
+    const BlockDef& oakButtonPulseDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:oak_button"));
+    if (stoneButtonPulseDef.redstonePulseTicks != 10 || oakButtonPulseDef.redstonePulseTicks != 15) {
+        return fail("button pulse durations should parse from blocks.json");
+    }
+
     PlacementStrategyFn chestStrategy = PlacementStrategyRegistry::getStrategy(chestDef.placementStrategy);
     if (chestStrategy == nullptr) {
         return fail("chest placement strategy should be registered");

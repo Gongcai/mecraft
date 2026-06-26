@@ -105,6 +105,7 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.isRedstonePowerSource = false;
     def.respondsToRedstone = false;
     def.redstonePowerOutput = 0;
+    def.redstonePulseTicks = 0;
     def.redstoneBehavior.clear();
     def.redstoneControlledProperty.clear();
     def.redstoneControlledMirrorProperties.clear();
@@ -524,6 +525,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.isRedstonePowerSource = false;
         def.respondsToRedstone = false;
         def.redstonePowerOutput = 0;
+        def.redstonePulseTicks = 0;
         def.redstoneBehavior.clear();
         def.redstoneControlledProperty.clear();
         def.redstoneControlledMirrorProperties.clear();
@@ -651,6 +653,16 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
             def.redstonePowerOutput = static_cast<uint8_t>(powerOutput);
         }
+        if (blockJson.contains("redstonePulseTicks")) {
+            if (!blockJson["redstonePulseTicks"].is_number_integer()) {
+                throw std::runtime_error("redstonePulseTicks must be an integer for block: " + def.namespacedId.full());
+            }
+            const int pulseTicks = blockJson["redstonePulseTicks"].get<int>();
+            if (pulseTicks <= 0) {
+                throw std::runtime_error("redstonePulseTicks must be positive for block: " + def.namespacedId.full());
+            }
+            def.redstonePulseTicks = static_cast<uint64_t>(pulseTicks);
+        }
         if (blockJson.contains("redstoneBehavior")) {
             if (!blockJson["redstoneBehavior"].is_string()) {
                 throw std::runtime_error("redstoneBehavior must be a string for block: " + def.namespacedId.full());
@@ -659,6 +671,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             if (!isKnownRedstoneBehavior(def.redstoneBehavior)) {
                 throw std::runtime_error("Unknown redstoneBehavior '" + def.redstoneBehavior + "' for block: " + def.namespacedId.full());
             }
+        }
+        if (def.redstoneBehavior == "button" && def.redstonePulseTicks == 0) {
+            throw std::runtime_error("redstoneBehavior=button requires redstonePulseTicks for block: " +
+                                     def.namespacedId.full());
         }
         if (blockJson.contains("redstoneControlledProperty")) {
             if (!blockJson["redstoneControlledProperty"].is_string()) {

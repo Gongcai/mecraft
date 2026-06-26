@@ -32,8 +32,6 @@ namespace ecs {
 namespace {
 
 constexpr uint8_t kMaxRedstonePower = 15;
-constexpr uint64_t kStoneButtonPulseTicks = 10;
-constexpr uint64_t kWoodButtonPulseTicks = 15;
 constexpr uint64_t kObserverPulseDelayTicks = 1;
 constexpr uint64_t kObserverPulseDurationTicks = 1;
 constexpr size_t kMaxPistonPushBlocks = 12;
@@ -134,16 +132,6 @@ struct PistonMovementCollision {
     CollisionAabb sourceBox;
     CollisionAabb sweptBox;
 };
-
-BlockID stoneButtonBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:stone_button");
-    return blockId;
-}
-
-BlockID oakButtonBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:oak_button");
-    return blockId;
-}
 
 BlockID pistonBlockId() {
     static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:piston");
@@ -620,13 +608,15 @@ bool isPistonHeadState(const StateID stateId) {
 
 uint64_t buttonPulseTicks(const StateID stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    if (blockId == stoneButtonBlockId()) {
-        return kStoneButtonPulseTicks;
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (def.redstoneBehavior != "button") {
+        throw std::runtime_error("Redstone pulse duration requires a button block");
     }
-    if (blockId == oakButtonBlockId()) {
-        return kWoodButtonPulseTicks;
+    if (def.redstonePulseTicks == 0) {
+        throw std::runtime_error("Redstone button has no configured pulse duration: " +
+                                 def.namespacedId.full());
     }
-    throw std::runtime_error("Redstone button has no registered pulse duration");
+    return def.redstonePulseTicks;
 }
 
 uint64_t repeaterDelayTicks(const StateID stateId) {

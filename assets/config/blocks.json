@@ -1157,6 +1157,7 @@
       "isRedstoneConductor": false,
       "isRedstonePowerSource": true,
       "redstonePowerOutput": 15,
+      "redstonePulseTicks": 10,
       "properties": {
         "facing": ["floor", "north", "south", "east", "west"],
         "powered": ["false", "true"]
@@ -1194,6 +1195,7 @@
       "isRedstoneConductor": false,
       "isRedstonePowerSource": true,
       "redstonePowerOutput": 15,
+      "redstonePulseTicks": 15,
       "properties": {
         "facing": ["floor", "north", "south", "east", "west"],
         "powered": ["false", "true"]
