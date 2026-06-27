@@ -41,6 +41,7 @@
 #include "systems/world/FarmlandMoistureSystem.h"
 #include "systems/world/FluidTickSystem.h"
 #include "systems/world/PressurePlateSystem.h"
+#include "systems/world/HopperSystem.h"
 #include "systems/world/RandomTickSystem.h"
 #include "systems/world/RedstoneDeviceActionSystem.h"
 #include "systems/world/RedstoneSystem.h"
@@ -146,6 +147,7 @@ void GameplayPipeline::buildClientTickSystems() {
     addTickSystem<PressurePlateSystem>();
     addTickSystem<RedstoneSystem>();
     addTickSystem<RedstoneDeviceActionSystem>();
+    addTickSystem<HopperSystem>();
     // Spawn falling-block entities from events emitted by BlockSupportSystem,
     // then advance each entity one cell per tick (Minecraft falling semantics).
     addTickSystem<FallingBlockSpawnSystem>();

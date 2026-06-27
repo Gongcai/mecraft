@@ -1,0 +1,61 @@
+{
+  "id": "minecraft:hopper",
+  "behavior": "minecraft:hopper",
+  "backgroundTexture": "hopper",
+  "backgroundTexturePath": "textures/gui/hopper.png",
+  "width": 176,
+  "height": 133,
+  "textureWidth": 256,
+  "textureHeight": 256,
+  "anchorX": 0.5,
+  "anchorY": 0.5,
+  "pivotX": 0.5,
+  "pivotY": 0.5,
+  "offsetX": 0,
+  "offsetY": 0,
+  "scale": 2,
+  "fitPadding": 8,
+  "showPlayerPreview": false,
+  "slotGroups": [
+    {
+      "id": "hopper",
+      "kind": "container",
+      "firstSlot": 0,
+      "columns": 5,
+      "rows": 1,
+      "x": 44,
+      "y": 20,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "player_inventory",
+      "kind": "player_inventory",
+      "firstSlot": 9,
+      "columns": 9,
+      "rows": 3,
+      "x": 8,
+      "y": 51,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "hotbar",
+      "kind": "player_inventory",
+      "firstSlot": 0,
+      "columns": 9,
+      "rows": 1,
+      "x": 8,
+      "y": 109,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    }
+  ],
+  "progressBars": []
+}

@@ -370,6 +370,7 @@ set(SRC_ECS
         src/ecs/systems/world/PressurePlateSystem.cpp
         src/ecs/systems/world/RedstoneSystem.cpp
         src/ecs/systems/world/RedstoneDeviceActionSystem.cpp
+        src/ecs/systems/world/HopperSystem.cpp
         src/ecs/systems/world/FallingBlockSpawnSystem.cpp
         src/ecs/systems/world/FallingBlockTickSystem.cpp
         src/ecs/systems/world/FallingBlockInterpolateSystem.cpp
@@ -689,6 +690,8 @@ if(MECRAFT_BUILD_TESTS)
     mecraft_copy_runtime_assets(redstone_piston_test)
     add_mecraft_test(redstone_control_interaction_test tests/redstone_control_interaction_test.cpp)
     mecraft_copy_runtime_assets(redstone_control_interaction_test)
+    add_mecraft_test(hopper_system_test tests/hopper_system_test.cpp)
+    mecraft_copy_runtime_assets(hopper_system_test)
     add_mecraft_test(bucket_use_test tests/bucket_use_test.cpp)
     mecraft_copy_runtime_assets(bucket_use_test)
     add_mecraft_test(water_spread_test tests/water_spread_test.cpp)

@@ -6,6 +6,7 @@
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
 #include "../../components/Components.h"
+#include "../../../game/inventory/BlockEntityInventoryLifecycle.h"
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../client/GameClient.h"
 #include "../../../world/IWorldView.h"
@@ -272,6 +273,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         } else {
             mutableWorld->setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
         }
+        static_cast<void>(ensureBlockEntityInventoryForPlacedBlock(registry, blockToPlace, placeBlock));
         // Notify DropSystem of placement so nearby drops resolve against new collision.
         if (ctx.services.dropSystem) {
             ctx.services.dropSystem->onBlockPlaced(placeBlock, *mutableWorld);

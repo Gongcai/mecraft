@@ -1676,6 +1676,7 @@
     {
       "id": "minecraft:hopper",
       "drop": "minecraft:hopper",
+      "containerUi": "minecraft:hopper",
       "redstoneBehavior": "hopper",
       "respondsToRedstone": true,
       "redstoneControlledProperty": "enabled",

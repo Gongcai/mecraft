@@ -1,0 +1,11 @@
+{
+  "id": "minecraft:hopper",
+  "handler": "storage",
+  "storage": {
+    "kind": "block_entity",
+    "slots": 5
+  },
+  "comparatorSignal": true,
+  "slotRules": [],
+  "processors": []
+}

@@ -59,3 +59,18 @@ bool handleBlockEntityInventoryBreak(ecs::GameplayRegistry& registry,
 
     return true;
 }
+
+bool ensureBlockEntityInventoryForPlacedBlock(ecs::GameplayRegistry& registry,
+                                              const BlockID placedBlock,
+                                              const glm::ivec3& blockPos) {
+    const ContainerBehaviorDef* behavior = storageBehaviorForBlock(placedBlock);
+    if (behavior == nullptr) {
+        return false;
+    }
+
+    BlockEntityInventoryStore& store = registry.ctxHas<BlockEntityInventoryStore>()
+        ? registry.ctxGet<BlockEntityInventoryStore>()
+        : registry.ctxSet<BlockEntityInventoryStore>();
+    static_cast<void>(store.getOrCreate(blockPos, behavior->id, behavior->storage.slots));
+    return true;
+}

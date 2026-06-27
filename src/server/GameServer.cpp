@@ -17,6 +17,7 @@
 #include "../ecs/systems/world/FallingBlockSpawnSystem.h"
 #include "../ecs/systems/world/FallingBlockTickSystem.h"
 #include "../ecs/systems/world/FarmlandMoistureSystem.h"
+#include "../ecs/systems/world/HopperSystem.h"
 #include "../ecs/systems/world/PressurePlateSystem.h"
 #include "../ecs/systems/world/RandomTickSystem.h"
 #include "../ecs/systems/world/RedstoneDeviceActionSystem.h"
@@ -915,6 +916,9 @@ void GameServer::tickWorldSystems() {
             ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, 4096);
         }
     }
+    if (m_gameplayRegistry != nullptr) {
+        ecs::HopperSystem::processWorld(m_world, *m_gameplayRegistry, m_currentTick);
+    }
 }
 
 void GameServer::processClientMessages() {
@@ -1734,6 +1738,12 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                      action.placeBlock.y,
                      action.placeBlock.z,
                      static_cast<BlockID>(action.blockState));
+    if (m_gameplayRegistry != nullptr) {
+        static_cast<void>(ensureBlockEntityInventoryForPlacedBlock(
+            *m_gameplayRegistry,
+            BlockStateRegistry::getBlockId(action.blockState),
+            action.placeBlock));
+    }
     MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%u\n",
                        client.id,
                        action.placeBlock.x,

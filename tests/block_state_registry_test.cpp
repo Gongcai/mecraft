@@ -1761,6 +1761,9 @@ int main() {
         !hopperDef.redstoneControlledPowerInverted) {
         return fail("hopper should declare inverted enabled redstone control metadata");
     }
+    if (hopperDef.containerUi != "minecraft:hopper") {
+        return fail("hopper should bind to its data-driven container UI");
+    }
     PlacementStrategyFn hopperStrategy = PlacementStrategyRegistry::getStrategy(hopperDef.placementStrategy);
     if (hopperStrategy == nullptr) {
         return fail("hopper_facing placement strategy should be registered");
