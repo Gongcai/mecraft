@@ -74,8 +74,12 @@ bool isRedstoneWireState(const StateID stateId) {
     return isRedstoneWireBlockDef(BlockRegistry::getFast(blockId));
 }
 
-bool isMatchingRedstoneWireState(const StateID stateId, const BlockID wireBlockId) {
-    return isRedstoneWireState(stateId) && BlockStateRegistry::getBlockId(stateId) == wireBlockId;
+bool isMatchingRedstoneWireState(const StateID stateId, const uint16_t wireChannelId) {
+    if (!isRedstoneWireState(stateId)) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).redstoneWireChannelId == wireChannelId;
 }
 
 bool canConnectedBlockAttachTo(const StateID stateId) {
@@ -88,7 +92,7 @@ bool canConnectedBlockAttachTo(const StateID stateId) {
     return isConnectedBlockDef(def) || def.isSolid;
 }
 
-bool canRedstoneWireAttachTo(const StateID stateId, const BlockID wireBlockId) {
+bool canRedstoneWireAttachTo(const StateID stateId, const uint16_t wireChannelId) {
     if (stateId == RUNTIME_ID_NULL) {
         return false;
     }
@@ -96,7 +100,7 @@ bool canRedstoneWireAttachTo(const StateID stateId, const BlockID wireBlockId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (isRedstoneWireBlockDef(def)) {
-        return blockId == wireBlockId;
+        return def.redstoneWireChannelId == wireChannelId;
     }
 
     if (def.isRedstonePowerSource) {
@@ -131,17 +135,17 @@ bool isSolidBlockForRedstoneClimb(const StateID stateId) {
 uint16_t redstoneWireConnectionValue(const StateID sameLevelState,
                                      const StateID upState,
                                      const StateID downState,
-                                     const BlockID wireBlockId,
+                                     const uint16_t wireChannelId,
                                      const uint16_t noneValue,
                                      const uint16_t sideValue,
                                      const uint16_t upValue) {
-    if (canRedstoneWireAttachTo(sameLevelState, wireBlockId)) {
+    if (canRedstoneWireAttachTo(sameLevelState, wireChannelId)) {
         return sideValue;
     }
-    if (isSolidBlockForRedstoneClimb(sameLevelState) && isMatchingRedstoneWireState(upState, wireBlockId)) {
+    if (isSolidBlockForRedstoneClimb(sameLevelState) && isMatchingRedstoneWireState(upState, wireChannelId)) {
         return upValue;
     }
-    if (!isSolidBlockForRedstoneClimb(sameLevelState) && isMatchingRedstoneWireState(downState, wireBlockId)) {
+    if (!isSolidBlockForRedstoneClimb(sameLevelState) && isMatchingRedstoneWireState(downState, wireChannelId)) {
         return sideValue;
     }
     return noneValue;
@@ -868,6 +872,10 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
                 : PropIndices::WEST_FALSE);
     } else if (isRedstoneWireBlock) {
         requireHorizontalConnectionProperties();
+        const uint16_t wireChannelId = def.redstoneWireChannelId;
+        if (wireChannelId == 0) {
+            throw std::runtime_error("Redstone wire block is missing redstoneWireChannelId");
+        }
 
         // North: neighbor is at z-1. Up-neighbor is at y+1,z-1. Down-neighbor is at y-1,z-1.
         updatedState = BlockStateRegistry::withProperty(
@@ -877,7 +885,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
                 getBlockState(pos.x, pos.y, pos.z - 1),
                 getBlockState(pos.x, pos.y + 1, pos.z - 1),
                 getBlockState(pos.x, pos.y - 1, pos.z - 1),
-                blockId,
+                wireChannelId,
                 PropIndices::NORTH_NONE,
                 PropIndices::NORTH_SIDE,
                 PropIndices::NORTH_UP));
@@ -889,7 +897,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
                 getBlockState(pos.x, pos.y, pos.z + 1),
                 getBlockState(pos.x, pos.y + 1, pos.z + 1),
                 getBlockState(pos.x, pos.y - 1, pos.z + 1),
-                blockId,
+                wireChannelId,
                 PropIndices::SOUTH_NONE,
                 PropIndices::SOUTH_SIDE,
                 PropIndices::SOUTH_UP));
@@ -901,7 +909,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
                 getBlockState(pos.x + 1, pos.y, pos.z),
                 getBlockState(pos.x + 1, pos.y + 1, pos.z),
                 getBlockState(pos.x + 1, pos.y - 1, pos.z),
-                blockId,
+                wireChannelId,
                 PropIndices::EAST_NONE,
                 PropIndices::EAST_SIDE,
                 PropIndices::EAST_UP));
@@ -913,7 +921,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
                 getBlockState(pos.x - 1, pos.y, pos.z),
                 getBlockState(pos.x - 1, pos.y + 1, pos.z),
                 getBlockState(pos.x - 1, pos.y - 1, pos.z),
-                blockId,
+                wireChannelId,
                 PropIndices::WEST_NONE,
                 PropIndices::WEST_SIDE,
                 PropIndices::WEST_UP));

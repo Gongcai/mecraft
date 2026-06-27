@@ -1374,8 +1374,22 @@ int main() {
     if (redstoneWireDef.renderShapeName != "redstone_wire" ||
         redstoneWireDef.renderShapeTag != MeshBuilderRegistry::REDSTONE_WIRE_TAG ||
         redstoneWireDef.placementStrategy != "face_plane_floor" ||
-        redstoneWireDef.supportRule != "attached_face") {
+        redstoneWireDef.supportRule != "attached_face" ||
+        redstoneWireDef.redstoneWireChannel != "minecraft:red" ||
+        redstoneWireDef.redstoneWireChannelId == 0 ||
+        redstoneWireDef.redstoneWireTint != 0) {
         return fail("redstone_wire should use the custom wire render shape and floor support path");
+    }
+    const BlockDef& blueRedstoneWireDef =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire"));
+    if (blueRedstoneWireDef.renderShapeName != "redstone_wire" ||
+        blueRedstoneWireDef.renderShapeTag != MeshBuilderRegistry::REDSTONE_WIRE_TAG ||
+        blueRedstoneWireDef.redstoneBehavior != "wire" ||
+        blueRedstoneWireDef.redstoneWireChannel != "minecraft:blue" ||
+        blueRedstoneWireDef.redstoneWireChannelId == 0 ||
+        blueRedstoneWireDef.redstoneWireChannelId == redstoneWireDef.redstoneWireChannelId ||
+        blueRedstoneWireDef.redstoneWireTint != 1) {
+        return fail("blue_redstone_wire should declare its wire channel and tint metadata");
     }
     const StateID redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     if (BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR ||

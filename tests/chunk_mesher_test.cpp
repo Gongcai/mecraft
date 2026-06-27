@@ -1155,6 +1155,33 @@ int main() {
     }
 
     {
+        const BlockID blueRedstoneWireBlock = BlockRegistry::requireIdByName("minecraft:blue_redstone_wire");
+        const StateID blueRedstoneWire = BlockStateRegistry::withProperty(
+            BlockStateRegistry::getDefaultState(blueRedstoneWireBlock),
+            PropIndices::POWER,
+            PropIndices::POWER_15);
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, blueRedstoneWire);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("isolated blue redstone wire should emit one tinted floor quad");
+        }
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
+            const uint8_t tintU = static_cast<uint8_t>((vertex.tintPacked >> 4u) & 0x0fu);
+            const uint8_t tintV = static_cast<uint8_t>(vertex.tintPacked & 0x0fu);
+            if (tintKind != BlockTintKinds::REDSTONE ||
+                tintU != 15 ||
+                tintV != 1 ||
+                !approxEqual(vertex.y, 32.0f + 1.0f / 128.0f)) {
+                return fail("blue redstone wire vertices should encode redstone tint color slot");
+            }
+        }
+    }
+
+    {
         const StateID redstoneWireEast = BlockStateRegistry::getState(
             BlockRegistry::requireIdByName("minecraft:redstone_wire"),
             std::vector<std::pair<uint16_t, uint16_t>>{

@@ -115,6 +115,9 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.redstonePowerOutput = 0;
     def.redstonePulseTicks = 0;
     def.redstoneBehavior.clear();
+    def.redstoneWireChannel.clear();
+    def.redstoneWireChannelId = 0;
+    def.redstoneWireTint = 0;
     def.pressurePlateEntityFilter.clear();
     def.redstoneControlledProperty.clear();
     def.redstoneControlledMirrorProperties.clear();
@@ -463,6 +466,20 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     }
 
     s_idLookup.clear();
+    std::unordered_map<std::string, uint16_t> redstoneWireChannelIds;
+    auto assignRedstoneWireChannelId = [&](const std::string& channel, const std::string& blockName) {
+        const auto existing = redstoneWireChannelIds.find(channel);
+        if (existing != redstoneWireChannelIds.end()) {
+            return existing->second;
+        }
+        if (redstoneWireChannelIds.size() >= 65535u) {
+            throw std::runtime_error("Too many redstone wire channels while registering block: " + blockName);
+        }
+        const uint16_t channelId = static_cast<uint16_t>(redstoneWireChannelIds.size() + 1u);
+        redstoneWireChannelIds.emplace(channel, channelId);
+        return channelId;
+    };
+
     for (const auto& blockJson : root["blocks"]) {
         if (!blockJson.contains("id") || !blockJson["id"].is_string()) {
             continue;
@@ -537,6 +554,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.redstonePowerOutput = 0;
         def.redstonePulseTicks = 0;
         def.redstoneBehavior.clear();
+        def.redstoneWireChannel.clear();
+        def.redstoneWireChannelId = 0;
+        def.redstoneWireTint = 0;
         def.pressurePlateEntityFilter.clear();
         def.redstoneControlledProperty.clear();
         def.redstoneControlledMirrorProperties.clear();
@@ -686,6 +706,51 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (def.redstoneBehavior == "button" && def.redstonePulseTicks == 0) {
             throw std::runtime_error("redstoneBehavior=button requires redstonePulseTicks for block: " +
+                                     def.namespacedId.full());
+        }
+        if (blockJson.contains("redstoneWireChannel")) {
+            if (!blockJson["redstoneWireChannel"].is_string()) {
+                throw std::runtime_error("redstoneWireChannel must be a string for block: " +
+                                         def.namespacedId.full());
+            }
+            if (def.redstoneBehavior != "wire") {
+                throw std::runtime_error("redstoneWireChannel requires redstoneBehavior=wire for block: " +
+                                         def.namespacedId.full());
+            }
+            def.redstoneWireChannel = blockJson["redstoneWireChannel"].get<std::string>();
+            if (def.redstoneWireChannel.empty()) {
+                throw std::runtime_error("redstoneWireChannel must not be empty for block: " +
+                                         def.namespacedId.full());
+            }
+            def.redstoneWireChannelId =
+                assignRedstoneWireChannelId(def.redstoneWireChannel, def.namespacedId.full());
+        }
+        if (blockJson.contains("redstoneWireTint")) {
+            if (!blockJson["redstoneWireTint"].is_number_integer()) {
+                throw std::runtime_error("redstoneWireTint must be an integer for block: " +
+                                         def.namespacedId.full());
+            }
+            if (def.redstoneBehavior != "wire") {
+                throw std::runtime_error("redstoneWireTint requires redstoneBehavior=wire for block: " +
+                                         def.namespacedId.full());
+            }
+            const int tint = blockJson["redstoneWireTint"].get<int>();
+            if (tint < 0 || tint > 15) {
+                throw std::runtime_error("redstoneWireTint must be between 0 and 15 for block: " +
+                                         def.namespacedId.full());
+            }
+            def.redstoneWireTint = static_cast<uint8_t>(tint);
+        }
+        if (def.redstoneBehavior == "wire" && def.redstoneWireChannel.empty()) {
+            throw std::runtime_error("redstoneBehavior=wire requires redstoneWireChannel for block: " +
+                                     def.namespacedId.full());
+        }
+        if (def.redstoneBehavior == "wire" && !blockJson.contains("redstoneWireTint")) {
+            throw std::runtime_error("redstoneBehavior=wire requires redstoneWireTint for block: " +
+                                     def.namespacedId.full());
+        }
+        if (def.redstoneBehavior == "wire" && def.redstoneWireChannelId == 0) {
+            throw std::runtime_error("redstoneBehavior=wire requires a parsed redstoneWireChannelId for block: " +
                                      def.namespacedId.full());
         }
         if (blockJson.contains("pressurePlateEntityFilter")) {

@@ -158,8 +158,24 @@ bool isWireState(const StateID stateId) {
     return BlockRegistry::getFast(blockId).redstoneBehavior == "wire";
 }
 
-bool isMatchingWireState(const StateID stateId, const BlockID wireBlockId) {
-    return isWireState(stateId) && BlockStateRegistry::getBlockId(stateId) == wireBlockId;
+uint16_t redstoneWireChannelIdForState(const StateID stateId) {
+    if (!isWireState(stateId)) {
+        throw std::runtime_error("Redstone wire channel requires a wire state");
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (def.redstoneWireChannelId == 0) {
+        throw std::runtime_error("Redstone wire state is missing redstoneWireChannelId");
+    }
+    return def.redstoneWireChannelId;
+}
+
+bool isMatchingWireState(const StateID stateId, const uint16_t wireChannelId) {
+    if (!isWireState(stateId)) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).redstoneWireChannelId == wireChannelId;
 }
 
 uint16_t getRequiredProperty(const StateID stateId, const uint16_t property, const char* propertyName) {
@@ -486,11 +502,11 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
     if (!isWireState(selfState)) {
         return;
     }
-    const BlockID wireBlockId = BlockStateRegistry::getBlockId(selfState);
+    const uint16_t wireChannelId = redstoneWireChannelIdForState(selfState);
 
     for (const glm::ivec3& direction : kDirections) {
         const glm::ivec3 neighbor = pos + direction;
-        if (isMatchingWireState(world.getBlockState(neighbor.x, neighbor.y, neighbor.z), wireBlockId)) {
+        if (isMatchingWireState(world.getBlockState(neighbor.x, neighbor.y, neighbor.z), wireChannelId)) {
             fn(neighbor);
         }
     }
@@ -499,12 +515,12 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
         const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
         if (isSolidBlockState(neighborState)) {
             const glm::ivec3 upPos = neighbor + glm::ivec3(0, 1, 0);
-            if (isMatchingWireState(world.getBlockState(upPos.x, upPos.y, upPos.z), wireBlockId)) {
+            if (isMatchingWireState(world.getBlockState(upPos.x, upPos.y, upPos.z), wireChannelId)) {
                 fn(upPos);
             }
         } else {
             const glm::ivec3 downPos = neighbor + glm::ivec3(0, -1, 0);
-            if (isMatchingWireState(world.getBlockState(downPos.x, downPos.y, downPos.z), wireBlockId)) {
+            if (isMatchingWireState(world.getBlockState(downPos.x, downPos.y, downPos.z), wireChannelId)) {
                 fn(downPos);
             }
         }

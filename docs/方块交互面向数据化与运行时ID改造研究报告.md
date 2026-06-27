@@ -16,12 +16,12 @@
 7. **红石部分数据尾巴已清理**：按钮脉冲时长由 `redstonePulseTicks` 数据驱动；活塞不可推动规则由 `pistonPushReaction` 数据驱动；比较器读取容器信号由 `ContainerBehaviorDef.comparatorSignal` 数据驱动；压力板接受实体类型由 `pressurePlateEntityFilter` 数据驱动。
 8. **通用 block-entity storage 已落地**：箱子、木桶等 `handler:"storage"` 容器共用 `BlockEntityInventoryStore`、`BlockEntityInventoryLifecycle` 和通用 storage 面板；服务器保存空容器时也按 `containerUi -> behavior` 数据判断 block entity 类型，已用 `minecraft:barrel` 保存/恢复测试验证。
 9. **机器类 smelting 容器存储已泛化**：`SmeltingProcessorRuntime` 从 `ContainerBehaviorRegistry` 读取 smelting processor 和 slotRules，`MachineInventory::tick` 使用预解析槽位驱动输入、燃料和输出处理，不在热路径解释 JSON；熔炉已迁移到 `MachineInventoryStore`、`MachineInventoryLifecycle`、`SmeltingContainerState` 和通用 machine 面板 API，服务器保存/恢复、破坏掉落、比较器信号读取均不再依赖 `FurnaceInventoryStore`。
+10. **多色红石线已落地**：红石线通过 `redstoneWireChannel` 控制视觉连接和信号传播隔离，加载期解析为 `redstoneWireChannelId` 供热路径整数比较，通过 `redstoneWireTint` 选择 shader 调色板；`minecraft:blue_redstone_wire` 和 `minecraft:blue_redstone` 已接入配置、贴图、掉落和测试。
 
 仍建议继续推进的剩余项：
 
 1. 活塞主体、活塞头、移动方块等结构性逻辑仍需要 C++，但可继续抽离可配置的规则字段。
 2. 当前机器处理器只实现了 `smelting` 类型；若后续新增 brewing、stonecutting、crushing 等机器，需要继续按“配置解析期生成 runtime 结构、tick 热路径直接读结构”的方式扩展 processor runtime。
-3. 红石多色线仍停留在方案层面，尚未实现。
 
 ---
 
@@ -544,7 +544,7 @@ void dispatchUse(World& world, const glm::ivec3& pos, StateID state) {
 
 **需求背景**：Minecraft 原版只有单一红石线，相邻即自动连接，玩家需用复杂结构（方块隔离、高度差）分割线路。mecraft 希望支持多色红石线——只有同色线才相互连接，从根源上解决线路串扰问题。
 
-**当前红石线连接的硬编码关键点**（共两处，是多色化的核心改造点）：
+**原始红石线连接的硬编码关键点**（共两处，是多色化的核心改造点）：
 
 **关键点 1：视觉连接判断**（`src/world/World.cpp:79-97`）
 
@@ -578,54 +578,53 @@ bool isWireState(const StateID stateId) {
 
 **推荐方案：多 BlockID + 数据驱动识别（方案 A）**
 
-每种颜色注册为独立方块（`minecraft:redstone_wire`、`minecraft:redstone_wire_blue`、`minecraft:redstone_wire_green`...），全部在 JSON 中标记 `redstoneBehavior: "wire"`。
+每种颜色注册为独立方块（`minecraft:redstone_wire`、`minecraft:blue_redstone_wire`...），全部在 JSON 中标记 `redstoneBehavior: "wire"`，并声明：
+
+- `redstoneWireChannel`：同一线路通道才视觉连接、传播信号，例如 `minecraft:red`、`minecraft:blue`；加载期会解析为 `redstoneWireChannelId`，热路径只比较整数。
+- `redstoneWireTint`：shader 红石调色板槽位，范围 `[0, 15]`，红色为 `0`，蓝色为 `1`。
 
 改造点仅需两处 C++ 改动 + JSON 扩展：
 
-**C++ 改动 1**：`canRedstoneWireAttachTo()` 增加"同色"参数
+**已落地 C++ 改动 1**：视觉连接按 `redstoneWireChannel` 匹配
 
 ```cpp
-// 改造后：selfBlockId 表示当前线的颜色（BlockID）
-bool canRedstoneWireAttachTo(const StateID stateId, const BlockID selfBlockId) {
+bool canRedstoneWireAttachTo(const StateID stateId, const uint16_t wireChannelId) {
     if (stateId == BlockIds::AIR) return false;
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (def.redstoneBehavior == "wire") {
-        return blockId == selfBlockId;          // ← 同色才连接
+        return def.redstoneWireChannelId == wireChannelId;
     }
-    if (def.isRedstonePowerSource) return true; // 电源驱动所有颜色
+    if (def.isRedstonePowerSource) return true;
     return def.redstoneBehavior == "repeater" ||
            def.redstoneBehavior == "comparator" ||
            def.redstoneBehavior == "observer";
 }
 ```
 
-调用处（`World.cpp:859-902`）传入当前线自身的 BlockID 即可。
+调用处（`World.cpp`）从当前线的 `BlockDef.redstoneWireChannelId` 传入通道。这样新增颜色不依赖 BlockID 相等，允许多个方块共享同一个逻辑通道，也允许一个颜色族继续扩展不同形态；逐邻居判断只做整数比较，不做字符串比较。
 
-**C++ 改动 2**：`isWireState()` + `forEachWireNeighbor()` 传导时同色过滤
+**已落地 C++ 改动 2**：`forEachWireNeighbor()` 传导时按通道过滤
 
 ```cpp
-// 改造后：isWireState 只判断"是不是线"，不区分颜色
 bool isWireState(const StateID stateId) {
     if (stateId == BlockIds::AIR) return false;
     const BlockDef& def = BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId));
     return def.redstoneBehavior == "wire";
 }
 
-// forEachWireNeighbor 传导时增加同色检查
 template <typename Fn>
 void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
     const StateID selfState = world.getBlockState(pos.x, pos.y, pos.z);
-    const BlockID selfBlockId = BlockStateRegistry::getBlockId(selfState);
+    const uint16_t wireChannelId = redstoneWireChannelIdForState(selfState);
     for (const glm::ivec3& direction : kDirections) {
         const glm::ivec3 neighbor = pos + direction;
         const StateID nState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-        if (isWireState(nState) &&
-            BlockStateRegistry::getBlockId(nState) == selfBlockId) {  // ← 同色才传导
+        if (isMatchingWireState(nState, wireChannelId)) {
             fn(neighbor);
         }
     }
-    // ... 爬坡/下降方向同理加同色检查
+    // 爬坡/下降方向同理按通道过滤。
 }
 ```
 
@@ -633,13 +632,22 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 
 ```json
 // assets/config/blocks.json
-{ "id": "minecraft:redstone_wire",       "redstoneBehavior": "wire", "color": "#FF0000", ... },
-{ "id": "minecraft:redstone_wire_blue",  "redstoneBehavior": "wire", "color": "#0000FF", ... },
-{ "id": "minecraft:redstone_wire_green", "redstoneBehavior": "wire", "color": "#00FF00", ... }
+{
+  "id": "minecraft:redstone_wire",
+  "redstoneBehavior": "wire",
+  "redstoneWireChannel": "minecraft:red",
+  "redstoneWireTint": 0
+},
+{
+  "id": "minecraft:blue_redstone_wire",
+  "redstoneBehavior": "wire",
+  "redstoneWireChannel": "minecraft:blue",
+  "redstoneWireTint": 1
+}
 ```
 
 **方案 A 的优势**：
-- **纯数据驱动新增颜色**：加 JSON + 贴图即可，无需改 C++ 红石引擎
+- **纯数据驱动新增颜色**：加 JSON + 物品图标即可，无需改 C++ 红石引擎
 - **天然隔离**：不同 BlockID 不互连，从数据层面保证跨色不串扰
 - **与 BlockID 运行时化契合**：运行时可注册任意数量的红石线颜色
 - **改造面极小**：仅 2 个函数 + 传导函数加同色过滤，红石引擎其余 ~2400 行逻辑无需改动
@@ -648,7 +656,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 **方案 A 的注意点**：
 - **中继器/比较器跨色**：中继器接收任意颜色线的信号、输出时需决定输出颜色。建议中继器输出按自身 facing 侧相邻线的颜色，或保持原版"无色"输出（驱动所有颜色）。这是需要明确的设计决策。
 - **视觉连接属性**：north/south/east/west 三态属性由 `canRedstoneWireAttachTo` 计算，改造后同色才显示连接线，异色显示为"none"（视觉上断开），符合需求。
-- **贴图与渲染**：每种颜色需一套红石线贴图（或用着色器 + color 字段染色，减少贴图量）。`ChunkMesher` 中红石线渲染按 BlockDef.color 着色即可。
+- **贴图与渲染**：红石线本体复用灰度 `redstone_dust_*` 贴图；`ChunkMesher` 将 power 写入 `tintU`、`redstoneWireTint` 写入 `tintV`，shader 按二维调色板完成颜色和亮度混合。
 
 **备选方案 B（不推荐）：单 BlockID + color 属性**
 
@@ -657,7 +665,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 - 缺点：连接判断需多一步属性读取（`getPropertyIndex`），比方案 A 的 BlockID 直接比较慢
 - 缺点：与"不同颜色=不同方块"的直觉不符
 
-**结论**：多色红石线**完全可行，且改造成本很低**。核心仅 2 个硬编码检查函数 + 传导同色过滤。方案 A（多 BlockID + `redstoneBehavior:"wire"` 数据驱动识别）是最佳路径，新增颜色纯数据驱动，与 BlockID 运行时化改造方向高度一致。这个特性恰好是"红石系统保留 C++、仅识别改为查表"策略的最佳应用案例——红石引擎逻辑不动，只把识别从硬编码 ID 改为数据驱动字段。
+**当前结论**：多色红石线已经按方案 A 落地。核心仍是“红石系统保留 C++ 热路径，识别信息从 BlockDef 读取”：`redstoneBehavior:"wire"` 判断线家族，`redstoneWireChannel` 是数据入口，`redstoneWireChannelId` 用于连接/传播隔离的整数比较，`redstoneWireTint` 决定渲染颜色。已验证红线与蓝线相邻时不视觉连接、不传播红石功率，shader include 展开后 10 个受影响 fragment shader 均通过 `glslangValidator` 语法验证。
 
 ### 4.3 特殊操作（锄地、水桶等）
 
@@ -722,7 +730,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 | 阶段 2：特殊操作数据化 | **已完成主要目标** | 锄地、水桶等 use-on-block 规则由 `ItemUseDispatcher` 驱动 | 新增规则时继续扩展数据 schema，而不是在入口写分支 |
 | 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态、通用 block-entity storage、机器类 smelting store/runtime/state 已落地；箱子、木桶、熔炉、合成台已迁移 | 新增 processor 类型时继续走预解析 runtime |
 | 阶段 4：方块状态切换数据化 | **已完成大部分常见交互** | lever/button/repeater/comparator/door/trapdoor/fence_gate 已通过交互配置分发；多人交互为服务端权威 | 继续评估活塞等红石子系统中的结构性规则 |
-| 阶段 5：红石数据尾巴清理 | **进行中** | 按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已数据化 | 多色红石线、活塞结构性规则 |
+| 阶段 5：红石数据尾巴清理 | **进行中** | 按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤、多色红石线已数据化 | 活塞结构性规则 |
 
 ### 5.3 性能总结
 
@@ -758,7 +766,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 
 4. **性能无显著影响**，方块交互是低频逻辑。但需确保热路径使用缓存 ID 而非每次哈希查询。
 
-5. **红石系统保留 C++ 实现**，但应继续把可配置规则移出 C++。按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已经数据化；多色红石线、活塞结构性规则仍是后续重点。**多色红石线完全可行且成本低**——核心仅 2 个硬编码检查函数（`canRedstoneWireAttachTo`、`isWireState`）改为识别 `redstoneBehavior:"wire"` 家族 + 同色过滤，推荐"多 BlockID + JSON 驱动"方案，新增颜色纯数据化，与 BlockID 运行时化方向一致。
+5. **红石系统保留 C++ 实现**，但应继续把可配置规则移出 C++。按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤、多色红石线已经数据化；活塞结构性规则仍是后续重点。多色红石线采用“多 BlockID + JSON 驱动”方案，`redstoneWireChannel` 作为配置入口并解析为整数通道 ID，隔离视觉连接和信号传播，`redstoneWireTint` 复用灰度线贴图并由 shader 调色，新增颜色无需改红石引擎。
 
 6. **改造已进入尾部清理阶段**，当前重点不是继续扩大框架，而是逐个消除新增方块会碰到的小型硬编码规则。
 

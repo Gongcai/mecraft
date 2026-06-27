@@ -3660,7 +3660,7 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
         applyTextureRef(renderData, texture);
         renderData.tintKind = BlockTintKinds::REDSTONE;
         renderData.tintU = static_cast<uint8_t>(power << 4U);
-        renderData.tintV = 0;
+        renderData.tintV = static_cast<uint8_t>(def.redstoneWireTint << 4U);
         renderData.flipDiagonal = false;
         return renderData;
     };

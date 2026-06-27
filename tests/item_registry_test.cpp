@@ -182,6 +182,17 @@ int main() {
         std::string(redstone.iconTextureName) != "redstone") {
         return fail("redstone item should place redstone_wire while keeping its powder icon");
     }
+    const ItemID blueRedstoneItem = ItemRegistry::findByName("blue_redstone");
+    const BlockID blueRedstoneWireBlock = BlockRegistry::findByName("blue_redstone_wire");
+    if (blueRedstoneItem == RUNTIME_ID_NULL || blueRedstoneWireBlock == RUNTIME_ID_NULL) {
+        return fail("blue_redstone item and blue_redstone_wire block should be registered");
+    }
+    const ItemDef& blueRedstone = ItemRegistry::get(blueRedstoneItem);
+    if (ItemRegistry::toPlaceBlock(blueRedstoneItem) != blueRedstoneWireBlock ||
+        ItemRegistry::toRenderBlock(blueRedstoneItem) != RUNTIME_ID_NULL ||
+        std::string(blueRedstone.iconTextureName) != "blue_redstone") {
+        return fail("blue_redstone item should place blue_redstone_wire while using its tinted powder icon");
+    }
 
     const ItemID redstoneTorchItem = ItemRegistry::findByName("redstone_torch");
     const BlockID redstoneTorchBlock = BlockRegistry::findByName("redstone_torch");
@@ -385,6 +396,9 @@ int main() {
     }
     if (BlockDropTable::getDropItem(redstoneWireBlock) != redstoneItem) {
         return fail("redstone_wire should drop redstone powder");
+    }
+    if (BlockDropTable::getDropItem(blueRedstoneWireBlock) != blueRedstoneItem) {
+        return fail("blue_redstone_wire should drop blue redstone powder");
     }
     if (BlockDropTable::getDropItem(redstoneTorchBlock) != redstoneTorchItem) {
         return fail("redstone_torch should drop its torch item");

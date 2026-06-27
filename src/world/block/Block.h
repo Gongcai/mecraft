@@ -269,6 +269,9 @@ struct BlockDef {
     uint8_t redstonePowerOutput = 0;       // Fixed output strength in the inclusive range [0, 15].
     uint64_t redstonePulseTicks = 0;       // Scheduled pulse duration for momentary redstone devices.
     std::string redstoneBehavior;          // Behavior tag used by redstone systems and device-specific logic.
+    std::string redstoneWireChannel;       // Wire network key; wires only connect and propagate to matching channels.
+    uint16_t redstoneWireChannelId = 0;    // Parsed wire network id used by hot-path wire comparisons.
+    uint8_t redstoneWireTint = 0;          // Redstone shader tint palette index in the inclusive range [0, 15].
     std::string pressurePlateEntityFilter; // Entity filter used by pressure plate contact evaluation.
     std::string redstoneControlledProperty; // Boolean state property driven by incoming redstone power.
     std::vector<std::string> redstoneControlledMirrorProperties; // Boolean state properties updated when the controlled property changes.

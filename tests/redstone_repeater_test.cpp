@@ -298,6 +298,25 @@ int main() {
         }
     }
 
+    {
+        const int coloredWireY = 56;
+        prepareFlatTestLine(world, coloredWireY);
+        world.setBlockState(0, coloredWireY, 0, leverState(true));
+        world.setBlockState(1, coloredWireY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(2, coloredWireY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(3, coloredWireY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+
+        ecs::RedstoneSystem::processWorld(world, 50);
+        if (wirePower(world, 1, coloredWireY, 0) != 15 ||
+            wirePower(world, 2, coloredWireY, 0) != 0 ||
+            lampLit(world, 3, coloredWireY, 0)) {
+            return fail("redstone wires with different channels should not share propagated power");
+        }
+    }
+
     std::cout << "[redstone_repeater_test] PASS\n";
     return EXIT_SUCCESS;
 }

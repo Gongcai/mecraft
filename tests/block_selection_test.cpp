@@ -546,6 +546,14 @@ int main() {
     if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_NONE) {
         return fail("redstone_wire should disconnect visually when its neighbor is removed");
     }
+    world.setBlockState(11, wireY, 2, BlockRegistry::requireIdByName("minecraft:blue_redstone_wire"));
+    placedWire = world.getBlockState(10, wireY, 2);
+    const StateID blueEastWire = world.getBlockState(11, wireY, 2);
+    if (BlockStateRegistry::getPropertyIndex(placedWire, PropIndices::EAST) != PropIndices::EAST_NONE ||
+        BlockStateRegistry::getPropertyIndex(blueEastWire, PropIndices::WEST) != PropIndices::WEST_NONE) {
+        return fail("redstone wires with different channels should not connect visually");
+    }
+    world.setBlockState(11, wireY, 2, RUNTIME_ID_NULL);
 
     world.setBlockState(6, baseY, 0, RUNTIME_ID_NULL);
     world.setBlockState(7, baseY, 0, RUNTIME_ID_NULL);

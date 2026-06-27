@@ -1021,6 +1021,47 @@
       "id": "minecraft:redstone_wire",
       "drop": "minecraft:redstone",
       "redstoneBehavior": "wire",
+      "redstoneWireChannel": "minecraft:red",
+      "redstoneWireTint": 0,
+      "isRedstoneConductor": false,
+      "properties": {
+        "facing": ["floor"],
+        "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
+        "north": ["none", "side", "up"],
+        "south": ["none", "side", "up"],
+        "east": ["none", "side", "up"],
+        "west": ["none", "side", "up"]
+      },
+      "defaultState": {
+        "facing": "floor",
+        "power": "0",
+        "north": "none",
+        "south": "none",
+        "east": "none",
+        "west": "none"
+      },
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "placementStrategy": "face_plane_floor",
+      "supportRule": "attached_face",
+      "renderShape": "redstone_wire",
+      "timeToBreak": 0,
+      "textures": {
+        "all": "redstone_dust_dot",
+        "dot": "redstone_dust_dot",
+        "line0": "redstone_dust_line0",
+        "line1": "redstone_dust_line1",
+        "overlay": "redstone_dust_overlay"
+      }
+    },
+    {
+      "id": "minecraft:blue_redstone_wire",
+      "drop": "minecraft:blue_redstone",
+      "redstoneBehavior": "wire",
+      "redstoneWireChannel": "minecraft:blue",
+      "redstoneWireTint": 1,
       "isRedstoneConductor": false,
       "properties": {
         "facing": ["floor"],

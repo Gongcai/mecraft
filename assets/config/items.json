@@ -213,6 +213,14 @@
       "renderBlock": "minecraft:air"
     },
     {
+      "id": "minecraft:blue_redstone",
+      "iconTexture": "blue_redstone",
+      "maxStack": 64,
+      "icon": "minecraft:blue_redstone",
+      "placeBlock": "minecraft:blue_redstone_wire",
+      "renderBlock": "minecraft:air"
+    },
+    {
       "id": "minecraft:repeater",
       "iconTexture": "repeater",
       "maxStack": 64,
