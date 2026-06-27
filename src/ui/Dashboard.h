@@ -145,6 +145,12 @@ private:
     void showTextSettings(UIRenderer& uiRenderer);
 
     FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
+    FrameProfilerStats m_displayProfilerStats{};
+    GpuFrameStats m_displayGpuStats{};
+    ShadowFrameStats m_displayShadowStats{};
+    double m_displayFps = 0.0;
+    double m_nextProfilerStatsRefreshTime = 0.0;
+    float m_profilerStatsRefreshIntervalSec = 0.5f;
     float m_fontScale = 1.5f; // Global ImGui font scale
     bool m_initialized = false;
 };

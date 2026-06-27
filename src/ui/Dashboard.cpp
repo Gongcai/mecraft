@@ -213,6 +213,21 @@ void Dashboard::showCameraStats( Camera &camera) {
 
 void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, FrameProfilerStats& profilerStats) {
     if (ImGui::CollapsingHeader("Performance Stats")) {
+        if (ImGui::SliderFloat("Stats Refresh", &m_profilerStatsRefreshIntervalSec, 0.1f, 2.0f, "%.1f s")) {
+            m_nextProfilerStatsRefreshTime = 0.0;
+        }
+
+        const double now = ImGui::GetTime();
+        if (m_nextProfilerStatsRefreshTime <= 0.0 || now >= m_nextProfilerStatsRefreshTime) {
+            m_displayProfilerStats = profilerStats;
+            m_displayGpuStats = render.getGpuFrameStats();
+            m_displayShadowStats = render.getShadowFrameStats();
+            m_displayFps = ImGui::GetIO().Framerate;
+            m_nextProfilerStatsRefreshTime = now + static_cast<double>(m_profilerStatsRefreshIntervalSec);
+        }
+
+        const FrameProfilerStats& displayedProfilerStats = m_displayProfilerStats;
+
         // Helper: append max value in orange on the same line
         const auto showMax = [](const char* label, double current, double maxVal) {
             ImGui::Text("%s: %.3f ms", label, current);
@@ -222,46 +237,50 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             }
         };
 
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Text("Frame Time: %.3f ms", 1000.0 / ImGui::GetIO().Framerate);
-        showMax("Loop Frame (clamped)", profilerStats.frameMs, profilerStats.maxFrameMs);
-        showMax("App Update Dispatch", profilerStats.appUpdateDispatchMs, profilerStats.maxAppUpdateDispatchMs);
-        showMax("App Render Dispatch", profilerStats.appRenderDispatchMs, profilerStats.maxAppRenderDispatchMs);
-        showMax("Fixed Update", profilerStats.fixedUpdateMs, profilerStats.maxFixedUpdateMs);
-        showMax("  - Input Update", profilerStats.fixedInputMs, profilerStats.maxFixedInputMs);
-        showMax("  - State Update", profilerStats.fixedStateUpdateMs, profilerStats.maxFixedStateUpdateMs);
-        showMax("  - Particle Update", profilerStats.fixedParticleUpdateMs, profilerStats.maxFixedParticleUpdateMs);
-        showMax("  - Drop Update", profilerStats.fixedDropUpdateMs, profilerStats.maxFixedDropUpdateMs);
-        showMax("  - World Update", profilerStats.fixedWorldUpdateMs, profilerStats.maxFixedWorldUpdateMs);
-        showMax("Audio Sync", profilerStats.audioMs, profilerStats.maxAudioMs);
-        showMax("Render Submit", profilerStats.renderMs, profilerStats.maxRenderMs);
-        showMax("  - Snapshot", profilerStats.renderSnapshotMs, profilerStats.maxRenderSnapshotMs);
-        showMax("  - Scene", profilerStats.renderSceneMs, profilerStats.maxRenderSceneMs);
-        showMax("  - UI", profilerStats.renderUiMs, profilerStats.maxRenderUiMs);
-        showMax("  - Dashboard", profilerStats.renderDashboardMs, profilerStats.maxRenderDashboardMs);
-        showMax("  - Swap Buffers", profilerStats.swapBuffersMs, profilerStats.maxSwapBuffersMs);
-        showMax("  - Other Render", profilerStats.renderOtherMs, profilerStats.maxRenderOtherMs);
-        showMax("Untracked / Wait", profilerStats.untrackedMs, profilerStats.maxUntrackedMs);
+        ImGui::Text("FPS: %.1f", m_displayFps);
+        ImGui::Text("Frame Time: %.3f ms", m_displayFps > 0.0 ? 1000.0 / m_displayFps : 0.0);
+        showMax("Loop Frame (clamped)", displayedProfilerStats.frameMs, displayedProfilerStats.maxFrameMs);
+        showMax("App Update Dispatch", displayedProfilerStats.appUpdateDispatchMs, displayedProfilerStats.maxAppUpdateDispatchMs);
+        showMax("App Render Dispatch", displayedProfilerStats.appRenderDispatchMs, displayedProfilerStats.maxAppRenderDispatchMs);
+        showMax("Fixed Update", displayedProfilerStats.fixedUpdateMs, displayedProfilerStats.maxFixedUpdateMs);
+        showMax("  - Input Update", displayedProfilerStats.fixedInputMs, displayedProfilerStats.maxFixedInputMs);
+        showMax("  - State Update", displayedProfilerStats.fixedStateUpdateMs, displayedProfilerStats.maxFixedStateUpdateMs);
+        showMax("  - Particle Update", displayedProfilerStats.fixedParticleUpdateMs, displayedProfilerStats.maxFixedParticleUpdateMs);
+        showMax("  - Drop Update", displayedProfilerStats.fixedDropUpdateMs, displayedProfilerStats.maxFixedDropUpdateMs);
+        showMax("  - World Update", displayedProfilerStats.fixedWorldUpdateMs, displayedProfilerStats.maxFixedWorldUpdateMs);
+        showMax("Audio Sync", displayedProfilerStats.audioMs, displayedProfilerStats.maxAudioMs);
+        showMax("Render Submit", displayedProfilerStats.renderMs, displayedProfilerStats.maxRenderMs);
+        showMax("  - Snapshot", displayedProfilerStats.renderSnapshotMs, displayedProfilerStats.maxRenderSnapshotMs);
+        showMax("  - Scene", displayedProfilerStats.renderSceneMs, displayedProfilerStats.maxRenderSceneMs);
+        showMax("  - UI", displayedProfilerStats.renderUiMs, displayedProfilerStats.maxRenderUiMs);
+        showMax("  - Dashboard", displayedProfilerStats.renderDashboardMs, displayedProfilerStats.maxRenderDashboardMs);
+        showMax("  - Swap Buffers", displayedProfilerStats.swapBuffersMs, displayedProfilerStats.maxSwapBuffersMs);
+        showMax("  - Other Render", displayedProfilerStats.renderOtherMs, displayedProfilerStats.maxRenderOtherMs);
+        showMax("Untracked / Wait", displayedProfilerStats.untrackedMs, displayedProfilerStats.maxUntrackedMs);
 
-        if (profilerStats.maxFrameMs > 0.0 && ImGui::Button("Reset Max Frame Time")) {
-            profilerStats.maxFrameMs = 0.0;
-            profilerStats.maxFixedUpdateMs = 0.0;
-            profilerStats.maxFixedInputMs = 0.0;
-            profilerStats.maxFixedStateUpdateMs = 0.0;
-            profilerStats.maxFixedParticleUpdateMs = 0.0;
-            profilerStats.maxFixedDropUpdateMs = 0.0;
-            profilerStats.maxFixedWorldUpdateMs = 0.0;
-            profilerStats.maxAudioMs = 0.0;
-            profilerStats.maxRenderMs = 0.0;
-            profilerStats.maxAppUpdateDispatchMs = 0.0;
-            profilerStats.maxAppRenderDispatchMs = 0.0;
-            profilerStats.maxRenderSnapshotMs = 0.0;
-            profilerStats.maxRenderSceneMs = 0.0;
-            profilerStats.maxRenderUiMs = 0.0;
-            profilerStats.maxRenderDashboardMs = 0.0;
-            profilerStats.maxSwapBuffersMs = 0.0;
-            profilerStats.maxRenderOtherMs = 0.0;
-            profilerStats.maxUntrackedMs = 0.0;
+        if (displayedProfilerStats.maxFrameMs > 0.0 && ImGui::Button("Reset Max Frame Time")) {
+            auto resetMaxFrameStats = [](FrameProfilerStats& stats) {
+                stats.maxFrameMs = 0.0;
+                stats.maxFixedUpdateMs = 0.0;
+                stats.maxFixedInputMs = 0.0;
+                stats.maxFixedStateUpdateMs = 0.0;
+                stats.maxFixedParticleUpdateMs = 0.0;
+                stats.maxFixedDropUpdateMs = 0.0;
+                stats.maxFixedWorldUpdateMs = 0.0;
+                stats.maxAudioMs = 0.0;
+                stats.maxRenderMs = 0.0;
+                stats.maxAppUpdateDispatchMs = 0.0;
+                stats.maxAppRenderDispatchMs = 0.0;
+                stats.maxRenderSnapshotMs = 0.0;
+                stats.maxRenderSceneMs = 0.0;
+                stats.maxRenderUiMs = 0.0;
+                stats.maxRenderDashboardMs = 0.0;
+                stats.maxSwapBuffersMs = 0.0;
+                stats.maxRenderOtherMs = 0.0;
+                stats.maxUntrackedMs = 0.0;
+            };
+            resetMaxFrameStats(profilerStats);
+            resetMaxFrameStats(m_displayProfilerStats);
         }
 
         auto historyMax = [](const float* history, const size_t count, const float fallbackMax) {
@@ -274,48 +293,48 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             return std::max(maxValue * 1.1f, fallbackMax);
         };
 
-        if (profilerStats.frameHistoryCount > 1) {
+        if (displayedProfilerStats.frameHistoryCount > 1) {
             ImGui::Separator();
             ImGui::Text("Frame History");
-            ImGui::PlotLines("FPS", profilerStats.fpsHistory.data(),
-                             static_cast<int>(profilerStats.frameHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fpsHistory.data(), profilerStats.frameHistoryCount, 1.0f),
+            ImGui::PlotLines("FPS", displayedProfilerStats.fpsHistory.data(),
+                             static_cast<int>(displayedProfilerStats.frameHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.fpsHistory.data(), displayedProfilerStats.frameHistoryCount, 1.0f),
                              ImVec2(0.0f, 65.0f));
         }
 
-        if (profilerStats.fixedHistoryCount > 1) {
-            ImGui::PlotLines("Render Submit", profilerStats.renderHistory.data(),
-                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.renderHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+        if (displayedProfilerStats.fixedHistoryCount > 1) {
+            ImGui::PlotLines("Render Submit", displayedProfilerStats.renderHistory.data(),
+                             static_cast<int>(displayedProfilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.renderHistory.data(), displayedProfilerStats.fixedHistoryCount, 0.1f),
                              ImVec2(0.0f, 55.0f));
         }
 
-        if (profilerStats.fixedHistoryCount > 1) {
+        if (displayedProfilerStats.fixedHistoryCount > 1) {
             ImGui::Separator();
             ImGui::Text("Fixed Update History (ms/step)");
-            ImGui::PlotLines("Fixed Total", profilerStats.fixedUpdateHistory.data(),
-                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedUpdateHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+            ImGui::PlotLines("Fixed Total", displayedProfilerStats.fixedUpdateHistory.data(),
+                             static_cast<int>(displayedProfilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.fixedUpdateHistory.data(), displayedProfilerStats.fixedHistoryCount, 0.1f),
                              ImVec2(0.0f, 65.0f));
-            ImGui::PlotLines("Input", profilerStats.fixedInputHistory.data(),
-                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedInputHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+            ImGui::PlotLines("Input", displayedProfilerStats.fixedInputHistory.data(),
+                             static_cast<int>(displayedProfilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.fixedInputHistory.data(), displayedProfilerStats.fixedHistoryCount, 0.1f),
                              ImVec2(0.0f, 55.0f));
-            ImGui::PlotLines("State", profilerStats.fixedStateHistory.data(),
-                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedStateHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+            ImGui::PlotLines("State", displayedProfilerStats.fixedStateHistory.data(),
+                             static_cast<int>(displayedProfilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.fixedStateHistory.data(), displayedProfilerStats.fixedHistoryCount, 0.1f),
                              ImVec2(0.0f, 55.0f));
-            ImGui::PlotLines("Particle", profilerStats.fixedParticleHistory.data(),
-                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedParticleHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+            ImGui::PlotLines("Particle", displayedProfilerStats.fixedParticleHistory.data(),
+                             static_cast<int>(displayedProfilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.fixedParticleHistory.data(), displayedProfilerStats.fixedHistoryCount, 0.1f),
                              ImVec2(0.0f, 55.0f));
-            ImGui::PlotLines("Drop", profilerStats.fixedDropHistory.data(),
-                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedDropHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+            ImGui::PlotLines("Drop", displayedProfilerStats.fixedDropHistory.data(),
+                             static_cast<int>(displayedProfilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.fixedDropHistory.data(), displayedProfilerStats.fixedHistoryCount, 0.1f),
                              ImVec2(0.0f, 55.0f));
-            ImGui::PlotLines("World", profilerStats.fixedWorldHistory.data(),
-                             static_cast<int>(profilerStats.fixedHistoryCount), 0, nullptr,
-                             0.0f, historyMax(profilerStats.fixedWorldHistory.data(), profilerStats.fixedHistoryCount, 0.1f),
+            ImGui::PlotLines("World", displayedProfilerStats.fixedWorldHistory.data(),
+                             static_cast<int>(displayedProfilerStats.fixedHistoryCount), 0, nullptr,
+                             0.0f, historyMax(displayedProfilerStats.fixedWorldHistory.data(), displayedProfilerStats.fixedHistoryCount, 0.1f),
                              ImVec2(0.0f, 55.0f));
         }
 
@@ -325,7 +344,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
         }
 
-        GpuFrameStats gpuStats = render.getGpuFrameStats();
+        GpuFrameStats gpuStats = m_displayGpuStats;
         bool gpuTimerEnabled = render.isGpuTimerEnabled();
         if (ImGui::Checkbox("GPU Timer Query", &gpuTimerEnabled)) {
             render.setGpuTimerEnabled(gpuTimerEnabled);
@@ -350,7 +369,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             ImGui::Text("GPU Water: %.3f ms", gpuStats.waterMs);
             ImGui::Text("GPU Post: %.3f ms", gpuStats.postMs);
         }
-        ShadowFrameStats shadowStats = render.getShadowFrameStats();
+        ShadowFrameStats shadowStats = m_displayShadowStats;
         if (shadowStats.supported && shadowStats.valid) {
             ImGui::Text("CSM GPU: %.3f ms  res=%d  submitted=%d  culled=%d  maxDist=%.1f",
                         shadowStats.gpuTotalMs,
