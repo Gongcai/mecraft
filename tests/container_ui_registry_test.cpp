@@ -104,6 +104,26 @@ int main() {
         return fail("dispenser UI should declare the 3x3 dispenser slot grid");
     }
 
+    const ui::ContainerUiDef& dropper = ui::ContainerUiRegistry::require("minecraft:dropper");
+    if (dropper.behavior != "minecraft:dropper" ||
+        dropper.backgroundTexture != "dispenser" ||
+        dropper.backgroundTexturePath != "textures/gui/dispenser.png" ||
+        dropper.width != 176.0f ||
+        dropper.height != 166.0f ||
+        !hasCenteredAdaptivePanel(dropper) ||
+        dropper.slotGroups.size() != 3 ||
+        !dropper.progressBars.empty()) {
+        return fail("dropper UI should parse its storage layout definition");
+    }
+    const ui::ContainerSlotGroupDef* dropperSlots = findSlotGroup(dropper, "dropper");
+    if (dropperSlots == nullptr ||
+        dropperSlots->kind != ui::ContainerSlotGroupKind::Container ||
+        dropperSlots->columns != 3 ||
+        dropperSlots->rows != 3 ||
+        dropperSlots->firstSlot != 0) {
+        return fail("dropper UI should declare the 3x3 dropper slot grid");
+    }
+
     const ui::ContainerUiDef& furnace = ui::ContainerUiRegistry::require("minecraft:furnace");
     if (furnace.behavior != "minecraft:furnace" ||
         furnace.backgroundTexture != "furnace" ||
@@ -172,11 +192,13 @@ int main() {
     const BlockDef& chestBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:chest"));
     const BlockDef& barrelBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:barrel"));
     const BlockDef& dispenserBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:dispenser"));
+    const BlockDef& dropperBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:dropper"));
     const BlockDef& furnaceBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:furnace"));
     const BlockDef& craftingBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:crafting_table"));
     if (&ui::ContainerUiRegistry::require(chestBlock.containerUi) != &chest ||
         &ui::ContainerUiRegistry::require(barrelBlock.containerUi) != &barrel ||
         &ui::ContainerUiRegistry::require(dispenserBlock.containerUi) != &dispenser ||
+        &ui::ContainerUiRegistry::require(dropperBlock.containerUi) != &dropper ||
         &ui::ContainerUiRegistry::require(furnaceBlock.containerUi) != &furnace ||
         &ui::ContainerUiRegistry::require(craftingBlock.containerUi) != &crafting) {
         return fail("block containerUi bindings should resolve to registered UI definitions");

@@ -253,6 +253,10 @@ ProjectileDefinition makeAppleProjectileDefinition() {
     return defaultDefinitionForItem(appleItem);
 }
 
+bool ensureThrowableProjectileDefinitionsLoaded(std::string* error) {
+    return ensureProjectileDefinitionsLoaded(error);
+}
+
 bool getThrowableProjectileDefinition(const ItemID itemId, ProjectileDefinition& outDefinition) {
     if (itemId == 0) {
         return false;

@@ -12,6 +12,7 @@
 #include "../src/ecs/SystemContext.h"
 #include "../src/ecs/entity/EntityFactory.h"
 #include "../src/ecs/systems/combat/ProjectileSystem.h"
+#include "../src/ecs/systems/world/RedstoneDeviceActionSystem.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
 #include "../src/ecs/util/AudioEventBuffer.h"
 #include "../src/ecs/util/RedstoneEventBuffer.h"
@@ -1041,7 +1042,9 @@ int main() {
         services.world = &audioWorld;
         ecs::SystemContext ctx{registry, services, 1.0f / 60.0f, 200};
         ecs::RedstoneSystem redstoneSystem;
+        ecs::RedstoneDeviceActionSystem deviceActionSystem;
         redstoneSystem.update(ctx);
+        deviceActionSystem.update(ctx);
 
         auto& audioEvents = ecs::ensureAudioEventBus(registry);
         if (audioEvents.size() != 1 ||
@@ -1052,6 +1055,7 @@ int main() {
         ctx.tickIndex = 202;
         audioWorld.redstoneUpdateQueue().enqueue(glm::ivec3(2, noteAudioY, 0));
         redstoneSystem.update(ctx);
+        deviceActionSystem.update(ctx);
         if (audioEvents.size() != 1) {
             return fail("note_block should not emit another sound while power remains high");
         }
@@ -1059,6 +1063,7 @@ int main() {
         audioWorld.setBlockState(0, noteAudioY, 0, leverState(false));
         ctx.tickIndex = 204;
         redstoneSystem.update(ctx);
+        deviceActionSystem.update(ctx);
         if (audioEvents.size() != 1 ||
             noteBlockPowered(audioWorld, 2, noteAudioY, 0)) {
             return fail("note_block falling edge should reset state without emitting sound");
@@ -1067,6 +1072,7 @@ int main() {
         audioWorld.setBlockState(0, noteAudioY, 0, leverState(true));
         ctx.tickIndex = 206;
         redstoneSystem.update(ctx);
+        deviceActionSystem.update(ctx);
         if (audioEvents.size() != 2) {
             return fail("note_block should emit again after power falls and rises");
         }

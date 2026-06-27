@@ -9,7 +9,9 @@
 #include "../src/ecs/components/Components.h"
 #include "../src/ecs/systems/interaction/BlockBreakSystem.h"
 #include "../src/ecs/systems/item/ItemSpawnSystem.h"
+#include "../src/ecs/util/GameplayRuntimeContext.h"
 #include "../src/game/inventory/BlockEntityInventoryStore.h"
+#include "../src/game/modes/GameplayModeRules.h"
 #include "../src/item/Item.h"
 #include "../src/world/World.h"
 #include "../src/world/block/BlockStateRegistry.h"
@@ -126,6 +128,71 @@ int main() {
     }
     if (countDroppedItems(registry, ItemRegistry::fromBlock(BlockRegistry::requireIdByName("minecraft:chest"))) != 1) {
         return fail("survival chest break should still drop the chest item itself");
+    }
+
+    {
+        World creativeWorld;
+        creativeWorld.init(20260608);
+        creativeWorld.setRenderDistance(1);
+        for (int i = 0; i < 8; ++i) {
+            creativeWorld.update(glm::vec3(0.0f), 1.0f / 20.0f);
+        }
+
+        const glm::ivec3 dispenserPos(2, 122, 0);
+        const BlockID dispenserBlock = BlockRegistry::requireIdByName("minecraft:dispenser");
+        const StateID dispenserState = BlockStateRegistry::getDefaultState(dispenserBlock);
+        creativeWorld.setBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z, dispenserState);
+
+        ecs::GameplayRegistry creativeRegistry;
+        ecs::GameplayServices creativeServices;
+        creativeServices.world = &creativeWorld;
+        creativeServices.worldView = &creativeWorld;
+
+        auto& runtime = creativeRegistry.ctxSet<ecs::GameplayRuntimeContext>();
+        runtime.modeRules = &CreativeModeRules::instance();
+        runtime.gameplayMode = GameplayMode::Creative;
+
+        BlockEntityInventoryStore& creativeStore = creativeRegistry.ctxSet<BlockEntityInventoryStore>();
+        BlockEntityInventory& dispenser = creativeStore.getOrCreate(dispenserPos, "minecraft:dispenser", 9);
+        dispenser.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 4);
+
+        const entt::entity creativePlayer = creativeRegistry.create();
+        creativeRegistry.emplace<ecs::LocalPlayerTag>(creativePlayer);
+        ecs::BlockActionIntentComponent creativeIntent;
+        creativeIntent.wantsBreak = true;
+        creativeRegistry.emplace<ecs::BlockActionIntentComponent>(creativePlayer, creativeIntent);
+
+        ecs::BlockTargetComponent creativeTarget;
+        creativeTarget.hasTarget = true;
+        creativeTarget.targetState = dispenserState;
+        creativeTarget.targetBlock = dispenserPos;
+        creativeTarget.placeBlock = dispenserPos + glm::ivec3(0, 1, 0);
+        creativeRegistry.emplace<ecs::BlockTargetComponent>(creativePlayer, creativeTarget);
+
+        creativeRegistry.emplace<ecs::BlockBreakComponent>(creativePlayer);
+        creativeRegistry.emplace<ecs::BlockInteractionRuntimeComponent>(creativePlayer);
+        creativeRegistry.emplace<ecs::InventoryComponent>(creativePlayer);
+        creativeRegistry.emplace<ecs::InventoryDataComponent>(creativePlayer);
+
+        ecs::TransformComponent creativeTransform;
+        creativeTransform.position = glm::vec3(dispenserPos) + glm::vec3(0.5f, 0.5f, 2.5f);
+        creativeRegistry.emplace<ecs::TransformComponent>(creativePlayer, creativeTransform);
+
+        ecs::SystemContext creativeCtx{creativeRegistry, creativeServices, 1.0f / 60.0f, 2};
+        breakSystem.update(creativeCtx);
+
+        if (creativeWorld.getBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z) != RUNTIME_ID_NULL) {
+            return fail("creative dispenser break should remove the block from the world");
+        }
+        if (creativeStore.find(dispenserPos) != nullptr) {
+            return fail("creative dispenser break should erase its stored inventory");
+        }
+        if (countDroppedItems(creativeRegistry, ItemRegistry::requireIdByName("minecraft:apple")) != 4) {
+            return fail("creative dispenser break should drop stored contents");
+        }
+        if (countDroppedItems(creativeRegistry, ItemRegistry::fromBlock(dispenserBlock)) != 0) {
+            return fail("creative dispenser break should not drop the dispenser block item");
+        }
     }
 
     std::cout << "[chest_inventory_lifecycle_test] PASS\n";

@@ -181,8 +181,8 @@ void BlockBreakSystem::update(SystemContext& ctx) {
 
             std::vector<glm::ivec3> removedPositions;
             const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
-            const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, false);
-            const bool handledMachine = handleMachineInventoryBreak(registry, brokenBlock, hitBlock, false);
+            const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, true);
+            const bool handledMachine = handleMachineInventoryBreak(registry, brokenBlock, hitBlock, true);
             static_cast<void>(handledStorage);
             static_cast<void>(handledMachine);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});

@@ -1142,6 +1142,10 @@ int main() {
             PropIndices::POWERED_TRUE) {
         return fail("dropper should expose a powered=true block state");
     }
+    if (BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:dropper")).containerUi !=
+        "minecraft:dropper") {
+        return fail("dropper should bind to its container UI");
+    }
 
     const auto modelVariantMatches = [](const StateID state,
                                         const char* expectedModel,

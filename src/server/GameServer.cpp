@@ -19,6 +19,7 @@
 #include "../ecs/systems/world/FarmlandMoistureSystem.h"
 #include "../ecs/systems/world/PressurePlateSystem.h"
 #include "../ecs/systems/world/RandomTickSystem.h"
+#include "../ecs/systems/world/RedstoneDeviceActionSystem.h"
 #include "../ecs/systems/world/RedstoneSystem.h"
 #include "../ecs/components/Components.h"
 #include "../ecs/components/NetworkComponents.h"
@@ -909,6 +910,7 @@ void GameServer::tickWorldSystems() {
     if ((m_currentTick % 2u) == 0u) {
         if (m_gameplayRegistry != nullptr) {
             ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, *m_gameplayRegistry, 4096);
+            ecs::RedstoneDeviceActionSystem::processEvents(m_world, *m_gameplayRegistry);
         } else {
             ecs::RedstoneSystem::processWorld(m_world, m_currentTick / 2u, 4096);
         }
@@ -1515,31 +1517,40 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         }
         std::vector<glm::ivec3> removedPositions;
         const BlockID brokenBlock = removeServerTargetBlock(m_world, action.targetBlock, removedPositions);
-        const bool shouldDrop = client.gameplayMode != net::NetworkGameplayMode::Creative;
+        const bool dropBrokenBlockItem = client.gameplayMode != net::NetworkGameplayMode::Creative;
+        constexpr bool dropContainerContents = true;
         bool brokeStorage = false;
         bool brokeMachine = false;
         const bool brokeBed = BedBlockLogic::isBedBlock(brokenBlock);
         const bool brokeDoor = DoorBlockLogic::isDoorBlock(brokenBlock);
         if (m_gameplayRegistry != nullptr) {
-            brokeStorage = handleBlockEntityInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
-            brokeMachine = handleMachineInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
-            if (brokeStorage && shouldDrop) {
+            brokeStorage = handleBlockEntityInventoryBreak(
+                *m_gameplayRegistry,
+                brokenBlock,
+                action.targetBlock,
+                dropContainerContents);
+            brokeMachine = handleMachineInventoryBreak(
+                *m_gameplayRegistry,
+                brokenBlock,
+                action.targetBlock,
+                dropContainerContents);
+            if (brokeStorage && dropBrokenBlockItem) {
                 const ItemID storageItem = BlockDropTable::getDropItem(brokenBlock);
                 if (storageItem != RUNTIME_ID_NULL) {
                     ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, storageItem, action.targetBlock, 1);
                 }
             }
-            if (brokeMachine && shouldDrop) {
+            if (brokeMachine && dropBrokenBlockItem) {
                 const ItemID machineItem = BlockDropTable::getDropItem(brokenBlock);
                 if (machineItem != RUNTIME_ID_NULL) {
                     ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, machineItem, action.targetBlock, 1);
                 }
             }
-            if (brokeBed && shouldDrop) {
+            if (brokeBed && dropBrokenBlockItem) {
                 const ItemID bedItem = BlockDropTable::getDropItem(brokenBlock);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, bedItem, action.targetBlock, 1);
             }
-            if (brokeDoor && shouldDrop) {
+            if (brokeDoor && dropBrokenBlockItem) {
                 const ItemID doorItem = BlockDropTable::getDropItem(brokenBlock);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, doorItem, action.targetBlock, 1);
             }

@@ -3074,6 +3074,77 @@ static void testServerBlockActionBreaksChestLifecycle() {
     std::printf("[PASS] testServerBlockActionBreaksChestLifecycle\n");
 }
 
+static void testCreativeServerBreakDropsDispenserContents() {
+    ServerHarness harness;
+    ecs::GameplayRegistry registry;
+    harness.server.setEcsRegistry(&registry);
+
+    auto clientTransport = std::make_unique<ManualTransport>();
+    ManualTransport* clientPtr = clientTransport.get();
+    net::Packet hello;
+    hello.type = net::MessageType::ClientHello;
+    hello.inProcessPayload = net::ClientHello{};
+    clientPtr->pushIncoming(std::move(hello));
+
+    harness.server.acceptClient(std::move(clientTransport), 1);
+    harness.server.tick(1.0f / 20.0f);
+
+    net::Packet commandPacket;
+    commandPacket.type = net::MessageType::ClientCommandRequest;
+    net::ClientCommandRequest command;
+    command.sequence = 41;
+    command.command = "/gamemode creative";
+    commandPacket.inProcessPayload = command;
+    clientPtr->pushIncoming(std::move(commandPacket));
+    harness.server.tick(1.0f / 20.0f);
+
+    const glm::ivec3 dispenserPos(0, Chunk::SIZE_Y - 8, 0);
+    for (int tick = 0;
+         tick < 240 && !harness.server.world().isChunkLoadedForBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z);
+         ++tick) {
+        harness.server.tick(1.0f / 20.0f);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(harness.server.world().isChunkLoadedForBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z),
+            "test setup should load the target dispenser chunk");
+
+    const BlockID dispenserBlock = BlockRegistry::requireIdByName("minecraft:dispenser");
+    const StateID dispenserState = BlockStateRegistry::getDefaultState(dispenserBlock);
+    harness.server.world().setBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z, dispenserState);
+
+    BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
+    BlockEntityInventory& dispenser = store.getOrCreate(dispenserPos, "minecraft:dispenser", 9);
+    dispenser.setSlotItem(0, ItemRegistry::requireIdByName("minecraft:apple"), 5);
+
+    while (!clientPtr->sent.empty()) {
+        clientPtr->sent.pop();
+    }
+
+    net::Packet actionPacket;
+    actionPacket.type = net::MessageType::ClientBlockAction;
+    net::ClientBlockAction action;
+    action.sequence = 42;
+    action.action = net::ClientBlockActionType::Break;
+    action.targetBlock = dispenserPos;
+    action.playerPosition = glm::vec3(dispenserPos) + glm::vec3(0.5f);
+    actionPacket.inProcessPayload = action;
+    clientPtr->pushIncoming(std::move(actionPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    require(harness.server.world().getBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z) == RUNTIME_ID_NULL,
+            "creative server block break should remove the dispenser block");
+    require(store.find(dispenserPos) == nullptr,
+            "creative server block break should erase the dispenser inventory store entry");
+    require(ecsDroppedItemCount(registry, ItemRegistry::requireIdByName("minecraft:apple")) == 5,
+            "creative server dispenser break should spawn stored apple drops");
+    require(ecsDroppedItemCount(registry, ItemRegistry::fromBlock(dispenserBlock)) == 0,
+            "creative server dispenser break should not spawn the dispenser item drop");
+
+    harness.server.setEcsRegistry(static_cast<ecs::GameplayRegistry*>(nullptr));
+    std::printf("[PASS] testCreativeServerBreakDropsDispenserContents\n");
+}
+
 static void testOwnedServerEcsRestoresPersistentZombie() {
     const std::filesystem::path saveRoot = "test_owned_server_entities_save";
     std::filesystem::remove_all(saveRoot);
@@ -3997,6 +4068,7 @@ int main() {
     testPersistentChestBlockRestoresFromSave();
     testPersistentBarrelBlockRestoresFromSave();
     testServerBlockActionBreaksChestLifecycle();
+    testCreativeServerBreakDropsDispenserContents();
     testOwnedServerEcsRestoresPersistentZombie();
     testOwnedServerEcsRestoresPersistentDrop();
     testChatCommandCodecRoundTrip();

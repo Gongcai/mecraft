@@ -5,10 +5,13 @@
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
 
+#include <string>
+
 namespace ecs {
 
 BlockID defaultProjectileEntityImpactParticleBlock();
 ProjectileDefinition makeAppleProjectileDefinition();
+bool ensureThrowableProjectileDefinitionsLoaded(std::string* error = nullptr);
 bool getThrowableProjectileDefinition(ItemID itemId, ProjectileDefinition& outDefinition);
 ProjectileDefinition projectileDefinitionForItemOrDefault(ItemID itemId);
 

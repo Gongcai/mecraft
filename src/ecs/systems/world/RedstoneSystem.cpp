@@ -2,7 +2,6 @@
 
 #include "../../GameplayRegistry.h"
 #include "../../components/Components.h"
-#include "../../util/AudioEventBuffer.h"
 #include "../../util/RedstoneEventBuffer.h"
 #include "../../../game/inventory/BlockEntityInventoryStore.h"
 #include "../../../game/inventory/ContainerBehaviorRegistry.h"
@@ -2502,25 +2501,17 @@ void emitEdgeTriggeredDeviceEvent(GameplayRegistry& registry,
                                   const uint64_t redstoneTick) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (def.redstoneBehavior != "note_block" &&
+        def.redstoneBehavior != "dispenser" &&
+        def.redstoneBehavior != "dropper") {
+        throw std::runtime_error("Unsupported redstone edge-triggered behavior: " + def.redstoneBehavior);
+    }
     ensureRedstoneDeviceActivationEventBus(registry).push({
         position,
         blockId,
         stateId,
         redstoneTick
     });
-    if (def.redstoneBehavior == "note_block") {
-        ensureAudioEventBus(registry).push({
-            "block.note_block.harp",
-            glm::vec3(position) + glm::vec3(0.5f),
-            true,
-            1.0f
-        });
-        return;
-    }
-    if (def.redstoneBehavior == "dispenser" || def.redstoneBehavior == "dropper") {
-        return;
-    }
-    throw std::runtime_error("Unsupported redstone edge-triggered behavior: " + def.redstoneBehavior);
 }
 
 size_t applyEdgeTriggeredDeviceStates(World& world,

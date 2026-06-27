@@ -42,6 +42,7 @@
 #include "systems/world/FluidTickSystem.h"
 #include "systems/world/PressurePlateSystem.h"
 #include "systems/world/RandomTickSystem.h"
+#include "systems/world/RedstoneDeviceActionSystem.h"
 #include "systems/world/RedstoneSystem.h"
 
 #ifdef MECRAFT_DEBUG
@@ -144,6 +145,7 @@ void GameplayPipeline::buildClientTickSystems() {
     addTickSystem<BlockSupportSystem>();
     addTickSystem<PressurePlateSystem>();
     addTickSystem<RedstoneSystem>();
+    addTickSystem<RedstoneDeviceActionSystem>();
     // Spawn falling-block entities from events emitted by BlockSupportSystem,
     // then advance each entity one cell per tick (Minecraft falling semantics).
     addTickSystem<FallingBlockSpawnSystem>();

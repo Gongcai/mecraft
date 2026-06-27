@@ -1640,6 +1640,7 @@
     {
       "id": "minecraft:dropper",
       "drop": "minecraft:dropper",
+      "containerUi": "minecraft:dropper",
       "redstoneBehavior": "dropper",
       "respondsToRedstone": true,
       "properties": {

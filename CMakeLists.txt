@@ -369,6 +369,7 @@ set(SRC_ECS
         src/ecs/systems/world/BlockSupportSystem.cpp
         src/ecs/systems/world/PressurePlateSystem.cpp
         src/ecs/systems/world/RedstoneSystem.cpp
+        src/ecs/systems/world/RedstoneDeviceActionSystem.cpp
         src/ecs/systems/world/FallingBlockSpawnSystem.cpp
         src/ecs/systems/world/FallingBlockTickSystem.cpp
         src/ecs/systems/world/FallingBlockInterpolateSystem.cpp
@@ -674,6 +675,8 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(chunk_mesher_test tests/chunk_mesher_test.cpp)
     add_mecraft_test(redstone_basic_test tests/redstone_basic_test.cpp)
     mecraft_copy_runtime_assets(redstone_basic_test)
+    add_mecraft_test(redstone_device_action_test tests/redstone_device_action_test.cpp)
+    mecraft_copy_runtime_assets(redstone_device_action_test)
     add_mecraft_test(redstone_pressure_plate_test tests/redstone_pressure_plate_test.cpp)
     mecraft_copy_runtime_assets(redstone_pressure_plate_test)
     add_mecraft_test(redstone_repeater_test tests/redstone_repeater_test.cpp)

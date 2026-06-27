@@ -67,6 +67,12 @@ int main() {
         return fail("dispenser storage handler should create a data-driven container state");
     }
 
+    std::unique_ptr<IGameState> dropper =
+        ContainerStateFactory::create(deps, "minecraft:dropper", blockPosition);
+    if (dynamic_cast<DataDrivenContainerState*>(dropper.get()) == nullptr) {
+        return fail("dropper storage handler should create a data-driven container state");
+    }
+
     std::unique_ptr<IGameState> furnace =
         ContainerStateFactory::create(deps, "minecraft:furnace", blockPosition);
     if (dynamic_cast<SmeltingContainerState*>(furnace.get()) == nullptr) {

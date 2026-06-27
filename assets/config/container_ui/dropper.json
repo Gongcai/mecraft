@@ -1,0 +1,61 @@
+{
+  "id": "minecraft:dropper",
+  "behavior": "minecraft:dropper",
+  "backgroundTexture": "dispenser",
+  "backgroundTexturePath": "textures/gui/dispenser.png",
+  "width": 176,
+  "height": 166,
+  "textureWidth": 256,
+  "textureHeight": 256,
+  "anchorX": 0.5,
+  "anchorY": 0.5,
+  "pivotX": 0.5,
+  "pivotY": 0.5,
+  "offsetX": 0,
+  "offsetY": 0,
+  "scale": 2,
+  "fitPadding": 8,
+  "showPlayerPreview": false,
+  "slotGroups": [
+    {
+      "id": "dropper",
+      "kind": "container",
+      "firstSlot": 0,
+      "columns": 3,
+      "rows": 3,
+      "x": 62,
+      "y": 17,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "player_inventory",
+      "kind": "player_inventory",
+      "firstSlot": 9,
+      "columns": 9,
+      "rows": 3,
+      "x": 8,
+      "y": 84,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    },
+    {
+      "id": "hotbar",
+      "kind": "player_inventory",
+      "firstSlot": 0,
+      "columns": 9,
+      "rows": 1,
+      "x": 8,
+      "y": 142,
+      "slotSize": 18,
+      "columnGap": 0,
+      "rowGap": 0,
+      "row4ExtraGap": 0
+    }
+  ],
+  "progressBars": []
+}
