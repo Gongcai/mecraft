@@ -74,8 +74,42 @@ struct IVec3Hash {
     }
 };
 
-using WirePowerMap = std::unordered_map<glm::ivec3, uint8_t, IVec3Hash>;
 using PositionSet = std::unordered_set<glm::ivec3, IVec3Hash>;
+
+struct WirePowerMap {
+    using Map = std::unordered_map<glm::ivec3, uint8_t, IVec3Hash>;
+
+    Map powers;
+    const PositionSet* evaluatedWires = nullptr;
+
+    void reserve(const size_t count) {
+        powers.reserve(count);
+    }
+
+    auto emplace(const glm::ivec3& position, const uint8_t power) {
+        return powers.emplace(position, power);
+    }
+
+    [[nodiscard]] auto find(const glm::ivec3& position) {
+        return powers.find(position);
+    }
+
+    [[nodiscard]] auto find(const glm::ivec3& position) const {
+        return powers.find(position);
+    }
+
+    [[nodiscard]] auto end() {
+        return powers.end();
+    }
+
+    [[nodiscard]] auto end() const {
+        return powers.end();
+    }
+
+    [[nodiscard]] bool wasEvaluated(const glm::ivec3& position) const {
+        return evaluatedWires != nullptr && evaluatedWires->find(position) != evaluatedWires->end();
+    }
+};
 
 struct RedstoneSource {
     glm::ivec3 position;
@@ -112,6 +146,11 @@ struct PowerNode {
     bool operator<(const PowerNode& other) const {
         return power < other.power;
     }
+};
+
+struct WireSearchNode {
+    glm::ivec3 position;
+    uint8_t distance = 0;
 };
 
 struct ComparatorEvaluation {
@@ -1420,22 +1459,27 @@ void collectWireComponent(const World& world, const glm::ivec3& start, RedstoneW
         return;
     }
 
-    std::queue<glm::ivec3> frontier;
-    frontier.push(start);
+    std::queue<WireSearchNode> frontier;
+    frontier.push({start, 0});
     workSet.wires.push_back(start);
 
     while (!frontier.empty()) {
-        const glm::ivec3 position = frontier.front();
+        const WireSearchNode node = frontier.front();
         frontier.pop();
+        const glm::ivec3 position = node.position;
 
-        // Discover all connected wires, including diagonal up/down climbing
-        // connections that vanilla redstone wire supports.
-        forEachWireNeighbor(world, position, [&](const glm::ivec3& wireNeighbor) {
-            if (workSet.wireSet.insert(wireNeighbor).second) {
-                workSet.wires.push_back(wireNeighbor);
-                frontier.push(wireNeighbor);
-            }
-        });
+        // Redstone wire power cannot travel beyond fifteen wire steps from a
+        // source. Dirty updates only need the local power radius; far-away
+        // wires in the same physical dust network keep their stored state until
+        // a nearby source or wire change dirties their own radius.
+        if (node.distance < kMaxRedstonePower) {
+            forEachWireNeighbor(world, position, [&](const glm::ivec3& wireNeighbor) {
+                if (workSet.wireSet.insert(wireNeighbor).second) {
+                    workSet.wires.push_back(wireNeighbor);
+                    frontier.push({wireNeighbor, static_cast<uint8_t>(node.distance + 1)});
+                }
+            });
+        }
 
         // Check cardinal direction neighbors for non-wire redstone components.
         for (const glm::ivec3& direction : kDirections) {
@@ -1813,6 +1857,9 @@ void setBestWirePower(WirePowerMap& wirePowers,
                       std::priority_queue<PowerNode>& frontier,
                       const glm::ivec3& position,
                       const uint8_t power) {
+    if (power == 0) {
+        return;
+    }
     auto [it, inserted] = wirePowers.emplace(position, power);
     if (!inserted && it->second >= power) {
         return;
@@ -1872,18 +1919,14 @@ WirePowerMap propagateWirePower(const World& world,
                                 const PositionSet& wires,
                                 const std::vector<RedstoneSource>& sources) {
     WirePowerMap wirePowers;
+    wirePowers.evaluatedWires = &wires;
     std::priority_queue<PowerNode> frontier;
 
-    // Pre-seed every wire in the work set with 0 so the map fully covers the
-    // connected component being evaluated. Wires not reached by any source are
-    // unambiguously at 0 power; downstream readers can then distinguish "in the
-    // work set, carries 0" from "outside the work set, stable stored state" by
-    // map membership alone. Readers use stored wire power only for positions
-    // outside the evaluated component boundary.
-    wirePowers.reserve(wires.size());
-    for (const glm::ivec3& wire : wires) {
-        wirePowers.emplace(wire, uint8_t{0});
-    }
+    // Redstone power can travel at most fifteen wire steps from each source.
+    // Store only non-zero wire powers and keep the evaluated wire set beside
+    // the map so readers can still distinguish evaluated zero power from
+    // stable outside-of-work-set state.
+    wirePowers.reserve(std::min(wires.size(), sources.size() * 512U + 64U));
 
     for (const RedstoneSource& source : sources) {
         if (source.directional) {
@@ -1990,9 +2033,10 @@ uint8_t directSignalPowerToward(const World& world,
     const StateID signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
     if (isWireState(signalState)) {
         const auto computedIt = wirePowers.find(signalPosition);
-        return computedIt != wirePowers.end()
-            ? computedIt->second
-            : redstonePowerFromState(signalState);
+        if (computedIt != wirePowers.end()) {
+            return computedIt->second;
+        }
+        return wirePowers.wasEvaluated(signalPosition) ? 0 : redstonePowerFromState(signalState);
     }
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
 }
@@ -2029,8 +2073,11 @@ uint8_t wirePowerTowardConductor(const World& world,
         return 0;
     }
     const auto computedIt = wirePowers.find(wirePosition);
-    return computedIt != wirePowers.end()
-        ? computedIt->second
+    if (computedIt != wirePowers.end()) {
+        return computedIt->second;
+    }
+    return wirePowers.wasEvaluated(wirePosition)
+        ? 0
         : redstonePowerFromState(world.getBlockState(wirePosition.x, wirePosition.y, wirePosition.z));
 }
 
@@ -2759,10 +2806,12 @@ size_t processWorldWithContext(World& world,
         collectActiveSources(world, workSet.sourcePositions, nullptr);
     appendSources(outputSources, collectPoweredRepeaterSources(world, workSet.repeaters));
     appendSources(outputSources, collectPoweredObserverSources(world, workSet.observers));
-    const WirePowerMap inputWirePowers = propagateWirePower(world, workSet.wireSet, outputSources);
-    const std::vector<ComparatorEvaluation> comparatorEvaluations =
-        evaluateComparators(world, readRegistry, workSet.comparators, inputWirePowers);
-    appendSources(outputSources, collectComparatorSources(world, comparatorEvaluations));
+    std::vector<ComparatorEvaluation> comparatorEvaluations;
+    if (!workSet.comparators.empty()) {
+        const WirePowerMap inputWirePowers = propagateWirePower(world, workSet.wireSet, outputSources);
+        comparatorEvaluations = evaluateComparators(world, readRegistry, workSet.comparators, inputWirePowers);
+        appendSources(outputSources, collectComparatorSources(world, comparatorEvaluations));
+    }
     const WirePowerMap wirePowers = propagateWirePower(world, workSet.wireSet, outputSources);
     changed += applyWirePowers(world, workSet.wires, wirePowers);
     changed += applyComparatorStates(world, comparatorEvaluations);
