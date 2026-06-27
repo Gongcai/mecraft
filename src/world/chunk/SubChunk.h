@@ -181,11 +181,13 @@ struct SubChunkMesh {
     GpuMeshRange waterRange;
     uint32_t waterVertexCount = 0;
     bool inGlobalPool = false;
+    uint64_t metadataFingerprint = 0;
 
     void upload(const std::vector<BlockVertex>& vertices);
     void uploadCutout(const std::vector<BlockVertex>& cutoutVerts);
     void uploadCutoutDistance(const std::vector<BlockVertex>& cutoutDistanceVerts);
     void uploadTransparent(const std::vector<BlockVertex>& transparentVerts);
+    [[nodiscard]] uint64_t computeMetadataFingerprint() const;
     void destroy();
 };
 

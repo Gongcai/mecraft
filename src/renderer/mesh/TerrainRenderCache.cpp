@@ -32,29 +32,6 @@ struct MeshingCandidate {
     std::shared_ptr<Chunk> neighborNegZ;
 };
 
-// Combine two 64-bit hashes using FNV-style mixing.
-uint64_t hashCombine64(uint64_t seed, const uint64_t value) {
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
-    return seed;
-}
-
-// Compute a 64-bit fingerprint of a sub-chunk mesh for change detection.
-uint64_t meshFingerprint(const SubChunkMesh& mesh) {
-    uint64_t hash = 1469598103934665603ULL;
-    hash = hashCombine64(hash, mesh.vertexCount);
-    hash = hashCombine64(hash, mesh.cutoutVertexCount);
-    hash = hashCombine64(hash, mesh.cutoutDistanceVertexCount);
-    hash = hashCombine64(hash, mesh.transparentVertexCount);
-    hash = hashCombine64(hash, mesh.waterVertexCount);
-    hash = hashCombine64(hash, mesh.opaqueRange.generation);
-    hash = hashCombine64(hash, mesh.cutoutRange.generation);
-    hash = hashCombine64(hash, mesh.cutoutDistanceRange.generation);
-    hash = hashCombine64(hash, mesh.transparentRange.generation);
-    hash = hashCombine64(hash, mesh.waterRange.generation);
-    hash = hashCombine64(hash, mesh.hasBounds ? 1ULL : 0ULL);
-    return hash;
-}
-
 // Expand an AABB to include a candidate bounding box.
 void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
                   const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
@@ -101,6 +78,8 @@ void TerrainRenderCache::beginFrame() {
 void TerrainRenderCache::shutdown() {
     m_chunkRenderColumns.clear();
     m_mdiMeshAllocations.clear();
+    m_mdiAllocationSweepInitialized = false;
+    m_lastMdiAllocationSweepActiveRevision = 0;
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
     m_deferredTransparentBatch.clear();
@@ -182,7 +161,7 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         const uint64_t revision = column.chunk->getSubChunkMeshRevision(scy);
         const SubChunk* sc = column.chunk->getSubChunk(scy);
-        const uint64_t fingerprint = sc ? meshFingerprint(sc->getMesh()) : 0ULL;
+        const uint64_t fingerprint = sc ? sc->getMesh().metadataFingerprint : 0ULL;
         if (!column.stateValid ||
             column.subChunkMeshRevisions[scy] != revision ||
             column.subChunkMeshFingerprints[scy] != fingerprint) {
@@ -282,6 +261,14 @@ void TerrainRenderCache::releaseMdiAllocation(const SubChunkGpuKey& key) {
 
 void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView) {
     if (m_mdiMeshAllocations.empty()) {
+        m_mdiAllocationSweepInitialized = true;
+        m_lastMdiAllocationSweepActiveRevision = worldView.getActiveChunkRevision();
+        return;
+    }
+
+    const uint64_t activeChunkRevision = worldView.getActiveChunkRevision();
+    if (m_mdiAllocationSweepInitialized &&
+        m_lastMdiAllocationSweepActiveRevision == activeChunkRevision) {
         return;
     }
 
@@ -311,6 +298,8 @@ void TerrainRenderCache::releaseStaleMdiAllocations(const IWorldView& worldView)
             ++it;
         }
     }
+    m_mdiAllocationSweepInitialized = true;
+    m_lastMdiAllocationSweepActiveRevision = activeChunkRevision;
 }
 
 // ---------------------------------------------------------------------------

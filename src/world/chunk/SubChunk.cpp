@@ -395,6 +395,7 @@ SubChunkMesh& SubChunk::getMesh() {
 void SubChunk::setMesh(const SubChunkMesh& mesh) {
     m_mesh.destroy();
     m_mesh = mesh;
+    m_mesh.metadataFingerprint = m_mesh.computeMetadataFingerprint();
     m_dirty = false;
 }
 
@@ -575,6 +576,27 @@ void SubChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparent
     glBindVertexArray(0);
 }
 
+uint64_t SubChunkMesh::computeMetadataFingerprint() const {
+    auto combine = [](uint64_t seed, const uint64_t value) {
+        seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+        return seed;
+    };
+
+    uint64_t hash = 1469598103934665603ULL;
+    hash = combine(hash, vertexCount);
+    hash = combine(hash, cutoutVertexCount);
+    hash = combine(hash, cutoutDistanceVertexCount);
+    hash = combine(hash, transparentVertexCount);
+    hash = combine(hash, waterVertexCount);
+    hash = combine(hash, opaqueRange.generation);
+    hash = combine(hash, cutoutRange.generation);
+    hash = combine(hash, cutoutDistanceRange.generation);
+    hash = combine(hash, transparentRange.generation);
+    hash = combine(hash, waterRange.generation);
+    hash = combine(hash, hasBounds ? 1ULL : 0ULL);
+    return hash;
+}
+
 void SubChunkMesh::destroy() {
     if (inGlobalPool) {
         // GPU memory is owned by WorldRenderBuffer — just clear the handles.
@@ -590,6 +612,7 @@ void SubChunkMesh::destroy() {
         waterVertexCount = 0;
         hasBounds = false;
         inGlobalPool = false;
+        metadataFingerprint = 0;
         return;
     }
     if (vbo != 0) {
@@ -638,4 +661,5 @@ void SubChunkMesh::destroy() {
     hasBounds = false;
     boundsMin = glm::vec3(0.0f);
     boundsMax = glm::vec3(0.0f);
+    metadataFingerprint = 0;
 }

@@ -163,6 +163,8 @@ private:
 
     // MDI allocation tracking
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
+    uint64_t m_lastMdiAllocationSweepActiveRevision = 0;
+    bool m_mdiAllocationSweepInitialized = false;
 
     // Meshing state
     std::unordered_set<int64_t> m_meshingInFlight;

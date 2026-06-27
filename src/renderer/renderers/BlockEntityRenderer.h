@@ -24,6 +24,7 @@ class BlockEntityRenderer {
 public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
+    void beginFrame();
 
     void renderToGBuffer(const IWorldView& worldView,
                          const glm::mat4& viewProj,
@@ -108,6 +109,7 @@ private:
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
     uint64_t m_cacheSyncSerial = 0;
+    bool m_instanceCacheSyncedThisFrame = false;
 
     static void destroyMesh(Mesh& mesh);
     static Mesh buildMesh(const ModelDefinition& definition);

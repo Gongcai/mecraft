@@ -5,6 +5,7 @@
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
 #include "../targets/DeferredRenderTargets.h"
+#include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/FirstPersonHeldItemRenderer.h"
 #include <glad/glad.h>
 #include "engine/camera/Camera.h"
@@ -201,6 +202,9 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
 
     m_debugService.beginFrame();
     m_terrainStreamingService.beginFrame();
+    if (m_blockEntityRenderer != nullptr) {
+        m_blockEntityRenderer->beginFrame();
+    }
 
     // Build frame context
     m_currentContext = buildFrameContext(worldView, camera, window, dayNightSystem, weatherSystem);

@@ -172,10 +172,15 @@ void BlockEntityRenderer::shutdown() {
     m_models.clear();
     m_sectionCaches.clear();
     m_cacheSyncSerial = 0;
+    m_instanceCacheSyncedThisFrame = false;
     m_resourceMgr = nullptr;
     m_gbufferShader = nullptr;
     m_shadowShader = nullptr;
     m_forwardShader = nullptr;
+}
+
+void BlockEntityRenderer::beginFrame() {
+    m_instanceCacheSyncedThisFrame = false;
 }
 
 BlockEntityRenderer::ModelDefinition BlockEntityRenderer::makeChestDefinition() {
@@ -295,6 +300,11 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
 }
 
 void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) {
+    if (m_instanceCacheSyncedThisFrame) {
+        return;
+    }
+    m_instanceCacheSyncedThisFrame = true;
+
     ++m_cacheSyncSerial;
     const uint64_t syncSerial = m_cacheSyncSerial;
 
