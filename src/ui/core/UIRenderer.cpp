@@ -83,9 +83,9 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_storagePanel.visible = false;
     m_storagePanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
-    m_furnacePanel.init(resourceMgr);
-    m_furnacePanel.visible = false;
-    m_furnacePanel.setScaleStrategy(UIScaleStrategy::Uniform);
+    m_machinePanel.init(resourceMgr);
+    m_machinePanel.visible = false;
+    m_machinePanel.setScaleStrategy(UIScaleStrategy::Uniform);
 
     m_creativeInventoryPanel.init(resourceMgr);
     m_creativeInventoryPanel.visible = false;
@@ -109,7 +109,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
         &m_hotbar,
         &m_inventoryPanel,
         &m_storagePanel,
-        &m_furnacePanel,
+        &m_machinePanel,
         &m_creativeInventoryPanel,
     };
 
@@ -127,7 +127,7 @@ void UIRenderer::shutdown()
     m_commandInput.shutdown();
     m_text.shutdown();
     m_creativeInventoryPanel.shutdown();
-    m_furnacePanel.shutdown();
+    m_machinePanel.shutdown();
     m_storagePanel.shutdown();
     m_inventoryPanel.shutdown();
     m_deathPrompt.shutdown();
@@ -407,7 +407,7 @@ void UIRenderer::setInventoryPanelVisible(bool visible)
     m_inventoryPanel.setVisible(visible);
     if (visible) {
         m_storagePanel.setVisible(false);
-        m_furnacePanel.setVisible(false);
+        m_machinePanel.setVisible(false);
         m_creativeInventoryPanel.setVisible(false);
     }
 }
@@ -443,7 +443,7 @@ void UIRenderer::setStoragePanelVisible(const bool visible)
     m_storagePanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
-        m_furnacePanel.setVisible(false);
+        m_machinePanel.setVisible(false);
         m_creativeInventoryPanel.setVisible(false);
     }
 }
@@ -483,9 +483,9 @@ void UIRenderer::clearStoragePanelActivations()
     m_storagePanel.clearActivations();
 }
 
-void UIRenderer::setFurnacePanelVisible(const bool visible)
+void UIRenderer::setMachinePanelVisible(const bool visible)
 {
-    m_furnacePanel.setVisible(visible);
+    m_machinePanel.setVisible(visible);
     if (visible) {
         m_inventoryPanel.setVisible(false);
         m_storagePanel.setVisible(false);
@@ -493,44 +493,44 @@ void UIRenderer::setFurnacePanelVisible(const bool visible)
     }
 }
 
-void UIRenderer::setFurnacePanelDefinition(const ui::ContainerUiDef& definition)
+void UIRenderer::setMachinePanelDefinition(const ui::ContainerUiDef& definition)
 {
-    m_furnacePanel.setDefinition(definition);
+    m_machinePanel.setDefinition(definition);
 }
 
-void UIRenderer::setFurnacePanelSource(const FurnaceInventory* furnace)
+void UIRenderer::setMachinePanelSource(const MachineInventory* machine)
 {
-    m_furnacePanel.setFurnaceSource(furnace);
+    m_machinePanel.setMachineSource(machine);
 }
 
-void UIRenderer::setFurnacePanelProgress(const float burnFraction, const float cookFraction)
+void UIRenderer::setMachinePanelProgress(const float burnFraction, const float cookFraction)
 {
-    m_furnacePanel.setProgress(burnFraction, cookFraction);
+    m_machinePanel.setProgress(burnFraction, cookFraction);
 }
 
-int UIRenderer::getFurnacePanelLastActivatedSlot() const
+int UIRenderer::getMachinePanelLastActivatedSlot() const
 {
-    return m_furnacePanel.getContainerLastActivatedSlot();
+    return m_machinePanel.getContainerLastActivatedSlot();
 }
 
-int UIRenderer::getFurnacePanelPlayerLastActivatedSlot() const
+int UIRenderer::getMachinePanelPlayerLastActivatedSlot() const
 {
-    return m_furnacePanel.getPlayerLastActivatedSlot();
+    return m_machinePanel.getPlayerLastActivatedSlot();
 }
 
-int UIRenderer::getFurnacePanelHoveredSlot() const
+int UIRenderer::getMachinePanelHoveredSlot() const
 {
-    return m_furnacePanel.getContainerHoveredSlot();
+    return m_machinePanel.getContainerHoveredSlot();
 }
 
-int UIRenderer::getFurnacePanelPlayerHoveredSlot() const
+int UIRenderer::getMachinePanelPlayerHoveredSlot() const
 {
-    return m_furnacePanel.getPlayerHoveredSlot();
+    return m_machinePanel.getPlayerHoveredSlot();
 }
 
-void UIRenderer::clearFurnacePanelActivations()
+void UIRenderer::clearMachinePanelActivations()
 {
-    m_furnacePanel.clearActivations();
+    m_machinePanel.clearActivations();
 }
 
 void UIRenderer::setCreativeInventoryVisible(const bool visible)
@@ -539,7 +539,7 @@ void UIRenderer::setCreativeInventoryVisible(const bool visible)
     if (visible) {
         m_inventoryPanel.setVisible(false);
         m_storagePanel.setVisible(false);
-        m_furnacePanel.setVisible(false);
+        m_machinePanel.setVisible(false);
     }
 }
 
@@ -608,7 +608,7 @@ void UIRenderer::render(const Window& window,
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
     m_storagePanel.setPlayerInventorySource(&inventory);
-    m_furnacePanel.setPlayerInventorySource(&inventory);
+    m_machinePanel.setPlayerInventorySource(&inventory);
     m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible =(m_commandInputRequested);
     const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, inputSnapshot);

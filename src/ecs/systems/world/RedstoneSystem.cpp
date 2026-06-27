@@ -6,7 +6,7 @@
 #include "../../util/RedstoneEventBuffer.h"
 #include "../../../game/inventory/BlockEntityInventoryStore.h"
 #include "../../../game/inventory/ContainerBehaviorRegistry.h"
-#include "../../../game/inventory/FurnaceInventoryStore.h"
+#include "../../../game/inventory/MachineInventoryStore.h"
 #include "../../../item/Item.h"
 #include "../../../ui/inventory/ContainerUiRegistry.h"
 #include "../../../world/World.h"
@@ -424,16 +424,16 @@ uint8_t containerSignalPowerAt(const World& world,
     }
 
     if (behavior.handler == "smelting") {
-        if (registry == nullptr || !registry->ctxHas<FurnaceInventoryStore>()) {
+        if (registry == nullptr || !registry->ctxHas<MachineInventoryStore>()) {
             return 0;
         }
-        const FurnaceInventoryStore& store = registry->ctxGet<FurnaceInventoryStore>();
-        const FurnaceInventory* furnace = store.find(position);
-        if (furnace == nullptr) {
+        const MachineInventoryStore& store = registry->ctxGet<MachineInventoryStore>();
+        const MachineInventory* machine = store.find(position);
+        if (machine == nullptr) {
             return 0;
         }
-        return inventorySignalPower(behavior.storage.slots, [furnace](const int slot) {
-            return furnace->getSlotStack(slot);
+        return inventorySignalPower(behavior.storage.slots, [machine](const int slot) {
+            return machine->getSlotStack(slot);
         });
     }
 

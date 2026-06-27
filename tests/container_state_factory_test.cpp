@@ -9,8 +9,8 @@
 #include "../src/game/inventory/ContainerBehaviorRegistry.h"
 #include "../src/game/inventory/ContainerStateFactory.h"
 #include "../src/game/inventory/DataDrivenContainerState.h"
-#include "../src/game/inventory/FurnaceState.h"
 #include "../src/game/inventory/InventoryStateContext.h"
+#include "../src/game/inventory/SmeltingContainerState.h"
 #include "../src/game/inventory/WorkbenchState.h"
 #include "../src/game/states/GameStateMachine.h"
 #include "../src/player/ActionMap.h"
@@ -63,8 +63,8 @@ int main() {
 
     std::unique_ptr<IGameState> furnace =
         ContainerStateFactory::create(deps, "minecraft:furnace", blockPosition);
-    if (dynamic_cast<FurnaceState*>(furnace.get()) == nullptr) {
-        return fail("smelting handler should create the furnace state");
+    if (dynamic_cast<SmeltingContainerState*>(furnace.get()) == nullptr) {
+        return fail("smelting handler should create the smelting container state");
     }
 
     std::unique_ptr<IGameState> crafting =

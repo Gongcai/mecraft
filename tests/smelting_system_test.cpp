@@ -3,7 +3,7 @@
 
 #include "Paths.h"
 #include "crafting/SmeltingSystem.h"
-#include "game/inventory/FurnaceInventoryStore.h"
+#include "game/inventory/MachineInventoryStore.h"
 #include "item/Item.h"
 
 namespace {
@@ -45,52 +45,52 @@ int main() {
         return fail("coal should be an 80 second fuel");
     }
 
-    const FurnaceSmeltingProcessor processor{
-        FurnaceInventory::INPUT_SLOT,
-        FurnaceInventory::FUEL_SLOT,
-        FurnaceInventory::OUTPUT_SLOT,
+    const MachineSmeltingProcessor processor{
+        MachineInventory::DEFAULT_SMELTING_INPUT_SLOT,
+        MachineInventory::DEFAULT_SMELTING_FUEL_SLOT,
+        MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT,
     };
 
-    FurnaceInventory furnace;
-    furnace.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{rawIron, 2, 0});
-    furnace.setSlotStack(FurnaceInventory::FUEL_SLOT, ItemStack{coal, 1, 0});
+    MachineInventory furnace(3);
+    furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT, ItemStack{rawIron, 2, 0});
+    furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT, ItemStack{coal, 1, 0});
     furnace.tick(10.0f, smelting, processor);
 
-    const ItemStack firstOutput = furnace.getSlotStack(FurnaceInventory::OUTPUT_SLOT);
+    const ItemStack firstOutput = furnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT);
     if (firstOutput.itemId != ironIngot || firstOutput.count != 1) {
         return fail("ten seconds should smelt one raw iron");
     }
-    if (furnace.getSlotStack(FurnaceInventory::INPUT_SLOT).count != 1) {
+    if (furnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT).count != 1) {
         return fail("smelting should consume one input item");
     }
-    if (!furnace.getSlotStack(FurnaceInventory::FUEL_SLOT).isEmpty()) {
+    if (!furnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT).isEmpty()) {
         return fail("starting a burn should consume one coal item");
     }
 
     furnace.tick(10.0f, smelting, processor);
-    const ItemStack secondOutput = furnace.getSlotStack(FurnaceInventory::OUTPUT_SLOT);
+    const ItemStack secondOutput = furnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT);
     if (secondOutput.itemId != ironIngot || secondOutput.count != 2) {
         return fail("remaining burn time should smelt the second raw iron");
     }
 
-    FurnaceInventory blocked;
-    blocked.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{sand, 1, 0});
-    blocked.setSlotStack(FurnaceInventory::FUEL_SLOT, ItemStack{coal, 1, 0});
-    blocked.setSlotStack(FurnaceInventory::OUTPUT_SLOT, ItemStack{ironIngot, 1, 0});
+    MachineInventory blocked(3);
+    blocked.setSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT, ItemStack{sand, 1, 0});
+    blocked.setSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT, ItemStack{coal, 1, 0});
+    blocked.setSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT, ItemStack{ironIngot, 1, 0});
     blocked.tick(10.0f, smelting, processor);
-    if (blocked.getSlotStack(FurnaceInventory::OUTPUT_SLOT).itemId != ironIngot ||
-        blocked.getSlotStack(FurnaceInventory::OUTPUT_SLOT).count != 1) {
+    if (blocked.getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT).itemId != ironIngot ||
+        blocked.getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT).count != 1) {
         return fail("blocked output should preserve the existing output stack");
     }
-    if (blocked.getSlotStack(FurnaceInventory::FUEL_SLOT).count != 1) {
+    if (blocked.getSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT).count != 1) {
         return fail("blocked output should not consume fuel");
     }
 
-    FurnaceInventory sandFurnace;
-    sandFurnace.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{sand, 1, 0});
-    sandFurnace.setSlotStack(FurnaceInventory::FUEL_SLOT, ItemStack{coal, 1, 0});
+    MachineInventory sandFurnace(3);
+    sandFurnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT, ItemStack{sand, 1, 0});
+    sandFurnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT, ItemStack{coal, 1, 0});
     sandFurnace.tick(10.0f, smelting, processor);
-    const ItemStack glassOutput = sandFurnace.getSlotStack(FurnaceInventory::OUTPUT_SLOT);
+    const ItemStack glassOutput = sandFurnace.getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT);
     if (glassOutput.itemId != glass || glassOutput.count != 1) {
         return fail("sand should smelt into glass");
     }

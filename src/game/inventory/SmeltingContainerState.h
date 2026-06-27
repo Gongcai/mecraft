@@ -12,8 +12,8 @@
 #include "../states/IGameState.h"
 #include "engine/input/InputContextManager.h"
 #include "ContainerBehaviorRegistry.h"
-#include "FurnaceInventoryStore.h"
 #include "InventoryStateContext.h"
+#include "MachineInventoryStore.h"
 #include "SmeltingProcessorRuntime.h"
 #include "../../crafting/SmeltingSystem.h"
 #include "../../ecs/GameplayRegistry.h"
@@ -25,54 +25,54 @@
 #include "../../ui/inventory/ContainerUiRegistry.h"
 #include "../../world/DropSystem.h"
 
-class FurnaceState final : public IGameState {
+class SmeltingContainerState final : public IGameState {
 public:
-    FurnaceState(InventoryStateContext deps,
-                 std::string containerUiId,
-                 std::string behaviorId,
-                 const glm::ivec3 furnacePosition)
+    SmeltingContainerState(InventoryStateContext deps,
+                           std::string containerUiId,
+                           std::string behaviorId,
+                           const glm::ivec3 machinePosition)
         : m_deps(deps),
           m_containerUiId(std::move(containerUiId)),
           m_behaviorId(std::move(behaviorId)),
-          m_furnacePosition(furnacePosition) {}
+          m_machinePosition(machinePosition) {}
 
     void onEnter() override {
         const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(m_containerUiId);
         const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(m_behaviorId);
-        m_runtime = SmeltingProcessorRuntime::create(uiDef, behavior, FurnaceInventory::SLOT_COUNT);
+        m_runtime = SmeltingProcessorRuntime::create(uiDef, behavior, behavior.storage.slots);
 
-        FurnaceInventoryStore& store = ensureStore();
-        m_furnace = &store.getOrCreate(m_furnacePosition);
+        MachineInventoryStore& store = ensureStore();
+        m_machine = &store.getOrCreate(m_machinePosition, behavior.id, behavior.storage.slots);
 
         m_deps.context.pushContext(InputContextType::UI);
         m_deps.input.captureMouse(false);
-        m_deps.uiRenderer.setFurnacePanelDefinition(uiDef);
-        m_deps.uiRenderer.setFurnacePanelSource(m_furnace);
-        m_deps.uiRenderer.setFurnacePanelVisible(true);
-        m_deps.uiRenderer.clearFurnacePanelActivations();
+        m_deps.uiRenderer.setMachinePanelDefinition(uiDef);
+        m_deps.uiRenderer.setMachinePanelSource(m_machine);
+        m_deps.uiRenderer.setMachinePanelVisible(true);
+        m_deps.uiRenderer.clearMachinePanelActivations();
         m_lastSecondaryPlaceSlot = -1;
     }
 
     void onExit() override {
         returnDraggedItemToStorage();
-        m_deps.uiRenderer.setFurnacePanelVisible(false);
-        m_deps.uiRenderer.setFurnacePanelSource(nullptr);
+        m_deps.uiRenderer.setMachinePanelVisible(false);
+        m_deps.uiRenderer.setMachinePanelSource(nullptr);
         m_deps.context.popContext();
         if (m_deps.context.getCurrentContext() == InputContextType::Gameplay) {
             m_deps.input.captureMouse(true);
         }
-        m_furnace = nullptr;
+        m_machine = nullptr;
     }
 
     void update(const float dt, const InputSnapshot& snapshot) override {
-        if (m_furnace == nullptr) {
+        if (m_machine == nullptr) {
             m_deps.fsm.popState();
             return;
         }
 
         SmeltingSystem& smelting = m_deps.ecsRegistry.ctxGet<SmeltingSystem>();
-        m_furnace->tick(dt, smelting, m_runtime.processor());
-        m_deps.uiRenderer.setFurnacePanelProgress(m_furnace->burnFraction(), m_furnace->cookFraction());
+        m_machine->tick(dt, smelting, m_runtime.processor());
+        m_deps.uiRenderer.setMachinePanelProgress(m_machine->burnFraction(), m_machine->cookFraction());
 
         const UIInputRouteResult uiRouteResult =
             UIInputAdapter::routeInput(m_deps.uiRenderer, snapshot, m_deps.context);
@@ -99,7 +99,7 @@ public:
                 } else if (uiRouteResult.secondaryPressed) {
                     returnDraggedItemToStorage();
                 }
-                m_deps.uiRenderer.clearFurnacePanelActivations();
+                m_deps.uiRenderer.clearMachinePanelActivations();
                 return;
             }
         }
@@ -110,15 +110,15 @@ public:
         }
 
         handlePrimaryClick(activatedSlot(), smelting);
-        m_deps.uiRenderer.clearFurnacePanelActivations();
+        m_deps.uiRenderer.clearMachinePanelActivations();
     }
 
 private:
-    static constexpr int kFurnaceSlotBase = 30000;
+    static constexpr int kMachineSlotBase = 30000;
 
     enum class SlotSpace {
         None,
-        Furnace,
+        Machine,
         Player,
     };
 
@@ -131,20 +131,20 @@ private:
         }
     };
 
-    FurnaceInventoryStore& ensureStore() {
-        if (!m_deps.ecsRegistry.ctxHas<FurnaceInventoryStore>()) {
-            m_deps.ecsRegistry.ctxSet<FurnaceInventoryStore>();
+    MachineInventoryStore& ensureStore() {
+        if (!m_deps.ecsRegistry.ctxHas<MachineInventoryStore>()) {
+            m_deps.ecsRegistry.ctxSet<MachineInventoryStore>();
         }
-        return m_deps.ecsRegistry.ctxGet<FurnaceInventoryStore>();
+        return m_deps.ecsRegistry.ctxGet<MachineInventoryStore>();
     }
 
     [[nodiscard]] SlotRef activatedSlot() const {
-        const int furnaceSlot = m_deps.uiRenderer.getFurnacePanelLastActivatedSlot();
-        if (m_furnace != nullptr && m_furnace->isValidSlot(furnaceSlot)) {
-            return {SlotSpace::Furnace, furnaceSlot};
+        const int machineSlot = m_deps.uiRenderer.getMachinePanelLastActivatedSlot();
+        if (m_machine != nullptr && m_machine->isValidSlot(machineSlot)) {
+            return {SlotSpace::Machine, machineSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getFurnacePanelPlayerLastActivatedSlot();
+        const int playerGridSlot = m_deps.uiRenderer.getMachinePanelPlayerLastActivatedSlot();
         const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
@@ -154,12 +154,12 @@ private:
     }
 
     [[nodiscard]] SlotRef hoveredSlot() const {
-        const int furnaceSlot = m_deps.uiRenderer.getFurnacePanelHoveredSlot();
-        if (m_furnace != nullptr && m_furnace->isValidSlot(furnaceSlot)) {
-            return {SlotSpace::Furnace, furnaceSlot};
+        const int machineSlot = m_deps.uiRenderer.getMachinePanelHoveredSlot();
+        if (m_machine != nullptr && m_machine->isValidSlot(machineSlot)) {
+            return {SlotSpace::Machine, machineSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getFurnacePanelPlayerHoveredSlot();
+        const int playerGridSlot = m_deps.uiRenderer.getMachinePanelPlayerHoveredSlot();
         const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
@@ -170,8 +170,8 @@ private:
 
     [[nodiscard]] static int encodeSlot(const SlotRef slot) {
         switch (slot.space) {
-            case SlotSpace::Furnace:
-                return kFurnaceSlotBase + slot.index;
+            case SlotSpace::Machine:
+                return kMachineSlotBase + slot.index;
             case SlotSpace::Player:
                 return slot.index;
             case SlotSpace::None:
@@ -181,9 +181,10 @@ private:
     }
 
     [[nodiscard]] SlotRef decodeSlot(const int encodedSlot) const {
-        if (encodedSlot >= kFurnaceSlotBase &&
-            encodedSlot < kFurnaceSlotBase + FurnaceInventory::SLOT_COUNT) {
-            return {SlotSpace::Furnace, encodedSlot - kFurnaceSlotBase};
+        if (m_machine != nullptr &&
+            encodedSlot >= kMachineSlotBase &&
+            encodedSlot < kMachineSlotBase + m_machine->slotCount()) {
+            return {SlotSpace::Machine, encodedSlot - kMachineSlotBase};
         }
         if (m_deps.inventory.isValidSlot(encodedSlot)) {
             return {SlotSpace::Player, encodedSlot};
@@ -195,8 +196,8 @@ private:
         if (!slot.valid()) {
             return {};
         }
-        if (slot.space == SlotSpace::Furnace) {
-            return m_furnace != nullptr ? m_furnace->getSlotStack(slot.index) : ItemStack{};
+        if (slot.space == SlotSpace::Machine) {
+            return m_machine != nullptr ? m_machine->getSlotStack(slot.index) : ItemStack{};
         }
         return m_deps.inventory.getSlotStack(slot.index);
     }
@@ -205,9 +206,9 @@ private:
         if (!slot.valid()) {
             return;
         }
-        if (slot.space == SlotSpace::Furnace) {
-            if (m_furnace != nullptr) {
-                m_furnace->setSlotStack(slot.index, stack);
+        if (slot.space == SlotSpace::Machine) {
+            if (m_machine != nullptr) {
+                m_machine->setSlotStack(slot.index, stack);
             }
             return;
         }
@@ -362,8 +363,8 @@ private:
     InventoryStateContext m_deps;
     std::string m_containerUiId;
     std::string m_behaviorId;
-    glm::ivec3 m_furnacePosition{};
+    glm::ivec3 m_machinePosition{};
     SmeltingProcessorRuntime m_runtime;
-    FurnaceInventory* m_furnace = nullptr;
+    MachineInventory* m_machine = nullptr;
     int m_lastSecondaryPlaceSlot = -1;
 };

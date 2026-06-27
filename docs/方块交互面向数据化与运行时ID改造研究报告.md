@@ -3,7 +3,7 @@
 > 研究范围：BlockID/ItemID 全运行时生成可行性、方向信息 SoA/AoS 优化、性能影响、初始化顺序、HUD 声明式 UI、方块状态切换、特殊操作、红石耦合点
 > 编写日期：2026-06-26
 
-## 当前实现进度（2026-06-26）
+## 当前实现进度（2026-06-27）
 
 本报告最初以研究和方案评估为主。当前代码已经完成了多轮落地改造，进度如下：
 
@@ -15,12 +15,12 @@
 6. **客户端/服务器交互消费已改为服务端权威**：多人模式下客户端发送 `ClientBlockActionType::Interact` 后消费本地输入，但不直接改世界；服务器校验距离并执行交互，再广播结果，避免同一命中事件被客户端和服务器各消费一次导致随机行为。
 7. **红石部分数据尾巴已清理**：按钮脉冲时长由 `redstonePulseTicks` 数据驱动；活塞不可推动规则由 `pistonPushReaction` 数据驱动；比较器读取容器信号由 `ContainerBehaviorDef.comparatorSignal` 数据驱动；压力板接受实体类型由 `pressurePlateEntityFilter` 数据驱动。
 8. **通用 block-entity storage 已落地**：箱子、木桶等 `handler:"storage"` 容器共用 `BlockEntityInventoryStore`、`BlockEntityInventoryLifecycle` 和通用 storage 面板；服务器保存空容器时也按 `containerUi -> behavior` 数据判断 block entity 类型，已用 `minecraft:barrel` 保存/恢复测试验证。
-9. **熔炉 smelting processor runtime 已抽出并接入运行逻辑**：`SmeltingProcessorRuntime` 从 `ContainerBehaviorRegistry` 读取 smelting processor 和 slotRules，`FurnaceInventory::tick` 使用预解析槽位驱动输入、燃料和输出处理，不在热路径解释 JSON。
+9. **机器类 smelting 容器存储已泛化**：`SmeltingProcessorRuntime` 从 `ContainerBehaviorRegistry` 读取 smelting processor 和 slotRules，`MachineInventory::tick` 使用预解析槽位驱动输入、燃料和输出处理，不在热路径解释 JSON；熔炉已迁移到 `MachineInventoryStore`、`MachineInventoryLifecycle`、`SmeltingContainerState` 和通用 machine 面板 API，服务器保存/恢复、破坏掉落、比较器信号读取均不再依赖 `FurnaceInventoryStore`。
 
 仍建议继续推进的剩余项：
 
 1. 活塞主体、活塞头、移动方块等结构性逻辑仍需要 C++，但可继续抽离可配置的规则字段。
-2. 熔炉仍保留专用 `FurnaceInventoryStore` 和状态保存字段；若后续新增带处理流程的机器类容器，需要把库存存储与保存字段继续泛化。
+2. 当前机器处理器只实现了 `smelting` 类型；若后续新增 brewing、stonecutting、crushing 等机器，需要继续按“配置解析期生成 runtime 结构、tick 热路径直接读结构”的方式扩展 processor runtime。
 3. 红石多色线仍停留在方案层面，尚未实现。
 
 ---
@@ -720,7 +720,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 |------|------|----------|----------|
 | 阶段 1：BlockID/ItemID 运行时化 | **已完成** | `BuiltinIds`、`BlockIds::`、`ItemIds::` 已移除，方块/物品由 JSON 注册 | 保持新增内容只走 JSON 注册 |
 | 阶段 2：特殊操作数据化 | **已完成主要目标** | 锄地、水桶等 use-on-block 规则由 `ItemUseDispatcher` 驱动 | 新增规则时继续扩展数据 schema，而不是在入口写分支 |
-| 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态、通用 block-entity storage、熔炉 smelting processor 槽位数据化已落地；箱子、木桶、熔炉、合成台已迁移 | 泛化机器类 processor runtime |
+| 阶段 3：HUD 声明式 UI | **已完成主要目标** | 容器 UI、容器行为、通用容器状态、通用 block-entity storage、机器类 smelting store/runtime/state 已落地；箱子、木桶、熔炉、合成台已迁移 | 新增 processor 类型时继续走预解析 runtime |
 | 阶段 4：方块状态切换数据化 | **已完成大部分常见交互** | lever/button/repeater/comparator/door/trapdoor/fence_gate 已通过交互配置分发；多人交互为服务端权威 | 继续评估活塞等红石子系统中的结构性规则 |
 | 阶段 5：红石数据尾巴清理 | **进行中** | 按钮脉冲、活塞不可推动、比较器容器信号、压力板实体过滤已数据化 | 多色红石线、活塞结构性规则 |
 
@@ -754,7 +754,7 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
 
 2. **方向信息不适合 SoA 改造**，当前的 StateID 编码 + BitPackedArray + Palette 已是缓存友好的工业级设计，优于朴素 SoA。
 
-3. **HUD 声明式 UI 改造已完成主要目标**，容器 UI、容器行为、通用容器状态和通用 block-entity storage 已经落地；箱子、木桶、熔炉、合成台已迁移到配置绑定。
+3. **HUD 声明式 UI 改造已完成主要目标**，容器 UI、容器行为、通用容器状态、通用 block-entity storage 和机器类 smelting 容器存储已经落地；箱子、木桶、熔炉、合成台已迁移到配置绑定。
 
 4. **性能无显著影响**，方块交互是低频逻辑。但需确保热路径使用缓存 ID 而非每次哈希查询。
 

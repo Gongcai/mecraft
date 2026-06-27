@@ -26,8 +26,8 @@
 #include "../game/inventory/BlockEntityInventoryStore.h"
 #include "../game/inventory/BlockEntityInventoryLifecycle.h"
 #include "../game/inventory/ContainerBehaviorRegistry.h"
-#include "../game/inventory/FurnaceInventoryLifecycle.h"
-#include "../game/inventory/FurnaceInventoryStore.h"
+#include "../game/inventory/MachineInventoryLifecycle.h"
+#include "../game/inventory/MachineInventoryStore.h"
 #include "../item/Item.h"
 #include "../item/ItemUseDispatcher.h"
 #include "../physics/PhysicsSystem.h"
@@ -52,11 +52,6 @@ constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
 constexpr float kPlayerPoseSyncEpsilonSq = 0.000001f;
 constexpr float kPlayerPoseCorrectionAcceptDistanceSq = 0.1225f;
-
-BlockID furnaceBlockId() {
-    static const BlockID blockId = BlockRegistry::requireIdByName("minecraft:furnace");
-    return blockId;
-}
 
 int blockToChunkCoord(const int value) {
     return static_cast<int>(std::floor(static_cast<float>(value) / static_cast<float>(Chunk::SIZE_X)));
@@ -209,10 +204,6 @@ bool persistentBlockEntityTypeForBlock(const BlockID blockId, std::string& outTy
     if (blockId == RUNTIME_ID_NULL) {
         return false;
     }
-    if (blockId == furnaceBlockId()) {
-        outType = "minecraft:furnace";
-        return true;
-    }
 
     const BlockDef& blockDef = BlockRegistry::getFast(blockId);
     if (blockDef.containerUi.empty()) {
@@ -221,11 +212,11 @@ bool persistentBlockEntityTypeForBlock(const BlockID blockId, std::string& outTy
 
     const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(blockDef.containerUi);
     const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
-    if (behavior.handler != "storage") {
+    if (behavior.handler != "storage" && behavior.handler != "smelting") {
         return false;
     }
     if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-        throw std::runtime_error(behavior.id + " storage handler requires block_entity storage");
+        throw std::runtime_error(behavior.id + " persistent block entity requires block_entity storage");
     }
 
     outType = behavior.id;
@@ -1526,21 +1517,23 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         const BlockID brokenBlock = removeServerTargetBlock(m_world, action.targetBlock, removedPositions);
         const bool shouldDrop = client.gameplayMode != net::NetworkGameplayMode::Creative;
         bool brokeStorage = false;
-        bool brokeFurnace = false;
+        bool brokeMachine = false;
         const bool brokeBed = BedBlockLogic::isBedBlock(brokenBlock);
         const bool brokeDoor = DoorBlockLogic::isDoorBlock(brokenBlock);
         if (m_gameplayRegistry != nullptr) {
             brokeStorage = handleBlockEntityInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
-            brokeFurnace = handleFurnaceInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
+            brokeMachine = handleMachineInventoryBreak(*m_gameplayRegistry, brokenBlock, action.targetBlock, shouldDrop);
             if (brokeStorage && shouldDrop) {
                 const ItemID storageItem = BlockDropTable::getDropItem(brokenBlock);
                 if (storageItem != RUNTIME_ID_NULL) {
                     ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, storageItem, action.targetBlock, 1);
                 }
             }
-            if (brokeFurnace && shouldDrop) {
-                const ItemID furnaceItem = BlockDropTable::getDropItem(furnaceBlockId());
-                ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, furnaceItem, action.targetBlock, 1);
+            if (brokeMachine && shouldDrop) {
+                const ItemID machineItem = BlockDropTable::getDropItem(brokenBlock);
+                if (machineItem != RUNTIME_ID_NULL) {
+                    ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, machineItem, action.targetBlock, 1);
+                }
             }
             if (brokeBed && shouldDrop) {
                 const ItemID bedItem = BlockDropTable::getDropItem(brokenBlock);
@@ -1550,17 +1543,17 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                 const ItemID doorItem = BlockDropTable::getDropItem(brokenBlock);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, doorItem, action.targetBlock, 1);
             }
-        } else if (m_ecsRegistry != nullptr &&
-                   m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
-            const auto discardedContents =
-                m_ecsRegistry->ctx().get<BlockEntityInventoryStore>().extractAndErase(action.targetBlock);
-            static_cast<void>(discardedContents);
-        } else if (BlockStateRegistry::getBlockId(target) == furnaceBlockId() &&
-                   m_ecsRegistry != nullptr &&
-                   m_ecsRegistry->ctx().contains<FurnaceInventoryStore>()) {
-            const auto discardedContents =
-                m_ecsRegistry->ctx().get<FurnaceInventoryStore>().extractAndErase(action.targetBlock);
-            static_cast<void>(discardedContents);
+        } else if (m_ecsRegistry != nullptr) {
+            if (m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
+                const auto discardedContents =
+                    m_ecsRegistry->ctx().get<BlockEntityInventoryStore>().extractAndErase(action.targetBlock);
+                static_cast<void>(discardedContents);
+            }
+            if (m_ecsRegistry->ctx().contains<MachineInventoryStore>()) {
+                const auto discardedContents =
+                    m_ecsRegistry->ctx().get<MachineInventoryStore>().extractAndErase(action.targetBlock);
+                static_cast<void>(discardedContents);
+            }
         }
         MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break client=%u block=(%d,%d,%d)\n",
                            client.id,
@@ -2240,19 +2233,21 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
         });
     }
 
-    if (m_ecsRegistry->ctx().contains<FurnaceInventoryStore>()) {
-        const FurnaceInventoryStore& store = m_ecsRegistry->ctx().get<FurnaceInventoryStore>();
-        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position, const FurnaceInventory& furnace) {
-            save::BlockEntityData& data = ensureBlockEntityEntry(position, "minecraft:furnace");
-            data.type = "minecraft:furnace";
+    if (m_ecsRegistry->ctx().contains<MachineInventoryStore>()) {
+        const MachineInventoryStore& store = m_ecsRegistry->ctx().get<MachineInventoryStore>();
+        store.forEach([&ensureBlockEntityEntry](const glm::ivec3& position,
+                                                 const std::string& typeId,
+                                                 const MachineInventory& machine) {
+            save::BlockEntityData& data = ensureBlockEntityEntry(position, typeId);
+            data.type = typeId;
             data.slots.clear();
-            data.burnSecondsRemaining = furnace.burnSecondsRemaining();
-            data.burnSecondsTotal = furnace.burnSecondsTotal();
-            data.cookSeconds = furnace.cookSeconds();
-            data.cookTargetSeconds = furnace.cookTargetSeconds();
+            data.burnSecondsRemaining = machine.burnSecondsRemaining();
+            data.burnSecondsTotal = machine.burnSecondsTotal();
+            data.cookSeconds = machine.cookSeconds();
+            data.cookTargetSeconds = machine.cookTargetSeconds();
 
-            for (int slot = 0; slot < FurnaceInventory::SLOT_COUNT; ++slot) {
-                const ItemStack stack = furnace.getSlotStack(slot);
+            for (int slot = 0; slot < machine.slotCount(); ++slot) {
+                const ItemStack stack = machine.getSlotStack(slot);
                 if (stack.isEmpty()) {
                     continue;
                 }
@@ -2366,17 +2361,28 @@ void GameServer::restoreBlockEntities() {
     }
 
     for (const save::BlockEntityData& data : entities) {
-        if (data.type == "minecraft:furnace") {
-            FurnaceInventoryStore& store = m_ecsRegistry->ctx().contains<FurnaceInventoryStore>()
-                ? m_ecsRegistry->ctx().get<FurnaceInventoryStore>()
-                : m_ecsRegistry->ctx().emplace<FurnaceInventoryStore>();
-            FurnaceInventory& furnace = store.getOrCreate(glm::ivec3(data.x, data.y, data.z));
-            furnace.setProgress(data.burnSecondsRemaining,
+        const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(data.type);
+        if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
+            throw std::runtime_error(behavior.id + " block entity restore requires block_entity storage");
+        }
+
+        if (behavior.handler == "smelting") {
+            MachineInventoryStore& store = m_ecsRegistry->ctx().contains<MachineInventoryStore>()
+                ? m_ecsRegistry->ctx().get<MachineInventoryStore>()
+                : m_ecsRegistry->ctx().emplace<MachineInventoryStore>();
+            MachineInventory& machine = store.getOrCreate(
+                glm::ivec3(data.x, data.y, data.z),
+                behavior.id,
+                behavior.storage.slots);
+            machine.setProgress(data.burnSecondsRemaining,
                                 data.burnSecondsTotal,
                                 data.cookSeconds,
                                 data.cookTargetSeconds);
             for (const save::BlockEntitySlotData& slot : data.slots) {
-                if (!furnace.isValidSlot(slot.slot) || slot.itemId == 0 || slot.count == 0) {
+                if (!machine.isValidSlot(slot.slot) ||
+                    slot.slot >= behavior.storage.slots ||
+                    slot.itemId == 0 ||
+                    slot.count == 0) {
                     continue;
                 }
 
@@ -2384,17 +2390,13 @@ void GameServer::restoreBlockEntities() {
                 stack.itemId = static_cast<ItemID>(slot.itemId);
                 stack.count = static_cast<uint16_t>(std::min<uint32_t>(slot.count, 65535u));
                 stack.durability = static_cast<uint16_t>(std::min<uint32_t>(slot.durability, 65535u));
-                furnace.setSlotStack(slot.slot, stack);
+                machine.setSlotStack(slot.slot, stack);
             }
             continue;
         }
 
-        const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(data.type);
         if (behavior.handler != "storage") {
             continue;
-        }
-        if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-            throw std::runtime_error(behavior.id + " storage handler requires block_entity storage");
         }
 
         BlockEntityInventoryStore& store = m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()

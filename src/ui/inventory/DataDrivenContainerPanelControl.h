@@ -7,7 +7,7 @@
 #include "../core/UIWidget.h"
 #include "../widgets/UITooltip.h"
 #include "../../game/inventory/BlockEntityInventoryStore.h"
-#include "../../game/inventory/FurnaceInventoryStore.h"
+#include "../../game/inventory/MachineInventoryStore.h"
 
 class Inventory;
 class Shader;
@@ -22,7 +22,7 @@ public:
     void setVisible(bool isVisible);
     void setDefinition(const ui::ContainerUiDef& definition);
     void setStorageSource(const BlockEntityInventory* storageInventory);
-    void setFurnaceSource(const FurnaceInventory* furnace);
+    void setMachineSource(const MachineInventory* machine);
     void setPlayerInventorySource(const Inventory* inventory);
     void setProgress(float burnFraction, float cookFraction);
 
@@ -69,7 +69,7 @@ private:
 
     const ui::ContainerUiDef* m_definition = nullptr;
     const BlockEntityInventory* m_storageInventory = nullptr;
-    const FurnaceInventory* m_furnace = nullptr;
+    const MachineInventory* m_machine = nullptr;
     const Inventory* m_playerInventory = nullptr;
     ItemGridControl m_containerGrid;
     ItemGridControl m_playerGrid;

@@ -70,15 +70,15 @@ public:
     [[nodiscard]] int getStoragePanelPlayerHoveredSlot() const;
     void clearStoragePanelActivations();
 
-    void setFurnacePanelVisible(bool visible);
-    void setFurnacePanelDefinition(const ui::ContainerUiDef& definition);
-    void setFurnacePanelSource(const FurnaceInventory* furnace);
-    void setFurnacePanelProgress(float burnFraction, float cookFraction);
-    [[nodiscard]] int getFurnacePanelLastActivatedSlot() const;
-    [[nodiscard]] int getFurnacePanelPlayerLastActivatedSlot() const;
-    [[nodiscard]] int getFurnacePanelHoveredSlot() const;
-    [[nodiscard]] int getFurnacePanelPlayerHoveredSlot() const;
-    void clearFurnacePanelActivations();
+    void setMachinePanelVisible(bool visible);
+    void setMachinePanelDefinition(const ui::ContainerUiDef& definition);
+    void setMachinePanelSource(const MachineInventory* machine);
+    void setMachinePanelProgress(float burnFraction, float cookFraction);
+    [[nodiscard]] int getMachinePanelLastActivatedSlot() const;
+    [[nodiscard]] int getMachinePanelPlayerLastActivatedSlot() const;
+    [[nodiscard]] int getMachinePanelHoveredSlot() const;
+    [[nodiscard]] int getMachinePanelPlayerHoveredSlot() const;
+    void clearMachinePanelActivations();
 
     void setCreativeInventoryVisible(bool visible);
     void setCreativeInventoryTab(CreativeInventoryTab tab);
@@ -174,7 +174,7 @@ private:
     UIText m_deathPrompt;
     InventoryPanelControl m_inventoryPanel;
     DataDrivenContainerPanelControl m_storagePanel;
-    DataDrivenContainerPanelControl m_furnacePanel;
+    DataDrivenContainerPanelControl m_machinePanel;
     CreativeInventoryPanelControl m_creativeInventoryPanel;
     TextRenderer m_text;
     CommandInputOverlay m_commandInput;

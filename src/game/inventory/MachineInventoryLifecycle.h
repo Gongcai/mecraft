@@ -8,9 +8,9 @@ namespace ecs {
 class GameplayRegistry;
 }
 
-/// Removes furnace inventory data when a furnace block is destroyed.
-/// Returns true when the destroyed block is a furnace, even when it has no stored inventory.
-[[nodiscard]] bool handleFurnaceInventoryBreak(ecs::GameplayRegistry& registry,
+/// Removes machine inventory data when a processor-backed block entity is destroyed.
+/// Returns true when the destroyed block owns a machine inventory.
+[[nodiscard]] bool handleMachineInventoryBreak(ecs::GameplayRegistry& registry,
                                                BlockID brokenBlock,
                                                const glm::ivec3& blockPos,
                                                bool dropContents);

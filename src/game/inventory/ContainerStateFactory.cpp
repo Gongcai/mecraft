@@ -5,7 +5,7 @@
 
 #include "ContainerBehaviorRegistry.h"
 #include "DataDrivenContainerState.h"
-#include "FurnaceState.h"
+#include "SmeltingContainerState.h"
 #include "WorkbenchState.h"
 #include "../../ui/inventory/ContainerUiRegistry.h"
 
@@ -27,7 +27,7 @@ std::unique_ptr<IGameState> createSmeltingState(InventoryStateContext deps,
                                                 const ui::ContainerUiDef& def,
                                                 const ContainerBehaviorDef& behavior,
                                                 const glm::ivec3& blockPosition) {
-    return std::make_unique<FurnaceState>(deps, def.id, behavior.id, blockPosition);
+    return std::make_unique<SmeltingContainerState>(deps, def.id, behavior.id, blockPosition);
 }
 
 std::unique_ptr<IGameState> createCraftingState(InventoryStateContext deps,

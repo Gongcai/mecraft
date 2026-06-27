@@ -71,7 +71,7 @@ void DataDrivenContainerPanelControl::shutdown() {
     m_containerGrid.shutdown();
     m_containerSlotMapping.clear();
     m_storageInventory = nullptr;
-    m_furnace = nullptr;
+    m_machine = nullptr;
     m_playerInventory = nullptr;
     m_definition = nullptr;
     m_inventoryShader = nullptr;
@@ -123,14 +123,14 @@ void DataDrivenContainerPanelControl::setDefinition(const ui::ContainerUiDef& de
 void DataDrivenContainerPanelControl::setStorageSource(const BlockEntityInventory* storageInventory) {
     m_storageInventory = storageInventory;
     if (storageInventory != nullptr) {
-        m_furnace = nullptr;
+        m_machine = nullptr;
     }
     syncSlots();
 }
 
-void DataDrivenContainerPanelControl::setFurnaceSource(const FurnaceInventory* furnace) {
-    m_furnace = furnace;
-    if (furnace != nullptr) {
+void DataDrivenContainerPanelControl::setMachineSource(const MachineInventory* machine) {
+    m_machine = machine;
+    if (machine != nullptr) {
         m_storageInventory = nullptr;
     }
     syncSlots();
@@ -262,8 +262,8 @@ void DataDrivenContainerPanelControl::appendSlotsForGroup(const ui::ContainerSlo
             if (containerGroup) {
                 if (m_storageInventory != nullptr && m_storageInventory->isValidSlot(slot)) {
                     stack = m_storageInventory->getSlotStack(slot);
-                } else if (m_furnace != nullptr && m_furnace->isValidSlot(slot)) {
-                    stack = m_furnace->getSlotStack(slot);
+                } else if (m_machine != nullptr && m_machine->isValidSlot(slot)) {
+                    stack = m_machine->getSlotStack(slot);
                 }
             } else if (m_playerInventory != nullptr && m_playerInventory->isValidSlot(slot)) {
                 stack = m_playerInventory->getSlotStack(slot);

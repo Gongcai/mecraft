@@ -115,7 +115,7 @@ set(SRC_GAME
         src/game/inventory/ContainerBehaviorRegistry.cpp
         src/game/inventory/ContainerStateFactory.cpp
         src/game/inventory/BlockEntityInventoryLifecycle.cpp
-        src/game/inventory/FurnaceInventoryLifecycle.cpp
+        src/game/inventory/MachineInventoryLifecycle.cpp
         src/game/session/GameSession.cpp
         src/game/orchestrator/GameFrameOrchestrator.cpp
         src/game/debug/DebugFrameProfiler.cpp

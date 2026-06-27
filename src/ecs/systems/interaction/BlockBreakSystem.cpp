@@ -12,7 +12,7 @@
 #include "../../components/Components.h"
 #include "../../../game/modes/GameplayModeRules.h"
 #include "../../../game/inventory/BlockEntityInventoryLifecycle.h"
-#include "../../../game/inventory/FurnaceInventoryLifecycle.h"
+#include "../../../game/inventory/MachineInventoryLifecycle.h"
 #include "../../../client/GameClient.h"
 #include "../../../item/Item.h"
 #include "../../../world/IWorldView.h"
@@ -182,9 +182,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             std::vector<glm::ivec3> removedPositions;
             const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
             const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, false);
-            const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, false);
+            const bool handledMachine = handleMachineInventoryBreak(registry, brokenBlock, hitBlock, false);
             static_cast<void>(handledStorage);
-            static_cast<void>(handledFurnace);
+            static_cast<void>(handledMachine);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             for (const glm::ivec3& removedPos : removedPositions) {
                 particleBus.push({removedPos, brokenBlock});
@@ -230,9 +230,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             std::vector<glm::ivec3> removedPositions;
             const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
             const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, true);
-            const bool handledFurnace = handleFurnaceInventoryBreak(registry, brokenBlock, hitBlock, true);
+            const bool handledMachine = handleMachineInventoryBreak(registry, brokenBlock, hitBlock, true);
             static_cast<void>(handledStorage);
-            static_cast<void>(handledFurnace);
+            static_cast<void>(handledMachine);
             audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
             for (const glm::ivec3& removedPos : removedPositions) {
                 particleBus.push({removedPos, brokenBlock});

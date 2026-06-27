@@ -9,7 +9,7 @@
 #include "ecs/entity/MobModelFactory.h"
 #include "ecs/systems/world/BlockSupportSystem.h"
 #include "game/inventory/BlockEntityInventoryStore.h"
-#include "game/inventory/FurnaceInventoryStore.h"
+#include "game/inventory/MachineInventoryStore.h"
 #include "net/InProcessTransport.h"
 #include "net/ENetTransport.h"
 #include "net/PacketCodec.h"
@@ -2774,24 +2774,24 @@ static void testPersistentFurnaceInventoryRestoresFromSave() {
         ecs::GameplayRegistry registry;
         server.setEcsRegistry(&registry);
 
-        FurnaceInventoryStore& store = registry.ctxSet<FurnaceInventoryStore>();
-        FurnaceInventory& furnace = store.getOrCreate(furnacePos);
+        MachineInventoryStore& store = registry.ctxSet<MachineInventoryStore>();
+        MachineInventory& furnace = store.getOrCreate(furnacePos, "minecraft:furnace", 3);
 
         ItemStack input;
         input.itemId = ItemRegistry::requireIdByName("minecraft:apple");
         input.count = 3;
-        furnace.setSlotStack(FurnaceInventory::INPUT_SLOT, input);
+        furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT, input);
 
         ItemStack fuel;
         fuel.itemId = ItemRegistry::requireIdByName("minecraft:coal");
         fuel.count = 2;
-        furnace.setSlotStack(FurnaceInventory::FUEL_SLOT, fuel);
+        furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT, fuel);
 
         ItemStack output;
         output.itemId = ItemRegistry::requireIdByName("minecraft:iron_pickaxe");
         output.count = 1;
         output.durability = 17;
-        furnace.setSlotStack(FurnaceInventory::OUTPUT_SLOT, output);
+        furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT, output);
         furnace.setProgress(4.0f, 8.0f, 2.5f, 10.0f);
 
         server.saveBlockEntities();
@@ -2806,21 +2806,21 @@ static void testPersistentFurnaceInventoryRestoresFromSave() {
         ecs::GameplayRegistry registry;
         server.setEcsRegistry(&registry);
 
-        require(registry.ctxHas<FurnaceInventoryStore>(),
-                "persistent furnace restore should create a furnace inventory store");
-        const FurnaceInventoryStore& store = registry.ctxGet<FurnaceInventoryStore>();
-        const FurnaceInventory* furnace = store.find(furnacePos);
+        require(registry.ctxHas<MachineInventoryStore>(),
+                "persistent furnace restore should create a machine inventory store");
+        const MachineInventoryStore& store = registry.ctxGet<MachineInventoryStore>();
+        const MachineInventory* furnace = store.find(furnacePos);
         require(furnace != nullptr, "persistent furnace restore should recreate the furnace inventory");
 
-        const ItemStack input = furnace->getSlotStack(FurnaceInventory::INPUT_SLOT);
+        const ItemStack input = furnace->getSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT);
         require(input.itemId == ItemRegistry::requireIdByName("minecraft:apple") && input.count == 3,
                 "persistent furnace restore should keep the input slot");
 
-        const ItemStack fuel = furnace->getSlotStack(FurnaceInventory::FUEL_SLOT);
+        const ItemStack fuel = furnace->getSlotStack(MachineInventory::DEFAULT_SMELTING_FUEL_SLOT);
         require(fuel.itemId == ItemRegistry::requireIdByName("minecraft:coal") && fuel.count == 2,
                 "persistent furnace restore should keep the fuel slot");
 
-        const ItemStack output = furnace->getSlotStack(FurnaceInventory::OUTPUT_SLOT);
+        const ItemStack output = furnace->getSlotStack(MachineInventory::DEFAULT_SMELTING_OUTPUT_SLOT);
         require(output.itemId == ItemRegistry::requireIdByName("minecraft:iron_pickaxe") && output.count == 1 && output.durability == 17,
                 "persistent furnace restore should keep the output slot");
 

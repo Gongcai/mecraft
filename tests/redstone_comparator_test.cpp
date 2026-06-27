@@ -10,7 +10,7 @@
 #include "../src/ecs/GameplayRegistry.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
 #include "../src/game/inventory/BlockEntityInventoryStore.h"
-#include "../src/game/inventory/FurnaceInventoryStore.h"
+#include "../src/game/inventory/MachineInventoryStore.h"
 #include "../src/item/Item.h"
 #include "../src/world/World.h"
 #include "../src/world/block/Block.h"
@@ -229,11 +229,11 @@ int main() {
         const glm::ivec3 furnacePosition(1, y, 0);
         prepareComparatorArea(world, y);
         ecs::GameplayRegistry registry;
-        FurnaceInventoryStore& store = registry.ctxSet<FurnaceInventoryStore>();
-        FurnaceInventory& furnace = store.getOrCreate(furnacePosition);
+        MachineInventoryStore& store = registry.ctxSet<MachineInventoryStore>();
+        MachineInventory& furnace = store.getOrCreate(furnacePosition, "minecraft:furnace", 3);
         const ItemID coalId = ItemRegistry::requireIdByName("minecraft:coal");
         const uint16_t coalMaxStack = ItemRegistry::get(coalId).maxStack;
-        furnace.setSlotStack(FurnaceInventory::INPUT_SLOT, ItemStack{coalId, coalMaxStack, 0});
+        furnace.setSlotStack(MachineInventory::DEFAULT_SMELTING_INPUT_SLOT, ItemStack{coalId, coalMaxStack, 0});
 
         world.setBlockState(
             furnacePosition.x,

@@ -6,28 +6,39 @@
 #include <cstdint>
 #include <functional>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
 
 #include <glm/vec3.hpp>
 
 #include "../../crafting/SmeltingSystem.h"
 #include "../../item/Item.h"
+#include "BlockEntityInventoryStore.h"
 
-struct FurnaceSmeltingProcessor {
+struct MachineSmeltingProcessor {
     int inputSlot = 0;
     int fuelSlot = 1;
     int outputSlot = 2;
 };
 
-class FurnaceInventory {
+class MachineInventory {
 public:
-    static constexpr int INPUT_SLOT = 0;
-    static constexpr int FUEL_SLOT = 1;
-    static constexpr int OUTPUT_SLOT = 2;
-    static constexpr int SLOT_COUNT = 3;
+    static constexpr int DEFAULT_SMELTING_INPUT_SLOT = 0;
+    static constexpr int DEFAULT_SMELTING_FUEL_SLOT = 1;
+    static constexpr int DEFAULT_SMELTING_OUTPUT_SLOT = 2;
+    static constexpr int MAX_SLOT_COUNT = BlockEntityInventory::SLOT_COUNT;
+
+    explicit MachineInventory(const int slotCount = 0)
+        : m_slotCount(slotCount) {
+        validateSlotCount(slotCount);
+    }
+
+    [[nodiscard]] int slotCount() const {
+        return m_slotCount;
+    }
 
     [[nodiscard]] bool isValidSlot(const int slot) const {
-        return slot >= 0 && slot < SLOT_COUNT;
+        return slot >= 0 && slot < m_slotCount;
     }
 
     [[nodiscard]] ItemStack getSlotStack(const int slot) const {
@@ -44,7 +55,7 @@ public:
         m_slots[static_cast<std::size_t>(slot)] = stack.isEmpty() ? ItemStack{} : stack;
     }
 
-    void tick(float dt, const SmeltingSystem& smeltingSystem, const FurnaceSmeltingProcessor& processor) {
+    void tick(float dt, const SmeltingSystem& smeltingSystem, const MachineSmeltingProcessor& processor) {
         if (dt <= 0.0f) {
             return;
         }
@@ -123,24 +134,40 @@ public:
     }
 
 private:
-    static void validateProcessor(const FurnaceSmeltingProcessor& processor) {
+    friend class MachineInventoryStore;
+
+    static void validateSlotCount(const int slotCount) {
+        if (slotCount < 0 || slotCount > MAX_SLOT_COUNT) {
+            throw std::runtime_error("Machine inventory slot count is outside the supported range");
+        }
+    }
+
+    void configureSlotCount(const int slotCount) {
+        validateSlotCount(slotCount);
+        if (m_slotCount != 0 && m_slotCount != slotCount) {
+            throw std::runtime_error("Machine inventory slot count cannot change after creation");
+        }
+        m_slotCount = slotCount;
+    }
+
+    void validateProcessor(const MachineSmeltingProcessor& processor) const {
         if (processor.inputSlot < 0 ||
-            processor.inputSlot >= SLOT_COUNT ||
+            processor.inputSlot >= m_slotCount ||
             processor.fuelSlot < 0 ||
-            processor.fuelSlot >= SLOT_COUNT ||
+            processor.fuelSlot >= m_slotCount ||
             processor.outputSlot < 0 ||
-            processor.outputSlot >= SLOT_COUNT) {
-            throw std::runtime_error("Furnace smelting processor references a slot outside furnace storage");
+            processor.outputSlot >= m_slotCount) {
+            throw std::runtime_error("Machine smelting processor references a slot outside machine storage");
         }
         if (processor.inputSlot == processor.fuelSlot ||
             processor.inputSlot == processor.outputSlot ||
             processor.fuelSlot == processor.outputSlot) {
-            throw std::runtime_error("Furnace smelting processor requires distinct input, fuel, and output slots");
+            throw std::runtime_error("Machine smelting processor requires distinct input, fuel, and output slots");
         }
     }
 
     [[nodiscard]] const SmeltingRecipe* currentRecipe(const SmeltingSystem& smeltingSystem,
-                                                      const FurnaceSmeltingProcessor& processor) const {
+                                                      const MachineSmeltingProcessor& processor) const {
         const ItemStack input = m_slots[static_cast<std::size_t>(processor.inputSlot)];
         if (input.isEmpty()) {
             return nullptr;
@@ -149,7 +176,7 @@ private:
     }
 
     [[nodiscard]] bool canReceiveResult(const SmeltingRecipe& recipe,
-                                        const FurnaceSmeltingProcessor& processor) const {
+                                        const MachineSmeltingProcessor& processor) const {
         const ItemDef& resultDef = ItemRegistry::get(recipe.result);
         if (resultDef.maxStack == 0) {
             return false;
@@ -166,7 +193,7 @@ private:
     }
 
     [[nodiscard]] bool consumeFuel(const SmeltingSystem& smeltingSystem,
-                                   const FurnaceSmeltingProcessor& processor) {
+                                   const MachineSmeltingProcessor& processor) {
         ItemStack& fuel = m_slots[static_cast<std::size_t>(processor.fuelSlot)];
         if (fuel.isEmpty()) {
             return false;
@@ -186,7 +213,7 @@ private:
         return true;
     }
 
-    void completeRecipe(const SmeltingRecipe& recipe, const FurnaceSmeltingProcessor& processor) {
+    void completeRecipe(const SmeltingRecipe& recipe, const MachineSmeltingProcessor& processor) {
         ItemStack& input = m_slots[static_cast<std::size_t>(processor.inputSlot)];
         --input.count;
         if (input.count == 0) {
@@ -203,54 +230,69 @@ private:
         output.count = static_cast<uint16_t>(output.count + recipe.resultCount);
     }
 
-    std::array<ItemStack, SLOT_COUNT> m_slots{};
+    int m_slotCount = 0;
+    std::array<ItemStack, MAX_SLOT_COUNT> m_slots{};
     float m_burnSecondsRemaining = 0.0f;
     float m_burnSecondsTotal = 0.0f;
     float m_cookSeconds = 0.0f;
     float m_cookTargetSeconds = 0.0f;
 };
 
-class FurnaceInventoryStore {
+class MachineInventoryStore {
 public:
-    [[nodiscard]] FurnaceInventory& getOrCreate(const glm::ivec3& position) {
-        return m_furnaces[positionKey(position)];
+    [[nodiscard]] MachineInventory& getOrCreate(const glm::ivec3& position,
+                                                const std::string& typeId,
+                                                const int slotCount) {
+        validateTypeAndSlotCount(typeId, slotCount);
+        Entry& entry = m_entries[positionKey(position)];
+        if (entry.typeId.empty()) {
+            entry.typeId = typeId;
+            entry.slotCount = slotCount;
+            entry.inventory.configureSlotCount(slotCount);
+            return entry.inventory;
+        }
+        if (entry.typeId != typeId || entry.slotCount != slotCount) {
+            throw std::runtime_error("Machine inventory metadata mismatch at position");
+        }
+        return entry.inventory;
     }
 
-    [[nodiscard]] const FurnaceInventory* find(const glm::ivec3& position) const {
-        const auto it = m_furnaces.find(positionKey(position));
-        if (it == m_furnaces.end()) {
+    [[nodiscard]] const MachineInventory* find(const glm::ivec3& position) const {
+        const auto it = m_entries.find(positionKey(position));
+        if (it == m_entries.end()) {
             return nullptr;
         }
-        return &it->second;
+        return &it->second.inventory;
     }
 
     [[nodiscard]] bool empty() const {
-        return m_furnaces.empty();
+        return m_entries.empty();
     }
 
     template <typename Fn>
     void forEach(Fn&& fn) const {
-        for (const auto& [key, furnace] : m_furnaces) {
-            fn(glm::ivec3(key.x, key.y, key.z), furnace);
+        for (const auto& [key, entry] : m_entries) {
+            fn(glm::ivec3(key.x, key.y, key.z), entry.typeId, entry.inventory);
         }
     }
 
-    [[nodiscard]] std::array<ItemStack, FurnaceInventory::SLOT_COUNT> extractAndErase(const glm::ivec3& position) {
-        std::array<ItemStack, FurnaceInventory::SLOT_COUNT> contents{};
-        const auto it = m_furnaces.find(positionKey(position));
-        if (it == m_furnaces.end()) {
+    [[nodiscard]] std::array<ItemStack, MachineInventory::MAX_SLOT_COUNT> extractAndErase(
+        const glm::ivec3& position) {
+        std::array<ItemStack, MachineInventory::MAX_SLOT_COUNT> contents{};
+        const auto it = m_entries.find(positionKey(position));
+        if (it == m_entries.end()) {
             return contents;
         }
 
-        for (int slot = 0; slot < FurnaceInventory::SLOT_COUNT; ++slot) {
-            contents[static_cast<std::size_t>(slot)] = it->second.getSlotStack(slot);
+        for (int slot = 0; slot < it->second.slotCount; ++slot) {
+            contents[static_cast<std::size_t>(slot)] = it->second.inventory.getSlotStack(slot);
         }
-        m_furnaces.erase(it);
+        m_entries.erase(it);
         return contents;
     }
 
     void erase(const glm::ivec3& position) {
-        m_furnaces.erase(positionKey(position));
+        m_entries.erase(positionKey(position));
     }
 
 private:
@@ -273,9 +315,24 @@ private:
         }
     };
 
+    struct Entry {
+        std::string typeId;
+        int slotCount = 0;
+        MachineInventory inventory;
+    };
+
+    static void validateTypeAndSlotCount(const std::string& typeId, const int slotCount) {
+        if (typeId.empty()) {
+            throw std::runtime_error("Machine inventory requires a type id");
+        }
+        if (slotCount <= 0 || slotCount > MachineInventory::MAX_SLOT_COUNT) {
+            throw std::runtime_error("Machine inventory slot count is outside the supported range");
+        }
+    }
+
     [[nodiscard]] static Key positionKey(const glm::ivec3& position) {
         return {position.x, position.y, position.z};
     }
 
-    std::unordered_map<Key, FurnaceInventory, KeyHash> m_furnaces;
+    std::unordered_map<Key, Entry, KeyHash> m_entries;
 };

@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "ContainerBehaviorRegistry.h"
-#include "FurnaceInventoryStore.h"
+#include "MachineInventoryStore.h"
 #include "../../crafting/SmeltingSystem.h"
 #include "../../item/Item.h"
 #include "../../ui/inventory/ContainerUiRegistry.h"
@@ -56,7 +56,7 @@ public:
         return runtime;
     }
 
-    [[nodiscard]] const FurnaceSmeltingProcessor& processor() const {
+    [[nodiscard]] const MachineSmeltingProcessor& processor() const {
         return m_processor;
     }
 
@@ -131,7 +131,7 @@ private:
         }
     }
 
-    FurnaceSmeltingProcessor m_processor;
+    MachineSmeltingProcessor m_processor;
     int m_storageSlotCount = 0;
     std::vector<ContainerSlotRuleDef> m_slotRules;
 };

@@ -99,7 +99,7 @@ void GameplayState::onEnter()
     m_ctx.input.captureMouse(true);
     m_ctx.uiRenderer.setInventoryPanelVisible(false);
     m_ctx.uiRenderer.setStoragePanelVisible(false);
-    m_ctx.uiRenderer.setFurnacePanelVisible(false);
+    m_ctx.uiRenderer.setMachinePanelVisible(false);
     m_ctx.uiRenderer.setCreativeInventoryVisible(false);
     m_ctx.input.clearUIDragItem();
 
