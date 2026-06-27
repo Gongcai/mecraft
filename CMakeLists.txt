@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
+
+if(WIN32)
+    # Keep MSVC diagnostics stable so Ninja can filter /showIncludes output.
+    set(ENV{VSLANG} "1033")
+endif()
+
 project(mecraft VERSION 0.1.0 LANGUAGES C CXX)
 
 # ===========================================================================
@@ -29,6 +35,18 @@ if(MECRAFT_ENABLE_IPO)
 else()
     set(MECRAFT_IPO_SUPPORTED FALSE)
 endif()
+
+if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
+    set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_COMMAND} -E env VSLANG=1033")
+endif()
+
+function(mecraft_apply_ipo TARGET_NAME)
+    if(MECRAFT_IPO_SUPPORTED)
+        set_property(TARGET ${TARGET_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+        set_property(TARGET ${TARGET_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+        set_property(TARGET ${TARGET_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
+    endif()
+endfunction()
 
 function(mecraft_apply_msvc_defaults TARGET_NAME)
     if(MSVC)
@@ -434,6 +452,7 @@ if(MECRAFT_ENABLE_PCH)
     )
     mecraft_apply_project_warnings(mecraft_pch)
     mecraft_apply_msvc_defaults(mecraft_pch)
+    mecraft_apply_ipo(mecraft_pch)
     target_precompile_headers(mecraft_pch PRIVATE
             <algorithm>
             <array>
@@ -526,11 +545,7 @@ if(MECRAFT_ENABLE_PCH)
     target_precompile_headers(mecraft_core REUSE_FROM mecraft_pch)
 endif()
 
-if(MECRAFT_IPO_SUPPORTED)
-    set_property(TARGET mecraft_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-    set_property(TARGET mecraft_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
-    set_property(TARGET mecraft_core PROPERTY INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
-endif()
+mecraft_apply_ipo(mecraft_core)
 
 # ===========================================================================
 # 6. 主程序入口
@@ -542,11 +557,7 @@ mecraft_copy_runtime_assets(mecraft)
 if (MSVC)
     mecraft_apply_msvc_defaults(mecraft)
 endif()
-if(MECRAFT_IPO_SUPPORTED)
-    set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
-    set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
-    set_property(TARGET mecraft PROPERTY INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
-endif()
+mecraft_apply_ipo(mecraft)
 
 # ===========================================================================
 # 6b. Dedicated Server
@@ -562,6 +573,7 @@ endif()
 if(MECRAFT_ENABLE_PCH)
     target_precompile_headers(mecraft_server REUSE_FROM mecraft_pch)
 endif()
+mecraft_apply_ipo(mecraft_server)
 
 # ===========================================================================
 # 7. 测试用例
@@ -579,6 +591,7 @@ if(MECRAFT_BUILD_TESTS)
         if(MECRAFT_ENABLE_PCH)
             target_precompile_headers(${TEST_NAME} REUSE_FROM mecraft_pch)
         endif()
+        mecraft_apply_ipo(${TEST_NAME})
         add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
         set_tests_properties(${TEST_NAME} PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
     endfunction()
@@ -593,6 +606,7 @@ if(MECRAFT_BUILD_TESTS)
     if(MECRAFT_ENABLE_PCH)
         target_precompile_headers(physics_mvp_test REUSE_FROM mecraft_pch)
     endif()
+    mecraft_apply_ipo(physics_mvp_test)
     mecraft_copy_runtime_assets(physics_mvp_test)
     add_test(NAME physics_mvp_test COMMAND physics_mvp_test)
 

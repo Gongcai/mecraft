@@ -317,6 +317,61 @@ int main() {
         }
     }
 
+    {
+        const int coloredRepeaterY = 48;
+        prepareFlatTestLine(world, coloredRepeaterY);
+        world.setBlockState(0, coloredRepeaterY, 0, leverState(true));
+        world.setBlockState(1, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(2, coloredRepeaterY, 0, repeaterState(PropIndices::DELAY_1, false));
+        world.setBlockState(3, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(4, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(5, coloredRepeaterY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+        world.setBlock(3, coloredRepeaterY - 1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlockState(3, coloredRepeaterY, 1, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+
+        ecs::RedstoneSystem::processWorld(world, 60);
+        ecs::RedstoneSystem::processWorld(world, 61);
+        if (!powered(world, 2, coloredRepeaterY, 0) ||
+            wirePower(world, 3, coloredRepeaterY, 0) != 15 ||
+            wirePower(world, 4, coloredRepeaterY, 0) != 14 ||
+            wirePower(world, 3, coloredRepeaterY, 1) != 0 ||
+            !lampLit(world, 5, coloredRepeaterY, 0)) {
+            return fail("repeater output should enter the target wire channel without powering adjacent channels");
+        }
+    }
+
+    {
+        const int coloredComparatorY = 40;
+        prepareFlatTestLine(world, coloredComparatorY);
+        world.setBlockState(0, coloredComparatorY, 0, leverState(true));
+        world.setBlockState(1, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+        world.setBlockState(2, coloredComparatorY, 0, comparatorState(PropIndices::FACING_EAST, false));
+        world.setBlockState(3, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(4, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")));
+        world.setBlockState(5, coloredComparatorY, 0, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_lamp")));
+        world.setBlock(3, coloredComparatorY - 1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlockState(3, coloredComparatorY, 1, BlockStateRegistry::getDefaultState(
+            BlockRegistry::requireIdByName("minecraft:redstone_wire")));
+
+        ecs::RedstoneSystem::processWorld(world, 70);
+        if (!powered(world, 2, coloredComparatorY, 0) ||
+            wirePower(world, 3, coloredComparatorY, 0) != 15 ||
+            wirePower(world, 4, coloredComparatorY, 0) != 14 ||
+            wirePower(world, 3, coloredComparatorY, 1) != 0 ||
+            !lampLit(world, 5, coloredComparatorY, 0)) {
+            return fail("comparator output should enter the target wire channel without powering adjacent channels");
+        }
+    }
+
     std::cout << "[redstone_repeater_test] PASS\n";
     return EXIT_SUCCESS;
 }
