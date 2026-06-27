@@ -113,6 +113,44 @@ void GameClient::sendBlockAction(const net::ClientBlockAction& action) {
     m_transport->send(std::move(packet));
 }
 
+void GameClient::sendContainerOpenRequest(const glm::ivec3& blockPosition, const glm::vec3& playerPosition) {
+    if (!m_transport) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::ClientContainerOpenRequest;
+    net::ClientContainerOpenRequest request;
+    request.sequence = ++m_containerSequence;
+    request.blockPosition = blockPosition;
+    request.playerPosition = playerPosition;
+    packet.inProcessPayload = request;
+    m_transport->send(std::move(packet));
+}
+
+void GameClient::sendContainerSlotAction(const net::ClientContainerSlotAction& action) {
+    if (!m_transport) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::ClientContainerSlotAction;
+    net::ClientContainerSlotAction outgoing = action;
+    outgoing.sequence = ++m_containerSequence;
+    packet.inProcessPayload = outgoing;
+    m_transport->send(std::move(packet));
+}
+
+void GameClient::sendContainerClose(const uint32_t containerId) {
+    if (!m_transport || containerId == 0) return;
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::ClientContainerClose;
+    net::ClientContainerClose close;
+    close.containerId = containerId;
+    packet.inProcessPayload = close;
+    m_transport->send(std::move(packet));
+}
+
 void GameClient::sendChatMessage(const std::string& message) {
     if (!m_transport || message.empty()) return;
 
@@ -239,6 +277,20 @@ void GameClient::receiveMessages() {
             if (packet.inProcessPayload.has_value()) {
                 const auto& msg = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
                 handleInventorySnapshot(msg);
+            }
+            break;
+        }
+        case net::MessageType::ContainerSnapshot: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::ContainerSnapshotMessage&>(packet.inProcessPayload);
+                handleContainerSnapshot(msg);
+            }
+            break;
+        }
+        case net::MessageType::ContainerClose: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::ContainerCloseMessage&>(packet.inProcessPayload);
+                handleContainerClose(msg);
             }
             break;
         }
@@ -379,6 +431,41 @@ void GameClient::handleInventorySnapshot(const net::InventorySnapshotMessage& sn
         }
         break;
     }
+}
+
+void GameClient::handleContainerSnapshot(const net::ContainerSnapshotMessage& snapshot) {
+    if (snapshot.containerId == 0) {
+        return;
+    }
+    m_closedContainerIds.erase(snapshot.containerId);
+    m_containerSnapshots[snapshot.containerId] = snapshot;
+}
+
+void GameClient::handleContainerClose(const net::ContainerCloseMessage& close) {
+    if (close.containerId == 0) {
+        return;
+    }
+    m_containerSnapshots.erase(close.containerId);
+    m_closedContainerIds.insert(close.containerId);
+}
+
+const net::ContainerSnapshotMessage* GameClient::findContainerSnapshot(const uint32_t containerId) const {
+    const auto it = m_containerSnapshots.find(containerId);
+    return it == m_containerSnapshots.end() ? nullptr : &it->second;
+}
+
+const net::ContainerSnapshotMessage* GameClient::findContainerSnapshotAt(const glm::ivec3& blockPosition) const {
+    for (const auto& [containerId, snapshot] : m_containerSnapshots) {
+        static_cast<void>(containerId);
+        if (snapshot.blockPosition == blockPosition) {
+            return &snapshot;
+        }
+    }
+    return nullptr;
+}
+
+bool GameClient::consumeContainerClose(const uint32_t containerId) {
+    return m_closedContainerIds.erase(containerId) > 0;
 }
 
 void GameClient::handleWorldStateSnapshot(const net::WorldStateSnapshotMessage& snapshot) {

@@ -7,6 +7,7 @@
 
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
+#include "../../world/block/BlockStateRegistry.h"
 
 namespace ecs {
 
@@ -37,6 +38,19 @@ struct FallingBlockComponent {
     glm::ivec3 gridPosition{};       ///< Current logical (integer) grid cell
     glm::ivec3 prevGridPosition{};   ///< Grid cell at the start of the current tick (for interpolation)
     float tickAccumulator = 0.0f;    ///< Seconds accumulated since the last tick (render alpha source)
+};
+
+/// A piston-driven block that is currently moving between adjacent cells.
+/// The world cells are reserved by the piston logic while this component owns
+/// continuous rendering, collision push-out, and final block placement.
+struct MovingBlockComponent {
+    StateID stateId = 0;
+    glm::ivec3 sourcePosition{};
+    glm::ivec3 targetPosition{};
+    glm::ivec3 direction{};
+    float elapsedSeconds = 0.0f;
+    float durationSeconds = 0.1f;
+    bool placeAtTarget = true;
 };
 
 } // namespace ecs

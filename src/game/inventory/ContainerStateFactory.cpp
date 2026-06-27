@@ -5,6 +5,7 @@
 
 #include "ContainerBehaviorRegistry.h"
 #include "DataDrivenContainerState.h"
+#include "NetworkContainerState.h"
 #include "SmeltingContainerState.h"
 #include "WorkbenchState.h"
 #include "../../ui/inventory/ContainerUiRegistry.h"
@@ -52,6 +53,9 @@ std::unique_ptr<IGameState> ContainerStateFactory::create(InventoryStateContext 
                                                           const glm::ivec3& blockPosition) {
     const ui::ContainerUiDef& def = ui::ContainerUiRegistry::require(containerUiId);
     const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(def.behavior);
+    if (deps.isMultiplayer && (behavior.handler == "storage" || behavior.handler == "smelting")) {
+        return std::make_unique<NetworkContainerState>(deps, def.id, blockPosition);
+    }
     const auto& creators = containerStateCreators();
     const auto it = creators.find(behavior.handler);
     if (it == creators.end()) {

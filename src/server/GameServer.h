@@ -46,6 +46,13 @@ struct ConnectedClient {
     bool hasLastInventorySnapshot = false;
     uint8_t lastInventorySnapshotSelected = 0;
     std::vector<net::InventorySlotData> lastInventorySnapshotSlots;
+    uint32_t openContainerId = 0;
+    glm::ivec3 openContainerPosition = glm::ivec3(0);
+    std::string openContainerUiId;
+    std::string openContainerBehaviorId;
+    net::InventorySlotData openContainerCursor;
+    bool hasLastContainerSnapshot = false;
+    net::ContainerSnapshotMessage lastContainerSnapshot;
     net::NetworkGameplayMode gameplayMode = net::NetworkGameplayMode::Survival;
     net::EntityNetId playerNetId = 0;
     entt::entity ecsPlayerEntity = entt::null;
@@ -122,6 +129,10 @@ private:
     [[nodiscard]] ConnectedClient* findClient(net::ClientId id);
     void broadcastPlayerDespawn(net::EntityNetId playerNetId, net::ClientId exceptClientId = 0);
     void handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action);
+    void handleClientContainerOpenRequest(ConnectedClient& client, const net::ClientContainerOpenRequest& request);
+    void handleClientContainerSlotAction(ConnectedClient& client, const net::ClientContainerSlotAction& action);
+    void handleClientContainerClose(ConnectedClient& client, const net::ClientContainerClose& close);
+    void closeOpenContainersAtPositions(const std::vector<glm::ivec3>& positions);
     void handleClientChatMessage(ConnectedClient& client, const net::ClientChatMessage& message);
     void handleClientCommandRequest(ConnectedClient& client, const net::ClientCommandRequest& request);
     void executeServerCommand(ConnectedClient& client, const net::ClientCommandRequest& request);
@@ -134,6 +145,8 @@ private:
     void sendNewChunksToClients();
     void sendSnapshotsToClients();
     void sendInventorySnapshotsToClients();
+    void sendContainerSnapshotsToClients();
+    void sendContainerClose(ConnectedClient& client);
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
     void sendBlockUpdatesToClients();
     void syncEntitiesToClients();
@@ -148,6 +161,8 @@ private:
     [[nodiscard]] entt::entity resolvePlayerEntity(const ConnectedClient& client) const;
     [[nodiscard]] bool buildInventorySnapshot(const ConnectedClient& client,
                                               net::InventorySnapshotMessage& out) const;
+    [[nodiscard]] bool buildContainerSnapshot(const ConnectedClient& client,
+                                              net::ContainerSnapshotMessage& out) const;
     void destroyOwnedPlayerProxy(ConnectedClient& client);
     [[nodiscard]] net::EntitySpawnMessage makeEntitySpawnMessage(ecs::EntityNetId netId, entt::entity entity) const;
     [[nodiscard]] bool spawnMobEntity(const std::string& entityId, const glm::vec3& position);
@@ -179,6 +194,7 @@ private:
     std::unique_ptr<physics::PhysicsSystem> m_ownedPhysicsSystem;
     bool m_entitiesRestorePending = false;
     bool m_blockEntitiesRestorePending = false;
+    uint32_t m_nextContainerId = 1;
 
     net::TickId m_currentTick = 0;
     bool m_spawnChunksReady = false;

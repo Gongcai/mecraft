@@ -10,6 +10,7 @@
 #include "../core/Shader.h"
 #include "../mesh/BlockMeshBuilder.h"
 #include "../../world/block/Block.h"
+#include "../../world/block/BlockStateRegistry.h"
 
 class Camera;
 class IWorldView;
@@ -45,12 +46,12 @@ public:
                            float animationTime, float shaderTime);
 
 private:
-    const renderer::BlockCubeMesh* getOrCreateMesh(BlockID blockId);
+    const renderer::BlockCubeMesh* getOrCreateMesh(StateID stateId);
 
     ResourceMgr* m_resourceMgr = nullptr;
     Shader* m_gbufferShader = nullptr;   // drop_gbuffer (block path)
     Shader* m_shadowShader = nullptr;    // shadow_depth (block path, uUseModel=1)
-    std::unordered_map<BlockID, renderer::BlockCubeMesh> m_meshes;
+    std::unordered_map<StateID, renderer::BlockCubeMesh> m_meshes;
     // Per-object velocity: previous-frame model matrix per entity (by drop ID).
     std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
 };

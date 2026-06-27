@@ -7,6 +7,7 @@
 
 #include "../src/ecs/GameplayRegistry.h"
 #include "../src/ecs/components/Components.h"
+#include "../src/ecs/systems/world/MovingBlockSystem.h"
 #include "../src/ecs/systems/world/RedstoneSystem.h"
 #include "../src/world/World.h"
 #include "../src/world/block/Block.h"
@@ -126,6 +127,22 @@ bool physicsBodyOverlapsWorld(const World& world, const ecs::PhysicsBodyComponen
         }
     }
     return false;
+}
+
+std::size_t countMovingBlocks(const ecs::GameplayRegistry& registry) {
+    std::size_t count = 0;
+    const auto view = registry.view<ecs::MovingBlockTag>();
+    for (const entt::entity entity : view) {
+        static_cast<void>(entity);
+        ++count;
+    }
+    return count;
+}
+
+void advanceMovingBlocks(World& world, ecs::GameplayRegistry& registry) {
+    for (int i = 0; i < 8; ++i) {
+        ecs::MovingBlockSystem::processWorld(world, registry, 1.0f / 60.0f);
+    }
 }
 
 } // namespace
@@ -310,6 +327,11 @@ int main() {
             glm::vec3(2.5f, static_cast<float>(y), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 11, registry);
+        if (countMovingBlocks(registry) != 1 ||
+            world.getBlockState(2, y, 0) != RUNTIME_ID_NULL) {
+            return fail("extending piston should create a moving head before final placement");
+        }
+        advanceMovingBlocks(world, registry);
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
         if (!pistonExtended(world, 1, y, 0) ||
@@ -333,6 +355,12 @@ int main() {
             glm::vec3(3.5f, static_cast<float>(y), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 12, registry);
+        if (countMovingBlocks(registry) != 2 ||
+            world.getBlockState(2, y, 0) != RUNTIME_ID_NULL ||
+            world.getBlockState(3, y, 0) != RUNTIME_ID_NULL) {
+            return fail("piston-pushed block should move as entities before final placement");
+        }
+        advanceMovingBlocks(world, registry);
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
         if (!blockIs(world, 3, y, 0, BlockRegistry::requireIdByName("minecraft:stone")) ||
@@ -354,6 +382,11 @@ int main() {
             glm::vec3(2.1f, static_cast<float>(y), 0.05f));
 
         ecs::RedstoneSystem::processWorld(world, 14, registry);
+        if (countMovingBlocks(registry) != 1 ||
+            world.getBlockState(2, y, 0) != RUNTIME_ID_NULL) {
+            return fail("extending piston head should be animated through its swept path");
+        }
+        advanceMovingBlocks(world, registry);
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
         if (!matchingPistonHead(world, 2, y, 0, PropIndices::TYPE_NORMAL) ||
@@ -376,6 +409,10 @@ int main() {
             glm::vec3(2.5f, static_cast<float>(y + 1), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 15, registry);
+        if (countMovingBlocks(registry) != 2) {
+            return fail("horizontal piston-pushed block should create moving block entities");
+        }
+        advanceMovingBlocks(world, registry);
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
         if (!blockIs(world, 3, y, 0, BlockRegistry::requireIdByName("minecraft:stone")) ||
@@ -407,6 +444,10 @@ int main() {
             glm::vec3(1.5f, static_cast<float>(y), 0.5f));
 
         ecs::RedstoneSystem::processWorld(world, 16, registry);
+        if (countMovingBlocks(registry) != 8) {
+            return fail("two-high opposing piston door should animate every pushed head and block");
+        }
+        advanceMovingBlocks(world, registry);
         const auto& transform = registry.get<ecs::TransformComponent>(player);
         const auto& physics = registry.get<ecs::PhysicsBodyComponent>(player);
         const bool pushedOutsideDoorDepth = transform.position.z <= -0.29f || transform.position.z >= 1.29f ||

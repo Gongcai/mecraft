@@ -2,6 +2,7 @@
 
 #include "../../GameplayRegistry.h"
 #include "../../components/Components.h"
+#include "../../entity/EntityFactory.h"
 #include "../../util/RedstoneEventBuffer.h"
 #include "../../../game/inventory/BlockEntityInventoryStore.h"
 #include "../../../game/inventory/ContainerBehaviorRegistry.h"
@@ -36,6 +37,7 @@ constexpr uint8_t kMaxRedstonePower = 15;
 constexpr uint64_t kObserverPulseDelayTicks = 1;
 constexpr uint64_t kObserverPulseDurationTicks = 1;
 constexpr size_t kMaxPistonPushBlocks = 12;
+constexpr float kPistonMovementDurationSeconds = 0.1f;
 constexpr float kPistonEntityPushEpsilon = 0.001f;
 constexpr float kPistonEntitySupportContactTolerance = 0.02f;
 constexpr int kMaxPistonEntityDepenetrationIterations = 12;
@@ -1199,12 +1201,71 @@ bool buildPistonPushPlan(const World& world,
     throw std::runtime_error("Piston push scan exceeded its configured maximum distance");
 }
 
+void createMovingBlock(GameplayRegistry& registry,
+                       const StateID stateId,
+                       const glm::ivec3& sourcePosition,
+                       const glm::ivec3& targetPosition,
+                       const glm::ivec3& direction,
+                       const bool placeAtTarget) {
+    MovingBlockSpawnParams params;
+    params.stateId = stateId;
+    params.sourcePosition = sourcePosition;
+    params.targetPosition = targetPosition;
+    params.direction = direction;
+    params.durationSeconds = kPistonMovementDurationSeconds;
+    params.placeAtTarget = placeAtTarget;
+    EntityFactory::createMovingBlock(registry, params);
+}
+
+bool hasActivePistonMovement(const GameplayRegistry* registry,
+                             const glm::ivec3& pistonPosition,
+                             const glm::ivec3& facingDirection) {
+    if (registry == nullptr) {
+        return false;
+    }
+
+    const glm::ivec3 frontPosition = pistonPosition + facingDirection;
+    const auto view = registry->registry().view<MovingBlockTag, MovingBlockComponent>();
+    for (const entt::entity entity : view) {
+        const auto& block = view.get<MovingBlockComponent>(entity);
+        if (block.sourcePosition == pistonPosition ||
+            block.targetPosition == pistonPosition ||
+            block.sourcePosition == frontPosition ||
+            block.targetPosition == frontPosition) {
+            return true;
+        }
+    }
+    return false;
+}
+
 size_t applyPistonPush(World& world,
                        GameplayRegistry* registry,
                        const glm::ivec3& pistonPosition,
                        const StateID pistonState,
                        const glm::ivec3& pushDirection,
                        const PistonPushPlan& plan) {
+    if (registry != nullptr) {
+        size_t changed = 0;
+        for (const PistonMovedBlock& movedBlock : plan.movedBlocks) {
+            world.setBlockState(movedBlock.position.x, movedBlock.position.y, movedBlock.position.z, RUNTIME_ID_NULL);
+            ++changed;
+        }
+        for (const PistonMovedBlock& movedBlock : plan.movedBlocks) {
+            createMovingBlock(
+                *registry,
+                movedBlock.state,
+                movedBlock.position,
+                movedBlock.position + pushDirection,
+                pushDirection,
+                true);
+        }
+
+        const glm::ivec3 frontPosition = pistonPosition + pushDirection;
+        createMovingBlock(*registry, pistonHeadState(pistonState), pistonPosition, frontPosition, pushDirection, true);
+        world.setBlockState(pistonPosition.x, pistonPosition.y, pistonPosition.z, withExtended(pistonState, true));
+        return changed + 1;
+    }
+
     size_t changed = 0;
     for (auto it = plan.movedBlocks.rbegin(); it != plan.movedBlocks.rend(); ++it) {
         const glm::ivec3 target = it->position + pushDirection;
@@ -1238,15 +1299,22 @@ size_t applyPistonRetraction(World& world,
     if (removedMatchingHead) {
         world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, RUNTIME_ID_NULL);
         ++changed;
+        if (registry != nullptr) {
+            createMovingBlock(*registry, frontState, frontPosition, pistonPosition, -facingDirection, false);
+        }
     }
 
     if (removedMatchingHead && isStickyPistonState(pistonState)) {
         const glm::ivec3 pullPosition = frontPosition + facingDirection;
         const StateID pullState = world.getBlockState(pullPosition.x, pullPosition.y, pullPosition.z);
         if (isMovablePistonBlock(pullState)) {
-            world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pullState);
             world.setBlockState(pullPosition.x, pullPosition.y, pullPosition.z, RUNTIME_ID_NULL);
-            pushEntitiesFromMovedBlock(world, registry, frontPosition, -facingDirection);
+            if (registry != nullptr) {
+                createMovingBlock(*registry, pullState, pullPosition, frontPosition, -facingDirection, true);
+            } else {
+                world.setBlockState(frontPosition.x, frontPosition.y, frontPosition.z, pullState);
+                pushEntitiesFromMovedBlock(world, registry, frontPosition, -facingDirection);
+            }
             changed += 2;
         }
     }
@@ -2453,6 +2521,10 @@ size_t applyPistonStates(World& world,
         }
 
         const glm::ivec3 facingDirection = pistonFacingDirection(currentState);
+        if (hasActivePistonMovement(registry, position, facingDirection)) {
+            continue;
+        }
+
         if (shouldExtend) {
             PistonPushPlan pushPlan;
             if (!buildPistonPushPlan(world, position, facingDirection, pushPlan)) {

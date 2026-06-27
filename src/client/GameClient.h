@@ -10,6 +10,8 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 
 class ResourceMgr;
 namespace ecs { class GameplayRegistry; }
@@ -50,6 +52,9 @@ public:
 
     /// Send an authoritative block action request to the server.
     void sendBlockAction(const net::ClientBlockAction& action);
+    void sendContainerOpenRequest(const glm::ivec3& blockPosition, const glm::vec3& playerPosition);
+    void sendContainerSlotAction(const net::ClientContainerSlotAction& action);
+    void sendContainerClose(uint32_t containerId);
     void sendChatMessage(const std::string& message);
     void sendCommandRequest(const std::string& command);
     void sendRespawnRequest();
@@ -92,11 +97,16 @@ public:
 
     /// Get the assigned client ID from the server.
     [[nodiscard]] net::ClientId getClientId() const { return m_clientId; }
+    [[nodiscard]] const net::ContainerSnapshotMessage* findContainerSnapshot(uint32_t containerId) const;
+    [[nodiscard]] const net::ContainerSnapshotMessage* findContainerSnapshotAt(const glm::ivec3& blockPosition) const;
+    bool consumeContainerClose(uint32_t containerId);
 
 private:
     void handleChunkData(const net::ChunkDataMessage& data);
     void handleServerSnapshot(const net::ServerSnapshot& snapshot);
     void handleInventorySnapshot(const net::InventorySnapshotMessage& snapshot);
+    void handleContainerSnapshot(const net::ContainerSnapshotMessage& snapshot);
+    void handleContainerClose(const net::ContainerCloseMessage& close);
     void handleWorldStateSnapshot(const net::WorldStateSnapshotMessage& snapshot);
     void handlePlayerModeUpdate(const net::PlayerModeUpdateMessage& update);
 
@@ -108,6 +118,7 @@ private:
     glm::vec3 m_authPosition = glm::vec3(0.0f);
     net::ClientId m_clientId = 0;
     uint32_t m_inputSequence = 0;
+    uint32_t m_containerSequence = 0;
     uint32_t m_commandSequence = 0;
     uint32_t m_respawnSequence = 0;
     bool m_spawnChunksReady = false;
@@ -119,6 +130,8 @@ private:
     ChatMessageCallback m_chatMessageCallback;
     CommandResultCallback m_commandResultCallback;
     LocalModeCallback m_localModeCallback;
+    std::unordered_map<uint32_t, net::ContainerSnapshotMessage> m_containerSnapshots;
+    std::unordered_set<uint32_t> m_closedContainerIds;
 };
 
 } // namespace client

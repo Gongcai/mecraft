@@ -265,6 +265,14 @@ public:
         return &it->second.inventory;
     }
 
+    [[nodiscard]] MachineInventory* findMutable(const glm::ivec3& position) {
+        const auto it = m_entries.find(positionKey(position));
+        if (it == m_entries.end()) {
+            return nullptr;
+        }
+        return &it->second.inventory;
+    }
+
     [[nodiscard]] bool empty() const {
         return m_entries.empty();
     }

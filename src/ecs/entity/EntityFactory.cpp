@@ -9,7 +9,9 @@
 #include "../util/ProjectileDefinitions.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <stdexcept>
 #include <utility>
 
 namespace ecs {
@@ -275,6 +277,43 @@ entt::entity EntityFactory::createFallingBlock(GameplayRegistry& registry, const
     reg.emplace<GroundedStateComponent>(entity, GroundedStateComponent{false});
     reg.emplace<DropEntityIdComponent>(entity, dropId);
     reg.emplace<NetworkSyncTag>(entity);
+    return entity;
+}
+
+entt::entity EntityFactory::createMovingBlock(GameplayRegistry& registry, const MovingBlockSpawnParams& params) {
+    if (params.stateId == RUNTIME_ID_NULL) {
+        return entt::null;
+    }
+    if (params.durationSeconds <= 0.0f) {
+        throw std::runtime_error("Moving block duration must be positive");
+    }
+    const glm::ivec3 expectedDirection = params.targetPosition - params.sourcePosition;
+    if (expectedDirection != params.direction) {
+        throw std::runtime_error("Moving block direction must match source and target positions");
+    }
+    if (std::abs(params.direction.x) + std::abs(params.direction.y) + std::abs(params.direction.z) != 1) {
+        throw std::runtime_error("Moving block direction must be a single grid step");
+    }
+
+    entt::registry& reg = registry.registry();
+    auto& state = ensureDropRuntimeState(registry);
+    const std::size_t dropId = state.nextId++;
+
+    const entt::entity entity = reg.create();
+    const glm::vec3 renderPos = glm::vec3(params.sourcePosition) + glm::vec3(0.5f);
+
+    reg.emplace<MovingBlockTag>(entity);
+    reg.emplace<MovingBlockComponent>(entity,
+                                      params.stateId,
+                                      params.sourcePosition,
+                                      params.targetPosition,
+                                      params.direction,
+                                      0.0f,
+                                      params.durationSeconds,
+                                      params.placeAtTarget);
+    reg.emplace<TransformComponent>(entity, renderPos, 0.0f);
+    reg.emplace<BoundsComponent>(entity, glm::vec3(0.5f));
+    reg.emplace<DropEntityIdComponent>(entity, dropId);
     return entity;
 }
 

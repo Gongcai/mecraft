@@ -9,6 +9,7 @@ struct LocalPlayerTag {};
 struct DropItemTag {};
 struct ProjectileTag {};
 struct FallingBlockTag {};
+struct MovingBlockTag {};
 struct ParticleTag {};
 struct SteveTag {};
 struct MobTag {};

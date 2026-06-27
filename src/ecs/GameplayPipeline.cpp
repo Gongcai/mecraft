@@ -42,6 +42,7 @@
 #include "systems/world/FluidTickSystem.h"
 #include "systems/world/PressurePlateSystem.h"
 #include "systems/world/HopperSystem.h"
+#include "systems/world/MovingBlockSystem.h"
 #include "systems/world/RandomTickSystem.h"
 #include "systems/world/RedstoneDeviceActionSystem.h"
 #include "systems/world/RedstoneSystem.h"
@@ -76,6 +77,7 @@ void GameplayPipeline::buildClientFixedUpdateSystems() {
     addFixedUpdateSystem<PlayerIntentBuildSystem>();
     addFixedUpdateSystem<MobAISystem>();
     addFixedUpdateSystem<CharacterPhysicsSystem>();
+    addFixedUpdateSystem<MovingBlockSystem>();
     addFixedUpdateSystem<PlayerRuntimeUpdateSystem>();
     addFixedUpdateSystem<FallDamageSystem>();
     addFixedUpdateSystem<ViewBobSystem>();
@@ -128,6 +130,7 @@ void GameplayPipeline::buildServerFixedUpdateSystems() {
     // particles/audio, and visual hierarchy systems intentionally stay out.
     addFixedUpdateSystem<MobAISystem>();
     addFixedUpdateSystem<CharacterPhysicsSystem>();
+    addFixedUpdateSystem<MovingBlockSystem>();
     addFixedUpdateSystem<PlayerMeleeSystem>();
     addFixedUpdateSystem<ProjectileSystem>();
     addFixedUpdateSystem<DamageSystem>(FixedUpdateDebugCategory::State, PostSystemHook::AfterDamageSystem);

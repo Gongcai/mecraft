@@ -201,6 +201,34 @@ public:
         return buf;
     }
 
+    static std::vector<uint8_t> encodeClientContainerOpenRequest(const ClientContainerOpenRequest& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.sequence);
+        pushI32(buf, msg.blockPosition.x);
+        pushI32(buf, msg.blockPosition.y);
+        pushI32(buf, msg.blockPosition.z);
+        pushFloat(buf, msg.playerPosition.x);
+        pushFloat(buf, msg.playerPosition.y);
+        pushFloat(buf, msg.playerPosition.z);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeClientContainerSlotAction(const ClientContainerSlotAction& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.sequence);
+        pushU32(buf, msg.containerId);
+        pushU8(buf, static_cast<uint8_t>(msg.action));
+        pushU8(buf, static_cast<uint8_t>(msg.slotSpace));
+        pushI16(buf, msg.slot);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeClientContainerClose(const ClientContainerClose& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.containerId);
+        return buf;
+    }
+
     static std::vector<uint8_t> encodeClientChatMessage(const ClientChatMessage& msg) {
         std::vector<uint8_t> buf;
         pushString(buf, msg.message);
@@ -348,6 +376,32 @@ public:
             pushU16(buf, slot.itemId);
             pushU8(buf, slot.stackCount);
         }
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeContainerSnapshot(const ContainerSnapshotMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.containerId);
+        pushString(buf, msg.containerUiId);
+        pushString(buf, msg.behaviorId);
+        pushI32(buf, msg.blockPosition.x);
+        pushI32(buf, msg.blockPosition.y);
+        pushI32(buf, msg.blockPosition.z);
+        pushSlotVector(buf, msg.containerSlots);
+        pushSlotVector(buf, msg.playerSlots);
+        pushU16(buf, msg.cursor.itemId);
+        pushU8(buf, msg.cursor.stackCount);
+        pushFloat(buf, msg.burnFraction);
+        pushFloat(buf, msg.cookFraction);
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeContainerClose(const ContainerCloseMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushU32(buf, msg.containerId);
+        pushI32(buf, msg.blockPosition.x);
+        pushI32(buf, msg.blockPosition.y);
+        pushI32(buf, msg.blockPosition.z);
         return buf;
     }
 
@@ -583,6 +637,41 @@ public:
         return true;
     }
 
+    static bool decodeClientContainerOpenRequest(const uint8_t* data,
+                                                 size_t size,
+                                                 ClientContainerOpenRequest& out) {
+        if (size < 28) return false;
+        size_t offset = 0;
+        out.sequence = readU32(data, offset);
+        out.blockPosition.x = readI32(data, offset);
+        out.blockPosition.y = readI32(data, offset);
+        out.blockPosition.z = readI32(data, offset);
+        out.playerPosition.x = readFloat(data, offset);
+        out.playerPosition.y = readFloat(data, offset);
+        out.playerPosition.z = readFloat(data, offset);
+        return true;
+    }
+
+    static bool decodeClientContainerSlotAction(const uint8_t* data,
+                                                size_t size,
+                                                ClientContainerSlotAction& out) {
+        if (size < 12) return false;
+        size_t offset = 0;
+        out.sequence = readU32(data, offset);
+        out.containerId = readU32(data, offset);
+        out.action = static_cast<ContainerSlotActionType>(readU8(data, offset));
+        out.slotSpace = static_cast<ContainerSlotSpace>(readU8(data, offset));
+        out.slot = readI16(data, offset);
+        return true;
+    }
+
+    static bool decodeClientContainerClose(const uint8_t* data, size_t size, ClientContainerClose& out) {
+        if (size < 4) return false;
+        size_t offset = 0;
+        out.containerId = readU32(data, offset);
+        return true;
+    }
+
     static bool decodeClientChatMessage(const uint8_t* data, size_t size, ClientChatMessage& out) {
         size_t offset = 0;
         return readString(data, size, offset, out.message);
@@ -787,6 +876,40 @@ public:
         return true;
     }
 
+    static bool decodeContainerSnapshot(const uint8_t* data, size_t size, ContainerSnapshotMessage& out) {
+        if (size < 4) return false;
+        size_t offset = 0;
+        out.containerId = readU32(data, offset);
+        if (!readString(data, size, offset, out.containerUiId) ||
+            !readString(data, size, offset, out.behaviorId)) {
+            return false;
+        }
+        if (offset + 12 > size) return false;
+        out.blockPosition.x = readI32(data, offset);
+        out.blockPosition.y = readI32(data, offset);
+        out.blockPosition.z = readI32(data, offset);
+        if (!readSlotVector(data, size, offset, out.containerSlots) ||
+            !readSlotVector(data, size, offset, out.playerSlots)) {
+            return false;
+        }
+        if (offset + 11 > size) return false;
+        out.cursor.itemId = readU16(data, offset);
+        out.cursor.stackCount = readU8(data, offset);
+        out.burnFraction = readFloat(data, offset);
+        out.cookFraction = readFloat(data, offset);
+        return true;
+    }
+
+    static bool decodeContainerClose(const uint8_t* data, size_t size, ContainerCloseMessage& out) {
+        if (size < 16) return false;
+        size_t offset = 0;
+        out.containerId = readU32(data, offset);
+        out.blockPosition.x = readI32(data, offset);
+        out.blockPosition.y = readI32(data, offset);
+        out.blockPosition.z = readI32(data, offset);
+        return true;
+    }
+
 private:
     static constexpr size_t kHeaderSize = 6;  // channel(1) + type(1) + payload_size(4)
     static constexpr uint8_t kChunkEncodingRleSubChunks = 1;
@@ -862,6 +985,9 @@ private:
         buf.push_back(static_cast<uint8_t>(v & 0xFF));
         buf.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
     }
+    static void pushI16(std::vector<uint8_t>& buf, int16_t v) {
+        pushU16(buf, static_cast<uint16_t>(v));
+    }
     static void pushI32(std::vector<uint8_t>& buf, int32_t v) {
         pushU32(buf, static_cast<uint32_t>(v));
     }
@@ -880,6 +1006,13 @@ private:
         pushU32(buf, static_cast<uint32_t>(value.size()));
         buf.insert(buf.end(), value.begin(), value.end());
     }
+    static void pushSlotVector(std::vector<uint8_t>& buf, const std::vector<InventorySlotData>& slots) {
+        pushU32(buf, static_cast<uint32_t>(slots.size()));
+        for (const InventorySlotData& slot : slots) {
+            pushU16(buf, slot.itemId);
+            pushU8(buf, slot.stackCount);
+        }
+    }
 
     static uint8_t readU8(const uint8_t* data, size_t& offset) {
         return data[offset++];
@@ -889,6 +1022,9 @@ private:
                      (static_cast<uint16_t>(data[offset + 1]) << 8);
         offset += 2;
         return v;
+    }
+    static int16_t readI16(const uint8_t* data, size_t& offset) {
+        return static_cast<int16_t>(readU16(data, offset));
     }
     static int32_t readI32(const uint8_t* data, size_t& offset) {
         return static_cast<int32_t>(readU32(data, offset));
@@ -913,6 +1049,20 @@ private:
         if (offset + length > size) return false;
         out.assign(reinterpret_cast<const char*>(data + offset), length);
         offset += length;
+        return true;
+    }
+    static bool readSlotVector(const uint8_t* data,
+                               size_t size,
+                               size_t& offset,
+                               std::vector<InventorySlotData>& out) {
+        if (offset + 4 > size) return false;
+        const uint32_t count = readU32(data, offset);
+        if (offset + static_cast<size_t>(count) * 3 > size) return false;
+        out.resize(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            out[i].itemId = readU16(data, offset);
+            out[i].stackCount = readU8(data, offset);
+        }
         return true;
     }
 };

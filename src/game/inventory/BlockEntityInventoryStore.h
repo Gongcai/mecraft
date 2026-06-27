@@ -121,6 +121,11 @@ public:
         return it == m_entries.end() ? nullptr : &it->second.inventory;
     }
 
+    [[nodiscard]] BlockEntityInventory* findMutable(const glm::ivec3& position) {
+        const auto it = m_entries.find(toKey(position));
+        return it == m_entries.end() ? nullptr : &it->second.inventory;
+    }
+
     [[nodiscard]] bool empty() const {
         return m_entries.empty();
     }

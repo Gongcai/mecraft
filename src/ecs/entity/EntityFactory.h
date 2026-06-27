@@ -12,6 +12,7 @@
 
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
+#include "../../world/block/BlockStateRegistry.h"
 
 namespace ecs {
 
@@ -39,6 +40,17 @@ struct FallingBlockSpawnParams {
     glm::ivec3 gridPosition{};
 };
 
+/// Spawn parameters for a piston-driven moving block entity.
+/// `stateId` stores the exact block state restored when the motion completes.
+struct MovingBlockSpawnParams {
+    StateID stateId = 0;
+    glm::ivec3 sourcePosition{};
+    glm::ivec3 targetPosition{};
+    glm::ivec3 direction{};
+    float durationSeconds = 0.1f;
+    bool placeAtTarget = true;
+};
+
 class EntityFactory {
 public:
     static entt::entity createServerPlayerProxy(GameplayRegistry& registry,
@@ -56,6 +68,7 @@ public:
     static entt::entity createZombie(entt::registry& registry, const glm::vec3& position);
     static entt::entity createItemDrop(GameplayRegistry& registry, const ItemDropSpawnParams& params);
     static entt::entity createFallingBlock(GameplayRegistry& registry, const FallingBlockSpawnParams& params);
+    static entt::entity createMovingBlock(GameplayRegistry& registry, const MovingBlockSpawnParams& params);
     static entt::entity createProjectile(GameplayRegistry& registry,
                                          entt::entity owner,
                                          const glm::vec3& position,

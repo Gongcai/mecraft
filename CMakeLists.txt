@@ -371,6 +371,7 @@ set(SRC_ECS
         src/ecs/systems/world/RedstoneSystem.cpp
         src/ecs/systems/world/RedstoneDeviceActionSystem.cpp
         src/ecs/systems/world/HopperSystem.cpp
+        src/ecs/systems/world/MovingBlockSystem.cpp
         src/ecs/systems/world/FallingBlockSpawnSystem.cpp
         src/ecs/systems/world/FallingBlockTickSystem.cpp
         src/ecs/systems/world/FallingBlockInterpolateSystem.cpp

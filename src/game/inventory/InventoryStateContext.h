@@ -7,6 +7,9 @@ class InputManager;
 class UIRenderer;
 class DropSystem;
 
+namespace client {
+class GameClient;
+}
 namespace ecs {
 class GameplayRegistry;
 }
@@ -20,4 +23,6 @@ struct InventoryStateContext {
     UIRenderer& uiRenderer;
     DropSystem& dropSystem;
     ecs::GameplayRegistry& ecsRegistry;
+    client::GameClient* gameClient = nullptr;
+    bool isMultiplayer = false;
 };

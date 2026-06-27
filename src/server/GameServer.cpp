@@ -30,6 +30,7 @@
 #include "../game/inventory/ContainerBehaviorRegistry.h"
 #include "../game/inventory/MachineInventoryLifecycle.h"
 #include "../game/inventory/MachineInventoryStore.h"
+#include "../game/inventory/SmeltingProcessorRuntime.h"
 #include "../item/Item.h"
 #include "../item/ItemUseDispatcher.h"
 #include "../physics/PhysicsSystem.h"
@@ -40,6 +41,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
+#include <functional>
 #include <stdexcept>
 #include <sstream>
 #include <string>
@@ -54,6 +56,8 @@ constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
 constexpr float kPlayerPoseSyncEpsilonSq = 0.000001f;
 constexpr float kPlayerPoseCorrectionAcceptDistanceSq = 0.1225f;
+
+void clearOpenContainerSession(ConnectedClient& client);
 
 int blockToChunkCoord(const int value) {
     return static_cast<int>(std::floor(static_cast<float>(value) / static_cast<float>(Chunk::SIZE_X)));
@@ -200,6 +204,38 @@ bool inventorySnapshotSlotsEqual(const std::vector<net::InventorySlotData>& a,
         }
     }
     return true;
+}
+
+net::InventorySlotData slotDataFromStack(const ItemStack& stack) {
+    net::InventorySlotData slot;
+    if (!stack.isEmpty()) {
+        slot.itemId = static_cast<uint16_t>(std::clamp<uint32_t>(stack.itemId, 0u, 0xFFFFu));
+        slot.stackCount = static_cast<uint8_t>(std::clamp<uint32_t>(stack.count, 0u, 0xFFu));
+    }
+    return slot;
+}
+
+ItemStack stackFromSlotData(const net::InventorySlotData& slot) {
+    ItemStack stack;
+    if (slot.itemId != 0 && slot.stackCount != 0) {
+        stack.itemId = static_cast<ItemID>(slot.itemId);
+        stack.count = slot.stackCount;
+    }
+    return stack;
+}
+
+bool containerSnapshotsEqual(const net::ContainerSnapshotMessage& a,
+                             const net::ContainerSnapshotMessage& b) {
+    return a.containerId == b.containerId &&
+           a.containerUiId == b.containerUiId &&
+           a.behaviorId == b.behaviorId &&
+           a.blockPosition == b.blockPosition &&
+           inventorySnapshotSlotsEqual(a.containerSlots, b.containerSlots) &&
+           inventorySnapshotSlotsEqual(a.playerSlots, b.playerSlots) &&
+           a.cursor.itemId == b.cursor.itemId &&
+           a.cursor.stackCount == b.cursor.stackCount &&
+           a.burnFraction == b.burnFraction &&
+           a.cookFraction == b.cookFraction;
 }
 
 bool persistentBlockEntityTypeForBlock(const BlockID blockId, std::string& outType) {
@@ -375,6 +411,90 @@ bool GameServer::buildInventorySnapshot(const ConnectedClient& client,
     }
 
     return true;
+}
+
+bool GameServer::buildContainerSnapshot(const ConnectedClient& client,
+                                        net::ContainerSnapshotMessage& out) const {
+    if (m_ecsRegistry == nullptr || client.openContainerId == 0) {
+        return false;
+    }
+
+    const StateID state = m_world.getBlockState(client.openContainerPosition.x,
+                                                client.openContainerPosition.y,
+                                                client.openContainerPosition.z);
+    if (state == RUNTIME_ID_NULL) {
+        return false;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(state);
+    const BlockDef& blockDef = BlockRegistry::getFast(blockId);
+    if (blockDef.containerUi != client.openContainerUiId) {
+        return false;
+    }
+
+    const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(client.openContainerUiId);
+    const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
+    if (behavior.id != client.openContainerBehaviorId) {
+        return false;
+    }
+
+    const entt::entity playerEntity = resolvePlayerEntity(client);
+    if (playerEntity == entt::null || !m_ecsRegistry->valid(playerEntity)) {
+        return false;
+    }
+
+    const auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(playerEntity);
+    if (inventoryData == nullptr) {
+        return false;
+    }
+
+    out = {};
+    out.containerId = client.openContainerId;
+    out.containerUiId = client.openContainerUiId;
+    out.behaviorId = client.openContainerBehaviorId;
+    out.blockPosition = client.openContainerPosition;
+    out.cursor = client.openContainerCursor;
+
+    out.playerSlots.reserve(Inventory::INVENTORY_SIZE);
+    for (int slot = 0; slot < Inventory::INVENTORY_SIZE; ++slot) {
+        out.playerSlots.push_back(slotDataFromStack(inventoryData->inventory.getSlotStack(slot)));
+    }
+
+    if (behavior.handler == "storage") {
+        if (!m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
+            return false;
+        }
+        const BlockEntityInventoryStore& store = m_ecsRegistry->ctx().get<BlockEntityInventoryStore>();
+        const BlockEntityInventory* inventory = store.find(client.openContainerPosition);
+        if (inventory == nullptr) {
+            return false;
+        }
+        out.containerSlots.reserve(static_cast<std::size_t>(behavior.storage.slots));
+        for (int slot = 0; slot < behavior.storage.slots; ++slot) {
+            out.containerSlots.push_back(slotDataFromStack(inventory->getSlotStack(slot)));
+        }
+        return true;
+    }
+
+    if (behavior.handler == "smelting") {
+        if (!m_ecsRegistry->ctx().contains<MachineInventoryStore>()) {
+            return false;
+        }
+        const MachineInventoryStore& store = m_ecsRegistry->ctx().get<MachineInventoryStore>();
+        const MachineInventory* machine = store.find(client.openContainerPosition);
+        if (machine == nullptr) {
+            return false;
+        }
+        out.containerSlots.reserve(static_cast<std::size_t>(machine->slotCount()));
+        for (int slot = 0; slot < machine->slotCount(); ++slot) {
+            out.containerSlots.push_back(slotDataFromStack(machine->getSlotStack(slot)));
+        }
+        out.burnFraction = machine->burnFraction();
+        out.cookFraction = machine->cookFraction();
+        return true;
+    }
+
+    return false;
 }
 
 void GameServer::dropPlayerInventory(ConnectedClient& client) {
@@ -850,6 +970,7 @@ void GameServer::tick(float dt) {
     // Send authoritative snapshots to clients
     sendSnapshotsToClients();
     sendInventorySnapshotsToClients();
+    sendContainerSnapshotsToClients();
 
     // Sync entities (spawn/despawn/snapshot)
     syncEntitiesToClients();
@@ -875,6 +996,7 @@ void GameServer::tickInitialLoading(const float dt, const glm::vec3& loadCenter)
     sendNewChunksToClients();
     sendSnapshotsToClients();
     sendInventorySnapshotsToClients();
+    sendContainerSnapshotsToClients();
     sendBlockUpdatesToClients();
 
     if (!m_spawnChunksReady) {
@@ -930,6 +1052,7 @@ void GameServer::processClientMessages() {
                 client.receivedHello = true;
                 client.helloTick = m_currentTick;
                 client.sentChunks.clear();
+                clearOpenContainerSession(client);
                 client.chunkSendLogCount = 0;
                 client.totalChunksSent = 0;
                 if (packet.inProcessPayload.has_value()) {
@@ -1011,6 +1134,33 @@ void GameServer::processClientMessages() {
                 }
                 break;
             }
+            case net::MessageType::ClientContainerOpenRequest: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& request =
+                        std::any_cast<const net::ClientContainerOpenRequest&>(packet.inProcessPayload);
+                    if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
+                        handleClientContainerOpenRequest(client, request);
+                    }
+                }
+                break;
+            }
+            case net::MessageType::ClientContainerSlotAction: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& action =
+                        std::any_cast<const net::ClientContainerSlotAction&>(packet.inProcessPayload);
+                    if (!client.awaitingRespawn && client.respawnSnapshotTicksRemaining <= 0) {
+                        handleClientContainerSlotAction(client, action);
+                    }
+                }
+                break;
+            }
+            case net::MessageType::ClientContainerClose: {
+                if (packet.inProcessPayload.has_value()) {
+                    const auto& close = std::any_cast<const net::ClientContainerClose&>(packet.inProcessPayload);
+                    handleClientContainerClose(client, close);
+                }
+                break;
+            }
             case net::MessageType::ClientChatMessage: {
                 if (packet.inProcessPayload.has_value()) {
                     const auto& message = std::any_cast<const net::ClientChatMessage&>(packet.inProcessPayload);
@@ -1075,6 +1225,7 @@ void GameServer::cleanupDisconnectedClients() {
             MECRAFT_LOG_FLUSH(stdout);
             broadcastPlayerDespawn(client.playerNetId, client.id);
         }
+        clearOpenContainerSession(client);
         destroyOwnedPlayerProxy(client);
         client.receivedHello = false;
     }
@@ -1102,6 +1253,7 @@ void GameServer::cleanupDisconnectedClients() {
         client.deathDropsSpawned = false;
         client.hasLastInventorySnapshot = false;
         client.lastInventorySnapshotSlots.clear();
+        clearOpenContainerSession(client);
         client.helloTick = 0;
         client.sentChunks.clear();
         client.spawnedPlayerNetIds.clear();
@@ -1487,7 +1639,316 @@ BlockID removeServerTargetBlock(World& world,
     return BlockStateRegistry::getBlockId(targetState);
 }
 
+uint32_t addToStack(ItemStack& target, const ItemID itemId, const uint32_t count) {
+    if (itemId == 0 || count == 0) {
+        return count;
+    }
+
+    const ItemDef& def = ItemRegistry::get(itemId);
+    if (def.maxStack == 0) {
+        return count;
+    }
+
+    if (target.isEmpty()) {
+        const uint16_t add = static_cast<uint16_t>(std::min<uint32_t>(count, def.maxStack));
+        target.itemId = itemId;
+        target.count = add;
+        target.durability = def.isTool ? def.maxDurability : 0;
+        return count - add;
+    }
+
+    if (target.itemId != itemId || target.count >= def.maxStack) {
+        return count;
+    }
+
+    const uint16_t freeSpace = static_cast<uint16_t>(def.maxStack - target.count);
+    const uint16_t add = static_cast<uint16_t>(std::min<uint32_t>(count, freeSpace));
+    target.count = static_cast<uint16_t>(target.count + add);
+    return count - add;
+}
+
+void clearOpenContainerSession(ConnectedClient& client) {
+    client.openContainerId = 0;
+    client.openContainerPosition = glm::ivec3(0);
+    client.openContainerUiId.clear();
+    client.openContainerBehaviorId.clear();
+    client.openContainerCursor = {};
+    client.hasLastContainerSnapshot = false;
+    client.lastContainerSnapshot = {};
+}
+
 } // namespace
+
+void GameServer::handleClientContainerOpenRequest(ConnectedClient& client,
+                                                  const net::ClientContainerOpenRequest& request) {
+    if (!ItemUseDispatcher::isWithinReach(request.playerPosition, request.blockPosition)) {
+        return;
+    }
+    if (m_ecsRegistry == nullptr) {
+        return;
+    }
+
+    if (client.openContainerId != 0) {
+        handleClientContainerClose(client, net::ClientContainerClose{client.openContainerId});
+    }
+
+    const StateID state = m_world.getBlockState(request.blockPosition.x,
+                                                request.blockPosition.y,
+                                                request.blockPosition.z);
+    if (state == RUNTIME_ID_NULL) {
+        return;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(state);
+    const BlockDef& blockDef = BlockRegistry::getFast(blockId);
+    if (blockDef.containerUi.empty()) {
+        return;
+    }
+
+    const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(blockDef.containerUi);
+    const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
+    if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
+        throw std::runtime_error(behavior.id + " network container requires block_entity storage");
+    }
+
+    if (behavior.handler == "storage") {
+        BlockEntityInventoryStore& store = m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()
+            ? m_ecsRegistry->ctx().get<BlockEntityInventoryStore>()
+            : m_ecsRegistry->ctx().emplace<BlockEntityInventoryStore>();
+        static_cast<void>(store.getOrCreate(request.blockPosition, behavior.id, behavior.storage.slots));
+    } else if (behavior.handler == "smelting") {
+        MachineInventoryStore& store = m_ecsRegistry->ctx().contains<MachineInventoryStore>()
+            ? m_ecsRegistry->ctx().get<MachineInventoryStore>()
+            : m_ecsRegistry->ctx().emplace<MachineInventoryStore>();
+        static_cast<void>(store.getOrCreate(request.blockPosition, behavior.id, behavior.storage.slots));
+    } else {
+        return;
+    }
+
+    client.lastPosition = request.playerPosition;
+    client.openContainerId = m_nextContainerId++;
+    if (client.openContainerId == 0) {
+        client.openContainerId = m_nextContainerId++;
+    }
+    client.openContainerPosition = request.blockPosition;
+    client.openContainerUiId = uiDef.id;
+    client.openContainerBehaviorId = behavior.id;
+    client.openContainerCursor = {};
+    client.hasLastContainerSnapshot = false;
+}
+
+void GameServer::handleClientContainerSlotAction(ConnectedClient& client,
+                                                 const net::ClientContainerSlotAction& action) {
+    if (m_ecsRegistry == nullptr ||
+        client.openContainerId == 0 ||
+        action.containerId != client.openContainerId) {
+        return;
+    }
+
+    const entt::entity playerEntity = resolvePlayerEntity(client);
+    if (playerEntity == entt::null || !m_ecsRegistry->valid(playerEntity)) {
+        return;
+    }
+    auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(playerEntity);
+    if (inventoryData == nullptr) {
+        return;
+    }
+
+    const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(client.openContainerUiId);
+    const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
+
+    BlockEntityInventory* storage = nullptr;
+    MachineInventory* machine = nullptr;
+    SmeltingProcessorRuntime smeltingRuntime;
+    SmeltingSystem* smeltingSystem = nullptr;
+    int containerSlotCount = 0;
+
+    if (behavior.handler == "storage") {
+        if (!m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
+            return;
+        }
+        BlockEntityInventoryStore& store = m_ecsRegistry->ctx().get<BlockEntityInventoryStore>();
+        storage = &store.getOrCreate(client.openContainerPosition, behavior.id, behavior.storage.slots);
+        containerSlotCount = behavior.storage.slots;
+    } else if (behavior.handler == "smelting") {
+        if (!m_ecsRegistry->ctx().contains<MachineInventoryStore>() ||
+            !m_ecsRegistry->ctx().contains<SmeltingSystem>()) {
+            return;
+        }
+        MachineInventoryStore& store = m_ecsRegistry->ctx().get<MachineInventoryStore>();
+        machine = &store.getOrCreate(client.openContainerPosition, behavior.id, behavior.storage.slots);
+        containerSlotCount = machine->slotCount();
+        smeltingRuntime = SmeltingProcessorRuntime::create(uiDef, behavior, containerSlotCount);
+        smeltingSystem = &m_ecsRegistry->ctx().get<SmeltingSystem>();
+    } else {
+        return;
+    }
+
+    const auto validSlot = [containerSlotCount](const net::ContainerSlotSpace space, const int slot) {
+        if (space == net::ContainerSlotSpace::Player) {
+            return slot >= 0 && slot < Inventory::INVENTORY_SIZE;
+        }
+        if (space == net::ContainerSlotSpace::Container) {
+            return slot >= 0 && slot < containerSlotCount;
+        }
+        return false;
+    };
+    if (!validSlot(action.slotSpace, action.slot)) {
+        return;
+    }
+
+    const auto getSlot = [&](const net::ContainerSlotSpace space, const int slot) -> ItemStack {
+        if (space == net::ContainerSlotSpace::Player) {
+            return inventoryData->inventory.getSlotStack(slot);
+        }
+        if (storage != nullptr) {
+            return storage->getSlotStack(slot);
+        }
+        return machine != nullptr ? machine->getSlotStack(slot) : ItemStack{};
+    };
+    const auto setSlot = [&](const net::ContainerSlotSpace space, const int slot, const ItemStack& stack) {
+        if (space == net::ContainerSlotSpace::Player) {
+            inventoryData->inventory.setSlotStack(slot, stack);
+        } else if (storage != nullptr) {
+            storage->setSlotStack(slot, stack);
+        } else if (machine != nullptr) {
+            machine->setSlotStack(slot, stack);
+        }
+    };
+    const auto acceptsItem = [&](const net::ContainerSlotSpace space, const int slot, const ItemID itemId) {
+        if (space == net::ContainerSlotSpace::Player) {
+            return true;
+        }
+        if (storage != nullptr) {
+            return true;
+        }
+        return smeltingSystem != nullptr && smeltingRuntime.acceptsItem(slot, itemId, *smeltingSystem);
+    };
+    const auto addToSlot = [&](const net::ContainerSlotSpace space,
+                               const int slot,
+                               const ItemID itemId,
+                               const uint32_t count) -> uint32_t {
+        if (!validSlot(space, slot) || !acceptsItem(space, slot, itemId)) {
+            return count;
+        }
+        ItemStack target = getSlot(space, slot);
+        const uint32_t remaining = addToStack(target, itemId, count);
+        if (remaining != count) {
+            setSlot(space, slot, target);
+        }
+        return remaining;
+    };
+
+    ItemStack cursor = stackFromSlotData(client.openContainerCursor);
+    if (action.action == net::ContainerSlotActionType::PrimaryClick) {
+        if (cursor.isEmpty()) {
+            const ItemStack picked = getSlot(action.slotSpace, action.slot);
+            if (!picked.isEmpty()) {
+                setSlot(action.slotSpace, action.slot, {});
+                cursor = picked;
+            }
+        } else {
+            const ItemID cursorItem = cursor.itemId;
+            const uint32_t remaining = addToSlot(action.slotSpace, action.slot, cursorItem, cursor.count);
+            if (remaining == 0) {
+                cursor = {};
+            } else {
+                const ItemStack target = getSlot(action.slotSpace, action.slot);
+                if (target.itemId == cursorItem) {
+                    cursor.count = static_cast<uint16_t>(remaining);
+                } else if (acceptsItem(action.slotSpace, action.slot, cursorItem)) {
+                    ItemStack incoming = cursor;
+                    setSlot(action.slotSpace, action.slot, incoming);
+                    cursor = target;
+                }
+            }
+        }
+    } else if (action.action == net::ContainerSlotActionType::SecondaryPlace) {
+        if (!cursor.isEmpty()) {
+            const uint32_t remaining = addToSlot(action.slotSpace, action.slot, cursor.itemId, 1);
+            if (remaining == 0) {
+                --cursor.count;
+                if (cursor.count == 0) {
+                    cursor = {};
+                }
+            }
+        }
+    }
+
+    client.openContainerCursor = slotDataFromStack(cursor);
+    client.hasLastContainerSnapshot = false;
+    client.hasLastInventorySnapshot = false;
+}
+
+void GameServer::handleClientContainerClose(ConnectedClient& client, const net::ClientContainerClose& close) {
+    if (client.openContainerId == 0 || close.containerId != client.openContainerId) {
+        return;
+    }
+
+    ItemStack cursor = stackFromSlotData(client.openContainerCursor);
+    if (!cursor.isEmpty() && m_ecsRegistry != nullptr) {
+        const entt::entity playerEntity = resolvePlayerEntity(client);
+        if (playerEntity != entt::null && m_ecsRegistry->valid(playerEntity)) {
+            if (auto* inventoryData = m_ecsRegistry->try_get<ecs::InventoryDataComponent>(playerEntity)) {
+                uint32_t remaining = inventoryData->inventory.addItem(cursor.itemId, cursor.count);
+                if (remaining > 0) {
+                    const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(client.openContainerUiId);
+                    const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
+                    if (behavior.handler == "storage" &&
+                        m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
+                        BlockEntityInventoryStore& store = m_ecsRegistry->ctx().get<BlockEntityInventoryStore>();
+                        if (BlockEntityInventory* storage = store.findMutable(client.openContainerPosition)) {
+                            remaining = storage->addItem(cursor.itemId, remaining);
+                        }
+                    } else if (behavior.handler == "smelting" &&
+                               m_ecsRegistry->ctx().contains<MachineInventoryStore>() &&
+                               m_ecsRegistry->ctx().contains<SmeltingSystem>()) {
+                        MachineInventoryStore& store = m_ecsRegistry->ctx().get<MachineInventoryStore>();
+                        MachineInventory* machine = store.findMutable(client.openContainerPosition);
+                        if (machine != nullptr) {
+                            SmeltingProcessorRuntime runtime =
+                                SmeltingProcessorRuntime::create(uiDef, behavior, machine->slotCount());
+                            SmeltingSystem& smelting = m_ecsRegistry->ctx().get<SmeltingSystem>();
+                            for (int slot = 0; slot < machine->slotCount() && remaining > 0; ++slot) {
+                                if (!runtime.acceptsItem(slot, cursor.itemId, smelting)) {
+                                    continue;
+                                }
+                                ItemStack target = machine->getSlotStack(slot);
+                                const uint32_t before = remaining;
+                                remaining = addToStack(target, cursor.itemId, remaining);
+                                if (remaining != before) {
+                                    machine->setSlotStack(slot, target);
+                                }
+                            }
+                        }
+                    }
+                }
+                if (remaining > 0 && m_gameplayRegistry != nullptr) {
+                    ecs::ItemSpawnSystem::spawnAtPosition(*m_gameplayRegistry, cursor.itemId, client.lastPosition, remaining);
+                }
+            }
+        }
+    }
+
+    sendContainerClose(client);
+    clearOpenContainerSession(client);
+    client.hasLastInventorySnapshot = false;
+}
+
+void GameServer::closeOpenContainersAtPositions(const std::vector<glm::ivec3>& positions) {
+    if (positions.empty()) {
+        return;
+    }
+
+    for (auto& client : m_clients) {
+        if (client.openContainerId == 0) {
+            continue;
+        }
+        if (std::find(positions.begin(), positions.end(), client.openContainerPosition) == positions.end()) {
+            continue;
+        }
+        handleClientContainerClose(client, net::ClientContainerClose{client.openContainerId});
+    }
+}
 
 void GameServer::handleClientBlockAction(ConnectedClient& client, const net::ClientBlockAction& action) {
     const glm::ivec3 actionBlock =
@@ -1521,6 +1982,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         }
         std::vector<glm::ivec3> removedPositions;
         const BlockID brokenBlock = removeServerTargetBlock(m_world, action.targetBlock, removedPositions);
+        closeOpenContainersAtPositions(removedPositions);
         const bool dropBrokenBlockItem = client.gameplayMode != net::NetworkGameplayMode::Creative;
         constexpr bool dropContainerContents = true;
         bool brokeStorage = false;
@@ -1898,6 +2360,56 @@ void GameServer::sendInventorySnapshotsToClients() {
         client.hasLastInventorySnapshot = true;
         client.lastInventorySnapshotSelected = snapshot.selectedHotbarSlot;
         client.lastInventorySnapshotSlots = std::move(snapshot.slots);
+    }
+}
+
+void GameServer::sendContainerClose(ConnectedClient& client) {
+    if (client.openContainerId == 0 ||
+        !client.receivedHello ||
+        !client.transport ||
+        !client.transport->hasActiveRemote()) {
+        return;
+    }
+
+    net::Packet packet;
+    packet.channel = net::PacketChannel::ReliableWorld;
+    packet.type = net::MessageType::ContainerClose;
+    net::ContainerCloseMessage close;
+    close.containerId = client.openContainerId;
+    close.blockPosition = client.openContainerPosition;
+    packet.inProcessPayload = close;
+    client.transport->send(std::move(packet));
+}
+
+void GameServer::sendContainerSnapshotsToClients() {
+    for (auto& client : m_clients) {
+        if (!client.receivedHello ||
+            !client.transport ||
+            !client.transport->hasActiveRemote() ||
+            client.openContainerId == 0) {
+            continue;
+        }
+
+        net::ContainerSnapshotMessage snapshot;
+        if (!buildContainerSnapshot(client, snapshot)) {
+            handleClientContainerClose(client, net::ClientContainerClose{client.openContainerId});
+            continue;
+        }
+
+        const bool changed = !client.hasLastContainerSnapshot ||
+                             !containerSnapshotsEqual(client.lastContainerSnapshot, snapshot);
+        if (!changed) {
+            continue;
+        }
+
+        net::Packet packet;
+        packet.channel = net::PacketChannel::ReliableWorld;
+        packet.type = net::MessageType::ContainerSnapshot;
+        packet.inProcessPayload = snapshot;
+        client.transport->send(std::move(packet));
+
+        client.hasLastContainerSnapshot = true;
+        client.lastContainerSnapshot = std::move(snapshot);
     }
 }
 

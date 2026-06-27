@@ -19,6 +19,9 @@ const char* messageTypeName(MessageType type) {
     switch (type) {
     case MessageType::ClientHello: return "ClientHello";
     case MessageType::ClientViewConfig: return "ClientViewConfig";
+    case MessageType::ClientContainerOpenRequest: return "ClientContainerOpenRequest";
+    case MessageType::ClientContainerSlotAction: return "ClientContainerSlotAction";
+    case MessageType::ClientContainerClose: return "ClientContainerClose";
     case MessageType::ClientChatMessage: return "ClientChatMessage";
     case MessageType::ClientCommandRequest: return "ClientCommandRequest";
     case MessageType::ClientRespawnRequest: return "ClientRespawnRequest";
@@ -29,6 +32,8 @@ const char* messageTypeName(MessageType type) {
     case MessageType::WorldStateSnapshot: return "WorldStateSnapshot";
     case MessageType::PlayerModeUpdate: return "PlayerModeUpdate";
     case MessageType::InventorySnapshot: return "InventorySnapshot";
+    case MessageType::ContainerSnapshot: return "ContainerSnapshot";
+    case MessageType::ContainerClose: return "ContainerClose";
     case MessageType::EntityImpact: return "EntityImpact";
     case MessageType::ChunkData: return "ChunkData";
     case MessageType::ServerSnapshot: return "ServerSnapshot";
@@ -355,6 +360,27 @@ void ENetTransport::poll() {
                     }
                     break;
                 }
+                case MessageType::ClientContainerOpenRequest: {
+                    ClientContainerOpenRequest msg;
+                    if (PacketCodec::decodeClientContainerOpenRequest(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
+                case MessageType::ClientContainerSlotAction: {
+                    ClientContainerSlotAction msg;
+                    if (PacketCodec::decodeClientContainerSlotAction(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
+                case MessageType::ClientContainerClose: {
+                    ClientContainerClose msg;
+                    if (PacketCodec::decodeClientContainerClose(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
+                    }
+                    break;
+                }
                 case MessageType::ClientChatMessage: {
                     ClientChatMessage msg;
                     if (PacketCodec::decodeClientChatMessage(packet.payload.data(), packet.payload.size(), msg)) {
@@ -415,6 +441,20 @@ void ENetTransport::poll() {
                     InventorySnapshotMessage msg;
                     if (PacketCodec::decodeInventorySnapshot(packet.payload.data(), packet.payload.size(), msg)) {
                         packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::ContainerSnapshot: {
+                    ContainerSnapshotMessage msg;
+                    if (PacketCodec::decodeContainerSnapshot(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::ContainerClose: {
+                    ContainerCloseMessage msg;
+                    if (PacketCodec::decodeContainerClose(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = msg;
                     }
                     break;
                 }
@@ -611,6 +651,18 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
         typedPayload = PacketCodec::encodeClientBlockAction(
             std::any_cast<const ClientBlockAction&>(packet.inProcessPayload));
         break;
+    case MessageType::ClientContainerOpenRequest:
+        typedPayload = PacketCodec::encodeClientContainerOpenRequest(
+            std::any_cast<const ClientContainerOpenRequest&>(packet.inProcessPayload));
+        break;
+    case MessageType::ClientContainerSlotAction:
+        typedPayload = PacketCodec::encodeClientContainerSlotAction(
+            std::any_cast<const ClientContainerSlotAction&>(packet.inProcessPayload));
+        break;
+    case MessageType::ClientContainerClose:
+        typedPayload = PacketCodec::encodeClientContainerClose(
+            std::any_cast<const ClientContainerClose&>(packet.inProcessPayload));
+        break;
     case MessageType::ClientChatMessage:
         typedPayload = PacketCodec::encodeClientChatMessage(
             std::any_cast<const ClientChatMessage&>(packet.inProcessPayload));
@@ -650,6 +702,14 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
     case MessageType::InventorySnapshot:
         typedPayload = PacketCodec::encodeInventorySnapshot(
             std::any_cast<const InventorySnapshotMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::ContainerSnapshot:
+        typedPayload = PacketCodec::encodeContainerSnapshot(
+            std::any_cast<const ContainerSnapshotMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::ContainerClose:
+        typedPayload = PacketCodec::encodeContainerClose(
+            std::any_cast<const ContainerCloseMessage&>(packet.inProcessPayload));
         break;
     default:
         break;

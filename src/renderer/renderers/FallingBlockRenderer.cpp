@@ -58,12 +58,12 @@ void FallingBlockRenderer::shutdown() {
     m_shadowShader = nullptr;
 }
 
-const renderer::BlockCubeMesh* FallingBlockRenderer::getOrCreateMesh(BlockID blockId) {
-    const auto it = m_meshes.find(blockId);
+const renderer::BlockCubeMesh* FallingBlockRenderer::getOrCreateMesh(StateID stateId) {
+    const auto it = m_meshes.find(stateId);
     if (it != m_meshes.end()) {
         return &it->second;
     }
-    auto inserted = m_meshes.emplace(blockId, renderer::buildBlockCubeMesh(blockId, *m_resourceMgr));
+    auto inserted = m_meshes.emplace(stateId, renderer::buildBlockStateCubeMesh(stateId, *m_resourceMgr));
     return &inserted.first->second;
 }
 
@@ -104,13 +104,52 @@ void FallingBlockRenderer::renderToGBuffer(const IWorldView& worldView,
         const auto& transform = view.get<ecs::TransformComponent>(entity);
         const auto& idComp = view.get<ecs::DropEntityIdComponent>(entity);
 
-        const renderer::BlockCubeMesh* mesh = getOrCreateMesh(block.blockId);
+        const renderer::BlockCubeMesh* mesh =
+            getOrCreateMesh(BlockStateRegistry::getDefaultState(block.blockId));
         if (mesh == nullptr || !mesh->valid()) {
             continue;
         }
 
         // Full-cube model: translate to render position, no rotation, unit scale,
         // then offset so the cube spans [pos-0.5, pos+0.5] (centered on the cell).
+        glm::mat4 model(1.0f);
+        model = glm::translate(model, transform.position);
+        model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
+
+        const glm::vec2 light = queryWorldLight(worldView, transform.position);
+
+        const auto it = m_previousModelMatrices.find(idComp.dropId);
+        m_gbufferShader->setMat4(prevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
+        m_gbufferShader->setMat4(modelLoc, model);
+        m_gbufferShader->setFloat("uDropSunlight", light.x);
+        m_gbufferShader->setFloat("uDropBlockLight", light.y);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindVertexArray(mesh->vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+
+        m_previousModelMatrices[idComp.dropId] = model;
+    }
+
+    auto movingView = reg.view<ecs::MovingBlockTag,
+                              ecs::MovingBlockComponent,
+                              ecs::TransformComponent,
+                              ecs::DropEntityIdComponent>();
+    for (const entt::entity entity : movingView) {
+        const auto& block = movingView.get<ecs::MovingBlockComponent>(entity);
+        const auto& transform = movingView.get<ecs::TransformComponent>(entity);
+        const auto& idComp = movingView.get<ecs::DropEntityIdComponent>(entity);
+
+        const renderer::BlockCubeMesh* mesh = getOrCreateMesh(block.stateId);
+        if (mesh == nullptr || !mesh->valid()) {
+            continue;
+        }
+
         glm::mat4 model(1.0f);
         model = glm::translate(model, transform.position);
         model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
@@ -184,7 +223,35 @@ void FallingBlockRenderer::renderToShadowMap(const ecs::GameplayRegistry& regist
         const auto& block = view.get<ecs::FallingBlockComponent>(entity);
         const auto& transform = view.get<ecs::TransformComponent>(entity);
 
-        const renderer::BlockCubeMesh* mesh = getOrCreateMesh(block.blockId);
+        const renderer::BlockCubeMesh* mesh =
+            getOrCreateMesh(BlockStateRegistry::getDefaultState(block.blockId));
+        if (mesh == nullptr || !mesh->valid()) {
+            continue;
+        }
+
+        glm::mat4 model(1.0f);
+        model = glm::translate(model, transform.position);
+        model = glm::translate(model, glm::vec3(-0.5f, -0.5f, -0.5f));
+
+        m_shadowShader->setMat4(modelLoc, model);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindVertexArray(mesh->vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+    }
+
+    auto movingView = reg.view<ecs::MovingBlockTag,
+                              ecs::MovingBlockComponent,
+                              ecs::TransformComponent>();
+    for (const entt::entity entity : movingView) {
+        const auto& block = movingView.get<ecs::MovingBlockComponent>(entity);
+        const auto& transform = movingView.get<ecs::TransformComponent>(entity);
+
+        const renderer::BlockCubeMesh* mesh = getOrCreateMesh(block.stateId);
         if (mesh == nullptr || !mesh->valid()) {
             continue;
         }

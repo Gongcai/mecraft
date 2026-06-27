@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <queue>
 #include <thread>
 #include <vector>
@@ -151,6 +152,64 @@ static uint32_t ecsDroppedItemCount(ecs::GameplayRegistry& registry, const ItemI
         }
     }
     return total;
+}
+
+static void pushClientHello(ManualTransport& transport) {
+    net::Packet helloPacket;
+    helloPacket.type = net::MessageType::ClientHello;
+    helloPacket.inProcessPayload = net::ClientHello{};
+    transport.pushIncoming(std::move(helloPacket));
+}
+
+static void pushContainerOpen(ManualTransport& transport,
+                              const uint32_t sequence,
+                              const glm::ivec3& blockPosition,
+                              const glm::vec3& playerPosition) {
+    net::Packet packet;
+    packet.type = net::MessageType::ClientContainerOpenRequest;
+    net::ClientContainerOpenRequest request;
+    request.sequence = sequence;
+    request.blockPosition = blockPosition;
+    request.playerPosition = playerPosition;
+    packet.inProcessPayload = request;
+    transport.pushIncoming(std::move(packet));
+}
+
+static void pushContainerSlotAction(ManualTransport& transport,
+                                    const uint32_t sequence,
+                                    const uint32_t containerId,
+                                    const net::ContainerSlotActionType action,
+                                    const net::ContainerSlotSpace slotSpace,
+                                    const int16_t slot) {
+    net::Packet packet;
+    packet.type = net::MessageType::ClientContainerSlotAction;
+    net::ClientContainerSlotAction message;
+    message.sequence = sequence;
+    message.containerId = containerId;
+    message.action = action;
+    message.slotSpace = slotSpace;
+    message.slot = slot;
+    packet.inProcessPayload = message;
+    transport.pushIncoming(std::move(packet));
+}
+
+static void pushContainerClose(ManualTransport& transport, const uint32_t containerId) {
+    net::Packet packet;
+    packet.type = net::MessageType::ClientContainerClose;
+    packet.inProcessPayload = net::ClientContainerClose{containerId};
+    transport.pushIncoming(std::move(packet));
+}
+
+static std::optional<net::ContainerSnapshotMessage> drainLatestContainerSnapshot(ManualTransport& transport) {
+    std::optional<net::ContainerSnapshotMessage> latest;
+    while (!transport.sent.empty()) {
+        net::Packet packet = std::move(transport.sent.front());
+        transport.sent.pop();
+        if (packet.type == net::MessageType::ContainerSnapshot && packet.inProcessPayload.has_value()) {
+            latest = std::any_cast<const net::ContainerSnapshotMessage&>(packet.inProcessPayload);
+        }
+    }
+    return latest;
 }
 
 static void testServerInit() {
@@ -650,6 +709,192 @@ static void testClientBlockActionInteractIsServerAuthoritative() {
             "server should reject out-of-reach interact requests");
 
     std::printf("[PASS] testClientBlockActionInteractIsServerAuthoritative\n");
+}
+
+static void testMultiplayerContainerSnapshotsStayAuthoritative() {
+    ServerHarness harness;
+    World& world = harness.server.world();
+
+    const glm::ivec3 chestPos(4, Chunk::SIZE_Y - 8, 4);
+    for (int tick = 0;
+         tick < 240 && !world.isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z);
+         ++tick) {
+        world.update(glm::vec3(chestPos) + glm::vec3(0.5f));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(world.isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
+            "multiplayer container test chunk should be loaded");
+
+    world.setBlockState(chestPos.x,
+                        chestPos.y,
+                        chestPos.z,
+                        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest")));
+
+    auto transportA = std::make_unique<ManualTransport>();
+    ManualTransport* clientA = transportA.get();
+    pushClientHello(*clientA);
+    harness.server.acceptClient(std::move(transportA), 1);
+
+    auto transportB = std::make_unique<ManualTransport>();
+    ManualTransport* clientB = transportB.get();
+    pushClientHello(*clientB);
+    harness.server.acceptClient(std::move(transportB), 2);
+
+    harness.server.tick(1.0f / 20.0f);
+    while (!clientA->sent.empty()) {
+        clientA->sent.pop();
+    }
+    while (!clientB->sent.empty()) {
+        clientB->sent.pop();
+    }
+
+    const glm::vec3 playerPosition = glm::vec3(chestPos) + glm::vec3(0.5f, 0.5f, 1.5f);
+    pushContainerOpen(*clientA, 1, chestPos, playerPosition);
+    pushContainerOpen(*clientB, 1, chestPos, playerPosition);
+    harness.server.tick(1.0f / 20.0f);
+
+    const std::optional<net::ContainerSnapshotMessage> openedA = drainLatestContainerSnapshot(*clientA);
+    const std::optional<net::ContainerSnapshotMessage> openedB = drainLatestContainerSnapshot(*clientB);
+    require(openedA.has_value(), "client A should receive an opened chest container snapshot");
+    require(openedB.has_value(), "client B should receive an opened chest container snapshot");
+    require(openedA->containerId != 0 && openedB->containerId != 0,
+            "container sessions should have non-zero ids");
+    require(openedA->blockPosition == chestPos && openedB->blockPosition == chestPos,
+            "container snapshots should identify the opened chest position");
+    require(openedA->containerUiId == "minecraft:chest" && openedB->containerUiId == "minecraft:chest",
+            "container snapshots should carry the chest UI id");
+    require(openedA->containerSlots.size() == 27 && openedB->containerSlots.size() == 27,
+            "chest container snapshots should carry 27 storage slots");
+
+    const ItemID apple = ItemRegistry::requireIdByName("minecraft:apple");
+    require(openedA->playerSlots.size() == Inventory::INVENTORY_SIZE &&
+            openedA->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
+            openedA->playerSlots[7].stackCount == 16,
+            "client A snapshot should include its authoritative default apples");
+    require(openedB->playerSlots.size() == Inventory::INVENTORY_SIZE &&
+            openedB->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
+            openedB->playerSlots[7].stackCount == 16,
+            "client B snapshot should include its separate authoritative default apples");
+
+    pushContainerSlotAction(*clientA,
+                            2,
+                            openedA->containerId,
+                            net::ContainerSlotActionType::PrimaryClick,
+                            net::ContainerSlotSpace::Player,
+                            7);
+    harness.server.tick(1.0f / 20.0f);
+    const std::optional<net::ContainerSnapshotMessage> pickedA = drainLatestContainerSnapshot(*clientA);
+    require(pickedA.has_value(), "client A should receive a cursor snapshot after picking from its inventory");
+    require(pickedA->cursor.itemId == static_cast<uint16_t>(apple) && pickedA->cursor.stackCount == 16,
+            "client A cursor should hold picked apples");
+    require(pickedA->playerSlots[7].itemId == 0 && pickedA->playerSlots[7].stackCount == 0,
+            "client A player slot should be empty while apples are on the cursor");
+
+    pushContainerSlotAction(*clientA,
+                            3,
+                            openedA->containerId,
+                            net::ContainerSlotActionType::PrimaryClick,
+                            net::ContainerSlotSpace::Container,
+                            0);
+    harness.server.tick(1.0f / 20.0f);
+    const std::optional<net::ContainerSnapshotMessage> placedA = drainLatestContainerSnapshot(*clientA);
+    const std::optional<net::ContainerSnapshotMessage> placedB = drainLatestContainerSnapshot(*clientB);
+    require(placedA.has_value(), "client A should receive chest contents after placing apples");
+    require(placedB.has_value(), "client B should receive chest contents changed by client A");
+    require(placedA->containerSlots[0].itemId == static_cast<uint16_t>(apple) &&
+            placedA->containerSlots[0].stackCount == 16,
+            "client A should see apples in chest slot 0");
+    require(placedB->containerSlots[0].itemId == static_cast<uint16_t>(apple) &&
+            placedB->containerSlots[0].stackCount == 16,
+            "client B should see the same apples in chest slot 0");
+    require(placedA->cursor.itemId == 0 && placedA->cursor.stackCount == 0,
+            "client A cursor should clear after placing apples into the chest");
+    require(placedB->playerSlots[7].itemId == static_cast<uint16_t>(apple) &&
+            placedB->playerSlots[7].stackCount == 16,
+            "client B player inventory should remain separate from client A operations");
+
+    pushContainerSlotAction(*clientA,
+                            4,
+                            openedA->containerId,
+                            net::ContainerSlotActionType::PrimaryClick,
+                            net::ContainerSlotSpace::Container,
+                            0);
+    harness.server.tick(1.0f / 20.0f);
+    const std::optional<net::ContainerSnapshotMessage> cursorA = drainLatestContainerSnapshot(*clientA);
+    const std::optional<net::ContainerSnapshotMessage> emptiedB = drainLatestContainerSnapshot(*clientB);
+    require(cursorA.has_value(), "client A should receive cursor contents after picking from chest");
+    require(emptiedB.has_value(), "client B should receive the emptied chest after client A picks from it");
+    require(cursorA->cursor.itemId == static_cast<uint16_t>(apple) && cursorA->cursor.stackCount == 16,
+            "client A cursor should hold apples picked from the chest");
+    require(cursorA->containerSlots[0].itemId == 0 && cursorA->containerSlots[0].stackCount == 0,
+            "client A should see chest slot 0 emptied");
+    require(emptiedB->containerSlots[0].itemId == 0 && emptiedB->containerSlots[0].stackCount == 0,
+            "client B should see chest slot 0 emptied");
+
+    pushContainerClose(*clientA, openedA->containerId);
+    harness.server.tick(1.0f / 20.0f);
+
+    std::optional<net::ContainerCloseMessage> closeA;
+    std::optional<net::InventorySnapshotMessage> inventoryA;
+    while (!clientA->sent.empty()) {
+        net::Packet packet = std::move(clientA->sent.front());
+        clientA->sent.pop();
+        if (packet.type == net::MessageType::ContainerClose && packet.inProcessPayload.has_value()) {
+            closeA = std::any_cast<const net::ContainerCloseMessage&>(packet.inProcessPayload);
+        } else if (packet.type == net::MessageType::InventorySnapshot && packet.inProcessPayload.has_value()) {
+            inventoryA = std::any_cast<const net::InventorySnapshotMessage&>(packet.inProcessPayload);
+        }
+    }
+    require(closeA.has_value() && closeA->containerId == openedA->containerId,
+            "client A should receive a close message for the opened container session");
+    require(inventoryA.has_value(), "client A should receive an inventory snapshot after closing with a cursor stack");
+    require(inventoryA->slots.size() == Inventory::INVENTORY_SIZE &&
+            inventoryA->slots[7].itemId == static_cast<uint16_t>(apple) &&
+            inventoryA->slots[7].stackCount == 16,
+            "closing the container should return the cursor apples to client A inventory");
+
+    while (!clientB->sent.empty()) {
+        clientB->sent.pop();
+    }
+
+    net::Packet breakPacket;
+    breakPacket.type = net::MessageType::ClientBlockAction;
+    net::ClientBlockAction breakAction;
+    breakAction.sequence = 5;
+    breakAction.action = net::ClientBlockActionType::Break;
+    breakAction.targetBlock = chestPos;
+    breakAction.playerPosition = playerPosition;
+    breakPacket.inProcessPayload = breakAction;
+    clientB->pushIncoming(std::move(breakPacket));
+
+    harness.server.tick(1.0f / 20.0f);
+
+    bool sawCloseB = false;
+    bool sawAirUpdateB = false;
+    while (!clientB->sent.empty()) {
+        net::Packet packet = std::move(clientB->sent.front());
+        clientB->sent.pop();
+        if (packet.type == net::MessageType::ContainerClose && packet.inProcessPayload.has_value()) {
+            const auto& close = std::any_cast<const net::ContainerCloseMessage&>(packet.inProcessPayload);
+            sawCloseB = close.containerId == openedB->containerId && close.blockPosition == chestPos;
+        } else if (packet.type == net::MessageType::BlockUpdateBatch && packet.inProcessPayload.has_value()) {
+            const auto& batch = std::any_cast<const net::BlockUpdateBatchMessage&>(packet.inProcessPayload);
+            for (const net::BlockUpdateEntry& update : batch.updates) {
+                if (update.x == chestPos.x &&
+                    update.y == chestPos.y &&
+                    update.z == chestPos.z &&
+                    update.stateId == RUNTIME_ID_NULL) {
+                    sawAirUpdateB = true;
+                }
+            }
+        }
+    }
+    require(harness.server.world().getBlock(chestPos.x, chestPos.y, chestPos.z) == RUNTIME_ID_NULL,
+            "breaking an open container should remove the chest block");
+    require(sawCloseB, "breaking an open container should close client B's container session");
+    require(sawAirUpdateB, "breaking an open container should sync the removed chest block");
+
+    std::printf("[PASS] testMultiplayerContainerSnapshotsStayAuthoritative\n");
 }
 
 static void testChatBroadcastRoundTrip() {
@@ -1430,23 +1675,25 @@ static void testOwnedServerPistonPushCorrectsPlayerPose() {
 
     bool sawPistonPoseCorrection = false;
     glm::vec3 correctedPosition(0.0f);
-    harness.server.tick(1.0f / 20.0f);
-    while (!clientPtr->sent.empty()) {
-        net::Packet packet = std::move(clientPtr->sent.front());
-        clientPtr->sent.pop();
-        if (packet.type != net::MessageType::ServerSnapshot || !packet.inProcessPayload.has_value()) {
-            continue;
-        }
+    for (int tick = 0; tick < 6 && correctedPosition.x <= 7.29f; ++tick) {
+        harness.server.tick(1.0f / 20.0f);
+        while (!clientPtr->sent.empty()) {
+            net::Packet packet = std::move(clientPtr->sent.front());
+            clientPtr->sent.pop();
+            if (packet.type != net::MessageType::ServerSnapshot || !packet.inProcessPayload.has_value()) {
+                continue;
+            }
 
-        const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
-        if (snapshot.playerPoseCorrected) {
-            sawPistonPoseCorrection = true;
-            correctedPosition = snapshot.authoritativePosition;
+            const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);
+            if (snapshot.playerPoseCorrected) {
+                sawPistonPoseCorrection = true;
+                correctedPosition = snapshot.authoritativePosition;
+            }
         }
     }
 
-    require(sawPistonPoseCorrection, "piston push should emit an authoritative player pose correction");
-    require(correctedPosition.x > 7.29f, "piston push correction should move the player outside the piston head");
+    require(sawPistonPoseCorrection, "animated piston push should emit an authoritative player pose correction");
+    require(correctedPosition.x > 7.29f, "animated piston push should move the player outside the piston head");
 
     net::Packet staleInputPacket;
     staleInputPacket.type = net::MessageType::ClientInput;
@@ -3566,6 +3813,105 @@ static void testInventorySnapshotCodecRoundTrip() {
     std::printf("[PASS] testInventorySnapshotCodecRoundTrip\n");
 }
 
+static void testContainerMessageCodecRoundTrip() {
+    net::ClientContainerOpenRequest open;
+    open.sequence = 11;
+    open.blockPosition = glm::ivec3(3, 64, -5);
+    open.playerPosition = glm::vec3(3.5f, 65.0f, -4.5f);
+
+    const auto encodedOpen = net::PacketCodec::encodeClientContainerOpenRequest(open);
+    net::ClientContainerOpenRequest decodedOpen;
+    require(net::PacketCodec::decodeClientContainerOpenRequest(encodedOpen.data(), encodedOpen.size(), decodedOpen),
+            "container open codec should decode payload");
+    require(decodedOpen.sequence == open.sequence &&
+            decodedOpen.blockPosition == open.blockPosition &&
+            decodedOpen.playerPosition == open.playerPosition,
+            "container open codec should preserve sequence, block position, and player position");
+
+    net::ClientContainerSlotAction action;
+    action.sequence = 12;
+    action.containerId = 55;
+    action.action = net::ContainerSlotActionType::SecondaryPlace;
+    action.slotSpace = net::ContainerSlotSpace::Container;
+    action.slot = 8;
+
+    const auto encodedAction = net::PacketCodec::encodeClientContainerSlotAction(action);
+    net::ClientContainerSlotAction decodedAction;
+    require(net::PacketCodec::decodeClientContainerSlotAction(encodedAction.data(), encodedAction.size(), decodedAction),
+            "container slot action codec should decode payload");
+    require(decodedAction.sequence == action.sequence &&
+            decodedAction.containerId == action.containerId &&
+            decodedAction.action == net::ContainerSlotActionType::SecondaryPlace &&
+            decodedAction.slotSpace == net::ContainerSlotSpace::Container &&
+            decodedAction.slot == action.slot,
+            "container slot action codec should preserve action fields");
+
+    net::ClientContainerClose close;
+    close.containerId = 55;
+    const auto encodedClientClose = net::PacketCodec::encodeClientContainerClose(close);
+    net::ClientContainerClose decodedClientClose;
+    require(net::PacketCodec::decodeClientContainerClose(encodedClientClose.data(),
+                                                         encodedClientClose.size(),
+                                                         decodedClientClose),
+            "client container close codec should decode payload");
+    require(decodedClientClose.containerId == close.containerId,
+            "client container close codec should preserve container id");
+
+    net::ContainerSnapshotMessage snapshot;
+    snapshot.containerId = 55;
+    snapshot.containerUiId = "minecraft:dispenser";
+    snapshot.behaviorId = "minecraft:dispenser";
+    snapshot.blockPosition = glm::ivec3(1, 70, 2);
+    snapshot.containerSlots.resize(2);
+    snapshot.containerSlots[0].itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:apple"));
+    snapshot.containerSlots[0].stackCount = 4;
+    snapshot.playerSlots.resize(1);
+    snapshot.playerSlots[0].itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:coal"));
+    snapshot.playerSlots[0].stackCount = 9;
+    snapshot.cursor.itemId = static_cast<uint16_t>(ItemRegistry::requireIdByName("minecraft:bucket"));
+    snapshot.cursor.stackCount = 1;
+    snapshot.burnFraction = 0.25f;
+    snapshot.cookFraction = 0.75f;
+
+    const auto encodedSnapshot = net::PacketCodec::encodeContainerSnapshot(snapshot);
+    net::ContainerSnapshotMessage decodedSnapshot;
+    require(net::PacketCodec::decodeContainerSnapshot(encodedSnapshot.data(), encodedSnapshot.size(), decodedSnapshot),
+            "container snapshot codec should decode payload");
+    require(decodedSnapshot.containerId == snapshot.containerId &&
+            decodedSnapshot.containerUiId == snapshot.containerUiId &&
+            decodedSnapshot.behaviorId == snapshot.behaviorId &&
+            decodedSnapshot.blockPosition == snapshot.blockPosition,
+            "container snapshot codec should preserve identity fields");
+    require(decodedSnapshot.containerSlots.size() == 2 &&
+            decodedSnapshot.containerSlots[0].itemId == snapshot.containerSlots[0].itemId &&
+            decodedSnapshot.containerSlots[0].stackCount == snapshot.containerSlots[0].stackCount,
+            "container snapshot codec should preserve container slots");
+    require(decodedSnapshot.playerSlots.size() == 1 &&
+            decodedSnapshot.playerSlots[0].itemId == snapshot.playerSlots[0].itemId &&
+            decodedSnapshot.playerSlots[0].stackCount == snapshot.playerSlots[0].stackCount,
+            "container snapshot codec should preserve player slots");
+    require(decodedSnapshot.cursor.itemId == snapshot.cursor.itemId &&
+            decodedSnapshot.cursor.stackCount == snapshot.cursor.stackCount &&
+            decodedSnapshot.burnFraction == snapshot.burnFraction &&
+            decodedSnapshot.cookFraction == snapshot.cookFraction,
+            "container snapshot codec should preserve cursor and progress");
+
+    net::ContainerCloseMessage serverClose;
+    serverClose.containerId = 55;
+    serverClose.blockPosition = glm::ivec3(1, 70, 2);
+    const auto encodedServerClose = net::PacketCodec::encodeContainerClose(serverClose);
+    net::ContainerCloseMessage decodedServerClose;
+    require(net::PacketCodec::decodeContainerClose(encodedServerClose.data(),
+                                                   encodedServerClose.size(),
+                                                   decodedServerClose),
+            "server container close codec should decode payload");
+    require(decodedServerClose.containerId == serverClose.containerId &&
+            decodedServerClose.blockPosition == serverClose.blockPosition,
+            "server container close codec should preserve id and block position");
+
+    std::printf("[PASS] testContainerMessageCodecRoundTrip\n");
+}
+
 static void testServerTickBreaksUnsupportedPlant() {
     ServerHarness harness;
 
@@ -4039,6 +4385,7 @@ int main() {
     testClientBlockActionRoundTrip();
     testClientBlockActionMergesStackedSlabs();
     testClientBlockActionInteractIsServerAuthoritative();
+    testMultiplayerContainerSnapshotsStayAuthoritative();
     testChatBroadcastRoundTrip();
     testAdminCommandUpdatesWorldState();
     testNonAdminCommandDenied();
@@ -4079,6 +4426,7 @@ int main() {
     testEntitySnapshotCodecCarriesHealthAndHurt();
     testServerSnapshotCodecCarriesPlayerHealth();
     testInventorySnapshotCodecRoundTrip();
+    testContainerMessageCodecRoundTrip();
     testServerTickBreaksUnsupportedPlant();
     testPlacedUnsupportedSandQueuesItself();
     testDisconnectedPlayerDespawnsForOtherClients();

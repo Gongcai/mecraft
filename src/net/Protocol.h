@@ -47,6 +47,9 @@ enum class MessageType : uint8_t {
     ClientReady,
     ClientViewConfig,
     ClientBlockAction,
+    ClientContainerOpenRequest,
+    ClientContainerSlotAction,
+    ClientContainerClose,
     ClientChatMessage,
     ClientCommandRequest,
 
@@ -61,6 +64,8 @@ enum class MessageType : uint8_t {
     EntityImpact,
     EntitySnapshot,
     InventorySnapshot,
+    ContainerSnapshot,
+    ContainerClose,
     ServerChatMessage,
     ServerSystemMessage,
     CommandResult,
@@ -133,6 +138,35 @@ struct ClientBlockAction {
     glm::ivec3 hitNormal = glm::ivec3(0);
     glm::vec3 playerPosition = glm::vec3(0.0f);
     uint16_t blockState = 0;
+};
+
+enum class ContainerSlotSpace : uint8_t {
+    Container = 0,
+    Player = 1,
+    None = 255,
+};
+
+enum class ContainerSlotActionType : uint8_t {
+    PrimaryClick = 0,
+    SecondaryPlace = 1,
+};
+
+struct ClientContainerOpenRequest {
+    uint32_t sequence = 0;
+    glm::ivec3 blockPosition = glm::ivec3(0);
+    glm::vec3 playerPosition = glm::vec3(0.0f);
+};
+
+struct ClientContainerSlotAction {
+    uint32_t sequence = 0;
+    uint32_t containerId = 0;
+    ContainerSlotActionType action = ContainerSlotActionType::PrimaryClick;
+    ContainerSlotSpace slotSpace = ContainerSlotSpace::None;
+    int16_t slot = -1;
+};
+
+struct ClientContainerClose {
+    uint32_t containerId = 0;
 };
 
 /// Chat text submitted by a client. Slash commands use ClientCommandRequest.
@@ -267,6 +301,23 @@ struct InventorySlotData {
 struct InventorySnapshotMessage {
     uint8_t selectedHotbarSlot = 0;
     std::vector<InventorySlotData> slots;  // 36 slots (hotbar + main inventory)
+};
+
+struct ContainerSnapshotMessage {
+    uint32_t containerId = 0;
+    std::string containerUiId;
+    std::string behaviorId;
+    glm::ivec3 blockPosition = glm::ivec3(0);
+    std::vector<InventorySlotData> containerSlots;
+    std::vector<InventorySlotData> playerSlots;
+    InventorySlotData cursor;
+    float burnFraction = 0.0f;
+    float cookFraction = 0.0f;
+};
+
+struct ContainerCloseMessage {
+    uint32_t containerId = 0;
+    glm::ivec3 blockPosition = glm::ivec3(0);
 };
 
 enum class ChatMessageKind : uint8_t {

@@ -6,6 +6,7 @@
 
 #include "world/chunk/SubChunk.h"  // BlockVertex
 #include "world/block/Block.h"     // BlockID
+#include "world/block/BlockStateRegistry.h"
 
 class ResourceMgr;
 
@@ -27,9 +28,17 @@ struct BlockCubeMesh {
 /// uses full brightness vertex values so entity renderers can shade it per draw.
 [[nodiscard]] std::vector<BlockVertex> buildBlockMeshVertices(BlockID blockId, const ResourceMgr& resourceMgr);
 
+/// Build local-space geometry for a specific block state.
+/// Model-shaped blocks use the state's selected model variant.
+[[nodiscard]] std::vector<BlockVertex> buildBlockMeshVerticesForState(StateID stateId,
+                                                                      const ResourceMgr& resourceMgr);
+
 /// Build and upload a block-backed item/entity mesh. Returns an empty mesh
 /// (vertexCount=0) if the block has no renderable geometry.
 BlockCubeMesh buildBlockCubeMesh(BlockID blockId, const ResourceMgr& resourceMgr);
+
+/// Build and upload a block-backed item/entity mesh for a specific state.
+BlockCubeMesh buildBlockStateCubeMesh(StateID stateId, const ResourceMgr& resourceMgr);
 
 /// Upload a caller-built BlockVertex list to a GL mesh with the standard
 /// block vertex layout (matches ChunkMesher / DropRenderer attrib bindings).

@@ -325,14 +325,13 @@ void appendTorchVertices(std::vector<BlockVertex>& vertices, const BlockDef& def
 }
 
 void appendModelVertices(std::vector<BlockVertex>& vertices,
-                         const BlockID blockId,
+                         const StateID stateId,
                          const BlockDef& def,
                          const ResourceMgr& resourceMgr) {
-    const StateID stateId = BlockStateRegistry::getDefaultState(blockId);
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         throw std::runtime_error("Model block is missing a model variant: " +
-                                 BlockRegistry::getNamespacedId(blockId).full());
+                                 BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(stateId)).full());
     }
 
     uint8_t tintU = 0;
@@ -423,17 +422,18 @@ BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices) {
     return mesh;
 }
 
-std::vector<BlockVertex> buildBlockMeshVertices(const BlockID blockId, const ResourceMgr& resourceMgr) {
+std::vector<BlockVertex> buildBlockMeshVerticesForState(const StateID stateId, const ResourceMgr& resourceMgr) {
     std::vector<BlockVertex> vertices;
-    if (blockId == 0) {
+    if (stateId == RUNTIME_ID_NULL) {
         return vertices;
     }
 
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::get(blockId);
     vertices.reserve(36);
 
     if (isModelShape(def)) {
-        appendModelVertices(vertices, blockId, def, resourceMgr);
+        appendModelVertices(vertices, stateId, def, resourceMgr);
     } else if (def.renderShape == BlockRenderShape::Cross) {
         int tileIndex = def.faceTop.firstLayer;
         if (tileIndex < 0) tileIndex = def.faceFront.firstLayer;
@@ -488,9 +488,26 @@ std::vector<BlockVertex> buildBlockMeshVertices(const BlockID blockId, const Res
     return vertices;
 }
 
+std::vector<BlockVertex> buildBlockMeshVertices(const BlockID blockId, const ResourceMgr& resourceMgr) {
+    if (blockId == 0) {
+        return {};
+    }
+    return buildBlockMeshVerticesForState(BlockStateRegistry::getDefaultState(blockId), resourceMgr);
+}
+
 BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, const ResourceMgr& resourceMgr) {
     BlockCubeMesh mesh;
     std::vector<BlockVertex> vertices = buildBlockMeshVertices(blockId, resourceMgr);
+    if (vertices.empty()) {
+        return mesh;
+    }
+
+    return uploadBlockCubeMesh(vertices);
+}
+
+BlockCubeMesh buildBlockStateCubeMesh(const StateID stateId, const ResourceMgr& resourceMgr) {
+    BlockCubeMesh mesh;
+    std::vector<BlockVertex> vertices = buildBlockMeshVerticesForState(stateId, resourceMgr);
     if (vertices.empty()) {
         return mesh;
     }

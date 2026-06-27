@@ -57,7 +57,9 @@ GameplayState::GameplayState(StateDependencies deps,
               deps.input,
               deps.uiRenderer,
               deps.dropSystem,
-              deps.ecsRegistry
+              deps.ecsRegistry,
+              &deps.gameClient,
+              deps.isMultiplayer
           },
           CommandStateContext{
               deps.fsm,
