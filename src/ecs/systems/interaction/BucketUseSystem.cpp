@@ -35,16 +35,17 @@ void replaceSelectedItem(Inventory& inventory, const ItemID itemId) {
 void sendBucketAction(client::GameClient& client,
                       BlockInteractionRuntimeComponent& runtime,
                       const net::ClientBlockActionType actionType,
-                      const BlockTargetComponent& target,
-                      const glm::ivec3& actionBlock,
+                      const glm::ivec3& targetBlock,
+                      const glm::ivec3& placeBlock,
+                      const glm::ivec3& hitNormal,
                       const glm::vec3& playerPosition,
                       const StateID fluidState) {
     net::ClientBlockAction action;
     action.sequence = ++runtime.heldItemSwingSequence;
     action.action = actionType;
-    action.targetBlock = target.targetBlock;
-    action.placeBlock = actionBlock;
-    action.hitNormal = target.hitNormal;
+    action.targetBlock = targetBlock;
+    action.placeBlock = placeBlock;
+    action.hitNormal = hitNormal;
     action.playerPosition = playerPosition;
     action.blockState = static_cast<uint16_t>(fluidState);
     client.sendBlockAction(action);
@@ -80,7 +81,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
 
         inventoryData.inventory.setSelectedSlot(inventoryState.selectedHotbarSlot);
 
-        if (!intent.wantsPlace || intent.wantsBreak || !target.hasTarget) {
+        if (!intent.wantsPlace || intent.wantsBreak) {
             continue;
         }
         if (runtime.placeCooldownRemaining > 0.0f) {
@@ -99,7 +100,11 @@ void BucketUseSystem::update(SystemContext& ctx) {
         }
 
         if (pickupRule != nullptr) {
-            const glm::ivec3 pickupPos = target.targetBlock;
+            if (!target.hasFluidTarget) {
+                continue;
+            }
+
+            const glm::ivec3 pickupPos = target.fluidTargetBlock;
             if (!ItemUseDispatcher::isWithinReach(transform.position, pickupPos) ||
                 !ItemUseDispatcher::canPickupFluid(worldView, pickupPos, *pickupRule)) {
                 continue;
@@ -110,8 +115,9 @@ void BucketUseSystem::update(SystemContext& ctx) {
                     sendBucketAction(*ctx.services.gameClient,
                                      runtime,
                                      net::ClientBlockActionType::BucketPickupWater,
-                                     target,
                                      pickupPos,
+                                     target.fluidPlaceBlock,
+                                     target.fluidHitNormal,
                                      transform.position,
                                      RUNTIME_ID_NULL);
                 } else {
@@ -131,6 +137,10 @@ void BucketUseSystem::update(SystemContext& ctx) {
             continue;
         }
 
+        if (!target.hasTarget) {
+            continue;
+        }
+
         const glm::ivec3 placePos = target.placeBlock;
         if (!ItemUseDispatcher::isWithinReach(transform.position, placePos) ||
             !ItemUseDispatcher::canPlaceFluid(worldView, placePos, *placeRule)) {
@@ -143,8 +153,9 @@ void BucketUseSystem::update(SystemContext& ctx) {
                 sendBucketAction(*ctx.services.gameClient,
                                  runtime,
                                  net::ClientBlockActionType::BucketPlaceWater,
-                                 target,
+                                 target.targetBlock,
                                  placePos,
+                                 target.hitNormal,
                                  transform.position,
                                  sourceFluid);
             } else {

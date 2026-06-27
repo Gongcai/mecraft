@@ -179,8 +179,7 @@ private:
             return {SlotSpace::Container, containerSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getStoragePanelPlayerLastActivatedSlot();
-        const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
+        const int inventorySlot = m_deps.uiRenderer.getStoragePanelPlayerLastActivatedSlot();
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
         }
@@ -194,8 +193,7 @@ private:
             return {SlotSpace::Container, containerSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getStoragePanelPlayerHoveredSlot();
-        const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
+        const int inventorySlot = m_deps.uiRenderer.getStoragePanelPlayerHoveredSlot();
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
         }

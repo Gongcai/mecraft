@@ -47,6 +47,7 @@ private:
     [[nodiscard]] const ui::ContainerUiDef& requireDefinition() const;
     [[nodiscard]] ResolvedPanelRect resolvePanelRect(int screenWidth, int screenHeight) const;
     [[nodiscard]] int mapContainerGridIndex(int gridIndex) const;
+    [[nodiscard]] int mapPlayerGridIndex(int gridIndex) const;
     void syncSlots();
     void appendSlotsForGroup(const ui::ContainerSlotGroupDef& group,
                              const ResolvedPanelRect& panelRect,
@@ -74,6 +75,7 @@ private:
     ItemGridControl m_containerGrid;
     ItemGridControl m_playerGrid;
     std::vector<int> m_containerSlotMapping;
+    std::vector<int> m_playerSlotMapping;
 
     ResourceMgr* m_resourceMgr = nullptr;
     Shader* m_inventoryShader = nullptr;

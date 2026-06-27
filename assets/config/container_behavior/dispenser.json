@@ -1,0 +1,11 @@
+{
+  "id": "minecraft:dispenser",
+  "handler": "storage",
+  "storage": {
+    "kind": "block_entity",
+    "slots": 9
+  },
+  "comparatorSignal": true,
+  "slotRules": [],
+  "processors": []
+}

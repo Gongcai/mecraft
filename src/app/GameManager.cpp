@@ -6,7 +6,9 @@
 #include "../world/block/Block.h"
 #include "../item/Item.h"
 #include "../net/ENetTransport.h"
+#include "../ui/inventory/ContainerUiRegistry.h"
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <GLFW/glfw3.h>
 #ifdef MECRAFT_DEBUG
@@ -73,9 +75,13 @@ void GameManager::initResources() {
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
-    m_resourceMgr.loadGuiTexture("crafting_table", CRAFTING_TABLE_GUI_TEX_PATH, true);
-    m_resourceMgr.loadGuiTexture("furnace", FURNACE_GUI_TEX_PATH, true);
-    m_resourceMgr.loadGuiTexture("chest_generic_54", CHEST_GUI_TEX_PATH, true);
+    ui::ContainerUiRegistry::init();
+    for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
+        const std::string texturePath = std::string(ASSETS_DIR) + "/" + def.backgroundTexturePath;
+        if (m_resourceMgr.loadGuiTexture(def.backgroundTexture, texturePath, true) == 0) {
+            throw std::runtime_error("Failed to load container UI texture for " + id + ": " + texturePath);
+        }
+    }
     m_resourceMgr.loadGuiTexture("creative_tab_inventory", CREATIVE_INVENTORY_PATH, true);
     m_resourceMgr.loadGuiTexture("creative_tab_items", CREATIVE_TAB_ITEMS_PATH, true);
     for (int i = 1; i <= 7; ++i) {

@@ -35,6 +35,17 @@ bool canWaterOccupyBlockLayer(const StateID state) {
     return FluidState::canReplace(waterDesc, state) || FluidState::canCoexist(waterDesc, state);
 }
 
+bool canBlockStateKeepFluidLayer(const StateID blockState, const StateID fluidState) {
+    const DecodedFluid fluid = FluidState::decode(fluidState);
+    if (fluid.kind == FluidKind::None) {
+        return true;
+    }
+    if (FluidState::decode(blockState).kind != FluidKind::None) {
+        return false;
+    }
+    return FluidState::canCoexist(FluidRegistry::get(fluid.kind), blockState);
+}
+
 bool changesFluidPathing(const StateID oldState, const StateID newState) {
     return canWaterOccupyBlockLayer(oldState) != canWaterOccupyBlockLayer(newState);
 }
@@ -757,19 +768,27 @@ void World::setBlockState(int x, int y, int z, StateID id) {
         targetState = oldFluidLayer;
     }
 
-    if (oldId == targetState && !uncoverFluidLayer) {
+    const bool clearFluidLayer =
+        oldFluidLayer != RUNTIME_ID_NULL &&
+        !uncoverFluidLayer &&
+        !canBlockStateKeepFluidLayer(targetState, oldFluidLayer);
+    const bool blockStateChanges = oldId != targetState;
+
+    if (!blockStateChanges && !uncoverFluidLayer && !clearFluidLayer) {
         return;
     }
 
-    if (m_lightService) {
-        chunk.setBlockWithoutMeshDirty(localX, y, localZ, targetState);
-        m_lightService->onBlockChanged(x, y, z, oldId, targetState);
-        m_interactiveLightFlushRequested = true;
-    } else {
-        chunk.setBlock(localX, y, localZ, targetState);
+    if (blockStateChanges) {
+        if (m_lightService) {
+            chunk.setBlockWithoutMeshDirty(localX, y, localZ, targetState);
+            m_lightService->onBlockChanged(x, y, z, oldId, targetState);
+            m_interactiveLightFlushRequested = true;
+        } else {
+            chunk.setBlock(localX, y, localZ, targetState);
+        }
     }
 
-    if (uncoverFluidLayer) {
+    if (uncoverFluidLayer || clearFluidLayer) {
         if (SubChunk* sc = chunk.getSubChunk(editedScy)) {
             sc->setFluidLayer(localX, localY, localZ, RUNTIME_ID_NULL);
         }
@@ -795,7 +814,8 @@ void World::setBlockState(int x, int y, int z, StateID id) {
         if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
     }
 
-    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z), changesFluidPathing(oldId, targetState));
+    m_fluidSystem.onBlockChanged(glm::ivec3(x, y, z),
+                                 clearFluidLayer || changesFluidPathing(oldId, targetState));
 
     // Enqueue the edited cell and its 6 neighbors for support-rule validation.
     // The edited cell matters for gravity blocks placed directly into an

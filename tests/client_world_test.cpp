@@ -3,6 +3,7 @@
 #include "world/block/Block.h"
 #include "world/block/BlockStateRegistry.h"
 #include "world/block/PropIndices.h"
+#include "world/fluid/FluidState.h"
 #include "world/WorldRaycast.h"
 #include "physics/PhysicsInfo.h"
 #include <cassert>
@@ -173,6 +174,27 @@ static void testClientWorldRaycastHitsBlocks() {
     std::printf("[PASS] testClientWorldRaycastHitsBlocks\n");
 }
 
+static void testClientWorldRaycastSeparatesFluidAndBlockTargets() {
+    client::ClientWorld cw;
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    chunk->setBlock(1, 64, 0, FluidState::makeWater(0, false));
+    chunk->setBlock(3, 64, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+    cw.addChunk(chunk);
+
+    const PhysicsInfo ray(glm::vec3(0.5f, 64.5f, 0.5f), glm::vec3(1.0f, 0.0f, 0.0f));
+    const RayHit blockHit = raycastWorldView(cw, ray, 8.0f);
+    require(blockHit.hit, "default raycast should hit the block behind water");
+    require(blockHit.kind == RayHitKind::Block, "default raycast should report a block hit");
+    require(blockHit.blockPos == glm::ivec3(3, 64, 0), "default raycast should ignore water cells");
+
+    const RayHit fluidHit = raycastWorldView(cw, ray, 8.0f, RaycastFluidMode::Include);
+    require(fluidHit.hit, "fluid raycast should hit water");
+    require(fluidHit.kind == RayHitKind::Fluid, "fluid raycast should report a fluid hit");
+    require(fluidHit.blockPos == glm::ivec3(1, 64, 0), "fluid raycast should return the water position");
+    require(FluidState::isSource(cw.getFluidState(1, 64, 0)), "client world should expose block-layer water as fluid");
+    std::printf("[PASS] testClientWorldRaycastSeparatesFluidAndBlockTargets\n");
+}
+
 static void testApplyBlockUpdateAcceptsVariableLightPatch() {
     client::ClientWorld cw;
     auto chunk = std::make_shared<Chunk>(0, 0);
@@ -278,6 +300,7 @@ int main() {
     testWeatherDayNightProxy();
     testNeighborLinkingDirtiesExistingBorders();
     testClientWorldRaycastHitsBlocks();
+    testClientWorldRaycastSeparatesFluidAndBlockTargets();
     testApplyBlockUpdateAcceptsVariableLightPatch();
     testApplyBlockUpdatePreservesStateId();
     testApplyBlockUpdateAcceptsLightSection();

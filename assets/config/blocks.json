@@ -1604,6 +1604,7 @@
     {
       "id": "minecraft:dispenser",
       "drop": "minecraft:dispenser",
+      "containerUi": "minecraft:dispenser",
       "redstoneBehavior": "dispenser",
       "respondsToRedstone": true,
       "properties": {

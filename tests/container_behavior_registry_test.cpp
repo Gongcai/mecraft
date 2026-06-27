@@ -54,6 +54,16 @@ int main() {
         return fail("barrel behavior should describe block-entity storage");
     }
 
+    const ContainerBehaviorDef& dispenser = ContainerBehaviorRegistry::require("minecraft:dispenser");
+    if (dispenser.handler != "storage" ||
+        dispenser.storage.kind != ContainerStorageKind::BlockEntity ||
+        dispenser.storage.slots != 9 ||
+        !dispenser.comparatorSignal ||
+        !dispenser.slotRules.empty() ||
+        !dispenser.processors.empty()) {
+        return fail("dispenser behavior should describe 9-slot block-entity storage");
+    }
+
     const ContainerBehaviorDef& furnace = ContainerBehaviorRegistry::require("minecraft:furnace");
     if (furnace.handler != "smelting" ||
         furnace.storage.kind != ContainerStorageKind::BlockEntity ||
@@ -109,6 +119,7 @@ int main() {
 
     if (&ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:chest").behavior) != &chest ||
         &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:barrel").behavior) != &barrel ||
+        &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:dispenser").behavior) != &dispenser ||
         &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:furnace").behavior) != &furnace ||
         &ContainerBehaviorRegistry::require(ui::ContainerUiRegistry::require("minecraft:crafting_table").behavior) != &crafting) {
         return fail("container UI behavior bindings should resolve to behavior definitions");

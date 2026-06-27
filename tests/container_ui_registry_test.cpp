@@ -27,6 +27,17 @@ const ui::ContainerProgressDef* findProgress(const ui::ContainerUiDef& def, cons
     }
     return nullptr;
 }
+
+bool hasCenteredAdaptivePanel(const ui::ContainerUiDef& def) {
+    return def.anchorX == 0.5f &&
+           def.anchorY == 0.5f &&
+           def.pivotX == 0.5f &&
+           def.pivotY == 0.5f &&
+           def.offsetX == 0.0f &&
+           def.offsetY == 0.0f &&
+           def.scale == 2.0f &&
+           def.fitPadding == 8.0f;
+}
 }
 
 int main() {
@@ -35,9 +46,11 @@ int main() {
 
     const ui::ContainerUiDef& chest = ui::ContainerUiRegistry::require("minecraft:chest");
     if (chest.behavior != "minecraft:chest" ||
-        chest.backgroundTexture != "chest_generic_54" ||
-        chest.width != 177.0f ||
+        chest.backgroundTexture != "generic_54" ||
+        chest.backgroundTexturePath != "textures/gui/generic_54.png" ||
+        chest.width != 176.0f ||
         chest.height != 222.0f ||
+        !hasCenteredAdaptivePanel(chest) ||
         chest.slotGroups.size() != 3 ||
         !chest.progressBars.empty()) {
         return fail("chest UI should parse its static layout definition");
@@ -53,9 +66,11 @@ int main() {
 
     const ui::ContainerUiDef& barrel = ui::ContainerUiRegistry::require("minecraft:barrel");
     if (barrel.behavior != "minecraft:barrel" ||
-        barrel.backgroundTexture != "chest_generic_54" ||
-        barrel.width != 177.0f ||
+        barrel.backgroundTexture != "generic_54" ||
+        barrel.backgroundTexturePath != "textures/gui/generic_54.png" ||
+        barrel.width != 176.0f ||
         barrel.height != 222.0f ||
+        !hasCenteredAdaptivePanel(barrel) ||
         barrel.slotGroups.size() != 3 ||
         !barrel.progressBars.empty()) {
         return fail("barrel UI should parse its static storage layout definition");
@@ -69,9 +84,31 @@ int main() {
         return fail("barrel UI should declare the barrel slot grid");
     }
 
+    const ui::ContainerUiDef& dispenser = ui::ContainerUiRegistry::require("minecraft:dispenser");
+    if (dispenser.behavior != "minecraft:dispenser" ||
+        dispenser.backgroundTexture != "dispenser" ||
+        dispenser.backgroundTexturePath != "textures/gui/dispenser.png" ||
+        dispenser.width != 176.0f ||
+        dispenser.height != 166.0f ||
+        !hasCenteredAdaptivePanel(dispenser) ||
+        dispenser.slotGroups.size() != 3 ||
+        !dispenser.progressBars.empty()) {
+        return fail("dispenser UI should parse its storage layout definition");
+    }
+    const ui::ContainerSlotGroupDef* dispenserSlots = findSlotGroup(dispenser, "dispenser");
+    if (dispenserSlots == nullptr ||
+        dispenserSlots->kind != ui::ContainerSlotGroupKind::Container ||
+        dispenserSlots->columns != 3 ||
+        dispenserSlots->rows != 3 ||
+        dispenserSlots->firstSlot != 0) {
+        return fail("dispenser UI should declare the 3x3 dispenser slot grid");
+    }
+
     const ui::ContainerUiDef& furnace = ui::ContainerUiRegistry::require("minecraft:furnace");
     if (furnace.behavior != "minecraft:furnace" ||
         furnace.backgroundTexture != "furnace" ||
+        furnace.backgroundTexturePath != "textures/gui/furnace.png" ||
+        !hasCenteredAdaptivePanel(furnace) ||
         furnace.slotGroups.size() != 5 ||
         furnace.progressBars.size() != 2) {
         return fail("furnace UI should parse slots and progress bars");
@@ -95,8 +132,10 @@ int main() {
     const ui::ContainerUiDef& crafting = ui::ContainerUiRegistry::require("minecraft:crafting_table");
     if (crafting.behavior != "minecraft:crafting_table" ||
         crafting.backgroundTexture != "crafting_table" ||
+        crafting.backgroundTexturePath != "textures/gui/crafting_table.png" ||
         crafting.textureWidth != 256.0f ||
         crafting.textureHeight != 256.0f ||
+        !hasCenteredAdaptivePanel(crafting) ||
         crafting.slotGroups.size() != 4) {
         return fail("crafting table UI should parse its layout definition");
     }
@@ -132,10 +171,12 @@ int main() {
 
     const BlockDef& chestBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:chest"));
     const BlockDef& barrelBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:barrel"));
+    const BlockDef& dispenserBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:dispenser"));
     const BlockDef& furnaceBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:furnace"));
     const BlockDef& craftingBlock = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:crafting_table"));
     if (&ui::ContainerUiRegistry::require(chestBlock.containerUi) != &chest ||
         &ui::ContainerUiRegistry::require(barrelBlock.containerUi) != &barrel ||
+        &ui::ContainerUiRegistry::require(dispenserBlock.containerUi) != &dispenser ||
         &ui::ContainerUiRegistry::require(furnaceBlock.containerUi) != &furnace ||
         &ui::ContainerUiRegistry::require(craftingBlock.containerUi) != &crafting) {
         return fail("block containerUi bindings should resolve to registered UI definitions");

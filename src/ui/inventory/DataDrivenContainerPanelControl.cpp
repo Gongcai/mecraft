@@ -70,6 +70,7 @@ void DataDrivenContainerPanelControl::shutdown() {
     m_playerGrid.shutdown();
     m_containerGrid.shutdown();
     m_containerSlotMapping.clear();
+    m_playerSlotMapping.clear();
     m_storageInventory = nullptr;
     m_machine = nullptr;
     m_playerInventory = nullptr;
@@ -151,7 +152,7 @@ int DataDrivenContainerPanelControl::getContainerLastActivatedSlot() const {
 }
 
 int DataDrivenContainerPanelControl::getPlayerLastActivatedSlot() const {
-    return m_playerGrid.getLastActivatedIndex();
+    return mapPlayerGridIndex(m_playerGrid.getLastActivatedIndex());
 }
 
 int DataDrivenContainerPanelControl::getContainerHoveredSlot() const {
@@ -159,7 +160,7 @@ int DataDrivenContainerPanelControl::getContainerHoveredSlot() const {
 }
 
 int DataDrivenContainerPanelControl::getPlayerHoveredSlot() const {
-    return m_playerGrid.getHoveredIndex();
+    return mapPlayerGridIndex(m_playerGrid.getHoveredIndex());
 }
 
 void DataDrivenContainerPanelControl::clearActivations() {
@@ -194,14 +195,19 @@ DataDrivenContainerPanelControl::ResolvedPanelRect DataDrivenContainerPanelContr
     const ui::ContainerUiDef& def = requireDefinition();
     const int safeWidth = std::max(1, screenWidth);
     const int safeHeight = std::max(1, screenHeight);
-    const float scale = std::max(0.1f, def.scale);
+    const float preferredScale = std::max(0.1f, def.scale);
+    const float fitPadding = std::max(0.0f, def.fitPadding);
+    const float availableWidth = std::max(1.0f, static_cast<float>(safeWidth) - fitPadding * 2.0f);
+    const float availableHeight = std::max(1.0f, static_cast<float>(safeHeight) - fitPadding * 2.0f);
+    const float fitScale = std::min(availableWidth / def.width, availableHeight / def.height);
+    const float scale = std::max(0.1f, std::min(preferredScale, fitScale));
 
     ResolvedPanelRect rect;
     rect.scale = scale;
     rect.width = def.width * scale;
     rect.height = def.height * scale;
-    rect.x = static_cast<float>(safeWidth) * def.anchorX + def.offsetX;
-    rect.y = static_cast<float>(safeHeight) * def.anchorY + def.offsetY;
+    rect.x = static_cast<float>(safeWidth) * def.anchorX - rect.width * def.pivotX + def.offsetX * scale;
+    rect.y = static_cast<float>(safeHeight) * def.anchorY - rect.height * def.pivotY + def.offsetY * scale;
     return rect;
 }
 
@@ -210,6 +216,13 @@ int DataDrivenContainerPanelControl::mapContainerGridIndex(const int gridIndex) 
         return -1;
     }
     return m_containerSlotMapping[static_cast<std::size_t>(gridIndex)];
+}
+
+int DataDrivenContainerPanelControl::mapPlayerGridIndex(const int gridIndex) const {
+    if (gridIndex < 0 || gridIndex >= static_cast<int>(m_playerSlotMapping.size())) {
+        return -1;
+    }
+    return m_playerSlotMapping[static_cast<std::size_t>(gridIndex)];
 }
 
 void DataDrivenContainerPanelControl::syncSlots() {
@@ -221,16 +234,18 @@ void DataDrivenContainerPanelControl::syncSlots() {
     std::vector<Pickable::SlotInfo> containerSlots;
     std::vector<Pickable::SlotInfo> playerSlots;
     std::vector<int> containerSlotMapping;
+    std::vector<int> playerSlotMapping;
 
     for (const ui::ContainerSlotGroupDef& group : m_definition->slotGroups) {
         if (group.kind == ui::ContainerSlotGroupKind::Container) {
             appendSlotsForGroup(group, panelRect, true, containerSlots, &containerSlotMapping);
         } else if (group.kind == ui::ContainerSlotGroupKind::PlayerInventory) {
-            appendSlotsForGroup(group, panelRect, false, playerSlots, nullptr);
+            appendSlotsForGroup(group, panelRect, false, playerSlots, &playerSlotMapping);
         }
     }
 
     m_containerSlotMapping = std::move(containerSlotMapping);
+    m_playerSlotMapping = std::move(playerSlotMapping);
     if (containerSlots.empty()) {
         m_containerGrid.clearSlots();
     } else {
@@ -256,6 +271,9 @@ void DataDrivenContainerPanelControl::appendSlotsForGroup(const ui::ContainerSlo
     const int baseY = static_cast<int>(std::lround(panelRect.y + group.y * scale));
 
     for (int row = 0; row < group.rows; ++row) {
+        const int rowExtraGap = row >= 3
+            ? static_cast<int>(std::lround(group.row4ExtraGap * scale))
+            : 0;
         for (int col = 0; col < group.columns; ++col) {
             const int slot = group.firstSlot + row * group.columns + col;
             ItemStack stack;
@@ -270,7 +288,7 @@ void DataDrivenContainerPanelControl::appendSlotsForGroup(const ui::ContainerSlo
             }
             outSlots.push_back({
                 baseX + col * colStep,
-                baseY + row * rowStep,
+                baseY + row * rowStep + rowExtraGap,
                 slotSize,
                 static_cast<int>(stack.itemId),
                 static_cast<int>(stack.count)
@@ -379,12 +397,14 @@ void DataDrivenContainerPanelControl::drawTextureQuad(const UIRenderContext& con
     const ui::ContainerUiDef& def = requireDefinition();
     const unsigned int texture = m_resourceMgr->getGuiTexture(def.backgroundTexture);
     if (texture == 0) {
-        return;
+        throw std::runtime_error("Container UI texture is not loaded: " + def.backgroundTexture);
     }
 
     std::vector<float> vertices;
     vertices.reserve(24);
-    addQuad(vertices, x0, y0, x1, y1, u0, v0, u1, v1);
+    const float bottomY0 = static_cast<float>(context.screenHeight) - y1;
+    const float bottomY1 = static_cast<float>(context.screenHeight) - y0;
+    addQuad(vertices, x0, bottomY0, x1, bottomY1, u0, v0, u1, v1);
 
     const UIRenderUtils::GLStateGuard glState;
     glDisable(GL_DEPTH_TEST);

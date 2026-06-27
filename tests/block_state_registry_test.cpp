@@ -1123,6 +1123,10 @@ int main() {
             PropIndices::POWERED_TRUE) {
         return fail("dispenser should expose a powered=true block state");
     }
+    if (BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:dispenser")).containerUi !=
+        "minecraft:dispenser") {
+        return fail("dispenser should bind to its container UI");
+    }
     const StateID dropperDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:dropper"));
     if (BlockStateRegistry::getPropertyIndex(dropperDefault, PropIndices::POWERED) !=
         PropIndices::POWERED_FALSE) {

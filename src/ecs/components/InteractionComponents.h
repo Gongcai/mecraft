@@ -24,6 +24,12 @@ struct BlockTargetComponent {
     glm::ivec3 placeBlock{};
     glm::ivec3 hitNormal{};
     glm::vec3 hitPosition{};
+    bool hasFluidTarget = false;
+    BlockID fluidTargetState = 0;
+    glm::ivec3 fluidTargetBlock{};
+    glm::ivec3 fluidPlaceBlock{};
+    glm::ivec3 fluidHitNormal{};
+    glm::vec3 fluidHitPosition{};
 };
 
 struct BlockBreakComponent {

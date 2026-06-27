@@ -61,7 +61,8 @@ bool rayIntersectsAabb(const glm::vec3& rayOrigin,
 
 RayHit raycastWorldView(const IWorldView& worldView,
                         const PhysicsInfo& ray,
-                        const float maxDist) {
+                        const float maxDist,
+                        const RaycastFluidMode fluidMode) {
     RayHit hitResult{};
 
     const glm::vec3 rayDir = glm::normalize(ray.direction);
@@ -88,8 +89,11 @@ RayHit raycastWorldView(const IWorldView& worldView,
 
     while (dist <= maxDist) {
         const StateID blockState = worldView.getBlockState(x, y, z);
-        const bool hasSolidSelection = blockState != RUNTIME_ID_NULL && !FluidState::isWater(blockState);
-        const StateID fluidState = hasSolidSelection ? RUNTIME_ID_NULL : worldView.getFluidState(x, y, z);
+        const bool blockLayerIsFluid = FluidState::isWater(blockState);
+        const bool hasSolidSelection = blockState != RUNTIME_ID_NULL && !blockLayerIsFluid;
+        const StateID fluidState = (hasSolidSelection || fluidMode == RaycastFluidMode::Ignore)
+            ? RUNTIME_ID_NULL
+            : (blockLayerIsFluid ? blockState : worldView.getFluidState(x, y, z));
         const bool hasFluidSelection = FluidState::isWater(fluidState);
 
         if (hasSolidSelection || hasFluidSelection) {
@@ -103,6 +107,7 @@ RayHit raycastWorldView(const IWorldView& worldView,
             glm::ivec3 aabbNormal(0);
             if (rayIntersectsAabb(rayOri, rayDir, boxMin, boxMax, maxDist, aabbDistance, aabbNormal)) {
                 hitResult.hit = true;
+                hitResult.kind = hasSolidSelection ? RayHitKind::Block : RayHitKind::Fluid;
                 hitResult.blockPos = glm::ivec3(x, y, z);
                 hitResult.normal = (aabbNormal.x != 0 || aabbNormal.y != 0 || aabbNormal.z != 0)
                     ? aabbNormal

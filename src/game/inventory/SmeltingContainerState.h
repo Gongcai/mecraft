@@ -144,8 +144,7 @@ private:
             return {SlotSpace::Machine, machineSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getMachinePanelPlayerLastActivatedSlot();
-        const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
+        const int inventorySlot = m_deps.uiRenderer.getMachinePanelPlayerLastActivatedSlot();
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
         }
@@ -159,8 +158,7 @@ private:
             return {SlotSpace::Machine, machineSlot};
         }
 
-        const int playerGridSlot = m_deps.uiRenderer.getMachinePanelPlayerHoveredSlot();
-        const int inventorySlot = Inventory::toInventoryIndexFromGridSlot(playerGridSlot);
+        const int inventorySlot = m_deps.uiRenderer.getMachinePanelPlayerHoveredSlot();
         if (m_deps.inventory.isValidSlot(inventorySlot)) {
             return {SlotSpace::Player, inventorySlot};
         }

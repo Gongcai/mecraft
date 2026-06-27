@@ -23,11 +23,15 @@ struct InventoryPanelLayout {
     // Anchor is normalized to current screen size (0..1).
     float anchorX = 0.5f;
     float anchorY = 0.5f;
-    // Pixel offset from anchored top-left position.
-    float offsetX = -176.0f;
-    float offsetY = -166.0f;
+    // Pivot is normalized to the panel rectangle (0..1).
+    float pivotX = 0.5f;
+    float pivotY = 0.5f;
+    // Offset from the anchored pivot in source-texture design pixels.
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
     // Uniform scale based on 176x166 source texture.
     float panelScale = 2.0f;
+    float fitPadding = 8.0f;
 
     // Inventory grid layout in source-texture design pixels (scaled by panelScale).
     float gridOffsetX = 6.8f;

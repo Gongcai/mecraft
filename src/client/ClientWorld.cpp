@@ -1,5 +1,6 @@
 #include "ClientWorld.h"
 #include "../world/block/Block.h"
+#include "../world/fluid/FluidState.h"
 #include <cstddef>
 #include <cmath>
 
@@ -89,7 +90,11 @@ StateID ClientWorld::getFluidState(int x, int y, int z) const {
     if (it == m_chunks.end() || !it->second) return StateID{0};
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
-    return it->second->getFluidState(lx, y, lz);
+    const StateID fluidState = it->second->getFluidState(lx, y, lz);
+    if (fluidState != RUNTIME_ID_NULL) {
+        return fluidState;
+    }
+    return FluidState::getFluidState(it->second->getBlock(lx, y, lz));
 }
 
 bool ClientWorld::isChunkLoadedForBlock(int x, int y, int z) const {
@@ -118,7 +123,7 @@ TerrainBiome ClientWorld::getBiome(int x, int z) const {
     (void)z;
     // Biome data is computed by the server's TerrainGenerator and not stored in chunks.
     // For the in-process milestone, the renderer uses the server's World directly for biome queries.
-    // This fallback returns Temperate for any ClientWorld-only path.
+    // ClientWorld exposes a fixed biome until server chunk messages carry biome samples.
     // In Phase 2+, biome data will be included in chunk data messages from the server.
     return TerrainBiome::Temperate;
 }

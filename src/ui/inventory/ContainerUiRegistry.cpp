@@ -1,5 +1,6 @@
 #include "ContainerUiRegistry.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -48,6 +49,26 @@ float requireNumber(const nlohmann::json& owner,
         throw std::runtime_error(ownerName + " requires numeric field: " + fieldName);
     }
     return value.get<float>();
+}
+
+float requireFiniteNumber(const nlohmann::json& owner,
+                          const std::string& ownerName,
+                          const char* fieldName) {
+    const float parsed = requireNumber(owner, ownerName, fieldName);
+    if (!std::isfinite(parsed)) {
+        throw std::runtime_error(ownerName + " requires finite numeric field: " + fieldName);
+    }
+    return parsed;
+}
+
+float requireNormalizedNumber(const nlohmann::json& owner,
+                              const std::string& ownerName,
+                              const char* fieldName) {
+    const float parsed = requireFiniteNumber(owner, ownerName, fieldName);
+    if (parsed < 0.0f || parsed > 1.0f) {
+        throw std::runtime_error(ownerName + " requires normalized field in range [0, 1]: " + fieldName);
+    }
+    return parsed;
 }
 
 int requirePositiveInteger(const nlohmann::json& owner,
@@ -184,23 +205,30 @@ ContainerUiDef parseContainerUiDef(const nlohmann::json& root, const std::string
     def.id = parseNamespacedField(root, sourceName, "id");
     def.behavior = parseNamespacedField(root, def.id, "behavior");
     def.backgroundTexture = requireString(root, def.id, "backgroundTexture");
-    def.width = requireNumber(root, def.id, "width");
-    def.height = requireNumber(root, def.id, "height");
+    def.backgroundTexturePath = requireString(root, def.id, "backgroundTexturePath");
+    def.width = requireFiniteNumber(root, def.id, "width");
+    def.height = requireFiniteNumber(root, def.id, "height");
     if (def.width <= 0.0f || def.height <= 0.0f) {
         throw std::runtime_error(def.id + " requires positive width and height");
     }
-    def.textureWidth = requireNumber(root, def.id, "textureWidth");
-    def.textureHeight = requireNumber(root, def.id, "textureHeight");
+    def.textureWidth = requireFiniteNumber(root, def.id, "textureWidth");
+    def.textureHeight = requireFiniteNumber(root, def.id, "textureHeight");
     if (def.textureWidth <= 0.0f || def.textureHeight <= 0.0f) {
         throw std::runtime_error(def.id + " requires positive textureWidth and textureHeight");
     }
-    def.anchorX = requireNumber(root, def.id, "anchorX");
-    def.anchorY = requireNumber(root, def.id, "anchorY");
-    def.offsetX = requireNumber(root, def.id, "offsetX");
-    def.offsetY = requireNumber(root, def.id, "offsetY");
-    def.scale = requireNumber(root, def.id, "scale");
+    def.anchorX = requireNormalizedNumber(root, def.id, "anchorX");
+    def.anchorY = requireNormalizedNumber(root, def.id, "anchorY");
+    def.pivotX = requireNormalizedNumber(root, def.id, "pivotX");
+    def.pivotY = requireNormalizedNumber(root, def.id, "pivotY");
+    def.offsetX = requireFiniteNumber(root, def.id, "offsetX");
+    def.offsetY = requireFiniteNumber(root, def.id, "offsetY");
+    def.scale = requireFiniteNumber(root, def.id, "scale");
     if (def.scale <= 0.0f) {
         throw std::runtime_error(def.id + " requires positive scale");
+    }
+    def.fitPadding = requireFiniteNumber(root, def.id, "fitPadding");
+    if (def.fitPadding < 0.0f) {
+        throw std::runtime_error(def.id + " requires non-negative fitPadding");
     }
     def.showPlayerPreview = requireBoolean(root, def.id, "showPlayerPreview");
 

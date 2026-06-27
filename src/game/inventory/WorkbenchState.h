@@ -234,9 +234,12 @@ private:
         layout.showPlayerPreview = def.showPlayerPreview;
         layout.anchorX = def.anchorX;
         layout.anchorY = def.anchorY;
+        layout.pivotX = def.pivotX;
+        layout.pivotY = def.pivotY;
         layout.offsetX = def.offsetX;
         layout.offsetY = def.offsetY;
         layout.panelScale = def.scale;
+        layout.fitPadding = def.fitPadding;
 
         layout.gridOffsetX = playerInventory.x;
         layout.gridOffsetY = playerInventory.y;

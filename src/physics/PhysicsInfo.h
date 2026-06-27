@@ -7,6 +7,12 @@
 
 #include <glm/glm.hpp>
 
+enum class RayHitKind {
+    None,
+    Block,
+    Fluid
+};
+
 struct PhysicsInfo {
     glm::vec3 origin;    // 射线的起点
     glm::vec3 direction; // 射线方向（会归一化）
@@ -16,6 +22,7 @@ struct PhysicsInfo {
 
 struct RayHit {
     bool hit = false;
+    RayHitKind kind = RayHitKind::None;
     glm::ivec3 blockPos{};
     glm::ivec3 normal{};   // 命中面的法线，用于计算放置位置
     glm::vec3 position{};

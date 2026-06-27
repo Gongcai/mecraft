@@ -31,6 +31,8 @@ int main() {
     InventoryPanelLayout layout;
     layout.anchorX = 0.0f;
     layout.anchorY = 0.0f;
+    layout.pivotX = 0.0f;
+    layout.pivotY = 0.0f;
     layout.offsetX = 0.0f;
     layout.offsetY = 0.0f;
     layout.panelScale = 1.0f;

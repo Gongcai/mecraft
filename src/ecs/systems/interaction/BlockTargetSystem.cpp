@@ -29,14 +29,24 @@ void BlockTargetSystem::update(SystemContext& ctx) {
             camera.front
         };
         const RayHit hit = raycastWorldView(worldView, pickRay, kPickDistance);
-        target.hasTarget = hit.hit;
-        target.targetState = hit.hit
-            ? worldView.getBlock(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)
+        target.hasTarget = hit.hit && hit.kind == RayHitKind::Block;
+        target.targetState = target.hasTarget
+            ? worldView.getBlockState(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)
             : 0;
-        target.targetBlock = hit.hit ? hit.blockPos : glm::ivec3{};
-        target.placeBlock = hit.hit ? hit.blockPos + hit.normal : glm::ivec3{};
-        target.hitNormal = hit.hit ? hit.normal : glm::ivec3{};
-        target.hitPosition = hit.hit ? hit.position : glm::vec3{};
+        target.targetBlock = target.hasTarget ? hit.blockPos : glm::ivec3{};
+        target.placeBlock = target.hasTarget ? hit.blockPos + hit.normal : glm::ivec3{};
+        target.hitNormal = target.hasTarget ? hit.normal : glm::ivec3{};
+        target.hitPosition = target.hasTarget ? hit.position : glm::vec3{};
+
+        const RayHit fluidHit = raycastWorldView(worldView, pickRay, kPickDistance, RaycastFluidMode::Include);
+        target.hasFluidTarget = fluidHit.hit && fluidHit.kind == RayHitKind::Fluid;
+        target.fluidTargetState = target.hasFluidTarget
+            ? worldView.getFluidState(fluidHit.blockPos.x, fluidHit.blockPos.y, fluidHit.blockPos.z)
+            : 0;
+        target.fluidTargetBlock = target.hasFluidTarget ? fluidHit.blockPos : glm::ivec3{};
+        target.fluidPlaceBlock = target.hasFluidTarget ? fluidHit.blockPos + fluidHit.normal : glm::ivec3{};
+        target.fluidHitNormal = target.hasFluidTarget ? fluidHit.normal : glm::ivec3{};
+        target.fluidHitPosition = target.hasFluidTarget ? fluidHit.position : glm::vec3{};
     }
 }
 

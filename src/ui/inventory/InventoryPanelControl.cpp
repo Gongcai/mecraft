@@ -299,13 +299,16 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
     const float v0 = 1.0f - InventoryPanelLayout::kTextureHeight / atlasHeight;
     const float v1 = 1.0f;
 
+    const float bottomY0 = static_cast<float>(context.screenHeight) - y1;
+    const float bottomY1 = static_cast<float>(context.screenHeight) - y0;
+
     const float vertices[] = {
-        x0, y0, u0, v0,
-        x1, y0, u1, v0,
-        x1, y1, u1, v1,
-        x0, y0, u0, v0,
-        x1, y1, u1, v1,
-        x0, y1, u0, v1,
+        x0, bottomY0, u0, v0,
+        x1, bottomY0, u1, v0,
+        x1, bottomY1, u1, v1,
+        x0, bottomY0, u0, v0,
+        x1, bottomY1, u1, v1,
+        x0, bottomY1, u0, v1,
     };
 
     glDisable(GL_DEPTH_TEST);
@@ -346,8 +349,8 @@ void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
     const float previewWidth = std::max(1.0f, (m_layout.playerPreviewX1 - m_layout.playerPreviewX0) * panelRect.scale);
     const float previewHeight = std::max(1.0f, (m_layout.playerPreviewY1 - m_layout.playerPreviewY0) * panelRect.scale);
     const float previewX = panelRect.x + m_layout.playerPreviewX0 * panelRect.scale;
-    const float previewY = panelRect.y
-        + (InventoryPanelLayout::kTextureHeight - m_layout.playerPreviewY1) * panelRect.scale;
+    const float previewTopY = panelRect.y + m_layout.playerPreviewY0 * panelRect.scale;
+    const float previewY = static_cast<float>(context.screenHeight) - (previewTopY + previewHeight);
     const float pointerBottomY = static_cast<float>(context.screenHeight) - context.pointerY;
 
     context.humanoidRenderer->renderInventoryPreview(previewX,
@@ -427,13 +430,19 @@ InventoryPanelControl::ResolvedPanelRect InventoryPanelControl::resolvePanelRect
 {
     const int safeWidth = std::max(1, screenWidth);
     const int safeHeight = std::max(1, screenHeight);
-    const float scale = std::max(0.1f, m_layout.panelScale);
+    const float preferredScale = std::max(0.1f, m_layout.panelScale);
+    const float fitPadding = std::max(0.0f, m_layout.fitPadding);
+    const float availableWidth = std::max(1.0f, static_cast<float>(safeWidth) - fitPadding * 2.0f);
+    const float availableHeight = std::max(1.0f, static_cast<float>(safeHeight) - fitPadding * 2.0f);
+    const float fitScale = std::min(availableWidth / InventoryPanelLayout::kTextureWidth,
+                                    availableHeight / InventoryPanelLayout::kTextureHeight);
+    const float scale = std::max(0.1f, std::min(preferredScale, fitScale));
 
     ResolvedPanelRect rect;
     rect.scale = scale;
     rect.width = InventoryPanelLayout::kTextureWidth * scale;
     rect.height = InventoryPanelLayout::kTextureHeight * scale;
-    rect.x = static_cast<float>(safeWidth) * m_layout.anchorX + m_layout.offsetX;
-    rect.y = static_cast<float>(safeHeight) * m_layout.anchorY + m_layout.offsetY;
+    rect.x = static_cast<float>(safeWidth) * m_layout.anchorX - rect.width * m_layout.pivotX + m_layout.offsetX * scale;
+    rect.y = static_cast<float>(safeHeight) * m_layout.anchorY - rect.height * m_layout.pivotY + m_layout.offsetY * scale;
     return rect;
 }
