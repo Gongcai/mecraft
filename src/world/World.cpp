@@ -85,6 +85,14 @@ bool isRedstoneWireState(const StateID stateId) {
     return isRedstoneWireBlockDef(BlockRegistry::getFast(blockId));
 }
 
+bool isRedstoneTorchRuntimeState(const StateID stateId) {
+    if (stateId == RUNTIME_ID_NULL || FluidState::decode(stateId).kind != FluidKind::None) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).redstoneBehavior == "torch";
+}
+
 bool isMatchingRedstoneWireState(const StateID stateId, const uint16_t wireChannelId) {
     if (!isRedstoneWireState(stateId)) {
         return false;
@@ -347,6 +355,7 @@ void World::init(uint32_t seed) {
     m_redstoneUpdateQueue.clear();
     m_redstoneChangedBlockQueue.clear();
     m_redstoneScheduledUpdateQueue.clear();
+    m_redstoneRuntimeState.clear();
     m_ticketManager.reset();
     m_ticketManager.setViewRadius(m_renderDistance);
     m_ticketManager.setSimulationRadius(8);
@@ -785,6 +794,10 @@ void World::setBlockState(int x, int y, int z, StateID id) {
             m_interactiveLightFlushRequested = true;
         } else {
             chunk.setBlock(localX, y, localZ, targetState);
+        }
+
+        if (isRedstoneTorchRuntimeState(oldId) && !isRedstoneTorchRuntimeState(targetState)) {
+            m_redstoneRuntimeState.eraseTorch(glm::ivec3(x, y, z));
         }
     }
 

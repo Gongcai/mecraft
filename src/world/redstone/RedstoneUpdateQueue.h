@@ -15,7 +15,8 @@ enum class RedstoneScheduledAction : uint8_t {
     EvaluateRepeater,
     StartObserverPulse,
     ReleaseObserverPulse,
-    ReleaseTargetPulse
+    ReleaseTargetPulse,
+    ResetTorchBurnout
 };
 
 /// A delayed redstone update scheduled for a specific redstone tick.

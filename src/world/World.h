@@ -17,6 +17,7 @@
 #include "../server/ChunkTicketManager.h"
 #include "fluid/FluidState.h"
 #include "fluid/FluidSystem.h"
+#include "redstone/RedstoneRuntimeState.h"
 #include "redstone/RedstoneUpdateQueue.h"
 #include "WeatherSystem.h"
 #include "light/LightService.h"
@@ -92,6 +93,8 @@ public:
     const BlockNeighborUpdateQueue& redstoneChangedBlockQueue() const { return m_redstoneChangedBlockQueue; }
     RedstoneUpdateQueue& redstoneScheduledUpdateQueue() { return m_redstoneScheduledUpdateQueue; }
     const RedstoneUpdateQueue& redstoneScheduledUpdateQueue() const { return m_redstoneScheduledUpdateQueue; }
+    RedstoneRuntimeState& redstoneRuntimeState() { return m_redstoneRuntimeState; }
+    const RedstoneRuntimeState& redstoneRuntimeState() const { return m_redstoneRuntimeState; }
     void setLastProcessedRedstoneTick(uint64_t redstoneTick) { m_lastProcessedRedstoneTick = redstoneTick; }
     [[nodiscard]] uint64_t lastProcessedRedstoneTick() const { return m_lastProcessedRedstoneTick; }
 
@@ -135,6 +138,7 @@ private:
     BlockNeighborUpdateQueue m_redstoneUpdateQueue;
     BlockNeighborUpdateQueue m_redstoneChangedBlockQueue;
     RedstoneUpdateQueue m_redstoneScheduledUpdateQueue;
+    RedstoneRuntimeState m_redstoneRuntimeState;
     uint64_t m_lastProcessedRedstoneTick = 0;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;

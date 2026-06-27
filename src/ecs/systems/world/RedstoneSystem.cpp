@@ -36,6 +36,9 @@ namespace {
 constexpr uint8_t kMaxRedstonePower = 15;
 constexpr uint64_t kObserverPulseDelayTicks = 1;
 constexpr uint64_t kObserverPulseDurationTicks = 1;
+constexpr uint64_t kTorchBurnoutWindowTicks = 30;
+constexpr uint64_t kTorchBurnoutCooldownTicks = 80;
+constexpr size_t kTorchBurnoutTurnOffLimit = 8;
 constexpr size_t kMaxPistonPushBlocks = 12;
 constexpr float kPistonMovementDurationSeconds = 0.1f;
 constexpr float kPistonEntityPushEpsilon = 0.001f;
@@ -730,6 +733,10 @@ glm::ivec3 observerOutputDirection(const StateID stateId) {
 
 bool isPoweredPropertyTrue(const StateID stateId) {
     return hasBooleanPropertyValue(stateId, PropIndices::POWERED, PropIndices::POWERED_TRUE, "powered");
+}
+
+bool isLitPropertyTrue(const StateID stateId) {
+    return hasBooleanPropertyValue(stateId, PropIndices::LIT, PropIndices::LIT_TRUE, "lit");
 }
 
 bool isLockedPropertyTrue(const StateID stateId) {
@@ -2115,13 +2122,41 @@ bool shouldTorchBeLit(const World& world,
     return conductiveBlockPowerAt(world, inputWirePowers, attachedBlock, &torchPosition) == 0;
 }
 
+void pruneTorchTurnOffHistory(RedstoneTorchRuntimeState& torchRuntime, const uint64_t redstoneTick) {
+    while (!torchRuntime.turnOffTicks.empty() &&
+           redstoneTick - torchRuntime.turnOffTicks.front() > kTorchBurnoutWindowTicks) {
+        torchRuntime.turnOffTicks.pop_front();
+    }
+}
+
+bool recordTorchTurnOff(RedstoneTorchRuntimeState& torchRuntime, const uint64_t redstoneTick) {
+    pruneTorchTurnOffHistory(torchRuntime, redstoneTick);
+    torchRuntime.turnOffTicks.push_back(redstoneTick);
+    return torchRuntime.turnOffTicks.size() >= kTorchBurnoutTurnOffLimit;
+}
+
+void compactTorchRuntimeState(RedstoneRuntimeState& runtime,
+                              const glm::ivec3& position,
+                              const uint64_t redstoneTick) {
+    const auto it = runtime.torches.find(position);
+    if (it == runtime.torches.end()) {
+        return;
+    }
+
+    pruneTorchTurnOffHistory(it->second, redstoneTick);
+    if (!it->second.burnedOut && it->second.turnOffTicks.empty()) {
+        runtime.torches.erase(it);
+    }
+}
+
 size_t applyTorchStates(World& world,
                         const std::vector<glm::ivec3>& torches,
                         const PositionSet& wires,
                         const std::vector<glm::ivec3>& sourcePositions,
                         const std::vector<glm::ivec3>& repeaterPositions,
                         const std::vector<glm::ivec3>& observerPositions,
-                        const std::vector<glm::ivec3>& comparatorPositions) {
+                        const std::vector<glm::ivec3>& comparatorPositions,
+                        const uint64_t redstoneTick) {
     std::vector<glm::ivec3> orderedTorches = torches;
     std::sort(orderedTorches.begin(), orderedTorches.end(), [](const glm::ivec3& lhs, const glm::ivec3& rhs) {
         if (lhs.y != rhs.y) {
@@ -2149,13 +2184,37 @@ size_t applyTorchStates(World& world,
         appendSources(inputSources, collectPoweredComparatorStateSources(world, comparatorPositions));
         const WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
 
-        const StateID updatedState = withLit(
-            currentState,
-            shouldTorchBeLit(world, inputWirePowers, position, currentState));
+        bool shouldBeLit = shouldTorchBeLit(world, inputWirePowers, position, currentState);
+        auto& runtime = world.redstoneRuntimeState();
+        auto runtimeIt = runtime.torches.find(position);
+        if (runtimeIt != runtime.torches.end() &&
+            runtimeIt->second.burnedOut &&
+            redstoneTick >= runtimeIt->second.cooldownEndsAtTick) {
+            runtimeIt->second.burnedOut = false;
+            pruneTorchTurnOffHistory(runtimeIt->second, redstoneTick);
+        }
+
+        runtimeIt = runtime.torches.find(position);
+        if (runtimeIt != runtime.torches.end() && runtimeIt->second.burnedOut) {
+            shouldBeLit = false;
+        } else if (!shouldBeLit && isLitPropertyTrue(currentState)) {
+            RedstoneTorchRuntimeState& torchRuntime = runtime.torches[position];
+            if (recordTorchTurnOff(torchRuntime, redstoneTick)) {
+                torchRuntime.burnedOut = true;
+                torchRuntime.cooldownEndsAtTick = redstoneTick + kTorchBurnoutCooldownTicks;
+                world.redstoneScheduledUpdateQueue().reschedule(
+                    torchRuntime.cooldownEndsAtTick,
+                    position,
+                    RedstoneScheduledAction::ResetTorchBurnout);
+            }
+        }
+
+        const StateID updatedState = withLit(currentState, shouldBeLit);
         if (updatedState != currentState) {
             world.setBlockState(position.x, position.y, position.z, updatedState);
             ++changed;
         }
+        compactTorchRuntimeState(runtime, position, redstoneTick);
     }
     return changed;
 }
@@ -2425,6 +2484,41 @@ bool applyTargetPulseRelease(World& world, const glm::ivec3& position) {
     return true;
 }
 
+bool applyTorchBurnoutReset(World& world, const glm::ivec3& position, const uint64_t redstoneTick) {
+    auto& runtime = world.redstoneRuntimeState();
+    const StateID currentState = world.getBlockState(position.x, position.y, position.z);
+    if (!isTorchState(currentState)) {
+        runtime.eraseTorch(position);
+        return false;
+    }
+
+    const auto runtimeIt = runtime.torches.find(position);
+    if (runtimeIt == runtime.torches.end()) {
+        return false;
+    }
+
+    RedstoneTorchRuntimeState& torchRuntime = runtimeIt->second;
+    if (torchRuntime.burnedOut && redstoneTick < torchRuntime.cooldownEndsAtTick) {
+        return false;
+    }
+
+    torchRuntime.burnedOut = false;
+    torchRuntime.cooldownEndsAtTick = 0;
+    pruneTorchTurnOffHistory(torchRuntime, redstoneTick);
+
+    const WirePowerMap wirePowers;
+    const StateID updatedState = withLit(
+        currentState,
+        shouldTorchBeLit(world, wirePowers, position, currentState));
+    compactTorchRuntimeState(runtime, position, redstoneTick);
+    if (updatedState == currentState) {
+        return false;
+    }
+
+    world.setBlockState(position.x, position.y, position.z, updatedState);
+    return true;
+}
+
 bool applyRepeaterEvaluation(World& world, const glm::ivec3& position) {
     const StateID currentState = world.getBlockState(position.x, position.y, position.z);
     if (!isRepeaterState(currentState)) {
@@ -2478,6 +2572,11 @@ size_t applyScheduledUpdates(World& world, const std::vector<RedstoneScheduledUp
             break;
         case RedstoneScheduledAction::ReleaseTargetPulse:
             if (applyTargetPulseRelease(world, update.position)) {
+                ++changed;
+            }
+            break;
+        case RedstoneScheduledAction::ResetTorchBurnout:
+            if (applyTorchBurnoutReset(world, update.position, update.executionTick)) {
                 ++changed;
             }
             break;
@@ -2652,7 +2751,8 @@ size_t processWorldWithContext(World& world,
         workSet.sourcePositions,
         workSet.repeaters,
         workSet.observers,
-        workSet.comparators);
+        workSet.comparators,
+        redstoneTick);
     scheduleButtonReleaseUpdates(world, redstoneTick, workSet.sourcePositions);
 
     std::vector<RedstoneSource> outputSources =
