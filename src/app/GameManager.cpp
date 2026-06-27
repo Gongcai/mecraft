@@ -1,8 +1,11 @@
 #include "GameManager.h"
+#include "AppSettings.h"
+#include "states/LoadingAppState.h"
 #include "states/MainMenuAppState.h"
 #include "../Diagnostics.h"
 #include "../Paths.h"
 #include "../engine/platform/Time.h"
+#include "../save/SaveManager.h"
 #include "../world/block/Block.h"
 #include "../item/Item.h"
 #include "../net/ENetTransport.h"
@@ -22,7 +25,8 @@ GameManager::GameManager()
 
 GameManager::~GameManager() = default;
 
-void GameManager::init(int width, int height, const char* title) {
+void GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
+    m_launchOptions = std::move(launchOptions);
     if (!initWindow(width, height, title)) {
         return;
     }
@@ -38,7 +42,18 @@ void GameManager::init(int width, int height, const char* title) {
         MECRAFT_LOG_STREAM(std::cerr << "Failed to initialize ENet; multiplayer connections will fail." << std::endl);
     }
 
-    m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
+    configureInputReplay();
+
+    if (m_launchOptions.autoStartGameplay) {
+        m_appStateMachine.pushState(std::make_unique<LoadingAppState>(makeAppStateDependencies(),
+                                                                      makeBenchmarkSessionConfig()));
+    } else {
+        m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
+    }
+
+    if (m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::App) {
+        activateInputReplayForScope(AppLaunchOptions::InputReplayScope::App);
+    }
 }
 
 bool GameManager::initWindow(int width, int height, const char* title) {
@@ -124,8 +139,64 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
         m_bgmSystem,
         m_uiRenderer,
         m_localeManager,
-        m_threadPool
+        m_threadPool,
+        [this]() { activateInputReplayForScope(AppLaunchOptions::InputReplayScope::Gameplay); },
+        [this]() {
+            if (m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::Gameplay) {
+                m_input.setInputReplayActive(false);
+            }
+        },
+        [this]() {
+            return m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::Gameplay &&
+                   (m_launchOptions.recordInput || m_launchOptions.replayInput);
+        }
     };
+}
+
+GameSessionConfig GameManager::makeBenchmarkSessionConfig() const {
+    GameSessionConfig config;
+    config.seed = m_launchOptions.benchmarkSeed;
+    config.renderDistance = m_launchOptions.benchmarkRenderDistanceSet
+        ? m_launchOptions.benchmarkRenderDistance
+        : app::loadRenderDistance();
+    config.worldName = m_launchOptions.benchmarkWorldName;
+    config.worldDisplayName = m_launchOptions.benchmarkWorldDisplayName.empty()
+        ? m_launchOptions.benchmarkWorldName
+        : m_launchOptions.benchmarkWorldDisplayName;
+    config.saveRoot = m_launchOptions.benchmarkSaveRoot;
+    config.enableSaving = m_launchOptions.benchmarkEnableSaving;
+
+    if (!m_launchOptions.benchmarkSeedSet && !config.worldName.empty()) {
+        const std::filesystem::path worldPath = config.saveRoot / config.worldName;
+        if (std::filesystem::exists(worldPath)) {
+            save::SaveManager saveManager(worldPath);
+            save::LevelMeta meta;
+            if (!saveManager.loadLevelMeta(meta)) {
+                throw std::runtime_error("Failed to read benchmark world metadata: " + worldPath.string());
+            }
+            config.seed = static_cast<int>(meta.seed);
+        }
+    }
+    return config;
+}
+
+void GameManager::configureInputReplay() {
+    if (m_launchOptions.recordInput && m_launchOptions.replayInput) {
+        throw std::runtime_error("Input recording and playback cannot be enabled at the same time");
+    }
+    if (m_launchOptions.recordInput) {
+        m_input.configureInputRecording(m_launchOptions.inputRecordPath);
+    }
+    if (m_launchOptions.replayInput) {
+        m_input.configureInputPlayback(m_launchOptions.inputReplayPath);
+    }
+}
+
+void GameManager::activateInputReplayForScope(const AppLaunchOptions::InputReplayScope scope) {
+    if (m_launchOptions.inputReplayScope != scope) {
+        return;
+    }
+    m_input.setInputReplayActive(true);
 }
 
 double GameManager::clampFrameTime(const double dt) {
@@ -181,6 +252,23 @@ void GameManager::run() {
         const auto renderEnd = std::chrono::steady_clock::now();
         m_appStateMachine.recordAppRenderDispatch(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
 #endif
+        closeWindowIfBenchmarkComplete();
+    }
+}
+
+void GameManager::closeWindowIfBenchmarkComplete() {
+    if (!m_input.isInputReplayActive()) {
+        return;
+    }
+    if (m_launchOptions.benchmarkDurationSeconds > 0.0 &&
+        m_input.inputReplayActiveSeconds() >= m_launchOptions.benchmarkDurationSeconds) {
+        glfwSetWindowShouldClose(m_window.getHandle(), true);
+        return;
+    }
+    if (m_launchOptions.replayInput &&
+        m_launchOptions.exitWhenPlaybackEnds &&
+        m_input.isInputPlaybackFinished()) {
+        glfwSetWindowShouldClose(m_window.getHandle(), true);
     }
 }
 
@@ -193,4 +281,5 @@ void GameManager::shutdown() {
     m_audioEngine.shutdown();
     net::ENetTransport::deinitialize();
     m_threadPool.shutdown();
+    m_input.shutdownInputReplay();
 }

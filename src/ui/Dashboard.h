@@ -130,6 +130,14 @@ public:
                 FrameProfilerStats& profilerStats,
                 const std::function<void(int)>& renderDistanceSetter = {});
 private:
+    struct CachedWorldMetrics {
+        size_t activeChunks = 0;
+        size_t activeSubChunks = 0;
+        size_t totalVertices = 0;
+        size_t chunkStorageBytes = 0;
+        double nextRefreshTime = 0.0;
+    };
+
     void showPlayerStats(ecs::GameplayRegistry& registry);
     void showWorldStats(World& world,
                         ecs::GameplayRegistry& registry,
@@ -143,11 +151,15 @@ private:
     void showCraftingGridSettings(UIRenderer& uiRenderer);
     void showHeldItemPreviewSettings(FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer);
     void showTextSettings(UIRenderer& uiRenderer);
+    void refreshWorldMetricsIfNeeded(World& world, double now, bool forceRefresh);
 
     FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
     FrameProfilerStats m_displayProfilerStats{};
     GpuFrameStats m_displayGpuStats{};
     ShadowFrameStats m_displayShadowStats{};
+    RenderWorkStats m_displayRenderWorkStats{};
+    LightFrameStats m_displayLightStats{};
+    CachedWorldMetrics m_cachedWorldMetrics{};
     double m_displayFps = 0.0;
     double m_nextProfilerStatsRefreshTime = 0.0;
     float m_profilerStatsRefreshIntervalSec = 0.5f;

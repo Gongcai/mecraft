@@ -4,19 +4,199 @@
 
 #include "InputManager.h"
 
+#include <algorithm>
+#include <cmath>
+#include <fstream>
 #include <iostream>
-
-#include "Diagnostics.h"
+#include <iterator>
+#include <stdexcept>
 
 #ifdef MECRAFT_DEBUG
 #include <chrono>
+#endif
+
+#include "Diagnostics.h"
+#include <nlohmann/json.hpp>
 
 namespace {
+using json = nlohmann::json;
+
+template <size_t Count>
+json boolArrayToIndices(const bool (&values)[Count]) {
+    json indices = json::array();
+    for (size_t index = 0; index < Count; ++index) {
+        if (values[index]) {
+            indices.push_back(index);
+        }
+    }
+    return indices;
+}
+
+template <size_t Count>
+void indicesToBoolArray(const json& indices, bool (&values)[Count]) {
+    std::fill(std::begin(values), std::end(values), false);
+    if (!indices.is_array()) {
+        throw std::runtime_error("Input replay index list must be an array");
+    }
+    for (const json& item : indices) {
+        const int index = item.get<int>();
+        if (index < 0 || index >= static_cast<int>(Count)) {
+            throw std::runtime_error("Input replay index is out of range");
+        }
+        values[static_cast<size_t>(index)] = true;
+    }
+}
+
+json snapshotToJson(const InputSnapshot& snapshot) {
+    json frame;
+    frame["keys"] = boolArrayToIndices(snapshot.keys);
+    frame["keysJustPressed"] = boolArrayToIndices(snapshot.keysJustPressed);
+    frame["keysJustReleased"] = boolArrayToIndices(snapshot.keysJustReleased);
+    frame["keysDoubleTapped"] = boolArrayToIndices(snapshot.keysDoubleTapped);
+    frame["mouseButtons"] = boolArrayToIndices(snapshot.mouseButtons);
+    frame["mouseButtonsJustPressed"] = boolArrayToIndices(snapshot.mouseButtonsJustPressed);
+    frame["mouseButtonsJustReleased"] = boolArrayToIndices(snapshot.mouseButtonsJustReleased);
+    frame["mouseButtonsDoubleTapped"] = boolArrayToIndices(snapshot.mouseButtonsDoubleTapped);
+    frame["mousePosition"] = {snapshot.mousePosition.x, snapshot.mousePosition.y};
+    frame["mouseDelta"] = {snapshot.mouseDelta.x, snapshot.mouseDelta.y};
+    frame["scrollDelta"] = snapshot.scrollDelta;
+
+    json typedChars = json::array();
+    for (size_t index = 0; index < snapshot.typedCharCount; ++index) {
+        typedChars.push_back(snapshot.typedChars[index]);
+    }
+    frame["typedChars"] = std::move(typedChars);
+
+    const auto& drag = snapshot.draggedItem;
+    frame["draggedItem"] = {
+        {"active", drag.active},
+        {"itemId", drag.itemId},
+        {"count", drag.count},
+        {"sourceSlot", drag.sourceSlot},
+        {"pointerPosition", {drag.pointerPosition.x, drag.pointerPosition.y}}
+    };
+
+    json gamepad;
+    gamepad["connected"] = snapshot.gamepad.connected;
+    gamepad["buttons"] = boolArrayToIndices(snapshot.gamepad.buttons);
+    gamepad["buttonsJustPressed"] = boolArrayToIndices(snapshot.gamepad.buttonsJustPressed);
+    gamepad["buttonsJustReleased"] = boolArrayToIndices(snapshot.gamepad.buttonsJustReleased);
+    gamepad["buttonsDoubleTapped"] = boolArrayToIndices(snapshot.gamepad.buttonsDoubleTapped);
+    json axes = json::array();
+    for (float axis : snapshot.gamepad.axes) {
+        axes.push_back(axis);
+    }
+    gamepad["axes"] = std::move(axes);
+    frame["gamepad"] = std::move(gamepad);
+    return frame;
+}
+
+glm::vec2 readVec2(const json& value, const char* fieldName) {
+    if (!value.is_array() || value.size() != 2) {
+        throw std::runtime_error(std::string("Input replay field must be a vec2: ") + fieldName);
+    }
+    return {value[0].get<float>(), value[1].get<float>()};
+}
+
+InputSnapshot snapshotFromJson(const json& frame) {
+    InputSnapshot snapshot;
+    indicesToBoolArray(frame.at("keys"), snapshot.keys);
+    indicesToBoolArray(frame.at("keysJustPressed"), snapshot.keysJustPressed);
+    indicesToBoolArray(frame.at("keysJustReleased"), snapshot.keysJustReleased);
+    indicesToBoolArray(frame.at("keysDoubleTapped"), snapshot.keysDoubleTapped);
+    indicesToBoolArray(frame.at("mouseButtons"), snapshot.mouseButtons);
+    indicesToBoolArray(frame.at("mouseButtonsJustPressed"), snapshot.mouseButtonsJustPressed);
+    indicesToBoolArray(frame.at("mouseButtonsJustReleased"), snapshot.mouseButtonsJustReleased);
+    indicesToBoolArray(frame.at("mouseButtonsDoubleTapped"), snapshot.mouseButtonsDoubleTapped);
+    snapshot.mousePosition = readVec2(frame.at("mousePosition"), "mousePosition");
+    snapshot.mouseDelta = readVec2(frame.at("mouseDelta"), "mouseDelta");
+    snapshot.scrollDelta = frame.at("scrollDelta").get<double>();
+
+    const json& typedChars = frame.at("typedChars");
+    if (!typedChars.is_array() || typedChars.size() > InputSnapshot::kMaxTypedCharsPerFrame) {
+        throw std::runtime_error("Input replay typed character list is invalid");
+    }
+    snapshot.typedCharCount = typedChars.size();
+    for (size_t index = 0; index < snapshot.typedCharCount; ++index) {
+        snapshot.typedChars[index] = typedChars[index].get<uint32_t>();
+    }
+
+    const json& drag = frame.at("draggedItem");
+    snapshot.draggedItem.active = drag.at("active").get<bool>();
+    snapshot.draggedItem.itemId = drag.at("itemId").get<int>();
+    snapshot.draggedItem.count = drag.at("count").get<int>();
+    snapshot.draggedItem.sourceSlot = drag.at("sourceSlot").get<int>();
+    snapshot.draggedItem.pointerPosition = readVec2(drag.at("pointerPosition"), "draggedItem.pointerPosition");
+
+    const json& gamepad = frame.at("gamepad");
+    snapshot.gamepad.connected = gamepad.at("connected").get<bool>();
+    indicesToBoolArray(gamepad.at("buttons"), snapshot.gamepad.buttons);
+    indicesToBoolArray(gamepad.at("buttonsJustPressed"), snapshot.gamepad.buttonsJustPressed);
+    indicesToBoolArray(gamepad.at("buttonsJustReleased"), snapshot.gamepad.buttonsJustReleased);
+    indicesToBoolArray(gamepad.at("buttonsDoubleTapped"), snapshot.gamepad.buttonsDoubleTapped);
+    const json& axes = gamepad.at("axes");
+    if (!axes.is_array() || axes.size() != std::size(snapshot.gamepad.axes)) {
+        throw std::runtime_error("Input replay gamepad axis list is invalid");
+    }
+    for (size_t index = 0; index < std::size(snapshot.gamepad.axes); ++index) {
+        snapshot.gamepad.axes[index] = axes[index].get<float>();
+    }
+    return snapshot;
+}
+
+json replayFileFromFrames(const std::vector<InputSnapshot>& frames) {
+    json root;
+    root["version"] = 1;
+    root["kind"] = "mecraft.input_replay";
+    root["frames"] = json::array();
+    for (const InputSnapshot& frame : frames) {
+        root["frames"].push_back(snapshotToJson(frame));
+    }
+    return root;
+}
+
+std::vector<InputSnapshot> framesFromReplayFile(const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Failed to open input replay file: " + path.string());
+    }
+    json root = json::parse(input);
+    if (root.at("kind").get<std::string>() != "mecraft.input_replay" ||
+        root.at("version").get<int>() != 1) {
+        throw std::runtime_error("Unsupported input replay file: " + path.string());
+    }
+
+    const json& framesJson = root.at("frames");
+    if (!framesJson.is_array()) {
+        throw std::runtime_error("Input replay frames field must be an array");
+    }
+
+    std::vector<InputSnapshot> frames;
+    frames.reserve(framesJson.size());
+    for (const json& frameJson : framesJson) {
+        frames.push_back(snapshotFromJson(frameJson));
+    }
+    return frames;
+}
+
+void writeReplayFile(const std::filesystem::path& path, const std::vector<InputSnapshot>& frames) {
+    const std::filesystem::path parent = path.parent_path();
+    if (!parent.empty()) {
+        std::filesystem::create_directories(parent);
+    }
+    std::ofstream output(path);
+    if (!output) {
+        throw std::runtime_error("Failed to write input replay file: " + path.string());
+    }
+    output << replayFileFromFrames(frames).dump(2);
+}
+
+#ifdef MECRAFT_DEBUG
 double debugElapsedMs(const std::chrono::steady_clock::time_point& start) {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
-}
 #endif
+} // namespace
 
 bool InputSnapshot::isKeyHeld(int key) const {
     return key >= 0 && key <= GLFW_KEY_LAST && keys[key];
@@ -96,6 +276,23 @@ void InputManager::init(GLFWwindow* windowHandle) {
 }
 
 void InputManager::update() {
+    if (m_replayActive && m_replayMode == ReplayMode::Playback) {
+        if (m_playbackFrameIndex < m_playbackFrames.size()) {
+            m_snapshot = m_playbackFrames[m_playbackFrameIndex++];
+            m_draggedItem = m_snapshot.draggedItem;
+            m_mouseX = static_cast<double>(m_snapshot.mousePosition.x);
+            m_mouseY = static_cast<double>(m_snapshot.mousePosition.y);
+            m_mouseDeltaX = static_cast<double>(m_snapshot.mouseDelta.x);
+            m_mouseDeltaY = static_cast<double>(m_snapshot.mouseDelta.y);
+            m_playbackFinished = m_playbackFrameIndex >= m_playbackFrames.size();
+            return;
+        }
+        m_snapshot = {};
+        m_draggedItem = {};
+        m_playbackFinished = true;
+        return;
+    }
+
     double now = glfwGetTime();
 
     for (int key = 0; key <= GLFW_KEY_LAST; ++key) {
@@ -255,10 +452,80 @@ void InputManager::update() {
         m_snapshot.typedChars[i] = m_typedChars[i];
     }
     m_typedCharCount = 0;
+
+    if (m_replayActive && m_replayMode == ReplayMode::Recording) {
+        m_recordedFrames.push_back(m_snapshot);
+        m_recordingDirty = true;
+    }
 }
 
 const InputSnapshot& InputManager::snapshot() const {
     return m_snapshot;
+}
+
+void InputManager::configureInputRecording(const std::filesystem::path& path) {
+    shutdownInputReplay();
+    m_replayPath = path;
+    m_recordedFrames.clear();
+    m_playbackFrames.clear();
+    m_playbackFrameIndex = 0;
+    m_playbackFinished = false;
+    m_recordingDirty = false;
+    m_replayActive = false;
+    m_replayMode = ReplayMode::Recording;
+}
+
+void InputManager::configureInputPlayback(const std::filesystem::path& path) {
+    shutdownInputReplay();
+    m_replayPath = path;
+    m_recordedFrames.clear();
+    m_playbackFrames = framesFromReplayFile(path);
+    m_playbackFrameIndex = 0;
+    m_playbackFinished = m_playbackFrames.empty();
+    m_recordingDirty = false;
+    m_replayActive = false;
+    m_replayMode = ReplayMode::Playback;
+}
+
+void InputManager::setInputReplayActive(const bool active) {
+    if (m_replayMode == ReplayMode::None) {
+        return;
+    }
+    if (m_replayActive == active) {
+        return;
+    }
+    m_replayActive = active;
+    if (active) {
+        m_replayActiveStartTime = glfwGetTime();
+        resetMouseDelta();
+        return;
+    }
+    if (m_replayMode == ReplayMode::Recording && m_recordingDirty) {
+        writeReplayFile(m_replayPath, m_recordedFrames);
+        m_recordingDirty = false;
+    }
+}
+
+void InputManager::shutdownInputReplay() {
+    if (m_replayMode == ReplayMode::Recording && m_recordingDirty) {
+        writeReplayFile(m_replayPath, m_recordedFrames);
+    }
+    m_replayMode = ReplayMode::None;
+    m_replayActive = false;
+    m_playbackFinished = false;
+    m_recordingDirty = false;
+    m_replayActiveStartTime = 0.0;
+    m_replayPath.clear();
+    m_recordedFrames.clear();
+    m_playbackFrames.clear();
+    m_playbackFrameIndex = 0;
+}
+
+double InputManager::inputReplayActiveSeconds() const {
+    if (!m_replayActive) {
+        return 0.0;
+    }
+    return std::max(0.0, glfwGetTime() - m_replayActiveStartTime);
 }
 
 InputManager* InputManager::fromWindow(GLFWwindow* w) {

@@ -5,8 +5,10 @@
 #include <string>
 #include <array>
 
+#include "AppLaunchOptions.h"
 #include "../engine/platform/Window.h"
 #include "../engine/input/InputManager.h"
+#include "../game/session/GameSessionConfig.h"
 #include "../player/ActionMap.h"
 #include "../engine/input/InputContextManager.h"
 #include "../resource/ResourceMgr.h"
@@ -23,7 +25,7 @@ public:
     GameManager();
     ~GameManager();
 
-    void init(int width, int height, const char* title);
+    void init(int width, int height, const char* title, AppLaunchOptions launchOptions = {});
     void run();
     void shutdown();
 
@@ -34,6 +36,10 @@ private:
     [[nodiscard]] AppStateDependencies makeAppStateDependencies();
 
     [[nodiscard]] static double clampFrameTime(double dt);
+    [[nodiscard]] GameSessionConfig makeBenchmarkSessionConfig() const;
+    void configureInputReplay();
+    void activateInputReplayForScope(AppLaunchOptions::InputReplayScope scope);
+    void closeWindowIfBenchmarkComplete();
 
     Window m_window;
     InputManager m_input;
@@ -47,6 +53,7 @@ private:
     ThreadPool m_threadPool;
 
     AppStateMachine m_appStateMachine;
+    AppLaunchOptions m_launchOptions{};
 };
 
 #endif //MECRAFT_GAMEMANAGER_H

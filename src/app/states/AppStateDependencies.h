@@ -1,6 +1,8 @@
 #ifndef MECRAFT_APPSTATEDEPENDENCIES_H
 #define MECRAFT_APPSTATEDEPENDENCIES_H
 
+#include <functional>
+
 #include "engine/platform/Window.h"
 #include "engine/input/InputManager.h"
 #include "../../player/ActionMap.h"
@@ -26,6 +28,9 @@ struct AppStateDependencies {
     UIRenderer& uiRenderer;
     LocaleManager& localeManager;
     ThreadPool& threadPool;
+    std::function<void()> beginGameplayInputReplay;
+    std::function<void()> endGameplayInputReplay;
+    std::function<bool()> shouldCloseAppOnGameplayQuitToMenu;
 };
 
 #endif //MECRAFT_APPSTATEDEPENDENCIES_H

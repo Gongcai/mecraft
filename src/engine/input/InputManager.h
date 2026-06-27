@@ -14,6 +14,8 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <vector>
 
 struct InputSnapshot {
     static constexpr size_t kMaxTypedCharsPerFrame = 64;
@@ -83,6 +85,12 @@ struct InputSnapshot {
 
 class InputManager {
 public:
+    enum class ReplayMode {
+        None,
+        Recording,
+        Playback
+    };
+
 #ifdef MECRAFT_DEBUG
     struct DebugEventStats {
         uint32_t keyEvents = 0;
@@ -112,6 +120,15 @@ public:
     // 每帧调用：刷新状态并生成只读快照
     void update();
     [[nodiscard]] const InputSnapshot& snapshot() const;
+
+    void configureInputRecording(const std::filesystem::path& path);
+    void configureInputPlayback(const std::filesystem::path& path);
+    void setInputReplayActive(bool active);
+    void shutdownInputReplay();
+    [[nodiscard]] bool isInputReplayConfigured() const { return m_replayMode != ReplayMode::None; }
+    [[nodiscard]] bool isInputReplayActive() const { return m_replayActive; }
+    [[nodiscard]] bool isInputPlaybackFinished() const { return m_playbackFinished; }
+    [[nodiscard]] double inputReplayActiveSeconds() const;
 
     // ── 鼠标模式 ──
     void captureMouse(bool capture);       // true → GLFW_CURSOR_DISABLED
@@ -164,6 +181,16 @@ private:
 
     InputSnapshot m_snapshot{};
     InputSnapshot::UIDragPayload m_draggedItem{};
+
+    ReplayMode m_replayMode = ReplayMode::None;
+    bool m_replayActive = false;
+    bool m_playbackFinished = false;
+    bool m_recordingDirty = false;
+    double m_replayActiveStartTime = 0.0;
+    std::filesystem::path m_replayPath;
+    std::vector<InputSnapshot> m_recordedFrames;
+    std::vector<InputSnapshot> m_playbackFrames;
+    size_t m_playbackFrameIndex = 0;
 
     // Gamepad state tracking (joystick 0 = first gamepad)
     static constexpr int kGamepadJoystickId = 0; // GLFW_JOYSTICK_1 is actually 0

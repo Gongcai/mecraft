@@ -165,6 +165,9 @@ void Dashboard::showWorldStats(World& world,
                                ecs::GameplayRegistry& registry,
                                const std::function<void(int)>& renderDistanceSetter) {
     if (ImGui::CollapsingHeader("World Stats")) {
+        const double now = ImGui::GetTime();
+        refreshWorldMetricsIfNeeded(world, now, false);
+
         ecs::PlayerQuery query(registry);
         const glm::vec3 position = query.getPosition();
         const int worldX = static_cast<int>(std::floor(position.x));
@@ -173,8 +176,8 @@ void Dashboard::showWorldStats(World& world,
         const TerrainBiome biome = world.getBiome(worldX, worldZ);
 
         ImGui::Text("Render Distance: %d chunks", world.getRenderDistance());
-        ImGui::Text("Loaded Chunks: %zu", world.getActiveChunks().size());
-        ImGui::Text("Total Vertices: %zu", world.getTotalVertexCount());
+        ImGui::Text("Loaded Chunks: %zu", m_cachedWorldMetrics.activeChunks);
+        ImGui::Text("Total Vertices: %zu", m_cachedWorldMetrics.totalVertices);
         ImGui::Text("Current Chunk: (%d, %d)", chunkCoords.x, chunkCoords.y);
         ImGui::Text("Current Biome: %s", World::biomeToString(biome));
         const auto setRenderDistance = [&](const int distance) {
@@ -211,10 +214,41 @@ void Dashboard::showCameraStats( Camera &camera) {
     }
 }
 
+void Dashboard::refreshWorldMetricsIfNeeded(World& world, const double now, const bool forceRefresh) {
+    if (!forceRefresh && m_cachedWorldMetrics.nextRefreshTime > 0.0 && now < m_cachedWorldMetrics.nextRefreshTime) {
+        return;
+    }
+
+    CachedWorldMetrics metrics;
+    metrics.activeChunks = world.getActiveChunks().size();
+    for (const auto& [chunkKey, chunk] : world.getActiveChunks()) {
+        (void)chunkKey;
+        if (!chunk) {
+            continue;
+        }
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            const SubChunk* subChunk = chunk->getSubChunk(scy);
+            if (!subChunk) {
+                continue;
+            }
+            ++metrics.activeSubChunks;
+            const SubChunkMesh& mesh = subChunk->getMesh();
+            metrics.totalVertices += mesh.vertexCount;
+            metrics.totalVertices += mesh.cutoutVertexCount;
+            metrics.totalVertices += mesh.cutoutDistanceVertexCount;
+            metrics.totalVertices += mesh.transparentVertexCount;
+            metrics.chunkStorageBytes += subChunk->estimatedMemoryBytes();
+        }
+    }
+    metrics.nextRefreshTime = now + static_cast<double>(m_profilerStatsRefreshIntervalSec);
+    m_cachedWorldMetrics = metrics;
+}
+
 void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, RenderScene& renderScene, PostProcessPass& postProcess, FrameProfilerStats& profilerStats) {
     if (ImGui::CollapsingHeader("Performance Stats")) {
         if (ImGui::SliderFloat("Stats Refresh", &m_profilerStatsRefreshIntervalSec, 0.1f, 2.0f, "%.1f s")) {
             m_nextProfilerStatsRefreshTime = 0.0;
+            m_cachedWorldMetrics.nextRefreshTime = 0.0;
         }
 
         const double now = ImGui::GetTime();
@@ -222,6 +256,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             m_displayProfilerStats = profilerStats;
             m_displayGpuStats = render.getGpuFrameStats();
             m_displayShadowStats = render.getShadowFrameStats();
+            m_displayRenderWorkStats = render.getRenderWorkStats();
+            m_displayLightStats = world.getLightFrameStats();
+            refreshWorldMetricsIfNeeded(world, now, false);
             m_displayFps = ImGui::GetIO().Framerate;
             m_nextProfilerStatsRefreshTime = now + static_cast<double>(m_profilerStatsRefreshIntervalSec);
         }
@@ -403,7 +440,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             ImGui::Text("CSM GPU: waiting");
         }
 
-        RenderWorkStats renderWork = render.getRenderWorkStats();
+        const RenderWorkStats& renderWork = m_displayRenderWorkStats;
         const auto bytesToMiB = [](const uint64_t bytes) {
             return static_cast<double>(bytes) / (1024.0 * 1024.0);
         };
@@ -411,33 +448,16 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             return capacityBytes > 0 ? static_cast<double>(usedBytes) * 100.0 / static_cast<double>(capacityBytes) : 0.0;
         };
 
-        size_t activeSubChunks = 0;
-        size_t chunkStorageBytes = 0;
-        for (const auto& [chunkKey, chunk] : world.getActiveChunks()) {
-            (void)chunkKey;
-            if (!chunk) {
-                continue;
-            }
-            for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-                const SubChunk* subChunk = chunk->getSubChunk(scy);
-                if (!subChunk) {
-                    continue;
-                }
-                ++activeSubChunks;
-                chunkStorageBytes += subChunk->estimatedMemoryBytes();
-            }
-        }
-
         const int visibleMdiSubChunks = std::max(0, renderWork.mdiSubChunkTests - renderWork.mdiSubChunksCulled);
         const char* terrainVertexFormat = render.isMultiDrawIndirectEnabled() ? "PackedBlockVertex" : "BlockVertex";
 
         ImGui::Separator();
         ImGui::Text("Render Work");
         ImGui::Text("Active Chunks/SubChunks: %llu / %llu",
-                    static_cast<unsigned long long>(world.getActiveChunks().size()),
-                    static_cast<unsigned long long>(activeSubChunks));
+                    static_cast<unsigned long long>(m_cachedWorldMetrics.activeChunks),
+                    static_cast<unsigned long long>(m_cachedWorldMetrics.activeSubChunks));
         ImGui::Text("Chunk CPU Storage (approx): %.2f MiB",
-                    bytesToMiB(static_cast<uint64_t>(chunkStorageBytes)));
+                    bytesToMiB(static_cast<uint64_t>(m_cachedWorldMetrics.chunkStorageBytes)));
         ImGui::Text("Terrain Vertex: %llu bytes (%s)",
                     static_cast<unsigned long long>(renderWork.blockVertexBytes),
                     terrainVertexFormat);
@@ -1291,7 +1311,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Meshing Deferred Results: %d", meshingStats.deferredResults);
         ImGui::Text("Meshing Build: last %.3f ms, avg %.3f ms", meshingStats.lastBuildMs, meshingStats.averageBuildMs);
 
-        const LightFrameStats lightStats = world.getLightFrameStats();
+        const LightFrameStats& lightStats = m_displayLightStats;
         ImGui::Text("Light Submitted: %d / frame", lightStats.submitted);
         ImGui::Text("Light Completed: %d / frame", lightStats.completed);
         ImGui::Text("Light In-Flight: %d", lightStats.inFlight);

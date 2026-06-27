@@ -22,6 +22,9 @@ GameplayAppState::~GameplayAppState() {
 void GameplayAppState::onEnter() {
     if (m_game && m_game->isInitialized()) {
         m_deps.input.captureMouse(true);
+        if (m_deps.beginGameplayInputReplay) {
+            m_deps.beginGameplayInputReplay();
+        }
         return;
     }
 
@@ -50,9 +53,15 @@ void GameplayAppState::onEnter() {
     }
 
     m_deps.input.captureMouse(true);
+    if (m_deps.beginGameplayInputReplay) {
+        m_deps.beginGameplayInputReplay();
+    }
 }
 
 void GameplayAppState::onExit() {
+    if (m_deps.endGameplayInputReplay) {
+        m_deps.endGameplayInputReplay();
+    }
     if (m_game) {
         m_game->shutdown();
         m_game.reset();
@@ -70,13 +79,21 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
 #ifdef MECRAFT_DEBUG
         m_game->publishDebugStats(static_cast<float>(frameTime));
 #endif
+        const auto handleQuitToMenu = [this, &accumulator]() {
+            m_game->clearQuitToMenuRequest();
+            if (m_deps.shouldCloseAppOnGameplayQuitToMenu && m_deps.shouldCloseAppOnGameplayQuitToMenu()) {
+                glfwSetWindowShouldClose(m_deps.window.getHandle(), true);
+            } else {
+                m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+            }
+            accumulator = 0.0;
+        };
+
         constexpr double kFixedStep = 1.0 / 60.0;
         while (accumulator >= kFixedStep) {
             m_game->fixedUpdate(kFixedStep, accumulator);
             if (m_game->isQuitToMenuRequested()) {
-                m_game->clearQuitToMenuRequest();
-                m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
-                accumulator = 0.0;
+                handleQuitToMenu();
                 return;
             }
         }
@@ -84,9 +101,7 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
 
         // Check if the pause menu requested quit-to-menu
         if (m_game->isQuitToMenuRequested()) {
-            m_game->clearQuitToMenuRequest();
-            m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
-            accumulator = 0.0;
+            handleQuitToMenu();
         }
     } catch (const std::exception& ex) {
         MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay update failed: " << ex.what() << '\n');
