@@ -55,7 +55,7 @@ public:
     [[nodiscard]] int getUniformLocation(const string& name) const;
 
 private:
-    Shader() : ID(0) {} // private default for factory
+    Shader() : ID(0) { uniformLocationCache.reserve(128); } // private default for factory
     static std::string loadShaderSource(const std::string& path);
     static std::string resolveIncludes(const std::string& source,
                                        const std::string& sourcePath,

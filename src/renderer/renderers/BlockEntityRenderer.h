@@ -77,6 +77,7 @@ private:
         glm::vec3 blockPosition{0.0f};
         glm::vec3 center{0.0f};
         glm::mat4 modelMatrix{1.0f};
+        glm::vec2 light{1.0f, 0.0f};
     };
 
     struct InstancedDrawData {
@@ -114,6 +115,7 @@ private:
     Shader* m_forwardShader = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
+    std::vector<BlockEntityInstance*> m_flatInstances;
     GLuint m_instanceVbo = 0;
     std::size_t m_instanceCapacity = 0;
     std::vector<InstancedDrawData> m_instanceData;
@@ -122,6 +124,7 @@ private:
     uint64_t m_syncedBlockContentRevision = 0;
     bool m_hasSyncedRevisions = false;
     bool m_instanceCacheSyncedThisFrame = false;
+    bool m_instanceLightsSyncedThisFrame = false;
 
     static void destroyMesh(Mesh& mesh);
     static Mesh buildMesh(const ModelDefinition& definition);
@@ -132,6 +135,8 @@ private:
     void configureInstanceAttributes(const Mesh& mesh) const;
     void ensureInstanceCapacity(std::size_t instanceCount);
     void synchronizeInstanceCache(const IWorldView& worldView);
+    void rebuildFlatInstanceList();
+    void updateInstanceLightsForFrame();
     void rebuildSectionCache(const Chunk& chunk,
                              const SubChunk& subChunk,
                              int scy,

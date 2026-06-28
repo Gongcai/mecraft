@@ -258,6 +258,13 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             0,
             0
         };
+        const glm::mat4& cullerMatrix = cascadeCullers[cascade].viewProj;
+        cascadeCullers[cascade].absClipExtentX = glm::vec3(
+            std::abs(cullerMatrix[0][0]), std::abs(cullerMatrix[1][0]), std::abs(cullerMatrix[2][0]));
+        cascadeCullers[cascade].absClipExtentY = glm::vec3(
+            std::abs(cullerMatrix[0][1]), std::abs(cullerMatrix[1][1]), std::abs(cullerMatrix[2][1]));
+        cascadeCullers[cascade].absClipExtentZ = glm::vec3(
+            std::abs(cullerMatrix[0][2]), std::abs(cullerMatrix[1][2]), std::abs(cullerMatrix[2][2]));
     }
 
     shadow::ShadowCasterCuller shadowCuller;

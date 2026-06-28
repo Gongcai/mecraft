@@ -174,6 +174,7 @@ void BlockEntityRenderer::shutdown() {
     }
     m_models.clear();
     m_sectionCaches.clear();
+    m_flatInstances.clear();
     m_cacheSyncSerial = 0;
     m_syncedActiveChunkRevision = 0;
     m_syncedBlockContentRevision = 0;
@@ -185,6 +186,7 @@ void BlockEntityRenderer::shutdown() {
     m_instanceData.clear();
     m_hasSyncedRevisions = false;
     m_instanceCacheSyncedThisFrame = false;
+    m_instanceLightsSyncedThisFrame = false;
     m_resourceMgr = nullptr;
     m_gbufferShader = nullptr;
     m_shadowShader = nullptr;
@@ -193,6 +195,7 @@ void BlockEntityRenderer::shutdown() {
 
 void BlockEntityRenderer::beginFrame() {
     m_instanceCacheSyncedThisFrame = false;
+    m_instanceLightsSyncedThisFrame = false;
 }
 
 BlockEntityRenderer::ModelDefinition BlockEntityRenderer::makeChestDefinition() {
@@ -364,6 +367,32 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
     }
 }
 
+void BlockEntityRenderer::rebuildFlatInstanceList() {
+    m_flatInstances.clear();
+    for (auto& cachePair : m_sectionCaches) {
+        SectionCache& cache = cachePair.second;
+        for (BlockEntityInstance& instance : cache.instances) {
+            m_flatInstances.push_back(&instance);
+        }
+    }
+}
+
+void BlockEntityRenderer::updateInstanceLightsForFrame() {
+    if (m_instanceLightsSyncedThisFrame) {
+        return;
+    }
+    m_instanceLightsSyncedThisFrame = true;
+
+    for (BlockEntityInstance* instance : m_flatInstances) {
+        const uint8_t packedLight = instance->chunk->getPackedLight(instance->localX,
+                                                                    instance->columnY,
+                                                                    instance->localZ);
+        instance->light = glm::vec2(
+            static_cast<float>((packedLight >> 4) & 0x0F) / 15.0f,
+            static_cast<float>(packedLight & 0x0F) / 15.0f);
+    }
+}
+
 void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) {
     if (m_instanceCacheSyncedThisFrame) {
         return;
@@ -417,6 +446,7 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
 
     m_syncedActiveChunkRevision = activeChunkRevision;
     m_syncedBlockContentRevision = blockContentRevision;
+    rebuildFlatInstanceList();
     m_hasSyncedRevisions = true;
 }
 
@@ -426,6 +456,7 @@ void BlockEntityRenderer::drawBlockEntitiesInstanced(const IWorldView& worldView
                                                      const float splitNear,
                                                      const float splitFar) {
     synchronizeInstanceCache(worldView);
+    updateInstanceLightsForFrame();
 
     GLuint boundTexture = 0;
     glActiveTexture(GL_TEXTURE0);
@@ -443,32 +474,24 @@ void BlockEntityRenderer::drawBlockEntitiesInstanced(const IWorldView& worldView
         }
 
         m_instanceData.clear();
-        for (const auto& cachePair : m_sectionCaches) {
-            const SectionCache& cache = cachePair.second;
-            for (const BlockEntityInstance& instance : cache.instances) {
-                if (instance.model != &entry) {
+        for (const BlockEntityInstance* instance : m_flatInstances) {
+            if (instance->model != &entry) {
+                continue;
+            }
+
+            if (useSplitCulling) {
+                const glm::vec3 delta = instance->center - cameraPos;
+                const float distanceSq = glm::dot(delta, delta);
+                if ((minSplitDistance > 0.0f && distanceSq < minSplitDistanceSq) ||
+                    distanceSq > maxSplitDistanceSq) {
                     continue;
                 }
-
-                if (useSplitCulling) {
-                    const glm::vec3 delta = instance.center - cameraPos;
-                    const float distanceSq = glm::dot(delta, delta);
-                    if ((minSplitDistance > 0.0f && distanceSq < minSplitDistanceSq) ||
-                        distanceSq > maxSplitDistanceSq) {
-                        continue;
-                    }
-                }
-
-                const uint8_t packedLight = instance.chunk->getPackedLight(instance.localX,
-                                                                           instance.columnY,
-                                                                           instance.localZ);
-                InstancedDrawData drawData;
-                drawData.modelMatrix = instance.modelMatrix;
-                drawData.light = glm::vec2(
-                    static_cast<float>((packedLight >> 4) & 0x0F) / 15.0f,
-                    static_cast<float>(packedLight & 0x0F) / 15.0f);
-                m_instanceData.push_back(drawData);
             }
+
+            InstancedDrawData drawData;
+            drawData.modelMatrix = instance->modelMatrix;
+            drawData.light = instance->light;
+            m_instanceData.push_back(drawData);
         }
 
         if (m_instanceData.empty()) {
@@ -505,6 +528,7 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
                                             const float splitNear,
                                             const float splitFar) {
     synchronizeInstanceCache(worldView);
+    updateInstanceLightsForFrame();
 
     GLuint boundTexture = 0;
     glActiveTexture(GL_TEXTURE0);
@@ -514,51 +538,43 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
     const float maxSplitDistance = splitFar + 4.0f;
     const float maxSplitDistanceSq = maxSplitDistance * maxSplitDistance;
 
-    for (const auto& cachePair : m_sectionCaches) {
-        const SectionCache& cache = cachePair.second;
-        for (const BlockEntityInstance& instance : cache.instances) {
-            const ModelEntry* entry = instance.model;
-            if (entry == nullptr) {
-                continue;
-            }
-
-            const Mesh& mesh = entry->mesh;
-            if (mesh.vao == 0 || mesh.vertexCount == 0) {
-                continue;
-            }
-
-            if (useSplitCulling) {
-                const glm::vec3 delta = instance.center - cameraPos;
-                const float distanceSq = glm::dot(delta, delta);
-                if ((minSplitDistance > 0.0f && distanceSq < minSplitDistanceSq) ||
-                    distanceSq > maxSplitDistanceSq) {
-                    continue;
-                }
-            }
-
-            const uint8_t packedLight = instance.chunk->getPackedLight(instance.localX,
-                                                                       instance.columnY,
-                                                                       instance.localZ);
-            const float sunlight = static_cast<float>((packedLight >> 4) & 0x0F) / 15.0f;
-            const float blockLight = static_cast<float>(packedLight & 0x0F) / 15.0f;
-            glUniform1f(sunlightLoc, sunlight);
-            if (blockLightLoc >= 0) {
-                glUniform1f(blockLightLoc, blockLight);
-            }
-
-            if (boundTexture != entry->texture) {
-                glBindTexture(GL_TEXTURE_2D, entry->texture);
-                boundTexture = entry->texture;
-            }
-
-            shader.setMat4(modelLoc, instance.modelMatrix);
-            if (prevModelLoc >= 0) {
-                shader.setMat4(prevModelLoc, instance.modelMatrix);
-            }
-
-            glBindVertexArray(mesh.vao);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
+    for (const BlockEntityInstance* instance : m_flatInstances) {
+        const ModelEntry* entry = instance->model;
+        if (entry == nullptr) {
+            continue;
         }
+
+        const Mesh& mesh = entry->mesh;
+        if (mesh.vao == 0 || mesh.vertexCount == 0) {
+            continue;
+        }
+
+        if (useSplitCulling) {
+            const glm::vec3 delta = instance->center - cameraPos;
+            const float distanceSq = glm::dot(delta, delta);
+            if ((minSplitDistance > 0.0f && distanceSq < minSplitDistanceSq) ||
+                distanceSq > maxSplitDistanceSq) {
+                continue;
+            }
+        }
+
+        glUniform1f(sunlightLoc, instance->light.x);
+        if (blockLightLoc >= 0) {
+            glUniform1f(blockLightLoc, instance->light.y);
+        }
+
+        if (boundTexture != entry->texture) {
+            glBindTexture(GL_TEXTURE_2D, entry->texture);
+            boundTexture = entry->texture;
+        }
+
+        shader.setMat4(modelLoc, instance->modelMatrix);
+        if (prevModelLoc >= 0) {
+            shader.setMat4(prevModelLoc, instance->modelMatrix);
+        }
+
+        glBindVertexArray(mesh.vao);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
     }
 }
 

@@ -16,6 +16,7 @@ constexpr GLint kExposureResolveSpeedLocation = 1;
 constexpr GLint kExposureResolveBiasLocation = 2;
 constexpr GLint kExposureResolveManualLocation = 3;
 constexpr GLint kExposureResolveInitializedLocation = 4;
+constexpr GLint kExposureResolveReusePreviousTargetLocation = 5;
 constexpr GLint kBloomExtractSourceLodLocation = 0;
 constexpr GLint kBloomBlurDirectionLocation = 0;
 constexpr GLint kBloomBlurWeightLocation = 1;
@@ -63,7 +64,6 @@ void PostProcessPass::shutdown() {
     m_targetWidth = 0;
     m_targetHeight = 0;
     m_autoExposureSampleAccumulator = 0.0;
-    m_autoExposureAdaptationAccumulator = 0.0;
 }
 
 void PostProcessPass::setFrameEffects(const PostProcessEffects& effects) {
@@ -268,7 +268,6 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
         m_autoExposureInitialized = false;
         m_adaptedExposure = manualExposure;
         m_autoExposureSampleAccumulator = 0.0;
-        m_autoExposureAdaptationAccumulator = 0.0;
         return manualExposure;
     }
 
@@ -277,66 +276,64 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
     }
 
     const float elapsedFrameTime = std::max(frameTime, 0.0f);
-    m_autoExposureAdaptationAccumulator += elapsedFrameTime;
 
     m_autoExposureSampleAccumulator += elapsedFrameTime;
     const bool shouldSampleExposure =
         !m_autoExposureInitialized ||
         m_autoExposureSampleAccumulator >= kAutoExposureSampleIntervalSeconds;
-    if (!shouldSampleExposure) {
-        return m_adaptedExposure;
-    }
 
     if (!m_autoExposureInitialized) {
         initializeExposureState(manualExposure);
     }
 
-    m_exposureDownsampleShader->use();
     glBindVertexArray(m_fullscreenVao);
 
-    GLuint sourceTex = m_sceneColorTex;
-    const int exposureLod = std::min(kAutoExposureLod,
-        std::max(0, static_cast<int>(std::floor(std::log2(static_cast<float>(
-            std::max(m_targetWidth, m_targetHeight)))))));
-    glm::ivec2 sourceSize(std::max(1, m_targetWidth >> exposureLod),
-                          std::max(1, m_targetHeight >> exposureLod));
-    bool sourceIsScene = true;
     int finalMip = 0;
-    for (int mip = 0; mip < m_exposureMipCount; ++mip) {
-        if (m_exposureFbos[mip] == 0 || m_exposureTex[mip] == 0) {
-            break;
-        }
-        finalMip = mip;
-        glBindFramebuffer(GL_FRAMEBUFFER, m_exposureFbos[mip]);
-        glViewport(0, 0, m_exposureMipSize[mip].x, m_exposureMipSize[mip].y);
-        glClear(GL_COLOR_BUFFER_BIT);
-        glUniform1i(kExposureDownsampleSourceIsSceneLocation, sourceIsScene ? 1 : 0);
-        glUniform2f(kExposureDownsampleSourceSizeLocation,
-                    static_cast<float>(sourceSize.x),
-                    static_cast<float>(sourceSize.y));
-        glUniform1i(kExposureDownsampleSourceLodLocation, sourceIsScene ? exposureLod : 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, sourceTex);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+    if (shouldSampleExposure) {
+        m_exposureDownsampleShader->use();
 
-        sourceTex = m_exposureTex[mip];
-        sourceSize = m_exposureMipSize[mip];
-        sourceIsScene = false;
-        if (m_exposureMipSize[mip].x == 1 && m_exposureMipSize[mip].y == 1) {
-            break;
+        GLuint sourceTex = m_sceneColorTex;
+        const int exposureLod = std::min(kAutoExposureLod,
+            std::max(0, static_cast<int>(std::floor(std::log2(static_cast<float>(
+                std::max(m_targetWidth, m_targetHeight)))))));
+        glm::ivec2 sourceSize(std::max(1, m_targetWidth >> exposureLod),
+                              std::max(1, m_targetHeight >> exposureLod));
+        bool sourceIsScene = true;
+        for (int mip = 0; mip < m_exposureMipCount; ++mip) {
+            if (m_exposureFbos[mip] == 0 || m_exposureTex[mip] == 0) {
+                break;
+            }
+            finalMip = mip;
+            glBindFramebuffer(GL_FRAMEBUFFER, m_exposureFbos[mip]);
+            glViewport(0, 0, m_exposureMipSize[mip].x, m_exposureMipSize[mip].y);
+            glClear(GL_COLOR_BUFFER_BIT);
+            glUniform1i(kExposureDownsampleSourceIsSceneLocation, sourceIsScene ? 1 : 0);
+            glUniform2f(kExposureDownsampleSourceSizeLocation,
+                        static_cast<float>(sourceSize.x),
+                        static_cast<float>(sourceSize.y));
+            glUniform1i(kExposureDownsampleSourceLodLocation, sourceIsScene ? exposureLod : 0);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, sourceTex);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+
+            sourceTex = m_exposureTex[mip];
+            sourceSize = m_exposureMipSize[mip];
+            sourceIsScene = false;
+            if (m_exposureMipSize[mip].x == 1 && m_exposureMipSize[mip].y == 1) {
+                break;
+            }
         }
     }
 
     const int writeIndex = 1 - m_exposureStateReadIndex;
-    const float adaptationTime = static_cast<float>(
-        std::max(m_autoExposureAdaptationAccumulator, static_cast<double>(elapsedFrameTime)));
 
     m_exposureResolveShader->use();
-    glUniform1f(kExposureResolveFrameTimeLocation, adaptationTime);
+    glUniform1f(kExposureResolveFrameTimeLocation, elapsedFrameTime);
     glUniform1f(kExposureResolveSpeedLocation, m_effects.autoExposureSpeed);
     glUniform1f(kExposureResolveBiasLocation, m_effects.autoExposureBias);
     glUniform1f(kExposureResolveManualLocation, manualExposure);
     glUniform1i(kExposureResolveInitializedLocation, m_autoExposureInitialized ? 1 : 0);
+    glUniform1i(kExposureResolveReusePreviousTargetLocation, shouldSampleExposure ? 0 : 1);
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_exposureStateFbos[writeIndex]);
     glViewport(0, 0, 1, 1);
@@ -348,8 +345,9 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
 
     m_exposureStateReadIndex = writeIndex;
     m_autoExposureInitialized = true;
-    m_autoExposureSampleAccumulator = 0.0;
-    m_autoExposureAdaptationAccumulator = 0.0;
+    if (shouldSampleExposure) {
+        m_autoExposureSampleAccumulator = 0.0;
+    }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glActiveTexture(GL_TEXTURE1);
@@ -647,7 +645,6 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     m_targetHeight = height;
     m_autoExposureInitialized = false;
     m_autoExposureSampleAccumulator = 0.0;
-    m_autoExposureAdaptationAccumulator = 0.0;
     return true;
 }
 
@@ -762,7 +759,6 @@ void PostProcessPass::destroyRenderTargets() {
     m_exposureStateReadIndex = 0;
     m_autoExposureInitialized = false;
     m_autoExposureSampleAccumulator = 0.0;
-    m_autoExposureAdaptationAccumulator = 0.0;
 }
 
 void PostProcessPass::initFullscreenTriangle() {

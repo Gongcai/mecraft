@@ -177,7 +177,6 @@ private:
     GLuint m_exposureStateTex[2] = {};
     int m_exposureStateReadIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
-    double m_autoExposureAdaptationAccumulator = 0.0;
 
     GLuint m_fullscreenVao = 0;
     GLuint m_compositeParamsBuffer = 0;

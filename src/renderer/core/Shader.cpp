@@ -73,6 +73,7 @@ string Shader::resolveIncludes(const string& source,
 
 Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath )
 {
+	uniformLocationCache.reserve(128);
 
 	//从文件中读取着色器并写到字符串里转成const char* c
 	string vertexCode;
@@ -171,6 +172,7 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 	glDeleteShader(geometry);
 }
 Shader::Shader(const char* vertexPath,const char* fragmentPath){
+	uniformLocationCache.reserve(128);
 	//从文件中读取着色器并写到字符串里转成const char* c
 	string vertexCode;
 	string framentCode;
@@ -300,11 +302,13 @@ void Shader::setVec3(const std::string& name, float x, float y, float z) const
 }
 
 int Shader::getUniformLocation(const string &name) const {
-	if (uniformLocationCache.find(name) != uniformLocationCache.end())
-		return uniformLocationCache[name];
+	const auto cached = uniformLocationCache.find(name);
+	if (cached != uniformLocationCache.end()) {
+		return cached->second;
+	}
 
 	int location = glGetUniformLocation(ID, name.c_str());
-	uniformLocationCache[name] = location;
+	uniformLocationCache.emplace(name, location);
 	return location;
 }
 

@@ -17,6 +17,9 @@ struct CascadeAabbCuller {
     bool useZCulling = true;
     mutable int visibleCount = 0;
     mutable int culledCount = 0;
+    glm::vec3 absClipExtentX = glm::vec3(1.0f, 0.0f, 0.0f);
+    glm::vec3 absClipExtentY = glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 absClipExtentZ = glm::vec3(0.0f, 0.0f, 1.0f);
 };
 
 // Forward declarations for types used only as pointers/references in the public interface
