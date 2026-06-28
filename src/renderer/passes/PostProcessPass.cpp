@@ -38,6 +38,7 @@ void PostProcessPass::shutdown() {
     m_targetWidth = 0;
     m_targetHeight = 0;
     m_autoExposureSampleAccumulator = 0.0;
+    m_autoExposureAdaptationAccumulator = 0.0;
 }
 
 void PostProcessPass::setFrameEffects(const PostProcessEffects& effects) {
@@ -243,12 +244,16 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
         m_autoExposureInitialized = false;
         m_adaptedExposure = manualExposure;
         m_autoExposureSampleAccumulator = 0.0;
+        m_autoExposureAdaptationAccumulator = 0.0;
         return manualExposure;
     }
 
     if (!m_autoExposureInitialized) {
         m_adaptedExposure = manualExposure;
     }
+
+    const float elapsedFrameTime = std::max(frameTime, 0.0f);
+    m_autoExposureAdaptationAccumulator += elapsedFrameTime;
 
     for (int readIndex = 0; readIndex < kExposureReadbackRing; ++readIndex) {
         if (!m_exposureReadbackIssued[readIndex] || m_exposureReadbackFences[readIndex] == nullptr) {
@@ -263,7 +268,10 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
             const auto* exposureData = static_cast<const float*>(
                 glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, sizeof(float) * 2, GL_MAP_READ_BIT));
             if (exposureData != nullptr) {
-                updateExposureFromSample(exposureData[0], exposureData[1], frameTime);
+                const float adaptationTime = static_cast<float>(
+                    std::max(m_autoExposureAdaptationAccumulator, static_cast<double>(elapsedFrameTime)));
+                updateExposureFromSample(exposureData[0], exposureData[1], adaptationTime);
+                m_autoExposureAdaptationAccumulator = 0.0;
                 glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
             }
             glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
@@ -271,7 +279,7 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
         }
     }
 
-    m_autoExposureSampleAccumulator += std::max(frameTime, 0.0f);
+    m_autoExposureSampleAccumulator += elapsedFrameTime;
     const bool shouldSampleExposure =
         !m_autoExposureInitialized ||
         m_autoExposureSampleAccumulator >= kAutoExposureSampleIntervalSeconds;
@@ -617,6 +625,7 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     m_targetHeight = height;
     m_autoExposureInitialized = false;
     m_autoExposureSampleAccumulator = 0.0;
+    m_autoExposureAdaptationAccumulator = 0.0;
     return true;
 }
 
@@ -639,6 +648,7 @@ bool PostProcessPass::ensureExposureReadbackBuffers() {
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     m_exposureReadbackWriteIndex = 0;
     m_autoExposureSampleAccumulator = 0.0;
+    m_autoExposureAdaptationAccumulator = 0.0;
     return true;
 }
 
@@ -709,6 +719,7 @@ void PostProcessPass::destroyExposureReadbackBuffers() {
     }
     m_exposureReadbackWriteIndex = 0;
     m_autoExposureSampleAccumulator = 0.0;
+    m_autoExposureAdaptationAccumulator = 0.0;
 }
 
 void PostProcessPass::destroyRenderTargets() {
@@ -759,6 +770,7 @@ void PostProcessPass::destroyRenderTargets() {
     m_exposureMipCount = 0;
     m_autoExposureInitialized = false;
     m_autoExposureSampleAccumulator = 0.0;
+    m_autoExposureAdaptationAccumulator = 0.0;
 }
 
 void PostProcessPass::initFullscreenTriangle() {

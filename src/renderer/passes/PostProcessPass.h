@@ -106,7 +106,7 @@ private:
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
     static constexpr int kExposureReadbackRing = 3;
-    static constexpr double kAutoExposureSampleIntervalSeconds = 0.1;
+    static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
 
     bool ensureRenderTargets(int width, int height);
     void destroyRenderTargets();
@@ -158,6 +158,7 @@ private:
     bool m_exposureReadbackIssued[kExposureReadbackRing] = {};
     int m_exposureReadbackWriteIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
+    double m_autoExposureAdaptationAccumulator = 0.0;
 
     GLuint m_fullscreenVao = 0;
 
