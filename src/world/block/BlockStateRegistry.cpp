@@ -19,8 +19,8 @@ std::vector<BlockStateEntry> BlockStateRegistry::s_states{};
 std::vector<PropertyKey> BlockStateRegistry::s_statePropertiesPool{};
 std::vector<StateTextureIndices> BlockStateRegistry::s_stateTextures{};
 std::vector<ModelVariant> BlockStateRegistry::s_stateModelVariants{};
-std::unordered_map<BlockID, StateID> BlockStateRegistry::s_defaultState{};
-std::unordered_map<uint64_t, StateID> BlockStateRegistry::s_stateLookup{};
+std::unordered_map<BlockID, BlockStateId> BlockStateRegistry::s_defaultState{};
+std::unordered_map<uint64_t, BlockStateId> BlockStateRegistry::s_stateLookup{};
 std::unordered_map<BlockID, BlockStateRegistry::BlockPropertyLayout> BlockStateRegistry::s_blockPropertyLayouts{};
 StateTextureIndices BlockStateRegistry::s_fallbackTextures{};
 
@@ -291,7 +291,7 @@ std::vector<std::pair<uint16_t, uint16_t>> parseModelVariantPropertyKey(const st
     return props;
 }
 
-bool stateMatchesModelVariantProperties(const StateID stateId,
+bool stateMatchesModelVariantProperties(const BlockStateId stateId,
                                         const std::vector<std::pair<uint16_t, uint16_t>>& props) {
     for (const auto& [property, value] : props) {
         if (BlockStateRegistry::getPropertyIndex(stateId, property) != value) {
@@ -301,11 +301,15 @@ bool stateMatchesModelVariantProperties(const StateID stateId,
     return true;
 }
 
-uint32_t checkedRegistryOffset(const size_t value, const char* fieldName) {
+BlockStateId makeBlockStateId(const size_t value) {
     if (value > std::numeric_limits<uint32_t>::max()) {
-        throw std::runtime_error(std::string("Block state registry ") + fieldName + " exceeds uint32_t capacity");
+        throw std::runtime_error("Block state registry exceeds the current BlockStateId value capacity");
     }
-    return static_cast<uint32_t>(value);
+    return BlockStateId{static_cast<uint32_t>(value)};
+}
+
+size_t stateIndex(const BlockStateId stateId) {
+    return static_cast<size_t>(stateId.value);
 }
 }
 
@@ -420,10 +424,10 @@ void BlockStateRegistry::explodeAllStates() {
     s_stateTextures.reserve(blockCount);
 
     for (BlockID blockId = 0; blockId < blockCount; ++blockId) {
-        const uint32_t textureOffset = checkedRegistryOffset(s_stateTextures.size(), "texture offset");
+        const size_t textureOffset = s_stateTextures.size();
         s_stateTextures.push_back(makeTexturesForBlock(blockId));
         s_states[blockId] = BlockStateEntry{
-            blockId,
+            makeBlockStateId(blockId),
             blockId,
             0,
             0,
@@ -431,25 +435,25 @@ void BlockStateRegistry::explodeAllStates() {
         };
     }
 
-    StateID nextStateId = static_cast<StateID>(blockCount);
+    size_t nextStateId = blockCount;
 
     for (BlockID blockId = 0; blockId < blockCount; ++blockId) {
         const auto registeredIt = s_registeredProperties.find(blockId);
         if (registeredIt == s_registeredProperties.end() || registeredIt->second.propertyNameIndices.empty()) {
-            s_defaultState[blockId] = blockId;
+            s_defaultState[blockId] = makeBlockStateId(blockId);
             continue;
         }
 
         const RegisteredBlockProperties& registered = registeredIt->second;
         BlockPropertyLayout layout;
-        layout.firstStateId = nextStateId;
+        layout.firstStateId = makeBlockStateId(nextStateId);
         layout.propertyCount = static_cast<uint8_t>(registered.propertyNameIndices.size());
         layout.propertyPosition.assign(s_propertyNamePool.size(), std::numeric_limits<uint8_t>::max());
         layout.propertyStride.assign(s_propertyNamePool.size(), 0);
         layout.valueCounts.assign(s_propertyNamePool.size(), 0);
         layout.valueOrdinals.resize(registered.propertyNameIndices.size());
 
-        uint32_t runningStride = 1;
+        size_t runningStride = 1;
         for (int propertyIndex = static_cast<int>(registered.propertyNameIndices.size()) - 1;
              propertyIndex >= 0;
              --propertyIndex) {
@@ -467,26 +471,23 @@ void BlockStateRegistry::explodeAllStates() {
                     layout.valueOrdinals[propertyIndex][valueIndex] = ordinal;
                 }
             }
-            const uint64_t nextStride = static_cast<uint64_t>(runningStride) * values.size();
-            if (nextStride > std::numeric_limits<uint32_t>::max()) {
-                throw std::runtime_error("Block property stride exceeds uint32_t capacity");
+            if (values.size() > 0 && runningStride > std::numeric_limits<size_t>::max() / values.size()) {
+                throw std::runtime_error("Block property stride exceeds size_t capacity");
             }
-            runningStride = static_cast<uint32_t>(nextStride);
+            runningStride *= values.size();
         }
 
         std::vector<PropertyKey> props(registered.propertyNameIndices.size());
         std::function<void(size_t, bool)> buildStates = [&](const size_t propertyIndex, const bool isDefaultPath) {
             if (propertyIndex == registered.propertyNameIndices.size()) {
-                const uint32_t propertiesOffset = checkedRegistryOffset(s_statePropertiesPool.size(), "property offset");
+                const size_t propertiesOffset = s_statePropertiesPool.size();
                 s_statePropertiesPool.insert(s_statePropertiesPool.end(), props.begin(), props.end());
 
-                const uint32_t textureOffset = checkedRegistryOffset(s_stateTextures.size(), "texture offset");
+                const size_t textureOffset = s_stateTextures.size();
                 s_stateTextures.push_back(makeTexturesForState(blockId, props));
 
-                if (nextStateId == std::numeric_limits<StateID>::max()) {
-                    throw std::runtime_error("Block state registry exceeds usable uint32_t state id capacity");
-                }
-                const StateID stateId = nextStateId++;
+                const BlockStateId stateId = makeBlockStateId(nextStateId);
+                ++nextStateId;
                 s_states.push_back(BlockStateEntry{
                     stateId,
                     blockId,
@@ -512,51 +513,53 @@ void BlockStateRegistry::explodeAllStates() {
 
         buildStates(0, true);
         if (s_defaultState.find(blockId) == s_defaultState.end()) {
-            s_defaultState[blockId] = blockId;
+            s_defaultState[blockId] = makeBlockStateId(blockId);
         }
         s_blockPropertyLayouts[blockId] = std::move(layout);
     }
 }
 
-StateID BlockStateRegistry::getDefaultState(const BlockID blockId) {
+BlockStateId BlockStateRegistry::getDefaultState(const BlockID blockId) {
     const auto it = s_defaultState.find(blockId);
     if (it != s_defaultState.end()) {
         return it->second;
     }
-    return blockId;
+    return makeBlockStateId(blockId);
 }
 
-StateID BlockStateRegistry::getState(const BlockID blockId, const uint16_t propKey, const uint16_t propValue) {
+BlockStateId BlockStateRegistry::getState(const BlockID blockId, const uint16_t propKey, const uint16_t propValue) {
     return getState(blockId, {{propKey, propValue}});
 }
 
-StateID BlockStateRegistry::getState(const BlockID blockId,
-                                     std::initializer_list<std::pair<uint16_t, uint16_t>> props) {
+BlockStateId BlockStateRegistry::getState(const BlockID blockId,
+                                          std::initializer_list<std::pair<uint16_t, uint16_t>> props) {
     return getState(blockId, std::vector<std::pair<uint16_t, uint16_t>>(props.begin(), props.end()));
 }
 
-StateID BlockStateRegistry::getState(const BlockID blockId,
-                                     const std::vector<std::pair<uint16_t, uint16_t>>& props) {
-    StateID state = getDefaultState(blockId);
+BlockStateId BlockStateRegistry::getState(const BlockID blockId,
+                                          const std::vector<std::pair<uint16_t, uint16_t>>& props) {
+    BlockStateId state = getDefaultState(blockId);
     for (const auto& [propKey, propValue] : props) {
         state = withProperty(state, propKey, propValue);
     }
     return state;
 }
 
-BlockID BlockStateRegistry::getBlockId(const StateID stateId) {
-    if (stateId < s_states.size()) {
-        return s_states[stateId].blockId;
+BlockID BlockStateRegistry::getBlockId(const BlockStateId stateId) {
+    const size_t index = stateIndex(stateId);
+    if (index < s_states.size()) {
+        return s_states[index].blockId;
     }
     return RUNTIME_ID_NULL;
 }
 
-uint16_t BlockStateRegistry::getPropertyIndex(const StateID stateId, const uint16_t nameIndex) {
-    if (stateId >= s_states.size()) {
+uint16_t BlockStateRegistry::getPropertyIndex(const BlockStateId stateId, const uint16_t nameIndex) {
+    const size_t index = stateIndex(stateId);
+    if (index >= s_states.size()) {
         return INVALID_INDEX;
     }
 
-    const BlockStateEntry& entry = s_states[stateId];
+    const BlockStateEntry& entry = s_states[index];
     for (uint8_t propertyIndex = 0; propertyIndex < entry.propertyCount; ++propertyIndex) {
         const PropertyKey& prop = s_statePropertiesPool[entry.propertiesOffset + propertyIndex];
         if (prop.nameIndex == nameIndex) {
@@ -567,21 +570,23 @@ uint16_t BlockStateRegistry::getPropertyIndex(const StateID stateId, const uint1
     return INVALID_INDEX;
 }
 
-uint8_t BlockStateRegistry::getPropertyCount(const StateID stateId) {
-    if (stateId < s_states.size()) {
-        return s_states[stateId].propertyCount;
+uint8_t BlockStateRegistry::getPropertyCount(const BlockStateId stateId) {
+    const size_t index = stateIndex(stateId);
+    if (index < s_states.size()) {
+        return s_states[index].propertyCount;
     }
     return 0;
 }
 
-StateID BlockStateRegistry::withProperty(const StateID currentState,
-                                         const uint16_t propKey,
-                                         const uint16_t newValue) {
-    if (propKey == INVALID_INDEX || currentState >= s_states.size()) {
+BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState,
+                                              const uint16_t propKey,
+                                              const uint16_t newValue) {
+    const size_t currentIndex = stateIndex(currentState);
+    if (propKey == INVALID_INDEX || currentIndex >= s_states.size()) {
         return currentState;
     }
 
-    const BlockID blockId = s_states[currentState].blockId;
+    const BlockID blockId = s_states[currentIndex].blockId;
     const auto layoutIt = s_blockPropertyLayouts.find(blockId);
     if (layoutIt == s_blockPropertyLayouts.end()) {
         return currentState;
@@ -622,23 +627,24 @@ StateID BlockStateRegistry::withProperty(const StateID currentState,
         return currentState;
     }
 
-    const int64_t nextState = static_cast<int64_t>(currentState) +
+    const int64_t nextState = static_cast<int64_t>(currentIndex) +
                               delta * static_cast<int64_t>(layout.propertyStride[propKey]);
     if (nextState < 0 || static_cast<size_t>(nextState) >= s_states.size()) {
         return currentState;
     }
-    return static_cast<StateID>(nextState);
+    return makeBlockStateId(static_cast<size_t>(nextState));
 }
 
-StateID BlockStateRegistry::withProperty(const StateID currentState,
-                                         const uint16_t propKey,
-                                         const std::string& newValue) {
+BlockStateId BlockStateRegistry::withProperty(const BlockStateId currentState,
+                                              const uint16_t propKey,
+                                              const std::string& newValue) {
     return withProperty(currentState, propKey, getPropertyValueIndex(propKey, newValue));
 }
 
-const StateTextureIndices& BlockStateRegistry::getStateTextures(const StateID stateId) {
-    if (stateId < s_states.size()) {
-        const BlockStateEntry& entry = s_states[stateId];
+const StateTextureIndices& BlockStateRegistry::getStateTextures(const BlockStateId stateId) {
+    const size_t index = stateIndex(stateId);
+    if (index < s_states.size()) {
+        const BlockStateEntry& entry = s_states[index];
         if (entry.textureOffset < s_stateTextures.size()) {
             return s_stateTextures[entry.textureOffset];
         }
@@ -678,14 +684,15 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
 
         const std::vector<std::pair<uint16_t, uint16_t>> props = parseModelVariantPropertyKey(it.key());
         bool matchedState = false;
-        for (const StateID stateId : getStatesForBlock(blockId)) {
+        for (const BlockStateId stateId : getStatesForBlock(blockId)) {
             if (!stateMatchesModelVariantProperties(stateId, props)) {
                 continue;
             }
-            if (stateId >= s_stateModelVariants.size()) {
+            const size_t index = stateIndex(stateId);
+            if (index >= s_stateModelVariants.size()) {
                 throw std::runtime_error("Model variant state id is outside state registry");
             }
-            s_stateModelVariants[stateId] = variant;
+            s_stateModelVariants[index] = variant;
             matchedState = true;
         }
         if (!matchedState) {
@@ -694,11 +701,12 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
     }
 }
 
-const ModelVariant* BlockStateRegistry::getModelVariant(const StateID stateId) {
-    if (stateId >= s_stateModelVariants.size()) {
+const ModelVariant* BlockStateRegistry::getModelVariant(const BlockStateId stateId) {
+    const size_t index = stateIndex(stateId);
+    if (index >= s_stateModelVariants.size()) {
         return nullptr;
     }
-    const ModelVariant& variant = s_stateModelVariants[stateId];
+    const ModelVariant& variant = s_stateModelVariants[index];
     return variant.model != nullptr ? &variant : nullptr;
 }
 
@@ -733,12 +741,13 @@ const std::string& BlockStateRegistry::getPropertyValue(const uint16_t nameIndex
     return empty;
 }
 
-std::string BlockStateRegistry::stateToString(const StateID stateId) {
-    if (stateId >= s_states.size()) {
+std::string BlockStateRegistry::stateToString(const BlockStateId stateId) {
+    const size_t index = stateIndex(stateId);
+    if (index >= s_states.size()) {
         return BlockRegistry::getNamespacedId(RUNTIME_ID_NULL).full();
     }
 
-    const BlockStateEntry& entry = s_states[stateId];
+    const BlockStateEntry& entry = s_states[index];
     std::ostringstream out;
     out << BlockRegistry::getNamespacedId(entry.blockId).full();
     if (entry.propertyCount == 0) {
@@ -761,8 +770,8 @@ size_t BlockStateRegistry::getStateCount() {
     return s_states.size();
 }
 
-std::vector<StateID> BlockStateRegistry::getStatesForBlock(const BlockID blockId) {
-    std::vector<StateID> states;
+std::vector<BlockStateId> BlockStateRegistry::getStatesForBlock(const BlockID blockId) {
+    std::vector<BlockStateId> states;
     const bool hasExpandedStates = s_blockPropertyLayouts.find(blockId) != s_blockPropertyLayouts.end();
     for (const BlockStateEntry& entry : s_states) {
         if (entry.blockId == blockId &&

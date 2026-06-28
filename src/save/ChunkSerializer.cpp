@@ -186,7 +186,7 @@ void serializeLayer(
 
     // Write palette entries as block state strings.
     for (size_t i = 0; i < paletteSize; ++i) {
-        RuntimeId rid = palette.getRuntimeId(static_cast<uint16_t>(i));
+        RuntimeId rid = palette.getRuntimeId(static_cast<uint32_t>(i));
         writeString(out, BlockStateRegistry::stateToString(rid));
     }
 
@@ -251,6 +251,7 @@ bool deserializeLayer(
     // Read bits per entry
     uint8_t bpe = 0;
     if (!readU8(cursor, end, bpe)) return false;
+    if (bpe > 32) return false;
 
     // Read packed data size
     uint32_t packedDataSize = 0;

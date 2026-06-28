@@ -220,7 +220,7 @@ public:
         const std::size_t index = static_cast<std::size_t>(x) +
                                   static_cast<std::size_t>(z) * SIZE +
                                   static_cast<std::size_t>(y) * SIZE * SIZE;
-        const uint16_t paletteIndex = static_cast<uint16_t>(m_blockData.getUnchecked(index));
+        const uint32_t paletteIndex = m_blockData.getUnchecked(index);
         return m_palette.getRuntimeIdUnchecked(paletteIndex);
     }
     void setBlock(int x, int y, int z, BlockID id);
@@ -236,7 +236,7 @@ public:
         const std::size_t index = static_cast<std::size_t>(x) +
                                   static_cast<std::size_t>(z) * SIZE +
                                   static_cast<std::size_t>(y) * SIZE * SIZE;
-        const uint16_t paletteIndex = static_cast<uint16_t>(m_fluidData.getUnchecked(index));
+        const uint32_t paletteIndex = m_fluidData.getUnchecked(index);
         return m_fluidPalette.getRuntimeIdUnchecked(paletteIndex);
     }
     void setFluidLayer(int x, int y, int z, BlockID id);
@@ -289,11 +289,11 @@ private:
 
     Palette m_palette;
     BitPackedArray m_blockData;
-    std::unordered_map<BlockID, uint16_t> m_blockCounts;
+    std::unordered_map<BlockID, uint32_t> m_blockCounts;
 
     Palette m_fluidPalette;
     BitPackedArray m_fluidData;
-    std::unordered_map<BlockID, uint16_t> m_fluidCounts;
+    std::unordered_map<BlockID, uint32_t> m_fluidCounts;
 
     SubChunkType m_type = SubChunkType::Air;
     bool m_dirty = true;

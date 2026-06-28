@@ -36,8 +36,8 @@ SubChunk::SubChunk()
     m_fluidPalette.getOrCreateIndex(0);  // AIR for fluid layer
     m_fluidData.fill(0);
     m_lightMap.fill(0);
-    m_blockCounts.emplace(0, static_cast<uint16_t>(BLOCK_COUNT));
-    m_fluidCounts.emplace(0, static_cast<uint16_t>(BLOCK_COUNT));
+    m_blockCounts.emplace(0, static_cast<uint32_t>(BLOCK_COUNT));
+    m_fluidCounts.emplace(0, static_cast<uint32_t>(BLOCK_COUNT));
 }
 
 SubChunk::~SubChunk() {
@@ -101,7 +101,7 @@ BlockID SubChunk::getBlock(const int x, const int y, const int z) const {
         return 0;  // AIR
     }
     const size_t idx = toIndex(x, y, z);
-    const uint16_t paletteIdx = static_cast<uint16_t>(m_blockData.get(idx));
+    const uint32_t paletteIdx = m_blockData.get(idx);
     return m_palette.getRuntimeId(paletteIdx);
 }
 
@@ -112,13 +112,13 @@ void SubChunk::setBlockImpl(const int x, const int y, const int z, const BlockID
 
     const BlockID normalizedId = normalizeStoredState(id);
     const size_t index = toIndex(x, y, z);
-    const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_blockData.get(index));
+    const uint32_t oldPaletteIdx = m_blockData.get(index);
     const BlockID oldId = m_palette.getRuntimeId(oldPaletteIdx);
     if (oldId == normalizedId) {
         return;
     }
 
-    const uint16_t paletteIdx = m_palette.getOrCreateIndex(normalizedId);
+    const uint32_t paletteIdx = m_palette.getOrCreateIndex(normalizedId);
     const uint8_t neededBits = m_palette.bitsPerEntry();
     if (neededBits > m_blockData.bitsPerEntry()) {
         m_blockData.resize(neededBits);
@@ -162,13 +162,13 @@ void SubChunk::setBlockFast(const int x, const int y, const int z, const BlockID
 
     const BlockID normalizedId = normalizeStoredState(id);
     const size_t index = toIndex(x, y, z);
-    const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_blockData.get(index));
+    const uint32_t oldPaletteIdx = m_blockData.get(index);
     const BlockID oldId = m_palette.getRuntimeId(oldPaletteIdx);
     if (oldId == normalizedId) {
         return;
     }
 
-    const uint16_t paletteIdx = m_palette.getOrCreateIndex(normalizedId);
+    const uint32_t paletteIdx = m_palette.getOrCreateIndex(normalizedId);
     const uint8_t neededBits = m_palette.bitsPerEntry();
     if (neededBits > m_blockData.bitsPerEntry()) {
         m_blockData.resize(neededBits);
@@ -197,7 +197,7 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
     m_fluidPalette.clear();
     m_fluidCounts.clear();
 
-    std::array<uint16_t, BLOCK_COUNT> paletteIndices{};
+    std::array<uint32_t, BLOCK_COUNT> paletteIndices{};
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
         const BlockID id = normalizeStoredState(blocks[index]);
         paletteIndices[index] = m_palette.getOrCreateIndex(id);
@@ -212,7 +212,7 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
     m_fluidPalette.getOrCreateIndex(RUNTIME_ID_NULL);
     m_fluidData = BitPackedArray(BLOCK_COUNT, 1);
     m_fluidData.fill(0);
-    m_fluidCounts.emplace(RUNTIME_ID_NULL, static_cast<uint16_t>(BLOCK_COUNT));
+    m_fluidCounts.emplace(RUNTIME_ID_NULL, static_cast<uint32_t>(BLOCK_COUNT));
 
     inferType();
     m_dirty = true;
@@ -220,7 +220,7 @@ void SubChunk::initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& bloc
 
 void SubChunk::copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const {
     for (size_t index = 0; index < BLOCK_COUNT; ++index) {
-        const uint16_t paletteIdx = static_cast<uint16_t>(m_blockData.get(index));
+        const uint32_t paletteIdx = m_blockData.get(index);
         out[index] = m_palette.getRuntimeId(paletteIdx);
     }
 }
@@ -230,7 +230,7 @@ BlockID SubChunk::getFluidLayer(const int x, const int y, const int z) const {
         return 0;  // AIR
     }
     const size_t idx = toIndex(x, y, z);
-    const uint16_t paletteIdx = static_cast<uint16_t>(m_fluidData.get(idx));
+    const uint32_t paletteIdx = m_fluidData.get(idx);
     return m_fluidPalette.getRuntimeId(paletteIdx);
 }
 
@@ -241,13 +241,13 @@ void SubChunk::setFluidLayer(const int x, const int y, const int z, const BlockI
 
     const BlockID normalizedId = normalizeStoredState(id);
     const size_t index = toIndex(x, y, z);
-    const uint16_t oldPaletteIdx = static_cast<uint16_t>(m_fluidData.get(index));
+    const uint32_t oldPaletteIdx = m_fluidData.get(index);
     const BlockID oldId = m_fluidPalette.getRuntimeId(oldPaletteIdx);
     if (oldId == normalizedId) {
         return;
     }
 
-    const uint16_t paletteIdx = m_fluidPalette.getOrCreateIndex(normalizedId);
+    const uint32_t paletteIdx = m_fluidPalette.getOrCreateIndex(normalizedId);
     const uint8_t neededBits = m_fluidPalette.bitsPerEntry();
     if (neededBits > m_fluidData.bitsPerEntry()) {
         m_fluidData.resize(neededBits);
@@ -280,20 +280,20 @@ void SubChunk::optimizePalette() {
     std::vector<RuntimeId> usedIds;
     std::unordered_set<RuntimeId> seen;
     for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-        const uint16_t paletteIdx = static_cast<uint16_t>(m_blockData.get(i));
+        const uint32_t paletteIdx = m_blockData.get(i);
         const RuntimeId runtimeId = m_palette.getRuntimeId(paletteIdx);
         if (seen.insert(runtimeId).second) {
             usedIds.push_back(runtimeId);
         }
     }
 
-    std::vector<uint16_t> oldToNew = m_palette.compact(usedIds);
+    std::vector<uint32_t> oldToNew = m_palette.compact(usedIds);
 
     const uint8_t newBits = m_palette.bitsPerEntry();
     if (newBits != m_blockData.bitsPerEntry()) {
         std::vector<uint32_t> oldValues(BLOCK_COUNT);
         for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-            const uint16_t oldIdx = static_cast<uint16_t>(m_blockData.get(i));
+            const uint32_t oldIdx = m_blockData.get(i);
             oldValues[i] = oldToNew[oldIdx];
         }
         m_blockData.resize(newBits);
@@ -302,7 +302,7 @@ void SubChunk::optimizePalette() {
         }
     } else {
         for (size_t i = 0; i < BLOCK_COUNT; ++i) {
-            const uint16_t oldIdx = static_cast<uint16_t>(m_blockData.get(i));
+            const uint32_t oldIdx = m_blockData.get(i);
             m_blockData.set(i, oldToNew[oldIdx]);
         }
     }

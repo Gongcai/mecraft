@@ -34,7 +34,7 @@ uint32_t nextRandomBits(uint64_t& state) {
 
 bool paletteHasRandomTickBlock(const Palette& palette) {
     for (size_t i = 0; i < palette.size(); ++i) {
-        const BlockID blockId = BlockStateRegistry::getBlockId(palette.getRuntimeId(static_cast<uint16_t>(i)));
+        const BlockID blockId = BlockStateRegistry::getBlockId(palette.getRuntimeId(static_cast<uint32_t>(i)));
         if (BlockRegistry::getFast(blockId).randomTick.enabled) {
             return true;
         }

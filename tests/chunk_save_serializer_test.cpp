@@ -6,7 +6,9 @@
 #include "save/SaveFormat.h"
 #include "save/PlayerSerializer.h"
 #include "world/chunk/Chunk.h"
+#include "world/chunk/BitPackedArray.h"
 #include "world/block/Block.h"
+#include "world/block/Palette.h"
 #include "world/block/BlockStateRegistry.h"
 #include "world/block/PropIndices.h"
 #include "item/Item.h"
@@ -403,6 +405,36 @@ static void testPayloadSizeReasonable() {
     // Header is 24 bytes, payload should be modest for a mostly-empty chunk.
     assert(fileData.size() < 500);
     std::printf("[PASS] testPayloadSizeReasonable\n");
+}
+
+static void testPaletteIndexAboveUint16Limit() {
+    Palette palette;
+    uint32_t lastIndex = 0;
+    constexpr uint32_t kEntryCount = 65537;
+    constexpr RuntimeId kBaseRuntimeId = 1000000000u;
+    for (uint32_t i = 0; i < kEntryCount; ++i) {
+        lastIndex = palette.getOrCreateIndex(kBaseRuntimeId + i);
+    }
+
+    assert(lastIndex == 65536u);
+    assert(palette.bitsPerEntry() == 17);
+    assert(palette.getRuntimeId(65536u) == kBaseRuntimeId + 65536u);
+    std::printf("[PASS] testPaletteIndexAboveUint16Limit\n");
+}
+
+static void testBitPackedArrayThirtyTwoBitEntries() {
+    BitPackedArray values(4, 32);
+    values.set(0, 0u);
+    values.set(1, 0x12345678u);
+    values.set(2, 0xFFFFFFFFu);
+    values.set(3, 0x80000000u);
+
+    assert(values.bitsPerEntry() == 32);
+    assert(values.get(0) == 0u);
+    assert(values.get(1) == 0x12345678u);
+    assert(values.get(2) == 0xFFFFFFFFu);
+    assert(values.get(3) == 0x80000000u);
+    std::printf("[PASS] testBitPackedArrayThirtyTwoBitEntries\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -812,6 +844,8 @@ int main() {
     testInvalidPackedPaletteIndexRejected();
     testFluidLayerRoundTrip();
     testPayloadSizeReasonable();
+    testPaletteIndexAboveUint16Limit();
+    testBitPackedArrayThirtyTwoBitEntries();
 
     // SavePaths tests
     testSavePathsSanitizeWorldName();

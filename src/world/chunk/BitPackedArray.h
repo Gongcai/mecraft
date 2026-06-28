@@ -16,7 +16,7 @@ public:
         const size_t bitIndex = index * m_bitsPerEntry;
         const size_t wordIndex = bitIndex / BITS_PER_WORD;
         const size_t bitOffset = bitIndex % BITS_PER_WORD;
-        const uint64_t mask = (1ULL << m_bitsPerEntry) - 1ULL;
+        const uint64_t mask = valueMask(m_bitsPerEntry);
         const uint64_t word = m_data[wordIndex];
 
         if (bitOffset + m_bitsPerEntry > BITS_PER_WORD) {
@@ -53,4 +53,7 @@ private:
     std::vector<uint64_t> m_data;  // 64-bit words for storage
 
     static constexpr int BITS_PER_WORD = 64;
+    [[nodiscard]] static uint8_t normalizeBitsPerEntry(uint8_t bitsPerEntry);
+    [[nodiscard]] static size_t wordCountFor(size_t count, uint8_t bitsPerEntry);
+    [[nodiscard]] static uint64_t valueMask(uint8_t bitsPerEntry);
 };

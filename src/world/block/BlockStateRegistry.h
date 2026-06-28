@@ -1,9 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <initializer_list>
 #include <map>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -11,7 +14,101 @@
 #include "Block.h"
 #include "BlockModel.h"
 
-using StateID = uint32_t;
+// Opaque handle into the global BlockState table.
+// The registry owns this index space; callers should treat the stored value as
+// an implementation detail of the current registry encoding.
+struct BlockStateId {
+    uint32_t value = 0;
+
+    constexpr BlockStateId() = default;
+    constexpr BlockStateId(const uint32_t rawValue) : value(rawValue) {}
+
+    [[nodiscard]] constexpr bool operator==(const BlockStateId& other) const { return value == other.value; }
+    [[nodiscard]] constexpr bool operator!=(const BlockStateId& other) const { return value != other.value; }
+    [[nodiscard]] constexpr bool operator<(const BlockStateId& other) const { return value < other.value; }
+
+    [[nodiscard]] constexpr operator uint32_t() const { return value; }
+
+    constexpr BlockStateId& operator++() {
+        ++value;
+        return *this;
+    }
+
+    constexpr BlockStateId operator++(int) {
+        const BlockStateId previous = *this;
+        ++(*this);
+        return previous;
+    }
+};
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator==(const BlockStateId stateId, const Integer value) {
+    return static_cast<uint64_t>(stateId.value) == static_cast<uint64_t>(value);
+}
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator==(const Integer value, const BlockStateId stateId) {
+    return stateId == value;
+}
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator!=(const BlockStateId stateId, const Integer value) {
+    return !(stateId == value);
+}
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator!=(const Integer value, const BlockStateId stateId) {
+    return !(stateId == value);
+}
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator<(const BlockStateId stateId, const Integer value) {
+    return static_cast<uint64_t>(stateId.value) < static_cast<uint64_t>(value);
+}
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator<(const Integer value, const BlockStateId stateId) {
+    return static_cast<uint64_t>(value) < static_cast<uint64_t>(stateId.value);
+}
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator>=(const BlockStateId stateId, const Integer value) {
+    return !(stateId < value);
+}
+
+template <typename Integer,
+          typename = std::enable_if_t<std::is_integral<Integer>::value &&
+                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
+[[nodiscard]] constexpr bool operator>=(const Integer value, const BlockStateId stateId) {
+    return !(value < stateId);
+}
+
+namespace std {
+template <>
+struct hash<BlockStateId> {
+    size_t operator()(const BlockStateId& stateId) const noexcept {
+        return hash<uint32_t>{}(stateId.value);
+    }
+};
+} // namespace std
+
+constexpr BlockStateId NULL_BLOCK_STATE{0};
+
+using StateID = BlockStateId;
 
 struct PropertyKey {
     uint16_t nameIndex = 0;
@@ -41,11 +138,11 @@ struct StateTextureIndices {
 };
 
 struct BlockStateEntry {
-    StateID stateId = 0;
+    BlockStateId stateId{};
     BlockID blockId = 0;
     uint8_t propertyCount = 0;
-    uint32_t propertiesOffset = 0;
-    uint32_t textureOffset = 0;
+    size_t propertiesOffset = 0;
+    size_t textureOffset = 0;
 };
 
 class BlockStateRegistry {
@@ -59,28 +156,28 @@ public:
 
     static void explodeAllStates();
 
-    static StateID getDefaultState(BlockID blockId);
-    static StateID getState(BlockID blockId, uint16_t propKey, uint16_t propValue);
-    static StateID getState(BlockID blockId,
-                            std::initializer_list<std::pair<uint16_t, uint16_t>> props);
-    static StateID getState(BlockID blockId,
-                            const std::vector<std::pair<uint16_t, uint16_t>>& props);
-    static BlockID getBlockId(StateID stateId);
-    static uint16_t getPropertyIndex(StateID stateId, uint16_t nameIndex);
-    static uint8_t getPropertyCount(StateID stateId);
-    static StateID withProperty(StateID currentState, uint16_t propKey, uint16_t newValue);
-    static StateID withProperty(StateID currentState, uint16_t propKey, const std::string& newValue);
-    static const StateTextureIndices& getStateTextures(StateID stateId);
+    static BlockStateId getDefaultState(BlockID blockId);
+    static BlockStateId getState(BlockID blockId, uint16_t propKey, uint16_t propValue);
+    static BlockStateId getState(BlockID blockId,
+                                 std::initializer_list<std::pair<uint16_t, uint16_t>> props);
+    static BlockStateId getState(BlockID blockId,
+                                 const std::vector<std::pair<uint16_t, uint16_t>>& props);
+    static BlockID getBlockId(BlockStateId stateId);
+    static uint16_t getPropertyIndex(BlockStateId stateId, uint16_t nameIndex);
+    static uint8_t getPropertyCount(BlockStateId stateId);
+    static BlockStateId withProperty(BlockStateId currentState, uint16_t propKey, uint16_t newValue);
+    static BlockStateId withProperty(BlockStateId currentState, uint16_t propKey, const std::string& newValue);
+    static const StateTextureIndices& getStateTextures(BlockStateId stateId);
     static void registerBlockModelVariants(BlockID blockId, const nlohmann::json& variantsJson);
-    static const ModelVariant* getModelVariant(StateID stateId);
+    static const ModelVariant* getModelVariant(BlockStateId stateId);
 
     static uint16_t getPropertyNameIndex(const std::string& name);
     static uint16_t getPropertyValueIndex(uint16_t nameIndex, const std::string& value);
     static const std::string& getPropertyName(uint16_t nameIndex);
     static const std::string& getPropertyValue(uint16_t nameIndex, uint16_t valueIndex);
-    static std::string stateToString(StateID stateId);
+    static std::string stateToString(BlockStateId stateId);
     static size_t getStateCount();
-    static std::vector<StateID> getStatesForBlock(BlockID blockId);
+    static std::vector<BlockStateId> getStatesForBlock(BlockID blockId);
 
 private:
     struct RegisteredBlockProperties {
@@ -90,10 +187,10 @@ private:
     };
 
     struct BlockPropertyLayout {
-        StateID firstStateId = 0;
+        BlockStateId firstStateId{};
         uint8_t propertyCount = 0;
         std::vector<uint8_t> propertyPosition;
-        std::vector<uint32_t> propertyStride;
+        std::vector<size_t> propertyStride;
         std::vector<uint16_t> valueCounts;
         std::vector<std::vector<uint16_t>> valueOrdinals;
     };
@@ -109,8 +206,8 @@ private:
     static std::vector<PropertyKey> s_statePropertiesPool;
     static std::vector<StateTextureIndices> s_stateTextures;
     static std::vector<ModelVariant> s_stateModelVariants;
-    static std::unordered_map<BlockID, StateID> s_defaultState;
-    static std::unordered_map<uint64_t, StateID> s_stateLookup;
+    static std::unordered_map<BlockID, BlockStateId> s_defaultState;
+    static std::unordered_map<uint64_t, BlockStateId> s_stateLookup;
     static std::unordered_map<BlockID, BlockPropertyLayout> s_blockPropertyLayouts;
     static StateTextureIndices s_fallbackTextures;
 

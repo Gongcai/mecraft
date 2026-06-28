@@ -1,12 +1,38 @@
 #include "BitPackedArray.h"
 #include <algorithm>
+#include <limits>
+#include <stdexcept>
+
+uint8_t BitPackedArray::normalizeBitsPerEntry(uint8_t bitsPerEntry) {
+    if (bitsPerEntry == 0) {
+        bitsPerEntry = 1;
+    }
+    if (bitsPerEntry > 32) {
+        throw std::runtime_error("BitPackedArray supports at most 32 bits per entry");
+    }
+    return bitsPerEntry;
+}
+
+size_t BitPackedArray::wordCountFor(const size_t count, const uint8_t bitsPerEntry) {
+    if (count == 0) {
+        return 0;
+    }
+    if (count > std::numeric_limits<size_t>::max() / bitsPerEntry) {
+        throw std::runtime_error("BitPackedArray bit count exceeds size_t capacity");
+    }
+    const size_t totalBits = count * static_cast<size_t>(bitsPerEntry);
+    return (totalBits + BITS_PER_WORD - 1) / BITS_PER_WORD;
+}
+
+uint64_t BitPackedArray::valueMask(const uint8_t bitsPerEntry) {
+    return bitsPerEntry == 32
+        ? 0xFFFFFFFFULL
+        : ((1ULL << bitsPerEntry) - 1ULL);
+}
 
 BitPackedArray::BitPackedArray(size_t count, uint8_t bitsPerEntry)
-    : m_count(count), m_bitsPerEntry(bitsPerEntry) {
-    if (m_bitsPerEntry == 0) m_bitsPerEntry = 1;
-    size_t entriesPerWord = BITS_PER_WORD / m_bitsPerEntry;
-    size_t wordCount = (count + entriesPerWord - 1) / entriesPerWord;
-    m_data.resize(wordCount, 0);
+    : m_count(count), m_bitsPerEntry(normalizeBitsPerEntry(bitsPerEntry)) {
+    m_data.resize(wordCountFor(m_count, m_bitsPerEntry), 0);
 }
 
 uint32_t BitPackedArray::get(size_t index) const {
@@ -24,11 +50,11 @@ uint32_t BitPackedArray::get(size_t index) const {
         uint64_t lowBits = (word >> bitOffset);
         uint64_t highBits = (nextWord << (BITS_PER_WORD - bitOffset));
         uint64_t combined = lowBits | highBits;
-        uint64_t mask = (1ULL << m_bitsPerEntry) - 1;
+        uint64_t mask = valueMask(m_bitsPerEntry);
         return static_cast<uint32_t>(combined & mask);
     }
 
-    uint64_t mask = (1ULL << m_bitsPerEntry) - 1;
+    uint64_t mask = valueMask(m_bitsPerEntry);
     return static_cast<uint32_t>((word >> bitOffset) & mask);
 }
 
@@ -39,7 +65,7 @@ void BitPackedArray::set(size_t index, uint32_t value) {
     size_t wordIndex = bitIndex / BITS_PER_WORD;
     size_t bitOffset = bitIndex % BITS_PER_WORD;
 
-    uint64_t mask = (1ULL << m_bitsPerEntry) - 1;
+    uint64_t mask = valueMask(m_bitsPerEntry);
     uint64_t val = static_cast<uint64_t>(value & mask);
 
     // Clear the old bits and set the new ones
@@ -69,7 +95,7 @@ void BitPackedArray::set(size_t index, uint32_t value) {
 
 void BitPackedArray::resize(uint8_t newBitsPerEntry) {
     if (newBitsPerEntry == m_bitsPerEntry) return;
-    if (newBitsPerEntry == 0) newBitsPerEntry = 1;
+    newBitsPerEntry = normalizeBitsPerEntry(newBitsPerEntry);
 
     // Copy out all existing values
     std::vector<uint32_t> oldValues(m_count);
@@ -79,9 +105,7 @@ void BitPackedArray::resize(uint8_t newBitsPerEntry) {
 
     // Reinitialize with new bit width
     m_bitsPerEntry = newBitsPerEntry;
-    size_t entriesPerWord = BITS_PER_WORD / m_bitsPerEntry;
-    size_t wordCount = (m_count + entriesPerWord - 1) / entriesPerWord;
-    m_data.assign(wordCount, 0);
+    m_data.assign(wordCountFor(m_count, m_bitsPerEntry), 0);
 
     // Re-encode all values
     for (size_t i = 0; i < m_count; ++i) {
