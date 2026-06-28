@@ -61,6 +61,7 @@ void TerrainRenderCache::init() {
 }
 
 void TerrainRenderCache::beginFrame() {
+    ++m_frameSerial;
     m_meshUploadVerticesThisFrame = 0;
     m_meshUploadBytesThisFrame = 0;
     m_meshUploadDeferredCount = static_cast<int>(m_deferredMeshResults.size());
@@ -77,6 +78,7 @@ void TerrainRenderCache::beginFrame() {
 
 void TerrainRenderCache::shutdown() {
     m_chunkRenderColumns.clear();
+    m_frameSerial = 0;
     m_mdiMeshAllocations.clear();
     m_mdiAllocationSweepInitialized = false;
     m_lastMdiAllocationSweepActiveRevision = 0;
@@ -154,6 +156,9 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
     if (column.chunk == nullptr) {
         return;
     }
+    if (m_frameSerial != 0 && column.stateValid && column.validatedFrameSerial == m_frameSerial) {
+        return;
+    }
 
     column.chunk->ensureColumnMeshBuilt();
 
@@ -172,6 +177,7 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
     }
 
     if (!needsRefresh) {
+        column.validatedFrameSerial = m_frameSerial;
         return;
     }
 
@@ -244,6 +250,7 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
     column.columnBoundsMin = columnHasBounds ? columnMin : glm::vec3(0.0f);
     column.columnBoundsMax = columnHasBounds ? columnMax : glm::vec3(0.0f);
     column.stateValid = true;
+    column.validatedFrameSerial = m_frameSerial;
 }
 
 // ---------------------------------------------------------------------------

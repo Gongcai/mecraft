@@ -65,6 +65,7 @@ struct ChunkRenderColumnCache {
     std::array<int, Chunk::NUM_SUB_CHUNKS> transparentScys{};
     std::array<TransparentSubChunkCache, Chunk::NUM_SUB_CHUNKS> transparentSubChunks{};
     int transparentCount = 0;
+    uint64_t validatedFrameSerial = 0;
 };
 
 /// Key for MDI mesh allocation lookup
@@ -160,6 +161,7 @@ private:
     std::vector<ChunkRenderColumnCache> m_chunkRenderColumns;
     uint64_t m_chunkRenderColumnsRevision = 0;
     int m_chunkRenderColumnsRegionSize = 0;
+    uint64_t m_frameSerial = 0;
 
     // MDI allocation tracking
     std::unordered_map<SubChunkGpuKey, MdiMeshAllocation, SubChunkGpuKeyHash> m_mdiMeshAllocations;
