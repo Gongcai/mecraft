@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <array>
+#include <vector>
 
 #include "AppLaunchOptions.h"
 #include "../engine/platform/Window.h"
@@ -39,7 +40,19 @@ private:
     [[nodiscard]] GameSessionConfig makeBenchmarkSessionConfig() const;
     void configureInputReplay();
     void activateInputReplayForScope(AppLaunchOptions::InputReplayScope scope);
+    void recordBenchmarkFrame(double frameTime);
     void closeWindowIfBenchmarkComplete();
+    void writeBenchmarkReport();
+
+    struct BenchmarkFrameStats {
+        bool active = false;
+        size_t frameCount = 0;
+        double replayActiveSeconds = 0.0;
+        double totalFrameMs = 0.0;
+        double minFrameMs = 0.0;
+        double maxFrameMs = 0.0;
+        std::vector<double> frameTimesMs;
+    };
 
     Window m_window;
     InputManager m_input;
@@ -54,6 +67,9 @@ private:
 
     AppStateMachine m_appStateMachine;
     AppLaunchOptions m_launchOptions{};
+    BenchmarkFrameStats m_benchmarkStats{};
+    bool m_benchmarkReplayWasActive = false;
+    bool m_benchmarkReportWritten = false;
 };
 
 #endif //MECRAFT_GAMEMANAGER_H

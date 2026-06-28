@@ -26,7 +26,9 @@ struct AppLaunchOptions {
     std::filesystem::path benchmarkSaveRoot = "saves";
     bool benchmarkEnableSaving = true;
     double benchmarkDurationSeconds = 0.0;
+    std::filesystem::path benchmarkReportPath;
     bool exitWhenPlaybackEnds = true;
+    bool enableDebugDashboard = true;
 };
 
 #endif // MECRAFT_APP_LAUNCH_OPTIONS_H

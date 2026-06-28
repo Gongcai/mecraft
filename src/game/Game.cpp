@@ -70,8 +70,10 @@ void Game::updateLoading(const float deltaTime) {
         m_hudPresenter = std::make_unique<GameplayHudPresenter>(m_deps.window, m_deps.uiRenderer, m_deps.input);
 
 #ifdef MECRAFT_DEBUG
-        m_renderRuntime->initDebug(m_deps.window);
-        m_hudPresenter->setDashboard(m_renderRuntime->dashboard());
+        if (m_deps.enableDebugDashboard) {
+            m_renderRuntime->initDebug(m_deps.window);
+            m_hudPresenter->setDashboard(m_renderRuntime->dashboard());
+        }
 #endif
         m_loadPhase = LoadPhase::InitialChunks;
         break;

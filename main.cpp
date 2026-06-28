@@ -20,6 +20,7 @@ void printUsage() {
         << "  --benchmark-seed <integer>         Seed used when creating/loading benchmark world.\n"
         << "  --benchmark-render-distance <n>    Render distance for benchmark gameplay.\n"
         << "  --benchmark-duration <seconds>     Close the app after replay has been active this long.\n"
+        << "  --benchmark-report <file>          Write gameplay replay frame timing summary as JSON.\n"
         << "  --benchmark-save-root <path>       Save root for benchmark worlds.\n"
         << "  --benchmark-no-save                Disable saving for benchmark gameplay.\n"
         << "  --no-exit-on-replay-end            Keep app open when replay frames are exhausted.\n";
@@ -93,6 +94,8 @@ AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
         } else if (arg == "--benchmark-duration") {
             options.benchmarkDurationSeconds = parseDoubleArg(requireValue(argc, argv, index, "--benchmark-duration"),
                                                               "--benchmark-duration");
+        } else if (arg == "--benchmark-report") {
+            options.benchmarkReportPath = requireValue(argc, argv, index, "--benchmark-report");
         } else if (arg == "--benchmark-save-root") {
             options.benchmarkSaveRoot = requireValue(argc, argv, index, "--benchmark-save-root");
         } else if (arg == "--benchmark-no-save") {
@@ -107,8 +110,14 @@ AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
     if (options.recordInput && options.replayInput) {
         throw std::runtime_error("--record-input and --replay-input cannot be used together");
     }
+    if (!options.benchmarkReportPath.empty() && !options.autoStartGameplay) {
+        throw std::runtime_error("--benchmark-report requires --benchmark or --benchmark-world");
+    }
     if (options.autoStartGameplay && !inputScopeSet) {
         options.inputReplayScope = AppLaunchOptions::InputReplayScope::Gameplay;
+    }
+    if (options.autoStartGameplay) {
+        options.enableDebugDashboard = false;
     }
     return options;
 }

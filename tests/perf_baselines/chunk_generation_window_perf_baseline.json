@@ -1,0 +1,40 @@
+{
+  "benchmark": "chunk_generation_window_perf_test",
+  "build": {
+    "config": "Release"
+  },
+  "captured_at": "2026-06-27",
+  "cases": [
+    {
+      "avg_ms": 73.51495,
+      "checksum": 1,
+      "chunks": 9,
+      "chunks_per_sec": 125.3728099807901,
+      "max_ms": 88.3874,
+      "median_ms": 71.7859,
+      "min_ms": 67.6378,
+      "name": "window_3x3",
+      "p95_ms": 73.6776,
+      "radius": 1
+    },
+    {
+      "avg_ms": 189.06983333333332,
+      "checksum": 1,
+      "chunks": 25,
+      "chunks_per_sec": 132.17547616215285,
+      "max_ms": 200.2899,
+      "median_ms": 189.1425,
+      "min_ms": 176.6032,
+      "name": "window_5x5",
+      "p95_ms": 198.9941,
+      "radius": 2
+    }
+  ],
+  "focus": "End-to-end generated chunk window: terrain generation, neighbor linking, lighting, meshing",
+  "settings": {
+    "measure_rounds": 6,
+    "sea_level": 63,
+    "seed": 20260601,
+    "warmup_rounds": 2
+  }
+}

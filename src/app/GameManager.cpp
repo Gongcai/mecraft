@@ -10,14 +10,29 @@
 #include "../item/Item.h"
 #include "../net/ENetTransport.h"
 #include "../ui/inventory/ContainerUiRegistry.h"
+#include <algorithm>
+#include <cmath>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 #include <GLFW/glfw3.h>
+#include <nlohmann/json.hpp>
 #ifdef MECRAFT_DEBUG
 #include <chrono>
 #include "../../third_party/imgui/imgui_impl_glfw.h"
 #endif
+
+namespace {
+
+double percentileFromSorted(const std::vector<double>& sortedValues, const double percentile) {
+    const double rank = std::ceil((percentile / 100.0) * static_cast<double>(sortedValues.size()));
+    const auto clampedRank = static_cast<size_t>(std::clamp(rank, 1.0, static_cast<double>(sortedValues.size())));
+    return sortedValues[clampedRank - 1];
+}
+
+} // namespace
 
 GameManager::GameManager() 
     : m_contextManager(m_actionMap, m_input) {
@@ -140,6 +155,7 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
         m_uiRenderer,
         m_localeManager,
         m_threadPool,
+        m_launchOptions.enableDebugDashboard,
         [this]() { activateInputReplayForScope(AppLaunchOptions::InputReplayScope::Gameplay); },
         [this]() {
             if (m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::Gameplay) {
@@ -252,8 +268,38 @@ void GameManager::run() {
         const auto renderEnd = std::chrono::steady_clock::now();
         m_appStateMachine.recordAppRenderDispatch(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
 #endif
+        recordBenchmarkFrame(frameTime);
         closeWindowIfBenchmarkComplete();
     }
+}
+
+void GameManager::recordBenchmarkFrame(const double frameTime) {
+    if (!m_launchOptions.autoStartGameplay || !m_input.isInputReplayActive()) {
+        m_benchmarkReplayWasActive = false;
+        return;
+    }
+    if (!m_benchmarkReplayWasActive) {
+        m_benchmarkReplayWasActive = true;
+        return;
+    }
+
+    const double frameMs = frameTime * 1000.0;
+    if (!m_benchmarkStats.active) {
+        m_benchmarkStats.active = true;
+        m_benchmarkStats.minFrameMs = frameMs;
+        m_benchmarkStats.maxFrameMs = frameMs;
+        if (m_launchOptions.benchmarkDurationSeconds > 0.0) {
+            m_benchmarkStats.frameTimesMs.reserve(
+                static_cast<size_t>(std::ceil(m_launchOptions.benchmarkDurationSeconds * 240.0)));
+        }
+    }
+
+    ++m_benchmarkStats.frameCount;
+    m_benchmarkStats.replayActiveSeconds = m_input.inputReplayActiveSeconds();
+    m_benchmarkStats.totalFrameMs += frameMs;
+    m_benchmarkStats.minFrameMs = std::min(m_benchmarkStats.minFrameMs, frameMs);
+    m_benchmarkStats.maxFrameMs = std::max(m_benchmarkStats.maxFrameMs, frameMs);
+    m_benchmarkStats.frameTimesMs.push_back(frameMs);
 }
 
 void GameManager::closeWindowIfBenchmarkComplete() {
@@ -272,7 +318,83 @@ void GameManager::closeWindowIfBenchmarkComplete() {
     }
 }
 
+void GameManager::writeBenchmarkReport() {
+    if (m_benchmarkReportWritten) {
+        return;
+    }
+    m_benchmarkReportWritten = true;
+    if (!m_benchmarkStats.active || m_benchmarkStats.frameCount == 0) {
+        return;
+    }
+
+    std::vector<double> sortedFrameMs = m_benchmarkStats.frameTimesMs;
+    std::sort(sortedFrameMs.begin(), sortedFrameMs.end());
+
+    const double frameCount = static_cast<double>(m_benchmarkStats.frameCount);
+    const double avgFrameMs = m_benchmarkStats.totalFrameMs / frameCount;
+    const double medianFrameMs = percentileFromSorted(sortedFrameMs, 50.0);
+    const double p95FrameMs = percentileFromSorted(sortedFrameMs, 95.0);
+    const double p99FrameMs = percentileFromSorted(sortedFrameMs, 99.0);
+    const double avgFps = avgFrameMs > 0.0 ? 1000.0 / avgFrameMs : 0.0;
+
+    std::cout << std::fixed << std::setprecision(3)
+              << "[Benchmark] frames=" << m_benchmarkStats.frameCount
+              << " replay_active_s=" << m_benchmarkStats.replayActiveSeconds
+              << " avg_ms=" << avgFrameMs
+              << " median_ms=" << medianFrameMs
+              << " p95_ms=" << p95FrameMs
+              << " p99_ms=" << p99FrameMs
+              << " min_ms=" << m_benchmarkStats.minFrameMs
+              << " max_ms=" << m_benchmarkStats.maxFrameMs
+              << " avg_fps=" << avgFps
+              << '\n';
+
+    if (m_launchOptions.benchmarkReportPath.empty()) {
+        return;
+    }
+
+    nlohmann::json root;
+    root["kind"] = "mecraft.benchmark_frame_report";
+    root["world"] = m_launchOptions.benchmarkWorldName;
+    root["replay_input"] = m_launchOptions.inputReplayPath.string();
+    root["benchmark_duration_seconds"] = m_launchOptions.benchmarkDurationSeconds;
+    root["replay_active_seconds"] = m_benchmarkStats.replayActiveSeconds;
+    root["frame_count"] = m_benchmarkStats.frameCount;
+    root["frame_ms"] = {
+        {"average", avgFrameMs},
+        {"median", medianFrameMs},
+        {"p95", p95FrameMs},
+        {"p99", p99FrameMs},
+        {"min", m_benchmarkStats.minFrameMs},
+        {"max", m_benchmarkStats.maxFrameMs}
+    };
+    root["fps"] = {
+        {"average", avgFps}
+    };
+
+    const std::filesystem::path reportPath = m_launchOptions.benchmarkReportPath;
+    const std::filesystem::path parentPath = reportPath.parent_path();
+    if (!parentPath.empty()) {
+        std::error_code createError;
+        std::filesystem::create_directories(parentPath, createError);
+        if (createError) {
+            std::cerr << "[Benchmark] Failed to create report directory: "
+                      << parentPath << ": " << createError.message() << '\n';
+            return;
+        }
+    }
+
+    std::ofstream output(reportPath);
+    if (!output) {
+        std::cerr << "[Benchmark] Failed to write report: " << reportPath << '\n';
+        return;
+    }
+    output << root.dump(2);
+    std::cout << "[Benchmark] Report written to " << reportPath << '\n';
+}
+
 void GameManager::shutdown() {
+    writeBenchmarkReport();
     while (!m_appStateMachine.isEmpty()) {
         m_appStateMachine.popState();
     }

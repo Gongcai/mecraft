@@ -28,6 +28,7 @@ struct AppStateDependencies {
     UIRenderer& uiRenderer;
     LocaleManager& localeManager;
     ThreadPool& threadPool;
+    bool enableDebugDashboard;
     std::function<void()> beginGameplayInputReplay;
     std::function<void()> endGameplayInputReplay;
     std::function<bool()> shouldCloseAppOnGameplayQuitToMenu;

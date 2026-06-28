@@ -47,6 +47,7 @@ struct GameSessionDependencies {
     UIRenderer& uiRenderer;
     LocaleManager& localeManager;
     ThreadPool& threadPool;
+    bool enableDebugDashboard = true;
 };
 
 #endif // MECRAFT_GAME_SESSION_CONFIG_H
