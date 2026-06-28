@@ -27,6 +27,7 @@ public:
     // --- IWorldView implementation ---
     [[nodiscard]] const ChunkMap& getActiveChunks() const override;
     [[nodiscard]] uint64_t getActiveChunkRevision() const override;
+    [[nodiscard]] uint64_t getBlockContentRevision() const override;
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const override;
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const override;
     [[nodiscard]] StateID getBlockState(int x, int y, int z) const override;
@@ -75,6 +76,7 @@ private:
     mutable ChunkMap m_activeChunksSnapshot;
     mutable std::mutex m_chunksMutex;
     uint64_t m_activeChunkRevision = 1;
+    uint64_t m_blockContentRevision = 1;
     int m_renderDistance = 16;
 
     // Non-owning pointers to server systems (in-process mode only)

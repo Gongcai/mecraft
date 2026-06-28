@@ -25,6 +25,7 @@ static void testInitialState() {
     client::ClientWorld cw;
     assert(cw.getActiveChunks().empty());
     assert(cw.getActiveChunkRevision() == 1);
+    assert(cw.getBlockContentRevision() == 1);
     assert(cw.asWorld() == nullptr);
     assert(cw.getRenderDistance() == 16);
     assert(cw.loadedChunkCount() == 0);
@@ -38,6 +39,7 @@ static void testAddChunk() {
 
     assert(cw.loadedChunkCount() == 1);
     assert(cw.getActiveChunkRevision() == 2);  // Incremented from 1
+    assert(cw.getBlockContentRevision() == 2);  // Incremented from 1
     assert(cw.getActiveChunks().size() == 1);
     std::printf("[PASS] testAddChunk\n");
 }
@@ -51,6 +53,7 @@ static void testRemoveChunk() {
     cw.removeChunk(0, 0);
     assert(cw.loadedChunkCount() == 0);
     assert(cw.getActiveChunkRevision() == 3);  // Incremented twice (add + remove)
+    assert(cw.getBlockContentRevision() == 3);  // Incremented twice (add + remove)
     std::printf("[PASS] testRemoveChunk\n");
 }
 
@@ -58,6 +61,7 @@ static void testRemoveNonexistentChunk() {
     client::ClientWorld cw;
     cw.removeChunk(5, 5);  // Should not crash
     assert(cw.getActiveChunkRevision() == 1);  // No change
+    assert(cw.getBlockContentRevision() == 1);  // No change
     std::printf("[PASS] testRemoveNonexistentChunk\n");
 }
 
@@ -215,6 +219,7 @@ static void testApplyBlockUpdateAcceptsVariableLightPatch() {
     cw.applyBlockUpdate(4, 64, 4, BlockRegistry::requireIdByName("minecraft:torch"), lightPatch);
 
     require(cw.getBlock(4, 64, 4) == BlockRegistry::requireIdByName("minecraft:torch"), "block update should still apply the block state");
+    require(cw.getBlockContentRevision() == 3, "block updates should bump block content revision");
     require(cw.getPackedLight(6, 64, 4) == 0x0C, "client should apply larger odd-cube light patches");
     std::printf("[PASS] testApplyBlockUpdateAcceptsVariableLightPatch\n");
 }
@@ -278,9 +283,11 @@ static void testApplyBlockUpdateCanBeLightOnly() {
     std::vector<uint8_t> fullLight(Chunk::BLOCK_COUNT, 0);
     fullLight[Chunk::toIndex(4, 64, 4)] = 0x0A;
 
+    const uint64_t beforeRevision = cw.getBlockContentRevision();
     cw.applyBlockUpdate(0, 0, 0, 0xFFFFu, fullLight);
 
     require(cw.getBlock(4, 64, 4) == BlockRegistry::requireIdByName("minecraft:stone"), "light-only updates should not edit blocks");
+    require(cw.getBlockContentRevision() == beforeRevision, "light-only updates should not bump block content revision");
     require(cw.getPackedLight(4, 64, 4) == 0x0A, "light-only updates should apply packed light");
     std::printf("[PASS] testApplyBlockUpdateCanBeLightOnly\n");
 }

@@ -22,6 +22,10 @@ public:
         return 1;
     }
 
+    [[nodiscard]] uint64_t getBlockContentRevision() const override {
+        return 1;
+    }
+
     [[nodiscard]] BlockID getBlock(const int x, const int y, const int z) const override {
         const glm::ivec3 pos(x, y, z);
         for (const glm::ivec3& block : m_solidBlocks) {

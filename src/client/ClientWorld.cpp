@@ -46,6 +46,11 @@ uint64_t ClientWorld::getActiveChunkRevision() const {
     return m_activeChunkRevision;
 }
 
+uint64_t ClientWorld::getBlockContentRevision() const {
+    std::lock_guard lock(m_chunksMutex);
+    return m_blockContentRevision;
+}
+
 BlockID ClientWorld::getBlock(int x, int y, int z) const {
     if (y < 0 || y >= 256) return RUNTIME_ID_NULL;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
@@ -170,6 +175,7 @@ void ClientWorld::addChunk(std::shared_ptr<Chunk> chunk) {
 
     m_chunks[key] = std::move(chunk);
     ++m_activeChunkRevision;
+    ++m_blockContentRevision;
 }
 
 void ClientWorld::removeChunk(int cx, int cz) {
@@ -190,6 +196,7 @@ void ClientWorld::removeChunk(int cx, int cz) {
     }
     if (m_chunks.erase(key) > 0) {
         ++m_activeChunkRevision;
+        ++m_blockContentRevision;
     }
 }
 
@@ -212,6 +219,7 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId, const s
     Chunk& chunk = *it->second;
     if (stateId != kLightOnlyBlockUpdate) {
         chunk.setBlock(lx, y, lz, stateId);
+        ++m_blockContentRevision;
         chunk.recalcHeightMap(lx, lz);
         if (lx == 0 && chunk.neighbors[1]) {
             chunk.neighbors[1]->markSubChunkDirty(Chunk::toSubChunkIndex(y));

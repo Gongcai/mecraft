@@ -360,6 +360,7 @@ void World::init(uint32_t seed) {
     m_ticketManager.setViewRadius(m_renderDistance);
     m_ticketManager.setSimulationRadius(8);
     ++m_activeChunkRevision;
+    ++m_blockContentRevision;
     m_lightService = std::make_unique<LightService>(*this);
     m_lightService->setLightChangeCallback(m_lightChangeCallback);
     m_lightService->start(m_threadPool);
@@ -701,6 +702,7 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
     }
 
     // Mark dirty for remesh
+    ++m_blockContentRevision;
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, scy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
@@ -809,6 +811,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
 
 
     // Geometry edits must always trigger remesh, regardless of lighting pipeline.
+    ++m_blockContentRevision;
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
@@ -1300,6 +1303,7 @@ void World::finalizeChunkLoad(std::shared_ptr<Chunk> chunk) {
 
     m_chunks[key] = std::move(chunk);
     ++m_activeChunkRevision;
+    ++m_blockContentRevision;
 
     // Wire up neighbor pointers for the new chunk and its existing neighbors
     Chunk* cur = m_chunks[key].get();
@@ -1354,6 +1358,7 @@ void World::loadChunk(int cx, int cz) {
 
     m_chunks[key] = std::move(chunk);
     ++m_activeChunkRevision;
+    ++m_blockContentRevision;
 
     // Wire up neighbor pointers for the new chunk and its existing neighbors
     Chunk* cur = m_chunks[key].get();
@@ -1427,6 +1432,7 @@ void World::unloadChunk(int cx, int cz) {
 
     m_chunks.erase(it);
     ++m_activeChunkRevision;
+    ++m_blockContentRevision;
 }
 
 

@@ -60,6 +60,7 @@ public:
 
     [[nodiscard]] const ChunkMap& getActiveChunks() const override { return m_chunks; }
     [[nodiscard]] uint64_t getActiveChunkRevision() const override { return m_activeChunkRevision; }
+    [[nodiscard]] uint64_t getBlockContentRevision() const override { return m_blockContentRevision; }
     void setThreadPool(ThreadPool* pool);
     [[nodiscard]] LightFrameStats getLightFrameStats() const;
 
@@ -153,6 +154,7 @@ private:
     uint32_t m_seed = 0;
     int m_flatSurfaceY = 63;
     uint64_t m_activeChunkRevision = 1;
+    uint64_t m_blockContentRevision = 1;
     bool m_interactiveLightFlushRequested = false;
 
     void loadChunk(int cx, int cz);

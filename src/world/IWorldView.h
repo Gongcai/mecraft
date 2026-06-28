@@ -27,6 +27,9 @@ public:
     /// Get a revision counter that increments when the chunk set changes.
     [[nodiscard]] virtual uint64_t getActiveChunkRevision() const = 0;
 
+    /// Get a revision counter that increments when loaded block contents change.
+    [[nodiscard]] virtual uint64_t getBlockContentRevision() const = 0;
+
     /// Query a block at world coordinates. Returns 0 if chunk is not loaded.
     [[nodiscard]] virtual BlockID getBlock(int x, int y, int z) const = 0;
 

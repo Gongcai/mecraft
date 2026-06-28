@@ -109,6 +109,9 @@ private:
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
     uint64_t m_cacheSyncSerial = 0;
+    uint64_t m_syncedActiveChunkRevision = 0;
+    uint64_t m_syncedBlockContentRevision = 0;
+    bool m_hasSyncedRevisions = false;
     bool m_instanceCacheSyncedThisFrame = false;
 
     static void destroyMesh(Mesh& mesh);

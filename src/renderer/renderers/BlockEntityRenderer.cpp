@@ -172,6 +172,9 @@ void BlockEntityRenderer::shutdown() {
     m_models.clear();
     m_sectionCaches.clear();
     m_cacheSyncSerial = 0;
+    m_syncedActiveChunkRevision = 0;
+    m_syncedBlockContentRevision = 0;
+    m_hasSyncedRevisions = false;
     m_instanceCacheSyncedThisFrame = false;
     m_resourceMgr = nullptr;
     m_gbufferShader = nullptr;
@@ -305,6 +308,14 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
     }
     m_instanceCacheSyncedThisFrame = true;
 
+    const uint64_t activeChunkRevision = worldView.getActiveChunkRevision();
+    const uint64_t blockContentRevision = worldView.getBlockContentRevision();
+    if (m_hasSyncedRevisions &&
+        m_syncedActiveChunkRevision == activeChunkRevision &&
+        m_syncedBlockContentRevision == blockContentRevision) {
+        return;
+    }
+
     ++m_cacheSyncSerial;
     const uint64_t syncSerial = m_cacheSyncSerial;
 
@@ -341,6 +352,10 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
             ++it;
         }
     }
+
+    m_syncedActiveChunkRevision = activeChunkRevision;
+    m_syncedBlockContentRevision = blockContentRevision;
+    m_hasSyncedRevisions = true;
 }
 
 template <typename UniformBinder>
