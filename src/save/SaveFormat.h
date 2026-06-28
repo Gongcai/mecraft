@@ -19,12 +19,9 @@
 // LayerPayload:
 //   varuint   paletteCount (0 = all-air, skip packed data)
 //   For each palette entry:
-//     varuint stateLength
-//     char[stateLength] block state string
-//       e.g. "minecraft:stone"
-//       e.g. "minecraft:oak_stairs[facing=north, half=bottom, shape=straight]"
+//     varuint runtimeId
 //   uint8_t   bitsPerEntry
-//   uint32_t  packedDataSize (bytes)
+//   varuint   packedDataSize (bytes)
 //   uint8_t[packedDataSize] packedIndices
 
 #include <cstdint>
@@ -34,7 +31,7 @@ namespace save {
 
 // MCHK file magic: 'M' 'C' 'H' 'K' = 0x4D43484B
 constexpr uint32_t MCHK_MAGIC = 0x4D43484Bu;
-constexpr uint16_t MCHK_VERSION = 1;
+constexpr uint16_t MCHK_VERSION = 2;
 
 // Encoding identifiers
 constexpr uint8_t MCHK_ENCODING_PALLETIZED = 1;

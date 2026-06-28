@@ -51,7 +51,6 @@
 namespace server {
 namespace {
 constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
-constexpr uint32_t kLightOnlyBlockUpdate = net::LIGHT_ONLY_BLOCK_UPDATE_STATE_ID;
 constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
 constexpr float kPlayerPoseSyncEpsilonSq = 0.000001f;
@@ -773,9 +772,9 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
             if ((dirtySubChunkMask & (1u << scy)) == 0u) {
                 continue;
             }
-            net::BlockUpdateEntry entry = makeSubChunkLightUpdateEntry(chunkKey, scy);
-            if (!entry.packedLightPatch.empty()) {
-                m_pendingBlockUpdates.push_back(std::move(entry));
+            std::optional<net::BlockUpdateEntry> entry = makeSubChunkLightUpdateEntry(chunkKey, scy);
+            if (entry.has_value()) {
+                m_pendingBlockUpdates.push_back(std::move(*entry));
             }
         }
     });
@@ -2451,23 +2450,25 @@ net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const in
     entry.x = x;
     entry.y = y;
     entry.z = z;
+    entry.kind = net::BlockUpdateKind::BlockState;
     entry.stateId = stateId;
     return entry;
 }
 
-net::BlockUpdateEntry GameServer::makeSubChunkLightUpdateEntry(const int64_t chunkKey, const int scy) const {
+std::optional<net::BlockUpdateEntry> GameServer::makeSubChunkLightUpdateEntry(const int64_t chunkKey, const int scy) const {
     net::BlockUpdateEntry entry;
     const auto chunkIt = m_world.getActiveChunks().find(chunkKey);
     if (scy < 0 || scy >= Chunk::NUM_SUB_CHUNKS ||
         chunkIt == m_world.getActiveChunks().end() || !chunkIt->second) {
-        return entry;
+        return std::nullopt;
     }
 
     const Chunk& chunk = *chunkIt->second;
     entry.x = chunk.m_chunkX * Chunk::SIZE_X;
     entry.y = scy * SubChunk::SIZE;
     entry.z = chunk.m_chunkZ * Chunk::SIZE_Z;
-    entry.stateId = kLightOnlyBlockUpdate;
+    entry.kind = net::BlockUpdateKind::LightOnly;
+    entry.stateId = 0;
     entry.packedLightPatch.resize(SubChunk::BLOCK_COUNT);
     size_t index = 0;
     const int yBase = scy * SubChunk::SIZE;
@@ -2483,15 +2484,16 @@ net::BlockUpdateEntry GameServer::makeSubChunkLightUpdateEntry(const int64_t chu
     return entry;
 }
 
-net::BlockUpdateEntry GameServer::makeBlockUpdateEntry(const int x,
-                                                       const int y,
-                                                       const int z,
-                                                       const StateID stateId,
-                                                       const int lightPatchRadius) const {
+std::optional<net::BlockUpdateEntry> GameServer::makeBlockUpdateEntry(const int x,
+                                                                      const int y,
+                                                                      const int z,
+                                                                      const StateID stateId,
+                                                                      const int lightPatchRadius) const {
     net::BlockUpdateEntry entry;
     entry.x = x;
     entry.y = y;
     entry.z = z;
+    entry.kind = net::BlockUpdateKind::BlockState;
     entry.stateId = stateId;
     if (lightPatchRadius < 0) {
         const glm::ivec2 chunkCoords = m_world.getChunkCoords(x, z);

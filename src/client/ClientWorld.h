@@ -5,10 +5,15 @@
 #include "../world/chunk/Chunk.h"
 #include "../world/DayNightSystem.h"
 #include "../world/WeatherSystem.h"
+#include <cstdint>
 #include <unordered_map>
 #include <memory>
 #include <mutex>
 #include <vector>
+
+namespace net {
+enum class BlockUpdateKind : uint8_t;
+}
 
 namespace client {
 
@@ -51,6 +56,12 @@ public:
     /// Apply a block update from the server.
     void applyBlockUpdate(int x, int y, int z, StateID stateId);
     void applyBlockUpdate(int x, int y, int z, StateID stateId, const std::vector<uint8_t>& packedLightPatch);
+    void applyBlockUpdate(int x,
+                          int y,
+                          int z,
+                          net::BlockUpdateKind kind,
+                          StateID stateId,
+                          const std::vector<uint8_t>& packedLightPatch);
 
     /// Set the render distance.
     void setRenderDistance(int distance);

@@ -688,6 +688,7 @@ static void testClientBlockActionInteractIsServerAuthoritative() {
             if (update.x == targetBlock.x &&
                 update.y == targetBlock.y &&
                 update.z == targetBlock.z &&
+                update.kind == net::BlockUpdateKind::BlockState &&
                 update.stateId == leverState(true)) {
                 sawPoweredLeverUpdate = true;
             }
@@ -883,6 +884,7 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
                 if (update.x == chestPos.x &&
                     update.y == chestPos.y &&
                     update.z == chestPos.z &&
+                    update.kind == net::BlockUpdateKind::BlockState &&
                     update.stateId == RUNTIME_ID_NULL) {
                     sawAirUpdateB = true;
                 }
@@ -3298,6 +3300,7 @@ static void testServerBlockActionBreaksChestLifecycle() {
                 if (update.x == chestPos.x &&
                     update.y == chestPos.y &&
                     update.z == chestPos.z &&
+                    update.kind == net::BlockUpdateKind::BlockState &&
                     update.stateId == RUNTIME_ID_NULL) {
                     sawAirBlockUpdate = true;
                 }
@@ -3603,7 +3606,16 @@ static void testClientBlockActionCodecCarriesInteract() {
     require(decoded.playerPosition == action.playerPosition,
             "ClientBlockAction codec should preserve interact player position");
     require(decoded.blockState == action.blockState,
-            "ClientBlockAction codec should preserve 32-bit block state ids");
+            "ClientBlockAction codec should preserve block state ids");
+
+    std::vector<uint8_t> malformed(encoded.begin(), encoded.begin() + 53);
+    malformed.push_back(0x80u);
+    malformed.push_back(0x80u);
+    malformed.push_back(0x80u);
+    malformed.push_back(0x80u);
+    malformed.push_back(0x10u);
+    require(!net::PacketCodec::decodeClientBlockAction(malformed.data(), malformed.size(), decoded),
+            "ClientBlockAction codec should reject overflowing block state varuints");
 
     std::printf("[PASS] testClientBlockActionCodecCarriesInteract\n");
 }
@@ -4070,6 +4082,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     entry.x = 1;
     entry.y = 64;
     entry.z = -2;
+    entry.kind = net::BlockUpdateKind::BlockState;
     entry.stateId = 0x00012345u;
     entry.packedLightPatch.resize(5 * 5 * 5);
     for (size_t i = 0; i < entry.packedLightPatch.size(); ++i) {
@@ -4077,17 +4090,33 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     }
     message.updates.push_back(entry);
 
+    net::BlockUpdateEntry lightOnlyEntry;
+    lightOnlyEntry.x = -4;
+    lightOnlyEntry.y = 32;
+    lightOnlyEntry.z = 8;
+    lightOnlyEntry.kind = net::BlockUpdateKind::LightOnly;
+    lightOnlyEntry.stateId = 0x001ABCDEu;
+    lightOnlyEntry.packedLightPatch = {1, 2, 3, 4, 5, 6, 7};
+    message.updates.push_back(lightOnlyEntry);
+
     const std::vector<uint8_t> encoded = net::PacketCodec::encodeBlockUpdateBatch(message);
     net::BlockUpdateBatchMessage decoded;
     if (!net::PacketCodec::decodeBlockUpdateBatch(encoded.data(), encoded.size(), decoded)) {
         std::fprintf(stderr, "[FAIL] BlockUpdateBatch decode failed\n");
         std::abort();
     }
-    if (decoded.updates.size() != 1 ||
+    if (decoded.updates.size() != 2 ||
+        decoded.updates[0].kind != net::BlockUpdateKind::BlockState ||
         decoded.updates[0].stateId != entry.stateId ||
         decoded.updates[0].packedLightPatch.size() != entry.packedLightPatch.size() ||
         decoded.updates[0].packedLightPatch[124] != entry.packedLightPatch[124]) {
         std::fprintf(stderr, "[FAIL] BlockUpdateBatch variable light patch was not preserved\n");
+        std::abort();
+    }
+    if (decoded.updates[1].kind != net::BlockUpdateKind::LightOnly ||
+        decoded.updates[1].stateId != 0u ||
+        decoded.updates[1].packedLightPatch != lightOnlyEntry.packedLightPatch) {
+        std::fprintf(stderr, "[FAIL] BlockUpdateBatch light-only update was not preserved\n");
         std::abort();
     }
 
@@ -4137,6 +4166,7 @@ static void testServerBlockUpdateCarriesStateId() {
             if (update.x == targetPos.x &&
                 update.y == targetPos.y &&
                 update.z == targetPos.z &&
+                update.kind == net::BlockUpdateKind::BlockState &&
                 update.stateId == poweredTarget) {
                 sawPoweredTargetState = true;
             }
@@ -4220,6 +4250,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
                 if (update.x == placeBlock.x &&
                     update.y == placeBlock.y &&
                     update.z == placeBlock.z &&
+                    update.kind == net::BlockUpdateKind::BlockState &&
                     update.stateId == BlockRegistry::requireIdByName("minecraft:torch")) {
                     sawTorchBlockUpdate = true;
                 }

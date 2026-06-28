@@ -252,7 +252,7 @@ static void testApplyBlockUpdateAcceptsLightSection() {
         4 * SubChunk::SIZE * SubChunk::SIZE;
     sectionLight[localIndex] = 0x0B;
 
-    cw.applyBlockUpdate(0, 64, 0, net::LIGHT_ONLY_BLOCK_UPDATE_STATE_ID, sectionLight);
+    cw.applyBlockUpdate(0, 64, 0, net::BlockUpdateKind::LightOnly, StateID{0}, sectionLight);
 
     require(cw.getPackedLight(4, 68, 4) == 0x0B, "client should apply subchunk light section updates");
     require(chunk->getLightRevision() > 0, "subchunk light section updates should bump light revision");
@@ -285,7 +285,7 @@ static void testApplyBlockUpdateCanBeLightOnly() {
     fullLight[Chunk::toIndex(4, 64, 4)] = 0x0A;
 
     const uint64_t beforeRevision = cw.getBlockContentRevision();
-    cw.applyBlockUpdate(0, 0, 0, net::LIGHT_ONLY_BLOCK_UPDATE_STATE_ID, fullLight);
+    cw.applyBlockUpdate(0, 0, 0, net::BlockUpdateKind::LightOnly, StateID{0}, fullLight);
 
     require(cw.getBlock(4, 64, 4) == BlockRegistry::requireIdByName("minecraft:stone"), "light-only updates should not edit blocks");
     require(cw.getBlockContentRevision() == beforeRevision, "light-only updates should not bump block content revision");

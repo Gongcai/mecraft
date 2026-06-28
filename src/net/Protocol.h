@@ -25,7 +25,6 @@ enum class EntityKind : uint8_t {
 
 using ClientId = uint32_t;
 using TickId = uint32_t;
-constexpr uint32_t LIGHT_ONLY_BLOCK_UPDATE_STATE_ID = 0xFFFFFFFFu;
 
 namespace ClientInputActions {
 constexpr uint32_t Attack = 1u << 0;
@@ -213,11 +212,16 @@ struct ChunkUnloadMessage {
 };
 
 /// Batch of block updates.
+enum class BlockUpdateKind : uint8_t {
+    BlockState = 0,  // Entry carries a real block state.
+    LightOnly = 1,   // Entry only carries light data; stateId is ignored.
+};
+
 struct BlockUpdateEntry {
     int32_t x = 0;
     int32_t y = 0;
     int32_t z = 0;
-    // LIGHT_ONLY_BLOCK_UPDATE_STATE_ID means this entry only carries light data and must not edit a block.
+    BlockUpdateKind kind = BlockUpdateKind::BlockState;
     uint32_t stateId = 0;
     // Optional light payload. A SubChunk::BLOCK_COUNT-sized payload is the
     // complete light section containing y. Odd-sized cubic patches are centered

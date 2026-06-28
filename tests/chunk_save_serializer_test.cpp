@@ -11,6 +11,7 @@
 #include "world/block/Palette.h"
 #include "world/block/BlockStateRegistry.h"
 #include "world/block/PropIndices.h"
+#include "world/fluid/FluidState.h"
 #include "item/Item.h"
 
 #include <cassert>
@@ -38,13 +39,6 @@ void appendU16(std::vector<uint8_t>& out, const uint16_t value) {
     out.push_back(static_cast<uint8_t>(value >> 8));
 }
 
-void appendU32(std::vector<uint8_t>& out, const uint32_t value) {
-    out.push_back(static_cast<uint8_t>(value));
-    out.push_back(static_cast<uint8_t>(value >> 8));
-    out.push_back(static_cast<uint8_t>(value >> 16));
-    out.push_back(static_cast<uint8_t>(value >> 24));
-}
-
 void appendVaruint(std::vector<uint8_t>& out, uint32_t value) {
     while (value >= 0x80u) {
         out.push_back(static_cast<uint8_t>((value & 0x7Fu) | 0x80u));
@@ -61,7 +55,7 @@ void appendString(std::vector<uint8_t>& out, const std::string& value) {
 std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
                                                  const int32_t cz,
                                                  const uint8_t scy,
-                                                 const std::string& stateName,
+                                                 const RuntimeId stateId,
                                                  const uint8_t bitsPerEntry,
                                                  const std::vector<uint8_t>& packedData) {
     std::vector<uint8_t> payload;
@@ -70,12 +64,74 @@ std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
     appendU8(payload, scy);
 
     appendVaruint(payload, 1);
-    appendString(payload, stateName);
+    appendVaruint(payload, stateId);
     appendU8(payload, bitsPerEntry);
-    appendU32(payload, static_cast<uint32_t>(packedData.size()));
+    appendVaruint(payload, static_cast<uint32_t>(packedData.size()));
     payload.insert(payload.end(), packedData.begin(), packedData.end());
 
     appendVaruint(payload, 0);
+
+    save::MchkHeader header{};
+    header.magic = save::MCHK_MAGIC;
+    header.version = save::MCHK_VERSION;
+    header.flags = 0;
+    header.chunkX = cx;
+    header.chunkZ = cz;
+    header.payloadSize = static_cast<uint32_t>(payload.size());
+    header.payloadCrc32 = save::detail::crc32(payload.data(), payload.size());
+
+    std::vector<uint8_t> file(sizeof(save::MchkHeader));
+    std::memcpy(file.data(), &header, sizeof(header));
+    file.insert(file.end(), payload.begin(), payload.end());
+    return file;
+}
+
+std::vector<uint8_t> buildLegacyStringPaletteStateFile(const int32_t cx,
+                                                       const int32_t cz,
+                                                       const uint8_t scy,
+                                                       const std::string& stateName,
+                                                       const uint8_t bitsPerEntry,
+                                                       const std::vector<uint8_t>& packedData) {
+    std::vector<uint8_t> payload;
+    appendU8(payload, save::MCHK_ENCODING_PALLETIZED);
+    appendU16(payload, static_cast<uint16_t>(1u << scy));
+    appendU8(payload, scy);
+
+    appendVaruint(payload, 1);
+    appendString(payload, stateName);
+    appendU8(payload, bitsPerEntry);
+    appendVaruint(payload, static_cast<uint32_t>(packedData.size()));
+    payload.insert(payload.end(), packedData.begin(), packedData.end());
+
+    appendVaruint(payload, 0);
+
+    save::MchkHeader header{};
+    header.magic = save::MCHK_MAGIC;
+    header.version = 1;
+    header.flags = 0;
+    header.chunkX = cx;
+    header.chunkZ = cz;
+    header.payloadSize = static_cast<uint32_t>(payload.size());
+    header.payloadCrc32 = save::detail::crc32(payload.data(), payload.size());
+
+    std::vector<uint8_t> file(sizeof(save::MchkHeader));
+    std::memcpy(file.data(), &header, sizeof(header));
+    file.insert(file.end(), payload.begin(), payload.end());
+    return file;
+}
+
+std::vector<uint8_t> buildMalformedPaletteCountFile(const int32_t cx,
+                                                    const int32_t cz,
+                                                    const uint8_t scy) {
+    std::vector<uint8_t> payload;
+    appendU8(payload, save::MCHK_ENCODING_PALLETIZED);
+    appendU16(payload, static_cast<uint16_t>(1u << scy));
+    appendU8(payload, scy);
+    payload.push_back(0x80u);
+    payload.push_back(0x80u);
+    payload.push_back(0x80u);
+    payload.push_back(0x80u);
+    payload.push_back(0x10u);
 
     save::MchkHeader header{};
     header.magic = save::MCHK_MAGIC;
@@ -318,14 +374,8 @@ static void testChestBlockStateRoundTrip() {
     std::printf("[PASS] testChestBlockStateRoundTrip\n");
 }
 
-static void testBareStateNameLoadsDefaultBlockState() {
-    const BlockID oakStairs = BlockRegistry::findByName("oak_stairs");
-    if (oakStairs == RUNTIME_ID_NULL) {
-        std::fprintf(stderr, "[FAIL] oak_stairs should be registered\n");
-        std::abort();
-    }
-
-    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
+static void testOldStringPaletteFormatRejected() {
+    const std::vector<uint8_t> fileData = buildLegacyStringPaletteStateFile(
         0,
         0,
         4,
@@ -333,32 +383,21 @@ static void testBareStateNameLoadsDefaultBlockState() {
         0,
         {});
     auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
-    if (loaded == nullptr) {
-        std::fprintf(stderr, "[FAIL] bare block state names should deserialize\n");
+    if (loaded != nullptr) {
+        std::fprintf(stderr, "[FAIL] legacy string palette chunks should be rejected\n");
         std::abort();
     }
-
-    const StateID expectedDefault = BlockStateRegistry::getDefaultState(oakStairs);
-    const StateID loadedState = loaded->getBlock(0, 64, 0);
-    if (loadedState != expectedDefault ||
-        loadedState == oakStairs ||
-        BlockStateRegistry::getModelVariant(loadedState) == nullptr) {
-        std::fprintf(stderr,
-                     "[FAIL] bare state name should resolve to default block state: expected=%s loaded=%s\n",
-                     BlockStateRegistry::stateToString(expectedDefault).c_str(),
-                     BlockStateRegistry::stateToString(loadedState).c_str());
-        std::abort();
-    }
-    std::printf("[PASS] testBareStateNameLoadsDefaultBlockState\n");
+    std::printf("[PASS] testOldStringPaletteFormatRejected\n");
 }
 
 static void testInvalidPackedPaletteIndexRejected() {
     const std::vector<uint8_t> packedData(512, 0xFFu);
+    const RuntimeId stoneState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone"));
     const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
         0,
         0,
         4,
-        "minecraft:stone",
+        stoneState,
         1,
         packedData);
 
@@ -368,6 +407,47 @@ static void testInvalidPackedPaletteIndexRejected() {
         std::abort();
     }
     std::printf("[PASS] testInvalidPackedPaletteIndexRejected\n");
+}
+
+static void testInvalidPaletteRuntimeIdRejected() {
+    const RuntimeId invalidState = static_cast<RuntimeId>(BlockStateRegistry::getStateCount() + 1);
+    const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
+        0,
+        0,
+        4,
+        invalidState,
+        0,
+        {});
+
+    auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
+    if (loaded != nullptr) {
+        std::fprintf(stderr, "[FAIL] palette runtime ids outside the registry should be rejected\n");
+        std::abort();
+    }
+    std::printf("[PASS] testInvalidPaletteRuntimeIdRejected\n");
+}
+
+static void testMalformedPaletteVaruintRejected() {
+    const std::vector<uint8_t> fileData = buildMalformedPaletteCountFile(0, 0, 4);
+    auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
+    if (loaded != nullptr) {
+        std::fprintf(stderr, "[FAIL] overflowing palette varuints should be rejected\n");
+        std::abort();
+    }
+    std::printf("[PASS] testMalformedPaletteVaruintRejected\n");
+}
+
+static void testChunkPaletteStoresRuntimeIds() {
+    auto original = std::make_shared<Chunk>(0, 0);
+    original->setBlockFast(0, 64, 0, BlockRegistry::requireIdByName("minecraft:stone"));
+
+    const std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
+    const std::string raw(reinterpret_cast<const char*>(fileData.data()), fileData.size());
+    if (raw.find("minecraft:") != std::string::npos) {
+        std::fprintf(stderr, "[FAIL] chunk palette should store runtime ids instead of state strings\n");
+        std::abort();
+    }
+    std::printf("[PASS] testChunkPaletteStoresRuntimeIds\n");
 }
 
 static void testFluidLayerRoundTrip() {
@@ -381,17 +461,26 @@ static void testFluidLayerRoundTrip() {
     if (!sub) {
         sub = original->getOrCreateSubChunk(Chunk::toSubChunkIndex(65));
     }
-    sub->setFluidLayer(5, Chunk::toSubChunkLocalY(65), 5, BlockRegistry::requireIdByName("minecraft:water"));
+    const StateID waterState = FluidState::makeWater(0, false);
+    sub->setFluidLayer(5, Chunk::toSubChunkLocalY(65), 5, waterState);
 
     std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
     auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
-    assert(loaded != nullptr);
-
-    assert(loaded->getBlock(5, 64, 5) == BlockRegistry::requireIdByName("minecraft:stone"));
+    if (loaded == nullptr) {
+        std::fprintf(stderr, "[FAIL] chunk with fluid layer should deserialize\n");
+        std::abort();
+    }
+    if (loaded->getBlock(5, 64, 5) != BlockRegistry::requireIdByName("minecraft:stone")) {
+        std::fprintf(stderr, "[FAIL] fluid layer round trip should preserve the block layer\n");
+        std::abort();
+    }
 
     const SubChunk* loadedSub = loaded->getSubChunk(Chunk::toSubChunkIndex(65));
-    assert(loadedSub != nullptr);
-    assert(loadedSub->getFluidLayer(5, Chunk::toSubChunkLocalY(65), 5) == BlockRegistry::requireIdByName("minecraft:water"));
+    if (loadedSub == nullptr ||
+        loadedSub->getFluidLayer(5, Chunk::toSubChunkLocalY(65), 5) != waterState) {
+        std::fprintf(stderr, "[FAIL] fluid layer round trip should preserve the fluid layer\n");
+        std::abort();
+    }
     std::printf("[PASS] testFluidLayerRoundTrip\n");
 }
 
@@ -840,8 +929,11 @@ int main() {
     testMixedBlocksInSubchunk();
     testBlockStateRoundTrip();
     testChestBlockStateRoundTrip();
-    testBareStateNameLoadsDefaultBlockState();
+    testOldStringPaletteFormatRejected();
     testInvalidPackedPaletteIndexRejected();
+    testInvalidPaletteRuntimeIdRejected();
+    testMalformedPaletteVaruintRejected();
+    testChunkPaletteStoresRuntimeIds();
     testFluidLayerRoundTrip();
     testPayloadSizeReasonable();
     testPaletteIndexAboveUint16Limit();

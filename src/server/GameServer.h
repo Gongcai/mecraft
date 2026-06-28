@@ -9,6 +9,7 @@
 #include <entt/entt.hpp>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <unordered_set>
@@ -170,9 +171,9 @@ private:
     [[nodiscard]] std::vector<save::PersistentEntityData> snapshotPersistentEntities() const;
     [[nodiscard]] std::vector<save::BlockEntityData> snapshotBlockEntities() const;
     void checkSpawnChunksReady();
-    [[nodiscard]] net::BlockUpdateEntry makeBlockUpdateEntry(int x, int y, int z, StateID stateId, int lightPatchRadius) const;
+    [[nodiscard]] std::optional<net::BlockUpdateEntry> makeBlockUpdateEntry(int x, int y, int z, StateID stateId, int lightPatchRadius) const;
     [[nodiscard]] net::BlockUpdateEntry makeBlockOnlyUpdateEntry(int x, int y, int z, StateID stateId) const;
-    [[nodiscard]] net::BlockUpdateEntry makeSubChunkLightUpdateEntry(int64_t chunkKey, int scy) const;
+    [[nodiscard]] std::optional<net::BlockUpdateEntry> makeSubChunkLightUpdateEntry(int64_t chunkKey, int scy) const;
     void syncPlayersToClients();
 
     // Resolve the gameplay mode of the first hello'd client, falling back to the

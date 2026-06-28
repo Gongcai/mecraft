@@ -5,14 +5,10 @@
 #include "../world/chunk/Chunk.h"
 #include "../world/block/Block.h"
 #include "../world/block/BlockStateRegistry.h"
-#include "../engine/registry/NamespacedId.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cstring>
 #include <cstdio>
-#include <cmath>
-#include <sstream>
+#include <vector>
 
 namespace save {
 namespace {
@@ -31,96 +27,21 @@ void writeVaruint(std::vector<uint8_t>& out, uint32_t value) {
 
 bool readVaruint(const uint8_t*& cursor, const uint8_t* end, uint32_t& outValue) {
     outValue = 0;
-    int shift = 0;
-    while (cursor < end) {
-        uint8_t byte = *cursor++;
-        outValue |= static_cast<uint32_t>(byte & 0x7Fu) << shift;
+    uint32_t shift = 0;
+    for (uint32_t byteIndex = 0; byteIndex < 5; ++byteIndex) {
+        if (cursor >= end) {
+            return false; // truncated
+        }
+        const uint8_t byte = *cursor++;
+        const uint32_t payload = static_cast<uint32_t>(byte & 0x7Fu);
+        if (byteIndex == 4 && payload > 0x0Fu) {
+            return false; // overflow
+        }
+        outValue |= payload << shift;
         if ((byte & 0x80u) == 0) return true;
         shift += 7;
-        if (shift >= 32) return false; // overflow
     }
-    return false; // truncated
-}
-
-void writeString(std::vector<uint8_t>& out, const std::string& str) {
-    writeVaruint(out, static_cast<uint32_t>(str.size()));
-    out.insert(out.end(), reinterpret_cast<const uint8_t*>(str.data()),
-               reinterpret_cast<const uint8_t*>(str.data()) + str.size());
-}
-
-bool readString(const uint8_t*& cursor, const uint8_t* end, std::string& outStr) {
-    uint32_t len = 0;
-    if (!readVaruint(cursor, end, len)) return false;
-    if (cursor + len > end) return false;
-    outStr.assign(reinterpret_cast<const char*>(cursor), len);
-    cursor += len;
-    return true;
-}
-
-std::string trimCopy(const std::string& value) {
-    const auto first = std::find_if_not(value.begin(), value.end(), [](const unsigned char ch) {
-        return std::isspace(ch) != 0;
-    });
-    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](const unsigned char ch) {
-        return std::isspace(ch) != 0;
-    }).base();
-    if (first >= last) {
-        return {};
-    }
-    return std::string(first, last);
-}
-
-bool parseStoredRuntimeId(const std::string& encoded, RuntimeId& outId) {
-    const size_t propsBegin = encoded.find('[');
-    if (propsBegin == std::string::npos) {
-        BlockID blockId = RUNTIME_ID_NULL;
-        if (!BlockRegistry::tryGetId(NamespacedId(encoded), blockId)) {
-            return false;
-        }
-        outId = BlockStateRegistry::getDefaultState(blockId);
-        return true;
-    }
-
-    if (encoded.empty() || encoded.back() != ']' || propsBegin == 0) {
-        return false;
-    }
-
-    BlockID blockId = RUNTIME_ID_NULL;
-    if (!BlockRegistry::tryGetId(NamespacedId(encoded.substr(0, propsBegin)), blockId)) {
-        return false;
-    }
-
-    const std::string propsText = encoded.substr(propsBegin + 1, encoded.size() - propsBegin - 2);
-    std::vector<std::pair<uint16_t, uint16_t>> props;
-    std::istringstream input(propsText);
-    std::string segment;
-    while (std::getline(input, segment, ',')) {
-        const std::string trimmedSegment = trimCopy(segment);
-        const size_t equals = trimmedSegment.find('=');
-        if (equals == std::string::npos) {
-            return false;
-        }
-
-        const std::string propName = trimCopy(trimmedSegment.substr(0, equals));
-        const std::string propValue = trimCopy(trimmedSegment.substr(equals + 1));
-        const uint16_t nameIndex = BlockStateRegistry::getPropertyNameIndex(propName);
-        if (nameIndex == BlockStateRegistry::INVALID_INDEX) {
-            return false;
-        }
-        const uint16_t valueIndex = BlockStateRegistry::getPropertyValueIndex(nameIndex, propValue);
-        if (valueIndex == BlockStateRegistry::INVALID_INDEX) {
-            return false;
-        }
-        props.emplace_back(nameIndex, valueIndex);
-    }
-
-    const StateID stateId = BlockStateRegistry::getState(blockId, props);
-    if (BlockStateRegistry::getBlockId(stateId) != blockId) {
-        return false;
-    }
-
-    outId = stateId;
-    return true;
+    return false; // overflow
 }
 
 void writeBytes(std::vector<uint8_t>& out, const uint8_t* data, size_t size) {
@@ -136,13 +57,6 @@ void writeU16(std::vector<uint8_t>& out, uint16_t v) {
     out.push_back(static_cast<uint8_t>(v >> 8));
 }
 
-void writeU32(std::vector<uint8_t>& out, uint32_t v) {
-    out.push_back(static_cast<uint8_t>(v));
-    out.push_back(static_cast<uint8_t>(v >> 8));
-    out.push_back(static_cast<uint8_t>(v >> 16));
-    out.push_back(static_cast<uint8_t>(v >> 24));
-}
-
 bool readU8(const uint8_t*& cursor, const uint8_t* end, uint8_t& out) {
     if (cursor >= end) return false;
     out = *cursor++;
@@ -153,16 +67,6 @@ bool readU16(const uint8_t*& cursor, const uint8_t* end, uint16_t& out) {
     if (cursor + 2 > end) return false;
     out = static_cast<uint16_t>(cursor[0]) | (static_cast<uint16_t>(cursor[1]) << 8);
     cursor += 2;
-    return true;
-}
-
-bool readU32(const uint8_t*& cursor, const uint8_t* end, uint32_t& out) {
-    if (cursor + 4 > end) return false;
-    out = static_cast<uint32_t>(cursor[0])
-        | (static_cast<uint32_t>(cursor[1]) << 8)
-        | (static_cast<uint32_t>(cursor[2]) << 16)
-        | (static_cast<uint32_t>(cursor[3]) << 24);
-    cursor += 4;
     return true;
 }
 
@@ -184,10 +88,10 @@ void serializeLayer(
         return;
     }
 
-    // Write palette entries as block state strings.
+    // Write palette entries as registry-owned runtime ids.
     for (size_t i = 0; i < paletteSize; ++i) {
         RuntimeId rid = palette.getRuntimeId(static_cast<uint32_t>(i));
-        writeString(out, BlockStateRegistry::stateToString(rid));
+        writeVaruint(out, rid);
     }
 
     // Write bits per entry
@@ -196,7 +100,7 @@ void serializeLayer(
 
     // Write packed data
     const size_t dataSize = data.dataByteSize();
-    writeU32(out, static_cast<uint32_t>(dataSize));
+    writeVaruint(out, static_cast<uint32_t>(dataSize));
     if (dataSize > 0) {
         writeBytes(out, reinterpret_cast<const uint8_t*>(data.rawData()), dataSize);
     }
@@ -236,13 +140,12 @@ bool deserializeLayer(
     std::vector<RuntimeId> palette;
     palette.reserve(paletteCount);
     for (uint32_t i = 0; i < paletteCount; ++i) {
-        std::string name;
-        if (!readString(cursor, end, name)) return false;
-
         RuntimeId rid = RUNTIME_ID_NULL;
-        if (!parseStoredRuntimeId(name, rid)) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unknown block state '%s' in chunk data\n",
-                                name.c_str());
+        if (!readVaruint(cursor, end, rid)) return false;
+        if (static_cast<size_t>(rid) >= BlockStateRegistry::getStateCount()) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Palette runtime id %u exceeds block state count %zu\n",
+                                rid,
+                                BlockStateRegistry::getStateCount());
             return false;
         }
         palette.push_back(rid);
@@ -255,8 +158,8 @@ bool deserializeLayer(
 
     // Read packed data size
     uint32_t packedDataSize = 0;
-    if (!readU32(cursor, end, packedDataSize)) return false;
-    if (cursor + packedDataSize > end) return false;
+    if (!readVaruint(cursor, end, packedDataSize)) return false;
+    if (static_cast<size_t>(end - cursor) < packedDataSize) return false;
 
     const uint8_t* packedData = cursor;
     cursor += packedDataSize;

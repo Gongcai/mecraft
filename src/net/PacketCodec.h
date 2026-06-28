@@ -197,7 +197,7 @@ public:
         pushFloat(buf, msg.playerPosition.x);
         pushFloat(buf, msg.playerPosition.y);
         pushFloat(buf, msg.playerPosition.z);
-        pushU32(buf, msg.blockState);
+        pushVarU32(buf, msg.blockState);
         return buf;
     }
 
@@ -251,13 +251,16 @@ public:
     /// Encode a BlockUpdateBatch message into payload bytes.
     static std::vector<uint8_t> encodeBlockUpdateBatch(const BlockUpdateBatchMessage& msg) {
         std::vector<uint8_t> buf;
-        pushU32(buf, static_cast<uint32_t>(msg.updates.size()));
+        pushVarU32(buf, static_cast<uint32_t>(msg.updates.size()));
         for (const auto& u : msg.updates) {
             pushI32(buf, u.x);
             pushI32(buf, u.y);
             pushI32(buf, u.z);
-            pushU32(buf, u.stateId);
-            pushU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
+            pushU8(buf, static_cast<uint8_t>(u.kind));
+            if (u.kind == BlockUpdateKind::BlockState) {
+                pushVarU32(buf, u.stateId);
+            }
+            pushVarU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
             buf.insert(buf.end(), u.packedLightPatch.begin(), u.packedLightPatch.end());
         }
         return buf;
@@ -617,7 +620,8 @@ public:
     }
 
     static bool decodeClientBlockAction(const uint8_t* data, size_t size, ClientBlockAction& out) {
-        if (size < 57) return false;
+        constexpr size_t kFixedBytesBeforeState = 53;
+        if (size < kFixedBytesBeforeState) return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.action = static_cast<ClientBlockActionType>(readU8(data, offset));
@@ -633,8 +637,7 @@ public:
         out.playerPosition.x = readFloat(data, offset);
         out.playerPosition.y = readFloat(data, offset);
         out.playerPosition.z = readFloat(data, offset);
-        out.blockState = readU32(data, offset);
-        return true;
+        return readVarU32(data, size, offset, out.blockState) && offset == size;
     }
 
     static bool decodeClientContainerOpenRequest(const uint8_t* data,
@@ -692,17 +695,25 @@ public:
     }
 
     static bool decodeBlockUpdateBatch(const uint8_t* data, size_t size, BlockUpdateBatchMessage& out) {
-        if (size < 4) return false;
         size_t offset = 0;
-        const uint32_t count = readU32(data, offset);
+        uint32_t count = 0;
+        if (!readVarU32(data, size, offset, count)) return false;
         out.updates.resize(count);
         for (uint32_t i = 0; i < count; ++i) {
-            if (offset + 20 > size) return false;
+            if (offset + 13 > size) return false;
             out.updates[i].x = readI32(data, offset);
             out.updates[i].y = readI32(data, offset);
             out.updates[i].z = readI32(data, offset);
-            out.updates[i].stateId = readU32(data, offset);
-            const uint32_t lightCount = readU32(data, offset);
+            const uint8_t kindRaw = readU8(data, offset);
+            if (kindRaw > static_cast<uint8_t>(BlockUpdateKind::LightOnly)) return false;
+            out.updates[i].kind = static_cast<BlockUpdateKind>(kindRaw);
+            out.updates[i].stateId = 0;
+            if (out.updates[i].kind == BlockUpdateKind::BlockState &&
+                !readVarU32(data, size, offset, out.updates[i].stateId)) {
+                return false;
+            }
+            uint32_t lightCount = 0;
+            if (!readVarU32(data, size, offset, lightCount)) return false;
             if (offset + lightCount > size) return false;
             out.updates[i].packedLightPatch.assign(data + offset, data + offset + lightCount);
             offset += lightCount;
@@ -918,15 +929,15 @@ private:
         size_t i = 0;
         while (i < count) {
             const RuntimeId value = values[i];
-            uint16_t run = 1;
-            while (i + run < count && run < 0xFFFFu && values[i + run] == value) {
+            uint32_t run = 1;
+            while (i + run < count && values[i + run] == value) {
                 ++run;
             }
-            pushU16(buf, run);
-            pushU32(buf, value);
+            pushVarU32(buf, run);
+            pushVarU32(buf, value);
             i += run;
         }
-        pushU16(buf, 0);
+        pushVarU32(buf, 0);
     }
 
     static void encodeRleU8(std::vector<uint8_t>& buf, const uint8_t* values, const size_t count) {
@@ -946,14 +957,16 @@ private:
 
     static bool decodeRleRuntimeId(const uint8_t* data, const size_t size, size_t& offset, RuntimeId* out, const size_t count) {
         size_t written = 0;
-        while (offset + 2 <= size) {
-            const uint16_t run = readU16(data, offset);
+        while (offset < size) {
+            uint32_t run = 0;
+            if (!readVarU32(data, size, offset, run)) return false;
             if (run == 0) {
                 return written == count;
             }
-            if (offset + 4 > size || written + run > count) return false;
-            const RuntimeId value = readU32(data, offset);
-            for (uint16_t i = 0; i < run; ++i) {
+            if (written + run > count) return false;
+            RuntimeId value = RUNTIME_ID_NULL;
+            if (!readVarU32(data, size, offset, value)) return false;
+            for (uint32_t i = 0; i < run; ++i) {
                 out[written++] = value;
             }
         }
@@ -992,6 +1005,13 @@ private:
         buf.push_back(static_cast<uint8_t>((v >> 8) & 0xFF));
         buf.push_back(static_cast<uint8_t>((v >> 16) & 0xFF));
         buf.push_back(static_cast<uint8_t>((v >> 24) & 0xFF));
+    }
+    static void pushVarU32(std::vector<uint8_t>& buf, uint32_t value) {
+        while (value >= 0x80u) {
+            buf.push_back(static_cast<uint8_t>((value & 0x7Fu) | 0x80u));
+            value >>= 7u;
+        }
+        buf.push_back(static_cast<uint8_t>(value));
     }
     static void pushFloat(std::vector<uint8_t>& buf, float v) {
         uint32_t raw;
@@ -1032,6 +1052,26 @@ private:
                      (static_cast<uint32_t>(data[offset + 3]) << 24);
         offset += 4;
         return v;
+    }
+    static bool readVarU32(const uint8_t* data, const size_t size, size_t& offset, uint32_t& out) {
+        out = 0;
+        uint32_t shift = 0;
+        for (uint32_t byteIndex = 0; byteIndex < 5; ++byteIndex) {
+            if (offset >= size) {
+                return false;
+            }
+            const uint8_t byte = data[offset++];
+            const uint32_t payload = static_cast<uint32_t>(byte & 0x7Fu);
+            if (byteIndex == 4 && payload > 0x0Fu) {
+                return false;
+            }
+            out |= payload << shift;
+            if ((byte & 0x80u) == 0) {
+                return true;
+            }
+            shift += 7u;
+        }
+        return false;
     }
     static float readFloat(const uint8_t* data, size_t& offset) {
         uint32_t raw = readU32(data, offset);

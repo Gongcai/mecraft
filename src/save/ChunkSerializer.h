@@ -4,8 +4,8 @@
 // ChunkSerializer: converts between in-memory Chunk objects and MCHK binary format.
 //
 // Serialization reads the SubChunk palette + BitPackedArray data directly,
-// converting RuntimeId palette entries to block state strings for disk storage.
-// Deserialization rejects malformed or unknown palette entries.
+// writing RuntimeId palette entries as VarUInt values for disk storage.
+// Deserialization rejects malformed or out-of-range palette entries.
 //
 // All methods are stateless and thread-safe (read-only access to Chunk data).
 
@@ -21,7 +21,6 @@ namespace save {
 class ChunkSerializer {
 public:
     // Serialize a chunk to MCHK payload bytes (encoding + subchunk data, no header).
-    // Returns empty vector if the chunk has no non-air subchunks.
     [[nodiscard]] static std::vector<uint8_t> serializePayload(const Chunk& chunk);
 
     // Deserialize MCHK payload bytes into a Chunk.

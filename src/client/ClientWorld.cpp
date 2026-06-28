@@ -7,8 +7,6 @@
 
 namespace client {
 namespace {
-constexpr StateID kLightOnlyBlockUpdate = net::LIGHT_ONLY_BLOCK_UPDATE_STATE_ID;
-
 void markRenderableBorderDirty(Chunk& chunk) {
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         if (chunk.getSubChunk(scy) != nullptr) {
@@ -209,6 +207,15 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId) {
 }
 
 void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId, const std::vector<uint8_t>& packedLightPatch) {
+    applyBlockUpdate(x, y, z, net::BlockUpdateKind::BlockState, stateId, packedLightPatch);
+}
+
+void ClientWorld::applyBlockUpdate(const int x,
+                                   const int y,
+                                   const int z,
+                                   const net::BlockUpdateKind kind,
+                                   const StateID stateId,
+                                   const std::vector<uint8_t>& packedLightPatch) {
     if (y < 0 || y >= 256) return;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
@@ -220,7 +227,7 @@ void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId, const s
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     Chunk& chunk = *it->second;
-    if (stateId != kLightOnlyBlockUpdate) {
+    if (kind == net::BlockUpdateKind::BlockState) {
         chunk.setBlock(lx, y, lz, stateId);
         ++m_blockContentRevision;
         chunk.recalcHeightMap(lx, lz);
