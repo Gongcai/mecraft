@@ -11,7 +11,7 @@
 #include "Block.h"
 #include "BlockModel.h"
 
-using StateID = uint16_t;
+using StateID = uint32_t;
 
 struct PropertyKey {
     uint16_t nameIndex = 0;
@@ -44,8 +44,8 @@ struct BlockStateEntry {
     StateID stateId = 0;
     BlockID blockId = 0;
     uint8_t propertyCount = 0;
-    uint16_t propertiesOffset = 0;
-    uint16_t textureOffset = 0;
+    uint32_t propertiesOffset = 0;
+    uint32_t textureOffset = 0;
 };
 
 class BlockStateRegistry {
@@ -93,7 +93,7 @@ private:
         StateID firstStateId = 0;
         uint8_t propertyCount = 0;
         std::vector<uint8_t> propertyPosition;
-        std::vector<uint16_t> propertyStride;
+        std::vector<uint32_t> propertyStride;
         std::vector<uint16_t> valueCounts;
         std::vector<std::vector<uint16_t>> valueOrdinals;
     };

@@ -9,6 +9,9 @@
 #include "../../../world/block/Block.h"
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
+#include "../../../world/redstone/WireFaceGeometry.h"
+
+#include <stdexcept>
 
 namespace ecs {
 
@@ -41,35 +44,22 @@ bool checkFarmland(const World& world, const glm::ivec3& pos) {
     return id != 0 && BlockRegistry::getFast(id).namespacedId.path() == "farmland";
 }
 
-/// Evaluate the "attached_face" support rule for torches.
-/// The torch has a `facing` property that indicates which face it's attached to.
-/// We look up the facing value and check if the block on that side is solid.
+/// Evaluate the "attached_face" support rule for face-attached blocks.
+/// The `facing` property identifies the outward face, so support is located in
+/// the opposite direction from that face normal.
 bool checkAttachedFace(const World& world, const glm::ivec3& pos, StateID stateId) {
-    // Read the facing property from the block state
+    if (PropIndices::FACING == PropIndices::INVALID) {
+        throw std::runtime_error("attached_face support requires the facing property");
+    }
     const uint16_t facingValueIndex = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
-    // facingValueIndex maps to: floor, north, south, east, west
-    // For wall-mounted torches, we need the block on the opposite side of the face direction.
-
-    // If facing=floor, the torch sits on top of a block — check below
-    if (facingValueIndex == PropIndices::FACING_FLOOR) {
-        return isSupportive(world, pos + glm::ivec3(0, -1, 0));
+    if (facingValueIndex == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error("attached_face support requires a facing state value");
+    }
+    if (!WireFaceGeometry::isWireFacing(facingValueIndex)) {
+        throw std::runtime_error("attached_face support received an unsupported facing value");
     }
 
-    // Wall-mounted: check the block the torch is attached to
-    // The facing direction points outward from the attachment surface,
-    // so the attachment block is in the *opposite* direction.
-    glm::ivec3 attachDir(0);
-    if (facingValueIndex == PropIndices::FACING_NORTH) {
-        attachDir = {0, 0, 1};   // torch faces -Z, attached to block at +Z
-    } else if (facingValueIndex == PropIndices::FACING_SOUTH) {
-        attachDir = {0, 0, -1};  // torch faces +Z, attached to block at -Z
-    } else if (facingValueIndex == PropIndices::FACING_EAST) {
-        attachDir = {-1, 0, 0};   // torch faces +X, attached to block at -X
-    } else if (facingValueIndex == PropIndices::FACING_WEST) {
-        attachDir = {1, 0, 0};    // torch faces -X, attached to block at +X
-    }
-
-    return isSupportive(world, pos + attachDir);
+    return isSupportive(world, pos + WireFaceGeometry::supportOffset(facingValueIndex));
 }
 
 /// Returns true if the block at `pos` can survive given its supportRule.
@@ -98,8 +88,7 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
         return checkAttachedFace(world, pos, stateId);
     }
 
-    // Unknown rule — default to surviving
-    return true;
+    throw std::runtime_error("Unsupported block support rule: " + def.supportRule);
 }
 
 struct SupportEventSinks {

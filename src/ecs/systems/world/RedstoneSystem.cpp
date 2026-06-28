@@ -16,6 +16,7 @@
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/redstone/RedstoneUpdateQueue.h"
+#include "../../../world/redstone/WireFaceGeometry.h"
 
 #include <algorithm>
 #include <array>
@@ -230,6 +231,45 @@ uint16_t getRequiredProperty(const StateID stateId, const uint16_t property, con
         throw std::runtime_error(std::string("Redstone state is missing property: ") + propertyName);
     }
     return value;
+}
+
+uint16_t wireFacingForState(const StateID stateId) {
+    const uint16_t facing = getRequiredProperty(stateId, PropIndices::FACING, "facing");
+    if (!WireFaceGeometry::isWireFacing(facing)) {
+        throw std::runtime_error("Redstone wire state contains an unsupported facing value");
+    }
+    return facing;
+}
+
+bool isMatchingWireStateWithFacing(const StateID stateId,
+                                   const uint16_t wireChannelId,
+                                   const uint16_t wireFacing) {
+    if (!isMatchingWireState(stateId, wireChannelId)) {
+        return false;
+    }
+    return wireFacingForState(stateId) == wireFacing;
+}
+
+template <typename Fn>
+void forEachCornerWireNeighbor(const World& world,
+                               const glm::ivec3& pos,
+                               const uint16_t wireChannelId,
+                               const uint16_t wireFacing,
+                               Fn&& fn) {
+    const glm::ivec3 support = WireFaceGeometry::supportPosition(pos, wireFacing);
+    for (const uint16_t neighborFacing : WireFaceGeometry::wireFacings()) {
+        if (!WireFaceGeometry::arePerpendicularFacings(wireFacing, neighborFacing)) {
+            continue;
+        }
+
+        const glm::ivec3 neighbor = WireFaceGeometry::wirePositionOnSupportFace(support, neighborFacing);
+        if (isMatchingWireStateWithFacing(
+                world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
+                wireChannelId,
+                neighborFacing)) {
+            fn(neighbor);
+        }
+    }
 }
 
 StateID withRequiredProperty(const StateID stateId,
@@ -535,10 +575,9 @@ bool isSolidBlockState(const StateID stateId) {
 }
 
 // Calls fn for every wire position connected to the wire at pos, including
-// diagonal up/down connections where the wire climbs over a solid block or
-// descends through a non-solid block. The 6 cardinal directions cover same-
-// level and directly-above/below wire neighbors; the horizontal loop adds the
-// diagonal climbing/descending connections that vanilla redstone supports.
+// diagonal up/down connections where floor wire climbs over a solid block or
+// descends through a non-solid block. Face-attached wire also connects around
+// support-block edges to matching-color wire on perpendicular faces.
 template <typename Fn>
 void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
     const StateID selfState = world.getBlockState(pos.x, pos.y, pos.z);
@@ -546,28 +585,54 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
         return;
     }
     const uint16_t wireChannelId = redstoneWireChannelIdForState(selfState);
+    const uint16_t wireFacing = wireFacingForState(selfState);
 
-    for (const glm::ivec3& direction : kDirections) {
-        const glm::ivec3 neighbor = pos + direction;
-        if (isMatchingWireState(world.getBlockState(neighbor.x, neighbor.y, neighbor.z), wireChannelId)) {
+    if (wireFacing == PropIndices::FACING_FLOOR) {
+        for (const glm::ivec3& direction : kDirections) {
+            const glm::ivec3 neighbor = pos + direction;
+            if (isMatchingWireStateWithFacing(
+                    world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
+                    wireChannelId,
+                    PropIndices::FACING_FLOOR)) {
+                fn(neighbor);
+            }
+        }
+        for (const glm::ivec3& hDir : kHorizontalDirections) {
+            const glm::ivec3 neighbor = pos + hDir;
+            const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
+            if (isSolidBlockState(neighborState)) {
+                const glm::ivec3 upPos = neighbor + glm::ivec3(0, 1, 0);
+                if (isMatchingWireStateWithFacing(
+                        world.getBlockState(upPos.x, upPos.y, upPos.z),
+                        wireChannelId,
+                        PropIndices::FACING_FLOOR)) {
+                    fn(upPos);
+                }
+            } else {
+                const glm::ivec3 downPos = neighbor + glm::ivec3(0, -1, 0);
+                if (isMatchingWireStateWithFacing(
+                        world.getBlockState(downPos.x, downPos.y, downPos.z),
+                        wireChannelId,
+                        PropIndices::FACING_FLOOR)) {
+                    fn(downPos);
+                }
+            }
+        }
+        forEachCornerWireNeighbor(world, pos, wireChannelId, wireFacing, fn);
+        return;
+    }
+
+    for (const WireFaceGeometry::ConnectionDirection& connection :
+         WireFaceGeometry::connectionDirections(wireFacing)) {
+        const glm::ivec3 neighbor = pos + connection.offset;
+        if (isMatchingWireStateWithFacing(
+                world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
+                wireChannelId,
+                wireFacing)) {
             fn(neighbor);
         }
     }
-    for (const glm::ivec3& hDir : kHorizontalDirections) {
-        const glm::ivec3 neighbor = pos + hDir;
-        const StateID neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-        if (isSolidBlockState(neighborState)) {
-            const glm::ivec3 upPos = neighbor + glm::ivec3(0, 1, 0);
-            if (isMatchingWireState(world.getBlockState(upPos.x, upPos.y, upPos.z), wireChannelId)) {
-                fn(upPos);
-            }
-        } else {
-            const glm::ivec3 downPos = neighbor + glm::ivec3(0, -1, 0);
-            if (isMatchingWireState(world.getBlockState(downPos.x, downPos.y, downPos.z), wireChannelId)) {
-                fn(downPos);
-            }
-        }
-    }
+    forEachCornerWireNeighbor(world, pos, wireChannelId, wireFacing, fn);
 }
 
 bool isRedstoneControlledState(const StateID stateId) {

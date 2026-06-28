@@ -51,7 +51,7 @@
 namespace server {
 namespace {
 constexpr net::EntityNetId kPlayerNetIdBase = 0x80000000u;
-constexpr uint16_t kLightOnlyBlockUpdate = 0xFFFFu;
+constexpr uint32_t kLightOnlyBlockUpdate = net::LIGHT_ONLY_BLOCK_UPDATE_STATE_ID;
 constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
 constexpr float kPlayerPoseSyncEpsilonSq = 0.000001f;
@@ -2451,7 +2451,7 @@ net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const in
     entry.x = x;
     entry.y = y;
     entry.z = z;
-    entry.stateId = static_cast<uint16_t>(stateId);
+    entry.stateId = stateId;
     return entry;
 }
 
@@ -2492,7 +2492,7 @@ net::BlockUpdateEntry GameServer::makeBlockUpdateEntry(const int x,
     entry.x = x;
     entry.y = y;
     entry.z = z;
-    entry.stateId = static_cast<uint16_t>(stateId);
+    entry.stateId = stateId;
     if (lightPatchRadius < 0) {
         const glm::ivec2 chunkCoords = m_world.getChunkCoords(x, z);
         return makeSubChunkLightUpdateEntry(World::chunkKey(chunkCoords.x, chunkCoords.y),

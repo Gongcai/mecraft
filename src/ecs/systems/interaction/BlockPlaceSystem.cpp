@@ -240,7 +240,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
                 blockAction.placeBlock = placeBlock;
                 blockAction.hitNormal = target.hitNormal;
                 blockAction.playerPosition = playerPos;
-                blockAction.blockState = static_cast<uint16_t>(placedState);
+                blockAction.blockState = placedState;
                 ctx.services.gameClient->sendBlockAction(blockAction);
             } else {
                 ++runtime.heldItemSwingSequence;

@@ -47,7 +47,7 @@ void sendBucketAction(client::GameClient& client,
     action.placeBlock = placeBlock;
     action.hitNormal = hitNormal;
     action.playerPosition = playerPosition;
-    action.blockState = static_cast<uint16_t>(fluidState);
+    action.blockState = fluidState;
     client.sendBlockAction(action);
 }
 

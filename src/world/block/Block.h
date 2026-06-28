@@ -18,7 +18,7 @@
 
 class ResourceMgr;
 
-// BlockID is now RuntimeId (uint16_t), allowing up to 65535 block types
+// BlockID is the shared runtime id type used by block definitions and block states.
 using BlockID = RuntimeId;
 
 namespace BlockMaterialKinds {

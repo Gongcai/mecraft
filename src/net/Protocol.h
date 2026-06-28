@@ -25,6 +25,7 @@ enum class EntityKind : uint8_t {
 
 using ClientId = uint32_t;
 using TickId = uint32_t;
+constexpr uint32_t LIGHT_ONLY_BLOCK_UPDATE_STATE_ID = 0xFFFFFFFFu;
 
 namespace ClientInputActions {
 constexpr uint32_t Attack = 1u << 0;
@@ -137,7 +138,7 @@ struct ClientBlockAction {
     glm::ivec3 placeBlock = glm::ivec3(0);
     glm::ivec3 hitNormal = glm::ivec3(0);
     glm::vec3 playerPosition = glm::vec3(0.0f);
-    uint16_t blockState = 0;
+    uint32_t blockState = 0;
 };
 
 enum class ContainerSlotSpace : uint8_t {
@@ -216,8 +217,8 @@ struct BlockUpdateEntry {
     int32_t x = 0;
     int32_t y = 0;
     int32_t z = 0;
-    // 0xFFFF means this entry only carries light data and must not edit a block.
-    uint16_t stateId = 0;
+    // LIGHT_ONLY_BLOCK_UPDATE_STATE_ID means this entry only carries light data and must not edit a block.
+    uint32_t stateId = 0;
     // Optional light payload. A SubChunk::BLOCK_COUNT-sized payload is the
     // complete light section containing y. Odd-sized cubic patches are centered
     // on x/y/z and written in dy, dz, dx nested-loop order. A Chunk::BLOCK_COUNT

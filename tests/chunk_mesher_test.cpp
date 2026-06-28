@@ -1182,6 +1182,158 @@ int main() {
     }
 
     {
+        const BlockID redstoneWireBlock = BlockRegistry::requireIdByName("minecraft:redstone_wire");
+        const StateID ceilingWire = BlockStateRegistry::getState(
+            redstoneWireBlock,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, PropIndices::FACING_CEILING},
+                {PropIndices::POWER, PropIndices::POWER_15},
+                {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                {PropIndices::EAST, PropIndices::EAST_NONE},
+                {PropIndices::WEST, PropIndices::WEST_NONE}
+            });
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, ceilingWire);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("isolated ceiling redstone wire should emit one tinted ceiling quad");
+        }
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
+            const uint8_t tintU = static_cast<uint8_t>((vertex.tintPacked >> 4u) & 0x0fu);
+            if (tintKind != BlockTintKinds::REDSTONE ||
+                tintU != 15 ||
+                !approxEqual(vertex.normal, 1.0f) ||
+                !approxEqual(vertex.y, 33.0f - 1.0f / 128.0f)) {
+                return fail("ceiling redstone wire vertices should encode tint and lie on the ceiling plane");
+            }
+        }
+    }
+
+    {
+        const BlockID redstoneWireBlock = BlockRegistry::requireIdByName("minecraft:redstone_wire");
+        const StateID northWallWire = BlockStateRegistry::getState(
+            redstoneWireBlock,
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, PropIndices::FACING_NORTH},
+                {PropIndices::POWER, PropIndices::POWER_0},
+                {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                {PropIndices::EAST, PropIndices::EAST_NONE},
+                {PropIndices::WEST, PropIndices::WEST_NONE}
+            });
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, northWallWire);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("isolated north-wall redstone wire should emit one tinted wall quad");
+        }
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            if (!approxEqual(vertex.normal, 3.0f) ||
+                !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
+                return fail("north-wall redstone wire vertices should lie on the north wall plane");
+            }
+        }
+    }
+
+    {
+        const StateID northWallWireEast = BlockStateRegistry::getState(
+            BlockRegistry::requireIdByName("minecraft:redstone_wire"),
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, PropIndices::FACING_NORTH},
+                {PropIndices::POWER, PropIndices::POWER_0},
+                {PropIndices::NORTH, PropIndices::NORTH_NONE},
+                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                {PropIndices::EAST, PropIndices::EAST_SIDE},
+                {PropIndices::WEST, PropIndices::WEST_NONE}
+            });
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, northWallWireEast);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("one-sided north-wall redstone wire should emit one wall segment");
+        }
+
+        float minX = std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxY = std::numeric_limits<float>::lowest();
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            minX = std::min(minX, vertex.x);
+            minY = std::min(minY, vertex.y);
+            maxX = std::max(maxX, vertex.x);
+            maxY = std::max(maxY, vertex.y);
+            if (!approxEqual(vertex.normal, 3.0f) ||
+                !approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
+                return fail("east north-wall redstone segment should remain on the north wall plane");
+            }
+            if (approxEqual(vertex.x, 0.5f) && !approxEqual(vertex.v, 0.0f)) {
+                return fail("east north-wall redstone segment should map texture length along wall X");
+            }
+            if (approxEqual(vertex.x, 1.0f) && !approxEqual(vertex.v, 0.5f)) {
+                return fail("east north-wall redstone segment should map the texture edge along wall X");
+            }
+            if (approxEqual(vertex.y, 32.0f) && !approxEqual(vertex.u, 0.0f)) {
+                return fail("east north-wall redstone segment should map texture width along wall Y");
+            }
+            if (approxEqual(vertex.y, 33.0f) && !approxEqual(vertex.u, 1.0f)) {
+                return fail("east north-wall redstone segment should keep the texture upright on the wall");
+            }
+        }
+        if (!approxEqual(minX, 0.5f) ||
+            !approxEqual(maxX, 1.0f) ||
+            !approxEqual(minY, 32.0f) ||
+            !approxEqual(maxY, 33.0f)) {
+            return fail("east north-wall redstone segment should occupy the horizontal half of the wall face");
+        }
+    }
+
+    {
+        const StateID northWallWireUp = BlockStateRegistry::getState(
+            BlockRegistry::requireIdByName("minecraft:redstone_wire"),
+            std::vector<std::pair<uint16_t, uint16_t>>{
+                {PropIndices::FACING, PropIndices::FACING_NORTH},
+                {PropIndices::POWER, PropIndices::POWER_0},
+                {PropIndices::NORTH, PropIndices::NORTH_SIDE},
+                {PropIndices::SOUTH, PropIndices::SOUTH_NONE},
+                {PropIndices::EAST, PropIndices::EAST_NONE},
+                {PropIndices::WEST, PropIndices::WEST_NONE}
+            });
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, northWallWireUp);
+
+        const ChunkMeshData meshData = buildMeshDataFor(chunk);
+        if (meshData.cutoutDistanceVertices.size() != 6) {
+            return fail("upward north-wall redstone wire should emit one wall segment");
+        }
+
+        float minX = std::numeric_limits<float>::max();
+        float minY = std::numeric_limits<float>::max();
+        float maxX = std::numeric_limits<float>::lowest();
+        float maxY = std::numeric_limits<float>::lowest();
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            minX = std::min(minX, vertex.x);
+            minY = std::min(minY, vertex.y);
+            maxX = std::max(maxX, vertex.x);
+            maxY = std::max(maxY, vertex.y);
+        }
+        if (!approxEqual(minX, 0.0f) ||
+            !approxEqual(maxX, 1.0f) ||
+            !approxEqual(minY, 32.5f) ||
+            !approxEqual(maxY, 33.0f)) {
+            return fail("upward north-wall redstone segment should occupy the upper half of the wall face");
+        }
+    }
+
+    {
         const StateID redstoneWireEast = BlockStateRegistry::getState(
             BlockRegistry::requireIdByName("minecraft:redstone_wire"),
             std::vector<std::pair<uint16_t, uint16_t>>{

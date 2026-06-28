@@ -201,6 +201,10 @@ BlockSelectionBox getFacePlaneBox(const StateID stateId) {
         return {glm::vec3(0.0f, 0.0f, 0.0f),
                 glm::vec3(1.0f, kFacePlaneSelectionThickness, 1.0f)};
     }
+    if (facing == PropIndices::FACING_CEILING) {
+        return {glm::vec3(0.0f, 1.0f - kFacePlaneSelectionThickness, 0.0f),
+                glm::vec3(1.0f, 1.0f, 1.0f)};
+    }
     if (facing == PropIndices::FACING_NORTH) {
         return {glm::vec3(0.0f, 0.0f, 1.0f - kFacePlaneSelectionThickness),
                 glm::vec3(1.0f, 1.0f, 1.0f)};

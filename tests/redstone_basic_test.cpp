@@ -119,6 +119,31 @@ StateID pressurePlateState(const BlockID blockId, const bool powered) {
         });
 }
 
+uint16_t powerPropertyValue(const uint8_t power) {
+    static const std::array<uint16_t, 16> kPowerValues = {
+        PropIndices::POWER_0,
+        PropIndices::POWER_1,
+        PropIndices::POWER_2,
+        PropIndices::POWER_3,
+        PropIndices::POWER_4,
+        PropIndices::POWER_5,
+        PropIndices::POWER_6,
+        PropIndices::POWER_7,
+        PropIndices::POWER_8,
+        PropIndices::POWER_9,
+        PropIndices::POWER_10,
+        PropIndices::POWER_11,
+        PropIndices::POWER_12,
+        PropIndices::POWER_13,
+        PropIndices::POWER_14,
+        PropIndices::POWER_15,
+    };
+    if (power >= kPowerValues.size()) {
+        throw std::runtime_error("Redstone power test value must be in the range 0 through 15");
+    }
+    return kPowerValues[power];
+}
+
 StateID repeaterState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:repeater"),
@@ -139,28 +164,24 @@ StateID hopperState(const bool enabled) {
 }
 
 StateID targetState(const uint8_t power) {
-    static const std::array<uint16_t, 16> kPowerValues = {
-        PropIndices::POWER_0,
-        PropIndices::POWER_1,
-        PropIndices::POWER_2,
-        PropIndices::POWER_3,
-        PropIndices::POWER_4,
-        PropIndices::POWER_5,
-        PropIndices::POWER_6,
-        PropIndices::POWER_7,
-        PropIndices::POWER_8,
-        PropIndices::POWER_9,
-        PropIndices::POWER_10,
-        PropIndices::POWER_11,
-        PropIndices::POWER_12,
-        PropIndices::POWER_13,
-        PropIndices::POWER_14,
-        PropIndices::POWER_15,
-    };
-    if (power >= kPowerValues.size()) {
-        throw std::runtime_error("Target test power must be in the range 0 through 15");
-    }
-    return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER, kPowerValues[power]);
+    return BlockStateRegistry::getState(
+        BlockRegistry::requireIdByName("minecraft:target"),
+        PropIndices::POWER,
+        powerPropertyValue(power));
+}
+
+StateID wireState(const BlockID blockId, const uint16_t facing, const uint8_t power = 0) {
+    StateID state = BlockStateRegistry::getDefaultState(blockId);
+    state = BlockStateRegistry::withProperty(state, PropIndices::FACING, facing);
+    return BlockStateRegistry::withProperty(state, PropIndices::POWER, powerPropertyValue(power));
+}
+
+StateID redWireState(const uint16_t facing, const uint8_t power = 0) {
+    return wireState(BlockRegistry::requireIdByName("minecraft:redstone_wire"), facing, power);
+}
+
+StateID blueWireState(const uint16_t facing, const uint8_t power = 0) {
+    return wireState(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire"), facing, power);
 }
 
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {
@@ -222,6 +243,10 @@ bool noteBlockPowered(const World& world, const int x, const int y, const int z)
 bool hopperEnabled(const World& world, const int x, const int y, const int z) {
     const StateID state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::ENABLED) == PropIndices::ENABLED_TRUE;
+}
+
+uint16_t blockProperty(const World& world, const int x, const int y, const int z, const uint16_t property) {
+    return BlockStateRegistry::getPropertyIndex(world.getBlockState(x, y, z), property);
 }
 
 uint8_t targetPower(const World& world, const int x, const int y, const int z) {
@@ -353,6 +378,55 @@ int main() {
     }
     if (lampLit(world, 6, y, 0)) {
         return fail("redstone lamp should turn off after adjacent wire loses power");
+    }
+
+    {
+        World faceWorld;
+        faceWorld.init(20260628);
+        loadOriginChunks(faceWorld);
+
+        const int supportY = 72;
+        for (int x = -2; x <= 2; ++x) {
+            for (int yOffset = -1; yOffset <= 2; ++yOffset) {
+                for (int z = -2; z <= 2; ++z) {
+                    faceWorld.setBlockState(x, supportY + yOffset, z, RUNTIME_ID_NULL);
+                }
+            }
+        }
+
+        faceWorld.setBlockState(0, supportY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        faceWorld.setBlockState(-1, supportY + 1, 0, leverState(true));
+        faceWorld.setBlockState(0, supportY + 1, 0, redWireState(PropIndices::FACING_FLOOR));
+        faceWorld.setBlockState(0, supportY, -1, redWireState(PropIndices::FACING_NORTH));
+        ecs::RedstoneSystem::processWorld(faceWorld, 24);
+
+        if (wirePower(faceWorld, 0, supportY + 1, 0) != 15 ||
+            wirePower(faceWorld, 0, supportY, -1) != 14) {
+            return fail("same-color redstone wire should carry power around a shared support-block edge");
+        }
+        if (blockProperty(faceWorld, 0, supportY + 1, 0, PropIndices::NORTH) != PropIndices::NORTH_SIDE ||
+            blockProperty(faceWorld, 0, supportY, -1, PropIndices::NORTH) != PropIndices::NORTH_SIDE) {
+            return fail("same-color redstone wire should show side connections around a support-block edge");
+        }
+
+        faceWorld.setBlockState(0, supportY + 1, 0, RUNTIME_ID_NULL);
+        ecs::RedstoneSystem::processWorld(faceWorld, 25);
+        if (wirePower(faceWorld, 0, supportY, -1) != 0 ||
+            blockProperty(faceWorld, 0, supportY, -1, PropIndices::NORTH) != PropIndices::NORTH_NONE) {
+            return fail("removing a corner-connected wire should dirty and refresh the remaining face wire");
+        }
+
+        faceWorld.setBlockState(0, supportY + 1, 0, redWireState(PropIndices::FACING_FLOOR));
+        faceWorld.setBlockState(0, supportY, -1, blueWireState(PropIndices::FACING_NORTH));
+        ecs::RedstoneSystem::processWorld(faceWorld, 26);
+        if (wirePower(faceWorld, 0, supportY + 1, 0) != 15 ||
+            wirePower(faceWorld, 0, supportY, -1) != 0) {
+            return fail("different-color redstone wire should not carry power around a shared support-block edge");
+        }
+        if (blockProperty(faceWorld, 0, supportY + 1, 0, PropIndices::NORTH) != PropIndices::NORTH_NONE ||
+            blockProperty(faceWorld, 0, supportY, -1, PropIndices::NORTH) != PropIndices::NORTH_NONE) {
+            return fail("different-color redstone wire should not show corner visual connections");
+        }
     }
 
     {

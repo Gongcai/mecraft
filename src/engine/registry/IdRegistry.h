@@ -5,8 +5,8 @@
 #include <vector>
 #include <cstdint>
 
-// Runtime compact integer ID
-using RuntimeId = uint16_t;
+// Runtime compact integer ID.
+using RuntimeId = uint32_t;
 constexpr RuntimeId RUNTIME_ID_NULL = 0;
 
 class IdRegistry {

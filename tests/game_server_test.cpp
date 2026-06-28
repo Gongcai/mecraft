@@ -608,7 +608,7 @@ static void testClientBlockActionMergesStackedSlabs() {
     merge.placeBlock = placeBlock;
     merge.hitNormal = {0, 1, 0};
     merge.playerPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
-    merge.blockState = static_cast<uint16_t>(doubleSlab);
+    merge.blockState = doubleSlab;
     client.sendBlockAction(merge);
 
     harness.server.tick(1.0f / 20.0f);
@@ -620,7 +620,7 @@ static void testClientBlockActionMergesStackedSlabs() {
 
     net::ClientBlockAction invalidReplace = merge;
     invalidReplace.sequence = 2;
-    invalidReplace.blockState = static_cast<uint16_t>(topSlab);
+    invalidReplace.blockState = topSlab;
     client.sendBlockAction(invalidReplace);
 
     harness.server.tick(1.0f / 20.0f);
@@ -3588,6 +3588,7 @@ static void testClientBlockActionCodecCarriesInteract() {
     action.action = net::ClientBlockActionType::Interact;
     action.targetBlock = glm::ivec3(4, 65, -2);
     action.playerPosition = glm::vec3(4.5f, 65.5f, -1.5f);
+    action.blockState = 0x00012345u;
 
     const auto encoded = net::PacketCodec::encodeClientBlockAction(action);
     net::ClientBlockAction decoded;
@@ -3601,6 +3602,8 @@ static void testClientBlockActionCodecCarriesInteract() {
             "ClientBlockAction codec should preserve interact target block");
     require(decoded.playerPosition == action.playerPosition,
             "ClientBlockAction codec should preserve interact player position");
+    require(decoded.blockState == action.blockState,
+            "ClientBlockAction codec should preserve 32-bit block state ids");
 
     std::printf("[PASS] testClientBlockActionCodecCarriesInteract\n");
 }
@@ -4067,7 +4070,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     entry.x = 1;
     entry.y = 64;
     entry.z = -2;
-    entry.stateId = BlockRegistry::requireIdByName("minecraft:torch");
+    entry.stateId = 0x00012345u;
     entry.packedLightPatch.resize(5 * 5 * 5);
     for (size_t i = 0; i < entry.packedLightPatch.size(); ++i) {
         entry.packedLightPatch[i] = static_cast<uint8_t>(i & 0x0F);
@@ -4081,6 +4084,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
         std::abort();
     }
     if (decoded.updates.size() != 1 ||
+        decoded.updates[0].stateId != entry.stateId ||
         decoded.updates[0].packedLightPatch.size() != entry.packedLightPatch.size() ||
         decoded.updates[0].packedLightPatch[124] != entry.packedLightPatch[124]) {
         std::fprintf(stderr, "[FAIL] BlockUpdateBatch variable light patch was not preserved\n");

@@ -21,6 +21,7 @@
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/fluid/FluidState.h"
 #include "../../world/block/PropIndices.h"
+#include "../../world/redstone/WireFaceGeometry.h"
 #include "../../world/IWorldView.h"
 #include "../../world/World.h"
 
@@ -3268,6 +3269,9 @@ int facePlaneRenderFace(const uint16_t facing) {
     if (facing == PropIndices::FACING_FLOOR) {
         return FACE_TOP;
     }
+    if (facing == PropIndices::FACING_CEILING) {
+        return FACE_BOTTOM;
+    }
     if (facing == PropIndices::FACING_NORTH) {
         return FACE_BACK;
     }
@@ -3293,6 +3297,13 @@ std::array<glm::vec3, 4> buildFacePlaneCorners(const glm::vec3& pos, const uint1
                  {pos.x + 1.0f, pos.y + y, pos.z + 1.0f},
                  {pos.x + 1.0f, pos.y + y, pos.z + 0.0f},
                  {pos.x + 0.0f, pos.y + y, pos.z + 0.0f}}};
+    }
+    if (facing == PropIndices::FACING_CEILING) {
+        const float y = nearMax;
+        return {{{pos.x + 0.0f, pos.y + y, pos.z + 0.0f},
+                 {pos.x + 1.0f, pos.y + y, pos.z + 0.0f},
+                 {pos.x + 1.0f, pos.y + y, pos.z + 1.0f},
+                 {pos.x + 0.0f, pos.y + y, pos.z + 1.0f}}};
     }
     if (facing == PropIndices::FACING_NORTH) {
         const float z = nearMax;
@@ -3333,18 +3344,23 @@ void requireRedstoneWireMeshProperties() {
         PropIndices::EAST == PropIndices::INVALID ||
         PropIndices::WEST == PropIndices::INVALID ||
         PropIndices::FACING_FLOOR == PropIndices::INVALID ||
+        PropIndices::FACING_CEILING == PropIndices::INVALID ||
         PropIndices::NORTH_NONE == PropIndices::INVALID ||
         PropIndices::NORTH_SIDE == PropIndices::INVALID ||
         PropIndices::NORTH_UP == PropIndices::INVALID ||
+        PropIndices::NORTH_DOWN == PropIndices::INVALID ||
         PropIndices::SOUTH_NONE == PropIndices::INVALID ||
         PropIndices::SOUTH_SIDE == PropIndices::INVALID ||
         PropIndices::SOUTH_UP == PropIndices::INVALID ||
+        PropIndices::SOUTH_DOWN == PropIndices::INVALID ||
         PropIndices::EAST_NONE == PropIndices::INVALID ||
         PropIndices::EAST_SIDE == PropIndices::INVALID ||
         PropIndices::EAST_UP == PropIndices::INVALID ||
+        PropIndices::EAST_DOWN == PropIndices::INVALID ||
         PropIndices::WEST_NONE == PropIndices::INVALID ||
         PropIndices::WEST_SIDE == PropIndices::INVALID ||
         PropIndices::WEST_UP == PropIndices::INVALID ||
+        PropIndices::WEST_DOWN == PropIndices::INVALID ||
         PropIndices::POWER_0 == PropIndices::INVALID ||
         PropIndices::POWER_1 == PropIndices::INVALID ||
         PropIndices::POWER_2 == PropIndices::INVALID ||
@@ -3395,19 +3411,23 @@ uint8_t redstonePowerLevel(const StateID stateId) {
     throw std::runtime_error("Redstone wire mesh received an unsupported power value");
 }
 
-// Returns 0 for "none", 1 for "side", 2 for "up".
-// Throws if the property value is not one of the three recognized connection states.
+// Returns 0 for "none", 1 for "side" or "down", 2 for "up".
+// Throws if the property value is not one of the recognized connection states.
 uint8_t redstoneWireConnectionLevel(const StateID stateId,
                                      const uint16_t property,
                                      const uint16_t noneValue,
                                      const uint16_t sideValue,
                                      const uint16_t upValue,
+                                     const uint16_t downValue,
                                      const char* propertyName) {
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == noneValue) {
         return 0;
     }
     if (value == sideValue) {
+        return 1;
+    }
+    if (value == downValue) {
         return 1;
     }
     if (value == upValue) {
@@ -3424,6 +3444,102 @@ const AnimatedTextureRef& requireNamedTextureRef(const BlockDef& def, const char
     return it->second;
 }
 
+enum class PlanarWireSegmentDirection : uint8_t {
+    NegativeA,
+    PositiveA,
+    NegativeB,
+    PositiveB
+};
+
+struct PlanarWireSegmentRect {
+    float a0 = 0.0f;
+    float b0 = 0.0f;
+    float a1 = 1.0f;
+    float b1 = 1.0f;
+};
+
+PlanarWireSegmentDirection planarWireSegmentDirection(const uint16_t facing,
+                                                      const uint16_t property) {
+    const bool horizontalFace = facing == PropIndices::FACING_FLOOR ||
+                                facing == PropIndices::FACING_CEILING;
+    if (property == PropIndices::NORTH) {
+        return horizontalFace
+            ? PlanarWireSegmentDirection::NegativeB
+            : PlanarWireSegmentDirection::PositiveB;
+    }
+    if (property == PropIndices::SOUTH) {
+        return horizontalFace
+            ? PlanarWireSegmentDirection::PositiveB
+            : PlanarWireSegmentDirection::NegativeB;
+    }
+    if (property == PropIndices::EAST) {
+        return PlanarWireSegmentDirection::PositiveA;
+    }
+    if (property == PropIndices::WEST) {
+        return PlanarWireSegmentDirection::NegativeA;
+    }
+    throw std::runtime_error("Redstone wire segment received an unsupported connection property");
+}
+
+PlanarWireSegmentRect planarWireSegmentRect(const PlanarWireSegmentDirection direction) {
+    switch (direction) {
+        case PlanarWireSegmentDirection::NegativeA:
+            return {0.0f, 0.0f, 0.5f, 1.0f};
+        case PlanarWireSegmentDirection::PositiveA:
+            return {0.5f, 0.0f, 1.0f, 1.0f};
+        case PlanarWireSegmentDirection::NegativeB:
+            return {0.0f, 0.0f, 1.0f, 0.5f};
+        case PlanarWireSegmentDirection::PositiveB:
+            return {0.0f, 0.5f, 1.0f, 1.0f};
+    }
+    throw std::runtime_error("Redstone wire segment received an unsupported planar direction");
+}
+
+std::array<glm::vec2, 4> faceWireQuadLocalCoords(const uint16_t facing,
+                                                  const PlanarWireSegmentRect& rect) {
+    if (facing == PropIndices::FACING_FLOOR ||
+        facing == PropIndices::FACING_NORTH) {
+        return {{{rect.a0, rect.b1}, {rect.a1, rect.b1}, {rect.a1, rect.b0}, {rect.a0, rect.b0}}};
+    }
+    if (facing == PropIndices::FACING_CEILING ||
+        facing == PropIndices::FACING_SOUTH ||
+        facing == PropIndices::FACING_WEST) {
+        return {{{rect.a0, rect.b0}, {rect.a1, rect.b0}, {rect.a1, rect.b1}, {rect.a0, rect.b1}}};
+    }
+    if (facing == PropIndices::FACING_EAST) {
+        return {{{rect.a1, rect.b0}, {rect.a0, rect.b0}, {rect.a0, rect.b1}, {rect.a1, rect.b1}}};
+    }
+    throw std::runtime_error("Redstone wire segment received an unsupported facing value");
+}
+
+glm::vec2 planarWireSegmentUv(const PlanarWireSegmentDirection direction,
+                              const glm::vec2& local) {
+    switch (direction) {
+        case PlanarWireSegmentDirection::NegativeA:
+            return {1.0f - local.y, 0.5f - local.x};
+        case PlanarWireSegmentDirection::PositiveA:
+            return {local.y, local.x - 0.5f};
+        case PlanarWireSegmentDirection::NegativeB:
+            return {local.x, 0.5f - local.y};
+        case PlanarWireSegmentDirection::PositiveB:
+            return {local.x, 1.5f - local.y};
+    }
+    throw std::runtime_error("Redstone wire segment received an unsupported planar direction");
+}
+
+std::array<glm::vec2, 4> buildPlanarWireSegmentUv(const uint16_t facing,
+                                                  const uint16_t property) {
+    const PlanarWireSegmentDirection direction = planarWireSegmentDirection(facing, property);
+    const PlanarWireSegmentRect rect = planarWireSegmentRect(direction);
+    const std::array<glm::vec2, 4> localCoords = faceWireQuadLocalCoords(facing, rect);
+    return {{
+        planarWireSegmentUv(direction, localCoords[0]),
+        planarWireSegmentUv(direction, localCoords[1]),
+        planarWireSegmentUv(direction, localCoords[2]),
+        planarWireSegmentUv(direction, localCoords[3]),
+    }};
+}
+
 std::array<glm::vec3, 4> buildFloorWireQuad(const glm::vec3& pos,
                                             const float x0,
                                             const float z0,
@@ -3434,6 +3550,66 @@ std::array<glm::vec3, 4> buildFloorWireQuad(const glm::vec3& pos,
              {pos.x + x1, y, pos.z + z1},
              {pos.x + x1, y, pos.z + z0},
              {pos.x + x0, y, pos.z + z0}}};
+}
+
+// Builds a wire quad on any attachable face. The first coordinate maps to X on
+// floor/ceiling/north/south faces and to Z on east/west faces. The second
+// coordinate maps to Z on horizontal faces and to Y on wall faces.
+std::array<glm::vec3, 4> buildFaceWireQuad(const glm::vec3& pos,
+                                           const uint16_t facing,
+                                           const float a0,
+                                           const float b0,
+                                           const float a1,
+                                           const float b1) {
+    const float nearMin = kFacePlaneSurfaceOffset;
+    const float nearMax = 1.0f - kFacePlaneSurfaceOffset;
+
+    if (facing == PropIndices::FACING_FLOOR) {
+        return buildFloorWireQuad(pos, a0, b0, a1, b1);
+    }
+    if (facing == PropIndices::FACING_CEILING) {
+        const float y = pos.y + nearMax;
+        return {{{pos.x + a0, y, pos.z + b0},
+                 {pos.x + a1, y, pos.z + b0},
+                 {pos.x + a1, y, pos.z + b1},
+                 {pos.x + a0, y, pos.z + b1}}};
+    }
+    if (facing == PropIndices::FACING_NORTH) {
+        const float z = pos.z + nearMax;
+        return {{{pos.x + a0, pos.y + b1, z},
+                 {pos.x + a1, pos.y + b1, z},
+                 {pos.x + a1, pos.y + b0, z},
+                 {pos.x + a0, pos.y + b0, z}}};
+    }
+    if (facing == PropIndices::FACING_SOUTH) {
+        const float z = pos.z + nearMin;
+        return {{{pos.x + a0, pos.y + b0, z},
+                 {pos.x + a1, pos.y + b0, z},
+                 {pos.x + a1, pos.y + b1, z},
+                 {pos.x + a0, pos.y + b1, z}}};
+    }
+    if (facing == PropIndices::FACING_EAST) {
+        const float x = pos.x + nearMin;
+        return {{{x, pos.y + b0, pos.z + a1},
+                 {x, pos.y + b0, pos.z + a0},
+                 {x, pos.y + b1, pos.z + a0},
+                 {x, pos.y + b1, pos.z + a1}}};
+    }
+    if (facing == PropIndices::FACING_WEST) {
+        const float x = pos.x + nearMax;
+        return {{{x, pos.y + b0, pos.z + a0},
+                 {x, pos.y + b0, pos.z + a1},
+                 {x, pos.y + b1, pos.z + a1},
+                 {x, pos.y + b1, pos.z + a0}}};
+    }
+    throw std::runtime_error("Redstone wire quad received an unsupported facing value");
+}
+
+std::array<glm::vec3, 4> buildPlanarWireSegment(const glm::vec3& pos,
+                                                const uint16_t facing,
+                                                const uint16_t property) {
+    const PlanarWireSegmentRect rect = planarWireSegmentRect(planarWireSegmentDirection(facing, property));
+    return buildFaceWireQuad(pos, facing, rect.a0, rect.b0, rect.a1, rect.b1);
 }
 
 std::array<glm::vec3, 4> buildRotatedFloorWireSegment(const glm::vec3& pos,
@@ -3617,35 +3793,39 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
     requireRedstoneWireMeshProperties();
 
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
-    if (facing != PropIndices::FACING_FLOOR) {
-        throw std::runtime_error("Redstone wire mesh requires facing=floor");
+    if (!WireFaceGeometry::isWireFacing(facing)) {
+        throw std::runtime_error("Redstone wire mesh received an unsupported facing value");
     }
 
     // Connection level per horizontal direction: 0 = none, 1 = side (flat or
     // descending), 2 = up (climbing the side of a solid block).
     const uint8_t north = redstoneWireConnectionLevel(blockId,
                                                        PropIndices::NORTH,
-                                                       PropIndices::NORTH_NONE,
-                                                       PropIndices::NORTH_SIDE,
-                                                       PropIndices::NORTH_UP,
-                                                       "north");
+                                                        PropIndices::NORTH_NONE,
+                                                        PropIndices::NORTH_SIDE,
+                                                        PropIndices::NORTH_UP,
+                                                        PropIndices::NORTH_DOWN,
+                                                        "north");
     const uint8_t south = redstoneWireConnectionLevel(blockId,
                                                        PropIndices::SOUTH,
-                                                       PropIndices::SOUTH_NONE,
-                                                       PropIndices::SOUTH_SIDE,
-                                                       PropIndices::SOUTH_UP,
-                                                       "south");
+                                                        PropIndices::SOUTH_NONE,
+                                                        PropIndices::SOUTH_SIDE,
+                                                        PropIndices::SOUTH_UP,
+                                                        PropIndices::SOUTH_DOWN,
+                                                        "south");
     const uint8_t east = redstoneWireConnectionLevel(blockId,
                                                       PropIndices::EAST,
                                                       PropIndices::EAST_NONE,
                                                       PropIndices::EAST_SIDE,
                                                       PropIndices::EAST_UP,
+                                                      PropIndices::EAST_DOWN,
                                                       "east");
     const uint8_t west = redstoneWireConnectionLevel(blockId,
                                                       PropIndices::WEST,
                                                       PropIndices::WEST_NONE,
                                                       PropIndices::WEST_SIDE,
                                                       PropIndices::WEST_UP,
+                                                      PropIndices::WEST_DOWN,
                                                       "west");
     const bool isolated = north == 0 && south == 0 && east == 0 && west == 0;
     const uint8_t power = redstonePowerLevel(blockId);
@@ -3665,13 +3845,53 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
         return renderData;
     };
 
+    auto emitWireQuad = [&](const AnimatedTextureRef& texture,
+                            const std::array<glm::vec3, 4>& corners,
+                            const std::array<glm::vec2, 4>& uv,
+                            const int face) {
+        const FaceRenderData renderData = renderDataFor(texture, face);
+        appendFaceVertices(target, corners, uv, face, renderData);
+        expandBoundsForCorners(meshData, corners);
+    };
+
     auto emitFloorWireQuad = [&](const AnimatedTextureRef& texture,
                                  const std::array<glm::vec3, 4>& corners,
                                  const std::array<glm::vec2, 4>& uv) {
-        const FaceRenderData renderData = renderDataFor(texture, FACE_TOP);
-        appendFaceVertices(target, corners, uv, FACE_TOP, renderData);
-        expandBoundsForCorners(meshData, corners);
+        emitWireQuad(texture, corners, uv, FACE_TOP);
     };
+
+    if (facing != PropIndices::FACING_FLOOR) {
+        const int face = facePlaneRenderFace(facing);
+        const auto emitPlanarSegment = [&](const AnimatedTextureRef& texture,
+                                           const uint16_t property) {
+            emitWireQuad(
+                texture,
+                buildPlanarWireSegment(blockOffset, facing, property),
+                buildPlanarWireSegmentUv(facing, property),
+                face);
+        };
+
+        if (isolated) {
+            emitWireQuad(dotTexture,
+                         buildFaceWireQuad(blockOffset, facing, 0.0f, 0.0f, 1.0f, 1.0f),
+                         buildUvRect(0.0f, 0.0f, 1.0f, 1.0f),
+                         face);
+            return;
+        }
+        if (north >= 1) {
+            emitPlanarSegment(lineTexture, PropIndices::NORTH);
+        }
+        if (south >= 1) {
+            emitPlanarSegment(lineTexture, PropIndices::SOUTH);
+        }
+        if (east >= 1) {
+            emitPlanarSegment(lineTexture, PropIndices::EAST);
+        }
+        if (west >= 1) {
+            emitPlanarSegment(lineTexture, PropIndices::WEST);
+        }
+        return;
+    }
 
     // Emits a vertical climbing wire quad on both sides so it is visible from
     // either direction, matching the vanilla redstone_dust_up model which

@@ -93,7 +93,7 @@ void SoilTillingSystem::update(SystemContext& ctx) {
                 action.placeBlock = tillPos;
                 action.hitNormal = target.hitNormal;
                 action.playerPosition = transform.position;
-                action.blockState = static_cast<uint16_t>(resultState);
+                action.blockState = resultState;
                 ctx.services.gameClient->sendBlockAction(action);
             } else {
                 ++runtime.heldItemSwingSequence;

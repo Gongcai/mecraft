@@ -1060,6 +1060,7 @@ int main() {
         PropIndices::MODE == PropIndices::INVALID ||
         PropIndices::MODE_COMPARE == PropIndices::INVALID ||
         PropIndices::MODE_SUBTRACT == PropIndices::INVALID ||
+        PropIndices::FACING_CEILING == PropIndices::INVALID ||
         PropIndices::FACING_UP == PropIndices::INVALID ||
         PropIndices::FACING_DOWN == PropIndices::INVALID) {
         return fail("redstone support properties should be registered from blocks.json");
@@ -1381,17 +1382,18 @@ int main() {
     const BlockDef& redstoneWireDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     if (redstoneWireDef.renderShapeName != "redstone_wire" ||
         redstoneWireDef.renderShapeTag != MeshBuilderRegistry::REDSTONE_WIRE_TAG ||
-        redstoneWireDef.placementStrategy != "face_plane_floor" ||
+        redstoneWireDef.placementStrategy != "redstone_wire_face" ||
         redstoneWireDef.supportRule != "attached_face" ||
         redstoneWireDef.redstoneWireChannel != "minecraft:red" ||
         redstoneWireDef.redstoneWireChannelId == 0 ||
         redstoneWireDef.redstoneWireTint != 0) {
-        return fail("redstone_wire should use the custom wire render shape and floor support path");
+        return fail("redstone_wire should use the custom wire render shape and multi-face support path");
     }
     const BlockDef& blueRedstoneWireDef =
         BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire"));
     if (blueRedstoneWireDef.renderShapeName != "redstone_wire" ||
         blueRedstoneWireDef.renderShapeTag != MeshBuilderRegistry::REDSTONE_WIRE_TAG ||
+        blueRedstoneWireDef.placementStrategy != "redstone_wire_face" ||
         blueRedstoneWireDef.redstoneBehavior != "wire" ||
         blueRedstoneWireDef.redstoneWireChannel != "minecraft:blue" ||
         blueRedstoneWireDef.redstoneWireChannelId == 0 ||
@@ -1423,6 +1425,41 @@ int main() {
     if (redstoneWireEast == redstoneWireDefault ||
         BlockStateRegistry::getPropertyIndex(redstoneWireEast, PropIndices::EAST) != PropIndices::EAST_SIDE) {
         return fail("redstone_wire should expose directional visual connection states");
+    }
+    const StateID redstoneWireCeiling = BlockStateRegistry::withProperty(
+        redstoneWireDefault,
+        PropIndices::FACING,
+        PropIndices::FACING_CEILING);
+    const StateID redstoneWireNorthWall = BlockStateRegistry::withProperty(
+        redstoneWireDefault,
+        PropIndices::FACING,
+        PropIndices::FACING_NORTH);
+    if (redstoneWireCeiling == redstoneWireDefault ||
+        redstoneWireNorthWall == redstoneWireDefault ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireCeiling, PropIndices::FACING) != PropIndices::FACING_CEILING ||
+        BlockStateRegistry::getPropertyIndex(redstoneWireNorthWall, PropIndices::FACING) != PropIndices::FACING_NORTH) {
+        return fail("redstone_wire should expose ceiling and wall facing states");
+    }
+    PlacementStrategyFn redstoneWireStrategy = PlacementStrategyRegistry::getStrategy(redstoneWireDef.placementStrategy);
+    if (redstoneWireStrategy == nullptr) {
+        return fail("redstone_wire face placement strategy should be registered");
+    }
+    PlacementContext wirePlacement;
+    wirePlacement.blockId = BlockRegistry::requireIdByName("minecraft:redstone_wire");
+    wirePlacement.hitNormal = glm::ivec3(0, 1, 0);
+    if (BlockStateRegistry::getPropertyIndex(redstoneWireStrategy(wirePlacement), PropIndices::FACING) !=
+        PropIndices::FACING_FLOOR) {
+        return fail("redstone_wire placement should use floor facing for top-face hits");
+    }
+    wirePlacement.hitNormal = glm::ivec3(0, -1, 0);
+    if (BlockStateRegistry::getPropertyIndex(redstoneWireStrategy(wirePlacement), PropIndices::FACING) !=
+        PropIndices::FACING_CEILING) {
+        return fail("redstone_wire placement should use ceiling facing for bottom-face hits");
+    }
+    wirePlacement.hitNormal = glm::ivec3(0, 0, -1);
+    if (BlockStateRegistry::getPropertyIndex(redstoneWireStrategy(wirePlacement), PropIndices::FACING) !=
+        PropIndices::FACING_NORTH) {
+        return fail("redstone_wire placement should derive wall facing from side hits");
     }
 
     const BlockDef& redstoneTorchDef = BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_torch"));

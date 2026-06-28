@@ -114,7 +114,7 @@ public:
                     }
                 }
             }
-            encodeRleU16(buf, blocks.data(), blocks.size());
+            encodeRleRuntimeId(buf, blocks.data(), blocks.size());
             encodeRleU8(buf, lights.data(), lights.size());
         }
         return buf;
@@ -197,7 +197,7 @@ public:
         pushFloat(buf, msg.playerPosition.x);
         pushFloat(buf, msg.playerPosition.y);
         pushFloat(buf, msg.playerPosition.z);
-        pushU16(buf, msg.blockState);
+        pushU32(buf, msg.blockState);
         return buf;
     }
 
@@ -256,7 +256,7 @@ public:
             pushI32(buf, u.x);
             pushI32(buf, u.y);
             pushI32(buf, u.z);
-            pushU16(buf, u.stateId);
+            pushU32(buf, u.stateId);
             pushU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
             buf.insert(buf.end(), u.packedLightPatch.begin(), u.packedLightPatch.end());
         }
@@ -422,7 +422,7 @@ public:
 
     static bool decodeChunkData(const uint8_t* data, size_t size, ChunkDataMessage& out) {
         constexpr size_t kHeaderBytes = 13;
-        constexpr size_t kBlockBytes = Chunk::BLOCK_COUNT * sizeof(uint16_t);
+        constexpr size_t kBlockBytes = Chunk::BLOCK_COUNT * sizeof(uint32_t);
         constexpr size_t kLightBytes = Chunk::BLOCK_COUNT;
         if (size < kHeaderBytes) return false;
 
@@ -459,7 +459,7 @@ public:
 
                     std::array<BlockID, SubChunk::BLOCK_COUNT> blocks{};
                     std::array<uint8_t, SubChunk::BLOCK_COUNT> lights{};
-                    if (!decodeRleU16(data, size, offset, blocks.data(), blocks.size()) ||
+                    if (!decodeRleRuntimeId(data, size, offset, blocks.data(), blocks.size()) ||
                         !decodeRleU8(data, size, offset, lights.data(), lights.size())) {
                         return false;
                     }
@@ -505,7 +505,7 @@ public:
         for (int y = 0; y < Chunk::SIZE_Y; ++y) {
             for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                 for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                    chunk->setBlockFast(x, y, z, readU16(data, offset));
+                    chunk->setBlockFast(x, y, z, readU32(data, offset));
                 }
             }
         }
@@ -617,7 +617,7 @@ public:
     }
 
     static bool decodeClientBlockAction(const uint8_t* data, size_t size, ClientBlockAction& out) {
-        if (size < 51) return false;
+        if (size < 57) return false;
         size_t offset = 0;
         out.sequence = readU32(data, offset);
         out.action = static_cast<ClientBlockActionType>(readU8(data, offset));
@@ -633,7 +633,7 @@ public:
         out.playerPosition.x = readFloat(data, offset);
         out.playerPosition.y = readFloat(data, offset);
         out.playerPosition.z = readFloat(data, offset);
-        out.blockState = readU16(data, offset);
+        out.blockState = readU32(data, offset);
         return true;
     }
 
@@ -695,23 +695,19 @@ public:
         if (size < 4) return false;
         size_t offset = 0;
         const uint32_t count = readU32(data, offset);
-        const bool hasLightPatches = size > 4 + static_cast<size_t>(count) * 14;
         out.updates.resize(count);
         for (uint32_t i = 0; i < count; ++i) {
-            if (offset + 14 > size) return false;
+            if (offset + 20 > size) return false;
             out.updates[i].x = readI32(data, offset);
             out.updates[i].y = readI32(data, offset);
             out.updates[i].z = readI32(data, offset);
-            out.updates[i].stateId = readU16(data, offset);
-            if (hasLightPatches) {
-                if (offset + 4 > size) return false;
-                const uint32_t lightCount = readU32(data, offset);
-                if (offset + lightCount > size) return false;
-                out.updates[i].packedLightPatch.assign(data + offset, data + offset + lightCount);
-                offset += lightCount;
-            }
+            out.updates[i].stateId = readU32(data, offset);
+            const uint32_t lightCount = readU32(data, offset);
+            if (offset + lightCount > size) return false;
+            out.updates[i].packedLightPatch.assign(data + offset, data + offset + lightCount);
+            offset += lightCount;
         }
-        return true;
+        return offset == size;
     }
 
     static bool decodeChunkUnload(const uint8_t* data, size_t size, ChunkUnloadMessage& out) {
@@ -918,16 +914,16 @@ private:
         return static_cast<uint8_t>((y >= chunk.getHeightMap(x, z) ? 15 : 0) << 4);
     }
 
-    static void encodeRleU16(std::vector<uint8_t>& buf, const uint16_t* values, const size_t count) {
+    static void encodeRleRuntimeId(std::vector<uint8_t>& buf, const RuntimeId* values, const size_t count) {
         size_t i = 0;
         while (i < count) {
-            const uint16_t value = values[i];
+            const RuntimeId value = values[i];
             uint16_t run = 1;
             while (i + run < count && run < 0xFFFFu && values[i + run] == value) {
                 ++run;
             }
             pushU16(buf, run);
-            pushU16(buf, value);
+            pushU32(buf, value);
             i += run;
         }
         pushU16(buf, 0);
@@ -948,15 +944,15 @@ private:
         pushU16(buf, 0);
     }
 
-    static bool decodeRleU16(const uint8_t* data, const size_t size, size_t& offset, uint16_t* out, const size_t count) {
+    static bool decodeRleRuntimeId(const uint8_t* data, const size_t size, size_t& offset, RuntimeId* out, const size_t count) {
         size_t written = 0;
         while (offset + 2 <= size) {
             const uint16_t run = readU16(data, offset);
             if (run == 0) {
                 return written == count;
             }
-            if (offset + 2 > size || written + run > count) return false;
-            const uint16_t value = readU16(data, offset);
+            if (offset + 4 > size || written + run > count) return false;
+            const RuntimeId value = readU32(data, offset);
             for (uint16_t i = 0; i < run; ++i) {
                 out[written++] = value;
             }

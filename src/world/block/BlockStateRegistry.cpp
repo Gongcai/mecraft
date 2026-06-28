@@ -300,6 +300,13 @@ bool stateMatchesModelVariantProperties(const StateID stateId,
     }
     return true;
 }
+
+uint32_t checkedRegistryOffset(const size_t value, const char* fieldName) {
+    if (value > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error(std::string("Block state registry ") + fieldName + " exceeds uint32_t capacity");
+    }
+    return static_cast<uint32_t>(value);
+}
 }
 
 uint16_t BlockStateRegistry::internPropertyName(const std::string& name) {
@@ -413,7 +420,7 @@ void BlockStateRegistry::explodeAllStates() {
     s_stateTextures.reserve(blockCount);
 
     for (BlockID blockId = 0; blockId < blockCount; ++blockId) {
-        const uint16_t textureOffset = static_cast<uint16_t>(s_stateTextures.size());
+        const uint32_t textureOffset = checkedRegistryOffset(s_stateTextures.size(), "texture offset");
         s_stateTextures.push_back(makeTexturesForBlock(blockId));
         s_states[blockId] = BlockStateEntry{
             blockId,
@@ -442,7 +449,7 @@ void BlockStateRegistry::explodeAllStates() {
         layout.valueCounts.assign(s_propertyNamePool.size(), 0);
         layout.valueOrdinals.resize(registered.propertyNameIndices.size());
 
-        uint16_t runningStride = 1;
+        uint32_t runningStride = 1;
         for (int propertyIndex = static_cast<int>(registered.propertyNameIndices.size()) - 1;
              propertyIndex >= 0;
              --propertyIndex) {
@@ -460,18 +467,25 @@ void BlockStateRegistry::explodeAllStates() {
                     layout.valueOrdinals[propertyIndex][valueIndex] = ordinal;
                 }
             }
-            runningStride = static_cast<uint16_t>(runningStride * values.size());
+            const uint64_t nextStride = static_cast<uint64_t>(runningStride) * values.size();
+            if (nextStride > std::numeric_limits<uint32_t>::max()) {
+                throw std::runtime_error("Block property stride exceeds uint32_t capacity");
+            }
+            runningStride = static_cast<uint32_t>(nextStride);
         }
 
         std::vector<PropertyKey> props(registered.propertyNameIndices.size());
         std::function<void(size_t, bool)> buildStates = [&](const size_t propertyIndex, const bool isDefaultPath) {
             if (propertyIndex == registered.propertyNameIndices.size()) {
-                const uint16_t propertiesOffset = static_cast<uint16_t>(s_statePropertiesPool.size());
+                const uint32_t propertiesOffset = checkedRegistryOffset(s_statePropertiesPool.size(), "property offset");
                 s_statePropertiesPool.insert(s_statePropertiesPool.end(), props.begin(), props.end());
 
-                const uint16_t textureOffset = static_cast<uint16_t>(s_stateTextures.size());
+                const uint32_t textureOffset = checkedRegistryOffset(s_stateTextures.size(), "texture offset");
                 s_stateTextures.push_back(makeTexturesForState(blockId, props));
 
+                if (nextStateId == std::numeric_limits<StateID>::max()) {
+                    throw std::runtime_error("Block state registry exceeds usable uint32_t state id capacity");
+                }
                 const StateID stateId = nextStateId++;
                 s_states.push_back(BlockStateEntry{
                     stateId,
@@ -603,14 +617,14 @@ StateID BlockStateRegistry::withProperty(const StateID currentState,
         return currentState;
     }
 
-    const int delta = static_cast<int>(newOrdinal) - static_cast<int>(currentOrdinal);
+    const int64_t delta = static_cast<int64_t>(newOrdinal) - static_cast<int64_t>(currentOrdinal);
     if (delta == 0) {
         return currentState;
     }
 
-    const int nextState = static_cast<int>(currentState) +
-                          delta * static_cast<int>(layout.propertyStride[propKey]);
-    if (nextState < 0 || nextState >= static_cast<int>(s_states.size())) {
+    const int64_t nextState = static_cast<int64_t>(currentState) +
+                              delta * static_cast<int64_t>(layout.propertyStride[propKey]);
+    if (nextState < 0 || static_cast<size_t>(nextState) >= s_states.size()) {
         return currentState;
     }
     return static_cast<StateID>(nextState);

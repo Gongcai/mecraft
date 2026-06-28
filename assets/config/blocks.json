@@ -1025,12 +1025,12 @@
       "redstoneWireTint": 0,
       "isRedstoneConductor": false,
       "properties": {
-        "facing": ["floor"],
+        "facing": ["floor", "ceiling", "north", "south", "east", "west"],
         "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
-        "north": ["none", "side", "up"],
-        "south": ["none", "side", "up"],
-        "east": ["none", "side", "up"],
-        "west": ["none", "side", "up"]
+        "north": ["none", "side", "up", "down"],
+        "south": ["none", "side", "up", "down"],
+        "east": ["none", "side", "up", "down"],
+        "west": ["none", "side", "up", "down"]
       },
       "defaultState": {
         "facing": "floor",
@@ -1044,7 +1044,7 @@
       "isTransparent": true,
       "renderLayer": "cutout",
       "allowsFluidCoexistence": true,
-      "placementStrategy": "face_plane_floor",
+      "placementStrategy": "redstone_wire_face",
       "supportRule": "attached_face",
       "renderShape": "redstone_wire",
       "timeToBreak": 0,
@@ -1064,12 +1064,12 @@
       "redstoneWireTint": 1,
       "isRedstoneConductor": false,
       "properties": {
-        "facing": ["floor"],
+        "facing": ["floor", "ceiling", "north", "south", "east", "west"],
         "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
-        "north": ["none", "side", "up"],
-        "south": ["none", "side", "up"],
-        "east": ["none", "side", "up"],
-        "west": ["none", "side", "up"]
+        "north": ["none", "side", "up", "down"],
+        "south": ["none", "side", "up", "down"],
+        "east": ["none", "side", "up", "down"],
+        "west": ["none", "side", "up", "down"]
       },
       "defaultState": {
         "facing": "floor",
@@ -1083,7 +1083,7 @@
       "isTransparent": true,
       "renderLayer": "cutout",
       "allowsFluidCoexistence": true,
-      "placementStrategy": "face_plane_floor",
+      "placementStrategy": "redstone_wire_face",
       "supportRule": "attached_face",
       "renderShape": "redstone_wire",
       "timeToBreak": 0,

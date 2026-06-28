@@ -1,4 +1,5 @@
 #include "ClientWorld.h"
+#include "../net/Protocol.h"
 #include "../world/block/Block.h"
 #include "../world/fluid/FluidState.h"
 #include <cstddef>
@@ -6,7 +7,7 @@
 
 namespace client {
 namespace {
-constexpr BlockID kLightOnlyBlockUpdate = 0xFFFFu;
+constexpr StateID kLightOnlyBlockUpdate = net::LIGHT_ONLY_BLOCK_UPDATE_STATE_ID;
 
 void markRenderableBorderDirty(Chunk& chunk) {
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
@@ -83,7 +84,6 @@ uint8_t ClientWorld::getPackedLight(int x, int y, int z) const {
 }
 
 StateID ClientWorld::getBlockState(int x, int y, int z) const {
-    // BlockID and StateID are both uint16_t; getBlock serves as getBlockState.
     return static_cast<StateID>(getBlock(x, y, z));
 }
 

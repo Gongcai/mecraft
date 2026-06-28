@@ -4,6 +4,7 @@
 #include "BlockCollision.h"
 #include "DoorBlock.h"
 #include "PropIndices.h"
+#include "../redstone/WireFaceGeometry.h"
 
 #include <algorithm>
 #include <cmath>
@@ -67,6 +68,18 @@ void requireFloorFacePlanePlacementProperties() {
     if (PropIndices::FACING == PropIndices::INVALID ||
         PropIndices::FACING_FLOOR == PropIndices::INVALID) {
         throw std::runtime_error("Floor face plane placement requires facing=floor properties");
+    }
+}
+
+void requireRedstoneWireFacePlacementProperties() {
+    if (PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::FACING_FLOOR == PropIndices::INVALID ||
+        PropIndices::FACING_CEILING == PropIndices::INVALID ||
+        PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
+        PropIndices::FACING_EAST == PropIndices::INVALID ||
+        PropIndices::FACING_WEST == PropIndices::INVALID) {
+        throw std::runtime_error("Redstone wire placement requires floor, ceiling, and wall facing values");
     }
 }
 
@@ -444,6 +457,24 @@ StateID strategyFacePlaneFloor(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_FLOOR);
 }
 
+StateID strategyRedstoneWireFace(const PlacementContext& ctx) {
+    requireRedstoneWireFacePlacementProperties();
+
+    uint16_t facing = PropIndices::FACING_FLOOR;
+    if (ctx.hitNormal.y > 0) {
+        facing = PropIndices::FACING_FLOOR;
+    } else if (ctx.hitNormal.y < 0) {
+        facing = PropIndices::FACING_CEILING;
+    } else {
+        facing = facePlaneFacingFromWallNormal(ctx.hitNormal);
+    }
+
+    if (!WireFaceGeometry::isWireFacing(facing)) {
+        throw std::runtime_error("Redstone wire placement produced an unsupported facing value");
+    }
+    return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, facing);
+}
+
 } // namespace
 
 bool tryMergePlacementStates(const StateID existingState,
@@ -515,4 +546,5 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("wall", strategyWall);
     registerStrategy("face_plane_wall", strategyFacePlaneWall);
     registerStrategy("face_plane_floor", strategyFacePlaneFloor);
+    registerStrategy("redstone_wire_face", strategyRedstoneWireFace);
 }
