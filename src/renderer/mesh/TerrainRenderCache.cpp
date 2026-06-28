@@ -160,6 +160,12 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
         return;
     }
 
+    const uint64_t renderStateRevision = column.chunk->getRenderStateRevision();
+    if (column.stateValid && column.chunkRenderStateRevision == renderStateRevision) {
+        column.validatedFrameSerial = m_frameSerial;
+        return;
+    }
+
     column.chunk->ensureColumnMeshBuilt();
 
     bool needsRefresh = !column.stateValid;
@@ -177,6 +183,7 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
     }
 
     if (!needsRefresh) {
+        column.chunkRenderStateRevision = renderStateRevision;
         column.validatedFrameSerial = m_frameSerial;
         return;
     }
@@ -250,6 +257,7 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
     column.columnBoundsMin = columnHasBounds ? columnMin : glm::vec3(0.0f);
     column.columnBoundsMax = columnHasBounds ? columnMax : glm::vec3(0.0f);
     column.stateValid = true;
+    column.chunkRenderStateRevision = renderStateRevision;
     column.validatedFrameSerial = m_frameSerial;
 }
 

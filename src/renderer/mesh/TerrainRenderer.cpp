@@ -11,7 +11,42 @@
 #include <algorithm>
 #include <glad/glad.h>
 #include <glm/gtc/type_ptr.hpp>
-#include <cfloat>
+#include <cmath>
+
+namespace {
+
+bool isCascadeAabbVisible(const glm::vec3& boundsMin,
+                          const glm::vec3& boundsMax,
+                          const CascadeAabbCuller& culler) {
+    const glm::vec3 center = (boundsMin + boundsMax) * 0.5f;
+    const glm::vec3 extents = (boundsMax - boundsMin) * 0.5f;
+    const glm::mat4& m = culler.viewProj;
+
+    const glm::vec4 clipCenter = m * glm::vec4(center, 1.0f);
+    const float invW = 1.0f / clipCenter.w;
+
+    // Orthographic shadow cascades are affine, so projecting center/extents gives the exact AABB in clip space.
+    const glm::vec3 clipExtents(
+        std::abs(m[0][0]) * extents.x + std::abs(m[1][0]) * extents.y + std::abs(m[2][0]) * extents.z,
+        std::abs(m[0][1]) * extents.x + std::abs(m[1][1]) * extents.y + std::abs(m[2][1]) * extents.z,
+        std::abs(m[0][2]) * extents.x + std::abs(m[1][2]) * extents.y + std::abs(m[2][2]) * extents.z);
+
+    const glm::vec3 ndcCenter(clipCenter.x * invW, clipCenter.y * invW, clipCenter.z * invW);
+    const glm::vec3 ndcExtents = clipExtents * std::abs(invW);
+    const glm::vec3 minNdc = ndcCenter - ndcExtents;
+    const glm::vec3 maxNdc = ndcCenter + ndcExtents;
+
+    const float xyPad = culler.xyPaddingNdc;
+    const float zPad = culler.zPaddingNdc;
+    bool visible = !(maxNdc.x < -1.0f - xyPad || minNdc.x > 1.0f + xyPad ||
+                     maxNdc.y < -1.0f - xyPad || minNdc.y > 1.0f + xyPad);
+    if (visible && culler.useZCulling) {
+        visible = !(maxNdc.z < -1.0f - zPad || minNdc.z > 1.0f + zPad);
+    }
+    return visible;
+}
+
+} // namespace
 
 void TerrainRenderer::init(ResourceMgr& /*resourceMgr*/) {
     // No owned resources to initialize; dependencies are injected via setters.
@@ -680,33 +715,9 @@ void TerrainRenderer::collectShadowChunks(
         return dx * dx + dz * dz <= maxCameraDistanceSq;
     };
 
-    auto isAabbVisibleInCascade = [](const glm::vec3& boundsMin, const glm::vec3& boundsMax, const CascadeAabbCuller& culler) {
-        glm::vec3 minNdc(FLT_MAX);
-        glm::vec3 maxNdc(-FLT_MAX);
-        for (int corner = 0; corner < 8; ++corner) {
-            const glm::vec3 p(
-                (corner & 1) != 0 ? boundsMax.x : boundsMin.x,
-                (corner & 2) != 0 ? boundsMax.y : boundsMin.y,
-                (corner & 4) != 0 ? boundsMax.z : boundsMin.z);
-            const glm::vec4 clip = culler.viewProj * glm::vec4(p, 1.0f);
-            const float invW = std::abs(clip.w) > 1.0e-6f ? 1.0f / clip.w : 1.0f;
-            const glm::vec3 ndc(clip.x * invW, clip.y * invW, clip.z * invW);
-            minNdc = glm::min(minNdc, ndc);
-            maxNdc = glm::max(maxNdc, ndc);
-        }
-
-        const float xyPad = culler.xyPaddingNdc;
-        const float zPad = culler.zPaddingNdc;
-        bool visible = !(maxNdc.x < -1.0f - xyPad || minNdc.x > 1.0f + xyPad ||
-                         maxNdc.y < -1.0f - xyPad || minNdc.y > 1.0f + xyPad);
-        if (visible && culler.useZCulling) {
-            visible = !(maxNdc.z < -1.0f - zPad || minNdc.z > 1.0f + zPad);
-        }
-        return visible;
-    };
     auto isAabbVisibleInAnyCascade = [&](const glm::vec3& boundsMin, const glm::vec3& boundsMax) {
         for (const CascadeAabbCuller& culler : cascadeCullers) {
-            if (isAabbVisibleInCascade(boundsMin, boundsMax, culler)) {
+            if (isCascadeAabbVisible(boundsMin, boundsMax, culler)) {
                 return true;
             }
         }
@@ -801,7 +812,7 @@ void TerrainRenderer::collectShadowChunks(
 
                     // Test and bin to cascades
                     for (int c = 0; c < 4; ++c) {
-                        if (isAabbVisibleInCascade(boundsMin, boundsMax, cascadeCullers[c])) {
+                        if (isCascadeAabbVisible(boundsMin, boundsMax, cascadeCullers[c])) {
                             cascadeCullers[c].visibleCount++;
                             if (mesh.opaqueRange.vertexCount > 0) {
                                 outOpaqueRanges[c].push_back(mesh.opaqueRange);
@@ -837,7 +848,7 @@ void TerrainRenderer::collectShadowChunks(
                 if (column.aggregatedPresent) {
                     if (isAabbVisibleInAnyCascade(column.aggregatedBoundsMin, column.aggregatedBoundsMax)) {
                         for (int c = 0; c < 4; ++c) {
-                            if (isAabbVisibleInCascade(column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers[c])) {
+                            if (isCascadeAabbVisible(column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers[c])) {
                                 cascadeCullers[c].visibleCount++;
                                 const SubChunkMesh& mesh = column.chunk->getColumnMesh();
                                 if (column.aggregatedHasOpaque && mesh.vertexCount > 0) {
@@ -859,7 +870,7 @@ void TerrainRenderer::collectShadowChunks(
 
                     if (isAabbVisibleInAnyCascade(transparent.boundsMin, transparent.boundsMax)) {
                         for (int c = 0; c < 4; ++c) {
-                            if (isAabbVisibleInCascade(transparent.boundsMin, transparent.boundsMax, cascadeCullers[c])) {
+                            if (isCascadeAabbVisible(transparent.boundsMin, transparent.boundsMax, cascadeCullers[c])) {
                                 cascadeCullers[c].visibleCount++;
                                 outTransparentEntries[c].push_back({column.chunk, scy, false});
                             } else {

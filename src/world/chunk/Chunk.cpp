@@ -569,6 +569,7 @@ SubChunkMesh& Chunk::getSubChunkMesh(const int scy) {
 void Chunk::setSubChunkMesh(const int scy, const SubChunkMesh& mesh) {
     SubChunk* sc = getOrCreateSubChunk(scy);
     sc->setMesh(mesh);
+    ++m_renderStateRevision;
     m_dirtySubChunkMask &= ~(1u << scy);
     m_dirty = m_dirtySubChunkMask != 0u;
 }
@@ -756,6 +757,7 @@ void Chunk::markSubChunkDirty(const int scy) {
     }
 
     sc->markDirty();
+    ++m_renderStateRevision;
     if ((m_dirtySubChunkMask & (1u << scy)) != 0u) {
         return;
     }

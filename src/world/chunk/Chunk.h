@@ -49,6 +49,7 @@ public:
     }
     void markSubChunkDirty(int scy);
     [[nodiscard]] uint64_t getSubChunkMeshRevision(int scy) const;
+    [[nodiscard]] uint64_t getRenderStateRevision() const { return m_renderStateRevision; }
     void markMeshClean();  // Clears all sub-chunk dirty flags
 
     // --- Per sub-chunk mesh access ---
@@ -143,6 +144,7 @@ private:
     bool m_dirty = true;
     uint32_t m_dirtySubChunkMask = 0;
     bool m_columnMeshDirty = false;
+    uint64_t m_renderStateRevision = 1;
     uint64_t m_lightRevision = 1;
     bool m_lightQueued = false;
     bool m_lightInFlight = false;

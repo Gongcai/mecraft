@@ -60,6 +60,7 @@ struct ChunkRenderColumnCache {
     bool columnHasBounds = false;
     glm::vec3 columnBoundsMin = glm::vec3(0.0f);
     glm::vec3 columnBoundsMax = glm::vec3(0.0f);
+    uint64_t chunkRenderStateRevision = 0;
     std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshRevisions{};
     std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshFingerprints{};
     std::array<int, Chunk::NUM_SUB_CHUNKS> transparentScys{};
