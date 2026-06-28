@@ -3,55 +3,74 @@
 in vec2 vTexCoord;
 out vec4 FragColor;
 
-uniform sampler2D uSceneTex;
-uniform sampler2D uBloomTex;
-uniform sampler2D uBloomMip0;
-uniform sampler2D uBloomMip1;
-uniform sampler2D uBloomMip2;
-uniform sampler2D uBloomMip3;
-uniform sampler2D uBloomMip4;
-uniform sampler2D uBloomMip5;
-uniform sampler2D uBloomMip6;
-uniform sampler2D uNoiseTex;
+layout(binding = 0) uniform sampler2D uSceneTex;
+layout(binding = 1) uniform sampler2D uBloomTex;
+layout(binding = 1) uniform sampler2D uBloomMip0;
+layout(binding = 2) uniform sampler2D uBloomMip1;
+layout(binding = 3) uniform sampler2D uBloomMip2;
+layout(binding = 4) uniform sampler2D uBloomMip3;
+layout(binding = 5) uniform sampler2D uBloomMip4;
+layout(binding = 6) uniform sampler2D uBloomMip5;
+layout(binding = 7) uniform sampler2D uBloomMip6;
+layout(binding = 8) uniform sampler2D uNoiseTex;
 
-uniform bool uBloomEnabled;
-uniform int uBloomMipCount;
-uniform float uBloomStrength;
-uniform float uExposure;
-uniform bool uSunRaysEnabled;
-uniform vec2 uSunScreenPos;
-uniform float uSunVisibility;
-uniform float uSunRayStrength;
-uniform bool uShaderpackGradingEnabled;
-uniform int uTonemapMode;
-uniform float uColorTemperature;
-uniform float uVibrance;
-uniform float uSplitToneStrength;
-uniform float uVignetteStrength;
-uniform float uNoiseDitherStrength;
-uniform float uSharpenStrength;
-uniform bool uUnderwaterEnabled;
-uniform vec3 uUnderwaterTint;
-uniform float uUnderwaterStrength;
-uniform float uScreenRollRadians;
-uniform float uGamma;
-uniform float uSaturation;
-uniform float uContrast;
-uniform bool uPurkinjeShiftEnabled;
-uniform bool uBloomyFogEnabled;
-uniform float uWeatherWetness;
-uniform float uWeatherStorm;
-uniform float uSnowStrength;
-uniform float uSkyWetness;
-uniform float uFogWetness;
-uniform float uCloudWetness;
-uniform float uCameraRainVisibility; // 0=indoors, 1=outdoors (from 5-ray check)
-uniform float uWeatherExposureBias;  // EV offset on auto exposure during precipitation
-uniform float uWeatherPostRainFog;   // [0,2] multiplier on post-process rain/snow fog
-uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
-uniform sampler2D uSceneDepthTex;   // Final scene depth, including forward first-person items
-uniform int uPostprocessDebugMode; // 0=off, 1=bloomData, 2=fogTransmittance, 3=bloomyFog, 4=rainMask
-uniform float uTime; // Game time in seconds for animated effects (screen raindrops)
+layout(binding = 10) uniform sampler2D uExposureStateTex;
+layout(binding = 9) uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
+layout(binding = 11) uniform sampler2D uSceneDepthTex;  // Final scene depth, including forward first-person items
+
+layout(std140, binding = 0) uniform PostProcessParams {
+    ivec4 uPostFlags0;
+    ivec4 uPostModes0;
+    ivec4 uPostFlags1;
+    vec4 uPostBloomExposure;
+    vec4 uPostSunParams;
+    vec4 uPostColorParams0;
+    vec4 uPostColorParams1;
+    vec4 uPostUnderwaterParams;
+    vec4 uPostWeatherParams0;
+    vec4 uPostWeatherParams1;
+    vec4 uPostWeatherParams2;
+};
+
+#define uBloomEnabled (uPostFlags0.x != 0)
+#define uAutoExposureEnabled (uPostFlags0.y != 0)
+#define uSunRaysEnabled (uPostFlags0.z != 0)
+#define uShaderpackGradingEnabled (uPostFlags0.w != 0)
+#define uBloomMipCount uPostModes0.x
+#define uTonemapMode uPostModes0.y
+#define uPostprocessDebugMode uPostModes0.z
+#define uUnderwaterEnabled (uPostFlags1.x != 0)
+#define uPurkinjeShiftEnabled (uPostFlags1.y != 0)
+#define uBloomyFogEnabled (uPostFlags1.z != 0)
+#define uBloomStrength uPostBloomExposure.x
+#define uExposure uPostBloomExposure.y
+#define uGamma uPostBloomExposure.z
+#define uScreenRollRadians uPostBloomExposure.w
+#define uSunScreenPos uPostSunParams.xy
+#define uSunVisibility uPostSunParams.z
+#define uSunRayStrength uPostSunParams.w
+#define uColorTemperature uPostColorParams0.x
+#define uVibrance uPostColorParams0.y
+#define uSplitToneStrength uPostColorParams0.z
+#define uVignetteStrength uPostColorParams0.w
+#define uNoiseDitherStrength uPostColorParams1.x
+#define uSharpenStrength uPostColorParams1.y
+#define uSaturation uPostColorParams1.z
+#define uContrast uPostColorParams1.w
+#define uUnderwaterTint uPostUnderwaterParams.xyz
+#define uUnderwaterStrength uPostUnderwaterParams.w
+#define uWeatherWetness uPostWeatherParams0.x
+#define uWeatherStorm uPostWeatherParams0.y
+#define uSnowStrength uPostWeatherParams0.z
+#define uSkyWetness uPostWeatherParams0.w
+#define uFogWetness uPostWeatherParams1.x
+#define uCloudWetness uPostWeatherParams1.y
+#define uCameraRainVisibility uPostWeatherParams1.z
+#define uWeatherExposureBias uPostWeatherParams1.w
+#define uWeatherPostRainFog uPostWeatherParams2.x
+#define uTime uPostWeatherParams2.y
+
+float g_resolvedExposure = 1.0;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -772,9 +791,16 @@ vec3 applyVignette(vec3 color, vec2 uv) {
     return color * clamp(fade, 0.5, 1.0);
 }
 
+float readResolvedExposure() {
+    if (uAutoExposureEnabled) {
+        return texelFetch(uExposureStateTex, ivec2(0, 0), 0).r;
+    }
+    return uExposure;
+}
+
 vec3 applyExposure(vec3 color) {
     float evBias = pow(2.0, uWeatherExposureBias);
-    return color * max(uExposure * evBias, 0.001);
+    return color * max(g_resolvedExposure * evBias, 0.001);
 }
 
 // DerivativeMain Grade.glsl: tonemap is a pure LDR mapping.
@@ -1089,7 +1115,7 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
         g_debugBloomData = bloomData;
         g_debugFogBloom = fogBloom;
         // DerivativeMain Grade.glsl line 144: exposure compensation
-        float bloomAmount = (uBloomStrength * 0.15) / (max(uExposure, 1.0) * 0.7 + 0.3);
+        float bloomAmount = (uBloomStrength * 0.15) / (max(g_resolvedExposure, 1.0) * 0.7 + 0.3);
 
         // DerivativeMain Grade.glsl line 136-139: Bloomy Fog
         g_debugColorBeforeBloomyFog = color;
@@ -1111,12 +1137,12 @@ vec3 resolveHdrColor(vec2 sampleUv, vec2 screenUv) {
             float rainAmt = clamp(wetness - snowAmt, 0.0, 1.0);
             // Rain fog: DerivativeMain formula
             float rainBlend = rain * rainAmt * fogScale;
-            float rainFogAmount = clamp(uExposure, 0.6, 2.0) * 0.15 + 0.3;
+            float rainFogAmount = clamp(g_resolvedExposure, 0.6, 2.0) * 0.15 + 0.3;
             color = color * (1.0 - rainBlend) + fogBloom * rainFogAmount * rainBlend;
             // Snow fog: whiter, higher density
             float snowBlend = rain * snowAmt * fogScale * 1.4;
             vec3 snowFogBloom = mix(fogBloom, vec3(dot(fogBloom, vec3(0.299, 0.587, 0.114)) * 1.1), 0.4);
-            float snowFogAmount = clamp(uExposure, 0.6, 2.0) * 0.20 + 0.4;
+            float snowFogAmount = clamp(g_resolvedExposure, 0.6, 2.0) * 0.20 + 0.4;
             color = color * (1.0 - snowBlend) + snowFogBloom * snowFogAmount * snowBlend;
         }
     }
@@ -1163,6 +1189,8 @@ vec3 applyCasLikeSharpen(vec3 center, vec2 sampleUv, vec2 screenUv) {
 }
 
 void main() {
+    g_resolvedExposure = readResolvedExposure();
+
     vec2 centeredUv = vTexCoord - vec2(0.5, 0.5);
     float roll = uShaderpackGradingEnabled ? 0.0 : uScreenRollRadians;
     float c = cos(roll);

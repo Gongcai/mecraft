@@ -11,6 +11,23 @@ public:
 
     // Read the entry at the given index
     [[nodiscard]] uint32_t get(size_t index) const;
+    // Read an entry when the caller has already validated the index.
+    [[nodiscard]] uint32_t getUnchecked(size_t index) const {
+        const size_t bitIndex = index * m_bitsPerEntry;
+        const size_t wordIndex = bitIndex / BITS_PER_WORD;
+        const size_t bitOffset = bitIndex % BITS_PER_WORD;
+        const uint64_t mask = (1ULL << m_bitsPerEntry) - 1ULL;
+        const uint64_t word = m_data[wordIndex];
+
+        if (bitOffset + m_bitsPerEntry > BITS_PER_WORD) {
+            const uint64_t nextWord = m_data[wordIndex + 1];
+            const uint64_t lowBits = word >> bitOffset;
+            const uint64_t highBits = nextWord << (BITS_PER_WORD - bitOffset);
+            return static_cast<uint32_t>((lowBits | highBits) & mask);
+        }
+
+        return static_cast<uint32_t>((word >> bitOffset) & mask);
+    }
 
     // Write the entry at the given index
     void set(size_t index, uint32_t value);

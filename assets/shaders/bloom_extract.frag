@@ -9,8 +9,8 @@
 in vec2 vTexCoord;
 out vec4 FragColor;
 
-uniform sampler2D uSceneTex;
-uniform int uSourceLod;
+layout(binding = 0) uniform sampler2D uSceneTex;
+layout(location = 0) uniform int uSourceLod;
 
 vec3 DualBlurDownSample(vec2 uv, int lod) {
     const int BLUR_SAMPLES = 1;

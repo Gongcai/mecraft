@@ -5,6 +5,7 @@
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <glm/vec4.hpp>
 
 class ResourceMgr;
 class Shader;
@@ -98,6 +99,9 @@ public:
     [[nodiscard]] float getAdaptedExposure() const { return m_adaptedExposure; }
     [[nodiscard]] float getAverageLuminance() const { return m_lastAverageLum; }
     [[nodiscard]] float getTargetExposure() const { return m_lastTargetExposure; }
+    [[nodiscard]] bool isAutoExposureGpuResolved() const {
+        return m_effects.autoExposureEnabled && m_autoExposureInitialized;
+    }
     [[nodiscard]] int targetWidth() const { return m_targetWidth; }
     [[nodiscard]] int targetHeight() const { return m_targetHeight; }
 
@@ -105,17 +109,15 @@ private:
     static constexpr int kBloomMipCount = 7;
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
-    static constexpr int kExposureReadbackRing = 3;
     static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
+    static constexpr GLuint kCompositeParamsBinding = 0;
 
     bool ensureRenderTargets(int width, int height);
     void destroyRenderTargets();
-    bool ensureExposureReadbackBuffers();
-    void destroyExposureReadbackBuffers();
     void initFullscreenTriangle();
     void destroyFullscreenTriangle();
     float updateAutoExposure(float frameTime);
-    void updateExposureFromSample(float weightedLogLum, float weightSum, float frameTime);
+    void initializeExposureState(float manualExposure);
 
     /// Apply bloom extraction and blur passes.
     /// @return true if bloom was applied
@@ -123,14 +125,32 @@ private:
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
     void renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex, bool bloomReady);
+    void updateCompositeParams(bool useAutoExposureTexture, bool hasBloom);
     bool ensureCompositeTarget(int width, int height);
     void bindCompositeOutput(int width, int height);
     void bindBackbufferOutput(int width, int height);
+
+    struct alignas(16) PostProcessCompositeParams {
+        glm::ivec4 flags0;
+        glm::ivec4 modes0;
+        glm::ivec4 flags1;
+        glm::vec4 bloomExposure;
+        glm::vec4 sunParams;
+        glm::vec4 colorParams0;
+        glm::vec4 colorParams1;
+        glm::vec4 underwaterParams;
+        glm::vec4 weatherParams0;
+        glm::vec4 weatherParams1;
+        glm::vec4 weatherParams2;
+    };
+    static_assert(sizeof(PostProcessCompositeParams) == 176,
+                  "Post-process UBO layout must match the std140 shader block.");
 
     Shader* m_postProcessShader = nullptr;
     Shader* m_bloomExtractShader = nullptr;
     Shader* m_bloomBlurShader = nullptr;
     Shader* m_exposureDownsampleShader = nullptr;
+    Shader* m_exposureResolveShader = nullptr;
     Shader* m_blitShader = nullptr;
     GLuint m_noiseTexture = 0;
 
@@ -153,14 +173,14 @@ private:
     GLuint m_exposureTex[kExposureMipCount] = {};
     glm::ivec2 m_exposureMipSize[kExposureMipCount] = {};
     int m_exposureMipCount = 0;
-    GLuint m_exposureReadbackPbos[kExposureReadbackRing] = {};
-    GLsync m_exposureReadbackFences[kExposureReadbackRing] = {};
-    bool m_exposureReadbackIssued[kExposureReadbackRing] = {};
-    int m_exposureReadbackWriteIndex = 0;
+    GLuint m_exposureStateFbos[2] = {};
+    GLuint m_exposureStateTex[2] = {};
+    int m_exposureStateReadIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
     double m_autoExposureAdaptationAccumulator = 0.0;
 
     GLuint m_fullscreenVao = 0;
+    GLuint m_compositeParamsBuffer = 0;
 
     int m_targetWidth = 0;
     int m_targetHeight = 0;

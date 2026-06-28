@@ -832,17 +832,14 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         settings.postProcess.tonemapMode = tonemapMode;
         // Exposure diagnostics
         {
-            float adapted = postProcess.getAdaptedExposure();
-            float target = postProcess.getTargetExposure();
-            float avgLum = postProcess.getAverageLuminance();
-            float resolvedExposure = settings.postProcess.autoExposureEnabled ? adapted : (0.8f / std::max(settings.postProcess.exposure, 0.0001f));
+            float resolvedExposure = 0.8f / std::max(settings.postProcess.exposure, 0.0001f);
             ImGui::Separator();
             ImGui::TextColored(ImVec4(0.6f, 0.85f, 1.0f, 1.0f), "Exposure Diagnostics");
-            ImGui::Text("Resolved Exposure: %.4f", resolvedExposure);
             if (settings.postProcess.autoExposureEnabled) {
-                ImGui::Text("Adapted: %.4f  Target: %.4f", adapted, target);
-                ImGui::Text("Avg Luminance: %.3f", avgLum);
+                ImGui::Text("Auto Exposure: %s", postProcess.isAutoExposureGpuResolved() ? "GPU texture" : "initializing");
+                ImGui::TextDisabled("CPU readback diagnostics are disabled for benchmark stability.");
             } else {
+                ImGui::Text("Resolved Exposure: %.4f", resolvedExposure);
                 ImGui::Text("Manual Exposure: %.2f (1/exposure=%.4f)", settings.postProcess.exposure, resolvedExposure);
             }
             // SkyCapture metadata

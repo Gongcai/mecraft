@@ -10,9 +10,9 @@
 in vec2 vTexCoord;
 out vec4 FragColor;
 
-uniform sampler2D uImage;
-uniform vec2 uDirection;  // (1,0) for horizontal, (0,1) for vertical
-uniform float uWeight;
+layout(binding = 0) uniform sampler2D uImage;
+layout(location = 0) uniform vec2 uDirection;  // (1,0) for horizontal, (0,1) for vertical
+layout(location = 1) uniform float uWeight;
 
 const float w0 = 70.0 / 256.0;  // center
 const float w1 = 56.0 / 256.0;  // +/-1

@@ -11,6 +11,10 @@ class Palette {
 public:
     uint16_t getOrCreateIndex(RuntimeId runtimeId);
     [[nodiscard]] RuntimeId getRuntimeId(uint16_t paletteIndex) const;
+    // Read a runtime id when the caller has already validated the palette index.
+    [[nodiscard]] RuntimeId getRuntimeIdUnchecked(uint16_t paletteIndex) const {
+        return m_indexToId[paletteIndex];
+    }
     [[nodiscard]] size_t size() const;
     [[nodiscard]] uint8_t bitsPerEntry() const;
     [[nodiscard]] size_t dynamicMemoryBytes() const;

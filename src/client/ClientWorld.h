@@ -74,6 +74,7 @@ public:
 private:
     ChunkMap m_chunks;
     mutable ChunkMap m_activeChunksSnapshot;
+    mutable uint64_t m_activeChunksSnapshotRevision = 0;
     mutable std::mutex m_chunksMutex;
     uint64_t m_activeChunkRevision = 1;
     uint64_t m_blockContentRevision = 1;

@@ -76,6 +76,12 @@ private:
         int localZ = 0;
         glm::vec3 blockPosition{0.0f};
         glm::vec3 center{0.0f};
+        glm::mat4 modelMatrix{1.0f};
+    };
+
+    struct InstancedDrawData {
+        glm::mat4 modelMatrix{1.0f};
+        glm::vec2 light{1.0f, 0.0f};
     };
 
     struct SectionKey {
@@ -108,6 +114,9 @@ private:
     Shader* m_forwardShader = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
+    GLuint m_instanceVbo = 0;
+    std::size_t m_instanceCapacity = 0;
+    std::vector<InstancedDrawData> m_instanceData;
     uint64_t m_cacheSyncSerial = 0;
     uint64_t m_syncedActiveChunkRevision = 0;
     uint64_t m_syncedBlockContentRevision = 0;
@@ -120,18 +129,25 @@ private:
     static glm::mat4 buildModelMatrix(const ModelEntry& entry,
                                       BlockID stateId,
                                       const glm::vec3& blockPosition);
+    void configureInstanceAttributes(const Mesh& mesh) const;
+    void ensureInstanceCapacity(std::size_t instanceCount);
     void synchronizeInstanceCache(const IWorldView& worldView);
     void rebuildSectionCache(const Chunk& chunk,
                              const SubChunk& subChunk,
                              int scy,
                              SectionCache& cache) const;
+    void drawBlockEntitiesInstanced(const IWorldView& worldView,
+                                    bool useSplitCulling,
+                                    const glm::vec3& cameraPos,
+                                    float splitNear,
+                                    float splitFar);
 
-    template <typename UniformBinder>
     void drawBlockEntities(const IWorldView& worldView,
                            Shader& shader,
                            int modelLoc,
                            int prevModelLoc,
-                           const UniformBinder& bindUniforms,
+                           int sunlightLoc,
+                           int blockLightLoc,
                            bool useSplitCulling,
                            const glm::vec3& cameraPos,
                            float splitNear,

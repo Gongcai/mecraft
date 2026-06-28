@@ -215,6 +215,14 @@ public:
     SubChunk& operator=(SubChunk&& other) noexcept;
 
     [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
+    // Read a block when the caller has already validated local coordinates.
+    [[nodiscard]] BlockID getBlockUnchecked(int x, int y, int z) const {
+        const std::size_t index = static_cast<std::size_t>(x) +
+                                  static_cast<std::size_t>(z) * SIZE +
+                                  static_cast<std::size_t>(y) * SIZE * SIZE;
+        const uint16_t paletteIndex = static_cast<uint16_t>(m_blockData.getUnchecked(index));
+        return m_palette.getRuntimeIdUnchecked(paletteIndex);
+    }
     void setBlock(int x, int y, int z, BlockID id);
     void setBlockWithoutMeshDirty(int x, int y, int z, BlockID id);
     void setBlockFast(int x, int y, int z, BlockID id);
@@ -223,6 +231,14 @@ public:
 
     // --- Fluid layer access (for waterlogged blocks) ---
     [[nodiscard]] BlockID getFluidLayer(int x, int y, int z) const;
+    // Read a fluid layer when the caller has already validated local coordinates.
+    [[nodiscard]] BlockID getFluidLayerUnchecked(int x, int y, int z) const {
+        const std::size_t index = static_cast<std::size_t>(x) +
+                                  static_cast<std::size_t>(z) * SIZE +
+                                  static_cast<std::size_t>(y) * SIZE * SIZE;
+        const uint16_t paletteIndex = static_cast<uint16_t>(m_fluidData.getUnchecked(index));
+        return m_fluidPalette.getRuntimeIdUnchecked(paletteIndex);
+    }
     void setFluidLayer(int x, int y, int z, BlockID id);
 
     void optimizePalette();

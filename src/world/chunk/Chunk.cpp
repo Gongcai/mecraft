@@ -338,7 +338,7 @@ BlockID Chunk::getBlock(const int x, const int y, const int z) const {
         // Null sub-chunk = all air
         return 0;
     }
-    return sc->getBlock(x, toSubChunkLocalY(y), z);
+    return sc->getBlockUnchecked(x, toSubChunkLocalY(y), z);
 }
 
 BlockID Chunk::getFluidState(const int x, const int y, const int z) const {
@@ -351,11 +351,11 @@ BlockID Chunk::getFluidState(const int x, const int y, const int z) const {
         return 0;
     }
     const int localY = toSubChunkLocalY(y);
-    const BlockID fluidId = sc->getFluidLayer(x, localY, z);
+    const BlockID fluidId = sc->getFluidLayerUnchecked(x, localY, z);
     if (fluidId != 0) {
         return fluidId;
     }
-    const BlockID blockId = sc->getBlock(x, localY, z);
+    const BlockID blockId = sc->getBlockUnchecked(x, localY, z);
     if (FluidState::decode(blockId).kind != FluidKind::None) {
         return blockId;
     }
@@ -506,7 +506,7 @@ void Chunk::seedInitialLightMap() {
 
                 BlockID blockId = RUNTIME_ID_NULL;
                 if (sc) {
-                    blockId = sc->getBlock(x, toSubChunkLocalY(y), z);
+                    blockId = sc->getBlockUnchecked(x, toSubChunkLocalY(y), z);
                 }
 
                 const BlockDef& def = BlockRegistry::getFast(blockId);

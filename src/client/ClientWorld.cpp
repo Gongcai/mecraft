@@ -37,7 +37,10 @@ ClientWorld::~ClientWorld() = default;
 
 const ClientWorld::ChunkMap& ClientWorld::getActiveChunks() const {
     std::lock_guard lock(m_chunksMutex);
-    m_activeChunksSnapshot = m_chunks;
+    if (m_activeChunksSnapshotRevision != m_activeChunkRevision) {
+        m_activeChunksSnapshot = m_chunks;
+        m_activeChunksSnapshotRevision = m_activeChunkRevision;
+    }
     return m_activeChunksSnapshot;
 }
 

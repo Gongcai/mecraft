@@ -610,6 +610,7 @@ void ResourceMgr::init() {
     loadShader("bloom_extract", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/bloom_extract.frag");
     loadShader("bloom_blur", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/bloom_blur.frag");
     loadShader("exposure_downsample", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/exposure_downsample.frag");
+    loadShader("exposure_resolve", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/exposure_resolve.frag");
     loadShader("fsr1_easu", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/fsr1_easu.frag");
     loadShader("fsr1_rcas", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/fsr1_rcas.frag");
     loadShader("drop_block", SHADERS_DIR "/drop_block.vert", SHADERS_DIR "/drop_block.frag");
@@ -630,6 +631,8 @@ void ResourceMgr::init() {
     loadShader("steve_forward", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve_forward.frag");
     loadShader("entity_gbuffer", SHADERS_DIR "/entity_gbuffer.vert", SHADERS_DIR "/entity_gbuffer.frag");
     loadShader("entity_shadow", SHADERS_DIR "/entity_shadow.vert", SHADERS_DIR "/entity_shadow.frag");
+    loadShader("block_entity_gbuffer", SHADERS_DIR "/block_entity_gbuffer.vert", SHADERS_DIR "/block_entity_gbuffer.frag");
+    loadShader("block_entity_shadow", SHADERS_DIR "/block_entity_shadow.vert", SHADERS_DIR "/block_entity_shadow.frag");
     loadShader("drop_gbuffer", SHADERS_DIR "/drop_gbuffer.vert", SHADERS_DIR "/drop_gbuffer.frag");
     loadShader("item_gbuffer", SHADERS_DIR "/item_gbuffer.vert", SHADERS_DIR "/item_gbuffer.frag");
     loadShader("item_shadow", SHADERS_DIR "/item_shadow.vert", SHADERS_DIR "/item_shadow.frag");

@@ -146,9 +146,10 @@ float chestYawRadians(const StateID stateId) {
 
 void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
-    m_gbufferShader = resourceMgr.getShader("entity_gbuffer");
-    m_shadowShader = resourceMgr.getShader("entity_shadow");
+    m_gbufferShader = resourceMgr.getShader("block_entity_gbuffer");
+    m_shadowShader = resourceMgr.getShader("block_entity_shadow");
     m_forwardShader = resourceMgr.getShader("steve_forward");
+    glGenBuffers(1, &m_instanceVbo);
 
     const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
 
@@ -162,7 +163,9 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     entry.mesh = buildMesh(chest);
     entry.texture = chestTexture;
     entry.usesHorizontalFacing = chest.usesHorizontalFacing;
-    m_models.emplace(chestBlock, entry);
+    auto [it, inserted] = m_models.emplace(chestBlock, entry);
+    static_cast<void>(inserted);
+    configureInstanceAttributes(it->second.mesh);
 }
 
 void BlockEntityRenderer::shutdown() {
@@ -174,6 +177,12 @@ void BlockEntityRenderer::shutdown() {
     m_cacheSyncSerial = 0;
     m_syncedActiveChunkRevision = 0;
     m_syncedBlockContentRevision = 0;
+    if (m_instanceVbo != 0) {
+        glDeleteBuffers(1, &m_instanceVbo);
+        m_instanceVbo = 0;
+    }
+    m_instanceCapacity = 0;
+    m_instanceData.clear();
     m_hasSyncedRevisions = false;
     m_instanceCacheSyncedThisFrame = false;
     m_resourceMgr = nullptr;
@@ -247,6 +256,58 @@ void BlockEntityRenderer::destroyMesh(Mesh& mesh) {
     mesh.vertexCount = 0;
 }
 
+void BlockEntityRenderer::configureInstanceAttributes(const Mesh& mesh) const {
+    if (mesh.vao == 0 || m_instanceVbo == 0) {
+        return;
+    }
+
+    glBindVertexArray(mesh.vao);
+    glBindBuffer(GL_ARRAY_BUFFER, m_instanceVbo);
+
+    constexpr GLuint kModelLocation = 3;
+    for (GLuint column = 0; column < 4; ++column) {
+        const GLuint attrib = kModelLocation + column;
+        glEnableVertexAttribArray(attrib);
+        glVertexAttribPointer(attrib,
+                              4,
+                              GL_FLOAT,
+                              GL_FALSE,
+                              sizeof(InstancedDrawData),
+                              reinterpret_cast<void*>(offsetof(InstancedDrawData, modelMatrix) +
+                                                       sizeof(glm::vec4) * column));
+        glVertexAttribDivisor(attrib, 1);
+    }
+
+    glEnableVertexAttribArray(7);
+    glVertexAttribPointer(7,
+                          2,
+                          GL_FLOAT,
+                          GL_FALSE,
+                          sizeof(InstancedDrawData),
+                          reinterpret_cast<void*>(offsetof(InstancedDrawData, light)));
+    glVertexAttribDivisor(7, 1);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+}
+
+void BlockEntityRenderer::ensureInstanceCapacity(const std::size_t instanceCount) {
+    if (instanceCount <= m_instanceCapacity) {
+        return;
+    }
+
+    std::size_t newCapacity = m_instanceCapacity == 0 ? static_cast<std::size_t>(256) : m_instanceCapacity * 2;
+    while (newCapacity < instanceCount) {
+        newCapacity *= 2;
+    }
+
+    glNamedBufferData(m_instanceVbo,
+                      static_cast<GLsizeiptr>(newCapacity * sizeof(InstancedDrawData)),
+                      nullptr,
+                      GL_DYNAMIC_DRAW);
+    m_instanceCapacity = newCapacity;
+}
+
 glm::mat4 BlockEntityRenderer::buildModelMatrix(const ModelEntry& entry,
                                                 const BlockID stateId,
                                                 const glm::vec3& blockPosition) {
@@ -272,7 +333,7 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
         const int columnY = yBase + ly;
         for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
             for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                const StateID stateId = static_cast<StateID>(subChunk.getBlock(lx, ly, lz));
+                const StateID stateId = static_cast<StateID>(subChunk.getBlockUnchecked(lx, ly, lz));
                 if (stateId == RUNTIME_ID_NULL) {
                     continue;
                 }
@@ -296,6 +357,7 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
                 instance.localZ = lz;
                 instance.blockPosition = blockPosition;
                 instance.center = blockPosition + glm::vec3(0.5f, 0.5f, 0.5f);
+                instance.modelMatrix = buildModelMatrix(*instance.model, instance.stateId, instance.blockPosition);
                 cache.instances.push_back(instance);
             }
         }
@@ -358,12 +420,86 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
     m_hasSyncedRevisions = true;
 }
 
-template <typename UniformBinder>
+void BlockEntityRenderer::drawBlockEntitiesInstanced(const IWorldView& worldView,
+                                                     const bool useSplitCulling,
+                                                     const glm::vec3& cameraPos,
+                                                     const float splitNear,
+                                                     const float splitFar) {
+    synchronizeInstanceCache(worldView);
+
+    GLuint boundTexture = 0;
+    glActiveTexture(GL_TEXTURE0);
+
+    const float minSplitDistance = splitNear - 4.0f;
+    const float minSplitDistanceSq = minSplitDistance * minSplitDistance;
+    const float maxSplitDistance = splitFar + 4.0f;
+    const float maxSplitDistanceSq = maxSplitDistance * maxSplitDistance;
+
+    for (const auto& modelPair : m_models) {
+        const ModelEntry& entry = modelPair.second;
+        const Mesh& mesh = entry.mesh;
+        if (mesh.vao == 0 || mesh.vertexCount == 0) {
+            continue;
+        }
+
+        m_instanceData.clear();
+        for (const auto& cachePair : m_sectionCaches) {
+            const SectionCache& cache = cachePair.second;
+            for (const BlockEntityInstance& instance : cache.instances) {
+                if (instance.model != &entry) {
+                    continue;
+                }
+
+                if (useSplitCulling) {
+                    const glm::vec3 delta = instance.center - cameraPos;
+                    const float distanceSq = glm::dot(delta, delta);
+                    if ((minSplitDistance > 0.0f && distanceSq < minSplitDistanceSq) ||
+                        distanceSq > maxSplitDistanceSq) {
+                        continue;
+                    }
+                }
+
+                const uint8_t packedLight = instance.chunk->getPackedLight(instance.localX,
+                                                                           instance.columnY,
+                                                                           instance.localZ);
+                InstancedDrawData drawData;
+                drawData.modelMatrix = instance.modelMatrix;
+                drawData.light = glm::vec2(
+                    static_cast<float>((packedLight >> 4) & 0x0F) / 15.0f,
+                    static_cast<float>(packedLight & 0x0F) / 15.0f);
+                m_instanceData.push_back(drawData);
+            }
+        }
+
+        if (m_instanceData.empty()) {
+            continue;
+        }
+
+        ensureInstanceCapacity(m_instanceData.size());
+        glNamedBufferSubData(m_instanceVbo,
+                             0,
+                             static_cast<GLsizeiptr>(m_instanceData.size() * sizeof(InstancedDrawData)),
+                             m_instanceData.data());
+
+        if (boundTexture != entry.texture) {
+            glBindTexture(GL_TEXTURE_2D, entry.texture);
+            boundTexture = entry.texture;
+        }
+
+        glBindVertexArray(mesh.vao);
+        glDrawArraysInstanced(GL_TRIANGLES,
+                              0,
+                              static_cast<GLsizei>(mesh.vertexCount),
+                              static_cast<GLsizei>(m_instanceData.size()));
+    }
+}
+
 void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
                                             Shader& shader,
                                             const int modelLoc,
                                             const int prevModelLoc,
-                                            const UniformBinder& bindUniforms,
+                                            const int sunlightLoc,
+                                            const int blockLightLoc,
                                             const bool useSplitCulling,
                                             const glm::vec3& cameraPos,
                                             const float splitNear,
@@ -372,6 +508,11 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
 
     GLuint boundTexture = 0;
     glActiveTexture(GL_TEXTURE0);
+
+    const float minSplitDistance = splitNear - 4.0f;
+    const float minSplitDistanceSq = minSplitDistance * minSplitDistance;
+    const float maxSplitDistance = splitFar + 4.0f;
+    const float maxSplitDistanceSq = maxSplitDistance * maxSplitDistance;
 
     for (const auto& cachePair : m_sectionCaches) {
         const SectionCache& cache = cachePair.second;
@@ -387,8 +528,10 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
             }
 
             if (useSplitCulling) {
-                const float distance = glm::length(instance.center - cameraPos);
-                if (distance < splitNear - 4.0f || distance > splitFar + 4.0f) {
+                const glm::vec3 delta = instance.center - cameraPos;
+                const float distanceSq = glm::dot(delta, delta);
+                if ((minSplitDistance > 0.0f && distanceSq < minSplitDistanceSq) ||
+                    distanceSq > maxSplitDistanceSq) {
                     continue;
                 }
             }
@@ -398,17 +541,19 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
                                                                        instance.localZ);
             const float sunlight = static_cast<float>((packedLight >> 4) & 0x0F) / 15.0f;
             const float blockLight = static_cast<float>(packedLight & 0x0F) / 15.0f;
-            bindUniforms(shader, sunlight, blockLight);
+            glUniform1f(sunlightLoc, sunlight);
+            if (blockLightLoc >= 0) {
+                glUniform1f(blockLightLoc, blockLight);
+            }
 
             if (boundTexture != entry->texture) {
                 glBindTexture(GL_TEXTURE_2D, entry->texture);
                 boundTexture = entry->texture;
             }
 
-            const glm::mat4 model = buildModelMatrix(*entry, instance.stateId, instance.blockPosition);
-            shader.setMat4(modelLoc, model);
+            shader.setMat4(modelLoc, instance.modelMatrix);
             if (prevModelLoc >= 0) {
-                shader.setMat4(prevModelLoc, model);
+                shader.setMat4(prevModelLoc, instance.modelMatrix);
             }
 
             glBindVertexArray(mesh.vao);
@@ -426,26 +571,13 @@ void BlockEntityRenderer::renderToGBuffer(const IWorldView& worldView,
 
     m_gbufferShader->use();
     m_gbufferShader->setMat4("viewProj", viewProj);
-    m_gbufferShader->setMat4("prevViewProj", previousViewProj);
+    static_cast<void>(previousViewProj);
     m_gbufferShader->setInt("uTexture", 0);
-    m_gbufferShader->setFloat("uHurtFlash", 0.0f);
-    m_gbufferShader->setInt("uForceZeroVelocity", 1);
-
-    const int modelLoc = m_gbufferShader->getUniformLocation("model");
-    const int prevModelLoc = m_gbufferShader->getUniformLocation("prevModel");
-    drawBlockEntities(worldView,
-                      *m_gbufferShader,
-                      modelLoc,
-                      prevModelLoc,
-                      [](Shader& shader, const float sunlight, const float blockLight) {
-                          shader.setFloat("uEntitySunlight", sunlight);
-                          shader.setFloat("uEntityBlockLight", blockLight);
-                      },
-                      false,
-                      glm::vec3(0.0f),
-                      0.0f,
-                      0.0f);
-    m_gbufferShader->setInt("uForceZeroVelocity", 0);
+    drawBlockEntitiesInstanced(worldView,
+                               false,
+                               glm::vec3(0.0f),
+                               0.0f,
+                               0.0f);
 
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE0);
@@ -464,19 +596,11 @@ void BlockEntityRenderer::renderToShadowMap(const IWorldView& worldView,
     m_shadowShader->use();
     m_shadowShader->setMat4("viewProj", shadowViewProj);
     m_shadowShader->setInt("uTexture", 0);
-
-    const int modelLoc = m_shadowShader->getUniformLocation("model");
-    drawBlockEntities(worldView,
-                      *m_shadowShader,
-                      modelLoc,
-                      -1,
-                      [](Shader& shader, const float sunlight, const float) {
-                          shader.setFloat("uEntitySunlight", sunlight);
-                      },
-                      true,
-                      cameraPos,
-                      splitNear,
-                      splitFar);
+    drawBlockEntitiesInstanced(worldView,
+                               true,
+                               cameraPos,
+                               splitNear,
+                               splitFar);
 
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE0);
@@ -497,14 +621,14 @@ void BlockEntityRenderer::renderForward(const IWorldView& worldView,
     m_forwardShader->setFloat("uHurtFlash", 0.0f);
 
     const int modelLoc = m_forwardShader->getUniformLocation("model");
+    const int sunlightLoc = m_forwardShader->getUniformLocation("uHeldSunlight");
+    const int blockLightLoc = m_forwardShader->getUniformLocation("uHeldBlockLight");
     drawBlockEntities(worldView,
                       *m_forwardShader,
                       modelLoc,
                       -1,
-                      [](Shader& shader, const float sunlight, const float blockLight) {
-                          shader.setFloat("uHeldSunlight", sunlight);
-                          shader.setFloat("uHeldBlockLight", blockLight);
-                      },
+                      sunlightLoc,
+                      blockLightLoc,
                       false,
                       glm::vec3(0.0f),
                       0.0f,

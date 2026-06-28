@@ -257,7 +257,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 request.dayNightSystem, request.weatherSystem);
 
     if (!lightDebugActive) {
-        cameraRainVisibility = computeCameraRainVisibility(request.worldView, request.camera.getPosition());
+        cameraRainVisibility = m_currentContext.cameraRainVisibility;
         if (m_settings.weather.rainLinesEnabled) {
             const auto& weather = request.weatherSystem.getDerived();
             const glm::vec3 camPos = request.camera.getPosition();
@@ -842,29 +842,9 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.moonShadowActive = ctx.skyColors.moonVisibility > ctx.skyColors.sunVisibility;
     ctx.eyeInWater = m_eyeInWater;
 
-    // Multi-ray outdoor check: 5 rays upward (center + 4 cardinal offsets).
-    // cameraRainVisibility = fraction reaching sky. Gives smooth transitions at
-    // tree edges, doorways, overhangs instead of binary 0/1.
-    {
-        const glm::vec3 camPos = ctx.camera.position;
-        constexpr float kOffsets[5][2] = {{0.0f, 0.0f}, {0.4f, 0.0f}, {-0.4f, 0.0f}, {0.0f, 0.4f}, {0.0f, -0.4f}};
-        constexpr int kRayCount = 5;
-        int skyHits = 0;
-        const int startY = static_cast<int>(std::floor(camPos.y)) + 1;
-        for (int r = 0; r < kRayCount; ++r) {
-            const int bx = static_cast<int>(std::floor(camPos.x + kOffsets[r][0]));
-            const int bz = static_cast<int>(std::floor(camPos.z + kOffsets[r][1]));
-            bool blocked = false;
-            for (int y = startY; y < 256; ++y) {
-                BlockID above = worldView.getBlock(bx, y, bz);
-                if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
-                    blocked = true;
-                    break;
-                }
-            }
-            if (!blocked) ++skyHits;
-        }
-        ctx.cameraRainVisibility = static_cast<float>(skyHits) / static_cast<float>(kRayCount);
+    // Multi-ray outdoor check is only needed while sky precipitation effects are active.
+    if (ctx.weather.skyWetness > 0.01f) {
+        ctx.cameraRainVisibility = computeCameraRainVisibility(worldView, ctx.camera.position);
     }
 
     // Shared resources and world/environment pointers
