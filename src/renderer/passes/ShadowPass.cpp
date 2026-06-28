@@ -234,11 +234,13 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     float maxCasterDistance = 0.0f;
     const char* cullingMode = "CSMBoxCulling";
 
-    // Transparent shadow pass: writes DepthAll + Color0/Color1 for:
-    // 1. UW VL dual-depth detection (water caustics)
-    // 2. Colored shadows (stained glass tint)
-    // Maintained for every cascade so caustics/tints do not stop at split 0.
-    const bool needTransparentShadow = true;
+    // Transparent caster data is most visible in the near cascades. Far cascades
+    // still update DepthAll from opaque depth and clear color layers so receivers
+    // consume a coherent transparent-shadow contract without far water/glass draws.
+    constexpr int kTransparentShadowCasterCascadeCount = 2;
+    // Far cutout casters are dense vegetation silhouettes whose sub-pixel shadows
+    // cost more than they contribute after cascade 1.
+    constexpr int kCutoutShadowCasterCascadeCount = 2;
     RenderDebugService* debugService = ctx.debugService;
     const bool shadowStatsActive = debugService != nullptr &&
         debugService->beginShadowFrame(SHADOW_CASCADE_COUNT, targets.shadowResolution());
@@ -307,6 +309,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         renderer::debug::ScopedDebugGroup cascadeGroup(cascadeLabel);
 
         const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
+        const bool renderCutoutCasters = cascade < kCutoutShadowCasterCascadeCount;
+        const bool renderTransparentCasters = cascade < kTransparentShadowCasterCascadeCount;
 
         // Explicit GL state at cascade start — prevents leaked state from
         // entity/drop shadow sub-passes in previous cascades.
@@ -320,8 +324,10 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         for (const auto& range : m_cascadeOpaqueRanges[cascade]) {
             m_worldRenderBuffer->addOpaque(range);
         }
-        for (const auto& range : m_cascadeCutoutRanges[cascade]) {
-            m_worldRenderBuffer->addCutout(range);
+        if (renderCutoutCasters) {
+            for (const auto& range : m_cascadeCutoutRanges[cascade]) {
+                m_worldRenderBuffer->addCutout(range);
+            }
         }
 
         char cullerLabel[128];
@@ -340,10 +346,14 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         stats.boxCulled = cascadeCullers[cascade].culledCount;
         stats.distanceVisible = shadowCuller.getVisibleCount();
         stats.distanceCulled = shadowCuller.getCulledCount();
-        stats.cutoutEntries = static_cast<int>(m_cascadeCutoutEntries[cascade].size());
-        stats.transparentEntries = useMultiDrawIndirect
-            ? static_cast<int>(m_cascadeTransparentRanges[cascade].size())
-            : static_cast<int>(m_cascadeTransparentEntries[cascade].size());
+        stats.cutoutEntries = renderCutoutCasters
+            ? static_cast<int>(m_cascadeCutoutEntries[cascade].size())
+            : 0;
+        stats.transparentEntries = renderTransparentCasters
+            ? (useMultiDrawIndirect
+                ? static_cast<int>(m_cascadeTransparentRanges[cascade].size())
+                : static_cast<int>(m_cascadeTransparentEntries[cascade].size()))
+            : 0;
         stats.opaqueCommands = m_worldRenderBuffer->opaqueCommandCount();
         stats.cutoutCommands = m_worldRenderBuffer->cutoutCommandCount();
         stats.opaqueVertices = m_worldRenderBuffer->opaqueVertexCount();
@@ -387,10 +397,12 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             // Cutout shadow: render with polygon offset to prevent self-shadowing artifacts.
             // Cutout geometry (grass, flowers) are single-layer planes that would otherwise
             // cast shadows on themselves, producing stripe patterns.
-            glEnable(GL_POLYGON_OFFSET_FILL);
-            glPolygonOffset(2.0f, 4.0f);
-            m_terrainRenderer->renderCutoutChunks(m_cascadeCutoutEntries[cascade], *m_shadowDepthShader);
-            glDisable(GL_POLYGON_OFFSET_FILL);
+            if (renderCutoutCasters) {
+                glEnable(GL_POLYGON_OFFSET_FILL);
+                glPolygonOffset(2.0f, 4.0f);
+                m_terrainRenderer->renderCutoutChunks(m_cascadeCutoutEntries[cascade], *m_shadowDepthShader);
+                glDisable(GL_POLYGON_OFFSET_FILL);
+            }
             // Block entity shadow: render chest-style entity models into this cascade.
             renderShadowBlockEntities(worldView, cascadeData.viewProj, ctx.camera.position,
                                       cascadeData.splitNear, cascadeData.splitFar);
@@ -410,8 +422,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         }
 
         // Pass 2: Transparent/all.
-        // Copy DepthOpaque → DepthAll, then draw water + stained glass on top with depth writes.
-        if (needTransparentShadow) {
+        // Copy DepthOpaque -> DepthAll, then draw near water + stained glass casters.
+        {
             renderer::debug::ScopedDebugGroup transparentGroup("Transparent");
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
             glCopyImageSubData(
@@ -427,49 +439,51 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             const float clearColor1[] = {0.0f, 0.0f, 0.0f, 0.0f};
             glClearBufferfv(GL_COLOR, 0, clearColor0);
             glClearBufferfv(GL_COLOR, 1, clearColor1);
-            bindTerrainShadowInputs();
-            m_shadowDepthShader->setInt("uShadowPassMode", 1);
-            m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
-            m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
-            m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
-            m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
-            // Transparent casters: depth write ON, no blending, no sort.
-            glDepthMask(GL_TRUE);
-            glDepthFunc(GL_LESS);
-            glDisable(GL_BLEND);
-            glDisable(GL_CULL_FACE);
+            if (renderTransparentCasters) {
+                bindTerrainShadowInputs();
+                m_shadowDepthShader->setInt("uShadowPassMode", 1);
+                m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
+                m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
+                m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
+                m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
+                // Transparent casters: depth write ON, no blending, no sort.
+                glDepthMask(GL_TRUE);
+                glDepthFunc(GL_LESS);
+                glDisable(GL_BLEND);
+                glDisable(GL_CULL_FACE);
 
-            // Render transparent shadow chunks — same logic as Renderer::renderTransparentShadowChunks
-            m_shadowDepthShader->use();
-            m_shadowDepthShader->setInt("uForceBaseLod", 1);
-            if (useMultiDrawIndirect) {
-                m_worldRenderBuffer->beginFrame();
-                for (const GpuMeshRange& range : m_cascadeTransparentRanges[cascade]) {
-                    m_worldRenderBuffer->addTransparent(range);
+                // Render transparent shadow chunks using the same terrain shadow shader.
+                m_shadowDepthShader->use();
+                m_shadowDepthShader->setInt("uForceBaseLod", 1);
+                if (useMultiDrawIndirect) {
+                    m_worldRenderBuffer->beginFrame();
+                    for (const GpuMeshRange& range : m_cascadeTransparentRanges[cascade]) {
+                        m_worldRenderBuffer->addTransparent(range);
+                    }
+                    stats.transparentCommands = m_worldRenderBuffer->transparentCommandCount();
+                    stats.transparentVertices = m_worldRenderBuffer->transparentVertexCount();
+                    m_worldRenderBuffer->flushTransparent();
+                } else {
+                    uint64_t transparentVertices = 0;
+                    size_t transparentCommands = 0;
+                    for (const ChunkRenderEntry& entry : m_cascadeTransparentEntries[cascade]) {
+                        if (entry.chunk == nullptr) continue;
+                        const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
+                        if (!sc) continue;
+                        const SubChunkMesh& mesh = sc->getMesh();
+                        if (mesh.transparentVertexCount == 0) continue;
+                        glBindVertexArray(mesh.transparentVao);
+                        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
+                        transparentVertices += mesh.transparentVertexCount;
+                        ++transparentCommands;
+                    }
+                    stats.transparentCommands = transparentCommands;
+                    stats.transparentVertices = transparentVertices;
                 }
-                stats.transparentCommands = m_worldRenderBuffer->transparentCommandCount();
-                stats.transparentVertices = m_worldRenderBuffer->transparentVertexCount();
-                m_worldRenderBuffer->flushTransparent();
-            } else {
-                uint64_t transparentVertices = 0;
-                size_t transparentCommands = 0;
-                for (const ChunkRenderEntry& entry : m_cascadeTransparentEntries[cascade]) {
-                    if (entry.chunk == nullptr) continue;
-                    const SubChunk* sc = entry.chunk->getSubChunk(entry.scy);
-                    if (!sc) continue;
-                    const SubChunkMesh& mesh = sc->getMesh();
-                    if (mesh.transparentVertexCount == 0) continue;
-                    glBindVertexArray(mesh.transparentVao);
-                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.transparentVertexCount));
-                    transparentVertices += mesh.transparentVertexCount;
-                    ++transparentCommands;
-                }
-                stats.transparentCommands = transparentCommands;
-                stats.transparentVertices = transparentVertices;
+                m_shadowDepthShader->use();
+                m_shadowDepthShader->setInt("uForceBaseLod", 0);
+                stats.transparentRendered = true;
             }
-            m_shadowDepthShader->use();
-            m_shadowDepthShader->setInt("uForceBaseLod", 0);
-            stats.transparentRendered = true;
         }
         if (shadowStatsActive) {
             debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::End);

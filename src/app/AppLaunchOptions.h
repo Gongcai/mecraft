@@ -29,6 +29,7 @@ struct AppLaunchOptions {
     std::filesystem::path benchmarkReportPath;
     bool exitWhenPlaybackEnds = true;
     bool enableDebugDashboard = true;
+    bool enableGlDebugOutput = true;
 };
 
 #endif // MECRAFT_APP_LAUNCH_OPTIONS_H

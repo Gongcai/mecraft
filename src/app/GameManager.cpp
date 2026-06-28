@@ -72,7 +72,7 @@ void GameManager::init(int width, int height, const char* title, AppLaunchOption
 }
 
 bool GameManager::initWindow(int width, int height, const char* title) {
-    if (!m_window.init(width, height, title)) {
+    if (!m_window.init(width, height, title, m_launchOptions.enableGlDebugOutput)) {
         MECRAFT_LOG_STREAM(std::cerr << "Error while initializing the window." << std::endl);
         return false;
     }

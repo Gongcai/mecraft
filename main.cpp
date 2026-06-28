@@ -23,6 +23,8 @@ void printUsage() {
         << "  --benchmark-report <file>          Write gameplay replay frame timing summary as JSON.\n"
         << "  --benchmark-save-root <path>       Save root for benchmark worlds.\n"
         << "  --benchmark-no-save                Disable saving for benchmark gameplay.\n"
+        << "  --gl-debug-output                  Enable OpenGL debug callback output.\n"
+        << "  --no-gl-debug-output               Disable OpenGL debug callback output.\n"
         << "  --no-exit-on-replay-end            Keep app open when replay frames are exhausted.\n";
 }
 
@@ -54,6 +56,7 @@ const char* requireValue(int argc, char** argv, int& index, const char* name) {
 AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
     AppLaunchOptions options;
     bool inputScopeSet = false;
+    bool glDebugOutputSet = false;
 
     for (int index = 1; index < argc; ++index) {
         const std::string arg = argv[index];
@@ -100,6 +103,12 @@ AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
             options.benchmarkSaveRoot = requireValue(argc, argv, index, "--benchmark-save-root");
         } else if (arg == "--benchmark-no-save") {
             options.benchmarkEnableSaving = false;
+        } else if (arg == "--gl-debug-output") {
+            options.enableGlDebugOutput = true;
+            glDebugOutputSet = true;
+        } else if (arg == "--no-gl-debug-output") {
+            options.enableGlDebugOutput = false;
+            glDebugOutputSet = true;
         } else if (arg == "--no-exit-on-replay-end") {
             options.exitWhenPlaybackEnds = false;
         } else {
@@ -118,6 +127,9 @@ AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
     }
     if (options.autoStartGameplay) {
         options.enableDebugDashboard = false;
+        if (!glDebugOutputSet) {
+            options.enableGlDebugOutput = false;
+        }
     }
     return options;
 }

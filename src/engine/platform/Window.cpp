@@ -14,7 +14,7 @@ void glfwErrorCallback(int error, const char* description) {
 
 } // namespace
 
-bool Window::init(int width, int height, const char *title) {
+bool Window::init(int width, int height, const char *title, bool enableGlDebugOutput) {
     glfwSetErrorCallback(glfwErrorCallback);
     if (!glfwInit()) {
         const char* description = nullptr;
@@ -58,7 +58,7 @@ bool Window::init(int width, int height, const char *title) {
         throw std::runtime_error("OpenGL 4.5 core is required for the hybrid deferred renderer.");
     }
 #ifdef MECRAFT_DEBUG
-    if (GLAD_GL_VERSION_4_3) {
+    if (enableGlDebugOutput && GLAD_GL_VERSION_4_3) {
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
         glDebugMessageCallback(Window::debugMessageCallback, nullptr);
