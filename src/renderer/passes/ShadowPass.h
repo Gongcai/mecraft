@@ -2,8 +2,10 @@
 #define MECRAFT_SHADOW_PASS_H
 
 #include "RenderPass.h"
+#include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldDrawBatch.h"
 #include <glm/glm.hpp>
+#include <array>
 #include <vector>
 
 #include "renderer/core/FrameContext.h"
@@ -21,7 +23,6 @@ class DropRenderer;
 class FallingBlockRenderer;
 class DropSystem;
 class WorldRenderBuffer;
-class TerrainRenderer;
 
 namespace ecs { class GameplayRegistry; }
 
@@ -100,6 +101,13 @@ private:
     DropSystem* m_dropSystem = nullptr;
     ecs::GameplayRegistry* m_gameplayRegistry = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
+
+    std::array<std::vector<GpuMeshRange>, 4> m_cascadeOpaqueRanges;
+    std::array<std::vector<GpuMeshRange>, 4> m_cascadeCutoutRanges;
+    std::array<std::vector<GpuMeshRange>, 4> m_cascadeTransparentRanges;
+    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeOpaqueEntries;
+    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeCutoutEntries;
+    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeTransparentEntries;
 };
 
 #endif // MECRAFT_SHADOW_PASS_H

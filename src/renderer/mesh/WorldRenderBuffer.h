@@ -93,7 +93,6 @@ public:
     static constexpr size_t kInitialCutoutPoolVertices = kInitialPoolVertices / 4;
     static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
     static constexpr size_t kInitialIndirectCapacity = 4096;
-    static constexpr size_t kCommandMergeThreshold = 4096;  // Skip merge sort when commands exceed this
     static constexpr GLuint kTerrainMetadataBinding = 0;
 
     WorldRenderBuffer();

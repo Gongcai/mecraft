@@ -73,47 +73,6 @@ void subtractOrigin(std::vector<BlockVertex>& vertices, const glm::vec3& origin)
     }
 }
 
-void mergeAdjacentCommands(std::vector<DrawArraysIndirectCommand>& commands) {
-    if (commands.size() < 2) {
-        return;
-    }
-
-    std::sort(commands.begin(), commands.end(),
-              [](const DrawArraysIndirectCommand& a, const DrawArraysIndirectCommand& b) {
-                  return a.first < b.first;
-              });
-
-    size_t writeIndex = 0;
-    for (size_t readIndex = 1; readIndex < commands.size(); ++readIndex) {
-        DrawArraysIndirectCommand& current = commands[writeIndex];
-        const DrawArraysIndirectCommand& next = commands[readIndex];
-
-        const bool canMerge =
-            current.instanceCount == 1 &&
-            next.instanceCount == 1 &&
-            current.baseInstance == next.baseInstance &&
-            current.first + current.count == next.first;
-
-        if (canMerge) {
-            current.count += next.count;
-            continue;
-        }
-
-        ++writeIndex;
-        if (writeIndex != readIndex) {
-            commands[writeIndex] = next;
-        }
-    }
-
-    commands.resize(writeIndex + 1);
-}
-
-void maybeMergeAdjacentCommands(std::vector<DrawArraysIndirectCommand>& commands, size_t threshold) {
-    if (commands.size() <= threshold) {
-        mergeAdjacentCommands(commands);
-    }
-    // Above threshold: skip merge to avoid O(N log N) sort cost
-}
 }
 
 // ---------------------------------------------------------------------------
@@ -725,7 +684,6 @@ void WorldRenderBuffer::flushWater() {
 }
 
 void WorldRenderBuffer::flushOpaque() {
-    maybeMergeAdjacentCommands(m_opaqueCommands, kCommandMergeThreshold);
     char label[64];
     std::snprintf(label, sizeof(label), "Terrain.Opaque.MDI commands=%zu vertices=%llu",
                   m_opaqueCommands.size(),
@@ -735,7 +693,6 @@ void WorldRenderBuffer::flushOpaque() {
 }
 
 void WorldRenderBuffer::flushCutout() {
-    maybeMergeAdjacentCommands(m_cutoutCommands, kCommandMergeThreshold);
     char label[64];
     std::snprintf(label, sizeof(label), "Terrain.Cutout.MDI commands=%zu vertices=%llu",
                   m_cutoutCommands.size(),
