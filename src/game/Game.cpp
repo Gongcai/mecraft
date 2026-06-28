@@ -123,6 +123,10 @@ void Game::updateFrame(const float deltaTime) {
 #endif
 }
 
+void Game::setFixedInterpolationAlpha(const float alpha) {
+    m_fixedInterpolationAlpha = std::clamp(alpha, 0.0f, 1.0f);
+}
+
 #ifdef MECRAFT_DEBUG
 void Game::publishDebugStats(const float frameTime) {
     if (m_renderRuntime) {
@@ -184,9 +188,13 @@ void Game::renderFrame(const float frameTime) {
     }
 
     // G5: Delegate frame rendering to orchestrator
+    const float renderInterpolationAlpha = m_session.stateMachine().pausesSimulation()
+        ? 1.0f
+        : m_fixedInterpolationAlpha;
     m_frameOrchestrator->renderFrame(m_session, *m_renderRuntime,
                                      m_hudPresenter.get(),
-                                     m_deps.window, frameTime);
+                                     m_deps.window, frameTime,
+                                     renderInterpolationAlpha);
 }
 
 void Game::shutdown() {

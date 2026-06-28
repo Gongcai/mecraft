@@ -20,6 +20,10 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
     auto& transform = m_registry.emplace<TransformComponent>(m_localPlayer);
     transform.position = spawnPos;
     transform.eyeHeight = 1.62f;
+    auto& transformInterpolation = m_registry.emplace<TransformInterpolationComponent>(m_localPlayer);
+    transformInterpolation.previousPosition = transform.position;
+    transformInterpolation.previousEyeHeight = transform.eyeHeight;
+    transformInterpolation.initialized = true;
 
     auto& physicsBody = m_registry.emplace<PhysicsBodyComponent>(m_localPlayer);
     physicsBody.body.position = spawnPos;
@@ -42,6 +46,11 @@ void GameplayScene::initLocalPlayer(const glm::vec3& spawnPos) {
     camera.front = glm::vec3(0.0f, 0.0f, -1.0f);
     camera.right = glm::vec3(1.0f, 0.0f, 0.0f);
     camera.up = glm::vec3(0.0f, 1.0f, 0.0f);
+    auto& cameraInterpolation = m_registry.emplace<CameraInterpolationComponent>(m_localPlayer);
+    cameraInterpolation.previousYaw = camera.yaw;
+    cameraInterpolation.previousPitch = camera.pitch;
+    cameraInterpolation.previousFov = camera.fov;
+    cameraInterpolation.initialized = true;
 
     auto& sprintFov = m_registry.emplace<SprintFovComponent>(m_localPlayer);
     sprintFov.walkFov = 75.0f;

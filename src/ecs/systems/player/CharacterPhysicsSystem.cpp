@@ -48,6 +48,16 @@ void updateEyeHeight(const MoveIntentComponent& moveIntent,
     transform.eyeHeight = lerp(transform.eyeHeight, targetEyeHeight, dt * controller.eyeHeightLerpSpeed);
 }
 
+void capturePreviousTransform(TransformInterpolationComponent* interpolation,
+                              const TransformComponent& transform) {
+    if (interpolation == nullptr) {
+        return;
+    }
+    interpolation->previousPosition = transform.position;
+    interpolation->previousEyeHeight = transform.eyeHeight;
+    interpolation->initialized = true;
+}
+
 } // namespace
 
 void CharacterPhysicsSystem::update(SystemContext& ctx) {
@@ -70,6 +80,7 @@ void CharacterPhysicsSystem::update(SystemContext& ctx) {
         auto* grounded = registry.try_get<GroundedStateComponent>(entity);
         auto* velocity = registry.try_get<VelocityComponent>(entity);
         auto* flightState = registry.try_get<FlightStateComponent>(entity);
+        auto* transformInterpolation = registry.try_get<TransformInterpolationComponent>(entity);
 
         const bool wasGrounded = physicsBody.body.isGrounded;
         const bool creativeModeActive = isCreativeModeActive(registry);
@@ -88,6 +99,8 @@ void CharacterPhysicsSystem::update(SystemContext& ctx) {
             }
             isFlying = flightState->isFlying;
         }
+
+        capturePreviousTransform(transformInterpolation, transform);
 
         physicsBody.body.position = transform.position;
         physicsBody.body.eyeOffsetY = transform.eyeHeight;

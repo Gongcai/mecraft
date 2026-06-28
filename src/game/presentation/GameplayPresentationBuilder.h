@@ -17,10 +17,12 @@ public:
     /// @param reg The gameplay ECS registry
     /// @param cameraController The camera controller for final camera computation
     /// @param worldView The current render world used for third-person camera collision
+    /// @param interpolationAlpha Normalized fixed-step remainder used for render interpolation
     /// @return An immutable snapshot for the current frame
     [[nodiscard]] GameplayPresentationSnapshot build(ecs::GameplayRegistry& reg,
                                                       const CameraController& cameraController,
-                                                      const IWorldView& worldView);
+                                                      const IWorldView& worldView,
+                                                      float interpolationAlpha);
 };
 
 #endif // MECRAFT_GAMEPLAY_PRESENTATION_BUILDER_H

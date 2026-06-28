@@ -13,7 +13,7 @@ public:
     PhysicsSystem(const IWorldView* worldView);
     ~PhysicsSystem() = default;
 
-    // 提供给外部调用的主更新接口
+    // Advances one physics body by one simulation step.
     void updateBody(PhysicsBody& body, const MoveIntent& intent, float dt);
     void updateBody(PhysicsBody& body, const MoveIntent& intent, float dt, const PhysicsTuning& tuningOverride);
     PhysicsTuning tuning;

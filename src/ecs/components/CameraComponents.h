@@ -15,6 +15,13 @@ struct CameraStateComponent {
     glm::vec3 up{0.0f, 1.0f, 0.0f};
 };
 
+struct CameraInterpolationComponent {
+    float previousYaw = -90.0f;
+    float previousPitch = 0.0f;
+    float previousFov = 75.0f;
+    bool initialized = false;
+};
+
 struct SprintFovComponent {
     float walkFov = 75.0f;
     float sprintFov = 90.0f;

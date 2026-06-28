@@ -109,6 +109,9 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.biomeTint = BiomeTintKind::None;
     def.lightLevel = 0;
     def.opacity = 15;
+    def.surfaceFriction = 1.0f;
+    def.surfaceSpeedFactor = 1.0f;
+    def.surfaceDamping = 0.0f;
     def.isRedstoneConductor = true;
     def.isRedstonePowerSource = false;
     def.respondsToRedstone = false;
@@ -562,6 +565,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.redstoneControlledMirrorProperties.clear();
         def.redstoneControlledPowerInverted = false;
         def.pistonPushReaction = "normal";
+        def.surfaceFriction = 1.0f;
+        def.surfaceSpeedFactor = 1.0f;
+        def.surfaceDamping = 0.0f;
 
         if (blockJson.contains("isSolid") && blockJson["isSolid"].is_boolean()) {
             def.isSolid = blockJson["isSolid"].get<bool>();
@@ -653,6 +659,24 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("affectedByGravity") && blockJson["affectedByGravity"].is_boolean()) {
             def.affectedByGravity = blockJson["affectedByGravity"].get<bool>();
+        }
+        if (blockJson.contains("surfaceFriction")) {
+            if (!blockJson["surfaceFriction"].is_number()) {
+                throw std::runtime_error("surfaceFriction must be numeric for block: " + def.namespacedId.full());
+            }
+            def.surfaceFriction = std::max(0.0f, blockJson["surfaceFriction"].get<float>());
+        }
+        if (blockJson.contains("surfaceSpeedFactor")) {
+            if (!blockJson["surfaceSpeedFactor"].is_number()) {
+                throw std::runtime_error("surfaceSpeedFactor must be numeric for block: " + def.namespacedId.full());
+            }
+            def.surfaceSpeedFactor = std::max(0.0f, blockJson["surfaceSpeedFactor"].get<float>());
+        }
+        if (blockJson.contains("surfaceDamping")) {
+            if (!blockJson["surfaceDamping"].is_number()) {
+                throw std::runtime_error("surfaceDamping must be numeric for block: " + def.namespacedId.full());
+            }
+            def.surfaceDamping = std::max(0.0f, blockJson["surfaceDamping"].get<float>());
         }
         const bool hasExplicitRedstoneConductor = blockJson.contains("isRedstoneConductor");
         if (hasExplicitRedstoneConductor) {

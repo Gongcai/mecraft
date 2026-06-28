@@ -251,6 +251,9 @@ struct BlockDef {
     uint8_t lightLevel  = 0;
     uint8_t opacity     = 0;
     uint16_t timeToBreak = 1000;
+    float surfaceFriction = 1.0f;
+    float surfaceSpeedFactor = 1.0f;
+    float surfaceDamping = 0.0f;
     // Unified face texture references (TextureArray layer indices).
     // These are the single source of truth for all texture lookups.
     AnimatedTextureRef faceTop;

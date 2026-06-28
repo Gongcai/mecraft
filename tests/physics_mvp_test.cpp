@@ -470,6 +470,134 @@ int main() {
         return fail("water flow should push bodies in the direction of the fluid vector");
     }
 
+    // Case 10: swimming against a one-block shore while jumping should climb out of water.
+    const int shoreY = surfaceY + 18;
+    for (int x = -4; x <= 24; ++x) {
+        for (int y = surfaceY + 1; y <= shoreY + 4; ++y) {
+            for (int z = -13; z <= -9; ++z) {
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
+                world.setFluidState(x, y, z, RUNTIME_ID_NULL);
+            }
+        }
+    }
+    for (int x = -3; x <= 23; ++x) {
+        for (int z = -12; z <= -10; ++z) {
+            world.setBlock(x, shoreY - 1, z, BlockRegistry::requireIdByName("minecraft:stone"));
+        }
+    }
+    for (int x = -3; x <= 1; ++x) {
+        for (int z = -12; z <= -10; ++z) {
+            world.setFluidState(x, shoreY, z, FluidState::makeWater(0, false));
+        }
+    }
+    for (int x = 2; x <= 23; ++x) {
+        for (int z = -12; z <= -10; ++z) {
+            world.setBlock(x, shoreY, z, BlockRegistry::requireIdByName("minecraft:stone"));
+        }
+    }
+
+    PhysicsBody swimmer;
+    swimmer.position = glm::vec3(1.35f, static_cast<float>(shoreY) + swimmer.halfExtents.y, -11.5f);
+
+    MoveIntent swimToShore{};
+    swimToShore.move = glm::vec2(1.0f, 0.0f);
+    swimToShore.wantsJump = true;
+    bool reachedShore = false;
+    const float shoreStandingY = static_cast<float>(shoreY) + 1.0f + swimmer.halfExtents.y;
+    for (int i = 0; i < 180; ++i) {
+        phys.updateBody(swimmer, swimToShore, kDt);
+        if (!swimmer.isInWater &&
+            swimmer.position.x > 2.25f &&
+            swimmer.position.y >= shoreStandingY - 0.08f) {
+            reachedShore = true;
+            break;
+        }
+    }
+
+    if (!reachedShore) {
+        return fail("swimming jump against a shore ledge should climb out of water");
+    }
+
+    for (int i = 0; i < 120; ++i) {
+        phys.updateBody(swimmer, idleIntent, kDt);
+    }
+    if (swimmer.isInWater || !swimmer.isGrounded || std::abs(swimmer.position.y - shoreStandingY) > 0.05f) {
+        return fail("swimmer should settle on the shore after climbing out of water");
+    }
+
+    // Case 11: low-friction ice should preserve horizontal velocity after input is released.
+    const int iceLaneY = surfaceY + 21;
+    for (int x = -2; x <= 80; ++x) {
+        for (int y = surfaceY + 1; y <= iceLaneY + 3; ++y) {
+            for (int z = -9; z <= -7; ++z) {
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
+            }
+        }
+    }
+    for (int x = -1; x <= 78; ++x) {
+        world.setBlock(x, iceLaneY, -8, BlockRegistry::requireIdByName("minecraft:ice"));
+    }
+
+    PhysicsBody iceSlider;
+    iceSlider.position = glm::vec3(0.5f, static_cast<float>(iceLaneY) + 1.0f + iceSlider.halfExtents.y, -7.5f);
+    iceSlider.isGrounded = true;
+
+    MoveIntent slideForward{};
+    slideForward.move = glm::vec2(1.0f, 0.0f);
+    for (int i = 0; i < 60; ++i) {
+        phys.updateBody(iceSlider, slideForward, kDt);
+    }
+
+    const float releaseX = iceSlider.position.x;
+    for (int i = 0; i < 60; ++i) {
+        phys.updateBody(iceSlider, idleIntent, kDt);
+    }
+
+    if (iceSlider.position.x <= releaseX + 1.0f) {
+        return fail("ice surface should keep the body sliding after input release");
+    }
+    if (iceSlider.velocity.x <= 1.0f) {
+        return fail("ice surface should preserve significant horizontal velocity");
+    }
+
+    // Case 12: soul sand should reduce data-driven movement speed through surface properties.
+    const int soulLaneY = surfaceY + 25;
+    for (int x = -2; x <= 80; ++x) {
+        for (int y = surfaceY + 1; y <= soulLaneY + 3; ++y) {
+            for (int z = -6; z <= -2; ++z) {
+                world.setBlock(x, y, z, RUNTIME_ID_NULL);
+            }
+        }
+    }
+    for (int x = -1; x <= 78; ++x) {
+        world.setBlock(x, soulLaneY, -5, BlockRegistry::requireIdByName("minecraft:stone"));
+        world.setBlock(x, soulLaneY, -3, BlockRegistry::requireIdByName("minecraft:soul_sand"));
+    }
+
+    PhysicsBody stoneWalker;
+    stoneWalker.position = glm::vec3(0.5f, static_cast<float>(soulLaneY) + 1.0f + stoneWalker.halfExtents.y, -4.5f);
+    stoneWalker.isGrounded = true;
+
+    PhysicsBody soulWalker;
+    soulWalker.position = glm::vec3(0.5f, static_cast<float>(soulLaneY) + 1.0f + soulWalker.halfExtents.y, -2.5f);
+    soulWalker.isGrounded = true;
+
+    MoveIntent walkForward{};
+    walkForward.move = glm::vec2(1.0f, 0.0f);
+    for (int i = 0; i < 180; ++i) {
+        phys.updateBody(stoneWalker, walkForward, kDt);
+        phys.updateBody(soulWalker, walkForward, kDt);
+    }
+
+    const float stoneDistance = stoneWalker.position.x - 0.5f;
+    const float soulDistance = soulWalker.position.x - 0.5f;
+    if (soulDistance >= stoneDistance * 0.55f) {
+        return fail("soul sand surface speed factor should substantially reduce movement distance");
+    }
+    if (soulWalker.velocity.x >= stoneWalker.velocity.x * 0.55f) {
+        return fail("soul sand surface speed factor should reduce steady horizontal velocity");
+    }
+
     std::cout << "[physics_mvp_test] PASS\n";
     return EXIT_SUCCESS;
 }

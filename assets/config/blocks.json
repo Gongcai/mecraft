@@ -1835,6 +1835,8 @@
       "isTransparent": true,
       "opacity": 3,
       "timeToBreak": 500,
+      "surfaceFriction": 0.08,
+      "surfaceDamping": 0.05,
       "textures": {
         "all": "ice"
       }
@@ -1843,6 +1845,8 @@
       "id": "minecraft:packed_ice",
       "drop": "minecraft:packed_ice",
       "timeToBreak": 500,
+      "surfaceFriction": 0.06,
+      "surfaceDamping": 0.04,
       "textures": {
         "all": "packed_ice"
       }
@@ -1851,6 +1855,8 @@
       "id": "minecraft:blue_ice",
       "drop": "minecraft:blue_ice",
       "timeToBreak": 500,
+      "surfaceFriction": 0.04,
+      "surfaceDamping": 0.03,
       "textures": {
         "all": "blue_ice"
       }
@@ -1876,6 +1882,9 @@
       "id": "minecraft:soul_sand",
       "drop": "minecraft:soul_sand",
       "timeToBreak": 500,
+      "surfaceFriction": 1.4,
+      "surfaceSpeedFactor": 0.4,
+      "surfaceDamping": 2.0,
       "textures": {
         "all": "soul_sand"
       }

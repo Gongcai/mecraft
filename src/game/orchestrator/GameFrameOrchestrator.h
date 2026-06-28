@@ -40,7 +40,8 @@ public:
                      GameplayRenderRuntime& renderRuntime,
                      GameplayHudPresenter* hudPresenter,
                      Window& window,
-                     float frameTime);
+                     float frameTime,
+                     float interpolationAlpha);
 
     /// Set a callback to be invoked after 3D scene render but before UI overlay.
     /// Used for screenshot capture.

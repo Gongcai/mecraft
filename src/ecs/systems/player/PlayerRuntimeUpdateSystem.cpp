@@ -39,6 +39,17 @@ void applyHotbarIntent(const HotbarIntentComponent& hotbar, InventoryComponent& 
     }
 }
 
+void capturePreviousCamera(CameraInterpolationComponent* interpolation,
+                           const CameraStateComponent& camera) {
+    if (interpolation == nullptr) {
+        return;
+    }
+    interpolation->previousYaw = camera.yaw;
+    interpolation->previousPitch = camera.pitch;
+    interpolation->previousFov = camera.fov;
+    interpolation->initialized = true;
+}
+
 } // namespace
 
 void PlayerRuntimeUpdateSystem::update(SystemContext& ctx) {
@@ -55,8 +66,10 @@ void PlayerRuntimeUpdateSystem::update(SystemContext& ctx) {
         const auto& hotbarIntent = view.get<HotbarIntentComponent>(e);
         auto& camera = view.get<CameraStateComponent>(e);
         auto& inventory = view.get<InventoryComponent>(e);
+        auto* cameraInterpolation = registry.try_get<CameraInterpolationComponent>(e);
 
         applyHotbarIntent(hotbarIntent, inventory);
+        capturePreviousCamera(cameraInterpolation, camera);
 
         camera.yaw += lookIntent.deltaX * camera.sensitivity;
         camera.pitch = std::clamp(camera.pitch + lookIntent.deltaY * camera.sensitivity, -89.0f, 89.0f);

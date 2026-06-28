@@ -14,6 +14,12 @@ struct TransformComponent {
     float eyeHeight = 1.62f;
 };
 
+struct TransformInterpolationComponent {
+    glm::vec3 previousPosition{0.0f};
+    float previousEyeHeight = 1.62f;
+    bool initialized = false;
+};
+
 struct ParentComponent {
     entt::entity parent = entt::null;
 };

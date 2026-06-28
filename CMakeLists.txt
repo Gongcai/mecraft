@@ -16,7 +16,18 @@ option(MECRAFT_ENABLE_IPO "Enable IPO/LTO for optimized configurations" ON)
 option(MECRAFT_ENABLE_PCH "Enable precompiled headers" ON)
 option(MECRAFT_BUILD_TESTS "Build Mecraft tests" ON)
 option(MECRAFT_USE_SOURCE_ASSETS "Use the source-tree assets directory directly instead of packaged assets" OFF)
+if(MSVC)
+    message(STATUS "Using MSVC")
 
+    # 关闭警告 C4819: 无效的字符。避免中文注释被警告
+    add_compile_options(
+            "/wd4819"
+    )
+
+    # 关闭 /showIncludes
+    string(REPLACE "/showIncludes" "" CMAKE_DEPFILE_FLAGS_C "${CMAKE_DEPFILE_FLAGS_C}")
+    string(REPLACE "/showIncludes" "" CMAKE_DEPFILE_FLAGS_CXX "${CMAKE_DEPFILE_FLAGS_CXX}")
+endif()
 if(MECRAFT_USE_SOURCE_ASSETS)
     set(MECRAFT_RUNTIME_ASSETS_DIR "${PROJECT_SOURCE_DIR}/assets")
 else()
@@ -621,6 +632,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(block_selection_test tests/block_selection_test.cpp)
     mecraft_copy_runtime_assets(block_selection_test)
     add_mecraft_test(camera_controller_test tests/camera_controller_test.cpp)
+    add_mecraft_test(presentation_interpolation_test tests/presentation_interpolation_test.cpp)
     add_mecraft_test(audio_asset_decode_test tests/audio_asset_decode_test.cpp)
     add_mecraft_test(audio_catalog_test tests/audio_catalog_test.cpp)
     add_mecraft_test(audio_decoder_registry_test tests/audio_decoder_registry_test.cpp)

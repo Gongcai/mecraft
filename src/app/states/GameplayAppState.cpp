@@ -2,6 +2,7 @@
 #include "MainMenuAppState.h"
 #include "../../Diagnostics.h"
 #include "game/Game.h"
+#include <algorithm>
 #include <exception>
 #include <iostream>
 
@@ -98,6 +99,7 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
                 return;
             }
         }
+        m_game->setFixedInterpolationAlpha(static_cast<float>(std::clamp(accumulator / kFixedStep, 0.0, 1.0)));
         m_game->updateFrame(static_cast<float>(frameTime));
 
         // Check if the pause menu requested quit-to-menu

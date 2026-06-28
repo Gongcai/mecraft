@@ -8,10 +8,10 @@
 #include "../world/IWorldView.h"
 #include "../world/block/Block.h"
 #include "../world/block/BlockCollision.h"
+#include "../world/block/BlockStateRegistry.h"
 #include "../world/fluid/FluidFlow.h"
 #include "../world/fluid/FluidState.h"
 #include "../world/World.h"
-#include "engine/platform/Time.h"
 
 namespace {
 
@@ -23,6 +23,12 @@ constexpr float kPenetrationScoreEpsilon = 0.000001f;
 struct AABB {
     glm::vec3 min{};
     glm::vec3 max{};
+};
+
+struct SurfacePhysics {
+    float friction = 1.0f;
+    float speedFactor = 1.0f;
+    float damping = 0.0f;
 };
 
 AABB makeBodyAABBAt(const PhysicsBody& body, const glm::vec3& position) {
@@ -279,11 +285,79 @@ bool hasGroundSupportAt(const PhysicsBody& body, const IWorldView& world, const 
     return false;
 }
 
+SurfacePhysics querySurfacePhysics(const PhysicsBody& body, const IWorldView& world, const bool grounded) {
+    SurfacePhysics surface{};
+    if (!grounded) {
+        return surface;
+    }
+
+    const AABB box = makeBodyAABBAt(body, body.position);
+    constexpr float kSupportProbeDepth = 0.08f;
+    const int supportMinY = static_cast<int>(std::floor(box.min.y - kSupportProbeDepth));
+    const int supportMaxY = static_cast<int>(std::floor(box.min.y - kContactEpsilon));
+
+    constexpr float kProbeInset = 0.02f;
+    const float minX = box.min.x + kProbeInset;
+    const float maxX = box.max.x - kProbeInset;
+    const float minZ = box.min.z + kProbeInset;
+    const float maxZ = box.max.z - kProbeInset;
+    const float centerX = (minX + maxX) * 0.5f;
+    const float centerZ = (minZ + maxZ) * 0.5f;
+
+    const std::array<glm::vec2, 5> probes = {
+        glm::vec2(centerX, centerZ),
+        glm::vec2(minX, minZ),
+        glm::vec2(minX, maxZ),
+        glm::vec2(maxX, minZ),
+        glm::vec2(maxX, maxZ),
+    };
+
+    float frictionSum = 0.0f;
+    float speedFactorSum = 0.0f;
+    float dampingSum = 0.0f;
+    int contactCount = 0;
+    for (const glm::vec2& probe : probes) {
+        const int bx = static_cast<int>(std::floor(probe.x));
+        const int bz = static_cast<int>(std::floor(probe.y));
+        constexpr float kProbeRadius = 0.005f;
+        const glm::vec3 probeMin(probe.x - kProbeRadius,
+                                 box.min.y - kSupportProbeDepth,
+                                 probe.y - kProbeRadius);
+        const glm::vec3 probeMax(probe.x + kProbeRadius,
+                                 box.min.y,
+                                 probe.y + kProbeRadius);
+        for (int by = supportMinY; by <= supportMaxY; ++by) {
+            const StateID stateId = world.getBlockState(bx, by, bz);
+            if (stateId == RUNTIME_ID_NULL ||
+                !BlockCollision::intersects(stateId, glm::ivec3(bx, by, bz), probeMin, probeMax)) {
+                continue;
+            }
+
+            const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+            const BlockDef& def = BlockRegistry::getFast(blockId);
+            frictionSum += def.surfaceFriction;
+            speedFactorSum += def.surfaceSpeedFactor;
+            dampingSum += def.surfaceDamping;
+            ++contactCount;
+        }
+    }
+
+    if (contactCount > 0) {
+        const float invCount = 1.0f / static_cast<float>(contactCount);
+        surface.friction = frictionSum * invCount;
+        surface.speedFactor = speedFactorSum * invCount;
+        surface.damping = dampingSum * invCount;
+    }
+    return surface;
+}
+
 bool tryStepUp(PhysicsBody& body,
                const IWorldView& world,
                const MoveIntent& intent,
                const float maxStepHeight) {
-    if (intent.isFlying || body.isInWater || !body.isGrounded || maxStepHeight <= 0.0f) {
+    const bool canGroundStep = body.isGrounded && !body.isInWater;
+    const bool canWaterLedgeStep = body.isInWater && intent.wantsJump;
+    if (intent.isFlying || (!canGroundStep && !canWaterLedgeStep) || maxStepHeight <= 0.0f) {
         return false;
     }
 
@@ -298,13 +372,10 @@ bool tryStepUp(PhysicsBody& body,
     if (overlapsCollision(world, makeBodyAABBAt(body, steppedPosition))) {
         return false;
     }
-    if (!hasGroundSupportAt(body, world, steppedPosition)) {
-        return false;
-    }
 
     body.position = steppedPosition;
     body.velocity.y = std::max(body.velocity.y, 0.0f);
-    body.isGrounded = true;
+    body.isGrounded = hasGroundSupportAt(body, world, steppedPosition);
     return true;
 }
 
@@ -316,18 +387,15 @@ float moveTowards(const float current, const float target, const float maxDelta)
 }
 
 void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning,
-                            const bool wasGrounded, const float dt) {
+                            const SurfacePhysics& surface, const bool wasGrounded, const float dt) {
     glm::vec2 input = intent.move;
     const float len = glm::length(input);
+    const bool hasInput = len >= 0.001f;
     if (len > 1.0f) {
         input /= len;
+    } else if (!hasInput) {
+        input = glm::vec2(0.0f);
     }
-    else if (len < 0.001f && wasGrounded && !body.isInWater) {
-        // Keep grounded body stable without destroying vertical state.
-        body.velocity.x = 0.0f;
-        body.velocity.z = 0.0f;
-    }
-
 
     float speed = intent.isFlying ? tuning.moveSpeed : (body.isInWater ? tuning.swimSpeed : tuning.moveSpeed);
     if (!body.isInWater || intent.isFlying) {
@@ -338,20 +406,35 @@ void applyHorizontalControl(PhysicsBody& body, const MoveIntent& intent, const P
             speed = sprintSpeed;
         }
     }
+    if (wasGrounded && !body.isInWater && !intent.isFlying) {
+        speed *= surface.speedFactor;
+    }
 
     const float targetX = input.x * speed;
     const float targetZ = input.y * speed;
 
-    float control = tuning.groundFriction * 2.0f;
-    if (intent.isFlying) {
-        control = tuning.groundFriction * 2.0f;
-    } else if (body.isInWater) {
-        control = tuning.waterDrag * 1.4f;
-    } else if (!wasGrounded) {
-        control = std::max(0.1f, tuning.groundFriction * tuning.airControl);
+    if (hasInput) {
+        float acceleration = tuning.groundAcceleration * surface.friction;
+        if (intent.isFlying) {
+            acceleration = tuning.flyingAcceleration;
+        } else if (body.isInWater) {
+            acceleration = tuning.waterAcceleration;
+        } else if (!wasGrounded) {
+            acceleration = tuning.airAcceleration * tuning.airControl;
+        }
+        const float maxDelta = acceleration * dt;
+        body.velocity.x = moveTowards(body.velocity.x, targetX, maxDelta);
+        body.velocity.z = moveTowards(body.velocity.z, targetZ, maxDelta);
+        return;
     }
 
-    const float maxDelta = control * dt;
+    float braking = 0.0f;
+    if (intent.isFlying) {
+        braking = tuning.flyingAcceleration;
+    } else if (wasGrounded && !body.isInWater) {
+        braking = tuning.groundFriction * surface.friction;
+    }
+    const float maxDelta = braking * dt;
     body.velocity.x = moveTowards(body.velocity.x, targetX, maxDelta);
     body.velocity.z = moveTowards(body.velocity.z, targetZ, maxDelta);
 }
@@ -364,13 +447,14 @@ void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const Phys
             verticalSpeed *= tuning.sprintMultiplier;
         }
 
-        body.velocity.y = 0.0f;
+        float targetVelocityY = 0.0f;
         if (intent.wantsJump) {
-            body.velocity.y += verticalSpeed;
+            targetVelocityY += verticalSpeed;
         }
         if (intent.wantsCrouch) {
-            body.velocity.y -= verticalSpeed;
+            targetVelocityY -= verticalSpeed;
         }
+        body.velocity.y = moveTowards(body.velocity.y, targetVelocityY, tuning.flyingAcceleration * dt);
         return;
     }
 
@@ -378,11 +462,7 @@ void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const Phys
     body.velocity.y -= tuning.gravity * gravityScale * dt;
 
     if (body.isInWater && intent.wantsJump) {
-        if (body.isFullySubmerged) {
-            body.velocity.y += tuning.swimUpAccel * dt;
-        } else {
-            body.velocity.y += static_cast<float>(std::sin(tuning.swimUpAccel * Time::currentGameTime)) + 1;
-        }
+        body.velocity.y += tuning.swimUpAccel * dt;
     } else if (wasGrounded && intent.wantsJump) {
         // Hold-to-bounce: keep jumping as soon as we are grounded again.
         body.velocity.y = tuning.jumpSpeed;
@@ -391,9 +471,25 @@ void applyVerticalForces(PhysicsBody& body, const MoveIntent& intent, const Phys
     body.velocity.y = std::clamp(body.velocity.y, -tuning.terminalVelocity, tuning.terminalVelocity);
 }
 
-void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning, const float dt) {
-    const float drag = (body.isInWater && !intent.isFlying) ? tuning.waterDrag : tuning.airDrag;
-    const float factor = std::max(0.0f, 1.0f - drag * dt);
+void applyDrag(PhysicsBody& body, const MoveIntent& intent, const PhysicsTuning& tuning,
+               const SurfacePhysics& surface, const bool wasGrounded, const float dt) {
+    if (intent.isFlying) {
+        const float factor = std::exp(-tuning.flyingDrag * dt);
+        body.velocity *= factor;
+        return;
+    }
+    if (body.isInWater) {
+        const float factor = std::exp(-tuning.waterDrag * dt);
+        body.velocity *= factor;
+        return;
+    }
+    if (wasGrounded) {
+        const float factor = std::exp(-(tuning.groundDamping + surface.damping) * dt);
+        body.velocity.x *= factor;
+        body.velocity.z *= factor;
+        return;
+    }
+    const float factor = std::exp(-tuning.airDrag * dt);
     body.velocity *= factor;
 }
 
@@ -450,7 +546,14 @@ void moveAndCollideAxis(PhysicsBody& body,
             continue;
         }
 
-        if (axis != 1 && tryStepUp(body, world, intent, tuning.stepHeight)) {
+        if (axis != 1 && body.isGrounded && !body.isInWater &&
+            tryStepUp(body, world, intent, tuning.stepHeight)) {
+            continue;
+        }
+
+        const bool canWaterLedgeStep = body.isInWater && intent.wantsJump;
+        if (axis != 1 && canWaterLedgeStep &&
+            tryStepUp(body, world, intent, tuning.waterLedgeStepHeight)) {
             continue;
         }
 
@@ -504,10 +607,11 @@ void PhysicsSystem::updateBody(PhysicsBody& body, const MoveIntent& intent, cons
     body.isInWater = waterFillRatio > 0.2f;
     body.isFullySubmerged = waterFillRatio > 0.95f;
     body.isEyesInWater = queryEyesInWater(body, *m_worldView);
+    const SurfacePhysics surface = querySurfacePhysics(body, *m_worldView, wasGrounded);
 
-    applyHorizontalControl(body, intent, tuningOverride, wasGrounded, dt);
+    applyHorizontalControl(body, intent, tuningOverride, surface, wasGrounded, dt);
     applyVerticalForces(body, intent, tuningOverride, wasGrounded, dt);
-    applyDrag(body, intent, tuningOverride, dt);
+    applyDrag(body, intent, tuningOverride, surface, wasGrounded, dt);
     applyFluidFlow(body, *m_worldView, intent, tuningOverride, waterFillRatio, dt, m_concreteWorld);
 
     body.isGrounded = false;

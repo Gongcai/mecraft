@@ -229,7 +229,8 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
                                          GameplayRenderRuntime& renderRuntime,
                                          GameplayHudPresenter* hudPresenter,
                                          Window& window,
-                                         float frameTime) {
+                                         float frameTime,
+                                         float interpolationAlpha) {
     if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
         session.client().receiveMessages();
         window.swapBuffers();
@@ -250,7 +251,11 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // Build presentation snapshot from ECS (single point of ECS access)
     auto& reg = session.gameplayScene().registry();
-    const auto snap = session.presentationBuilder().build(reg, session.cameraController(), session.worldView());
+    const auto snap = session.presentationBuilder().build(
+        reg,
+        session.cameraController(),
+        session.worldView(),
+        interpolationAlpha);
 #ifdef MECRAFT_DEBUG
     const auto snapshotEnd = std::chrono::steady_clock::now();
 #endif

@@ -48,6 +48,7 @@ public:
 
     void fixedUpdate(double fixedStep, double& accumulator);
     void updateFrame(float deltaTime);
+    void setFixedInterpolationAlpha(float alpha);
     void renderFrame(float frameTime);
 #ifdef MECRAFT_DEBUG
     void publishDebugStats(float frameTime);
@@ -99,6 +100,7 @@ private:
 
     bool m_initialized = false;
     bool m_captureScreenshotOnNextFrame = false;
+    float m_fixedInterpolationAlpha = 0.0f;
     LoadPhase m_loadPhase = LoadPhase::NotStarted;
 };
 
