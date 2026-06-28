@@ -39,7 +39,7 @@ void sendBucketAction(client::GameClient& client,
                       const glm::ivec3& placeBlock,
                       const glm::ivec3& hitNormal,
                       const glm::vec3& playerPosition,
-                      const StateID fluidState) {
+                      const BlockStateId fluidState) {
     net::ClientBlockAction action;
     action.sequence = ++runtime.heldItemSwingSequence;
     action.action = actionType;
@@ -119,7 +119,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
                                      target.fluidPlaceBlock,
                                      target.fluidHitNormal,
                                      transform.position,
-                                     RUNTIME_ID_NULL);
+                                     NULL_BLOCK_STATE);
                 } else {
                     ++runtime.heldItemSwingSequence;
                 }
@@ -127,7 +127,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
                 continue;
             }
 
-            mutableWorld->setFluidState(pickupPos.x, pickupPos.y, pickupPos.z, RUNTIME_ID_NULL);
+            mutableWorld->setFluidState(pickupPos.x, pickupPos.y, pickupPos.z, NULL_BLOCK_STATE);
             if (modeRules.shouldReportBreakProgress()) {
                 replaceSelectedItem(inventory, pickupRule->resultItem);
             }
@@ -147,7 +147,7 @@ void BucketUseSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        const StateID sourceFluid = ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock);
+        const BlockStateId sourceFluid = ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock);
         if (mutableWorld == nullptr) {
             if (ctx.services.gameClient) {
                 sendBucketAction(*ctx.services.gameClient,

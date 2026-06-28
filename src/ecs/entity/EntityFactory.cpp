@@ -281,7 +281,7 @@ entt::entity EntityFactory::createFallingBlock(GameplayRegistry& registry, const
 }
 
 entt::entity EntityFactory::createMovingBlock(GameplayRegistry& registry, const MovingBlockSpawnParams& params) {
-    if (params.stateId == RUNTIME_ID_NULL) {
+    if (params.stateId == NULL_BLOCK_STATE) {
         return entt::null;
     }
     if (params.durationSeconds <= 0.0f) {

@@ -84,7 +84,7 @@ BlockSelectionBox makeTransformedBox(const glm::vec3& from,
     return box;
 }
 
-BlockSelectionBox getTorchBox(const StateID stateId) {
+BlockSelectionBox getTorchBox(const BlockStateId stateId) {
     uint16_t facingValue = PropIndices::FACING_FLOOR;
     if (PropIndices::FACING != PropIndices::INVALID) {
         const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
@@ -141,7 +141,7 @@ glm::vec3 applyModelSelectionTransform(glm::vec3 point, const ModelTransform& tr
     return point;
 }
 
-BlockSelectionBox getModelBox(const StateID stateId) {
+BlockSelectionBox getModelBox(const BlockStateId stateId) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         throw std::runtime_error("Model selection requires a registered model variant");
@@ -183,7 +183,7 @@ BlockSelectionBox getModelBox(const StateID stateId) {
     return box;
 }
 
-uint16_t requireFacePlaneFacing(const StateID stateId) {
+uint16_t requireFacePlaneFacing(const BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
         throw std::runtime_error("Face plane selection requires the facing property");
     }
@@ -194,7 +194,7 @@ uint16_t requireFacePlaneFacing(const StateID stateId) {
     return facing;
 }
 
-BlockSelectionBox getFacePlaneBox(const StateID stateId) {
+BlockSelectionBox getFacePlaneBox(const BlockStateId stateId) {
     const uint16_t facing = requireFacePlaneFacing(stateId);
 
     if (facing == PropIndices::FACING_FLOOR) {
@@ -226,7 +226,7 @@ BlockSelectionBox getFacePlaneBox(const StateID stateId) {
 
 } // namespace
 
-BlockSelectionBox BlockSelection::getBox(const StateID stateId) {
+BlockSelectionBox BlockSelection::getBox(const BlockStateId stateId) {
     const BlockDef& def = BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId));
 
     if (def.renderShapeName == "torch") {

@@ -38,12 +38,12 @@ AABB makeBodyAABBAt(const PhysicsBody& body, const glm::vec3& position) {
 
 bool isWaterBlock(const IWorldView& world, const int x, const int y, const int z) {
     // Check fluid layer first (waterlogged blocks), then block layer (pure water)
-    const StateID fluidState = world.getFluidState(x, y, z);
+    const BlockStateId fluidState = world.getFluidState(x, y, z);
     return FluidState::isWater(fluidState);
 }
 
 float waterTopY(const IWorldView& world, const int x, const int y, const int z) {
-    const StateID fluidState = world.getFluidState(x, y, z);
+    const BlockStateId fluidState = world.getFluidState(x, y, z);
     if (!FluidState::isWater(fluidState)) {
         return static_cast<float>(y);
     }
@@ -140,7 +140,7 @@ bool overlapsCollision(const IWorldView& world, const AABB& box) {
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {
-                const StateID stateId = world.getBlockState(x, y, z);
+                const BlockStateId stateId = world.getBlockState(x, y, z);
                 if (BlockCollision::intersects(stateId, glm::ivec3(x, y, z), box.min, box.max)) {
                     return true;
                 }
@@ -162,7 +162,7 @@ float collisionOverlapScore(const IWorldView& world, const AABB& box) {
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {
-                const StateID stateId = world.getBlockState(x, y, z);
+                const BlockStateId stateId = world.getBlockState(x, y, z);
                 const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
                 for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
                     const glm::vec3 obstacleMin = blockOffset + localBox.min;
@@ -203,7 +203,7 @@ bool computeRequiredStepLift(const IWorldView& world,
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {
-                const StateID stateId = world.getBlockState(x, y, z);
+                const BlockStateId stateId = world.getBlockState(x, y, z);
                 const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
                 for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
                     const glm::vec3 obstacleMin = blockOffset + localBox.min;
@@ -234,7 +234,7 @@ bool queryEyesInWater(const PhysicsBody& body, const IWorldView& world) {
     const int blockX = static_cast<int>(std::floor(eyePos.x));
     const int blockY = static_cast<int>(std::floor(eyePos.y));
     const int blockZ = static_cast<int>(std::floor(eyePos.z));
-    const StateID fluidState = world.getFluidState(blockX, blockY, blockZ);
+    const BlockStateId fluidState = world.getFluidState(blockX, blockY, blockZ);
     if (!FluidState::isWater(fluidState)) {
         return false;
     }
@@ -275,7 +275,7 @@ bool hasGroundSupportAt(const PhysicsBody& body, const IWorldView& world, const 
                                  box.min.y,
                                  probe.y + kProbeRadius);
         for (int by = supportMinY; by <= supportMaxY; ++by) {
-            const StateID stateId = world.getBlockState(bx, by, bz);
+            const BlockStateId stateId = world.getBlockState(bx, by, bz);
             if (BlockCollision::intersects(stateId, glm::ivec3(bx, by, bz), probeMin, probeMax)) {
                 return true;
             }
@@ -327,8 +327,8 @@ SurfacePhysics querySurfacePhysics(const PhysicsBody& body, const IWorldView& wo
                                  box.min.y,
                                  probe.y + kProbeRadius);
         for (int by = supportMinY; by <= supportMaxY; ++by) {
-            const StateID stateId = world.getBlockState(bx, by, bz);
-            if (stateId == RUNTIME_ID_NULL ||
+            const BlockStateId stateId = world.getBlockState(bx, by, bz);
+            if (stateId == NULL_BLOCK_STATE ||
                 !BlockCollision::intersects(stateId, glm::ivec3(bx, by, bz), probeMin, probeMax)) {
                 continue;
             }

@@ -168,7 +168,7 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
             throw std::runtime_error("Block interaction requires an active world context");
         }
 
-        const StateID targetState = m_ctx.world->getBlockState(
+        const BlockStateId targetState = m_ctx.world->getBlockState(
             target.targetBlock.x,
             target.targetBlock.y,
             target.targetBlock.z);

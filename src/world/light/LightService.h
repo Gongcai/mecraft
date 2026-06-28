@@ -16,6 +16,7 @@
 
 #include "LightTypes.h"
 #include "LightCache.h"
+#include "../block/BlockStateRegistry.h"
 
 class Chunk;
 class ThreadPool;
@@ -31,7 +32,7 @@ public:
 
     void onChunkLoaded(const std::shared_ptr<Chunk>& chunk);
     void onChunkUnloaded(int64_t chunkKey);
-    void onBlockChanged(int wx, int wy, int wz, BlockID oldId, BlockID newId);
+    void onBlockChanged(int wx, int wy, int wz, BlockStateId oldStateId, BlockStateId newStateId);
 
     void submitJobs(const glm::vec3& cameraPos, int submitBudget);
     void drainCompleted(World& world, int mergeBudget = 32, float timeBudgetMs = 1.0f);

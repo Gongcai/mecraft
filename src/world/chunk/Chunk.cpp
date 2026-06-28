@@ -328,41 +328,44 @@ bool Chunk::replacePackedLightSection(const int scy, const uint8_t* data, const 
 
 // --- Block access (delegates to sub-chunks) ---
 
-BlockID Chunk::getBlock(const int x, const int y, const int z) const {
+BlockStateId Chunk::getBlock(const int x, const int y, const int z) const {
     if (!isInBounds(x, y, z)) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
     const int scy = toSubChunkIndex(y);
     const SubChunk* sc = getSubChunk(scy);
     if (!sc) {
-        // Null sub-chunk = all air
-        return 0;
+        return NULL_BLOCK_STATE;
     }
     return sc->getBlockUnchecked(x, toSubChunkLocalY(y), z);
 }
 
-BlockID Chunk::getFluidState(const int x, const int y, const int z) const {
+BlockStateId Chunk::getFluidState(const int x, const int y, const int z) const {
     if (!isInBounds(x, y, z)) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
     const int scy = toSubChunkIndex(y);
     const SubChunk* sc = getSubChunk(scy);
     if (!sc) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
     const int localY = toSubChunkLocalY(y);
-    const BlockID fluidId = sc->getFluidLayerUnchecked(x, localY, z);
-    if (fluidId != 0) {
-        return fluidId;
+    const BlockStateId fluidState = sc->getFluidLayerUnchecked(x, localY, z);
+    if (fluidState != NULL_BLOCK_STATE) {
+        return fluidState;
     }
-    const BlockID blockId = sc->getBlockUnchecked(x, localY, z);
-    if (FluidState::decode(blockId).kind != FluidKind::None) {
-        return blockId;
+    const BlockStateId blockState = sc->getBlockUnchecked(x, localY, z);
+    if (FluidState::decode(blockState).kind != FluidKind::None) {
+        return blockState;
     }
-    return 0;
+    return NULL_BLOCK_STATE;
 }
 
-void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id, const bool markMeshDirty) {
+void Chunk::setBlockImpl(const int x,
+                         const int y,
+                         const int z,
+                         const BlockStateId stateId,
+                         const bool markMeshDirty) {
     if (!isInBounds(x, y, z)) {
         return;
     }
@@ -370,17 +373,17 @@ void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id
     const int scy = toSubChunkIndex(y);
     const int localY = toSubChunkLocalY(y);
 
-    if (id == 0 && !m_subChunks[scy]) {
+    if (stateId == NULL_BLOCK_STATE && !m_subChunks[scy]) {
         return;
     }
 
     SubChunk* sc = getOrCreateSubChunk(scy);
     if (markMeshDirty) {
-        sc->setBlock(x, localY, z, id);
+        sc->setBlock(x, localY, z, stateId);
         m_dirtySubChunkMask |= (1u << scy);
         m_dirty = true;
     } else {
-        sc->setBlockWithoutMeshDirty(x, localY, z, id);
+        sc->setBlockWithoutMeshDirty(x, localY, z, stateId);
     }
     tryRecycleSubChunk(scy);
 
@@ -405,26 +408,26 @@ void Chunk::setBlockImpl(const int x, const int y, const int z, const BlockID id
     m_dirty = m_dirtySubChunkMask != 0u;
 }
 
-void Chunk::setBlock(const int x, const int y, const int z, const BlockID id) {
-    setBlockImpl(x, y, z, id, true);
+void Chunk::setBlock(const int x, const int y, const int z, const BlockStateId stateId) {
+    setBlockImpl(x, y, z, stateId, true);
 }
 
-void Chunk::setBlockWithoutMeshDirty(const int x, const int y, const int z, const BlockID id) {
-    setBlockImpl(x, y, z, id, false);
+void Chunk::setBlockWithoutMeshDirty(const int x, const int y, const int z, const BlockStateId stateId) {
+    setBlockImpl(x, y, z, stateId, false);
 }
 
-void Chunk::setBlockFast(const int x, const int y, const int z, const BlockID id) {
+void Chunk::setBlockFast(const int x, const int y, const int z, const BlockStateId stateId) {
     if (!isInBounds(x, y, z)) {
         return;
     }
 
     const int scy = toSubChunkIndex(y);
-    if (id == 0 && !m_subChunks[scy]) {
+    if (stateId == NULL_BLOCK_STATE && !m_subChunks[scy]) {
         return;
     }
 
     SubChunk* sc = getOrCreateSubChunk(scy);
-    sc->setBlockFast(x, toSubChunkLocalY(y), z, id);
+    sc->setBlockFast(x, toSubChunkLocalY(y), z, stateId);
 }
 
 void Chunk::markExistingSubChunksDirty() {
@@ -504,11 +507,12 @@ void Chunk::seedInitialLightMap() {
                 const int scy = toSubChunkIndex(y);
                 SubChunk* sc = getSubChunk(scy);
 
-                BlockID blockId = RUNTIME_ID_NULL;
+                BlockStateId stateId = NULL_BLOCK_STATE;
                 if (sc) {
-                    blockId = sc->getBlockUnchecked(x, toSubChunkLocalY(y), z);
+                    stateId = sc->getBlockUnchecked(x, toSubChunkLocalY(y), z);
                 }
 
+                const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
                 const BlockDef& def = BlockRegistry::getFast(blockId);
                 if (def.opacity >= 15) {
                     skyLevel = 0;
@@ -853,7 +857,7 @@ void Chunk::recalcHeightMap(const int x, const int z) {
     }
     int height = 0;
     for (int y = SIZE_Y - 1; y >= 0; --y) {
-        if (BlockRegistry::getOpacityFast(getBlock(x, y, z)) >= 15) {
+        if (BlockRegistry::getOpacityFast(BlockStateRegistry::getBlockId(getBlock(x, y, z))) >= 15) {
             height = y;
             break;
         }

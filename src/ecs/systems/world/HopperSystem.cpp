@@ -80,7 +80,7 @@ bool positionTicks(const World& world, const glm::vec3& position) {
     return world.ticketManager().shouldTick(chunkX, chunkZ);
 }
 
-uint16_t requiredProperty(const StateID stateId, const uint16_t property, const char* propertyName) {
+uint16_t requiredProperty(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     if (property == PropIndices::INVALID) {
         throw std::runtime_error(std::string("Hopper state requires registered property: ") + propertyName);
     }
@@ -92,8 +92,8 @@ uint16_t requiredProperty(const StateID stateId, const uint16_t property, const 
     return value;
 }
 
-bool isHopperState(const StateID stateId) {
-    if (stateId == RUNTIME_ID_NULL) {
+bool isHopperState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
@@ -101,7 +101,7 @@ bool isHopperState(const StateID stateId) {
     return BlockRegistry::getFast(blockId).redstoneBehavior == "hopper";
 }
 
-bool hopperEnabled(const StateID stateId) {
+bool hopperEnabled(const BlockStateId stateId) {
     const uint16_t enabled = requiredProperty(stateId, PropIndices::ENABLED, "enabled");
     if (PropIndices::ENABLED_TRUE == PropIndices::INVALID ||
         PropIndices::ENABLED_FALSE == PropIndices::INVALID) {
@@ -113,7 +113,7 @@ bool hopperEnabled(const StateID stateId) {
     return enabled == PropIndices::ENABLED_TRUE;
 }
 
-glm::ivec3 hopperFacingDirection(const StateID stateId) {
+glm::ivec3 hopperFacingDirection(const BlockStateId stateId) {
     const uint16_t facing = requiredProperty(stateId, PropIndices::FACING, "facing");
     if (facing == PropIndices::FACING_DOWN) {
         return {0, -1, 0};
@@ -224,8 +224,8 @@ std::optional<InventoryAccess> containerAt(World& world,
         return std::nullopt;
     }
 
-    const StateID stateId = world.getBlockState(position.x, position.y, position.z);
-    if (stateId == RUNTIME_ID_NULL) {
+    const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
+    if (stateId == NULL_BLOCK_STATE) {
         return std::nullopt;
     }
 
@@ -451,7 +451,7 @@ bool tryPickupDropEntity(World& world,
 bool tryPushFromHopper(World& world,
                        GameplayRegistry& registry,
                        const glm::ivec3& hopperPosition,
-                       const StateID hopperState,
+                       const BlockStateId hopperState,
                        const InventoryAccess& hopper) {
     const glm::ivec3 targetPosition = hopperPosition + hopperFacingDirection(hopperState);
     std::optional<InventoryAccess> target = containerAt(world, registry, targetPosition);
@@ -525,7 +525,7 @@ std::size_t HopperSystem::processWorld(World& world,
             continue;
         }
 
-        const StateID stateId = world.getBlockState(position.x, position.y, position.z);
+        const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
         if (!isHopperState(stateId)) {
             throw std::runtime_error("Hopper inventory is not backed by a hopper block");
         }

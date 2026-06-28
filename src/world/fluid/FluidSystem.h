@@ -54,7 +54,7 @@ private:
 
     void updateFluidCell(const glm::ivec3& pos);
     void scheduleSlopeSearchNeighborhoodForFluidUpdate(glm::ivec3 pos, uint64_t dueTick);
-    [[nodiscard]] StateID computeTargetFluidState(const glm::ivec3& pos, BlockID currentId) const;
+    [[nodiscard]] BlockStateId computeTargetFluidState(const glm::ivec3& pos, BlockStateId currentState) const;
     [[nodiscard]] uint64_t resolveNeighborhoodTickDelay(const glm::ivec3& pos) const;
 
     World& m_world;

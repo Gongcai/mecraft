@@ -101,7 +101,7 @@ public:
                 continue;
             }
 
-            std::array<BlockID, SubChunk::BLOCK_COUNT> blocks{};
+            std::array<BlockStateId, SubChunk::BLOCK_COUNT> blocks{};
             std::array<uint8_t, SubChunk::BLOCK_COUNT> lights{};
             std::size_t index = 0;
             for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
@@ -114,7 +114,7 @@ public:
                     }
                 }
             }
-            encodeRleRuntimeId(buf, blocks.data(), blocks.size());
+            encodeRleBlockStateId(buf, blocks.data(), blocks.size());
             encodeRleU8(buf, lights.data(), lights.size());
         }
         return buf;
@@ -197,7 +197,7 @@ public:
         pushFloat(buf, msg.playerPosition.x);
         pushFloat(buf, msg.playerPosition.y);
         pushFloat(buf, msg.playerPosition.z);
-        pushVarU32(buf, msg.blockState);
+        pushVarU32(buf, msg.blockState.raw());
         return buf;
     }
 
@@ -258,7 +258,7 @@ public:
             pushI32(buf, u.z);
             pushU8(buf, static_cast<uint8_t>(u.kind));
             if (u.kind == BlockUpdateKind::BlockState) {
-                pushVarU32(buf, u.stateId);
+                pushVarU32(buf, u.stateId.raw());
             }
             pushVarU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
             buf.insert(buf.end(), u.packedLightPatch.begin(), u.packedLightPatch.end());
@@ -460,9 +460,9 @@ public:
                         continue;
                     }
 
-                    std::array<BlockID, SubChunk::BLOCK_COUNT> blocks{};
+                    std::array<BlockStateId, SubChunk::BLOCK_COUNT> blocks{};
                     std::array<uint8_t, SubChunk::BLOCK_COUNT> lights{};
-                    if (!decodeRleRuntimeId(data, size, offset, blocks.data(), blocks.size()) ||
+                    if (!decodeRleBlockStateId(data, size, offset, blocks.data(), blocks.size()) ||
                         !decodeRleU8(data, size, offset, lights.data(), lights.size())) {
                         return false;
                     }
@@ -473,7 +473,7 @@ public:
                         const int y = yBase + ly;
                         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                                if (blocks[index] != RUNTIME_ID_NULL) {
+                                if (blocks[index] != NULL_BLOCK_STATE) {
                                     chunk->setBlockFast(x, y, z, blocks[index]);
                                 }
                                 packedLight[Chunk::toIndex(x, y, z)] = lights[index];
@@ -508,7 +508,7 @@ public:
         for (int y = 0; y < Chunk::SIZE_Y; ++y) {
             for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                 for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                    chunk->setBlockFast(x, y, z, readU32(data, offset));
+                    chunk->setBlockFast(x, y, z, BlockStateId::fromRaw(readU32(data, offset)));
                 }
             }
         }
@@ -637,7 +637,12 @@ public:
         out.playerPosition.x = readFloat(data, offset);
         out.playerPosition.y = readFloat(data, offset);
         out.playerPosition.z = readFloat(data, offset);
-        return readVarU32(data, size, offset, out.blockState) && offset == size;
+        uint32_t rawBlockState = 0;
+        if (!readVarU32(data, size, offset, rawBlockState) || offset != size) {
+            return false;
+        }
+        out.blockState = BlockStateId::fromRaw(rawBlockState);
+        return true;
     }
 
     static bool decodeClientContainerOpenRequest(const uint8_t* data,
@@ -707,10 +712,13 @@ public:
             const uint8_t kindRaw = readU8(data, offset);
             if (kindRaw > static_cast<uint8_t>(BlockUpdateKind::LightOnly)) return false;
             out.updates[i].kind = static_cast<BlockUpdateKind>(kindRaw);
-            out.updates[i].stateId = 0;
-            if (out.updates[i].kind == BlockUpdateKind::BlockState &&
-                !readVarU32(data, size, offset, out.updates[i].stateId)) {
-                return false;
+            out.updates[i].stateId = NULL_BLOCK_STATE;
+            if (out.updates[i].kind == BlockUpdateKind::BlockState) {
+                uint32_t rawStateId = 0;
+                if (!readVarU32(data, size, offset, rawStateId)) {
+                    return false;
+                }
+                out.updates[i].stateId = BlockStateId::fromRaw(rawStateId);
             }
             uint32_t lightCount = 0;
             if (!readVarU32(data, size, offset, lightCount)) return false;
@@ -925,16 +933,16 @@ private:
         return static_cast<uint8_t>((y >= chunk.getHeightMap(x, z) ? 15 : 0) << 4);
     }
 
-    static void encodeRleRuntimeId(std::vector<uint8_t>& buf, const RuntimeId* values, const size_t count) {
+    static void encodeRleBlockStateId(std::vector<uint8_t>& buf, const BlockStateId* values, const size_t count) {
         size_t i = 0;
         while (i < count) {
-            const RuntimeId value = values[i];
+            const BlockStateId value = values[i];
             uint32_t run = 1;
             while (i + run < count && values[i + run] == value) {
                 ++run;
             }
             pushVarU32(buf, run);
-            pushVarU32(buf, value);
+            pushVarU32(buf, value.raw());
             i += run;
         }
         pushVarU32(buf, 0);
@@ -955,7 +963,11 @@ private:
         pushU16(buf, 0);
     }
 
-    static bool decodeRleRuntimeId(const uint8_t* data, const size_t size, size_t& offset, RuntimeId* out, const size_t count) {
+    static bool decodeRleBlockStateId(const uint8_t* data,
+                                      const size_t size,
+                                      size_t& offset,
+                                      BlockStateId* out,
+                                      const size_t count) {
         size_t written = 0;
         while (offset < size) {
             uint32_t run = 0;
@@ -964,8 +976,9 @@ private:
                 return written == count;
             }
             if (written + run > count) return false;
-            RuntimeId value = RUNTIME_ID_NULL;
-            if (!readVarU32(data, size, offset, value)) return false;
+            uint32_t rawValue = 0;
+            if (!readVarU32(data, size, offset, rawValue)) return false;
+            const BlockStateId value = BlockStateId::fromRaw(rawValue);
             for (uint32_t i = 0; i < run; ++i) {
                 out[written++] = value;
             }

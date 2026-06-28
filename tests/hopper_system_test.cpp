@@ -33,11 +33,11 @@ void loadOriginChunks(World& world) {
     }
 }
 
-StateID defaultState(const char* blockName) {
+BlockStateId defaultState(const char* blockName) {
     return BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName(blockName));
 }
 
-StateID hopperState(const uint16_t facing, const bool enabled) {
+BlockStateId hopperState(const uint16_t facing, const bool enabled) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:hopper"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -46,7 +46,7 @@ StateID hopperState(const uint16_t facing, const bool enabled) {
         });
 }
 
-void placeBlock(World& world, const glm::ivec3& position, const StateID state) {
+void placeBlock(World& world, const glm::ivec3& position, const BlockStateId state) {
     world.setBlockState(position.x, position.y, position.z, state);
 }
 

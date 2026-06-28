@@ -43,7 +43,7 @@ struct FallingBlockSpawnParams {
 /// Spawn parameters for a piston-driven moving block entity.
 /// `stateId` stores the exact block state restored when the motion completes.
 struct MovingBlockSpawnParams {
-    StateID stateId = 0;
+    BlockStateId stateId = NULL_BLOCK_STATE;
     glm::ivec3 sourcePosition{};
     glm::ivec3 targetPosition{};
     glm::ivec3 direction{};

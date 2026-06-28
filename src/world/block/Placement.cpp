@@ -27,17 +27,17 @@ namespace {
 
 constexpr float kPlacementEpsilon = 0.0001f;
 
-StateID strategySimple(const PlacementContext& ctx) {
+BlockStateId strategySimple(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
 }
 
-StateID strategyAttachWall(const PlacementContext& ctx) {
+BlockStateId strategyAttachWall(const PlacementContext& ctx) {
     const auto& n = ctx.hitNormal;
     if (n.y == 1) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_FLOOR);
     }
     if (n.y == -1) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
     if (n.z == -1) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_NORTH);
@@ -51,7 +51,7 @@ StateID strategyAttachWall(const PlacementContext& ctx) {
     if (n.x == 1) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_EAST);
     }
-    return 0;
+    return NULL_BLOCK_STATE;
 }
 
 void requireWallFacePlanePlacementProperties() {
@@ -327,14 +327,14 @@ uint16_t verticalHalfFromHit(const PlacementContext& ctx) {
     return halfValue;
 }
 
-StateID strategyHorizontalFacing(const PlacementContext& ctx) {
+BlockStateId strategyHorizontalFacing(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(
         ctx.blockId,
         PropIndices::FACING,
         applyPlacementFacingRevert(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw)));
 }
 
-StateID strategySixWayFacing(const PlacementContext& ctx) {
+BlockStateId strategySixWayFacing(const PlacementContext& ctx) {
     requireSixWayFacingPlacementProperties();
     if (ctx.hitNormal.y > 0) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_UP);
@@ -348,7 +348,7 @@ StateID strategySixWayFacing(const PlacementContext& ctx) {
         applyPlacementFacingRevert(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw)));
 }
 
-StateID strategyHopperFacing(const PlacementContext& ctx) {
+BlockStateId strategyHopperFacing(const PlacementContext& ctx) {
     requireHopperFacingPlacementProperties();
     if (ctx.hitNormal.y != 0) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_DOWN);
@@ -359,7 +359,7 @@ StateID strategyHopperFacing(const PlacementContext& ctx) {
         oppositeHorizontalFacing(facingFromSideNormal(ctx.hitNormal)));
 }
 
-StateID strategyAxisOriented(const PlacementContext& ctx) {
+BlockStateId strategyAxisOriented(const PlacementContext& ctx) {
     const auto& n = ctx.hitNormal;
     if (n.y != 0) {
         return BlockStateRegistry::getState(ctx.blockId, PropIndices::AXIS, PropIndices::AXIS_Y);
@@ -370,7 +370,7 @@ StateID strategyAxisOriented(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::AXIS, PropIndices::AXIS_Z);
 }
 
-StateID strategyStairs(const PlacementContext& ctx) {
+BlockStateId strategyStairs(const PlacementContext& ctx) {
     if (PropIndices::SHAPE == PropIndices::INVALID ||
         PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID) {
         throw std::runtime_error("Stair placement requires registered shape=straight property");
@@ -390,19 +390,19 @@ StateID strategyStairs(const PlacementContext& ctx) {
         });
 }
 
-StateID strategySlab(const PlacementContext& ctx) {
+BlockStateId strategySlab(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, halfFromHit(ctx));
 }
 
-StateID strategyVerticalSlab(const PlacementContext& ctx) {
+BlockStateId strategyVerticalSlab(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::HALF, verticalHalfFromHit(ctx));
 }
 
-StateID strategyBed(const PlacementContext& ctx) {
+BlockStateId strategyBed(const PlacementContext& ctx) {
     return BedBlockLogic::makeBedState(ctx.blockId, horizontalFacingFromYaw(ctx.playerYaw), PropIndices::PART_FOOT);
 }
 
-StateID strategyDoor(const PlacementContext& ctx) {
+BlockStateId strategyDoor(const PlacementContext& ctx) {
     return DoorBlockLogic::makeDoorState(
         ctx.blockId,
         horizontalFacingFromYaw(ctx.playerYaw),
@@ -412,7 +412,7 @@ StateID strategyDoor(const PlacementContext& ctx) {
         false);
 }
 
-StateID strategyTrapdoor(const PlacementContext& ctx) {
+BlockStateId strategyTrapdoor(const PlacementContext& ctx) {
     if (PropIndices::OPEN == PropIndices::INVALID ||
         PropIndices::OPEN_FALSE == PropIndices::INVALID ||
         PropIndices::POWERED == PropIndices::INVALID ||
@@ -433,31 +433,31 @@ StateID strategyTrapdoor(const PlacementContext& ctx) {
         });
 }
 
-StateID strategyFence(const PlacementContext& ctx) {
+BlockStateId strategyFence(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
 }
 
-StateID strategyWall(const PlacementContext& ctx) {
+BlockStateId strategyWall(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
 }
 
-StateID strategyFacePlaneWall(const PlacementContext& ctx) {
+BlockStateId strategyFacePlaneWall(const PlacementContext& ctx) {
     requireWallFacePlanePlacementProperties();
     if (ctx.hitNormal.y != 0) {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, facePlaneFacingFromWallNormal(ctx.hitNormal));
 }
 
-StateID strategyFacePlaneFloor(const PlacementContext& ctx) {
+BlockStateId strategyFacePlaneFloor(const PlacementContext& ctx) {
     requireFloorFacePlanePlacementProperties();
     if (ctx.hitNormal.y != 1) {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, PropIndices::FACING_FLOOR);
 }
 
-StateID strategyRedstoneWireFace(const PlacementContext& ctx) {
+BlockStateId strategyRedstoneWireFace(const PlacementContext& ctx) {
     requireRedstoneWireFacePlacementProperties();
 
     uint16_t facing = PropIndices::FACING_FLOOR;
@@ -477,9 +477,9 @@ StateID strategyRedstoneWireFace(const PlacementContext& ctx) {
 
 } // namespace
 
-bool tryMergePlacementStates(const StateID existingState,
-                             const StateID incomingState,
-                             StateID& mergedState) {
+bool tryMergePlacementStates(const BlockStateId existingState,
+                             const BlockStateId incomingState,
+                             BlockStateId& mergedState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
     if (blockId == RUNTIME_ID_NULL || blockId != BlockStateRegistry::getBlockId(incomingState)) {
         return false;
@@ -492,7 +492,7 @@ bool tryMergePlacementStates(const StateID existingState,
     }
 
     const float mergedVolume = totalBoxVolume(existingBoxes) + totalBoxVolume(incomingBoxes);
-    for (const StateID candidateState : BlockStateRegistry::getStatesForBlock(blockId)) {
+    for (const BlockStateId candidateState : BlockStateRegistry::getStatesForBlock(blockId)) {
         const std::vector<BlockCollisionBox> candidateBoxes = BlockCollision::getBoxes(candidateState);
         if (candidateBoxes.empty()) {
             continue;
@@ -512,15 +512,15 @@ bool tryMergePlacementStates(const StateID existingState,
     return false;
 }
 
-bool canReplaceWithMergedPlacementResult(const StateID existingState,
-                                         const StateID resultState) {
+bool canReplaceWithMergedPlacementResult(const BlockStateId existingState,
+                                         const BlockStateId resultState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(existingState);
     if (blockId == RUNTIME_ID_NULL || blockId != BlockStateRegistry::getBlockId(resultState)) {
         return false;
     }
 
-    for (const StateID incomingState : BlockStateRegistry::getStatesForBlock(blockId)) {
-        StateID mergedState = RUNTIME_ID_NULL;
+    for (const BlockStateId incomingState : BlockStateRegistry::getStatesForBlock(blockId)) {
+        BlockStateId mergedState = NULL_BLOCK_STATE;
         if (tryMergePlacementStates(existingState, incomingState, mergedState) &&
             mergedState == resultState) {
             return true;

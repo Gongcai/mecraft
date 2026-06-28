@@ -18,7 +18,7 @@ class TerrainGenerator {
 public:
     void init(uint32_t seed, int seaLevel);
     void generateChunk(Chunk& chunk) const;
-    [[nodiscard]] BlockID sampleBlock(int worldX, int y, int worldZ) const;
+    [[nodiscard]] BlockStateId sampleBlock(int worldX, int y, int worldZ) const;
     [[nodiscard]] int sampleSurfaceY(int worldX, int worldZ) const;
     [[nodiscard]] TerrainBiome sampleBiome(int worldX, int worldZ) const;
     void sampleSurfaceYBatch(int startWorldX, int worldZ, int count, int* outSurfaceY) const;

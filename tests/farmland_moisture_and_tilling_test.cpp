@@ -23,6 +23,10 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
+BlockID blockIdOf(const BlockStateId stateId) {
+    return BlockStateRegistry::getBlockId(stateId);
+}
+
 void loadSpawnChunks(World& world) {
     world.setRenderDistance(1);
     for (int i = 0; i < 8; ++i) {
@@ -37,7 +41,7 @@ void loadWideSpawnChunks(World& world) {
     }
 }
 
-uint16_t moistureValue(StateID state) {
+uint16_t moistureValue(BlockStateId state) {
     const uint16_t moisture = BlockStateRegistry::getPropertyNameIndex("moisture");
     if (moisture == BlockStateRegistry::INVALID_INDEX) {
         return BlockStateRegistry::INVALID_INDEX;
@@ -45,7 +49,7 @@ uint16_t moistureValue(StateID state) {
     return BlockStateRegistry::getPropertyIndex(state, moisture);
 }
 
-void fillSubChunkWithState(World& world, const glm::ivec3& origin, const StateID state) {
+void fillSubChunkWithState(World& world, const glm::ivec3& origin, const BlockStateId state) {
     for (int y = 0; y < 16; ++y) {
         for (int z = 0; z < 16; ++z) {
             for (int x = 0; x < 16; ++x) {
@@ -80,7 +84,7 @@ int main() {
     hydrationWorld.init(20260624);
     loadSpawnChunks(hydrationWorld);
 
-    const StateID dryFarmland = BlockStateRegistry::getDefaultState(farmland);
+    const BlockStateId dryFarmland = BlockStateRegistry::getDefaultState(farmland);
     const glm::ivec3 hydratedPos(0, 122, 0);
     const glm::ivec3 dryPos(0, 122, 10);
     hydrationWorld.setBlockState(hydratedPos.x, hydratedPos.y, hydratedPos.z, dryFarmland);
@@ -129,7 +133,7 @@ int main() {
     if (wheat == RUNTIME_ID_NULL) {
         return fail("wheat block should be registered");
     }
-    const StateID wheatAge0 = BlockStateRegistry::getDefaultState(wheat);
+    const BlockStateId wheatAge0 = BlockStateRegistry::getDefaultState(wheat);
     const glm::ivec3 outsideRandomTickOrigin(48, 128, 0);
     fillSubChunkWithState(simulationRangeWorld, outsideRandomTickOrigin, wheatAge0);
     if (ecs::RandomTickSystem::processWorld(simulationRangeWorld, 99, 4096) != 0) {
@@ -142,7 +146,7 @@ int main() {
         return fail("random ticks should process random-tick blocks inside simulation distance");
     }
 
-    const StateID moistFarmland = BlockStateRegistry::withProperty(
+    const BlockStateId moistFarmland = BlockStateRegistry::withProperty(
         dryFarmland,
         moisture,
         BlockStateRegistry::getPropertyValueIndex(moisture, "2"));
@@ -170,7 +174,7 @@ int main() {
         0
     };
     if (!BlockRandomTick::dispatch(BlockRegistry::get(farmland).randomTick, revertTickCtx) ||
-        hydrationWorld.getBlock(revertPos.x, revertPos.y, revertPos.z) != BlockRegistry::requireIdByName("minecraft:dirt")) {
+        blockIdOf(hydrationWorld.getBlock(revertPos.x, revertPos.y, revertPos.z)) != BlockRegistry::requireIdByName("minecraft:dirt")) {
         return fail("dry farmland random tick should revert to dirt when no crop is above");
     }
 
@@ -196,8 +200,8 @@ int main() {
     loadSpawnChunks(tillWorld);
 
     const glm::ivec3 dirtPos(0, 122, 0);
-    tillWorld.setBlockState(dirtPos.x, dirtPos.y, dirtPos.z, BlockRegistry::requireIdByName("minecraft:dirt"));
-    tillWorld.setBlockState(dirtPos.x, dirtPos.y + 1, dirtPos.z, RUNTIME_ID_NULL);
+    tillWorld.setBlock(dirtPos.x, dirtPos.y, dirtPos.z, BlockRegistry::requireIdByName("minecraft:dirt"));
+    tillWorld.setBlockState(dirtPos.x, dirtPos.y + 1, dirtPos.z, NULL_BLOCK_STATE);
 
     ecs::GameplayRegistry registry;
     ecs::GameplayServices services;
@@ -239,7 +243,7 @@ int main() {
     ecs::SoilTillingSystem tillingSystem;
     tillingSystem.update(ctx);
 
-    const StateID tilledState = tillWorld.getBlockState(dirtPos.x, dirtPos.y, dirtPos.z);
+    const BlockStateId tilledState = tillWorld.getBlockState(dirtPos.x, dirtPos.y, dirtPos.z);
     if (BlockStateRegistry::getBlockId(tilledState) != farmland || moistureValue(tilledState) != moisture0) {
         return fail("hoe interaction should convert dirt into dry farmland");
     }

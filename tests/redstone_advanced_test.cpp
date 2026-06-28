@@ -31,9 +31,9 @@ void loadTestChunks(World& world) {
 void prepareFlatLine(World& world, const int y, const int minX, const int maxX, const int z = 0) {
     for (int x = minX; x <= maxX; ++x) {
         world.setBlock(x, y - 1, z, BlockRegistry::requireIdByName("minecraft:stone"));
-        world.setBlockState(x, y, z, RUNTIME_ID_NULL);
-        world.setBlockState(x, y + 1, z, RUNTIME_ID_NULL);
-        world.setBlockState(x, y + 2, z, RUNTIME_ID_NULL);
+        world.setBlockState(x, y, z, NULL_BLOCK_STATE);
+        world.setBlockState(x, y + 1, z, NULL_BLOCK_STATE);
+        world.setBlockState(x, y + 2, z, NULL_BLOCK_STATE);
     }
 }
 
@@ -44,7 +44,7 @@ void processRedstoneTicks(World& world, uint64_t& tick, const int count) {
     }
 }
 
-StateID leverState(const uint16_t facing, const bool powered) {
+BlockStateId leverState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -53,11 +53,11 @@ StateID leverState(const uint16_t facing, const bool powered) {
         });
 }
 
-StateID leverState(const bool powered) {
+BlockStateId leverState(const bool powered) {
     return leverState(PropIndices::FACING_FLOOR, powered);
 }
 
-StateID buttonState(const bool powered) {
+BlockStateId buttonState(const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:stone_button"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -66,7 +66,7 @@ StateID buttonState(const bool powered) {
         });
 }
 
-StateID redstoneTorchState(const bool lit) {
+BlockStateId redstoneTorchState(const bool lit) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:redstone_torch"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -75,7 +75,7 @@ StateID redstoneTorchState(const bool lit) {
         });
 }
 
-StateID repeaterState(const uint16_t facing, const uint16_t delay, const bool powered) {
+BlockStateId repeaterState(const uint16_t facing, const uint16_t delay, const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:repeater"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -85,7 +85,7 @@ StateID repeaterState(const uint16_t facing, const uint16_t delay, const bool po
         });
 }
 
-uint8_t powerFromState(const StateID state) {
+uint8_t powerFromState(const BlockStateId state) {
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
         PropIndices::POWER_1,

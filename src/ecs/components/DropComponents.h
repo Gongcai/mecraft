@@ -44,7 +44,7 @@ struct FallingBlockComponent {
 /// The world cells are reserved by the piston logic while this component owns
 /// continuous rendering, collision push-out, and final block placement.
 struct MovingBlockComponent {
-    StateID stateId = 0;
+    BlockStateId stateId = NULL_BLOCK_STATE;
     glm::ivec3 sourcePosition{};
     glm::ivec3 targetPosition{};
     glm::ivec3 direction{};

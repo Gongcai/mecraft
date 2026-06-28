@@ -325,7 +325,7 @@ void appendTorchVertices(std::vector<BlockVertex>& vertices, const BlockDef& def
 }
 
 void appendModelVertices(std::vector<BlockVertex>& vertices,
-                         const StateID stateId,
+                         const BlockStateId stateId,
                          const BlockDef& def,
                          const ResourceMgr& resourceMgr) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
@@ -422,9 +422,9 @@ BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices) {
     return mesh;
 }
 
-std::vector<BlockVertex> buildBlockMeshVerticesForState(const StateID stateId, const ResourceMgr& resourceMgr) {
+std::vector<BlockVertex> buildBlockMeshVerticesForState(const BlockStateId stateId, const ResourceMgr& resourceMgr) {
     std::vector<BlockVertex> vertices;
-    if (stateId == RUNTIME_ID_NULL) {
+    if (stateId == NULL_BLOCK_STATE) {
         return vertices;
     }
 
@@ -505,7 +505,7 @@ BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, const ResourceMgr& resou
     return uploadBlockCubeMesh(vertices);
 }
 
-BlockCubeMesh buildBlockStateCubeMesh(const StateID stateId, const ResourceMgr& resourceMgr) {
+BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, const ResourceMgr& resourceMgr) {
     BlockCubeMesh mesh;
     std::vector<BlockVertex> vertices = buildBlockMeshVerticesForState(stateId, resourceMgr);
     if (vertices.empty()) {

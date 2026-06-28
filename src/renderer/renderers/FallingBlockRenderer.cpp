@@ -58,7 +58,7 @@ void FallingBlockRenderer::shutdown() {
     m_shadowShader = nullptr;
 }
 
-const renderer::BlockCubeMesh* FallingBlockRenderer::getOrCreateMesh(StateID stateId) {
+const renderer::BlockCubeMesh* FallingBlockRenderer::getOrCreateMesh(BlockStateId stateId) {
     const auto it = m_meshes.find(stateId);
     if (it != m_meshes.end()) {
         return &it->second;

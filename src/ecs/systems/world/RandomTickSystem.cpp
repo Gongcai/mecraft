@@ -34,7 +34,8 @@ uint32_t nextRandomBits(uint64_t& state) {
 
 bool paletteHasRandomTickBlock(const Palette& palette) {
     for (size_t i = 0; i < palette.size(); ++i) {
-        const BlockID blockId = BlockStateRegistry::getBlockId(palette.getRuntimeId(static_cast<uint32_t>(i)));
+        const BlockStateId stateId = BlockStateId::fromRaw(palette.getRuntimeId(static_cast<uint32_t>(i)));
+        const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
         if (BlockRegistry::getFast(blockId).randomTick.enabled) {
             return true;
         }
@@ -89,8 +90,8 @@ size_t RandomTickSystem::processWorld(World& world, const uint64_t tickIndex, co
                 const int localY = static_cast<int>(yBits & 0x0Fu);
                 const int localZ = static_cast<int>(zBits & 0x0Fu);
 
-                const StateID state = subChunk->getBlock(localX, localY, localZ);
-                if (state == RUNTIME_ID_NULL) {
+                const BlockStateId state = subChunk->getBlock(localX, localY, localZ);
+                if (state == NULL_BLOCK_STATE) {
                     continue;
                 }
 

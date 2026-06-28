@@ -15,13 +15,13 @@ struct PlacementContext {
     bool isSneaking = false;
 };
 
-using PlacementStrategyFn = StateID(*)(const PlacementContext&);
+using PlacementStrategyFn = BlockStateId(*)(const PlacementContext&);
 
-[[nodiscard]] bool tryMergePlacementStates(StateID existingState,
-                                           StateID incomingState,
-                                           StateID& mergedState);
-[[nodiscard]] bool canReplaceWithMergedPlacementResult(StateID existingState,
-                                                       StateID resultState);
+[[nodiscard]] bool tryMergePlacementStates(BlockStateId existingState,
+                                           BlockStateId incomingState,
+                                           BlockStateId& mergedState);
+[[nodiscard]] bool canReplaceWithMergedPlacementResult(BlockStateId existingState,
+                                                       BlockStateId resultState);
 
 class PlacementStrategyRegistry {
 public:

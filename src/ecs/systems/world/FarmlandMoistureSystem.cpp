@@ -24,7 +24,8 @@ FarmlandMoistureProperties getMoistureProperties() {
 
 bool paletteContainsFarmland(const Palette& palette, const BlockID farmlandBlock) {
     for (size_t i = 0; i < palette.size(); ++i) {
-        if (BlockStateRegistry::getBlockId(palette.getRuntimeId(static_cast<uint32_t>(i))) == farmlandBlock) {
+        const BlockStateId stateId = BlockStateId::fromRaw(palette.getRuntimeId(static_cast<uint32_t>(i)));
+        if (BlockStateRegistry::getBlockId(stateId) == farmlandBlock) {
             return true;
         }
     }
@@ -77,7 +78,7 @@ size_t FarmlandMoistureSystem::hydrateLoadedFarmland(World& world) {
                 const int worldY = scy * SubChunk::SIZE + localY;
                 for (int localZ = 0; localZ < SubChunk::SIZE; ++localZ) {
                     for (int localX = 0; localX < SubChunk::SIZE; ++localX) {
-                        const StateID state = subChunk->getBlock(localX, localY, localZ);
+                        const BlockStateId state = subChunk->getBlock(localX, localY, localZ);
                         if (BlockStateRegistry::getBlockId(state) != farmlandBlock) {
                             continue;
                         }
@@ -90,7 +91,7 @@ size_t FarmlandMoistureSystem::hydrateLoadedFarmland(World& world) {
                             continue;
                         }
 
-                        const StateID hydratedState = BlockStateRegistry::withProperty(
+                        const BlockStateId hydratedState = BlockStateRegistry::withProperty(
                             state,
                             props.moisture,
                             props.moisture7);

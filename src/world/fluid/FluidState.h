@@ -13,30 +13,30 @@ struct DecodedFluid {
 };
 
 struct FluidCellView {
-    StateID blockState = 0;  // AIR
-    StateID fluidState = 0;  // AIR
+    BlockStateId blockState = NULL_BLOCK_STATE;
+    BlockStateId fluidState = NULL_BLOCK_STATE;
 
-    [[nodiscard]] bool hasBlock() const { return blockState != 0; }
-    [[nodiscard]] bool hasFluid() const { return fluidState != 0; }
+    [[nodiscard]] bool hasBlock() const { return blockState != NULL_BLOCK_STATE; }
+    [[nodiscard]] bool hasFluid() const { return fluidState != NULL_BLOCK_STATE; }
     [[nodiscard]] bool isEmpty() const { return !hasBlock() && !hasFluid(); }
 };
 
 namespace FluidState {
 
-DecodedFluid decode(StateID id);
-StateID encode(const DecodedFluid& fluid);
-bool isFluidOf(StateID id, FluidKind kind);
-bool isWater(BlockID id);
-bool isSource(BlockID id);
-bool isFalling(BlockID id);
-uint8_t level(BlockID id);
-float surfaceHeight(BlockID id);
-StateID makeWater(uint8_t level, bool falling);
-bool canReplace(const FluidDesc& desc, StateID occupant);
-bool canCoexist(const FluidDesc& desc, StateID occupant);
-bool canWaterReplace(BlockID id);
-bool isSameWater(BlockID a, BlockID b);
-StateID getFluidState(StateID cellState);
-FluidCellView getCombinedCell(StateID cellState);
+DecodedFluid decode(BlockStateId id);
+BlockStateId encode(const DecodedFluid& fluid);
+bool isFluidOf(BlockStateId id, FluidKind kind);
+bool isWater(BlockStateId id);
+bool isSource(BlockStateId id);
+bool isFalling(BlockStateId id);
+uint8_t level(BlockStateId id);
+float surfaceHeight(BlockStateId id);
+BlockStateId makeWater(uint8_t level, bool falling);
+bool canReplace(const FluidDesc& desc, BlockStateId occupant);
+bool canCoexist(const FluidDesc& desc, BlockStateId occupant);
+bool canWaterReplace(BlockStateId id);
+bool isSameWater(BlockStateId a, BlockStateId b);
+BlockStateId getFluidState(BlockStateId cellState);
+FluidCellView getCombinedCell(BlockStateId cellState);
 
 }

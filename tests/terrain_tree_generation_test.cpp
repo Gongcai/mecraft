@@ -25,6 +25,10 @@ bool containsBlockId(const std::vector<BlockID>& ids, const BlockID id) {
     return std::find(ids.begin(), ids.end(), id) != ids.end();
 }
 
+BlockID blockIdOf(const BlockStateId stateId) {
+    return BlockStateRegistry::getBlockId(stateId);
+}
+
 const std::vector<BlockID>& naturalLogIds() {
     static const std::vector<BlockID> ids = {
         BlockRegistry::findByName("oak_log"),
@@ -73,7 +77,7 @@ bool findSampledBlock(const TerrainGenerator& generator,
     for (int z = minZ; z <= maxZ; ++z) {
         for (int x = minX; x <= maxX; ++x) {
             for (int y = minY; y <= maxY; ++y) {
-                if (containsBlockId(targets, generator.sampleBlock(x, y, z))) {
+                if (containsBlockId(targets, blockIdOf(generator.sampleBlock(x, y, z)))) {
                     return true;
                 }
             }
@@ -92,10 +96,10 @@ bool findTreeRoot(const TerrainGenerator& generator, TreeRoot& outRoot) {
     for (int z = -128; z <= 128; ++z) {
         for (int x = -128; x <= 128; ++x) {
             const int surfaceY = generator.sampleSurfaceY(x, z);
-            if (generator.sampleBlock(x, surfaceY, z) != BlockRegistry::requireIdByName("minecraft:grass_block")) {
+            if (blockIdOf(generator.sampleBlock(x, surfaceY, z)) != BlockRegistry::requireIdByName("minecraft:grass_block")) {
                 continue;
             }
-            if (isLog(generator.sampleBlock(x, surfaceY + 1, z))) {
+            if (isLog(blockIdOf(generator.sampleBlock(x, surfaceY + 1, z)))) {
                 outRoot = TreeRoot{x, z, surfaceY};
                 return true;
             }
@@ -109,7 +113,7 @@ bool findCrossChunkTreeBlock(const TerrainGenerator& generator,
                              int& outX,
                              int& outY,
                              int& outZ,
-                             BlockID& outBlock) {
+                             BlockStateId& outBlock) {
     for (int z = -192; z <= 192; ++z) {
         for (int x = -192; x <= 192; ++x) {
             const int localX = x - worldToChunkCoord(x, Chunk::SIZE_X) * Chunk::SIZE_X;
@@ -120,7 +124,7 @@ bool findCrossChunkTreeBlock(const TerrainGenerator& generator,
             }
 
             const int surfaceY = generator.sampleSurfaceY(x, z);
-            if (!isLog(generator.sampleBlock(x, surfaceY + 1, z))) {
+            if (!isLog(blockIdOf(generator.sampleBlock(x, surfaceY + 1, z)))) {
                 continue;
             }
 
@@ -136,8 +140,8 @@ bool findCrossChunkTreeBlock(const TerrainGenerator& generator,
                     }
 
                     for (int y = surfaceY + 1; y <= surfaceY + 8 && y < Chunk::SIZE_Y; ++y) {
-                        const BlockID block = generator.sampleBlock(targetX, y, targetZ);
-                        if (isTreeBlock(block)) {
+                        const BlockStateId block = generator.sampleBlock(targetX, y, targetZ);
+                        if (isTreeBlock(blockIdOf(block))) {
                             outRoot = TreeRoot{x, z, surfaceY};
                             outX = targetX;
                             outY = y;
@@ -153,7 +157,7 @@ bool findCrossChunkTreeBlock(const TerrainGenerator& generator,
     return false;
 }
 
-BlockID chunkBlockAt(const TerrainGenerator& generator, int worldX, int y, int worldZ) {
+BlockStateId chunkBlockAt(const TerrainGenerator& generator, int worldX, int y, int worldZ) {
     const int chunkX = worldToChunkCoord(worldX, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(worldZ, Chunk::SIZE_Z);
     Chunk chunk(chunkX, chunkZ);
@@ -168,7 +172,7 @@ bool findUnsuitableRoot(const TerrainGenerator& generator, int& outX, int& outZ,
         for (int x = -128; x <= 128; ++x) {
             const int surfaceY = generator.sampleSurfaceY(x, z);
             const TerrainBiome biome = generator.sampleBiome(x, z);
-            const BlockID surface = generator.sampleBlock(x, surfaceY, z);
+            const BlockStateId surface = generator.sampleBlock(x, surfaceY, z);
             if (surfaceY < kSeaLevel ||
                 biome == TerrainBiome::Arid ||
                 biome == TerrainBiome::HighMountain ||
@@ -235,8 +239,8 @@ int main() {
     }
 
     const int waterY = waterSurfaceY + 1;
-    const BlockID sampledWater = generator.sampleBlock(waterX, waterY, waterZ);
-    if (!FluidState::isWater(sampledWater) || sampledWater == BlockRegistry::requireIdByName("minecraft:water")) {
+    const BlockStateId sampledWater = generator.sampleBlock(waterX, waterY, waterZ);
+    if (!FluidState::isWater(sampledWater) || sampledWater != FluidState::makeWater(0, false)) {
         return fail("sampled natural water should use the canonical fluid state");
     }
     if (chunkBlockAt(generator, waterX, waterY, waterZ) != sampledWater) {
@@ -248,8 +252,8 @@ int main() {
         return fail("expected to find at least one deterministic tree root");
     }
 
-    const BlockID rootBlock = generator.sampleBlock(root.x, root.surfaceY + 1, root.z);
-    if (!isLog(rootBlock)) {
+    const BlockStateId rootBlock = generator.sampleBlock(root.x, root.surfaceY + 1, root.z);
+    if (!isLog(blockIdOf(rootBlock))) {
         return fail("tree root should place a log above grass");
     }
     if (chunkBlockAt(generator, root.x, root.surfaceY + 1, root.z) != rootBlock) {
@@ -266,7 +270,7 @@ int main() {
     int crossX = 0;
     int crossY = 0;
     int crossZ = 0;
-    BlockID crossBlock = 0;
+    BlockStateId crossBlock = NULL_BLOCK_STATE;
     if (!findCrossChunkTreeBlock(generator, crossingRoot, crossX, crossY, crossZ, crossBlock)) {
         return fail("expected to find a tree crossing a chunk boundary");
     }
@@ -301,7 +305,7 @@ int main() {
     if (!findUnsuitableRoot(generator, unsuitableX, unsuitableZ, unsuitableSurfaceY)) {
         return fail("expected to find an unsuitable tree root location");
     }
-    if (isLog(generator.sampleBlock(unsuitableX, unsuitableSurfaceY + 1, unsuitableZ))) {
+    if (isLog(blockIdOf(generator.sampleBlock(unsuitableX, unsuitableSurfaceY + 1, unsuitableZ)))) {
         return fail("unsuitable terrain should not host a tree trunk");
     }
 

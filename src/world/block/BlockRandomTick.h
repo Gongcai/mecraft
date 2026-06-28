@@ -12,7 +12,7 @@ class World;
 struct BlockRandomTickContext {
     World& world;
     glm::ivec3 pos{};
-    StateID state = 0;
+    BlockStateId state = NULL_BLOCK_STATE;
     uint64_t tickIndex = 0;
     uint32_t randomBits = 0;
 };

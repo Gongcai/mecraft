@@ -10,13 +10,13 @@ class World;
 
 namespace PistonBlockLogic {
 
-[[nodiscard]] bool isPistonBaseState(StateID stateId);
-[[nodiscard]] bool isPistonHeadState(StateID stateId);
-[[nodiscard]] bool isPistonAssemblyState(StateID stateId);
+[[nodiscard]] bool isPistonBaseState(BlockStateId stateId);
+[[nodiscard]] bool isPistonHeadState(BlockStateId stateId);
+[[nodiscard]] bool isPistonAssemblyState(BlockStateId stateId);
 [[nodiscard]] bool tryGetOtherPartPosition(const glm::ivec3& pos,
-                                           StateID stateId,
+                                           BlockStateId stateId,
                                            glm::ivec3& outOtherPos);
-[[nodiscard]] bool isMatchingAssemblyPart(StateID stateId, StateID otherState);
+[[nodiscard]] bool isMatchingAssemblyPart(BlockStateId stateId, BlockStateId otherState);
 
 BlockID removePistonAssembly(World& world,
                              const glm::ivec3& hitPos,

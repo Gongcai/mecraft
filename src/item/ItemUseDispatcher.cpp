@@ -9,8 +9,8 @@
 namespace {
 bool hasEmptySpaceAbove(const IWorldView& worldView, const glm::ivec3& pos) {
     const glm::ivec3 above = pos + glm::ivec3(0, 1, 0);
-    return worldView.getBlockState(above.x, above.y, above.z) == RUNTIME_ID_NULL &&
-           worldView.getFluidState(above.x, above.y, above.z) == RUNTIME_ID_NULL;
+    return worldView.getBlockState(above.x, above.y, above.z) == NULL_BLOCK_STATE &&
+           worldView.getFluidState(above.x, above.y, above.z) == NULL_BLOCK_STATE;
 }
 
 bool canPlaceFluidAt(const IWorldView& worldView, const glm::ivec3& pos, const FluidDesc& fluidDesc) {
@@ -18,7 +18,7 @@ bool canPlaceFluidAt(const IWorldView& worldView, const glm::ivec3& pos, const F
         return false;
     }
 
-    const StateID blockState = worldView.getBlockState(pos.x, pos.y, pos.z);
+    const BlockStateId blockState = worldView.getBlockState(pos.x, pos.y, pos.z);
     return FluidState::canReplace(fluidDesc, blockState) ||
            FluidState::canCoexist(fluidDesc, blockState);
 }
@@ -37,7 +37,7 @@ bool isWithinReach(const glm::vec3& actorPosition,
 bool canApplyBlockRule(const IWorldView& worldView,
                        const glm::ivec3& blockPosition,
                        const ItemUseRule& rule) {
-    const StateID targetState =
+    const BlockStateId targetState =
         worldView.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
     const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
     if (!ItemUseRules::matchesBlock(rule, targetBlock)) {
@@ -49,7 +49,7 @@ bool canApplyBlockRule(const IWorldView& worldView,
 bool canPickupFluid(const IWorldView& worldView,
                     const glm::ivec3& blockPosition,
                     const ItemUseRule& rule) {
-    const StateID fluidState =
+    const BlockStateId fluidState =
         worldView.getFluidState(blockPosition.x, blockPosition.y, blockPosition.z);
     const DecodedFluid fluid = FluidState::decode(fluidState);
     if (fluid.kind == FluidKind::None) {
@@ -78,7 +78,7 @@ bool canPlaceFluid(const IWorldView& worldView,
     return canPlaceFluidAt(worldView, blockPosition, *fluidDesc);
 }
 
-StateID makeSourceFluidState(const BlockID fluidBlock) {
+BlockStateId makeSourceFluidState(const BlockID fluidBlock) {
     const FluidKind fluidKind = FluidRegistry::kindForBlock(fluidBlock);
     if (FluidRegistry::tryGet(fluidKind) == nullptr) {
         throw std::runtime_error("Item use rule references unsupported fluid block.");

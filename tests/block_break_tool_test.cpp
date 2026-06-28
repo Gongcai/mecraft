@@ -76,7 +76,7 @@ int main() {
     ecs::BlockBreakSystem breakSystem;
     breakSystem.update(ctx);
 
-    if (world.getBlock(stonePos.x, stonePos.y, stonePos.z) != RUNTIME_ID_NULL) {
+    if (world.getBlock(stonePos.x, stonePos.y, stonePos.z) != NULL_BLOCK_STATE) {
         return fail("iron pickaxe should break stone within the accelerated duration");
     }
 

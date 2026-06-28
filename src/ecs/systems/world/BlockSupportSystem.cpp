@@ -29,9 +29,10 @@ constexpr glm::ivec3 kNeighborOffsets[6] = {
 
 /// Check if a block at `supportPos` can provide support (solid block).
 bool isSupportive(const World& world, const glm::ivec3& supportPos) {
-    const BlockID id = world.getBlock(supportPos.x, supportPos.y, supportPos.z);
-    if (id == 0) return false;
-    return BlockRegistry::getFast(id).isSolid;
+    const BlockStateId stateId = world.getBlockState(supportPos.x, supportPos.y, supportPos.z);
+    if (stateId == NULL_BLOCK_STATE) return false;
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isSolid;
 }
 
 /// Evaluate the "ground" support rule: block below must be solid.
@@ -40,14 +41,18 @@ bool checkGround(const World& world, const glm::ivec3& pos) {
 }
 
 bool checkFarmland(const World& world, const glm::ivec3& pos) {
-    const BlockID id = world.getBlock(pos.x, pos.y - 1, pos.z);
-    return id != 0 && BlockRegistry::getFast(id).namespacedId.path() == "farmland";
+    const BlockStateId stateId = world.getBlockState(pos.x, pos.y - 1, pos.z);
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).namespacedId.path() == "farmland";
 }
 
 /// Evaluate the "attached_face" support rule for face-attached blocks.
 /// The `facing` property identifies the outward face, so support is located in
 /// the opposite direction from that face normal.
-bool checkAttachedFace(const World& world, const glm::ivec3& pos, StateID stateId) {
+bool checkAttachedFace(const World& world, const glm::ivec3& pos, BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
         throw std::runtime_error("attached_face support requires the facing property");
     }
@@ -64,8 +69,9 @@ bool checkAttachedFace(const World& world, const glm::ivec3& pos, StateID stateI
 
 /// Returns true if the block at `pos` can survive given its supportRule.
 bool canSurvive(const World& world, const glm::ivec3& pos) {
-    const BlockID blockId = world.getBlock(pos.x, pos.y, pos.z);
-    if (blockId == 0) return true;  // air always survives
+    const BlockStateId stateId = world.getBlockState(pos.x, pos.y, pos.z);
+    if (stateId == NULL_BLOCK_STATE) return true;  // air always survives
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
 
     const BlockDef& def = BlockRegistry::getFast(blockId);
 
@@ -75,8 +81,6 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
     }
 
     if (def.supportRule.empty()) return true;  // no rule = always survives
-
-    const StateID stateId = world.getBlockState(pos.x, pos.y, pos.z);
 
     if (def.supportRule == "ground") {
         return checkGround(world, pos);
@@ -115,10 +119,11 @@ size_t processQueuedPositions(World& world,
             continue;
         }
 
-        const BlockID blockId = world.getBlock(pos.x, pos.y, pos.z);
+        const BlockStateId stateId = world.getBlockState(pos.x, pos.y, pos.z);
+        const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
         const BlockDef& def = BlockRegistry::getFast(blockId);
 
-        world.setBlock(pos.x, pos.y, pos.z, 0);
+        world.setBlockState(pos.x, pos.y, pos.z, NULL_BLOCK_STATE);
         if (def.affectedByGravity) {
             if (sinks.fallingBlockBus != nullptr) {
                 sinks.fallingBlockBus->push({blockId, pos});

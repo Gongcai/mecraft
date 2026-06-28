@@ -8,7 +8,7 @@ bool isControlBlock(const BlockID blockId) {
     return game::interaction::hasBlockInteraction(blockId);
 }
 
-StateID nextControlState(const StateID currentState) {
+BlockStateId nextControlState(const BlockStateId currentState) {
     return game::interaction::nextBlockInteractionState(currentState);
 }
 

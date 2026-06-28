@@ -46,7 +46,7 @@ void processRedstoneTicks(World& world, uint64_t& tick, const int count) {
     }
 }
 
-StateID pressurePlateState(const BlockID blockId, const bool powered) {
+BlockStateId pressurePlateState(const BlockID blockId, const bool powered) {
     return BlockStateRegistry::getState(
         blockId,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -74,7 +74,7 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
         PropIndices::POWER_15,
     };
 
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
     for (uint8_t power = 0; power < kPowerValues.size(); ++power) {
         if (value == kPowerValues[power]) {
@@ -86,7 +86,7 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
 }
 
 bool powered(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 

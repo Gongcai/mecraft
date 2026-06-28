@@ -83,7 +83,7 @@ void SoilTillingSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        const StateID resultState = BlockStateRegistry::getDefaultState(tillRule->resultBlock);
+        const BlockStateId resultState = BlockStateRegistry::getDefaultState(tillRule->resultBlock);
         if (mutableWorld == nullptr) {
             if (ctx.services.gameClient) {
                 net::ClientBlockAction action;

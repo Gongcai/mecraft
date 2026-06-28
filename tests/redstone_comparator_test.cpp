@@ -41,7 +41,7 @@ void prepareComparatorArea(World& world, const int y) {
     }
 }
 
-StateID leverState(const bool powered) {
+BlockStateId leverState(const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -50,7 +50,7 @@ StateID leverState(const bool powered) {
         });
 }
 
-StateID comparatorState(const uint16_t mode, const bool powered) {
+BlockStateId comparatorState(const uint16_t mode, const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:comparator"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -80,7 +80,7 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
         PropIndices::POWER_15,
     };
 
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
     for (uint8_t power = 0; power < kPowerValues.size(); ++power) {
         if (value == kPowerValues[power]) {
@@ -92,12 +92,12 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
 }
 
 bool powered(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 
 bool lampLit(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::LIT) == PropIndices::LIT_TRUE;
 }
 

@@ -43,15 +43,15 @@ public:
 
     [[nodiscard]] uint32_t getSeed() const { return m_seed; }
 
-    [[nodiscard]] BlockID getBlock(int x, int y, int z) const override;
+    [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const override;
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const override;
-    [[nodiscard]] StateID getBlockState(int x, int y, int z) const override;
-    [[nodiscard]] StateID getFluidState(int x, int y, int z) const override;
+    [[nodiscard]] BlockStateId getBlockState(int x, int y, int z) const override;
+    [[nodiscard]] BlockStateId getFluidState(int x, int y, int z) const override;
     [[nodiscard]] FluidCellView getCombinedCell(int x, int y, int z) const;
-    [[nodiscard]] BlockID sampleGeneratedBlock(int x, int y, int z) const;
+    [[nodiscard]] BlockStateId sampleGeneratedBlock(int x, int y, int z) const;
     void setBlock(int x, int y, int z, BlockID id);
-    void setBlockState(int x, int y, int z, StateID stateId);
-    void setFluidState(int x, int y, int z, StateID stateId);
+    void setBlockState(int x, int y, int z, BlockStateId stateId);
+    void setFluidState(int x, int y, int z, BlockStateId stateId);
     [[nodiscard]] bool isChunkLoadedForBlock(int x, int y, int z) const override;
 
     [[nodiscard]] RayHit raycast(const PhysicsInfo& ray, float maxDist) const;
@@ -108,7 +108,7 @@ public:
 
     /// Callback invoked after any block state change (setBlockState / setFluidState).
     /// Used by GameServer to collect dirty blocks for BlockUpdateBatch messages.
-    using BlockChangeCallback = std::function<void(int x, int y, int z, StateID newStateId)>;
+    using BlockChangeCallback = std::function<void(int x, int y, int z, BlockStateId newStateId)>;
     void setBlockChangeCallback(BlockChangeCallback callback) { m_blockChangeCallback = std::move(callback); }
 
     // --- Save system integration ---

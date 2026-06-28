@@ -72,6 +72,10 @@ struct ServerHarness {
     server::GameServer server;
 };
 
+static BlockStateId defaultState(const char* name) {
+    return BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName(name));
+}
+
 static float horizontalDistanceSq(const glm::vec3& a, const glm::vec3& b) {
     const float dx = a.x - b.x;
     const float dz = a.z - b.z;
@@ -83,7 +87,7 @@ static float distanceSq(const glm::vec3& a, const glm::vec3& b) {
     return glm::dot(d, d);
 }
 
-static StateID targetState(const uint8_t power) {
+static BlockStateId targetState(const uint8_t power) {
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
         PropIndices::POWER_1,
@@ -106,7 +110,7 @@ static StateID targetState(const uint8_t power) {
     return BlockStateRegistry::getState(BlockRegistry::requireIdByName("minecraft:target"), PropIndices::POWER, kPowerValues[power]);
 }
 
-static StateID leverState(const bool powered) {
+static BlockStateId leverState(const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -115,7 +119,7 @@ static StateID leverState(const bool powered) {
         });
 }
 
-static StateID pistonState(const BlockID blockId, const uint16_t facing, const bool extended) {
+static BlockStateId pistonState(const BlockID blockId, const uint16_t facing, const bool extended) {
     return BlockStateRegistry::getState(
         blockId,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -536,7 +540,7 @@ static void testClientBlockActionRoundTrip() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     assert(harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z));
-    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
+    assert(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == NULL_BLOCK_STATE);
 
     const glm::vec3 actionPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
     net::ClientBlockAction place;
@@ -544,13 +548,13 @@ static void testClientBlockActionRoundTrip() {
     place.action = net::ClientBlockActionType::Place;
     place.placeBlock = placeBlock;
     place.playerPosition = actionPosition;
-    place.blockState = BlockRegistry::requireIdByName("minecraft:stone");
+    place.blockState = defaultState("minecraft:stone");
     client.sendBlockAction(place);
 
     harness.server.tick(1.0f / 20.0f);
     client.receiveMessages();
-    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockRegistry::requireIdByName("minecraft:stone"));
-    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == BlockRegistry::requireIdByName("minecraft:stone"));
+    assert(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == defaultState("minecraft:stone"));
+    assert(client.clientWorld().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == defaultState("minecraft:stone"));
 
     net::ClientBlockAction breakAction;
     breakAction.sequence = 2;
@@ -561,8 +565,8 @@ static void testClientBlockActionRoundTrip() {
 
     harness.server.tick(1.0f / 20.0f);
     client.receiveMessages();
-    assert(harness.server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
-    assert(client.clientWorld().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
+    assert(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == NULL_BLOCK_STATE);
+    assert(client.clientWorld().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == NULL_BLOCK_STATE);
     std::printf("[PASS] testClientBlockActionRoundTrip\n");
 }
 
@@ -587,19 +591,19 @@ static void testClientBlockActionMergesStackedSlabs() {
 
     const BlockID oakSlab = BlockRegistry::findByName("oak_slab");
     require(oakSlab != RUNTIME_ID_NULL, "oak_slab should be registered for server slab merge test");
-    const StateID bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
-    const StateID topSlab = BlockStateRegistry::getState(
+    const BlockStateId bottomSlab = BlockStateRegistry::getDefaultState(oakSlab);
+    const BlockStateId topSlab = BlockStateRegistry::getState(
         oakSlab,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::HALF, PropIndices::HALF_TOP}
         });
-    const StateID doubleSlab = BlockStateRegistry::getState(
+    const BlockStateId doubleSlab = BlockStateRegistry::getState(
         oakSlab,
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::HALF, PropIndices::HALF_DOUBLE}
         });
 
-    harness.server.world().setBlock(placeBlock.x, placeBlock.y, placeBlock.z, bottomSlab);
+    harness.server.world().setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, bottomSlab);
 
     net::ClientBlockAction merge;
     merge.sequence = 1;
@@ -616,7 +620,7 @@ static void testClientBlockActionMergesStackedSlabs() {
     require(harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == doubleSlab,
             "server should accept a legal bottom+top slab merge result");
 
-    harness.server.world().setBlock(placeBlock.x, placeBlock.y, placeBlock.z, bottomSlab);
+    harness.server.world().setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, bottomSlab);
 
     net::ClientBlockAction invalidReplace = merge;
     invalidReplace.sequence = 2;
@@ -885,13 +889,13 @@ static void testMultiplayerContainerSnapshotsStayAuthoritative() {
                     update.y == chestPos.y &&
                     update.z == chestPos.z &&
                     update.kind == net::BlockUpdateKind::BlockState &&
-                    update.stateId == RUNTIME_ID_NULL) {
+                    update.stateId == NULL_BLOCK_STATE) {
                     sawAirUpdateB = true;
                 }
             }
         }
     }
-    require(harness.server.world().getBlock(chestPos.x, chestPos.y, chestPos.z) == RUNTIME_ID_NULL,
+    require(harness.server.world().getBlockState(chestPos.x, chestPos.y, chestPos.z) == NULL_BLOCK_STATE,
             "breaking an open container should remove the chest block");
     require(sawCloseB, "breaking an open container should close client B's container session");
     require(sawAirUpdateB, "breaking an open container should sync the removed chest block");
@@ -3091,7 +3095,7 @@ static void testPersistentChestBlockRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_chest_block_save";
     std::filesystem::remove_all(saveRoot);
     const glm::ivec3 chestPos(2, Chunk::SIZE_Y - 8, 3);
-    const StateID eastChest = BlockStateRegistry::getState(
+    const BlockStateId eastChest = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:chest"),
         PropIndices::FACING,
         PropIndices::FACING_EAST);
@@ -3109,7 +3113,7 @@ static void testPersistentChestBlockRestoresFromSave() {
         require(server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
                 "test setup should load the chest chunk before placement");
 
-        server.world().setBlock(chestPos.x, chestPos.y, chestPos.z, eastChest);
+        server.world().setBlockState(chestPos.x, chestPos.y, chestPos.z, eastChest);
         server.shutdown();
     }
 
@@ -3147,7 +3151,7 @@ static void testPersistentChestBlockRestoresFromSave() {
         require(server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
                 "test setup should load the saved chest chunk");
 
-        const StateID loadedState = server.world().getBlock(chestPos.x, chestPos.y, chestPos.z);
+        const BlockStateId loadedState = server.world().getBlock(chestPos.x, chestPos.y, chestPos.z);
         require(BlockStateRegistry::getBlockId(loadedState) == BlockRegistry::requireIdByName("minecraft:chest"),
                 "persistent chest block save should restore the chest block from chunk data");
         require(BlockStateRegistry::getPropertyIndex(loadedState, PropIndices::FACING) == PropIndices::FACING_EAST,
@@ -3164,7 +3168,7 @@ static void testPersistentBarrelBlockRestoresFromSave() {
     const std::filesystem::path saveRoot = "test_server_barrel_block_save";
     std::filesystem::remove_all(saveRoot);
     const glm::ivec3 barrelPos(4, Chunk::SIZE_Y - 8, 5);
-    const StateID barrelState =
+    const BlockStateId barrelState =
         BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:barrel"));
 
     {
@@ -3180,7 +3184,7 @@ static void testPersistentBarrelBlockRestoresFromSave() {
         require(server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z),
                 "test setup should load the barrel chunk before placement");
 
-        server.world().setBlock(barrelPos.x, barrelPos.y, barrelPos.z, barrelState);
+        server.world().setBlockState(barrelPos.x, barrelPos.y, barrelPos.z, barrelState);
         server.shutdown();
     }
 
@@ -3218,7 +3222,7 @@ static void testPersistentBarrelBlockRestoresFromSave() {
         require(server.world().isChunkLoadedForBlock(barrelPos.x, barrelPos.y, barrelPos.z),
                 "test setup should load the saved barrel chunk");
 
-        const StateID loadedState = server.world().getBlock(barrelPos.x, barrelPos.y, barrelPos.z);
+        const BlockStateId loadedState = server.world().getBlock(barrelPos.x, barrelPos.y, barrelPos.z);
         require(BlockStateRegistry::getBlockId(loadedState) == BlockRegistry::requireIdByName("minecraft:barrel"),
                 "persistent barrel block save should restore the barrel block from chunk data");
 
@@ -3254,8 +3258,8 @@ static void testServerBlockActionBreaksChestLifecycle() {
     require(harness.server.world().isChunkLoadedForBlock(chestPos.x, chestPos.y, chestPos.z),
             "test setup should load the target chest chunk");
 
-    const StateID chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
-    harness.server.world().setBlock(chestPos.x, chestPos.y, chestPos.z, chestState);
+    const BlockStateId chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
+    harness.server.world().setBlockState(chestPos.x, chestPos.y, chestPos.z, chestState);
 
     BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
     BlockEntityInventory& chest = store.getOrCreate(chestPos, "minecraft:chest", 27);
@@ -3278,7 +3282,7 @@ static void testServerBlockActionBreaksChestLifecycle() {
 
     harness.server.tick(1.0f / 20.0f);
 
-    require(harness.server.world().getBlock(chestPos.x, chestPos.y, chestPos.z) == RUNTIME_ID_NULL,
+    require(harness.server.world().getBlockState(chestPos.x, chestPos.y, chestPos.z) == NULL_BLOCK_STATE,
             "server block break should remove the chest block");
     require(store.find(chestPos) == nullptr,
             "server block break should erase the chest inventory store entry");
@@ -3301,7 +3305,7 @@ static void testServerBlockActionBreaksChestLifecycle() {
                     update.y == chestPos.y &&
                     update.z == chestPos.z &&
                     update.kind == net::BlockUpdateKind::BlockState &&
-                    update.stateId == RUNTIME_ID_NULL) {
+                    update.stateId == NULL_BLOCK_STATE) {
                     sawAirBlockUpdate = true;
                 }
             }
@@ -3359,8 +3363,8 @@ static void testCreativeServerBreakDropsDispenserContents() {
             "test setup should load the target dispenser chunk");
 
     const BlockID dispenserBlock = BlockRegistry::requireIdByName("minecraft:dispenser");
-    const StateID dispenserState = BlockStateRegistry::getDefaultState(dispenserBlock);
-    harness.server.world().setBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z, dispenserState);
+    const BlockStateId dispenserState = BlockStateRegistry::getDefaultState(dispenserBlock);
+    harness.server.world().setBlockState(dispenserPos.x, dispenserPos.y, dispenserPos.z, dispenserState);
 
     BlockEntityInventoryStore& store = registry.ctxSet<BlockEntityInventoryStore>();
     BlockEntityInventory& dispenser = store.getOrCreate(dispenserPos, "minecraft:dispenser", 9);
@@ -3382,7 +3386,7 @@ static void testCreativeServerBreakDropsDispenserContents() {
 
     harness.server.tick(1.0f / 20.0f);
 
-    require(harness.server.world().getBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z) == RUNTIME_ID_NULL,
+    require(harness.server.world().getBlockState(dispenserPos.x, dispenserPos.y, dispenserPos.z) == NULL_BLOCK_STATE,
             "creative server block break should remove the dispenser block");
     require(store.find(dispenserPos) == nullptr,
             "creative server block break should erase the dispenser inventory store entry");
@@ -3591,7 +3595,7 @@ static void testClientBlockActionCodecCarriesInteract() {
     action.action = net::ClientBlockActionType::Interact;
     action.targetBlock = glm::ivec3(4, 65, -2);
     action.playerPosition = glm::vec3(4.5f, 65.5f, -1.5f);
-    action.blockState = 0x00012345u;
+    action.blockState = BlockStateId::fromRaw(0x00012345u);
 
     const auto encoded = net::PacketCodec::encodeClientBlockAction(action);
     net::ClientBlockAction decoded;
@@ -3937,11 +3941,11 @@ static void testServerTickBreaksUnsupportedPlant() {
     const glm::ivec3 base(0, static_cast<int>(harness.server.getSpawnPosition().y), 0);
     harness.server.world().setBlock(base.x, base.y, base.z, BlockRegistry::requireIdByName("minecraft:dirt"));
     harness.server.world().setBlock(base.x, base.y + 1, base.z, BlockRegistry::requireIdByName("minecraft:tall_grass"));
-    harness.server.world().setBlock(base.x, base.y, base.z, RUNTIME_ID_NULL);
+    harness.server.world().setBlockState(base.x, base.y, base.z, NULL_BLOCK_STATE);
 
     harness.server.tick(1.0f / 20.0f);
 
-    assert(harness.server.world().getBlock(base.x, base.y + 1, base.z) == RUNTIME_ID_NULL);
+    assert(harness.server.world().getBlockState(base.x, base.y + 1, base.z) == NULL_BLOCK_STATE);
     std::printf("[PASS] testServerTickBreaksUnsupportedPlant\n");
 }
 
@@ -3954,12 +3958,12 @@ static void testPlacedUnsupportedSandQueuesItself() {
 
     const int surfaceY = static_cast<int>(harness.server.getSpawnPosition().y) - 2;
     const glm::ivec3 sandPos(0, surfaceY + 4, 0);
-    harness.server.world().setBlock(sandPos.x, sandPos.y - 1, sandPos.z, RUNTIME_ID_NULL);
+    harness.server.world().setBlockState(sandPos.x, sandPos.y - 1, sandPos.z, NULL_BLOCK_STATE);
     harness.server.world().setBlock(sandPos.x, sandPos.y, sandPos.z, BlockRegistry::requireIdByName("minecraft:sand"));
 
     ecs::BlockSupportSystem::processWorldQueue(harness.server.world(), 1024);
 
-    assert(harness.server.world().getBlock(sandPos.x, sandPos.y, sandPos.z) == RUNTIME_ID_NULL);
+    assert(harness.server.world().getBlockState(sandPos.x, sandPos.y, sandPos.z) == NULL_BLOCK_STATE);
     std::printf("[PASS] testPlacedUnsupportedSandQueuesItself\n");
 }
 
@@ -4023,7 +4027,7 @@ static void testChunkDataDecodeMarksRenderableSubChunks() {
     for (int y = 48; y < 56; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                source->setBlockFast(x, y, z, BlockRegistry::requireIdByName("minecraft:stone"));
+                source->setBlockFast(x, y, z, defaultState("minecraft:stone"));
             }
         }
     }
@@ -4083,7 +4087,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     entry.y = 64;
     entry.z = -2;
     entry.kind = net::BlockUpdateKind::BlockState;
-    entry.stateId = 0x00012345u;
+    entry.stateId = BlockStateId::fromRaw(0x00012345u);
     entry.packedLightPatch.resize(5 * 5 * 5);
     for (size_t i = 0; i < entry.packedLightPatch.size(); ++i) {
         entry.packedLightPatch[i] = static_cast<uint8_t>(i & 0x0F);
@@ -4095,7 +4099,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     lightOnlyEntry.y = 32;
     lightOnlyEntry.z = 8;
     lightOnlyEntry.kind = net::BlockUpdateKind::LightOnly;
-    lightOnlyEntry.stateId = 0x001ABCDEu;
+    lightOnlyEntry.stateId = BlockStateId::fromRaw(0x001ABCDEu);
     lightOnlyEntry.packedLightPatch = {1, 2, 3, 4, 5, 6, 7};
     message.updates.push_back(lightOnlyEntry);
 
@@ -4114,7 +4118,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
         std::abort();
     }
     if (decoded.updates[1].kind != net::BlockUpdateKind::LightOnly ||
-        decoded.updates[1].stateId != 0u ||
+        decoded.updates[1].stateId != NULL_BLOCK_STATE ||
         decoded.updates[1].packedLightPatch != lightOnlyEntry.packedLightPatch) {
         std::fprintf(stderr, "[FAIL] BlockUpdateBatch light-only update was not preserved\n");
         std::abort();
@@ -4150,7 +4154,7 @@ static void testServerBlockUpdateCarriesStateId() {
         clientPtr->sent.pop();
     }
 
-    const StateID poweredTarget = targetState(9);
+    const BlockStateId poweredTarget = targetState(9);
     server.world().setBlockState(targetPos.x, targetPos.y, targetPos.z, poweredTarget);
     server.tick(1.0f / 20.0f);
 
@@ -4202,7 +4206,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     assert(server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z));
-    assert(server.world().getBlock(placeBlock.x, placeBlock.y, placeBlock.z) == RUNTIME_ID_NULL);
+    assert(server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z) == NULL_BLOCK_STATE);
 
     bool lightSettled = false;
     for (int tick = 0; tick < 240; ++tick) {
@@ -4230,7 +4234,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
     action.action = net::ClientBlockActionType::Place;
     action.placeBlock = placeBlock;
     action.playerPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
-    action.blockState = BlockRegistry::requireIdByName("minecraft:torch");
+    action.blockState = defaultState("minecraft:torch");
     actionPacket.inProcessPayload = action;
     clientPtr->pushIncoming(std::move(actionPacket));
 
@@ -4251,7 +4255,7 @@ static void testServerEmitsLightPatchAfterTorchPlacement() {
                     update.y == placeBlock.y &&
                     update.z == placeBlock.z &&
                     update.kind == net::BlockUpdateKind::BlockState &&
-                    update.stateId == BlockRegistry::requireIdByName("minecraft:torch")) {
+                    BlockStateRegistry::getBlockId(update.stateId) == BlockRegistry::requireIdByName("minecraft:torch")) {
                     sawTorchBlockUpdate = true;
                 }
                 for (const uint8_t packed : update.packedLightPatch) {

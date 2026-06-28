@@ -1,6 +1,6 @@
 #include "LightCache.h"
 
-#include "../block/Block.h"
+#include "../block/BlockStateRegistry.h"
 
 namespace {
 
@@ -36,7 +36,7 @@ CachedBaseLight buildBaseLightFromChunk(const Chunk& chunk) {
         for (int x = 0; x < Chunk::SIZE_X; ++x) {
             uint8_t skyLevel = 15;
             for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-                const BlockID blockId = chunk.getBlock(x, y, z);
+                const BlockID blockId = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
                 const uint8_t opacity = BlockRegistry::getOpacityFast(blockId);
                 if (opacity >= 15) {
                     skyLevel = 0;
@@ -59,7 +59,7 @@ CachedBaseLight buildBaseLightFromChunk(const Chunk& chunk) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                const BlockID blockId = chunk.getBlock(x, y, z);
+                const BlockID blockId = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
                 if (!BlockRegistry::isLightSourceFast(blockId)) {
                     continue;
                 }
@@ -83,7 +83,7 @@ CachedBaseLight buildBaseLightFromChunk(const Chunk& chunk) {
 void recomputeSkyColumn(const Chunk& chunk, int x, int z, std::vector<uint8_t>& packed) {
     uint8_t skyLevel = 15;
     for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-        const BlockID blockId = chunk.getBlock(x, y, z);
+        const BlockID blockId = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
         const uint8_t opacity = BlockRegistry::getOpacityFast(blockId);
         const std::size_t idx = packedIndex(x, y, z);
 

@@ -120,7 +120,7 @@ void appendCuboidVertices(std::vector<BlockEntityVertex>& vertices,
     }
 }
 
-float chestYawRadians(const StateID stateId) {
+float chestYawRadians(const BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
         throw std::runtime_error("Chest block entity rendering requires the facing property index");
     }
@@ -312,7 +312,7 @@ void BlockEntityRenderer::ensureInstanceCapacity(const std::size_t instanceCount
 }
 
 glm::mat4 BlockEntityRenderer::buildModelMatrix(const ModelEntry& entry,
-                                                const BlockID stateId,
+                                                const BlockStateId stateId,
                                                 const glm::vec3& blockPosition) {
     glm::mat4 model = glm::translate(glm::mat4(1.0f), blockPosition);
     if (entry.usesHorizontalFacing) {
@@ -336,8 +336,8 @@ void BlockEntityRenderer::rebuildSectionCache(const Chunk& chunk,
         const int columnY = yBase + ly;
         for (int lz = 0; lz < SubChunk::SIZE; ++lz) {
             for (int lx = 0; lx < SubChunk::SIZE; ++lx) {
-                const StateID stateId = static_cast<StateID>(subChunk.getBlockUnchecked(lx, ly, lz));
-                if (stateId == RUNTIME_ID_NULL) {
+                const BlockStateId stateId = subChunk.getBlockUnchecked(lx, ly, lz);
+                if (stateId == NULL_BLOCK_STATE) {
                     continue;
                 }
 

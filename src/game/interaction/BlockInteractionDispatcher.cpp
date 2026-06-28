@@ -44,7 +44,7 @@ uint16_t requirePropertyValue(const BlockInteractionDef& def,
     return valueIndex;
 }
 
-uint16_t requireCurrentValue(const StateID currentState,
+uint16_t requireCurrentValue(const BlockStateId currentState,
                              const BlockInteractionDef& def,
                              const uint16_t property) {
     const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(currentState, property);
@@ -54,18 +54,18 @@ uint16_t requireCurrentValue(const StateID currentState,
     return currentValue;
 }
 
-StateID withInteractionProperty(const StateID currentState,
+BlockStateId withInteractionProperty(const BlockStateId currentState,
                                 const BlockInteractionDef& def,
                                 const uint16_t property,
                                 const uint16_t value) {
-    const StateID updated = BlockStateRegistry::withProperty(currentState, property, value);
+    const BlockStateId updated = BlockStateRegistry::withProperty(currentState, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
         throw std::runtime_error(def.id + " failed to update property: " + def.property);
     }
     return updated;
 }
 
-StateID nextToggleBooleanState(const StateID currentState,
+BlockStateId nextToggleBooleanState(const BlockStateId currentState,
                                const BlockInteractionDef& def,
                                const uint16_t property) {
     const uint16_t falseValue = requirePropertyValue(def, property, def.falseValue);
@@ -81,7 +81,7 @@ StateID nextToggleBooleanState(const StateID currentState,
     throw std::runtime_error(def.id + " target state contains an unknown boolean value");
 }
 
-StateID nextSetPropertyOnceState(const StateID currentState,
+BlockStateId nextSetPropertyOnceState(const BlockStateId currentState,
                                  const BlockInteractionDef& def,
                                  const uint16_t property) {
     const uint16_t value = requirePropertyValue(def, property, def.setValue);
@@ -89,7 +89,7 @@ StateID nextSetPropertyOnceState(const StateID currentState,
     return withInteractionProperty(currentState, def, property, value);
 }
 
-StateID nextCyclePropertyState(const StateID currentState,
+BlockStateId nextCyclePropertyState(const BlockStateId currentState,
                                const BlockInteractionDef& def,
                                const uint16_t property) {
     std::vector<uint16_t> values;
@@ -108,7 +108,7 @@ StateID nextCyclePropertyState(const StateID currentState,
     return withInteractionProperty(currentState, def, property, *nextIt);
 }
 
-StateID nextStateForDef(const StateID currentState, const BlockInteractionDef& def) {
+BlockStateId nextStateForDef(const BlockStateId currentState, const BlockInteractionDef& def) {
     const uint16_t property = requirePropertyIndex(def);
     switch (def.action) {
         case BlockInteractionActionKind::ToggleBooleanProperty:
@@ -123,8 +123,8 @@ StateID nextStateForDef(const StateID currentState, const BlockInteractionDef& d
 
 void applyPartnerSync(World& world,
                       const glm::ivec3& position,
-                      const StateID currentState,
-                      const StateID updatedState,
+                      const BlockStateId currentState,
+                      const BlockStateId updatedState,
                       const BlockInteractionDef& def) {
     if (def.partnerSync == BlockInteractionPartnerSync::None) {
         if (updatedState != currentState) {
@@ -164,21 +164,21 @@ bool hasBlockInteraction(const BlockID blockId) {
     return true;
 }
 
-StateID nextBlockInteractionState(const StateID currentState) {
+BlockStateId nextBlockInteractionState(const BlockStateId currentState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(currentState);
     const BlockInteractionDef& def = requireInteractionForBlock(blockId);
     return nextStateForDef(currentState, def);
 }
 
 bool applyBlockInteraction(World& world, const glm::ivec3& position) {
-    const StateID currentState = world.getBlockState(position.x, position.y, position.z);
+    const BlockStateId currentState = world.getBlockState(position.x, position.y, position.z);
     const BlockID blockId = BlockStateRegistry::getBlockId(currentState);
     if (!hasBlockInteraction(blockId)) {
         return false;
     }
 
     const BlockInteractionDef& def = requireInteractionForBlock(blockId);
-    const StateID updatedState = nextStateForDef(currentState, def);
+    const BlockStateId updatedState = nextStateForDef(currentState, def);
     applyPartnerSync(world, position, currentState, updatedState, def);
     return true;
 }

@@ -14,6 +14,12 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
+BlockStateId stateForBlockId(const BlockID blockId) {
+    return blockId == RUNTIME_ID_NULL
+        ? NULL_BLOCK_STATE
+        : BlockStateRegistry::getDefaultState(blockId);
+}
+
 template <typename Predicate>
 bool waitUntil(Predicate&& predicate, const int timeoutMs = 4000) {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
@@ -36,7 +42,7 @@ SubChunkMeshingJob makeDenseJob(const int64_t chunkKey,
     for (int y = 0; y < SubChunk::SIZE; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                chunkPtr->setBlock(x, yBase + y, z, blockId);
+                chunkPtr->setBlock(x, yBase + y, z, stateForBlockId(blockId));
             }
         }
     }

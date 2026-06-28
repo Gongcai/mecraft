@@ -102,7 +102,7 @@ int main() {
     ecs::GameplayRegistry stateDropRegistry;
     DropSystem stateDropSystem;
     stateDropSystem.bindRegistry(stateDropRegistry);
-    const StateID birchLogX = BlockStateRegistry::getState(
+    const BlockStateId birchLogX = BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:birch_log"),
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::AXIS, PropIndices::AXIS_X}

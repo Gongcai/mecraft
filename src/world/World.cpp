@@ -51,12 +51,12 @@ void forEachWirePositionOnSupport(const glm::ivec3& support, Fn&& fn) {
     }
 }
 
-bool canWaterOccupyBlockLayer(const StateID state) {
+bool canWaterOccupyBlockLayer(const BlockStateId state) {
     const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
     return FluidState::canReplace(waterDesc, state) || FluidState::canCoexist(waterDesc, state);
 }
 
-bool canBlockStateKeepFluidLayer(const StateID blockState, const StateID fluidState) {
+bool canBlockStateKeepFluidLayer(const BlockStateId blockState, const BlockStateId fluidState) {
     const DecodedFluid fluid = FluidState::decode(fluidState);
     if (fluid.kind == FluidKind::None) {
         return true;
@@ -67,22 +67,11 @@ bool canBlockStateKeepFluidLayer(const StateID blockState, const StateID fluidSt
     return FluidState::canCoexist(FluidRegistry::get(fluid.kind), blockState);
 }
 
-bool changesFluidPathing(const StateID oldState, const StateID newState) {
+bool changesFluidPathing(const BlockStateId oldState, const BlockStateId newState) {
     return canWaterOccupyBlockLayer(oldState) != canWaterOccupyBlockLayer(newState);
 }
 
-StateID normalizeFluidBlockState(const StateID stateId) {
-    const FluidDesc& waterDesc = FluidRegistry::get(FluidKind::Water);
-    if (stateId == waterDesc.blockId) {
-        return FluidState::makeWater(0, false);
-    }
-    return stateId;
-}
-
-StateID normalizeDefaultBlockState(const StateID stateId) {
-    if (stateId < BlockRegistry::getBlockCount()) {
-        return BlockStateRegistry::getDefaultState(stateId);
-    }
+BlockStateId normalizeFluidBlockState(const BlockStateId stateId) {
     return stateId;
 }
 
@@ -98,23 +87,23 @@ bool isRedstoneWireBlockDef(const BlockDef& def) {
     return def.redstoneBehavior == "wire";
 }
 
-bool isRedstoneWireState(const StateID stateId) {
-    if (stateId == RUNTIME_ID_NULL) {
+bool isRedstoneWireState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     return isRedstoneWireBlockDef(BlockRegistry::getFast(blockId));
 }
 
-bool isRedstoneTorchRuntimeState(const StateID stateId) {
-    if (stateId == RUNTIME_ID_NULL || FluidState::decode(stateId).kind != FluidKind::None) {
+bool isRedstoneTorchRuntimeState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE || FluidState::decode(stateId).kind != FluidKind::None) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     return BlockRegistry::getFast(blockId).redstoneBehavior == "torch";
 }
 
-bool isMatchingRedstoneWireState(const StateID stateId, const uint16_t wireChannelId) {
+bool isMatchingRedstoneWireState(const BlockStateId stateId, const uint16_t wireChannelId) {
     if (!isRedstoneWireState(stateId)) {
         return false;
     }
@@ -122,7 +111,7 @@ bool isMatchingRedstoneWireState(const StateID stateId, const uint16_t wireChann
     return BlockRegistry::getFast(blockId).redstoneWireChannelId == wireChannelId;
 }
 
-uint16_t redstoneWireFacingForState(const StateID stateId) {
+uint16_t redstoneWireFacingForState(const BlockStateId stateId) {
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facing == BlockStateRegistry::INVALID_INDEX) {
         throw std::runtime_error("Redstone wire connection update requires wire facing values");
@@ -133,15 +122,15 @@ uint16_t redstoneWireFacingForState(const StateID stateId) {
     return facing;
 }
 
-bool isMatchingRedstoneWireStateWithFacing(const StateID stateId,
+bool isMatchingRedstoneWireStateWithFacing(const BlockStateId stateId,
                                            const uint16_t wireChannelId,
                                            const uint16_t wireFacing) {
     return isMatchingRedstoneWireState(stateId, wireChannelId) &&
            redstoneWireFacingForState(stateId) == wireFacing;
 }
 
-bool canConnectedBlockAttachTo(const StateID stateId) {
-    if (stateId == RUNTIME_ID_NULL) {
+bool canConnectedBlockAttachTo(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
@@ -150,8 +139,8 @@ bool canConnectedBlockAttachTo(const StateID stateId) {
     return isConnectedBlockDef(def) || def.isSolid;
 }
 
-bool canRedstoneWireAttachTo(const StateID stateId, const uint16_t wireChannelId) {
-    if (stateId == RUNTIME_ID_NULL) {
+bool canRedstoneWireAttachTo(const BlockStateId stateId, const uint16_t wireChannelId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
@@ -173,10 +162,10 @@ bool canRedstoneWireAttachTo(const StateID stateId, const uint16_t wireChannelId
            def.redstoneBehavior == "observer";
 }
 
-bool canPlanarRedstoneWireAttachTo(const StateID stateId,
+bool canPlanarRedstoneWireAttachTo(const BlockStateId stateId,
                                    const uint16_t wireChannelId,
                                    const uint16_t wireFacing) {
-    if (stateId == RUNTIME_ID_NULL) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
@@ -200,8 +189,8 @@ bool canPlanarRedstoneWireAttachTo(const StateID stateId,
 
 // Returns true when the given state is a solid block that redstone wire can
 // climb over. Redstone wire itself, non-solid blocks, and air are excluded.
-bool isSolidBlockForRedstoneClimb(const StateID stateId) {
-    if (stateId == RUNTIME_ID_NULL) {
+bool isSolidBlockForRedstoneClimb(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
@@ -218,9 +207,9 @@ bool isSolidBlockForRedstoneClimb(const StateID stateId) {
 //   - If the same-level neighbor is not solid and the block below it is a
 //     redstone wire, the connection is "down" (wire descends to the lower wire).
 //   - Otherwise, the connection is "none".
-uint16_t redstoneWireConnectionValue(const StateID sameLevelState,
-                                     const StateID upState,
-                                     const StateID downState,
+uint16_t redstoneWireConnectionValue(const BlockStateId sameLevelState,
+                                     const BlockStateId upState,
+                                     const BlockStateId downState,
                                      const uint16_t wireChannelId,
                                      const uint16_t noneValue,
                                      const uint16_t sideValue,
@@ -260,9 +249,9 @@ bool hasCornerRedstoneWireConnection(const World& world,
 
 uint16_t redstoneWireConnectionValueWithCorners(const World& world,
                                                 const glm::ivec3& pos,
-                                                const StateID sameLevelState,
-                                                const StateID upState,
-                                                const StateID downState,
+                                                const BlockStateId sameLevelState,
+                                                const BlockStateId upState,
+                                                const BlockStateId downState,
                                                 const uint16_t wireChannelId,
                                                 const WireFaceGeometry::ConnectionDirection& connection) {
     const uint16_t value = redstoneWireConnectionValue(
@@ -287,7 +276,7 @@ uint16_t redstoneWireConnectionValueWithCorners(const World& world,
         : connection.noneValue;
 }
 
-uint16_t redstoneWirePlanarConnectionValue(const StateID neighborState,
+uint16_t redstoneWirePlanarConnectionValue(const BlockStateId neighborState,
                                            const uint16_t wireChannelId,
                                            const uint16_t wireFacing,
                                            const uint16_t noneValue,
@@ -689,8 +678,8 @@ void World::updateStreaming(const glm::vec3& playerPos,
     }
 }
 
-BlockID World::getBlock(int x, int y, int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return 0;
+BlockStateId World::getBlock(int x, int y, int z) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) return NULL_BLOCK_STATE;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -701,7 +690,7 @@ BlockID World::getBlock(int x, int y, int z) const {
         int localZ = z - chunkZ * Chunk::SIZE_Z;
         return it->second->getBlock(localX, y, localZ);
     }
-    return 0;
+    return NULL_BLOCK_STATE;
 }
 
 uint8_t World::getPackedLight(const int x, const int y, const int z) const {
@@ -720,18 +709,18 @@ uint8_t World::getPackedLight(const int x, const int y, const int z) const {
     return it->second->getPackedLight(localX, y, localZ);
 }
 
-StateID World::getBlockState(const int x, const int y, const int z) const {
+BlockStateId World::getBlockState(const int x, const int y, const int z) const {
     return getBlock(x, y, z);
 }
 
-StateID World::getFluidState(const int x, const int y, const int z) const {
-    if (y < 0 || y >= Chunk::SIZE_Y) return RUNTIME_ID_NULL;
+BlockStateId World::getFluidState(const int x, const int y, const int z) const {
+    if (y < 0 || y >= Chunk::SIZE_Y) return NULL_BLOCK_STATE;
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
     const auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
     if (it == m_chunks.end()) {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
 
     const int localX = x - chunkX * Chunk::SIZE_X;
@@ -739,13 +728,13 @@ StateID World::getFluidState(const int x, const int y, const int z) const {
     const int scy = Chunk::toSubChunkIndex(y);
     const SubChunk* sc = it->second->getSubChunk(scy);
     if (!sc) {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
 
     // First check the dedicated fluid layer
     const int localY = Chunk::toSubChunkLocalY(y);
-    const BlockID fluidLayer = sc->getFluidLayer(localX, localY, localZ);
-    if (fluidLayer != RUNTIME_ID_NULL) {
+    const BlockStateId fluidLayer = sc->getFluidLayer(localX, localY, localZ);
+    if (fluidLayer != NULL_BLOCK_STATE) {
         return fluidLayer;
     }
 
@@ -772,33 +761,33 @@ FluidCellView World::getCombinedCell(const int x, const int y, const int z) cons
     }
 
     const int localY = Chunk::toSubChunkLocalY(y);
-    const BlockID blockState = sc->getBlock(localX, localY, localZ);
-    const BlockID fluidLayer = sc->getFluidLayer(localX, localY, localZ);
+    const BlockStateId blockState = sc->getBlock(localX, localY, localZ);
+    const BlockStateId fluidLayer = sc->getFluidLayer(localX, localY, localZ);
 
     const DecodedFluid blockFluid = FluidState::decode(blockState);
     if (blockFluid.kind != FluidKind::None) {
         // Pure fluid position (block layer IS the fluid)
-        return FluidCellView{RUNTIME_ID_NULL, blockState};
+        return FluidCellView{NULL_BLOCK_STATE, blockState};
     }
     // Block position (possibly waterlogged)
     return FluidCellView{blockState, fluidLayer};
 }
 
-BlockID World::sampleGeneratedBlock(const int x, const int y, const int z) const {
+BlockStateId World::sampleGeneratedBlock(const int x, const int y, const int z) const {
     if (y < 0 || y >= Chunk::SIZE_Y) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     return m_terrainGen.sampleBlock(x, y, z);
 }
 
 void World::setBlock(int x, int y, int z, BlockID id) {
-    setBlockState(x, y, z, id);
+    setBlockState(x, y, z, BlockStateRegistry::getDefaultState(id));
 }
 
-void World::setFluidState(const int x, const int y, const int z, const StateID stateId) {
+void World::setFluidState(const int x, const int y, const int z, const BlockStateId stateId) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
-    const StateID normalizedStateId = normalizeFluidBlockState(stateId);
+    const BlockStateId normalizedStateId = normalizeFluidBlockState(stateId);
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -818,16 +807,16 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
 
     const int localY = Chunk::toSubChunkLocalY(y);
     const DecodedFluid newFluid = FluidState::decode(normalizedStateId);
-    const BlockID currentBlock = sc->getBlock(localX, localY, localZ);
+    const BlockStateId currentBlock = sc->getBlock(localX, localY, localZ);
     const DecodedFluid currentBlockFluid = FluidState::decode(currentBlock);
 
     if (currentBlockFluid.kind != FluidKind::None) {
         // Current block layer IS fluid (pure water position).
         // If new state is also fluid of same kind, update block layer directly.
         // If new state is air/no-fluid, clear block layer to air.
-        const StateID targetBlockState = (newFluid.kind != FluidKind::None)
+        const BlockStateId targetBlockState = (newFluid.kind != FluidKind::None)
             ? normalizedStateId
-            : RUNTIME_ID_NULL;
+            : NULL_BLOCK_STATE;
         setBlockState(x, y, z, targetBlockState);
         return;
     }
@@ -835,14 +824,14 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
     // Block layer is a real block (possibly waterlogged).
     if (newFluid.kind == FluidKind::None) {
         // Removing fluid from this cell
-        const BlockID oldFluid = sc->getFluidLayer(localX, localY, localZ);
-        if (oldFluid == RUNTIME_ID_NULL) {
+        const BlockStateId oldFluid = sc->getFluidLayer(localX, localY, localZ);
+        if (oldFluid == NULL_BLOCK_STATE) {
             return;  // Nothing to do
         }
-        sc->setFluidLayer(localX, localY, localZ, RUNTIME_ID_NULL);
+        sc->setFluidLayer(localX, localY, localZ, NULL_BLOCK_STATE);
     } else {
         // Adding/updating fluid in a waterlogged cell
-        if (BlockRegistry::getFast(currentBlock).allowsFluidCoexistence) {
+        if (BlockRegistry::getFast(BlockStateRegistry::getBlockId(currentBlock)).allowsFluidCoexistence) {
             sc->setFluidLayer(localX, localY, localZ, normalizedStateId);
         } else {
             // Block doesn't allow fluid coexistence — replace the block with fluid
@@ -876,8 +865,8 @@ void World::setFluidState(const int x, const int y, const int z, const StateID s
     // Notify block change callback for waterlogged fluid changes
     // (pure fluid and block-replacement paths go through setBlockState, which already fires the callback)
     if (m_blockChangeCallback) {
-        const BlockID currentBlockId = sc->getBlock(localX, localY, localZ);
-        m_blockChangeCallback(x, y, z, currentBlockId);
+        const BlockStateId currentBlockState = sc->getBlock(localX, localY, localZ);
+        m_blockChangeCallback(x, y, z, currentBlockState);
     }
 
     // Mark chunk dirty for persistence
@@ -894,10 +883,9 @@ bool World::isChunkLoadedForBlock(const int x, const int y, const int z) const {
     return m_chunks.find(chunkKey(chunkX, chunkZ)) != m_chunks.end();
 }
 
-void World::setBlockState(int x, int y, int z, StateID id) {
+void World::setBlockState(int x, int y, int z, BlockStateId id) {
     if (y < 0 || y >= Chunk::SIZE_Y) return;
     id = normalizeFluidBlockState(id);
-    id = normalizeDefaultBlockState(id);
 
     const int chunkX = worldToChunkCoord(x, Chunk::SIZE_X);
     const int chunkZ = worldToChunkCoord(z, Chunk::SIZE_Z);
@@ -914,15 +902,15 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     const int editedScy = Chunk::toSubChunkIndex(y);
     const int localY = Chunk::toSubChunkLocalY(y);
     const SubChunk* existingSubChunk = chunk.getSubChunk(editedScy);
-    const BlockID oldId = chunk.getBlock(localX, y, localZ);
-    const BlockID oldFluidLayer = existingSubChunk
+    const BlockStateId oldId = chunk.getBlock(localX, y, localZ);
+    const BlockStateId oldFluidLayer = existingSubChunk
         ? existingSubChunk->getFluidLayer(localX, localY, localZ)
-        : RUNTIME_ID_NULL;
+        : NULL_BLOCK_STATE;
 
-    StateID targetState = id;
+    BlockStateId targetState = id;
     const bool uncoverFluidLayer =
-        id == RUNTIME_ID_NULL &&
-        oldFluidLayer != RUNTIME_ID_NULL &&
+        id == NULL_BLOCK_STATE &&
+        oldFluidLayer != NULL_BLOCK_STATE &&
         FluidState::decode(oldId).kind == FluidKind::None &&
         FluidState::decode(oldFluidLayer).kind != FluidKind::None;
     if (uncoverFluidLayer) {
@@ -930,7 +918,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
     }
 
     const bool clearFluidLayer =
-        oldFluidLayer != RUNTIME_ID_NULL &&
+        oldFluidLayer != NULL_BLOCK_STATE &&
         !uncoverFluidLayer &&
         !canBlockStateKeepFluidLayer(targetState, oldFluidLayer);
     const bool blockStateChanges = oldId != targetState;
@@ -955,7 +943,7 @@ void World::setBlockState(int x, int y, int z, StateID id) {
 
     if (uncoverFluidLayer || clearFluidLayer) {
         if (SubChunk* sc = chunk.getSubChunk(editedScy)) {
-            sc->setFluidLayer(localX, localY, localZ, RUNTIME_ID_NULL);
+            sc->setFluidLayer(localX, localY, localZ, NULL_BLOCK_STATE);
         }
     }
 
@@ -1017,8 +1005,8 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         return;
     }
 
-    const StateID currentState = getBlockState(pos.x, pos.y, pos.z);
-    if (currentState == RUNTIME_ID_NULL) {
+    const BlockStateId currentState = getBlockState(pos.x, pos.y, pos.z);
+    if (currentState == NULL_BLOCK_STATE) {
         return;
     }
 
@@ -1031,7 +1019,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         return;
     }
 
-    StateID updatedState = currentState;
+    BlockStateId updatedState = currentState;
     if (isConnectedBlock) {
         requireHorizontalConnectionProperties();
 
@@ -1114,8 +1102,8 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
             throw std::runtime_error("Stair shape updates require state facing, half, and shape values");
         }
 
-        const auto isStairWithSameHalf = [&](const StateID state) {
-            if (state == RUNTIME_ID_NULL) {
+        const auto isStairWithSameHalf = [&](const BlockStateId state) {
+            if (state == NULL_BLOCK_STATE) {
                 return false;
             }
             const BlockID otherBlockId = BlockStateRegistry::getBlockId(state);
@@ -1127,14 +1115,14 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         };
         const auto canUseShapeSide = [&](const uint16_t sideFacing) {
             const glm::ivec3 offset = offsetForHorizontalFacing(sideFacing);
-            const StateID sideState = getBlockState(pos.x + offset.x, pos.y, pos.z + offset.z);
+            const BlockStateId sideState = getBlockState(pos.x + offset.x, pos.y, pos.z + offset.z);
             if (!isStairWithSameHalf(sideState)) {
                 return true;
             }
             return BlockStateRegistry::getPropertyIndex(sideState, PropIndices::FACING) != currentFacing;
         };
         const auto stairNeighborFacing = [&](const glm::ivec3& offset, uint16_t& neighborFacing) {
-            const StateID neighborState = getBlockState(pos.x + offset.x, pos.y, pos.z + offset.z);
+            const BlockStateId neighborState = getBlockState(pos.x + offset.x, pos.y, pos.z + offset.z);
             if (!isStairWithSameHalf(neighborState)) {
                 return false;
             }
@@ -1332,7 +1320,7 @@ int World::getSurfaceY(int x, int z) const {
         const int localX = x - chunkX * Chunk::SIZE_X;
         const int localZ = z - chunkZ * Chunk::SIZE_Z;
         for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-            if (it->second->getBlock(localX, y, localZ) != 0) {
+            if (it->second->getBlock(localX, y, localZ) != NULL_BLOCK_STATE) {
                 return y;
             }
         }

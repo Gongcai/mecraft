@@ -1,6 +1,5 @@
 #include "Item.h"
 #include "Paths.h"
-#include "../world/block/BlockStateRegistry.h"
 #include "../world/fluid/FluidRegistry.h"
 
 #include <algorithm>
@@ -30,9 +29,6 @@ constexpr const char* kItemsConfigPath = ITEMS_CONFIG_PATH;
 BlockID resolveDropBlockId(const BlockID blockId) {
     if (blockId < BlockRegistry::getBlockCount()) {
         return blockId;
-    }
-    if (blockId < BlockStateRegistry::getStateCount()) {
-        return BlockStateRegistry::getBlockId(blockId);
     }
     return 0;
 }

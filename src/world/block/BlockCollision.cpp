@@ -102,7 +102,7 @@ bool pointInside(const glm::vec3& point, const glm::vec3& boxMin, const glm::vec
            point.z >= boxMin.z && point.z <= boxMax.z;
 }
 
-const ModelVariant& requireModelVariant(const StateID stateId) {
+const ModelVariant& requireModelVariant(const BlockStateId stateId) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         throw std::runtime_error("Model collision requires a registered model variant");
@@ -113,7 +113,7 @@ const ModelVariant& requireModelVariant(const StateID stateId) {
     return *variant;
 }
 
-const BlockDef& blockDefForState(const StateID stateId) {
+const BlockDef& blockDefForState(const BlockStateId stateId) {
     return BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId));
 }
 
@@ -121,9 +121,9 @@ const BlockDef& blockDefForState(const StateID stateId) {
 
 namespace BlockCollision {
 
-std::vector<BlockCollisionBox> getBoxes(const StateID stateId) {
+std::vector<BlockCollisionBox> getBoxes(const BlockStateId stateId) {
     std::vector<BlockCollisionBox> boxes;
-    if (stateId == RUNTIME_ID_NULL) {
+    if (stateId == NULL_BLOCK_STATE) {
         return boxes;
     }
 
@@ -147,13 +147,13 @@ std::vector<BlockCollisionBox> getBoxes(const StateID stateId) {
     return boxes;
 }
 
-bool intersects(const StateID stateId,
+bool intersects(const BlockStateId stateId,
                 const glm::ivec3& blockPos,
                 const glm::vec3& queryMin,
                 const glm::vec3& queryMax) {
     const glm::vec3 blockOffset(blockPos);
 
-    if (stateId == RUNTIME_ID_NULL) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
@@ -180,12 +180,12 @@ bool intersects(const StateID stateId,
     return false;
 }
 
-bool containsPoint(const StateID stateId,
+bool containsPoint(const BlockStateId stateId,
                    const glm::ivec3& blockPos,
                    const glm::vec3& point) {
     const glm::vec3 blockOffset(blockPos);
 
-    if (stateId == RUNTIME_ID_NULL) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 

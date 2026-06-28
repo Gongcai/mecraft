@@ -184,12 +184,12 @@ struct WorldGenBlocks {
     BlockID shortDryGrass = 0;
     BlockID brownMushroom = 0;
     BlockID redMushroom = 0;
-    BlockID wildflowers = 0;
-    BlockID leafLitter = 0;
-    BlockID glowLichenNorth = 0;
-    BlockID glowLichenSouth = 0;
-    BlockID glowLichenEast = 0;
-    BlockID glowLichenWest = 0;
+    BlockStateId wildflowers = NULL_BLOCK_STATE;
+    BlockStateId leafLitter = NULL_BLOCK_STATE;
+    BlockStateId glowLichenNorth = NULL_BLOCK_STATE;
+    BlockStateId glowLichenSouth = NULL_BLOCK_STATE;
+    BlockStateId glowLichenEast = NULL_BLOCK_STATE;
+    BlockStateId glowLichenWest = NULL_BLOCK_STATE;
 
     std::array<OreRule, 8> stoneOreRules{};
     std::array<OreRule, 8> deepslateOreRules{};
@@ -219,17 +219,21 @@ BlockID requireBlockId(const char* path) {
     return id;
 }
 
-BlockID requireDefaultState(const char* path) {
+BlockStateId stateForBlockId(const BlockID blockId) {
+    return blockId == RUNTIME_ID_NULL ? NULL_BLOCK_STATE : BlockStateRegistry::getDefaultState(blockId);
+}
+
+BlockStateId requireDefaultState(const char* path) {
     return BlockStateRegistry::getDefaultState(requireBlockId(path));
 }
 
-BlockID requireFacingState(const char* path, const uint16_t facing) {
+BlockStateId requireFacingState(const char* path, const uint16_t facing) {
     if (PropIndices::FACING == PropIndices::INVALID || facing == PropIndices::INVALID) {
         throw std::runtime_error("World generation facing states require registered facing properties");
     }
     const BlockID blockId = requireBlockId(path);
-    const StateID state = BlockStateRegistry::getState(blockId, PropIndices::FACING, facing);
-    if (state == RUNTIME_ID_NULL || BlockStateRegistry::getBlockId(state) != blockId) {
+    const BlockStateId state = BlockStateRegistry::getState(blockId, PropIndices::FACING, facing);
+    if (state == NULL_BLOCK_STATE || BlockStateRegistry::getBlockId(state) != blockId) {
         throw std::runtime_error(std::string("Missing required facing state for world generation block: minecraft:") + path);
     }
     return state;
@@ -348,7 +352,7 @@ const WorldGenBlocks& worldGenBlocks() {
     return blocks;
 }
 
-BlockID naturalWaterState() {
+BlockStateId naturalWaterState() {
     return FluidState::makeWater(0, false);
 }
 
@@ -1070,7 +1074,7 @@ bool isCaveCarvableBlock(const BlockID id, const WorldGenBlocks& blocks) {
 struct CaveWallSupportCandidate {
     int dx = 0;
     int dz = 0;
-    BlockID decorationState = 0;
+    BlockStateId decorationState = NULL_BLOCK_STATE;
 };
 
 bool isSolidCaveWallSupport(const int worldX,
@@ -1102,14 +1106,14 @@ bool isSolidCaveWallSupport(const int worldX,
     return true;
 }
 
-BlockID sampleCaveWallDecorationBlock(const int worldX,
-                                      const int y,
-                                      const int worldZ,
-                                      const uint32_t seed,
-                                      const int seaLevel,
-                                      const WorldGenBlocks& blocks) {
+BlockStateId sampleCaveWallDecorationState(const int worldX,
+                                           const int y,
+                                           const int worldZ,
+                                           const uint32_t seed,
+                                           const int seaLevel,
+                                           const WorldGenBlocks& blocks) {
     if (y < 10 || y >= Chunk::SIZE_Y) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     uint32_t h = seed ^ kDecorSaltCavePlane;
@@ -1118,7 +1122,7 @@ BlockID sampleCaveWallDecorationBlock(const int worldX,
     h ^= hash32(static_cast<uint32_t>(worldZ) * kOreZMul);
     h = hash32(h);
     if (h >= probabilityToCutoff(0.055)) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     const std::array<CaveWallSupportCandidate, 4> candidates{{
@@ -1132,7 +1136,7 @@ BlockID sampleCaveWallDecorationBlock(const int worldX,
         return candidate.decorationState;
     }
 
-    return 0;
+    return NULL_BLOCK_STATE;
 }
 
 BlockID sampleOreBlockFromHash(const int y,
@@ -1390,12 +1394,9 @@ bool isReplaceableDecoration(const BlockID id, const WorldGenBlocks& blocks) {
            id == blocks.shortDryGrass ||
            id == blocks.brownMushroom ||
            id == blocks.redMushroom ||
-           id == blocks.wildflowers ||
-           id == blocks.leafLitter ||
-           id == blocks.glowLichenNorth ||
-           id == blocks.glowLichenSouth ||
-           id == blocks.glowLichenEast ||
-           id == blocks.glowLichenWest;
+           id == BlockStateRegistry::getBlockId(blocks.wildflowers) ||
+           id == BlockStateRegistry::getBlockId(blocks.leafLitter) ||
+           id == BlockStateRegistry::getBlockId(blocks.glowLichenNorth);
 }
 
 bool canTreeLogReplace(const BlockID id, const WorldGenBlocks& blocks) {
@@ -1409,17 +1410,17 @@ bool canTreeLeavesReplace(const BlockID id, const WorldGenBlocks& blocks) {
            isReplaceableDecoration(id, blocks);
 }
 
-BlockID sampleVegetationBlock(int worldX,
-                              int worldZ,
-                              uint32_t seed,
-                              TerrainBiome biome,
-                              double moisture,
-                              int seaLevel,
-                              int surfaceY,
-                              BlockID surfaceBlock,
-                              const WorldGenBlocks& blocks) {
+BlockStateId sampleVegetationState(int worldX,
+                                   int worldZ,
+                                   uint32_t seed,
+                                   TerrainBiome biome,
+                                   double moisture,
+                                   int seaLevel,
+                                   int surfaceY,
+                                   BlockID surfaceBlock,
+                                   const WorldGenBlocks& blocks) {
     if (surfaceY < seaLevel) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     const uint32_t h = hashColumn(worldX, worldZ, seed);
@@ -1427,21 +1428,21 @@ BlockID sampleVegetationBlock(int worldX,
     if (surfaceBlock == blocks.sand || surfaceBlock == blocks.redSand) {
         const double dryDensity = surfaceBlock == blocks.redSand ? 0.080 : 0.050;
         if (hash32(h ^ kDecorSaltDensity) >= probabilityToCutoff(dryDensity)) {
-            return 0;
+            return NULL_BLOCK_STATE;
         }
 
         const uint32_t dryVariant = hash32(h ^ kDecorSaltVariant);
         if ((dryVariant & 3U) == 0U) {
-            return blocks.bush;
+            return stateForBlockId(blocks.bush);
         }
         if ((dryVariant & 1U) == 0U) {
-            return blocks.shortDryGrass;
+            return stateForBlockId(blocks.shortDryGrass);
         }
-        return blocks.deadBush;
+        return stateForBlockId(blocks.deadBush);
     }
 
     if (surfaceBlock != blocks.grass || moisture < 0.36) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     double density = 0.0;
@@ -1450,11 +1451,11 @@ BlockID sampleVegetationBlock(int worldX,
     } else if (biome == TerrainBiome::Mountain) {
         density = 0.05 + moisture * 0.10;
     } else {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     if (hash32(h ^ kDecorSaltDensity) > probabilityToCutoff(density)) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     const uint32_t variant = hash32(h ^ kDecorSaltVariant);
@@ -1470,41 +1471,41 @@ BlockID sampleVegetationBlock(int worldX,
     if (hash32(h ^ kDecorSaltFlower) < probabilityToCutoff(flowerChance)) {
         switch (variant % 13U) {
             case 0U:
-                return blocks.rose;
+                return stateForBlockId(blocks.rose);
             case 1U:
-                return blocks.poppy;
+                return stateForBlockId(blocks.poppy);
             case 2U:
-                return blocks.blueOrchid;
+                return stateForBlockId(blocks.blueOrchid);
             case 3U:
-                return blocks.allium;
+                return stateForBlockId(blocks.allium);
             case 4U:
-                return blocks.azureBluet;
+                return stateForBlockId(blocks.azureBluet);
             case 5U:
-                return blocks.oxeyeDaisy;
+                return stateForBlockId(blocks.oxeyeDaisy);
             case 6U:
-                return blocks.cornflower;
+                return stateForBlockId(blocks.cornflower);
             case 7U:
-                return blocks.lilyOfTheValley;
+                return stateForBlockId(blocks.lilyOfTheValley);
             case 8U:
-                return blocks.redTulip;
+                return stateForBlockId(blocks.redTulip);
             case 9U:
-                return blocks.orangeTulip;
+                return stateForBlockId(blocks.orangeTulip);
             case 10U:
-                return blocks.whiteTulip;
+                return stateForBlockId(blocks.whiteTulip);
             case 11U:
-                return blocks.pinkTulip;
+                return stateForBlockId(blocks.pinkTulip);
             default:
-                return blocks.dandelion;
+                return stateForBlockId(blocks.dandelion);
         }
     }
 
     if (moisture > 0.70 && (variant & 15U) == 0U) {
-        return (variant & 16U) == 0U ? blocks.brownMushroom : blocks.redMushroom;
+        return stateForBlockId((variant & 16U) == 0U ? blocks.brownMushroom : blocks.redMushroom);
     }
     if (moisture > 0.62 && (variant & 3U) == 0U) {
-        return blocks.fern;
+        return stateForBlockId(blocks.fern);
     }
-    return (variant & 1U) == 0U ? blocks.shortGrass : blocks.tallGrass;
+    return stateForBlockId((variant & 1U) == 0U ? blocks.shortGrass : blocks.tallGrass);
 }
 
 } // namespace
@@ -1515,15 +1516,16 @@ void TerrainGenerator::init(uint32_t seed, int seaLevel) {
     m_seaLevel = std::clamp(seaLevel, 16, Chunk::SIZE_Y - 32);
 }
 
-BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int worldZ) const {
+BlockStateId TerrainGenerator::sampleBlock(const int worldX, const int y, const int worldZ) const {
     if (y < 0 || y >= Chunk::SIZE_Y) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
 
     const WorldGenBlocks& blocks = worldGenBlocks();
     const TerrainColumnSample column = sampleTerrainColumn(worldX, worldZ, m_seed, m_seaLevel, blocks);
 
     BlockID id = 0;
+    BlockStateId caveDecorationState = NULL_BLOCK_STATE;
     bool carvedCave = false;
     if (y <= column.surfaceY) {
         id = sampleTerrainSolidBlock(worldX, y, worldZ, m_seed, column, blocks);
@@ -1537,30 +1539,34 @@ BlockID TerrainGenerator::sampleBlock(const int worldX, const int y, const int w
             id = sampleOreBlock(worldX, y, worldZ, id);
         }
     } else if (y <= m_seaLevel) {
-        id = naturalWaterState();
+        return naturalWaterState();
     }
 
     if (id == 0 && carvedCave) {
-        id = sampleCaveWallDecorationBlock(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
+        caveDecorationState = sampleCaveWallDecorationState(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
+    }
+
+    if (caveDecorationState != NULL_BLOCK_STATE) {
+        return caveDecorationState;
     }
 
     if (id == 0) {
         const BlockID treeBlock = sampleTreeBlock(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
         if (treeBlock != 0) {
-            return treeBlock;
+            return BlockStateRegistry::getDefaultState(treeBlock);
         }
     }
 
     const int vegetationY = column.surfaceY + 1;
     if (id == 0 &&
         y == vegetationY) {
-        id = sampleVegetationBlock(worldX, worldZ, m_seed,
-                                   column.biome, column.moisture,
-                                   m_seaLevel, column.surfaceY,
-                                   column.surface.topBlock, blocks);
+        return sampleVegetationState(worldX, worldZ, m_seed,
+                                     column.biome, column.moisture,
+                                     m_seaLevel, column.surfaceY,
+                                     column.surface.topBlock, blocks);
     }
 
-    return id;
+    return stateForBlockId(id);
 }
 
 int TerrainGenerator::sampleSurfaceY(int worldX, int worldZ) const {
@@ -1634,8 +1640,8 @@ BlockID TerrainGenerator::sampleOreBlock(int worldX, int y, int worldZ, BlockID 
 void TerrainGenerator::generateChunk(Chunk& chunk) const {
     const glm::ivec3 offset = chunk.getWorldOffset();
     const WorldGenBlocks& blocks = worldGenBlocks();
-    const BlockID waterState = naturalWaterState();
-    std::array<std::array<BlockID, SubChunk::BLOCK_COUNT>, Chunk::NUM_SUB_CHUNKS> generatedBlocks{};
+    const BlockStateId waterState = naturalWaterState();
+    std::array<std::array<BlockStateId, SubChunk::BLOCK_COUNT>, Chunk::NUM_SUB_CHUNKS> generatedBlocks{};
     std::array<bool, Chunk::NUM_SUB_CHUNKS> hasGeneratedBlocks{};
 
     for (int z = 0; z < Chunk::SIZE_Z; ++z) {
@@ -1695,7 +1701,9 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 int highestOpaqueY = 0;
                 for (int y = 0; y <= columnTop; ++y) {
                     BlockID id = 0;
+                    BlockStateId caveDecorationState = NULL_BLOCK_STATE;
                     bool carvedCave = false;
+                    BlockStateId stateId = NULL_BLOCK_STATE;
                     if (y <= surfaceY) {
                         id = sampleTerrainSolidBlock(worldX, y, worldZ, m_seed, column, blocks);
 
@@ -1708,18 +1716,24 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                             id = sampleOreBlockFromHash(y, id, oreColumnSeed, blocks);
                         }
                     } else if (y <= m_seaLevel) {
-                        id = waterState;
+                        stateId = waterState;
                     }
 
                     if (id == 0 && carvedCave) {
-                        id = sampleCaveWallDecorationBlock(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
+                        caveDecorationState = sampleCaveWallDecorationState(worldX, y, worldZ, m_seed, m_seaLevel, blocks);
                     }
 
-                    if (id != 0) {
+                    if (id != RUNTIME_ID_NULL) {
+                        stateId = stateForBlockId(id);
+                    } else if (caveDecorationState != NULL_BLOCK_STATE) {
+                        stateId = caveDecorationState;
+                    }
+
+                    if (stateId != NULL_BLOCK_STATE) {
                         const int scy = Chunk::toSubChunkIndex(y);
-                        generatedBlocks[scy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(y), z)] = id;
+                        generatedBlocks[scy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(y), z)] = stateId;
                         hasGeneratedBlocks[scy] = true;
-                        if (BlockRegistry::getOpacityFast(id) >= 15) {
+                        if (BlockRegistry::getOpacityFast(BlockStateRegistry::getBlockId(stateId)) >= 15) {
                             highestOpaqueY = y;
                         }
                     }
@@ -1729,20 +1743,21 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                 if (vegetationY < Chunk::SIZE_Y) {
                     const int surfaceScy = Chunk::toSubChunkIndex(surfaceY);
                     const int vegetationScy = Chunk::toSubChunkIndex(vegetationY);
-                    const BlockID surfaceBlock =
-                        generatedBlocks[surfaceScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(surfaceY), z)];
-                    const BlockID blockAbove =
+                    const BlockID surfaceBlock = BlockStateRegistry::getBlockId(
+                        generatedBlocks[surfaceScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(surfaceY), z)]);
+                    const BlockStateId blockAbove =
                         generatedBlocks[vegetationScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)];
 
-                    if (blockAbove == 0) {
-                        const BlockID vegetation = sampleVegetationBlock(worldX, worldZ, m_seed,
-                                                                         surfaceKind, moisture,
-                                                                         m_seaLevel, surfaceY,
-                                                                         surfaceBlock, blocks);
-                        if (vegetation != 0) {
-                            generatedBlocks[vegetationScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)] = vegetation;
+                    if (blockAbove == NULL_BLOCK_STATE) {
+                        const BlockStateId vegetation = sampleVegetationState(worldX, worldZ, m_seed,
+                                                                              surfaceKind, moisture,
+                                                                              m_seaLevel, surfaceY,
+                                                                              surfaceBlock, blocks);
+                        if (vegetation != NULL_BLOCK_STATE) {
+                            generatedBlocks[vegetationScy][SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(vegetationY), z)] =
+                                vegetation;
                             hasGeneratedBlocks[vegetationScy] = true;
-                            if (BlockRegistry::getOpacityFast(vegetation) >= 15) {
+                            if (BlockRegistry::getOpacityFast(BlockStateRegistry::getBlockId(vegetation)) >= 15) {
                                 highestOpaqueY = std::max(highestOpaqueY, vegetationY);
                             }
                         }
@@ -1788,7 +1803,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
 
                         const int scy = Chunk::toSubChunkIndex(y);
                         const std::size_t index = SubChunk::toIndex(localX, Chunk::toSubChunkLocalY(y), localZ);
-                        const BlockID current = generatedBlocks[scy][index];
+                        const BlockID current = BlockStateRegistry::getBlockId(generatedBlocks[scy][index]);
                         const bool canReplace = treeBlock == tree.log
                                                     ? canTreeLogReplace(current, blocks)
                                                     : canTreeLeavesReplace(current, blocks);
@@ -1796,7 +1811,7 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
                             continue;
                         }
 
-                        generatedBlocks[scy][index] = treeBlock;
+                        generatedBlocks[scy][index] = BlockStateRegistry::getDefaultState(treeBlock);
                         hasGeneratedBlocks[scy] = true;
                         if (BlockRegistry::getOpacityFast(treeBlock) >= 15) {
                             chunk.setHeightMap(localX, localZ,

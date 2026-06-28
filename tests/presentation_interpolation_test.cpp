@@ -32,11 +32,11 @@ public:
         return 0;
     }
 
-    [[nodiscard]] StateID getBlockState(int, int, int) const override {
+    [[nodiscard]] BlockStateId getBlockState(int, int, int) const override {
         return RUNTIME_ID_NULL;
     }
 
-    [[nodiscard]] StateID getFluidState(int, int, int) const override {
+    [[nodiscard]] BlockStateId getFluidState(int, int, int) const override {
         return RUNTIME_ID_NULL;
     }
 

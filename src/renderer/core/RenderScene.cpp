@@ -890,8 +890,9 @@ float RenderScene::computeCameraRainVisibility(const IWorldView& worldView, cons
         const int bz = static_cast<int>(std::floor(cameraPos.z + kOffsets[r][1]));
         bool blocked = false;
         for (int y = startY; y < 256; ++y) {
-            BlockID above = worldView.getBlock(bx, y, bz);
-            if (above != 0 && BlockRegistry::getOpacityFast(above) > 0) {
+            const BlockStateId above = worldView.getBlock(bx, y, bz);
+            if (above != NULL_BLOCK_STATE &&
+                BlockRegistry::getOpacityFast(BlockStateRegistry::getBlockId(above)) > 0) {
                 blocked = true;
                 break;
             }

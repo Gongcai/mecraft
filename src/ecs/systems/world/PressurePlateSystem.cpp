@@ -52,7 +52,7 @@ enum class PressurePlateEntityKind : uint8_t {
     LooseItem
 };
 
-uint16_t getRequiredProperty(const StateID stateId, const uint16_t property, const char* propertyName) {
+uint16_t getRequiredProperty(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     if (property == PropIndices::INVALID) {
         throw std::runtime_error(std::string("Pressure plates require registered property: ") + propertyName);
     }
@@ -63,7 +63,7 @@ uint16_t getRequiredProperty(const StateID stateId, const uint16_t property, con
     return value;
 }
 
-StateID withPowered(const StateID stateId, const bool powered) {
+BlockStateId withPowered(const BlockStateId stateId, const bool powered) {
     const uint16_t value = powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE;
     if (value == PropIndices::INVALID) {
         throw std::runtime_error("Pressure plates require registered powered boolean values");
@@ -74,15 +74,15 @@ StateID withPowered(const StateID stateId, const bool powered) {
         return stateId;
     }
 
-    const StateID updatedState = BlockStateRegistry::withProperty(stateId, PropIndices::POWERED, value);
+    const BlockStateId updatedState = BlockStateRegistry::withProperty(stateId, PropIndices::POWERED, value);
     if (BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWERED) != value) {
         throw std::runtime_error("Pressure plate powered state transition failed");
     }
     return updatedState;
 }
 
-bool isPressurePlateState(const StateID stateId) {
-    if (stateId == RUNTIME_ID_NULL) {
+bool isPressurePlateState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
@@ -91,7 +91,7 @@ bool isPressurePlateState(const StateID stateId) {
     return def.redstoneBehavior == "plate";
 }
 
-bool pressurePlateAcceptsEntity(const StateID stateId, const PressurePlateEntityKind entityKind) {
+bool pressurePlateAcceptsEntity(const BlockStateId stateId, const PressurePlateEntityKind entityKind) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (def.pressurePlateEntityFilter == "all") {
@@ -132,7 +132,7 @@ void addContactingPlates(const World& world,
     for (int x = minX; x <= maxX; ++x) {
         for (int z = minZ; z <= maxZ; ++z) {
             const glm::ivec3 platePos(x, y, z);
-            const StateID stateId = world.getBlockState(platePos.x, platePos.y, platePos.z);
+            const BlockStateId stateId = world.getBlockState(platePos.x, platePos.y, platePos.z);
             if (!isPressurePlateState(stateId)) {
                 continue;
             }
@@ -216,12 +216,12 @@ void collectLooseItemPressurePlateContacts(SystemContext& ctx, PositionSet& occu
 }
 
 size_t applyPressurePlateState(World& world, const glm::ivec3& position, const bool powered) {
-    const StateID currentState = world.getBlockState(position.x, position.y, position.z);
+    const BlockStateId currentState = world.getBlockState(position.x, position.y, position.z);
     if (!isPressurePlateState(currentState)) {
         return 0;
     }
 
-    const StateID updatedState = withPowered(currentState, powered);
+    const BlockStateId updatedState = withPowered(currentState, powered);
     if (updatedState == currentState) {
         return 0;
     }

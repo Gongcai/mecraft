@@ -6,7 +6,6 @@
 #include <initializer_list>
 #include <map>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -18,19 +17,18 @@
 // The registry owns this index space; callers should treat the stored value as
 // an implementation detail of the current registry encoding.
 struct BlockStateId {
-    uint32_t value = 0;
-
     constexpr BlockStateId() = default;
-    constexpr BlockStateId(const uint32_t rawValue) : value(rawValue) {}
+    [[nodiscard]] static constexpr BlockStateId fromRaw(const uint32_t rawValue) {
+        return BlockStateId(rawValue);
+    }
 
-    [[nodiscard]] constexpr bool operator==(const BlockStateId& other) const { return value == other.value; }
-    [[nodiscard]] constexpr bool operator!=(const BlockStateId& other) const { return value != other.value; }
-    [[nodiscard]] constexpr bool operator<(const BlockStateId& other) const { return value < other.value; }
-
-    [[nodiscard]] constexpr operator uint32_t() const { return value; }
+    [[nodiscard]] constexpr uint32_t raw() const { return m_value; }
+    [[nodiscard]] constexpr bool operator==(const BlockStateId& other) const { return m_value == other.m_value; }
+    [[nodiscard]] constexpr bool operator!=(const BlockStateId& other) const { return m_value != other.m_value; }
+    [[nodiscard]] constexpr bool operator<(const BlockStateId& other) const { return m_value < other.m_value; }
 
     constexpr BlockStateId& operator++() {
-        ++value;
+        ++m_value;
         return *this;
     }
 
@@ -39,76 +37,23 @@ struct BlockStateId {
         ++(*this);
         return previous;
     }
+
+private:
+    explicit constexpr BlockStateId(const uint32_t rawValue) : m_value(rawValue) {}
+
+    uint32_t m_value = 0;
 };
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator==(const BlockStateId stateId, const Integer value) {
-    return static_cast<uint64_t>(stateId.value) == static_cast<uint64_t>(value);
-}
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator==(const Integer value, const BlockStateId stateId) {
-    return stateId == value;
-}
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator!=(const BlockStateId stateId, const Integer value) {
-    return !(stateId == value);
-}
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator!=(const Integer value, const BlockStateId stateId) {
-    return !(stateId == value);
-}
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator<(const BlockStateId stateId, const Integer value) {
-    return static_cast<uint64_t>(stateId.value) < static_cast<uint64_t>(value);
-}
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator<(const Integer value, const BlockStateId stateId) {
-    return static_cast<uint64_t>(value) < static_cast<uint64_t>(stateId.value);
-}
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator>=(const BlockStateId stateId, const Integer value) {
-    return !(stateId < value);
-}
-
-template <typename Integer,
-          typename = std::enable_if_t<std::is_integral<Integer>::value &&
-                                      !std::is_same<std::decay_t<Integer>, BlockStateId>::value>>
-[[nodiscard]] constexpr bool operator>=(const Integer value, const BlockStateId stateId) {
-    return !(value < stateId);
-}
 
 namespace std {
 template <>
 struct hash<BlockStateId> {
     size_t operator()(const BlockStateId& stateId) const noexcept {
-        return hash<uint32_t>{}(stateId.value);
+        return hash<uint32_t>{}(stateId.raw());
     }
 };
 } // namespace std
 
-constexpr BlockStateId NULL_BLOCK_STATE{0};
-
-using StateID = BlockStateId;
+constexpr BlockStateId NULL_BLOCK_STATE = BlockStateId::fromRaw(0);
 
 struct PropertyKey {
     uint16_t nameIndex = 0;

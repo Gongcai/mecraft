@@ -14,7 +14,7 @@ constexpr float kAxisStep = 0.2f;
 constexpr float kContactEpsilon = 0.0005f;
 
 inline bool hasCollisionBlock(const World& world, const int x, const int y, const int z) {
-    const StateID stateId = world.getBlockState(x, y, z);
+    const BlockStateId stateId = world.getBlockState(x, y, z);
     return !BlockCollision::getBoxes(stateId).empty();
 }
 
@@ -32,7 +32,7 @@ inline bool overlapsCollision(const World& world, const glm::vec3& center, const
     for (int x = minX; x <= maxX; ++x) {
         for (int y = minY; y <= maxY; ++y) {
             for (int z = minZ; z <= maxZ; ++z) {
-                const StateID stateId = world.getBlockState(x, y, z);
+                const BlockStateId stateId = world.getBlockState(x, y, z);
                 if (BlockCollision::intersects(stateId, glm::ivec3(x, y, z), minPos, maxPos)) {
                     return true;
                 }
@@ -49,12 +49,12 @@ inline bool overlapsBlockCollision(const World& world,
                                    const glm::ivec3& blockPos) {
     const glm::vec3 minPos = position - halfExtents;
     const glm::vec3 maxPos = position + halfExtents;
-    const StateID stateId = world.getBlockState(blockPos.x, blockPos.y, blockPos.z);
+    const BlockStateId stateId = world.getBlockState(blockPos.x, blockPos.y, blockPos.z);
     return BlockCollision::intersects(stateId, blockPos, minPos, maxPos);
 }
 
 inline float collisionTopY(const World& world, const glm::ivec3& blockPos) {
-    const StateID stateId = world.getBlockState(blockPos.x, blockPos.y, blockPos.z);
+    const BlockStateId stateId = world.getBlockState(blockPos.x, blockPos.y, blockPos.z);
     float topY = static_cast<float>(blockPos.y);
     for (const BlockCollisionBox& box : BlockCollision::getBoxes(stateId)) {
         topY = std::max(topY, static_cast<float>(blockPos.y) + box.max.y);

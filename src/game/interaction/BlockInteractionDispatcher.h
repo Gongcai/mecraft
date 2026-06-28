@@ -10,7 +10,7 @@ class World;
 namespace game::interaction {
 
 [[nodiscard]] bool hasBlockInteraction(BlockID blockId);
-[[nodiscard]] StateID nextBlockInteractionState(StateID currentState);
+[[nodiscard]] BlockStateId nextBlockInteractionState(BlockStateId currentState);
 bool applyBlockInteraction(World& world, const glm::ivec3& position);
 
 } // namespace game::interaction

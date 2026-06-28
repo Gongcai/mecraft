@@ -83,7 +83,7 @@ void printStats(const std::string& caseName,
               << '\n';
 }
 
-StateID leverState(const bool powered) {
+BlockStateId leverState(const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -92,7 +92,7 @@ StateID leverState(const bool powered) {
         });
 }
 
-uint8_t powerFromState(const StateID state) {
+uint8_t powerFromState(const BlockStateId state) {
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
         PropIndices::POWER_1,
@@ -163,13 +163,13 @@ std::unique_ptr<RedstoneBenchmarkWorld> buildLargeWireGrid() {
     loadBenchmarkArea(benchmark->world, -1, maxX, benchmark->y, minZ, maxZ);
 
     const BlockID stone = BlockRegistry::requireIdByName("minecraft:stone");
-    const StateID wire = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
+    const BlockStateId wire = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
 
     for (int x = minX; x <= maxX; ++x) {
         for (int z = minZ; z <= maxZ; ++z) {
             benchmark->world.setBlock(x, benchmark->y - 1, z, stone);
             benchmark->world.setBlockState(x, benchmark->y, z, wire);
-            benchmark->world.setBlockState(x, benchmark->y + 1, z, RUNTIME_ID_NULL);
+            benchmark->world.setBlockState(x, benchmark->y + 1, z, NULL_BLOCK_STATE);
         }
     }
     benchmark->world.setBlock(benchmark->leverPosition.x, benchmark->y - 1, benchmark->leverPosition.z, stone);

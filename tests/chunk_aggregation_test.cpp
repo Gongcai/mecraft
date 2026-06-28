@@ -13,6 +13,10 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
+BlockStateId stateForBlockName(const char* name) {
+    return BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName(name));
+}
+
 void expandBounds(ChunkMeshData& merged, const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
     if (!merged.hasBounds) {
         merged.hasBounds = true;
@@ -104,9 +108,9 @@ int main() {
     BlockRegistry::init(nullptr);
 
     Chunk chunk(0, 0);
-    chunk.setBlock(0, 1, 0, BlockRegistry::requireIdByName("minecraft:stone"));
-    chunk.setBlock(0, 18, 0, BlockRegistry::requireIdByName("minecraft:tall_grass"));
-    chunk.setBlock(0, 33, 0, BlockRegistry::requireIdByName("minecraft:water"));
+    chunk.setBlock(0, 1, 0, stateForBlockName("minecraft:stone"));
+    chunk.setBlock(0, 18, 0, stateForBlockName("minecraft:tall_grass"));
+    chunk.setBlock(0, 33, 0, stateForBlockName("minecraft:water"));
 
     const ChunkMeshData aggregated = buildMeshDataFor(chunk);
     if (aggregated.opaqueFaceCountBeforeGreedy != 6 || aggregated.opaqueFaceCountAfterGreedy != 6) {

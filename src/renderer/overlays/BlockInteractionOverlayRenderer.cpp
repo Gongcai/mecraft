@@ -3,6 +3,7 @@
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockSelection.h"
+#include "../../world/block/BlockStateRegistry.h"
 #include "../core/Shader.h"
 
 #include <array>
@@ -152,7 +153,7 @@ void BlockInteractionOverlayRenderer::renderBlockOutline(const IWorldView& world
     }
 
     const glm::ivec3 targetBlock = target.targetBlock;
-    const StateID targetState = worldView.getBlockState(targetBlock.x, targetBlock.y, targetBlock.z);
+    const BlockStateId targetState = worldView.getBlockState(targetBlock.x, targetBlock.y, targetBlock.z);
     const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
     const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
     const glm::vec3 boxSize = selectionBox.max - selectionBox.min;
@@ -189,10 +190,10 @@ void BlockInteractionOverlayRenderer::renderBlockBreakOverlay(const IWorldView& 
     }
 
     const glm::ivec3 target = blockBreak.blockPos;
-    const BlockID targetId = worldView.getBlock(target.x, target.y, target.z);
+    const BlockStateId targetState = worldView.getBlockState(target.x, target.y, target.z);
+    const BlockID targetId = BlockStateRegistry::getBlockId(targetState);
     const BlockDef& targetDef = BlockRegistry::get(targetId);
     const bool useCrossOverlay = (targetDef.renderShape == BlockRenderShape::Cross);
-    const StateID targetState = worldView.getBlockState(target.x, target.y, target.z);
     const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
     const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
     const glm::vec3 boxSize = selectionBox.max - selectionBox.min;

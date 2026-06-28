@@ -30,7 +30,7 @@ struct BlockCubeMesh {
 
 /// Build local-space geometry for a specific block state.
 /// Model-shaped blocks use the state's selected model variant.
-[[nodiscard]] std::vector<BlockVertex> buildBlockMeshVerticesForState(StateID stateId,
+[[nodiscard]] std::vector<BlockVertex> buildBlockMeshVerticesForState(BlockStateId stateId,
                                                                       const ResourceMgr& resourceMgr);
 
 /// Build and upload a block-backed item/entity mesh. Returns an empty mesh
@@ -38,7 +38,7 @@ struct BlockCubeMesh {
 BlockCubeMesh buildBlockCubeMesh(BlockID blockId, const ResourceMgr& resourceMgr);
 
 /// Build and upload a block-backed item/entity mesh for a specific state.
-BlockCubeMesh buildBlockStateCubeMesh(StateID stateId, const ResourceMgr& resourceMgr);
+BlockCubeMesh buildBlockStateCubeMesh(BlockStateId stateId, const ResourceMgr& resourceMgr);
 
 /// Upload a caller-built BlockVertex list to a GL mesh with the standard
 /// block vertex layout (matches ChunkMesher / DropRenderer attrib bindings).

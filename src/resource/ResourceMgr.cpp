@@ -464,7 +464,7 @@ void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
                         const int iconOriginX,
                         const int iconOriginY,
                         const float unit) {
-    const StateID stateId = BlockStateRegistry::getDefaultState(blockId);
+    const BlockStateId stateId = BlockStateRegistry::getDefaultState(blockId);
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         throw std::runtime_error("Model block is missing an icon model variant: " +

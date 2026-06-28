@@ -31,18 +31,18 @@ void requireHorizontalFacingValue(const uint16_t facingValue) {
     }
 }
 
-StateID withRequiredProperty(const StateID stateId,
+BlockStateId withRequiredProperty(const BlockStateId stateId,
                              const uint16_t property,
                              const uint16_t value,
                              const char* context) {
-    const StateID updated = BlockStateRegistry::withProperty(stateId, property, value);
+    const BlockStateId updated = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
         throw std::runtime_error(context);
     }
     return updated;
 }
 
-uint16_t partValue(const StateID stateId) {
+uint16_t partValue(const BlockStateId stateId) {
     requireBedProperties();
     const uint16_t part = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::PART);
     if (part != PropIndices::PART_HEAD && part != PropIndices::PART_FOOT) {
@@ -51,7 +51,7 @@ uint16_t partValue(const StateID stateId) {
     return part;
 }
 
-uint16_t facingValue(const StateID stateId) {
+uint16_t facingValue(const BlockStateId stateId) {
     requireBedProperties();
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     requireHorizontalFacingValue(facing);
@@ -60,8 +60,8 @@ uint16_t facingValue(const StateID stateId) {
 
 bool isEmptyBedCell(const IWorldView& worldView, const glm::ivec3& pos) {
     return worldView.isChunkLoadedForBlock(pos.x, pos.y, pos.z) &&
-           worldView.getBlockState(pos.x, pos.y, pos.z) == RUNTIME_ID_NULL &&
-           worldView.getFluidState(pos.x, pos.y, pos.z) == RUNTIME_ID_NULL;
+           worldView.getBlockState(pos.x, pos.y, pos.z) == NULL_BLOCK_STATE &&
+           worldView.getFluidState(pos.x, pos.y, pos.z) == NULL_BLOCK_STATE;
 }
 
 uint16_t oppositePartValue(const uint16_t part) {
@@ -83,7 +83,7 @@ bool isBedBlock(const BlockID blockId) {
     return BlockRegistry::getFast(blockId).placementStrategy == "bed";
 }
 
-bool isBedState(const StateID stateId) {
+bool isBedState(const BlockStateId stateId) {
     if (!isBedBlock(BlockStateRegistry::getBlockId(stateId))) {
         return false;
     }
@@ -94,11 +94,11 @@ bool isBedState(const StateID stateId) {
            isHorizontalFacingValue(facing);
 }
 
-bool isFootState(const StateID stateId) {
+bool isFootState(const BlockStateId stateId) {
     return isBedState(stateId) && partValue(stateId) == PropIndices::PART_FOOT;
 }
 
-bool isHeadState(const StateID stateId) {
+bool isHeadState(const BlockStateId stateId) {
     return isBedState(stateId) && partValue(stateId) == PropIndices::PART_HEAD;
 }
 
@@ -116,7 +116,7 @@ glm::ivec3 headOffsetForFacing(const uint16_t facingValue) {
     return {0, 0, -1};
 }
 
-StateID makeBedState(const BlockID blockId, const uint16_t facingValue, const uint16_t partValue) {
+BlockStateId makeBedState(const BlockID blockId, const uint16_t facingValue, const uint16_t partValue) {
     requireBedProperties();
     requireHorizontalFacingValue(facingValue);
     if (!isBedBlock(blockId)) {
@@ -126,7 +126,7 @@ StateID makeBedState(const BlockID blockId, const uint16_t facingValue, const ui
         throw std::runtime_error("Bed state construction requires part=head or part=foot");
     }
 
-    StateID stateId = BlockStateRegistry::getDefaultState(blockId);
+    BlockStateId stateId = BlockStateRegistry::getDefaultState(blockId);
     stateId = withRequiredProperty(stateId, PropIndices::FACING, facingValue, "Bed state is missing facing");
     stateId = withRequiredProperty(stateId, PropIndices::PART, partValue, "Bed state is missing part");
     return stateId;
@@ -134,7 +134,7 @@ StateID makeBedState(const BlockID blockId, const uint16_t facingValue, const ui
 
 BedPlacement resolvePlacement(const IWorldView& worldView,
                               const glm::ivec3& footPos,
-                              const StateID footState) {
+                              const BlockStateId footState) {
     BedPlacement placement;
     if (!isFootState(footState)) {
         return placement;
@@ -152,7 +152,7 @@ BedPlacement resolvePlacement(const IWorldView& worldView,
 }
 
 bool tryGetOtherHalfPosition(const glm::ivec3& pos,
-                             const StateID stateId,
+                             const BlockStateId stateId,
                              glm::ivec3& outOtherPos) {
     if (!isBedState(stateId)) {
         return false;
@@ -165,7 +165,7 @@ bool tryGetOtherHalfPosition(const glm::ivec3& pos,
     return true;
 }
 
-bool isMatchingOtherHalf(const StateID stateId, const StateID otherState) {
+bool isMatchingOtherHalf(const BlockStateId stateId, const BlockStateId otherState) {
     if (!isBedState(stateId) || !isBedState(otherState)) {
         return false;
     }
@@ -187,7 +187,7 @@ void placeBed(World& world, const BedPlacement& placement) {
 }
 
 BlockID removeBed(World& world, const glm::ivec3& hitPos, std::vector<glm::ivec3>* removedPositions) {
-    const StateID stateId = world.getBlockState(hitPos.x, hitPos.y, hitPos.z);
+    const BlockStateId stateId = world.getBlockState(hitPos.x, hitPos.y, hitPos.z);
     if (!isBedState(stateId)) {
         return RUNTIME_ID_NULL;
     }
@@ -195,18 +195,18 @@ BlockID removeBed(World& world, const glm::ivec3& hitPos, std::vector<glm::ivec3
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     glm::ivec3 otherPos{};
     const bool hasOtherPos = tryGetOtherHalfPosition(hitPos, stateId, otherPos);
-    const StateID otherState = hasOtherPos
+    const BlockStateId otherState = hasOtherPos
         ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z)
-        : RUNTIME_ID_NULL;
+        : NULL_BLOCK_STATE;
     const bool removeOther = hasOtherPos && isMatchingOtherHalf(stateId, otherState);
 
-    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, RUNTIME_ID_NULL);
+    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, NULL_BLOCK_STATE);
     if (removedPositions != nullptr) {
         removedPositions->push_back(hitPos);
     }
 
     if (removeOther) {
-        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, RUNTIME_ID_NULL);
+        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, NULL_BLOCK_STATE);
         if (removedPositions != nullptr) {
             removedPositions->push_back(otherPos);
         }

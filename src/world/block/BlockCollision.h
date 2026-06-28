@@ -13,12 +13,12 @@ struct BlockCollisionBox {
 
 namespace BlockCollision {
 
-[[nodiscard]] std::vector<BlockCollisionBox> getBoxes(StateID stateId);
-[[nodiscard]] bool intersects(StateID stateId,
+[[nodiscard]] std::vector<BlockCollisionBox> getBoxes(BlockStateId stateId);
+[[nodiscard]] bool intersects(BlockStateId stateId,
                               const glm::ivec3& blockPos,
                               const glm::vec3& queryMin,
                               const glm::vec3& queryMax);
-[[nodiscard]] bool containsPoint(StateID stateId,
+[[nodiscard]] bool containsPoint(BlockStateId stateId,
                                  const glm::ivec3& blockPos,
                                  const glm::vec3& point);
 

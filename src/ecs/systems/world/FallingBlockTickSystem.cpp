@@ -8,6 +8,7 @@
 #include "../../components/Components.h"
 #include "../../../world/World.h"
 #include "../../../world/block/Block.h"
+#include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/chunk/Chunk.h"
 
 namespace ecs {
@@ -20,9 +21,10 @@ bool isPassable(const World& world, const glm::ivec3& pos) {
     if (pos.y < 0 || pos.y >= Chunk::SIZE_Y) {
         return false;  // world bottom / top — treat as non-passable (landing surface)
     }
-    const BlockID id = world.getBlock(pos.x, pos.y, pos.z);
-    if (id == 0) return true;  // air
-    return !BlockRegistry::getFast(id).isSolid;
+    const BlockStateId stateId = world.getBlockState(pos.x, pos.y, pos.z);
+    if (stateId == NULL_BLOCK_STATE) return true;  // air
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return !BlockRegistry::getFast(blockId).isSolid;
 }
 
 /// Place the block back into the world at `pos` if the cell is currently

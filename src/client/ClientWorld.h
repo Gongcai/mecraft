@@ -33,10 +33,10 @@ public:
     [[nodiscard]] const ChunkMap& getActiveChunks() const override;
     [[nodiscard]] uint64_t getActiveChunkRevision() const override;
     [[nodiscard]] uint64_t getBlockContentRevision() const override;
-    [[nodiscard]] BlockID getBlock(int x, int y, int z) const override;
+    [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const override;
     [[nodiscard]] uint8_t getPackedLight(int x, int y, int z) const override;
-    [[nodiscard]] StateID getBlockState(int x, int y, int z) const override;
-    [[nodiscard]] StateID getFluidState(int x, int y, int z) const override;
+    [[nodiscard]] BlockStateId getBlockState(int x, int y, int z) const override;
+    [[nodiscard]] BlockStateId getFluidState(int x, int y, int z) const override;
     [[nodiscard]] bool isChunkLoadedForBlock(int x, int y, int z) const override;
     [[nodiscard]] int getRenderDistance() const override;
     [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const override;
@@ -54,13 +54,13 @@ public:
     void removeChunk(int cx, int cz);
 
     /// Apply a block update from the server.
-    void applyBlockUpdate(int x, int y, int z, StateID stateId);
-    void applyBlockUpdate(int x, int y, int z, StateID stateId, const std::vector<uint8_t>& packedLightPatch);
+    void applyBlockUpdate(int x, int y, int z, BlockStateId stateId);
+    void applyBlockUpdate(int x, int y, int z, BlockStateId stateId, const std::vector<uint8_t>& packedLightPatch);
     void applyBlockUpdate(int x,
                           int y,
                           int z,
                           net::BlockUpdateKind kind,
-                          StateID stateId,
+                          BlockStateId stateId,
                           const std::vector<uint8_t>& packedLightPatch);
 
     /// Set the render distance.

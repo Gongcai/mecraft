@@ -30,17 +30,17 @@ public:
     /// Get a revision counter that increments when loaded block contents change.
     [[nodiscard]] virtual uint64_t getBlockContentRevision() const = 0;
 
-    /// Query a block at world coordinates. Returns 0 if chunk is not loaded.
-    [[nodiscard]] virtual BlockID getBlock(int x, int y, int z) const = 0;
+    /// Query a block state at world coordinates.
+    [[nodiscard]] virtual BlockStateId getBlock(int x, int y, int z) const = 0;
 
     /// Query packed light (block light in low nibble, sky light in high nibble).
     [[nodiscard]] virtual uint8_t getPackedLight(int x, int y, int z) const = 0;
 
     /// Query block state at world coordinates.
-    [[nodiscard]] virtual StateID getBlockState(int x, int y, int z) const = 0;
+    [[nodiscard]] virtual BlockStateId getBlockState(int x, int y, int z) const = 0;
 
     /// Query fluid state at world coordinates.
-    [[nodiscard]] virtual StateID getFluidState(int x, int y, int z) const = 0;
+    [[nodiscard]] virtual BlockStateId getFluidState(int x, int y, int z) const = 0;
 
     /// Check if the chunk containing the given block coordinates is loaded.
     [[nodiscard]] virtual bool isChunkLoadedForBlock(int x, int y, int z) const = 0;

@@ -46,12 +46,12 @@ public:
                            float animationTime, float shaderTime);
 
 private:
-    const renderer::BlockCubeMesh* getOrCreateMesh(StateID stateId);
+    const renderer::BlockCubeMesh* getOrCreateMesh(BlockStateId stateId);
 
     ResourceMgr* m_resourceMgr = nullptr;
     Shader* m_gbufferShader = nullptr;   // drop_gbuffer (block path)
     Shader* m_shadowShader = nullptr;    // shadow_depth (block path, uUseModel=1)
-    std::unordered_map<StateID, renderer::BlockCubeMesh> m_meshes;
+    std::unordered_map<BlockStateId, renderer::BlockCubeMesh> m_meshes;
     // Per-object velocity: previous-frame model matrix per entity (by drop ID).
     std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
 };

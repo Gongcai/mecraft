@@ -55,7 +55,7 @@ bool incrementNumericProperty(const BlockRandomTickRule& rule, const BlockRandom
         return false;
     }
 
-    const StateID nextState = BlockStateRegistry::withProperty(ctx.state, property, nextValueIndex);
+    const BlockStateId nextState = BlockStateRegistry::withProperty(ctx.state, property, nextValueIndex);
     if (nextState == ctx.state) {
         return false;
     }
@@ -84,7 +84,7 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
         if (moistValue == BlockStateRegistry::INVALID_INDEX) {
             throw std::runtime_error("farmland_moisture random tick requires moisture value 7");
         }
-        const StateID moistState = BlockStateRegistry::withProperty(ctx.state, moisture, moistValue);
+        const BlockStateId moistState = BlockStateRegistry::withProperty(ctx.state, moisture, moistValue);
         if (moistState != ctx.state) {
             ctx.world.setBlockState(ctx.pos.x, ctx.pos.y, ctx.pos.z, moistState);
             return true;
@@ -105,7 +105,7 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
             throw std::runtime_error("farmland_moisture random tick could not resolve the next moisture value");
         }
 
-        const StateID dryState = BlockStateRegistry::withProperty(ctx.state, moisture, nextValueIndex);
+        const BlockStateId dryState = BlockStateRegistry::withProperty(ctx.state, moisture, nextValueIndex);
         if (dryState != ctx.state) {
             ctx.world.setBlockState(ctx.pos.x, ctx.pos.y, ctx.pos.z, dryState);
             return true;
@@ -118,7 +118,7 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
     }
 
     const BlockID dirtBlock = BlockRegistry::requireIdByName("minecraft:dirt");
-    ctx.world.setBlockState(ctx.pos.x, ctx.pos.y, ctx.pos.z, dirtBlock);
+    ctx.world.setBlockState(ctx.pos.x, ctx.pos.y, ctx.pos.z, BlockStateRegistry::getDefaultState(dirtBlock));
     return true;
 }
 

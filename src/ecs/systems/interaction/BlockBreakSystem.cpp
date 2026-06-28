@@ -83,7 +83,7 @@ float survivalBreakDurationMs(const BlockID targetBlock, const ItemStack& heldSt
 BlockID removeTargetBlock(World& world,
                           const glm::ivec3& hitBlock,
                           std::vector<glm::ivec3>& removedPositions) {
-    const StateID targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+    const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (BedBlockLogic::isBedState(targetState)) {
         return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
     }
@@ -94,7 +94,7 @@ BlockID removeTargetBlock(World& world,
         return PistonBlockLogic::removePistonAssembly(world, hitBlock, &removedPositions);
     }
 
-    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, RUNTIME_ID_NULL);
+    world.setBlockState(hitBlock.x, hitBlock.y, hitBlock.z, NULL_BLOCK_STATE);
     removedPositions.push_back(hitBlock);
     return BlockStateRegistry::getBlockId(targetState);
 }
@@ -152,8 +152,9 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        const BlockID targetBlock = worldView.getBlock(hitBlock.x, hitBlock.y, hitBlock.z);
-        if (targetBlock == 0 || !BlockRegistry::get(targetBlock).isSelectable) {
+        const BlockStateId targetState = worldView.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+        const BlockID targetBlock = BlockStateRegistry::getBlockId(targetState);
+        if (targetState == NULL_BLOCK_STATE || !BlockRegistry::get(targetBlock).isSelectable) {
             resetBreakSession(blockBreak, runtime);
             continue;
         }

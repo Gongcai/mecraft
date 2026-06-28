@@ -30,7 +30,7 @@ void loadOriginChunks(World& world) {
     }
 }
 
-StateID deviceState(const BlockID blockId, const uint16_t facing) {
+BlockStateId deviceState(const BlockID blockId, const uint16_t facing) {
     return BlockStateRegistry::getState(
         blockId,
         {
@@ -42,7 +42,7 @@ StateID deviceState(const BlockID blockId, const uint16_t facing) {
 void pushDeviceEvent(ecs::GameplayRegistry& registry,
                      const glm::ivec3& position,
                      const BlockID blockId,
-                     const StateID stateId,
+                     const BlockStateId stateId,
                      const uint64_t redstoneTick) {
     ecs::ensureRedstoneDeviceActivationEventBus(registry).push({
         position,
@@ -63,7 +63,7 @@ BlockEntityInventory& inventoryFor(ecs::GameplayRegistry& registry,
 }
 
 bool isSourceWaterAt(const World& world, const glm::ivec3& position) {
-    const StateID fluidState = world.getFluidState(position.x, position.y, position.z);
+    const BlockStateId fluidState = world.getFluidState(position.x, position.y, position.z);
     return FluidState::isWater(fluidState) && FluidState::isSource(fluidState);
 }
 
@@ -82,12 +82,12 @@ int main() {
 
         ecs::GameplayRegistry registry;
         const BlockID dispenser = BlockRegistry::requireIdByName("minecraft:dispenser");
-        const StateID state = deviceState(dispenser, PropIndices::FACING_EAST);
+        const BlockStateId state = deviceState(dispenser, PropIndices::FACING_EAST);
         const glm::ivec3 position(0, 122, 0);
         const glm::ivec3 target = position + glm::ivec3(1, 0, 0);
         world.setBlockState(position.x, position.y, position.z, state);
-        world.setBlockState(target.x, target.y, target.z, RUNTIME_ID_NULL);
-        world.setFluidState(target.x, target.y, target.z, RUNTIME_ID_NULL);
+        world.setBlockState(target.x, target.y, target.z, NULL_BLOCK_STATE);
+        world.setFluidState(target.x, target.y, target.z, NULL_BLOCK_STATE);
 
         BlockEntityInventory& inventory = inventoryFor(registry, position, "minecraft:dispenser");
         inventory.setSlotStack(0, ItemStack{ItemRegistry::requireIdByName("minecraft:water_bucket"), 1, 0});
@@ -111,11 +111,11 @@ int main() {
 
         ecs::GameplayRegistry registry;
         const BlockID dispenser = BlockRegistry::requireIdByName("minecraft:dispenser");
-        const StateID state = deviceState(dispenser, PropIndices::FACING_EAST);
+        const BlockStateId state = deviceState(dispenser, PropIndices::FACING_EAST);
         const glm::ivec3 position(0, 122, 0);
         const glm::ivec3 target = position + glm::ivec3(1, 0, 0);
         world.setBlockState(position.x, position.y, position.z, state);
-        world.setBlockState(target.x, target.y, target.z, RUNTIME_ID_NULL);
+        world.setBlockState(target.x, target.y, target.z, NULL_BLOCK_STATE);
         world.setFluidState(target.x, target.y, target.z, FluidState::makeWater(0, false));
 
         BlockEntityInventory& inventory = inventoryFor(registry, position, "minecraft:dispenser");
@@ -125,7 +125,7 @@ int main() {
         const std::size_t actions = ecs::RedstoneDeviceActionSystem::processEvents(world, registry);
         const ItemStack slot = inventory.getSlotStack(0);
         if (actions != 1 ||
-            world.getFluidState(target.x, target.y, target.z) != RUNTIME_ID_NULL ||
+            world.getFluidState(target.x, target.y, target.z) != NULL_BLOCK_STATE ||
             slot.itemId != ItemRegistry::requireIdByName("minecraft:water_bucket") ||
             slot.count != 1) {
             return fail("dispenser should pick up source water into an empty bucket");
@@ -139,7 +139,7 @@ int main() {
 
         ecs::GameplayRegistry registry;
         const BlockID dispenser = BlockRegistry::requireIdByName("minecraft:dispenser");
-        const StateID state = deviceState(dispenser, PropIndices::FACING_EAST);
+        const BlockStateId state = deviceState(dispenser, PropIndices::FACING_EAST);
         const glm::ivec3 position(0, 122, 0);
         world.setBlockState(position.x, position.y, position.z, state);
 
@@ -183,12 +183,12 @@ int main() {
 
         ecs::GameplayRegistry registry;
         const BlockID dropper = BlockRegistry::requireIdByName("minecraft:dropper");
-        const StateID state = deviceState(dropper, PropIndices::FACING_EAST);
+        const BlockStateId state = deviceState(dropper, PropIndices::FACING_EAST);
         const glm::ivec3 position(0, 122, 0);
         const glm::ivec3 target = position + glm::ivec3(1, 0, 0);
         world.setBlockState(position.x, position.y, position.z, state);
-        world.setBlockState(target.x, target.y, target.z, RUNTIME_ID_NULL);
-        world.setFluidState(target.x, target.y, target.z, RUNTIME_ID_NULL);
+        world.setBlockState(target.x, target.y, target.z, NULL_BLOCK_STATE);
+        world.setFluidState(target.x, target.y, target.z, NULL_BLOCK_STATE);
 
         const ItemID waterBucket = ItemRegistry::requireIdByName("minecraft:water_bucket");
         BlockEntityInventory& inventory = inventoryFor(registry, position, "minecraft:dropper");
@@ -213,7 +213,7 @@ int main() {
         if (actions != 1 ||
             dropCount != 1 ||
             !inventory.getSlotStack(0).isEmpty() ||
-            world.getFluidState(target.x, target.y, target.z) != RUNTIME_ID_NULL) {
+            world.getFluidState(target.x, target.y, target.z) != NULL_BLOCK_STATE) {
             return fail("dropper should not execute dispenser bucket behavior");
         }
     }

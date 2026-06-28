@@ -61,8 +61,9 @@ bool isPlacementSolid(const World& world, const int x, const int y, const int z)
     if (!world.isChunkLoadedForBlock(x, y, z)) {
         return true;
     }
-    const BlockID id = world.getBlock(x, y, z);
-    return id != RUNTIME_ID_NULL && BlockRegistry::getFast(id).isSolid;
+    const BlockStateId stateId = world.getBlock(x, y, z);
+    return stateId != NULL_BLOCK_STATE &&
+           BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isSolid;
 }
 
 bool arePlacementChunksLoaded(const World& world, const PlayerPlacementBox& box) {

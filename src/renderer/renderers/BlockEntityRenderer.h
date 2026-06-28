@@ -11,7 +11,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
-#include "../../world/block/Block.h"
+#include "../../world/block/BlockStateRegistry.h"
 
 class IWorldView;
 class ResourceMgr;
@@ -70,7 +70,7 @@ private:
         const Chunk* chunk = nullptr;
         const ModelEntry* model = nullptr;
         BlockID blockId = 0;
-        BlockID stateId = 0;
+        BlockStateId stateId = NULL_BLOCK_STATE;
         int localX = 0;
         int columnY = 0;
         int localZ = 0;
@@ -130,7 +130,7 @@ private:
     static Mesh buildMesh(const ModelDefinition& definition);
     static ModelDefinition makeChestDefinition();
     static glm::mat4 buildModelMatrix(const ModelEntry& entry,
-                                      BlockID stateId,
+                                      BlockStateId stateId,
                                       const glm::vec3& blockPosition);
     void configureInstanceAttributes(const Mesh& mesh) const;
     void ensureInstanceCapacity(std::size_t instanceCount);

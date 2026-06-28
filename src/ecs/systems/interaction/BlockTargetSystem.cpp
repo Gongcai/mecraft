@@ -32,7 +32,7 @@ void BlockTargetSystem::update(SystemContext& ctx) {
         target.hasTarget = hit.hit && hit.kind == RayHitKind::Block;
         target.targetState = target.hasTarget
             ? worldView.getBlockState(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)
-            : 0;
+            : NULL_BLOCK_STATE;
         target.targetBlock = target.hasTarget ? hit.blockPos : glm::ivec3{};
         target.placeBlock = target.hasTarget ? hit.blockPos + hit.normal : glm::ivec3{};
         target.hitNormal = target.hasTarget ? hit.normal : glm::ivec3{};
@@ -42,7 +42,7 @@ void BlockTargetSystem::update(SystemContext& ctx) {
         target.hasFluidTarget = fluidHit.hit && fluidHit.kind == RayHitKind::Fluid;
         target.fluidTargetState = target.hasFluidTarget
             ? worldView.getFluidState(fluidHit.blockPos.x, fluidHit.blockPos.y, fluidHit.blockPos.z)
-            : 0;
+            : NULL_BLOCK_STATE;
         target.fluidTargetBlock = target.hasFluidTarget ? fluidHit.blockPos : glm::ivec3{};
         target.fluidPlaceBlock = target.hasFluidTarget ? fluidHit.blockPos + fluidHit.normal : glm::ivec3{};
         target.fluidHitNormal = target.hasFluidTarget ? fluidHit.normal : glm::ivec3{};

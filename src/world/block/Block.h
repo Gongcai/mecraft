@@ -18,7 +18,7 @@
 
 class ResourceMgr;
 
-// BlockID is the shared runtime id type used by block definitions and block states.
+// BlockID identifies block definitions; concrete placed variants use BlockStateId.
 using BlockID = RuntimeId;
 
 namespace BlockMaterialKinds {

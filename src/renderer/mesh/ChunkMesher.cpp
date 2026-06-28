@@ -114,7 +114,7 @@ std::unordered_map<ModelGeometryCacheKey,
                    ModelGeometryCacheKeyHash> g_modelGeometryCache;
 
 struct FaceMergeKey {
-    BlockID blockId = 0;
+    BlockStateId stateId = NULL_BLOCK_STATE;
     int tileIndex = 0;
     bool flipDiagonal = false;
     uint8_t tintKind = BlockTintKinds::NONE;
@@ -166,7 +166,7 @@ struct MeshBlockInfo {
     bool isTransparent = false;
 };
 
-MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(BlockID id);
+MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(BlockStateId stateId);
 
 constexpr int FACE_TOP = 0;
 constexpr int FACE_BOTTOM = 1;
@@ -213,26 +213,26 @@ std::size_t toBorderXZIndex(const int x, const int z) {
 
 // ======================== Neighbor-aware block/light lookup (sub-chunk) ========================
 
-BlockID getNeighborAwareBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+BlockStateId getNeighborAwareBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     // Out of Y range — above top = air, below bottom = stone/air
     if (y < 0) {
-        if (snapshot.isBottomSection) return 0;
-        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        if (snapshot.isBottomSection) return NULL_BLOCK_STATE;
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
         return snapshot.negYBorder[toBorderXZIndex(x, z)];
     }
     if (y >= SubChunk::SIZE) {
-        if (snapshot.isTopSection) return 0;  // Above world = air
-        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return 0;
+        if (snapshot.isTopSection) return NULL_BLOCK_STATE;  // Above world = air
+        if (x < 0 || x >= SubChunk::SIZE || z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
         return snapshot.posYBorder[toBorderXZIndex(x, z)];
     }
 
     // X borders
     if (x < 0) {
-        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        if (z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
         return snapshot.negXBorder[toBorderXZIndex(y, z)];
     }
     if (x >= SubChunk::SIZE) {
-        if (z < 0 || z >= SubChunk::SIZE) return 0;
+        if (z < 0 || z >= SubChunk::SIZE) return NULL_BLOCK_STATE;
         return snapshot.posXBorder[toBorderXZIndex(y, z)];
     }
 
@@ -286,30 +286,30 @@ uint8_t getNeighborBlockLightSC(const SubChunkMeshingSnapshot& snapshot, int x, 
     return static_cast<uint8_t>(getNeighborAwareLightSC(snapshot, x, y, z) & 0x0F);
 }
 
-MECRAFT_FORCEINLINE BlockID getResolvedBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+MECRAFT_FORCEINLINE BlockStateId getResolvedBlockSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (x < -1 || x > SubChunk::SIZE ||
         y < -1 || y > SubChunk::SIZE ||
         z < -1 || z > SubChunk::SIZE) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
     return snapshot.haloBlocks[haloToIndex(x, y, z)];
 }
 
-BlockID getResolvedFluidSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
+BlockStateId getResolvedFluidSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
     if (x < -1 || x > SubChunk::SIZE ||
         y < -1 || y > SubChunk::SIZE ||
         z < -1 || z > SubChunk::SIZE) {
-        return 0;
+        return NULL_BLOCK_STATE;
     }
-    const BlockID fluidId = snapshot.haloFluidBlocks[haloToIndex(x, y, z)];
-    if (fluidId != 0) {
-        return fluidId;
+    const BlockStateId fluidState = snapshot.haloFluidBlocks[haloToIndex(x, y, z)];
+    if (fluidState != NULL_BLOCK_STATE) {
+        return fluidState;
     }
-    const BlockID blockId = snapshot.haloBlocks[haloToIndex(x, y, z)];
-    if (FluidState::decode(blockId).kind != FluidKind::None) {
-        return blockId;
+    const BlockStateId blockState = snapshot.haloBlocks[haloToIndex(x, y, z)];
+    if (FluidState::decode(blockState).kind != FluidKind::None) {
+        return blockState;
     }
-    return 0;
+    return NULL_BLOCK_STATE;
 }
 
 MECRAFT_FORCEINLINE uint8_t getResolvedLightSC(const SubChunkMeshingSnapshot& snapshot, int x, int y, int z) {
@@ -339,8 +339,8 @@ MECRAFT_FORCEINLINE uint8_t computeVertexAO(const bool side1, const bool side2, 
 }
 
 MECRAFT_FORCEINLINE bool isSolidForAO(const SubChunkMeshingSnapshot& snapshot, const int x, const int y, const int z) {
-    const BlockID id = getResolvedBlockSC(snapshot, x, y, z);
-    return getMeshBlockInfo(id).isSolid;
+    const BlockStateId stateId = getResolvedBlockSC(snapshot, x, y, z);
+    return getMeshBlockInfo(stateId).isSolid;
 }
 
 MECRAFT_FORCEINLINE uint8_t getSafePackedLightForAO(const SubChunkMeshingSnapshot& snapshot,
@@ -547,12 +547,12 @@ const AnimatedTextureRef& getFaceTextureRef(const StateTextureIndices& textures,
     }
 }
 
-uint8_t getFaceUvQuarterTurns(const BlockID blockId, const int face) {
+uint8_t getFaceUvQuarterTurns(const BlockStateId stateId, const int face) {
     if (PropIndices::AXIS == PropIndices::INVALID) {
         return 0;
     }
 
-    const uint16_t axisValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::AXIS);
+    const uint16_t axisValue = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::AXIS);
     if (axisValue == PropIndices::INVALID) {
         return 0;
     }
@@ -582,8 +582,8 @@ uint8_t getFaceUvQuarterTurns(const BlockID blockId, const int face) {
     return 0;
 }
 
-MeshFaceInfo buildMeshFaceInfo(const BlockID blockId, const int face) {
-    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+MeshFaceInfo buildMeshFaceInfo(const BlockStateId stateId, const int face) {
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const AnimatedTextureRef& faceTexture = getFaceTextureRef(textures, face);
 
     MeshFaceInfo info;
@@ -592,12 +592,12 @@ MeshFaceInfo buildMeshFaceInfo(const BlockID blockId, const int face) {
     info.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, faceTexture.frameCount));
     info.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
     info.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
-    info.uvQuarterTurns = getFaceUvQuarterTurns(blockId, face);
+    info.uvQuarterTurns = getFaceUvQuarterTurns(stateId, face);
     return info;
 }
 
 FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockID blockId,
+                                   const BlockStateId stateId,
                                    const BlockDef& def,
                                    const MeshBlockInfo& info,
                                    const int x,
@@ -636,13 +636,13 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
 }
 
 FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockID blockId,
+                                   const BlockStateId stateId,
                                    const BlockDef& def,
                                    const int x,
                                    const int y,
                                    const int z,
                                    const int face) {
-    return buildFaceRenderData(snapshot, blockId, def, getMeshBlockInfo(blockId), x, y, z, face);
+    return buildFaceRenderData(snapshot, stateId, def, getMeshBlockInfo(stateId), x, y, z, face);
 }
 
 uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
@@ -651,7 +651,7 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
         h ^= v;
         h *= 1099511628211ULL;
     };
-    mix(static_cast<uint64_t>(key.blockId));
+    mix(static_cast<uint64_t>(key.stateId.raw()));
     mix(static_cast<uint64_t>(key.tileIndex));
     mix(static_cast<uint64_t>(key.flipDiagonal));
     mix(static_cast<uint64_t>(key.tintKind));
@@ -671,9 +671,9 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
     return h;
 }
 
-FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& renderData) {
+FaceMergeKey buildFaceMergeKey(const BlockStateId stateId, const FaceRenderData& renderData) {
     FaceMergeKey key;
-    key.blockId = blockId;
+    key.stateId = stateId;
     key.tileIndex = renderData.tileIndex;
     key.flipDiagonal = renderData.flipDiagonal;
     key.tintKind = renderData.tintKind;
@@ -691,7 +691,7 @@ FaceMergeKey buildFaceMergeKey(const BlockID blockId, const FaceRenderData& rend
 }
 
 MECRAFT_FORCEINLINE bool sameMergeKeyPayload(const FaceMergeKey& lhs, const FaceMergeKey& rhs) {
-    return lhs.blockId == rhs.blockId &&
+    return lhs.stateId == rhs.stateId &&
            lhs.tileIndex == rhs.tileIndex &&
            lhs.flipDiagonal == rhs.flipDiagonal &&
            lhs.tintKind == rhs.tintKind &&
@@ -715,20 +715,21 @@ MECRAFT_FORCEINLINE bool samePlaneFaceCell(const FaceCell& lhs, const FaceCell& 
            sameMergeKeyPayload(lhs.key, rhs.key);
 }
 
-std::array<MeshBlockInfo, 1u << 16u> g_meshBlockInfoCache{};
+std::vector<MeshBlockInfo> g_meshBlockInfoCache;
 std::once_flag g_meshBlockInfoCacheInitFlag;
 
-MeshBlockInfo buildMeshBlockInfo(const BlockID id) {
+MeshBlockInfo buildMeshBlockInfo(const BlockStateId stateId) {
     MeshBlockInfo info;
-    const BlockDef& def = BlockRegistry::getFast(id);
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     info.def = &def;
     info.isSolid = def.isSolid;
     info.isTransparent = def.isTransparent;
     for (int face = 0; face < 6; ++face) {
-        info.faces[static_cast<size_t>(face)] = buildMeshFaceInfo(id, face);
+        info.faces[static_cast<size_t>(face)] = buildMeshFaceInfo(stateId, face);
     }
 
-    if (id == RUNTIME_ID_NULL) {
+    if (stateId == NULL_BLOCK_STATE) {
         info.cubeClass = MeshCubeClass::Air;
     } else if (def.renderShape != BlockRenderShape::Cube) {
         info.cubeClass = MeshCubeClass::Other;
@@ -746,17 +747,16 @@ MeshBlockInfo buildMeshBlockInfo(const BlockID id) {
 
 void ensureMeshBlockInfoCache() {
     std::call_once(g_meshBlockInfoCacheInitFlag, []() {
-        const std::size_t count = std::min(g_meshBlockInfoCache.size(),
-                                           std::max(BlockRegistry::getBlockCount(),
-                                                    BlockStateRegistry::getStateCount()));
+        const std::size_t count = BlockStateRegistry::getStateCount();
+        g_meshBlockInfoCache.resize(count);
         for (std::size_t i = 0; i < count; ++i) {
-            g_meshBlockInfoCache[i] = buildMeshBlockInfo(static_cast<BlockID>(i));
+            g_meshBlockInfoCache[i] = buildMeshBlockInfo(BlockStateId::fromRaw(static_cast<uint32_t>(i)));
         }
     });
 }
 
-MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(const BlockID id) {
-    return g_meshBlockInfoCache[id];
+MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(const BlockStateId stateId) {
+    return g_meshBlockInfoCache[stateId.raw()];
 }
 
 struct SubChunkMeshClassPresence {
@@ -773,9 +773,9 @@ struct SubChunkMeshClassPresence {
 SubChunkMeshClassPresence scanMeshClassPresence(const SubChunkMeshingSnapshot& snapshot) {
     SubChunkMeshClassPresence presence;
     for (std::size_t i = 0; i < SC_BLOCK_COUNT; ++i) {
-        const BlockID blockId = snapshot.blocks[i];
-        if (blockId != 0) {
-            switch (getMeshBlockInfo(blockId).cubeClass) {
+        const BlockStateId stateId = snapshot.blocks[i];
+        if (stateId != NULL_BLOCK_STATE) {
+            switch (getMeshBlockInfo(stateId).cubeClass) {
                 case MeshCubeClass::Opaque:
                     presence.hasOpaqueCube = true;
                     break;
@@ -800,15 +800,15 @@ SubChunkMeshClassPresence scanMeshClassPresence(const SubChunkMeshingSnapshot& s
                     break;
             }
 
-            if (!presence.hasAnyWater && FluidState::isWater(blockId)) {
+            if (!presence.hasAnyWater && FluidState::isWater(stateId)) {
                 presence.hasAnyWater = true;
             }
         }
 
-        const BlockID fluidId = snapshot.fluidBlocks[i];
-        if (fluidId != 0) {
+        const BlockStateId fluidState = snapshot.fluidBlocks[i];
+        if (fluidState != NULL_BLOCK_STATE) {
             presence.hasFluidLayer = true;
-            if (FluidState::isWater(fluidId)) {
+            if (FluidState::isWater(fluidState)) {
                 presence.hasAnyWater = true;
             }
         }
@@ -820,20 +820,20 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
                           const int nx,
                           const int ny,
                           const int nz,
-                          const BlockID currentId,
+                          const BlockStateId currentState,
                           const BlockDef& currentDef) {
-    const BlockID neighborId = getResolvedBlockSC(snapshot, nx, ny, nz);
+    const BlockStateId neighborState = getResolvedBlockSC(snapshot, nx, ny, nz);
     if (currentDef.renderShape == BlockRenderShape::Cube &&
         currentDef.isTransparent &&
-        neighborId == currentId) {
+        neighborState == currentState) {
         return false;
     }
 
-    if (neighborId == 0) {
+    if (neighborState == NULL_BLOCK_STATE) {
         return true;
     }
 
-    const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborId);
+    const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborState);
 
     if (!neighborInfo.isSolid) {
         return true;
@@ -843,7 +843,7 @@ bool shouldRenderFaceImpl(const SubChunkMeshingSnapshot& snapshot,
         if (!currentDef.isTransparent) {
             return true;
         }
-        return neighborId != currentId;
+        return neighborState != currentState;
     }
 
     return false;
@@ -853,12 +853,12 @@ MECRAFT_FORCEINLINE bool shouldRenderOpaqueCubeFace(const SubChunkMeshingSnapsho
                                                     const int nx,
                                                     const int ny,
                                                     const int nz) {
-    const BlockID neighborId = getResolvedBlockSC(snapshot, nx, ny, nz);
-    if (neighborId == 0) {
+    const BlockStateId neighborState = getResolvedBlockSC(snapshot, nx, ny, nz);
+    if (neighborState == NULL_BLOCK_STATE) {
         return true;
     }
 
-    const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborId);
+    const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborState);
     return !neighborInfo.isSolid || neighborInfo.isTransparent;
 }
 
@@ -954,15 +954,15 @@ uint8_t fallbackHorizontalEdgeLight(const Chunk& chunk,
     return best;
 }
 
-BlockID sampleHaloBlock(const Chunk& chunk,
-                        const int localX,
-                        const int worldY,
-                        const int localZ,
-                        const Chunk* neighborPosX,
-                        const Chunk* neighborNegX,
-                        const Chunk* neighborPosZ,
-                        const Chunk* neighborNegZ,
-                        const IWorldView* worldView) {
+BlockStateId sampleHaloBlock(const Chunk& chunk,
+                             const int localX,
+                             const int worldY,
+                             const int localZ,
+                             const Chunk* neighborPosX,
+                             const Chunk* neighborNegX,
+                             const Chunk* neighborPosZ,
+                             const Chunk* neighborNegZ,
+                             const IWorldView* worldView) {
     static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
@@ -979,18 +979,18 @@ BlockID sampleHaloBlock(const Chunk& chunk,
         return sampleChunk->getBlock(sampleX, worldY, sampleZ);
     }
 
-    return 0;
+    return NULL_BLOCK_STATE;
 }
 
-BlockID sampleHaloFluid(const Chunk& chunk,
-                        const int localX,
-                        const int worldY,
-                        const int localZ,
-                        const Chunk* neighborPosX,
-                        const Chunk* neighborNegX,
-                        const Chunk* neighborPosZ,
-                        const Chunk* neighborNegZ,
-                        const IWorldView* worldView) {
+BlockStateId sampleHaloFluid(const Chunk& chunk,
+                             const int localX,
+                             const int worldY,
+                             const int localZ,
+                             const Chunk* neighborPosX,
+                             const Chunk* neighborNegX,
+                             const Chunk* neighborPosZ,
+                             const Chunk* neighborNegZ,
+                             const IWorldView* worldView) {
     static_cast<void>(worldView);
     const bool xInRange = localX >= 0 && localX < Chunk::SIZE_X;
     const bool zInRange = localZ >= 0 && localZ < Chunk::SIZE_Z;
@@ -1007,7 +1007,7 @@ BlockID sampleHaloFluid(const Chunk& chunk,
         return sampleChunk->getFluidState(sampleX, worldY, sampleZ);
     }
 
-    return 0;
+    return NULL_BLOCK_STATE;
 }
 
 uint8_t sampleHaloLight(const Chunk& chunk,
@@ -1116,10 +1116,10 @@ void captureSubChunkBorders(const Chunk& chunk,
             const auto idx = toBorderXZIndex(ly, lz);
             snapshot.posXBorder[idx] = neighborPosX
                 ? neighborPosX->getBlock(0, columnY, lz)
-                : RUNTIME_ID_NULL;
+                : NULL_BLOCK_STATE;
             snapshot.negXBorder[idx] = neighborNegX
                 ? neighborNegX->getBlock(Chunk::SIZE_X - 1, columnY, lz)
-                : RUNTIME_ID_NULL;
+                : NULL_BLOCK_STATE;
             snapshot.posXLightBorder[idx] = neighborPosX
                 ? neighborPosX->getPackedLight(0, columnY, lz) : 0;
             snapshot.negXLightBorder[idx] = neighborNegX
@@ -1129,10 +1129,10 @@ void captureSubChunkBorders(const Chunk& chunk,
             const auto idx = toBorderXZIndex(ly, lx);
             snapshot.posZBorder[idx] = neighborPosZ
                 ? neighborPosZ->getBlock(lx, columnY, 0)
-                : RUNTIME_ID_NULL;
+                : NULL_BLOCK_STATE;
             snapshot.negZBorder[idx] = neighborNegZ
                 ? neighborNegZ->getBlock(lx, columnY, Chunk::SIZE_Z - 1)
-                : RUNTIME_ID_NULL;
+                : NULL_BLOCK_STATE;
             snapshot.posZLightBorder[idx] = neighborPosZ
                 ? neighborPosZ->getPackedLight(lx, columnY, 0) : 0;
             snapshot.negZLightBorder[idx] = neighborNegZ
@@ -1460,8 +1460,8 @@ bool shouldCullModelFace(const uint8_t transformedCullfaceBits,
             continue;
         }
         const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-        const BlockID neighborId = getResolvedBlockSC(snapshot, x + normal.x, y + normal.y, z + normal.z);
-        const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborId);
+        const BlockStateId neighborState = getResolvedBlockSC(snapshot, x + normal.x, y + normal.y, z + normal.z);
+        const MeshBlockInfo& neighborInfo = getMeshBlockInfo(neighborState);
         if (neighborInfo.cubeClass == MeshCubeClass::Opaque && neighborInfo.isSolid) {
             return true;
         }
@@ -1738,24 +1738,24 @@ bool shouldRenderWaterFace(const SubChunkMeshingSnapshot& snapshot,
                            const int nx,
                            const int ny,
                            const int nz,
-                           const BlockID currentId) {
-    const BlockID neighborId = getResolvedBlockSC(snapshot, nx, ny, nz);
-    const DecodedFluid currentFluid = FluidState::decode(currentId);
+                           const BlockStateId currentState) {
+    const BlockStateId neighborState = getResolvedBlockSC(snapshot, nx, ny, nz);
+    const DecodedFluid currentFluid = FluidState::decode(currentState);
     if (currentFluid.kind != FluidKind::None &&
-        FluidState::decode(neighborId).kind == currentFluid.kind) {
+        FluidState::decode(neighborState).kind == currentFluid.kind) {
         return false;
     }
     // Check fluid layer for waterlogged neighbors
-    const BlockID neighborFluidId = getResolvedFluidSC(snapshot, nx, ny, nz);
+    const BlockStateId neighborFluidState = getResolvedFluidSC(snapshot, nx, ny, nz);
     if (currentFluid.kind != FluidKind::None &&
-        FluidState::decode(neighborFluidId).kind == currentFluid.kind) {
+        FluidState::decode(neighborFluidState).kind == currentFluid.kind) {
         return false;
     }
-    if (neighborId == RUNTIME_ID_NULL && neighborFluidId == 0) {
+    if (neighborState == NULL_BLOCK_STATE && neighborFluidState == NULL_BLOCK_STATE) {
         return true;
     }
 
-    const BlockDef& neighborDef = BlockRegistry::getFast(neighborId);
+    const BlockDef& neighborDef = *getMeshBlockInfo(neighborState).def;
     if (!neighborDef.isSolid) {
         return true;
     }
@@ -1767,32 +1767,32 @@ float sampleWaterColumnSurfaceHeight(const SubChunkMeshingSnapshot& snapshot,
                                      const int x,
                                      const int y,
                                      const int z) {
-    const BlockID aboveId = getResolvedFluidSC(snapshot, x, y + 1, z);
-    const BlockID id = getResolvedFluidSC(snapshot, x, y, z);
-    const DecodedFluid fluid = FluidState::decode(id);
+    const BlockStateId aboveState = getResolvedFluidSC(snapshot, x, y + 1, z);
+    const BlockStateId stateId = getResolvedFluidSC(snapshot, x, y, z);
+    const DecodedFluid fluid = FluidState::decode(stateId);
     if (fluid.kind == FluidKind::None) {
         return 0.0f;
     }
-    if (FluidState::decode(aboveId).kind == fluid.kind) {
+    if (FluidState::decode(aboveState).kind == fluid.kind) {
         return 1.0f;
     }
-    return FluidState::surfaceHeight(id);
+    return FluidState::surfaceHeight(stateId);
 }
 
-bool isOpenWaterSurfaceSample(const BlockID id) {
-    if (id == RUNTIME_ID_NULL) {
+bool isOpenWaterSurfaceSample(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return true;
     }
 
-    if (FluidState::isWater(id)) {
+    if (FluidState::isWater(stateId)) {
         return false;
     }
 
-    return !BlockRegistry::getFast(id).isSolid;
+    return !getMeshBlockInfo(stateId).isSolid;
 }
 
 float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
-                               const BlockID currentId,
+                               const BlockStateId currentState,
                                const int x0,
                                const int y,
                                const int z0,
@@ -1812,15 +1812,15 @@ float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
     float liquidPercentSum = 0.0f;
     int weightSum = 0;
     for (const glm::ivec2& sample : samples) {
-        const BlockID aboveId = getResolvedFluidSC(snapshot, sample.x, y + 1, sample.y);
-        if (FluidState::isWater(aboveId)) {
+        const BlockStateId aboveState = getResolvedFluidSC(snapshot, sample.x, y + 1, sample.y);
+        if (FluidState::isWater(aboveState)) {
             return 1.0f;
         }
 
-        const BlockID sampleId = getResolvedFluidSC(snapshot, sample.x, y, sample.y);
-        if (FluidState::isWater(sampleId)) {
-            const float liquidPercent = static_cast<float>(FluidState::level(sampleId) + 1) / 9.0f;
-            const int weight = (FluidState::level(sampleId) == 0) ? 10 : 1;
+        const BlockStateId sampleState = getResolvedFluidSC(snapshot, sample.x, y, sample.y);
+        if (FluidState::isWater(sampleState)) {
+            const float liquidPercent = static_cast<float>(FluidState::level(sampleState) + 1) / 9.0f;
+            const int weight = (FluidState::level(sampleState) == 0) ? 10 : 1;
             liquidPercentSum += liquidPercent * static_cast<float>(weight);
             weightSum += weight;
 
@@ -1829,8 +1829,8 @@ float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
             continue;
         }
 
-        const BlockID sampleBlockId = getResolvedBlockSC(snapshot, sample.x, y, sample.y);
-        if (isOpenWaterSurfaceSample(sampleBlockId)) {
+        const BlockStateId sampleBlockState = getResolvedBlockSC(snapshot, sample.x, y, sample.y);
+        if (isOpenWaterSurfaceSample(sampleBlockState)) {
             liquidPercentSum += 1.0f;
             ++weightSum;
         }
@@ -1839,7 +1839,7 @@ float computeWaterCornerHeight(const SubChunkMeshingSnapshot& snapshot,
     if (weightSum == 0) {
         return sampleWaterColumnSurfaceHeight(snapshot, x1, y, z1);
     }
-    static_cast<void>(currentId);
+    static_cast<void>(currentState);
     return 1.0f - liquidPercentSum / static_cast<float>(weightSum);
 }
 
@@ -1909,16 +1909,16 @@ void applyTextureRef(FaceRenderData& renderData, const AnimatedTextureRef& textu
 
 void addWaterFacesImpl(ChunkMeshData& meshData,
                        const SubChunkMeshingSnapshot& snapshot,
-                       const BlockID blockId,
+                       const BlockStateId stateId,
                        const BlockDef& def,
                        const int x,
                        const int y,
                        const int z,
                        const bool skipTopFace = false) {
-    const float frontLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
-    const float frontRight = computeWaterCornerHeight(snapshot, blockId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
-    const float backRight = computeWaterCornerHeight(snapshot, blockId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
-    const float backLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
+    const float frontLeft = computeWaterCornerHeight(snapshot, stateId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
+    const float frontRight = computeWaterCornerHeight(snapshot, stateId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
+    const float backRight = computeWaterCornerHeight(snapshot, stateId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
+    const float backLeft = computeWaterCornerHeight(snapshot, stateId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
 
     const glm::vec3 flow = computeFluidFlowVector(snapshot, x, y, z, FluidKind::Water);
     const bool flowing = isFlowingWaterVector(flow);
@@ -1926,9 +1926,9 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
     const AnimatedTextureRef* waterTexture = findNamedWaterTexture(def, flowing ? "flow" : "still");
 
     const glm::vec3 pos(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
-    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+    const MeshBlockInfo& info = getMeshBlockInfo(stateId);
     const auto emitWaterFace = [&](const int face, const std::array<glm::vec3, 4>& corners) {
-        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
+        FaceRenderData renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
         if (waterTexture != nullptr) {
             applyWaterTextureRef(renderData, *waterTexture);
         }
@@ -1943,7 +1943,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         ++meshData.transparentFaceCountAfterGreedy;
     };
 
-    if (!skipTopFace && shouldRenderWaterFace(snapshot, x, y + 1, z, blockId)) {
+    if (!skipTopFace && shouldRenderWaterFace(snapshot, x, y + 1, z, stateId)) {
         emitWaterFace(FACE_TOP, {{
             pos + glm::vec3(0.0f, frontLeft, 1.0f),
             pos + glm::vec3(1.0f, frontRight, 1.0f),
@@ -1952,7 +1952,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         }});
     }
 
-    if (shouldRenderWaterFace(snapshot, x, y - 1, z, blockId)) {
+    if (shouldRenderWaterFace(snapshot, x, y - 1, z, stateId)) {
         emitWaterFace(FACE_BOTTOM, {{
             pos + glm::vec3(0.0f, 0.0f, 0.0f),
             pos + glm::vec3(1.0f, 0.0f, 0.0f),
@@ -1961,7 +1961,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         }});
     }
 
-    if (shouldRenderWaterFace(snapshot, x, y, z + 1, blockId) &&
+    if (shouldRenderWaterFace(snapshot, x, y, z + 1, stateId) &&
         (frontLeft > 0.0f || frontRight > 0.0f)) {
         emitWaterFace(FACE_FRONT, {{
             pos + glm::vec3(0.0f, 0.0f, 1.0f),
@@ -1971,7 +1971,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         }});
     }
 
-    if (shouldRenderWaterFace(snapshot, x, y, z - 1, blockId) &&
+    if (shouldRenderWaterFace(snapshot, x, y, z - 1, stateId) &&
         (backLeft > 0.0f || backRight > 0.0f)) {
         emitWaterFace(FACE_BACK, {{
             pos + glm::vec3(1.0f, 0.0f, 0.0f),
@@ -1981,7 +1981,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         }});
     }
 
-    if (shouldRenderWaterFace(snapshot, x - 1, y, z, blockId) &&
+    if (shouldRenderWaterFace(snapshot, x - 1, y, z, stateId) &&
         (frontLeft > 0.0f || backLeft > 0.0f)) {
         emitWaterFace(FACE_LEFT, {{
             pos + glm::vec3(0.0f, 0.0f, 0.0f),
@@ -1991,7 +1991,7 @@ void addWaterFacesImpl(ChunkMeshData& meshData,
         }});
     }
 
-    if (shouldRenderWaterFace(snapshot, x + 1, y, z, blockId) &&
+    if (shouldRenderWaterFace(snapshot, x + 1, y, z, stateId) &&
         (frontRight > 0.0f || backRight > 0.0f)) {
         emitWaterFace(FACE_RIGHT, {{
             pos + glm::vec3(1.0f, 0.0f, 1.0f),
@@ -2025,12 +2025,12 @@ bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapsho
                                           const int z,
                                           const bool waterTarget,
                                           FaceCell& outCell) {
-    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-    if (blockId == 0) {
+    const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
-    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+    const MeshBlockInfo& info = getMeshBlockInfo(stateId);
     const MeshCubeClass expectedClass = waterTarget ? MeshCubeClass::Water : MeshCubeClass::Transparent;
     if (info.cubeClass != expectedClass) {
         return false;
@@ -2038,7 +2038,7 @@ bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapsho
     const BlockDef& def = *info.def;
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, stateId, def)) {
         return false;
     }
 
@@ -2046,8 +2046,8 @@ bool populateTransparentFaceCellForTarget(const SubChunkMeshingSnapshot& snapsho
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
-    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
+    outCell.renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
+    outCell.key = buildFaceMergeKey(stateId, outCell.renderData);
     return true;
 }
 
@@ -2075,19 +2075,19 @@ bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
                             const int y,
                             const int z,
                             FaceCell& outCell) {
-    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-    if (blockId == 0) {
+    const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
-    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+    const MeshBlockInfo& info = getMeshBlockInfo(stateId);
     if (info.cubeClass != MeshCubeClass::Cutout) {
         return false;
     }
     const BlockDef& def = *info.def;
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, stateId, def)) {
         return false;
     }
 
@@ -2095,8 +2095,8 @@ bool populateCutoutFaceCell(const SubChunkMeshingSnapshot& snapshot,
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
-    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
+    outCell.renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
+    outCell.key = buildFaceMergeKey(stateId, outCell.renderData);
     return true;
 }
 
@@ -2106,19 +2106,19 @@ bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot,
                                     const int y,
                                     const int z,
                                     FaceCell& outCell) {
-    const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-    if (blockId == 0) {
+    const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
 
-    const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+    const MeshBlockInfo& info = getMeshBlockInfo(stateId);
     if (info.cubeClass != MeshCubeClass::CutoutDistance) {
         return false;
     }
     const BlockDef& def = *info.def;
 
     const IVec3 normal = kFaceNormals[static_cast<size_t>(face)];
-    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, blockId, def)) {
+    if (!shouldRenderFaceImpl(snapshot, x + normal.x, y + normal.y, z + normal.z, stateId, def)) {
         return false;
     }
 
@@ -2126,8 +2126,8 @@ bool populateCutoutDistanceFaceCell(const SubChunkMeshingSnapshot& snapshot,
     outCell.x = x;
     outCell.y = y;
     outCell.z = z;
-    outCell.renderData = buildFaceRenderData(snapshot, blockId, def, info, x, y, z, face);
-    outCell.key = buildFaceMergeKey(blockId, outCell.renderData);
+    outCell.renderData = buildFaceRenderData(snapshot, stateId, def, info, x, y, z, face);
+    outCell.key = buildFaceMergeKey(stateId, outCell.renderData);
     return true;
 }
 
@@ -2309,12 +2309,12 @@ void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot,
                     z = u;
                 }
 
-                const BlockID blockId = snapshot.blocks[scToIndex(x, y, z)];
-                if (blockId == 0) {
+                const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
+                if (stateId == NULL_BLOCK_STATE) {
                     continue;
                 }
 
-                const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+                const MeshBlockInfo& info = getMeshBlockInfo(stateId);
                 if (info.cubeClass != MeshCubeClass::Opaque) {
                     continue;
                 }
@@ -2328,8 +2328,8 @@ void buildOpaqueGreedyPlane(const SubChunkMeshingSnapshot& snapshot,
                 cell.x = x;
                 cell.y = y;
                 cell.z = z;
-                cell.renderData = buildFaceRenderData(snapshot, blockId, *info.def, info, x, y, z, Face);
-                cell.key = buildFaceMergeKey(blockId, cell.renderData);
+                cell.renderData = buildFaceRenderData(snapshot, stateId, *info.def, info, x, y, z, Face);
+                cell.key = buildFaceMergeKey(stateId, cell.renderData);
                 ++meshData.opaqueFaceCountBeforeGreedy;
             }
         }
@@ -2424,25 +2424,25 @@ bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot,
                               const int x,
                               const int y,
                               const int z,
-                              BlockID& outBlockId,
+                              BlockStateId& outStateId,
                               const BlockDef*& outDef,
                               float& outHeight,
                               uint16_t& outHeightKey) {
-    const BlockID blockId = getResolvedFluidSC(snapshot, x, y, z);
-    if (!FluidState::isWater(blockId) || !FluidState::isSource(blockId) || FluidState::isFalling(blockId)) {
+    const BlockStateId stateId = getResolvedFluidSC(snapshot, x, y, z);
+    if (!FluidState::isWater(stateId) || !FluidState::isSource(stateId) || FluidState::isFalling(stateId)) {
         return false;
     }
-    if (!shouldRenderWaterFace(snapshot, x, y + 1, z, blockId)) {
+    if (!shouldRenderWaterFace(snapshot, x, y + 1, z, stateId)) {
         return false;
     }
     if (isFlowingWaterVector(computeFluidFlowVector(snapshot, x, y, z, FluidKind::Water))) {
         return false;
     }
 
-    const float frontLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
-    const float frontRight = computeWaterCornerHeight(snapshot, blockId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
-    const float backRight = computeWaterCornerHeight(snapshot, blockId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
-    const float backLeft = computeWaterCornerHeight(snapshot, blockId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
+    const float frontLeft = computeWaterCornerHeight(snapshot, stateId, x - 1, y, z, x, z, x - 1, z + 1, x, z + 1);
+    const float frontRight = computeWaterCornerHeight(snapshot, stateId, x, y, z, x + 1, z, x, z + 1, x + 1, z + 1);
+    const float backRight = computeWaterCornerHeight(snapshot, stateId, x, y, z - 1, x + 1, z - 1, x, z, x + 1, z);
+    const float backLeft = computeWaterCornerHeight(snapshot, stateId, x - 1, y, z - 1, x, z - 1, x - 1, z, x, z);
     constexpr float kHeightEpsilon = 1.0f / 1024.0f;
     if (std::abs(frontLeft - frontRight) > kHeightEpsilon ||
         std::abs(frontLeft - backRight) > kHeightEpsilon ||
@@ -2450,8 +2450,8 @@ bool isMergeableStillWaterTop(const SubChunkMeshingSnapshot& snapshot,
         return false;
     }
 
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    outBlockId = blockId;
+    const BlockDef& def = *getMeshBlockInfo(stateId).def;
+    outStateId = stateId;
     outDef = &def;
     outHeight = frontLeft;
     outHeightKey = static_cast<uint16_t>(std::clamp(frontLeft, 0.0f, 1.0f) * 1024.0f + 0.5f);
@@ -2475,11 +2475,11 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
 
         for (int z = 0; z < S; ++z) {
             for (int x = 0; x < S; ++x) {
-                BlockID blockId = 0;
+                BlockStateId stateId = NULL_BLOCK_STATE;
                 const BlockDef* def = nullptr;
                 float height = 0.0f;
                 uint16_t heightKey = 0;
-                if (!isMergeableStillWaterTop(snapshot, x, y, z, blockId, def, height, heightKey)) {
+                if (!isMergeableStillWaterTop(snapshot, x, y, z, stateId, def, height, heightKey)) {
                     continue;
                 }
 
@@ -2490,12 +2490,12 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
                 cell.z = z;
                 cell.height = height;
                 cell.heightKey = heightKey;
-                cell.renderData = buildFaceRenderData(snapshot, blockId, *def, getMeshBlockInfo(blockId), x, y, z, FACE_TOP);
+                cell.renderData = buildFaceRenderData(snapshot, stateId, *def, getMeshBlockInfo(stateId), x, y, z, FACE_TOP);
                 if (const AnimatedTextureRef* waterTexture = findNamedWaterTexture(*def, "still")) {
                     applyWaterTextureRef(cell.renderData, *waterTexture);
                 }
                 cell.renderData.uvQuarterTurns = 0;
-                cell.key = buildFaceMergeKey(blockId, cell.renderData);
+                cell.key = buildFaceMergeKey(stateId, cell.renderData);
                 ++meshData.transparentFaceCountBeforeGreedy;
             }
         }
@@ -2573,14 +2573,14 @@ void buildStillWaterTopGreedyFaces(const SubChunkMeshingSnapshot& snapshot,
 
 void addCrossedQuadsImpl(std::vector<BlockVertex>& vertices,
                           const glm::vec3& pos,
-                          const BlockID blockId,
+                          const BlockStateId stateId,
                           const BlockDef& def,
                           const int x,
                           const int y,
                           const int z,
                           const SubChunkMeshingSnapshot& snapshot) {
     static_cast<void>(def);
-    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
@@ -2670,13 +2670,13 @@ constexpr float kTorchWallOffset = 1.0f / 16.0f;
 
 void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
                         const glm::vec3& pos,
-                        const BlockID blockId,
+                        const BlockStateId stateId,
                         const int x,
                         const int y,
                         const int z,
                         const SubChunkMeshingSnapshot& snapshot) {
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    const BlockDef& def = *getMeshBlockInfo(stateId).def;
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     int tileIndex = textures.faceTop.firstLayer;
     if (tileIndex < 0) tileIndex = 0;
     const float layer = static_cast<float>(tileIndex);
@@ -2700,7 +2700,7 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
     // Determine facing from block state
     uint16_t facingValue = PropIndices::FACING_FLOOR;
     if (PropIndices::FACING != PropIndices::INVALID) {
-        facingValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+        facingValue = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     }
 
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
@@ -2811,13 +2811,13 @@ void addTorchCuboidImpl(std::vector<BlockVertex>& vertices,
 
 void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
                        const glm::vec3& pos,
-                       const BlockID blockId,
+                       const BlockStateId stateId,
                        const int x,
                        const int y,
                        const int z,
                        const SubChunkMeshingSnapshot& snapshot) {
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    const BlockDef& def = *getMeshBlockInfo(stateId).def;
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
@@ -2837,7 +2837,7 @@ void addTorchPrismImpl(std::vector<BlockVertex>& vertices,
 
     uint16_t facingValue = PropIndices::FACING_FLOOR;
     if (PropIndices::FACING != PropIndices::INVALID) {
-        facingValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+        facingValue = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     }
 
     const std::array<int, 6> indices = {{0, 1, 2, 0, 2, 3}};
@@ -3122,13 +3122,13 @@ void emitTorchModelCuboidFaces(std::vector<BlockVertex>& vertices,
 
 void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
                           const glm::vec3& pos,
-                          const BlockID blockId,
+                          const BlockStateId stateId,
                           const int x,
                           const int y,
                           const int z,
                           const SubChunkMeshingSnapshot& snapshot) {
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(blockId);
+    const BlockDef& def = *getMeshBlockInfo(stateId).def;
+    const StateTextureIndices& textures = BlockStateRegistry::getStateTextures(stateId);
     const float layer = static_cast<float>(textures.faceTop.firstLayer);
 
     uint8_t sunLevel = getResolvedSunlightSC(snapshot, x, y, z);
@@ -3148,7 +3148,7 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
 
     uint16_t facingValue = PropIndices::FACING_FLOOR;
     if (PropIndices::FACING != PropIndices::INVALID) {
-        facingValue = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+        facingValue = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     }
 
     const TorchModelUvRect kTorchTopUv = makeTorchModelSourceUvRect(7.0f, 6.0f, 9.0f, 8.0f);
@@ -3254,11 +3254,11 @@ void addTorchTemplateImpl(std::vector<BlockVertex>& vertices,
 
 constexpr float kFacePlaneSurfaceOffset = 1.0f / 128.0f;
 
-uint16_t requireFacePlaneFacing(const BlockID blockId) {
+uint16_t requireFacePlaneFacing(const BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
         throw std::runtime_error("Face plane mesh requires the facing property");
     }
-    const uint16_t facing = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+    const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facing == BlockStateRegistry::INVALID_INDEX) {
         throw std::runtime_error("Face plane mesh requires a facing state value");
     }
@@ -3381,7 +3381,7 @@ void requireRedstoneWireMeshProperties() {
     }
 }
 
-uint8_t redstonePowerLevel(const StateID stateId) {
+uint8_t redstonePowerLevel(const BlockStateId stateId) {
     const uint16_t powerValue = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::POWER);
     static const std::array<uint16_t, 16> kPowerValues = {{
         PropIndices::POWER_0,
@@ -3413,7 +3413,7 @@ uint8_t redstonePowerLevel(const StateID stateId) {
 
 // Returns 0 for "none", 1 for "side" or "down", 2 for "up".
 // Throws if the property value is not one of the recognized connection states.
-uint8_t redstoneWireConnectionLevel(const StateID stateId,
+uint8_t redstoneWireConnectionLevel(const BlockStateId stateId,
                                      const uint16_t property,
                                      const uint16_t noneValue,
                                      const uint16_t sideValue,
@@ -3678,14 +3678,14 @@ bool ChunkMesher::debugDisableGreedyMeshing() {
 
 void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
                                    const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockID blockId,
+                                   const BlockStateId stateId,
                                    const BlockDef& def,
                                    const int x,
                                    const int y,
                                    const int z) {
     addCrossedQuadsImpl(cutoutTargetFor(meshData, def),
                         glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                        blockId, def, x, y, z, snapshot);
+                        stateId, def, x, y, z, snapshot);
     expandBounds(meshData,
                  glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
@@ -3693,14 +3693,14 @@ void ChunkMeshBuilders::buildCross(ChunkMeshData& meshData,
 
 void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
                                     const SubChunkMeshingSnapshot& snapshot,
-                                    const BlockID blockId,
+                                    const BlockStateId stateId,
                                     const BlockDef& def,
                                     const int x,
                                     const int y,
                                     const int z) {
     addTorchTemplateImpl(cutoutTargetFor(meshData, def),
                       glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
-                      blockId, x, y, z, snapshot);
+                      stateId, x, y, z, snapshot);
     expandBounds(meshData,
                  glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                  glm::vec3(static_cast<float>(x + 1), static_cast<float>(y + 1), static_cast<float>(z + 1)));
@@ -3708,25 +3708,25 @@ void ChunkMeshBuilders::buildTorch(ChunkMeshData& meshData,
 
 void ChunkMeshBuilders::buildWater(ChunkMeshData& meshData,
                                    const SubChunkMeshingSnapshot& snapshot,
-                                   const BlockID blockId,
+                                   const BlockStateId stateId,
                                    const BlockDef& def,
                                    const int x,
                                    const int y,
                                    const int z) {
-    addWaterFacesImpl(meshData, snapshot, blockId, def, x, y, z);
+    addWaterFacesImpl(meshData, snapshot, stateId, def, x, y, z);
 }
 
 void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
                                         const SubChunkMeshingSnapshot& snapshot,
-                                        const BlockID blockId,
+                                        const BlockStateId stateId,
                                         const BlockDef& def,
                                         const int x,
                                         const int y,
                                         const int z) {
-    const ModelVariant* variant = BlockStateRegistry::getModelVariant(blockId);
+    const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
         throw std::runtime_error("Model block is missing a model variant: " +
-                                 BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(blockId)).full());
+                                 BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(stateId)).full());
     }
 
     const CachedModelGeometry& geometry = getCachedModelGeometry(*variant);
@@ -3751,14 +3751,14 @@ void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
 
 void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData,
                                          const SubChunkMeshingSnapshot& snapshot,
-                                         const BlockID blockId,
+                                         const BlockStateId stateId,
                                          const BlockDef& def,
                                          const int x,
                                          const int y,
                                          const int z) {
     static_cast<void>(meshData);
     static_cast<void>(snapshot);
-    static_cast<void>(blockId);
+    static_cast<void>(stateId);
     static_cast<void>(def);
     static_cast<void>(x);
     static_cast<void>(y);
@@ -3767,17 +3767,17 @@ void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData,
 
 void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
                                        const SubChunkMeshingSnapshot& snapshot,
-                                       const BlockID blockId,
+                                       const BlockStateId stateId,
                                        const BlockDef& def,
                                        const int x,
                                        const int y,
                                        const int z) {
-    const uint16_t facing = requireFacePlaneFacing(blockId);
+    const uint16_t facing = requireFacePlaneFacing(stateId);
     const int face = facePlaneRenderFace(facing);
     const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
     const std::array<glm::vec3, 4> corners = buildFacePlaneCorners(blockOffset, facing);
 
-    FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+    FaceRenderData renderData = buildFaceRenderData(snapshot, stateId, def, x, y, z, face);
     const std::array<glm::vec2, 4> faceUV = buildFaceUv(1.0f, 1.0f, renderData.uvQuarterTurns);
     appendFaceVertices(selectModelVertexTarget(meshData, def), corners, faceUV, face, renderData);
     expandBoundsForCorners(meshData, corners);
@@ -3785,42 +3785,42 @@ void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
 
 void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
                                           const SubChunkMeshingSnapshot& snapshot,
-                                          const BlockID blockId,
+                                          const BlockStateId stateId,
                                           const BlockDef& def,
                                           const int x,
                                           const int y,
                                           const int z) {
     requireRedstoneWireMeshProperties();
 
-    const uint16_t facing = BlockStateRegistry::getPropertyIndex(blockId, PropIndices::FACING);
+    const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (!WireFaceGeometry::isWireFacing(facing)) {
         throw std::runtime_error("Redstone wire mesh received an unsupported facing value");
     }
 
     // Connection level per horizontal direction: 0 = none, 1 = side (flat or
     // descending), 2 = up (climbing the side of a solid block).
-    const uint8_t north = redstoneWireConnectionLevel(blockId,
+    const uint8_t north = redstoneWireConnectionLevel(stateId,
                                                        PropIndices::NORTH,
                                                         PropIndices::NORTH_NONE,
                                                         PropIndices::NORTH_SIDE,
                                                         PropIndices::NORTH_UP,
                                                         PropIndices::NORTH_DOWN,
                                                         "north");
-    const uint8_t south = redstoneWireConnectionLevel(blockId,
+    const uint8_t south = redstoneWireConnectionLevel(stateId,
                                                        PropIndices::SOUTH,
                                                         PropIndices::SOUTH_NONE,
                                                         PropIndices::SOUTH_SIDE,
                                                         PropIndices::SOUTH_UP,
                                                         PropIndices::SOUTH_DOWN,
                                                         "south");
-    const uint8_t east = redstoneWireConnectionLevel(blockId,
+    const uint8_t east = redstoneWireConnectionLevel(stateId,
                                                       PropIndices::EAST,
                                                       PropIndices::EAST_NONE,
                                                       PropIndices::EAST_SIDE,
                                                       PropIndices::EAST_UP,
                                                       PropIndices::EAST_DOWN,
                                                       "east");
-    const uint8_t west = redstoneWireConnectionLevel(blockId,
+    const uint8_t west = redstoneWireConnectionLevel(stateId,
                                                       PropIndices::WEST,
                                                       PropIndices::WEST_NONE,
                                                       PropIndices::WEST_SIDE,
@@ -3828,7 +3828,7 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
                                                       PropIndices::WEST_DOWN,
                                                       "west");
     const bool isolated = north == 0 && south == 0 && east == 0 && west == 0;
-    const uint8_t power = redstonePowerLevel(blockId);
+    const uint8_t power = redstonePowerLevel(stateId);
 
     const AnimatedTextureRef& dotTexture = requireNamedTextureRef(def, "dot");
     const AnimatedTextureRef& lineTexture = requireNamedTextureRef(def, "line0");
@@ -3836,7 +3836,7 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
     const glm::vec3 blockOffset(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
 
     auto renderDataFor = [&](const AnimatedTextureRef& texture, const int face) {
-        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        FaceRenderData renderData = buildFaceRenderData(snapshot, stateId, def, x, y, z, face);
         applyTextureRef(renderData, texture);
         renderData.tintKind = BlockTintKinds::REDSTONE;
         renderData.tintU = static_cast<uint8_t>(power << 4U);
@@ -3959,18 +3959,18 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
 
 void buildWaterSkippingTop(ChunkMeshData& meshData,
                            const SubChunkMeshingSnapshot& snapshot,
-                           const BlockID blockId,
+                           const BlockStateId stateId,
                            const BlockDef& def,
                            const int x,
                            const int y,
                            const int z,
                            const bool skipTopFace) {
-    addWaterFacesImpl(meshData, snapshot, blockId, def, x, y, z, skipTopFace);
+    addWaterFacesImpl(meshData, snapshot, stateId, def, x, y, z, skipTopFace);
 }
 
 void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
                                        const SubChunkMeshingSnapshot& snapshot,
-                                       const BlockID blockId,
+                                       const BlockStateId stateId,
                                        const BlockDef& def,
                                        const int x,
                                        const int y,
@@ -3981,7 +3981,7 @@ void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
         const int ny = y + normal.y;
         const int nz = z + normal.z;
 
-        if (!shouldRenderFaceImpl(snapshot, nx, ny, nz, blockId, def)) {
+        if (!shouldRenderFaceImpl(snapshot, nx, ny, nz, stateId, def)) {
             continue;
         }
 
@@ -3990,7 +3990,7 @@ void ChunkMeshBuilders::buildUnitFaces(ChunkMeshData& meshData,
             : (def.renderLayer == BlockRenderLayer::Cutout
                 ? cutoutTargetFor(meshData, def)
                 : meshData.opaqueVertices);
-        FaceRenderData renderData = buildFaceRenderData(snapshot, blockId, def, x, y, z, face);
+        FaceRenderData renderData = buildFaceRenderData(snapshot, stateId, def, x, y, z, face);
         emitUnitFace(target,
                      glm::vec3(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)),
                      face, renderData);
@@ -4098,12 +4098,12 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
             for (int z = 0; z < S; ++z) {
                 for (int x = 0; x < S; ++x) {
                     const std::size_t index = scToIndex(x, y, z);
-                    const BlockID blockId = snapshot.blocks[index];
-                    const BlockID fluidId = snapshot.fluidBlocks[index];
+                    const BlockStateId stateId = snapshot.blocks[index];
+                    const BlockStateId fluidState = snapshot.fluidBlocks[index];
 
                     // Render the block (if any)
-                    if (blockId != 0) {
-                        const MeshBlockInfo& info = getMeshBlockInfo(blockId);
+                    if (stateId != NULL_BLOCK_STATE) {
+                        const MeshBlockInfo& info = getMeshBlockInfo(stateId);
 
                         if (info.cubeClass == MeshCubeClass::Other) {
                             const BlockDef& def = *info.def;
@@ -4111,30 +4111,30 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
                             if (builder == nullptr) {
                                 builder = &ChunkMeshBuilders::buildUnitFaces;
                             }
-                            if (FluidState::isWater(blockId)) {
+                            if (FluidState::isWater(stateId)) {
                                 buildWaterSkippingTop(meshData,
                                                       snapshot,
-                                                      blockId,
+                                                      stateId,
                                                       def,
                                                       x,
                                                       y,
                                                       z,
                                                       mergedWaterTopFaces[index]);
                             } else {
-                                builder(meshData, snapshot, blockId, def, x, y, z);
+                                builder(meshData, snapshot, stateId, def, x, y, z);
                             }
                         }
                     }
 
                     // Render waterlogged fluid overlay
-                    if (fluidId != 0 && FluidState::decode(fluidId).kind != FluidKind::None) {
+                    if (fluidState != NULL_BLOCK_STATE && FluidState::decode(fluidState).kind != FluidKind::None) {
                         // Render water for waterlogged blocks and tolerate fluid-only cells.
                         // Pure water in the block layer is already handled by the water builder above.
-                        if (FluidState::decode(blockId).kind == FluidKind::None) {
-                            const BlockDef& fluidDef = *getMeshBlockInfo(fluidId).def;
+                        if (FluidState::decode(stateId).kind == FluidKind::None) {
+                            const BlockDef& fluidDef = *getMeshBlockInfo(fluidState).def;
                             buildWaterSkippingTop(meshData,
                                                   snapshot,
-                                                  fluidId,
+                                                  fluidState,
                                                   fluidDef,
                                                   x,
                                                   y,

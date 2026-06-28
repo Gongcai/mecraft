@@ -186,13 +186,14 @@ bool deserializeLayer(
         }
 
         const RuntimeId rid = palette[paletteIndex];
+        const BlockStateId stateId = BlockStateId::fromRaw(rid);
 
         if (isFluidLayer) {
             sub.setFluidLayer(static_cast<int>(lx), static_cast<int>(ly),
-                              static_cast<int>(lz), rid);
+                              static_cast<int>(lz), stateId);
         } else {
             sub.setBlock(static_cast<int>(lx), static_cast<int>(ly),
-                         static_cast<int>(lz), rid);
+                         static_cast<int>(lz), stateId);
         }
     }
 

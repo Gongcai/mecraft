@@ -15,12 +15,22 @@ namespace {
     std::_Exit(EXIT_FAILURE);
 }
 
+BlockStateId stateForBlockId(const BlockID blockId) {
+    return blockId == RUNTIME_ID_NULL
+        ? NULL_BLOCK_STATE
+        : BlockStateRegistry::getDefaultState(blockId);
+}
+
+BlockStateId stateForBlockName(const char* name) {
+    return stateForBlockId(BlockRegistry::requireIdByName(name));
+}
+
 std::vector<BlockID> snapshotBlocks(const Chunk& chunk) {
     std::vector<BlockID> blocks(Chunk::BLOCK_COUNT);
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                blocks[Chunk::toIndex(x, y, z)] = chunk.getBlock(x, y, z);
+                blocks[Chunk::toIndex(x, y, z)] = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
             }
         }
     }
@@ -68,17 +78,17 @@ void buildSealedTunnel(const std::shared_ptr<Chunk>& left, const std::shared_ptr
     for (int iy = 0; iy <= 40; ++iy) {
         for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
             for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
-                left->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
-                right->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
+                left->setBlockFast(ix, iy, iz, stateForBlockName("minecraft:stone"));
+                right->setBlockFast(ix, iy, iz, stateForBlockName("minecraft:stone"));
             }
         }
     }
 
     for (int x = 13; x <= 15; ++x) {
-        left->setBlockFast(x, y, z, RUNTIME_ID_NULL);
+        left->setBlockFast(x, y, z, NULL_BLOCK_STATE);
     }
     for (int x = 0; x <= 2; ++x) {
-        right->setBlockFast(x, y, z, RUNTIME_ID_NULL);
+        right->setBlockFast(x, y, z, NULL_BLOCK_STATE);
     }
 }
 
@@ -90,7 +100,7 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
     constexpr int z = 8;
     buildSealedTunnel(left, right, y, z);
 
-    left->setBlockFast(14, y, z, BlockRegistry::requireIdByName("minecraft:torch"));
+    left->setBlockFast(14, y, z, stateForBlockName("minecraft:torch"));
 
     LightJob leftLitJob = buildJob(left);
     leftLitJob.neighborPosX = right;
@@ -126,7 +136,7 @@ void testCrossChunkBlockLightNeedsPersistentBoundaryInput() {
         fail("neighbor chunk should stay lit when boundary contribution is reused");
     }
 
-    left->setBlockFast(14, y, z, RUNTIME_ID_NULL);
+    left->setBlockFast(14, y, z, NULL_BLOCK_STATE);
     LightJob leftRemovedJob = buildJob(left);
     leftRemovedJob.neighborPosX = right;
     const LightResult leftRemoved = LightSolver::solve(leftRemovedJob);
@@ -152,19 +162,19 @@ void testLocalEmitterRemovalUsesRemovePass() {
     for (int iy = 0; iy <= 40; ++iy) {
         for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
             for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
-                chunk->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
+                chunk->setBlockFast(ix, iy, iz, stateForBlockName("minecraft:stone"));
             }
         }
     }
     for (int x = 6; x <= 10; ++x) {
-        chunk->setBlockFast(x, y, z, RUNTIME_ID_NULL);
+        chunk->setBlockFast(x, y, z, NULL_BLOCK_STATE);
     }
-    chunk->setBlockFast(8, y, z, BlockRegistry::requireIdByName("minecraft:torch"));
+    chunk->setBlockFast(8, y, z, stateForBlockName("minecraft:torch"));
 
     const LightResult lit = LightSolver::solve(buildJob(chunk));
     chunk->replacePackedLight(lit.selfDelta.packedLight.data(), lit.selfDelta.packedLight.size(), nullptr);
 
-    chunk->setBlockFast(8, y, z, RUNTIME_ID_NULL);
+    chunk->setBlockFast(8, y, z, NULL_BLOCK_STATE);
     LightJob removedJob = buildJob(chunk);
     removedJob.reason = LightDirtyReason::BlockChanged;
     removedJob.blockChanges.push_back({

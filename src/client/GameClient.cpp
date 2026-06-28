@@ -233,7 +233,7 @@ void GameClient::receiveMessages() {
                 for (const auto& update : batch.updates) {
                     m_clientWorld.applyBlockUpdate(update.x, update.y, update.z,
                                                    update.kind,
-                                                   static_cast<StateID>(update.stateId),
+                                                   update.stateId,
                                                    update.packedLightPatch);
                 }
             }

@@ -155,10 +155,6 @@ BlockID resolveDefinitionBlockId(const BlockID id) {
         return id;
     }
 
-    if (id < BlockStateRegistry::getStateCount()) {
-        return BlockStateRegistry::getBlockId(id);
-    }
-
     return RUNTIME_ID_NULL;
 }
 

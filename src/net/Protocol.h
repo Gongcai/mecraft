@@ -8,6 +8,8 @@
 #include <any>
 #include <glm/glm.hpp>
 
+#include "../world/block/BlockStateRegistry.h"
+
 class Chunk;
 
 namespace net {
@@ -137,7 +139,7 @@ struct ClientBlockAction {
     glm::ivec3 placeBlock = glm::ivec3(0);
     glm::ivec3 hitNormal = glm::ivec3(0);
     glm::vec3 playerPosition = glm::vec3(0.0f);
-    uint32_t blockState = 0;
+    BlockStateId blockState = NULL_BLOCK_STATE;
 };
 
 enum class ContainerSlotSpace : uint8_t {
@@ -222,7 +224,7 @@ struct BlockUpdateEntry {
     int32_t y = 0;
     int32_t z = 0;
     BlockUpdateKind kind = BlockUpdateKind::BlockState;
-    uint32_t stateId = 0;
+    BlockStateId stateId = NULL_BLOCK_STATE;
     // Optional light payload. A SubChunk::BLOCK_COUNT-sized payload is the
     // complete light section containing y. Odd-sized cubic patches are centered
     // on x/y/z and written in dy, dz, dx nested-loop order. A Chunk::BLOCK_COUNT

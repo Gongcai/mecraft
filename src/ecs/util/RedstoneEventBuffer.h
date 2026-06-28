@@ -14,7 +14,7 @@ namespace ecs {
 struct RedstoneDeviceActivationEvent {
     glm::ivec3 position{0};
     BlockID blockId = RUNTIME_ID_NULL;
-    StateID stateId = RUNTIME_ID_NULL;
+    BlockStateId stateId = NULL_BLOCK_STATE;
     uint64_t redstoneTick = 0;
 };
 

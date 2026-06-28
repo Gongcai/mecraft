@@ -32,7 +32,7 @@ const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
     return SurvivalModeRules::instance();
 }
 
-bool wouldOverlapPlacedState(const PhysicsBody& body, const glm::ivec3& blockPos, const StateID stateId) {
+bool wouldOverlapPlacedState(const PhysicsBody& body, const glm::ivec3& blockPos, const BlockStateId stateId) {
     const glm::vec3 bodyCenter = body.position + body.colliderOffset;
     const glm::vec3 bodyMin = bodyCenter - body.halfExtents;
     const glm::vec3 bodyMax = bodyCenter + body.halfExtents;
@@ -46,7 +46,7 @@ void recordPostPlaceSuppression(BlockInteractionRuntimeComponent& runtime,
     runtime.postPlaceInteractionSuppressSeconds = 0.25f;
 }
 
-StateID resolvePlacementState(const BlockID blockId,
+BlockStateId resolvePlacementState(const BlockID blockId,
                               const CameraStateComponent& camera,
                               const MoveIntentComponent& moveIntent,
                               const glm::ivec3& hitNormal,
@@ -64,26 +64,26 @@ StateID resolvePlacementState(const BlockID blockId,
     pctx.playerYaw = camera.yaw;
     pctx.isSneaking = moveIntent.wantsCrouch;
 
-    const StateID stateId = strategy(pctx);
-    return stateId != 0 ? stateId : RUNTIME_ID_NULL;
+    const BlockStateId stateId = strategy(pctx);
+    return stateId;
 }
 
 struct PlacementResolution {
     glm::ivec3 placeBlock{};
-    StateID stateId = RUNTIME_ID_NULL;
+    BlockStateId stateId = NULL_BLOCK_STATE;
     glm::ivec3 secondaryBlock{};
-    StateID secondaryStateId = RUNTIME_ID_NULL;
+    BlockStateId secondaryStateId = NULL_BLOCK_STATE;
     bool hasSecondaryBlock = false;
     bool replacesExisting = false;
 };
 
 bool wouldOverlapPlacement(const PhysicsBody& body, const PlacementResolution& placement) {
-    if (placement.stateId != RUNTIME_ID_NULL &&
+    if (placement.stateId != NULL_BLOCK_STATE &&
         wouldOverlapPlacedState(body, placement.placeBlock, placement.stateId)) {
         return true;
     }
     return placement.hasSecondaryBlock &&
-           placement.secondaryStateId != RUNTIME_ID_NULL &&
+           placement.secondaryStateId != NULL_BLOCK_STATE &&
            wouldOverlapPlacedState(body, placement.secondaryBlock, placement.secondaryStateId);
 }
 
@@ -100,7 +100,7 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         const BedBlockLogic::BedPlacement bedPlacement =
             BedBlockLogic::resolvePlacement(worldView, result.placeBlock, result.stateId);
         if (!bedPlacement.valid) {
-            result.stateId = RUNTIME_ID_NULL;
+            result.stateId = NULL_BLOCK_STATE;
             return result;
         }
 
@@ -116,7 +116,7 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         const DoorBlockLogic::DoorPlacement doorPlacement =
             DoorBlockLogic::resolvePlacement(worldView, result.placeBlock, result.stateId);
         if (!doorPlacement.valid) {
-            result.stateId = RUNTIME_ID_NULL;
+            result.stateId = NULL_BLOCK_STATE;
             return result;
         }
 
@@ -128,12 +128,12 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         return result;
     }
 
-    const StateID existingTargetState =
+    const BlockStateId existingTargetState =
         worldView.getBlockState(target.targetBlock.x, target.targetBlock.y, target.targetBlock.z);
-    const StateID inCellState =
+    const BlockStateId inCellState =
         resolvePlacementState(blockId, camera, moveIntent, -target.hitNormal, target.hitPosition);
 
-    StateID mergedState = RUNTIME_ID_NULL;
+    BlockStateId mergedState = NULL_BLOCK_STATE;
     if (tryMergePlacementStates(existingTargetState, inCellState, mergedState)) {
         result.placeBlock = target.targetBlock;
         result.stateId = mergedState;
@@ -206,7 +206,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        const StateID placedState = placement.stateId;
+        const BlockStateId placedState = placement.stateId;
 
         GameplayBlockActionRequest request;
         request.hasHit = target.hasTarget;
@@ -214,7 +214,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
         request.wantsPlace = intent.wantsPlace;
         request.placeCooldownRemaining = runtime.placeCooldownRemaining;
         if (target.hasTarget) {
-            request.targetBlock = worldView.getBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+            request.targetBlock = worldView.getBlockState(placeBlock.x, placeBlock.y, placeBlock.z);
             request.placementReplacesTarget = placement.replacesExisting;
             request.playerWouldOverlapPlaceBlock = wouldOverlapPlacement(physicsBody.body, placement);
         }
@@ -228,7 +228,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
             continue;
         }
 
-        if (placedState == RUNTIME_ID_NULL) {
+        if (placedState == NULL_BLOCK_STATE) {
             continue;
         }
         if (mutableWorld == nullptr) {
@@ -271,7 +271,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
                 throw std::runtime_error("Unsupported multi-block placement state");
             }
         } else {
-            mutableWorld->setBlock(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
+            mutableWorld->setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
         }
         static_cast<void>(ensureBlockEntityInventoryForPlacedBlock(registry, blockToPlace, placeBlock));
         // Notify DropSystem of placement so nearby drops resolve against new collision.

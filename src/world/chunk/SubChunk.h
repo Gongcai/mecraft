@@ -10,7 +10,7 @@
 #include <glad/glad.h>
 #include <glm/vec3.hpp>
 
-#include "../block/Block.h"
+#include "../block/BlockStateRegistry.h"
 #include "../block/Palette.h"
 #include "BitPackedArray.h"
 
@@ -214,32 +214,32 @@ public:
     SubChunk(SubChunk&& other) noexcept;
     SubChunk& operator=(SubChunk&& other) noexcept;
 
-    [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
+    [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const;
     // Read a block when the caller has already validated local coordinates.
-    [[nodiscard]] BlockID getBlockUnchecked(int x, int y, int z) const {
+    [[nodiscard]] BlockStateId getBlockUnchecked(int x, int y, int z) const {
         const std::size_t index = static_cast<std::size_t>(x) +
                                   static_cast<std::size_t>(z) * SIZE +
                                   static_cast<std::size_t>(y) * SIZE * SIZE;
         const uint32_t paletteIndex = m_blockData.getUnchecked(index);
-        return m_palette.getRuntimeIdUnchecked(paletteIndex);
+        return BlockStateId::fromRaw(m_palette.getRuntimeIdUnchecked(paletteIndex));
     }
-    void setBlock(int x, int y, int z, BlockID id);
-    void setBlockWithoutMeshDirty(int x, int y, int z, BlockID id);
-    void setBlockFast(int x, int y, int z, BlockID id);
-    void initializeFromBlocks(const std::array<BlockID, BLOCK_COUNT>& blocks);
-    void copyBlocksTo(std::array<BlockID, BLOCK_COUNT>& out) const;
+    void setBlock(int x, int y, int z, BlockStateId stateId);
+    void setBlockWithoutMeshDirty(int x, int y, int z, BlockStateId stateId);
+    void setBlockFast(int x, int y, int z, BlockStateId stateId);
+    void initializeFromBlocks(const std::array<BlockStateId, BLOCK_COUNT>& blocks);
+    void copyBlocksTo(std::array<BlockStateId, BLOCK_COUNT>& out) const;
 
     // --- Fluid layer access (for waterlogged blocks) ---
-    [[nodiscard]] BlockID getFluidLayer(int x, int y, int z) const;
+    [[nodiscard]] BlockStateId getFluidLayer(int x, int y, int z) const;
     // Read a fluid layer when the caller has already validated local coordinates.
-    [[nodiscard]] BlockID getFluidLayerUnchecked(int x, int y, int z) const {
+    [[nodiscard]] BlockStateId getFluidLayerUnchecked(int x, int y, int z) const {
         const std::size_t index = static_cast<std::size_t>(x) +
                                   static_cast<std::size_t>(z) * SIZE +
                                   static_cast<std::size_t>(y) * SIZE * SIZE;
         const uint32_t paletteIndex = m_fluidData.getUnchecked(index);
-        return m_fluidPalette.getRuntimeIdUnchecked(paletteIndex);
+        return BlockStateId::fromRaw(m_fluidPalette.getRuntimeIdUnchecked(paletteIndex));
     }
-    void setFluidLayer(int x, int y, int z, BlockID id);
+    void setFluidLayer(int x, int y, int z, BlockStateId stateId);
 
     void optimizePalette();
 
@@ -285,15 +285,15 @@ public:
 
 private:
     [[nodiscard]] static bool isInBounds(int x, int y, int z);
-    void setBlockImpl(int x, int y, int z, BlockID id, bool markMeshDirty);
+    void setBlockImpl(int x, int y, int z, BlockStateId stateId, bool markMeshDirty);
 
     Palette m_palette;
     BitPackedArray m_blockData;
-    std::unordered_map<BlockID, uint32_t> m_blockCounts;
+    std::unordered_map<BlockStateId, uint32_t> m_blockCounts;
 
     Palette m_fluidPalette;
     BitPackedArray m_fluidData;
-    std::unordered_map<BlockID, uint32_t> m_fluidCounts;
+    std::unordered_map<BlockStateId, uint32_t> m_fluidCounts;
 
     SubChunkType m_type = SubChunkType::Air;
     bool m_dirty = true;

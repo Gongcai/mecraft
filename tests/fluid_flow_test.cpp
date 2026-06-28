@@ -50,11 +50,11 @@ const char* testSymmetricFlowReturnsZero() {
     fillBox(world, -2, 2, y - 1, y - 1, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
     fillBox(world, -2, 2, y, y + 1, -2, 2, RUNTIME_ID_NULL);
 
-    world.setBlock(0, y, 0, FluidState::makeWater(3, false));
-    world.setBlock(1, y, 0, FluidState::makeWater(3, false));
-    world.setBlock(-1, y, 0, FluidState::makeWater(3, false));
-    world.setBlock(0, y, 1, FluidState::makeWater(3, false));
-    world.setBlock(0, y, -1, FluidState::makeWater(3, false));
+    world.setBlockState(0, y, 0, FluidState::makeWater(3, false));
+    world.setBlockState(1, y, 0, FluidState::makeWater(3, false));
+    world.setBlockState(-1, y, 0, FluidState::makeWater(3, false));
+    world.setBlockState(0, y, 1, FluidState::makeWater(3, false));
+    world.setBlockState(0, y, -1, FluidState::makeWater(3, false));
 
     const glm::vec3 flow = computeFluidFlowVector(world, glm::ivec3(0, y, 0), FluidKind::Water);
     if (!approxEqual(flow.x, 0.0f) || !approxEqual(flow.y, 0.0f) || !approxEqual(flow.z, 0.0f)) {
@@ -71,8 +71,8 @@ const char* testLowerNeighborBiasesDirection() {
     fillBox(world, -2, 2, y - 1, y - 1, -1, 1, BlockRegistry::requireIdByName("minecraft:stone"));
     fillBox(world, -2, 2, y, y + 1, -1, 1, RUNTIME_ID_NULL);
 
-    world.setBlock(0, y, 0, FluidState::makeWater(0, false));
-    world.setBlock(1, y, 0, FluidState::makeWater(3, false));
+    world.setBlockState(0, y, 0, FluidState::makeWater(0, false));
+    world.setBlockState(1, y, 0, FluidState::makeWater(3, false));
 
     const glm::vec3 flow = computeFluidFlowVector(world, glm::ivec3(0, y, 0), FluidKind::Water);
     if (flow.x < 0.9f || !approxEqual(flow.y, 0.0f) || !approxEqual(flow.z, 0.0f)) {
@@ -87,9 +87,9 @@ const char* testFallingWaterAddsVerticalBias() {
 
     const int y = 104;
     fillBox(world, -1, 1, y - 2, y + 1, -1, 1, RUNTIME_ID_NULL);
-    world.setBlock(0, y, 0, FluidState::makeWater(0, true));
-    world.setBlock(1, y, 0, FluidState::makeWater(0, true));
-    world.setBlock(-1, y, 0, FluidState::makeWater(0, true));
+    world.setBlockState(0, y, 0, FluidState::makeWater(0, true));
+    world.setBlockState(1, y, 0, FluidState::makeWater(0, true));
+    world.setBlockState(-1, y, 0, FluidState::makeWater(0, true));
 
     const glm::vec3 flow = computeFluidFlowVector(world, glm::ivec3(0, y, 0), FluidKind::Water);
     if (flow.y > -0.9f || !approxEqual(flow.x, 0.0f) || !approxEqual(flow.z, 0.0f)) {
@@ -106,17 +106,17 @@ const char* testCappedColumnStaysStable() {
     fillBox(world, -2, 2, y - 1, y - 1, -2, 2, BlockRegistry::requireIdByName("minecraft:stone"));
     fillBox(world, -2, 2, y, y + 2, -2, 2, RUNTIME_ID_NULL);
 
-    world.setBlock(0, y, 0, FluidState::makeWater(3, false));
-    world.setBlock(1, y, 0, FluidState::makeWater(3, false));
-    world.setBlock(-1, y, 0, FluidState::makeWater(3, false));
-    world.setBlock(0, y, 1, FluidState::makeWater(3, false));
-    world.setBlock(0, y, -1, FluidState::makeWater(3, false));
+    world.setBlockState(0, y, 0, FluidState::makeWater(3, false));
+    world.setBlockState(1, y, 0, FluidState::makeWater(3, false));
+    world.setBlockState(-1, y, 0, FluidState::makeWater(3, false));
+    world.setBlockState(0, y, 1, FluidState::makeWater(3, false));
+    world.setBlockState(0, y, -1, FluidState::makeWater(3, false));
 
-    world.setBlock(0, y + 1, 0, FluidState::makeWater(0, false));
-    world.setBlock(1, y + 1, 0, FluidState::makeWater(0, false));
-    world.setBlock(-1, y + 1, 0, FluidState::makeWater(0, false));
-    world.setBlock(0, y + 1, 1, FluidState::makeWater(0, false));
-    world.setBlock(0, y + 1, -1, FluidState::makeWater(0, false));
+    world.setBlockState(0, y + 1, 0, FluidState::makeWater(0, false));
+    world.setBlockState(1, y + 1, 0, FluidState::makeWater(0, false));
+    world.setBlockState(-1, y + 1, 0, FluidState::makeWater(0, false));
+    world.setBlockState(0, y + 1, 1, FluidState::makeWater(0, false));
+    world.setBlockState(0, y + 1, -1, FluidState::makeWater(0, false));
 
     const glm::vec3 flow = computeFluidFlowVector(world, glm::ivec3(0, y, 0), FluidKind::Water);
     if (!approxEqual(flow.x, 0.0f) || !approxEqual(flow.y, 0.0f) || !approxEqual(flow.z, 0.0f)) {

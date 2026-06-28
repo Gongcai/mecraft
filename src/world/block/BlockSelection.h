@@ -11,6 +11,6 @@ struct BlockSelectionBox {
 
 namespace BlockSelection {
 
-[[nodiscard]] BlockSelectionBox getBox(StateID stateId);
+[[nodiscard]] BlockSelectionBox getBox(BlockStateId stateId);
 
 } // namespace BlockSelection

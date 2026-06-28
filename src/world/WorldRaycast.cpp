@@ -7,7 +7,7 @@
 
 namespace {
 
-BlockSelectionBox getFluidSelectionBox(const StateID fluidState) {
+BlockSelectionBox getFluidSelectionBox(const BlockStateId fluidState) {
     return {glm::vec3(0.0f),
             glm::vec3(1.0f, FluidState::surfaceHeight(fluidState), 1.0f)};
 }
@@ -88,11 +88,11 @@ RayHit raycastWorldView(const IWorldView& worldView,
     glm::ivec3 hitNormal(0);
 
     while (dist <= maxDist) {
-        const StateID blockState = worldView.getBlockState(x, y, z);
+        const BlockStateId blockState = worldView.getBlockState(x, y, z);
         const bool blockLayerIsFluid = FluidState::isWater(blockState);
-        const bool hasSolidSelection = blockState != RUNTIME_ID_NULL && !blockLayerIsFluid;
-        const StateID fluidState = (hasSolidSelection || fluidMode == RaycastFluidMode::Ignore)
-            ? RUNTIME_ID_NULL
+        const bool hasSolidSelection = blockState != NULL_BLOCK_STATE && !blockLayerIsFluid;
+        const BlockStateId fluidState = (hasSolidSelection || fluidMode == RaycastFluidMode::Ignore)
+            ? NULL_BLOCK_STATE
             : (blockLayerIsFluid ? blockState : worldView.getFluidState(x, y, z));
         const bool hasFluidSelection = FluidState::isWater(fluidState);
 

@@ -26,26 +26,26 @@ constexpr std::size_t SC_HALO_BLOCK_COUNT = static_cast<std::size_t>(SC_HALO_SIZ
 // Contains the 16x16x16 block/light data plus 6-direction border slices.
 struct SubChunkMeshingSnapshot {
     // Core data (16x16x16)
-    std::array<BlockID, SC_BLOCK_COUNT> blocks{};
-    std::array<BlockID, SC_BLOCK_COUNT> fluidBlocks{};  // Dedicated fluid layer
+    std::array<BlockStateId, SC_BLOCK_COUNT> blocks{};
+    std::array<BlockStateId, SC_BLOCK_COUNT> fluidBlocks{};
     std::array<uint8_t, SC_BLOCK_COUNT> lightMap{};
-    std::array<BlockID, SC_HALO_BLOCK_COUNT> haloBlocks{};
-    std::array<BlockID, SC_HALO_BLOCK_COUNT> haloFluidBlocks{};  // Halo fluid layer
+    std::array<BlockStateId, SC_HALO_BLOCK_COUNT> haloBlocks{};
+    std::array<BlockStateId, SC_HALO_BLOCK_COUNT> haloFluidBlocks{};
     std::array<uint8_t, SC_HALO_BLOCK_COUNT> haloLightMap{};
 
     // Horizontal borders (same as before, but now per-sub-chunk height slice)
-    std::array<BlockID, SC_BORDER_SIZE> posXBorder{};
-    std::array<BlockID, SC_BORDER_SIZE> negXBorder{};
-    std::array<BlockID, SC_BORDER_SIZE> posZBorder{};
-    std::array<BlockID, SC_BORDER_SIZE> negZBorder{};
+    std::array<BlockStateId, SC_BORDER_SIZE> posXBorder{};
+    std::array<BlockStateId, SC_BORDER_SIZE> negXBorder{};
+    std::array<BlockStateId, SC_BORDER_SIZE> posZBorder{};
+    std::array<BlockStateId, SC_BORDER_SIZE> negZBorder{};
     std::array<uint8_t, SC_BORDER_SIZE> posXLightBorder{};
     std::array<uint8_t, SC_BORDER_SIZE> negXLightBorder{};
     std::array<uint8_t, SC_BORDER_SIZE> posZLightBorder{};
     std::array<uint8_t, SC_BORDER_SIZE> negZLightBorder{};
 
     // Vertical borders (+Y and -Y) — new in Phase 2
-    std::array<BlockID, SC_BORDER_SIZE> posYBorder{};
-    std::array<BlockID, SC_BORDER_SIZE> negYBorder{};
+    std::array<BlockStateId, SC_BORDER_SIZE> posYBorder{};
+    std::array<BlockStateId, SC_BORDER_SIZE> negYBorder{};
     std::array<uint8_t, SC_BORDER_SIZE> posYLightBorder{};
     std::array<uint8_t, SC_BORDER_SIZE> negYLightBorder{};
 
@@ -115,56 +115,56 @@ public:
 namespace ChunkMeshBuilders {
 void buildCross(ChunkMeshData& meshData,
                 const SubChunkMeshingSnapshot& snapshot,
-                BlockID blockId,
+                BlockStateId stateId,
                 const BlockDef& def,
                 int x,
                 int y,
                 int z);
 void buildTorch(ChunkMeshData& meshData,
                 const SubChunkMeshingSnapshot& snapshot,
-                BlockID blockId,
+                BlockStateId stateId,
                 const BlockDef& def,
                 int x,
                 int y,
                 int z);
 void buildWater(ChunkMeshData& meshData,
                 const SubChunkMeshingSnapshot& snapshot,
-                BlockID blockId,
+                BlockStateId stateId,
                 const BlockDef& def,
                 int x,
                 int y,
                 int z);
 void buildModelBlock(ChunkMeshData& meshData,
                      const SubChunkMeshingSnapshot& snapshot,
-                     BlockID blockId,
+                     BlockStateId stateId,
                      const BlockDef& def,
                      int x,
                      int y,
                      int z);
 void buildBlockEntity(ChunkMeshData& meshData,
                       const SubChunkMeshingSnapshot& snapshot,
-                      BlockID blockId,
+                      BlockStateId stateId,
                       const BlockDef& def,
                       int x,
                       int y,
                       int z);
 void buildFacePlane(ChunkMeshData& meshData,
                     const SubChunkMeshingSnapshot& snapshot,
-                    BlockID blockId,
+                    BlockStateId stateId,
                     const BlockDef& def,
                     int x,
                     int y,
                     int z);
 void buildRedstoneWire(ChunkMeshData& meshData,
                        const SubChunkMeshingSnapshot& snapshot,
-                       BlockID blockId,
+                       BlockStateId stateId,
                        const BlockDef& def,
                        int x,
                        int y,
                        int z);
 void buildUnitFaces(ChunkMeshData& meshData,
                     const SubChunkMeshingSnapshot& snapshot,
-                    BlockID blockId,
+                    BlockStateId stateId,
                     const BlockDef& def,
                     int x,
                     int y,

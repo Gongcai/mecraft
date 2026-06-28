@@ -92,6 +92,16 @@ uint32_t nextRand(uint32_t& state) {
     return state;
 }
 
+BlockStateId stateForBlockId(const BlockID blockId) {
+    return blockId == RUNTIME_ID_NULL
+        ? NULL_BLOCK_STATE
+        : BlockStateRegistry::getDefaultState(blockId);
+}
+
+BlockStateId stateForBlockName(const char* name) {
+    return stateForBlockId(BlockRegistry::requireIdByName(name));
+}
+
 /// Small: ~20% fill, only top layers (low block density)
 std::shared_ptr<Chunk> makeSmallChunk(int cx, int cz, uint32_t seed) {
     auto chunk = std::make_shared<Chunk>(cx, cz);
@@ -110,7 +120,7 @@ std::shared_ptr<Chunk> makeSmallChunk(int cx, int cz, uint32_t seed) {
                     id = BlockRegistry::requireIdByName("minecraft:dirt");
                 else
                     id = BlockRegistry::requireIdByName("minecraft:grass_block");
-                chunk->setBlock(x, y, z, id);
+                chunk->setBlock(x, y, z, stateForBlockId(id));
             }
         }
     }
@@ -139,11 +149,11 @@ std::shared_ptr<Chunk> makeMediumChunk(int cx, int cz, uint32_t seed) {
                     id = BlockRegistry::requireIdByName("minecraft:sand");
                 else
                     id = BlockRegistry::requireIdByName("minecraft:dirt");
-                chunk->setBlock(x, y, z, id);
+                chunk->setBlock(x, y, z, stateForBlockId(id));
             }
             // Add water in low areas
             for (int y = height; y < 63; ++y) {
-                chunk->setBlock(x, y, z, BlockRegistry::requireIdByName("minecraft:water"));
+                chunk->setBlock(x, y, z, stateForBlockName("minecraft:water"));
             }
         }
     }
@@ -161,7 +171,7 @@ std::shared_ptr<Chunk> makeMediumChunk(int cx, int cz, uint32_t seed) {
         if (bucket == 1) id = BlockRegistry::requireIdByName("minecraft:iron_ore");
         else if (bucket == 2) id = BlockRegistry::requireIdByName("minecraft:glass");
         else if (bucket == 3) id = BlockRegistry::requireIdByName("minecraft:gold_ore");
-        chunk->setBlock(ox, oy, oz, id);
+        chunk->setBlock(ox, oy, oz, stateForBlockId(id));
     }
     // Add some tall grass / flowers on surface
     for (int i = 0; i < 16; ++i) {
@@ -173,11 +183,13 @@ std::shared_ptr<Chunk> makeMediumChunk(int cx, int cz, uint32_t seed) {
         const int baseY = 40 + static_cast<int>(state % 40);
         // Find top solid block
         for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-            if (chunk->getBlock(fx, y, fz) != RUNTIME_ID_NULL) {
+            if (chunk->getBlock(fx, y, fz) != NULL_BLOCK_STATE) {
                 if (y + 1 < Chunk::SIZE_Y) {
                     nextRand(state);
                     chunk->setBlock(fx, y + 1, fz,
-                                    (state % 2 == 0) ? BlockRegistry::requireIdByName("minecraft:tall_grass") : BlockRegistry::requireIdByName("minecraft:rose"));
+                                    stateForBlockId((state % 2 == 0)
+                                        ? BlockRegistry::requireIdByName("minecraft:tall_grass")
+                                        : BlockRegistry::requireIdByName("minecraft:rose")));
                 }
                 break;
             }
@@ -214,18 +226,18 @@ std::shared_ptr<Chunk> makeLargeChunk(int cx, int cz, uint32_t seed) {
                     id = BlockRegistry::requireIdByName("minecraft:gold_ore");
                 else
                     id = BlockRegistry::requireIdByName("minecraft:diamond_ore");
-                chunk->setBlock(x, y, z, id);
+                chunk->setBlock(x, y, z, stateForBlockId(id));
             }
             // Fill water up to sea level
             for (int y = height; y < 63; ++y) {
-                chunk->setBlock(x, y, z, BlockRegistry::requireIdByName("minecraft:water"));
+                chunk->setBlock(x, y, z, stateForBlockName("minecraft:water"));
             }
             // Glass panes scattered in upper layers
             if (height > 80) {
                 for (int y = 75; y < 80; ++y) {
                     nextRand(state);
                     if (state % 5 == 0) {
-                        chunk->setBlock(x, y, z, BlockRegistry::requireIdByName("minecraft:glass"));
+                        chunk->setBlock(x, y, z, stateForBlockName("minecraft:glass"));
                     }
                 }
             }
@@ -240,15 +252,17 @@ std::shared_ptr<Chunk> makeLargeChunk(int cx, int cz, uint32_t seed) {
         nextRand(state);
         const int baseY = 60 + static_cast<int>(state % 50);
         for (int y = Chunk::SIZE_Y - 1; y >= 0; --y) {
-            if (chunk->getBlock(fx, y, fz) != RUNTIME_ID_NULL &&
+            if (chunk->getBlock(fx, y, fz) != NULL_BLOCK_STATE &&
                 !FluidState::isWater(chunk->getBlock(fx, y, fz))) {
                 if (y + 1 < Chunk::SIZE_Y) {
                     nextRand(state);
                     const uint32_t t = state % 3U;
                     chunk->setBlock(fx, y + 1, fz,
-                                    t == 0 ? BlockRegistry::requireIdByName("minecraft:tall_grass")
-                                           : (t == 1 ? BlockRegistry::requireIdByName("minecraft:rose")
-                                                     : BlockRegistry::requireIdByName("minecraft:brown_mushroom")));
+                                    stateForBlockId(t == 0
+                                        ? BlockRegistry::requireIdByName("minecraft:tall_grass")
+                                        : (t == 1
+                                            ? BlockRegistry::requireIdByName("minecraft:rose")
+                                            : BlockRegistry::requireIdByName("minecraft:brown_mushroom"))));
                 }
                 break;
             }

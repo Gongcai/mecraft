@@ -26,7 +26,7 @@ constexpr float kDispensedItemSpeed = 4.0f;
 constexpr float kDispensedItemOffset = 0.72f;
 constexpr float kDispensedItemSpinRadians = 2.6f;
 
-uint16_t requiredPropertyValue(const StateID stateId,
+uint16_t requiredPropertyValue(const BlockStateId stateId,
                                const uint16_t property,
                                const char* propertyName) {
     if (property == PropIndices::INVALID) {
@@ -62,7 +62,7 @@ glm::ivec3 directionFromFacingValue(const uint16_t facing) {
     throw std::runtime_error("Redstone device state contains an unknown facing value");
 }
 
-glm::ivec3 facingDirection(const StateID stateId) {
+glm::ivec3 facingDirection(const BlockStateId stateId) {
     return directionFromFacingValue(requiredPropertyValue(stateId, PropIndices::FACING, "facing"));
 }
 
@@ -172,7 +172,7 @@ bool placeFluidFromBucket(World& world,
         return false;
     }
 
-    const StateID sourceFluid = ItemUseDispatcher::makeSourceFluidState(rule->resultBlock);
+    const BlockStateId sourceFluid = ItemUseDispatcher::makeSourceFluidState(rule->resultBlock);
     world.setFluidState(targetPosition.x, targetPosition.y, targetPosition.z, sourceFluid);
     replaceSingleItemInSlot(inventory, slot, stack, rule->resultItem);
     ensureAudioEventBus(registry).push({
@@ -199,7 +199,7 @@ bool pickupFluidIntoBucket(World& world,
         return false;
     }
 
-    world.setFluidState(targetPosition.x, targetPosition.y, targetPosition.z, RUNTIME_ID_NULL);
+    world.setFluidState(targetPosition.x, targetPosition.y, targetPosition.z, NULL_BLOCK_STATE);
     replaceSingleItemInSlot(inventory, slot, stack, rule->resultItem);
     ensureAudioEventBus(registry).push({
         "item.bucket.fill",
@@ -310,9 +310,9 @@ bool executeNoteBlock(GameplayRegistry& registry, const glm::ivec3& position) {
 bool executeDeviceEvent(World& world,
                         GameplayRegistry& registry,
                         const RedstoneDeviceActivationEvent& event) {
-    const StateID currentState =
+    const BlockStateId currentState =
         world.getBlockState(event.position.x, event.position.y, event.position.z);
-    if (currentState == RUNTIME_ID_NULL ||
+    if (currentState == NULL_BLOCK_STATE ||
         BlockStateRegistry::getBlockId(currentState) != event.blockId) {
         throw std::runtime_error("Redstone device activation event does not match the current block state");
     }

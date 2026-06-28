@@ -28,11 +28,11 @@ public:
     ~Chunk();
 
     // --- Block access (column-local coordinates, y in [0, 256)) ---
-    [[nodiscard]] BlockID getBlock(int x, int y, int z) const;
-    [[nodiscard]] BlockID getFluidState(int x, int y, int z) const;
-    void setBlock(int x, int y, int z, BlockID id);
-    void setBlockWithoutMeshDirty(int x, int y, int z, BlockID id);
-    void setBlockFast(int x, int y, int z, BlockID id);
+    [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const;
+    [[nodiscard]] BlockStateId getFluidState(int x, int y, int z) const;
+    void setBlock(int x, int y, int z, BlockStateId stateId);
+    void setBlockWithoutMeshDirty(int x, int y, int z, BlockStateId stateId);
+    void setBlockFast(int x, int y, int z, BlockStateId stateId);
 
     void optimizePalette();
     void seedInitialLightMap();
@@ -125,7 +125,7 @@ private:
     };
 
     [[nodiscard]] static bool isInBounds(int x, int y, int z);
-    void setBlockImpl(int x, int y, int z, BlockID id, bool markMeshDirty);
+    void setBlockImpl(int x, int y, int z, BlockStateId stateId, bool markMeshDirty);
     [[nodiscard]] uint8_t getImplicitSunlight(int x, int y, int z) const;
     [[nodiscard]] uint8_t getImplicitPackedLight(int x, int y, int z) const;
     void initializeSubChunkLightDefaults(SubChunk& subChunk) const;

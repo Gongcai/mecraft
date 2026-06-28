@@ -31,7 +31,7 @@ uint16_t resolveLevelValue(const uint8_t level, const FluidDesc& desc) {
 
 namespace FluidState {
 
-DecodedFluid decode(const StateID id) {
+DecodedFluid decode(const BlockStateId id) {
     const FluidKind kind = FluidRegistry::kindForBlock(BlockStateRegistry::getBlockId(id));
     if (kind == FluidKind::None) {
         return {};
@@ -60,21 +60,21 @@ DecodedFluid decode(const StateID id) {
     return fluid;
 }
 
-StateID encode(const DecodedFluid& fluid) {
+BlockStateId encode(const DecodedFluid& fluid) {
     if (fluid.kind == FluidKind::None) {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
 
     const FluidDesc& desc = FluidRegistry::get(fluid.kind);
     if (desc.blockId == RUNTIME_ID_NULL) {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
 
     if (PropIndices::LEVEL == PropIndices::INVALID || PropIndices::FALLING == PropIndices::INVALID) {
-        return desc.blockId;
+        return BlockStateRegistry::getDefaultState(desc.blockId);
     }
 
-    StateID state = BlockStateRegistry::getDefaultState(desc.blockId);
+    BlockStateId state = BlockStateRegistry::getDefaultState(desc.blockId);
     state = BlockStateRegistry::withProperty(state, PropIndices::LEVEL, resolveLevelValue(fluid.level, desc));
     state = BlockStateRegistry::withProperty(
         state,
@@ -83,27 +83,27 @@ StateID encode(const DecodedFluid& fluid) {
     return state;
 }
 
-bool isFluidOf(const StateID id, const FluidKind kind) {
+bool isFluidOf(const BlockStateId id, const FluidKind kind) {
     return decode(id).kind == kind;
 }
 
-bool isWater(const BlockID id) {
+bool isWater(const BlockStateId id) {
     return isFluidOf(id, FluidKind::Water);
 }
 
-bool isFalling(const BlockID id) {
+bool isFalling(const BlockStateId id) {
     return decode(id).falling;
 }
 
-uint8_t level(const BlockID id) {
+uint8_t level(const BlockStateId id) {
     return decode(id).level;
 }
 
-bool isSource(const BlockID id) {
+bool isSource(const BlockStateId id) {
     return decode(id).isSource;
 }
 
-float surfaceHeight(const BlockID id) {
+float surfaceHeight(const BlockStateId id) {
     const DecodedFluid fluid = decode(id);
     if (fluid.kind == FluidKind::None) {
         return 0.0f;
@@ -117,41 +117,41 @@ float surfaceHeight(const BlockID id) {
     return 1.0f - static_cast<float>(fluid.level) / static_cast<float>(desc.maxLevel + 1);
 }
 
-StateID makeWater(const uint8_t requestedLevel, const bool falling) {
+BlockStateId makeWater(const uint8_t requestedLevel, const bool falling) {
     return encode(DecodedFluid{FluidKind::Water, requestedLevel, falling, !falling && requestedLevel == 0});
 }
 
-bool canReplace(const FluidDesc& desc, const StateID occupant) {
-    return occupant == RUNTIME_ID_NULL || decode(occupant).kind == desc.kind;
+bool canReplace(const FluidDesc& desc, const BlockStateId occupant) {
+    return occupant == NULL_BLOCK_STATE || decode(occupant).kind == desc.kind;
 }
 
-bool canCoexist(const FluidDesc& desc, const StateID occupant) {
-    if (desc.kind == FluidKind::None || occupant == RUNTIME_ID_NULL) {
+bool canCoexist(const FluidDesc& desc, const BlockStateId occupant) {
+    if (desc.kind == FluidKind::None || occupant == NULL_BLOCK_STATE) {
         return false;
     }
     if (decode(occupant).kind != FluidKind::None) {
         return false;
     }
-    return BlockRegistry::getFast(occupant).allowsFluidCoexistence;
+    return BlockRegistry::getFast(BlockStateRegistry::getBlockId(occupant)).allowsFluidCoexistence;
 }
 
-bool canWaterReplace(const BlockID id) {
+bool canWaterReplace(const BlockStateId id) {
     return canReplace(FluidRegistry::get(FluidKind::Water), id);
 }
 
-bool isSameWater(const BlockID a, const BlockID b) {
+bool isSameWater(const BlockStateId a, const BlockStateId b) {
     return isFluidOf(a, FluidKind::Water) && isFluidOf(b, FluidKind::Water);
 }
 
-StateID getFluidState(const StateID cellState) {
-    return decode(cellState).kind == FluidKind::None ? RUNTIME_ID_NULL : cellState;
+BlockStateId getFluidState(const BlockStateId cellState) {
+    return decode(cellState).kind == FluidKind::None ? NULL_BLOCK_STATE : cellState;
 }
 
-FluidCellView getCombinedCell(const StateID cellState) {
+FluidCellView getCombinedCell(const BlockStateId cellState) {
     if (decode(cellState).kind != FluidKind::None) {
-        return FluidCellView{RUNTIME_ID_NULL, cellState};
+        return FluidCellView{NULL_BLOCK_STATE, cellState};
     }
-    return FluidCellView{cellState, RUNTIME_ID_NULL};
+    return FluidCellView{cellState, NULL_BLOCK_STATE};
 }
 
 }

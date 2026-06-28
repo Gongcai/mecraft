@@ -59,12 +59,22 @@ int64_t chunkKey(const int cx, const int cz) {
            (static_cast<uint32_t>(cz) & 0xFFFFFFFFULL);
 }
 
+BlockStateId stateForBlockId(const BlockID blockId) {
+    return blockId == RUNTIME_ID_NULL
+        ? NULL_BLOCK_STATE
+        : BlockStateRegistry::getDefaultState(blockId);
+}
+
+BlockStateId stateForBlockName(const char* name) {
+    return stateForBlockId(BlockRegistry::requireIdByName(name));
+}
+
 std::vector<BlockID> snapshotBlocks(const Chunk& chunk) {
     std::vector<BlockID> blocks(Chunk::BLOCK_COUNT, RUNTIME_ID_NULL);
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                blocks[Chunk::toIndex(x, y, z)] = chunk.getBlock(x, y, z);
+                blocks[Chunk::toIndex(x, y, z)] = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
             }
         }
     }
@@ -99,7 +109,7 @@ void carveRoom(Chunk& chunk,
     for (int y = y0; y <= y1; ++y) {
         for (int z = z0; z <= z1; ++z) {
             for (int x = x0; x <= x1; ++x) {
-                chunk.setBlockFast(x, y, z, RUNTIME_ID_NULL);
+                chunk.setBlockFast(x, y, z, NULL_BLOCK_STATE);
             }
         }
     }
@@ -112,7 +122,7 @@ void carveColumn(Chunk& chunk,
                  const int z,
                  const BlockID id) {
     for (int y = y0; y <= y1; ++y) {
-        chunk.setBlockFast(x, y, z, id);
+        chunk.setBlockFast(x, y, z, stateForBlockId(id));
     }
 }
 
@@ -134,7 +144,7 @@ std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
                 } else if (y < 3) {
                     id = BlockRegistry::requireIdByName("minecraft:bedrock");
                 }
-                chunk->setBlockFast(x, y, z, id);
+                chunk->setBlockFast(x, y, z, stateForBlockId(id));
             }
         }
     }
@@ -157,12 +167,12 @@ std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
     carveColumn(*chunk, 4, 46, 49, 4, BlockRegistry::requireIdByName("minecraft:glass"));
 
     for (int x = 2; x <= 13; ++x) {
-        chunk->setBlockFast(x, 18, 2, BlockRegistry::requireIdByName("minecraft:glass"));
-        chunk->setBlockFast(x, 18, 13, BlockRegistry::requireIdByName("minecraft:glass"));
+        chunk->setBlockFast(x, 18, 2, stateForBlockName("minecraft:glass"));
+        chunk->setBlockFast(x, 18, 13, stateForBlockName("minecraft:glass"));
     }
     for (int z = 2; z <= 13; ++z) {
-        chunk->setBlockFast(2, 18, z, BlockRegistry::requireIdByName("minecraft:glass"));
-        chunk->setBlockFast(13, 18, z, BlockRegistry::requireIdByName("minecraft:glass"));
+        chunk->setBlockFast(2, 18, z, stateForBlockName("minecraft:glass"));
+        chunk->setBlockFast(13, 18, z, stateForBlockName("minecraft:glass"));
     }
 
     const std::array<std::array<int, 3>, 6> torchPositions = {{
@@ -174,7 +184,7 @@ std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
         {10, 23, 8}
     }};
     for (const auto& pos : torchPositions) {
-        chunk->setBlockFast(pos[0], pos[1], pos[2], BlockRegistry::requireIdByName("minecraft:torch"));
+        chunk->setBlockFast(pos[0], pos[1], pos[2], stateForBlockName("minecraft:torch"));
     }
 
     const std::array<std::array<int, 2>, 6> floraPositions = {{
@@ -192,9 +202,9 @@ std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
             ? BlockRegistry::requireIdByName("minecraft:tall_grass")
             : BlockRegistry::requireIdByName("minecraft:rose");
         for (int y = Chunk::SIZE_Y - 2; y >= 0; --y) {
-            if (chunk->getBlock(x, y, z) != RUNTIME_ID_NULL) {
+            if (chunk->getBlock(x, y, z) != NULL_BLOCK_STATE) {
                 if (y + 1 < Chunk::SIZE_Y) {
-                    chunk->setBlockFast(x, y + 1, z, flora);
+                    chunk->setBlockFast(x, y + 1, z, stateForBlockId(flora));
                 }
                 break;
             }
@@ -223,7 +233,7 @@ std::shared_ptr<Chunk> makeLightingStressChunk(const int cx,
             case 2: id = BlockRegistry::requireIdByName("minecraft:stone"); break;
             default: break;
         }
-        chunk->setBlockFast(pos[0], pos[1], pos[2], id);
+        chunk->setBlockFast(pos[0], pos[1], pos[2], stateForBlockId(id));
     }
 
     return chunk;
@@ -253,12 +263,12 @@ LightJob makeBlockChangedJob(const int cx,
                                 const int y,
                                 const int z,
                                 const BlockID newId) {
-        const BlockID oldId = chunk->getBlock(x, y, z);
+        const BlockID oldId = BlockStateRegistry::getBlockId(chunk->getBlock(x, y, z));
         if (oldId == newId) {
             return;
         }
 
-        chunk->setBlockFast(x, y, z, newId);
+        chunk->setBlockFast(x, y, z, stateForBlockId(newId));
         changes.push_back(LocalLightChange{
             static_cast<uint8_t>(x),
             static_cast<uint8_t>(y),
@@ -304,22 +314,22 @@ void buildBoundaryTunnel(const std::shared_ptr<Chunk>& left,
     for (int iy = 0; iy <= 40; ++iy) {
         for (int iz = 0; iz < Chunk::SIZE_Z; ++iz) {
             for (int ix = 0; ix < Chunk::SIZE_X; ++ix) {
-                left->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
-                right->setBlockFast(ix, iy, iz, BlockRegistry::requireIdByName("minecraft:stone"));
+                left->setBlockFast(ix, iy, iz, stateForBlockName("minecraft:stone"));
+                right->setBlockFast(ix, iy, iz, stateForBlockName("minecraft:stone"));
             }
         }
     }
 
     for (int x = 10; x <= 15; ++x) {
-        left->setBlockFast(x, y, z, RUNTIME_ID_NULL);
+        left->setBlockFast(x, y, z, NULL_BLOCK_STATE);
     }
     for (int x = 0; x <= 5; ++x) {
-        right->setBlockFast(x, y, z, RUNTIME_ID_NULL);
+        right->setBlockFast(x, y, z, NULL_BLOCK_STATE);
     }
 
-    left->setBlockFast(14, y, z, BlockRegistry::requireIdByName("minecraft:torch"));
-    left->setBlockFast(12, y + 1, z, BlockRegistry::requireIdByName("minecraft:glass"));
-    right->setBlockFast(1, y + 1, z, BlockRegistry::requireIdByName("minecraft:glass"));
+    left->setBlockFast(14, y, z, stateForBlockName("minecraft:torch"));
+    left->setBlockFast(12, y + 1, z, stateForBlockName("minecraft:glass"));
+    right->setBlockFast(1, y + 1, z, stateForBlockName("minecraft:glass"));
 }
 
 LightJob makeNeighborBoundaryJob(const int pairIndex,
@@ -347,7 +357,7 @@ LightJob makeNeighborBoundaryJob(const int pairIndex,
     const LightResult rightLit = LightSolver::solve(rightLitJob);
     applyResultToChunk(rightLit, right);
 
-    left->setBlockFast(14, y, z, RUNTIME_ID_NULL);
+    left->setBlockFast(14, y, z, NULL_BLOCK_STATE);
 
     LightJob leftRemovedJob = makeChunkLoadedJob(left);
     leftRemovedJob.neighborPosX = right;

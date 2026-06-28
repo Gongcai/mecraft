@@ -222,11 +222,14 @@ void LightService::onChunkUnloaded(const int64_t chunkKey) {
 }
 
 void LightService::onBlockChanged(const int wx, const int wy, const int wz,
-                                  const BlockID oldId, const BlockID newId) {
+                                  const BlockStateId oldStateId,
+                                  const BlockStateId newStateId) {
     if (!m_running || m_pool == nullptr) {
         return;
     }
 
+    const BlockID oldId = BlockStateRegistry::getBlockId(oldStateId);
+    const BlockID newId = BlockStateRegistry::getBlockId(newStateId);
     const glm::ivec2 chunkCoords = m_world.getChunkCoords(wx, wz);
     const int64_t key = World::chunkKey(chunkCoords.x, chunkCoords.y);
     ++m_frameStats.blockChangeCalls;
@@ -836,7 +839,7 @@ std::vector<BlockID> LightService::captureBlockSnapshot(const Chunk& chunk) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                blocks[Chunk::toIndex(x, y, z)] = chunk.getBlock(x, y, z);
+                blocks[Chunk::toIndex(x, y, z)] = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
             }
         }
     }

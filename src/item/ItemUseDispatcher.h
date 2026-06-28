@@ -20,5 +20,5 @@ namespace ItemUseDispatcher {
 [[nodiscard]] bool canPlaceFluid(const IWorldView& worldView,
                                  const glm::ivec3& blockPosition,
                                  const ItemUseRule& rule);
-[[nodiscard]] StateID makeSourceFluidState(BlockID fluidBlock);
+[[nodiscard]] BlockStateId makeSourceFluidState(BlockID fluidBlock);
 }

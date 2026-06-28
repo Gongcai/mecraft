@@ -53,15 +53,15 @@ uint64_t ClientWorld::getBlockContentRevision() const {
     return m_blockContentRevision;
 }
 
-BlockID ClientWorld::getBlock(int x, int y, int z) const {
-    if (y < 0 || y >= 256) return RUNTIME_ID_NULL;
+BlockStateId ClientWorld::getBlock(int x, int y, int z) const {
+    if (y < 0 || y >= 256) return NULL_BLOCK_STATE;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
     const int64_t key = chunkKey(cx, cz);
 
     std::lock_guard lock(m_chunksMutex);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end() || !it->second) return RUNTIME_ID_NULL;
+    if (it == m_chunks.end() || !it->second) return NULL_BLOCK_STATE;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
     return it->second->getBlock(lx, y, lz);
@@ -81,23 +81,23 @@ uint8_t ClientWorld::getPackedLight(int x, int y, int z) const {
     return it->second->getPackedLight(lx, y, lz);
 }
 
-StateID ClientWorld::getBlockState(int x, int y, int z) const {
-    return static_cast<StateID>(getBlock(x, y, z));
+BlockStateId ClientWorld::getBlockState(int x, int y, int z) const {
+    return getBlock(x, y, z);
 }
 
-StateID ClientWorld::getFluidState(int x, int y, int z) const {
-    if (y < 0 || y >= 256) return StateID{0};
+BlockStateId ClientWorld::getFluidState(int x, int y, int z) const {
+    if (y < 0 || y >= 256) return NULL_BLOCK_STATE;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));
     const int cz = static_cast<int>(std::floor(static_cast<float>(z) / 16.0f));
     const int64_t key = chunkKey(cx, cz);
 
     std::lock_guard lock(m_chunksMutex);
     auto it = m_chunks.find(key);
-    if (it == m_chunks.end() || !it->second) return StateID{0};
+    if (it == m_chunks.end() || !it->second) return NULL_BLOCK_STATE;
     const int lx = x - cx * 16;
     const int lz = z - cz * 16;
-    const StateID fluidState = it->second->getFluidState(lx, y, lz);
-    if (fluidState != RUNTIME_ID_NULL) {
+    const BlockStateId fluidState = it->second->getFluidState(lx, y, lz);
+    if (fluidState != NULL_BLOCK_STATE) {
         return fluidState;
     }
     return FluidState::getFluidState(it->second->getBlock(lx, y, lz));
@@ -201,12 +201,12 @@ void ClientWorld::removeChunk(int cx, int cz) {
     }
 }
 
-void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId) {
+void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockStateId stateId) {
     static const std::vector<uint8_t> kNoLightPatch;
     applyBlockUpdate(x, y, z, stateId, kNoLightPatch);
 }
 
-void ClientWorld::applyBlockUpdate(int x, int y, int z, StateID stateId, const std::vector<uint8_t>& packedLightPatch) {
+void ClientWorld::applyBlockUpdate(int x, int y, int z, BlockStateId stateId, const std::vector<uint8_t>& packedLightPatch) {
     applyBlockUpdate(x, y, z, net::BlockUpdateKind::BlockState, stateId, packedLightPatch);
 }
 
@@ -214,7 +214,7 @@ void ClientWorld::applyBlockUpdate(const int x,
                                    const int y,
                                    const int z,
                                    const net::BlockUpdateKind kind,
-                                   const StateID stateId,
+                                   const BlockStateId stateId,
                                    const std::vector<uint8_t>& packedLightPatch) {
     if (y < 0 || y >= 256) return;
     const int cx = static_cast<int>(std::floor(static_cast<float>(x) / 16.0f));

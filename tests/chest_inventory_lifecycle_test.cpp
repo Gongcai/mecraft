@@ -69,8 +69,8 @@ int main() {
     }
 
     const glm::ivec3 chestPos(0, 122, 0);
-    const StateID chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
-    world.setBlock(chestPos.x, chestPos.y, chestPos.z, chestState);
+    const BlockStateId chestState = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
+    world.setBlockState(chestPos.x, chestPos.y, chestPos.z, chestState);
     if (BlockStateRegistry::getBlockId(world.getBlock(chestPos.x, chestPos.y, chestPos.z)) != BlockRegistry::requireIdByName("minecraft:chest")) {
         return fail("test setup should place a chest block in the world");
     }
@@ -114,7 +114,7 @@ int main() {
     ecs::ItemSpawnSystem itemSpawnSystem;
     itemSpawnSystem.update(ctx);
 
-    if (world.getBlock(chestPos.x, chestPos.y, chestPos.z) != RUNTIME_ID_NULL) {
+    if (world.getBlock(chestPos.x, chestPos.y, chestPos.z) != NULL_BLOCK_STATE) {
         return fail("breaking a chest should remove the block from the world");
     }
     if (store.find(chestPos) != nullptr) {
@@ -140,8 +140,8 @@ int main() {
 
         const glm::ivec3 dispenserPos(2, 122, 0);
         const BlockID dispenserBlock = BlockRegistry::requireIdByName("minecraft:dispenser");
-        const StateID dispenserState = BlockStateRegistry::getDefaultState(dispenserBlock);
-        creativeWorld.setBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z, dispenserState);
+        const BlockStateId dispenserState = BlockStateRegistry::getDefaultState(dispenserBlock);
+        creativeWorld.setBlockState(dispenserPos.x, dispenserPos.y, dispenserPos.z, dispenserState);
 
         ecs::GameplayRegistry creativeRegistry;
         ecs::GameplayServices creativeServices;
@@ -181,7 +181,7 @@ int main() {
         ecs::SystemContext creativeCtx{creativeRegistry, creativeServices, 1.0f / 60.0f, 2};
         breakSystem.update(creativeCtx);
 
-        if (creativeWorld.getBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z) != RUNTIME_ID_NULL) {
+        if (creativeWorld.getBlock(dispenserPos.x, dispenserPos.y, dispenserPos.z) != NULL_BLOCK_STATE) {
             return fail("creative dispenser break should remove the block from the world");
         }
         if (creativeStore.find(dispenserPos) != nullptr) {

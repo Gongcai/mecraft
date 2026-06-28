@@ -43,7 +43,7 @@ ecs::GameplayServices makeClientServices(World& world) {
     return services;
 }
 
-uint16_t moistureValue(const StateID state) {
+uint16_t moistureValue(const BlockStateId state) {
     const uint16_t moisture = BlockStateRegistry::getPropertyNameIndex("moisture");
     if (moisture == BlockStateRegistry::INVALID_INDEX) {
         return BlockStateRegistry::INVALID_INDEX;
@@ -51,7 +51,7 @@ uint16_t moistureValue(const StateID state) {
     return BlockStateRegistry::getPropertyIndex(state, moisture);
 }
 
-void fillSubChunk(World& world, const glm::ivec3& origin, const StateID state) {
+void fillSubChunk(World& world, const glm::ivec3& origin, const BlockStateId state) {
     for (int y = 0; y < 16; ++y) {
         for (int z = 0; z < 16; ++z) {
             for (int x = 0; x < 16; ++x) {
@@ -69,7 +69,7 @@ size_t countStatesWithPropertyValue(World& world,
     for (int y = 0; y < 16; ++y) {
         for (int z = 0; z < 16; ++z) {
             for (int x = 0; x < 16; ++x) {
-                const StateID state = world.getBlockState(origin.x + x, origin.y + y, origin.z + z);
+                const BlockStateId state = world.getBlockState(origin.x + x, origin.y + y, origin.z + z);
                 if (BlockStateRegistry::getPropertyIndex(state, property) == value) {
                     ++count;
                 }
@@ -79,7 +79,7 @@ size_t countStatesWithPropertyValue(World& world,
     return count;
 }
 
-StateID poweredPlateState(const bool powered) {
+BlockStateId poweredPlateState(const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:oak_pressure_plate"),
         PropIndices::POWERED,
@@ -116,7 +116,7 @@ int main() {
     const uint16_t moisture1 = BlockStateRegistry::getPropertyValueIndex(moisture, "1");
     const uint16_t moisture2 = BlockStateRegistry::getPropertyValueIndex(moisture, "2");
     const uint16_t moisture7 = BlockStateRegistry::getPropertyValueIndex(moisture, "7");
-    const StateID dryFarmland = BlockStateRegistry::getDefaultState(farmland);
+    const BlockStateId dryFarmland = BlockStateRegistry::getDefaultState(farmland);
 
     const glm::ivec3 hydratedPos(0, 122, 0);
     world.setBlockState(hydratedPos.x, hydratedPos.y, hydratedPos.z, dryFarmland);
@@ -132,7 +132,7 @@ int main() {
     }
 
     const glm::ivec3 randomTickOrigin(0, 128, 0);
-    const StateID moistFarmland = BlockStateRegistry::withProperty(dryFarmland, moisture, moisture2);
+    const BlockStateId moistFarmland = BlockStateRegistry::withProperty(dryFarmland, moisture, moisture2);
     fillSubChunk(world, randomTickOrigin, moistFarmland);
     ecs::RandomTickSystem randomTickSystem;
     randomTickSystem.update(clientCtx);
@@ -172,12 +172,12 @@ int main() {
     ecs::BlockSupportSystem blockSupportSystem;
     blockSupportSystem.update(clientCtx);
     if (world.neighborUpdateQueue().size() != queuedSupportUpdates ||
-        world.getBlock(sandPos.x, sandPos.y, sandPos.z) != BlockRegistry::requireIdByName("minecraft:sand")) {
+        BlockStateRegistry::getBlockId(world.getBlock(sandPos.x, sandPos.y, sandPos.z)) != BlockRegistry::requireIdByName("minecraft:sand")) {
         return fail("client block support tick must not drain authoritative support updates");
     }
 
     if (ecs::BlockSupportSystem::processWorldQueue(world, registry, 1024) == 0 ||
-        world.getBlock(sandPos.x, sandPos.y, sandPos.z) != RUNTIME_ID_NULL) {
+        world.getBlock(sandPos.x, sandPos.y, sandPos.z) != NULL_BLOCK_STATE) {
         return fail("server block support tick should clear unsupported gravity blocks");
     }
     if (!registry.ctxHas<ecs::FallingBlockSpawnEventBus>() ||

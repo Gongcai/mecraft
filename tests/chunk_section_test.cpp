@@ -75,7 +75,7 @@ int main() {
         clearDirty(negZ);
 
         const uint64_t baseRevision = center.getSubChunkMeshRevision(1);
-        center.setBlock(4, 20, 4, BlockRegistry::requireIdByName("minecraft:stone"));
+        center.setBlock(4, 20, 4, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         if (!center.isSubChunkDirty(1) || center.isSubChunkDirty(0) || center.isSubChunkDirty(2)) {
             return fail("interior edits should dirty only the owning sub-chunk");
         }
@@ -92,7 +92,7 @@ int main() {
         clearDirty(posZ);
         clearDirty(negZ);
 
-        center.setBlock(4, 15, 4, BlockRegistry::requireIdByName("minecraft:stone"));
+        center.setBlock(4, 15, 4, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         if (!center.isSubChunkDirty(0) || !center.isSubChunkDirty(1) || center.isSubChunkDirty(2)) {
             return fail("top/bottom boundary edits should dirty both touching sub-chunks");
         }
@@ -103,7 +103,7 @@ int main() {
         clearDirty(posZ);
         clearDirty(negZ);
 
-        center.setBlock(0, 33, 5, BlockRegistry::requireIdByName("minecraft:stone"));
+        center.setBlock(0, 33, 5, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         if (!center.isSubChunkDirty(2)) {
             return fail("chunk-border edits should keep the local dirty sub-chunk");
         }
@@ -120,7 +120,7 @@ int main() {
         clearDirty(posZ);
         clearDirty(negZ);
 
-        center.setBlock(0, 64, 5, BlockRegistry::requireIdByName("minecraft:stone"));
+        center.setBlock(0, 64, 5, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         if (!center.isSubChunkDirty(4) || !center.isSubChunkDirty(3)) {
             return fail("boundary edits on a sub-chunk floor should dirty both local touching sub-chunks");
         }
@@ -132,7 +132,7 @@ int main() {
     {
         Chunk chunk(2, 3);
         clearDirty(chunk);
-        chunk.setBlock(2, 33, 4, BlockRegistry::requireIdByName("minecraft:stone"));
+        chunk.setBlock(2, 33, 4, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
 
         SubChunk* sc = chunk.getSubChunk(2);
         if (!sc) {
@@ -141,14 +141,15 @@ int main() {
         if (!chunk.isSubChunkDirty(2) || !chunk.isDirty()) {
             return fail("setBlock should dirty the owning sub-chunk and column");
         }
-        if (sc->getBlock(2, 1, 4) != BlockRegistry::requireIdByName("minecraft:stone") || chunk.getBlock(2, 33, 4) != BlockRegistry::requireIdByName("minecraft:stone")) {
+        if (BlockStateRegistry::getBlockId(sc->getBlock(2, 1, 4)) != BlockRegistry::requireIdByName("minecraft:stone") ||
+            BlockStateRegistry::getBlockId(chunk.getBlock(2, 33, 4)) != BlockRegistry::requireIdByName("minecraft:stone")) {
             return fail("block reads should round-trip through sub-chunk-backed storage");
         }
     }
 
     {
         Chunk chunk(0, 0);
-        chunk.setBlock(1, 63, 1, BlockRegistry::requireIdByName("minecraft:stone"));
+        chunk.setBlock(1, 63, 1, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
         chunk.recalcHeightMap(1, 1);
         clearDirty(chunk);
 

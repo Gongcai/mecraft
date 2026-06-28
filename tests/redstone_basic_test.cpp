@@ -72,7 +72,7 @@ struct BinaryGateCase {
     bool expectedOutput = false;
 };
 
-StateID leverState(const uint16_t facing, const bool powered) {
+BlockStateId leverState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:lever"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -81,11 +81,11 @@ StateID leverState(const uint16_t facing, const bool powered) {
         });
 }
 
-StateID leverState(const bool powered) {
+BlockStateId leverState(const bool powered) {
     return leverState(PropIndices::FACING_FLOOR, powered);
 }
 
-StateID redstoneTorchState(const uint16_t facing, const bool lit) {
+BlockStateId redstoneTorchState(const uint16_t facing, const bool lit) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:redstone_torch"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -94,11 +94,11 @@ StateID redstoneTorchState(const uint16_t facing, const bool lit) {
         });
 }
 
-StateID redstoneTorchState(const bool lit) {
+BlockStateId redstoneTorchState(const bool lit) {
     return redstoneTorchState(PropIndices::FACING_FLOOR, lit);
 }
 
-StateID buttonState(const BlockID blockId, const uint16_t facing, const bool powered) {
+BlockStateId buttonState(const BlockID blockId, const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         blockId,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -107,11 +107,11 @@ StateID buttonState(const BlockID blockId, const uint16_t facing, const bool pow
         });
 }
 
-StateID buttonState(const BlockID blockId, const bool powered) {
+BlockStateId buttonState(const BlockID blockId, const bool powered) {
     return buttonState(blockId, PropIndices::FACING_FLOOR, powered);
 }
 
-StateID pressurePlateState(const BlockID blockId, const bool powered) {
+BlockStateId pressurePlateState(const BlockID blockId, const bool powered) {
     return BlockStateRegistry::getState(
         blockId,
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -144,7 +144,7 @@ uint16_t powerPropertyValue(const uint8_t power) {
     return kPowerValues[power];
 }
 
-StateID repeaterState(const uint16_t facing, const bool powered) {
+BlockStateId repeaterState(const uint16_t facing, const bool powered) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:repeater"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -154,7 +154,7 @@ StateID repeaterState(const uint16_t facing, const bool powered) {
         });
 }
 
-StateID hopperState(const bool enabled) {
+BlockStateId hopperState(const bool enabled) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:hopper"),
         std::vector<std::pair<uint16_t, uint16_t>>{
@@ -163,24 +163,24 @@ StateID hopperState(const bool enabled) {
         });
 }
 
-StateID targetState(const uint8_t power) {
+BlockStateId targetState(const uint8_t power) {
     return BlockStateRegistry::getState(
         BlockRegistry::requireIdByName("minecraft:target"),
         PropIndices::POWER,
         powerPropertyValue(power));
 }
 
-StateID wireState(const BlockID blockId, const uint16_t facing, const uint8_t power = 0) {
-    StateID state = BlockStateRegistry::getDefaultState(blockId);
+BlockStateId wireState(const BlockID blockId, const uint16_t facing, const uint8_t power = 0) {
+    BlockStateId state = BlockStateRegistry::getDefaultState(blockId);
     state = BlockStateRegistry::withProperty(state, PropIndices::FACING, facing);
     return BlockStateRegistry::withProperty(state, PropIndices::POWER, powerPropertyValue(power));
 }
 
-StateID redWireState(const uint16_t facing, const uint8_t power = 0) {
+BlockStateId redWireState(const uint16_t facing, const uint8_t power = 0) {
     return wireState(BlockRegistry::requireIdByName("minecraft:redstone_wire"), facing, power);
 }
 
-StateID blueWireState(const uint16_t facing, const uint8_t power = 0) {
+BlockStateId blueWireState(const uint16_t facing, const uint8_t power = 0) {
     return wireState(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire"), facing, power);
 }
 
@@ -204,7 +204,7 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
         PropIndices::POWER_15,
     };
 
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
     for (uint8_t power = 0; power < kPowerValues.size(); ++power) {
         if (value == kPowerValues[power]) {
@@ -216,32 +216,32 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
 }
 
 bool lampLit(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::LIT) == PropIndices::LIT_TRUE;
 }
 
 bool torchLit(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::LIT) == PropIndices::LIT_TRUE;
 }
 
 bool buttonPowered(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 
 bool powered(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 
 bool noteBlockPowered(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::POWERED) == PropIndices::POWERED_TRUE;
 }
 
 bool hopperEnabled(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     return BlockStateRegistry::getPropertyIndex(state, PropIndices::ENABLED) == PropIndices::ENABLED_TRUE;
 }
 
@@ -250,7 +250,7 @@ uint16_t blockProperty(const World& world, const int x, const int y, const int z
 }
 
 uint8_t targetPower(const World& world, const int x, const int y, const int z) {
-    const StateID state = world.getBlockState(x, y, z);
+    const BlockStateId state = world.getBlockState(x, y, z);
     const uint16_t value = BlockStateRegistry::getPropertyIndex(state, PropIndices::POWER);
     static const std::array<uint16_t, 16> kPowerValues = {
         PropIndices::POWER_0,
@@ -389,7 +389,7 @@ int main() {
         for (int x = -2; x <= 2; ++x) {
             for (int yOffset = -1; yOffset <= 2; ++yOffset) {
                 for (int z = -2; z <= 2; ++z) {
-                    faceWorld.setBlockState(x, supportY + yOffset, z, RUNTIME_ID_NULL);
+                    faceWorld.setBlockState(x, supportY + yOffset, z, NULL_BLOCK_STATE);
                 }
             }
         }
@@ -409,7 +409,7 @@ int main() {
             return fail("same-color redstone wire should show side connections around a support-block edge");
         }
 
-        faceWorld.setBlockState(0, supportY + 1, 0, RUNTIME_ID_NULL);
+        faceWorld.setBlockState(0, supportY + 1, 0, NULL_BLOCK_STATE);
         ecs::RedstoneSystem::processWorld(faceWorld, 25);
         if (wirePower(faceWorld, 0, supportY, -1) != 0 ||
             blockProperty(faceWorld, 0, supportY, -1, PropIndices::NORTH) != PropIndices::NORTH_NONE) {
@@ -960,8 +960,8 @@ int main() {
         const int projectileTargetEdgeY = 16;
         prepareFlatTestLine(world, projectileTargetEdgeY);
         for (int x = -1; x <= 8; ++x) {
-            world.setBlockState(x, projectileTargetEdgeY, -1, RUNTIME_ID_NULL);
-            world.setBlockState(x, projectileTargetEdgeY + 1, -1, RUNTIME_ID_NULL);
+            world.setBlockState(x, projectileTargetEdgeY, -1, NULL_BLOCK_STATE);
+            world.setBlockState(x, projectileTargetEdgeY + 1, -1, NULL_BLOCK_STATE);
         }
         world.setBlockState(2, projectileTargetEdgeY, 0, targetState(0));
         world.setBlockState(3, projectileTargetEdgeY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire")));

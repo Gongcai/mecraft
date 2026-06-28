@@ -26,27 +26,26 @@ public:
         return 1;
     }
 
-    [[nodiscard]] BlockID getBlock(const int x, const int y, const int z) const override {
+    [[nodiscard]] BlockStateId getBlock(const int x, const int y, const int z) const override {
         const glm::ivec3 pos(x, y, z);
         for (const glm::ivec3& block : m_solidBlocks) {
             if (block == pos) {
-                return BlockRegistry::requireIdByName("minecraft:stone");
+                return BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone"));
             }
         }
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
 
     [[nodiscard]] uint8_t getPackedLight(int, int, int) const override {
         return 0;
     }
 
-    [[nodiscard]] StateID getBlockState(const int x, const int y, const int z) const override {
-        const BlockID block = getBlock(x, y, z);
-        return block == RUNTIME_ID_NULL ? RUNTIME_ID_NULL : BlockStateRegistry::getDefaultState(block);
+    [[nodiscard]] BlockStateId getBlockState(const int x, const int y, const int z) const override {
+        return getBlock(x, y, z);
     }
 
-    [[nodiscard]] StateID getFluidState(int, int, int) const override {
-        return RUNTIME_ID_NULL;
+    [[nodiscard]] BlockStateId getFluidState(int, int, int) const override {
+        return NULL_BLOCK_STATE;
     }
 
     [[nodiscard]] bool isChunkLoadedForBlock(int, int, int) const override {

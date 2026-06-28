@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 
 #include "../../player/Inventory.h"
+#include "../../world/block/BlockStateRegistry.h"
 
 namespace ecs {
 
@@ -19,13 +20,13 @@ struct InventoryDataComponent {
 
 struct BlockTargetComponent {
     bool hasTarget = false;
-    BlockID targetState = 0;
+    BlockStateId targetState = NULL_BLOCK_STATE;
     glm::ivec3 targetBlock{};
     glm::ivec3 placeBlock{};
     glm::ivec3 hitNormal{};
     glm::vec3 hitPosition{};
     bool hasFluidTarget = false;
-    BlockID fluidTargetState = 0;
+    BlockStateId fluidTargetState = NULL_BLOCK_STATE;
     glm::ivec3 fluidTargetBlock{};
     glm::ivec3 fluidPlaceBlock{};
     glm::ivec3 fluidHitNormal{};

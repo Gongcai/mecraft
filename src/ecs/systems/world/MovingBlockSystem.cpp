@@ -74,7 +74,7 @@ bool rangesOverlap(const float aMin, const float aMax, const float bMin, const f
 
 template <typename Fn>
 void forEachWorldCollisionBox(const World& world, const glm::ivec3& blockPosition, Fn&& fn) {
-    const StateID stateId = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+    const BlockStateId stateId = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
     const glm::vec3 blockOffset(blockPosition);
     for (const BlockCollisionBox& localBox : BlockCollision::getBoxes(stateId)) {
         fn(CollisionAabb{blockOffset + localBox.min, blockOffset + localBox.max});
@@ -202,7 +202,7 @@ void depenetratePhysicsBodyFromWorld(const World& world, PhysicsBody& body) {
     }
 }
 
-std::vector<MovingBlockFrameCollision> collectMovingBlockCollisions(const StateID stateId,
+std::vector<MovingBlockFrameCollision> collectMovingBlockCollisions(const BlockStateId stateId,
                                                                     const glm::vec3& previousOrigin,
                                                                     const glm::vec3& currentOrigin) {
     std::vector<MovingBlockFrameCollision> collisions;
@@ -269,12 +269,12 @@ bool targetCellIsReadyForPlacement(const World& world, const MovingBlockComponen
         return true;
     }
     return world.getBlockState(block.targetPosition.x, block.targetPosition.y, block.targetPosition.z) ==
-           RUNTIME_ID_NULL;
+           NULL_BLOCK_STATE;
 }
 
 void applyMovingBlockCollisionToEntities(World& world,
                                          GameplayRegistry& registry,
-                                         const StateID stateId,
+                                         const BlockStateId stateId,
                                          const glm::vec3& previousOrigin,
                                          const glm::vec3& currentOrigin,
                                          const glm::ivec3& movementDirection) {

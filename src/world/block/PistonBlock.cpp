@@ -58,7 +58,7 @@ glm::ivec3 directionFromFacing(const uint16_t facing) {
     throw std::runtime_error("Piston state contains an unknown facing value");
 }
 
-uint16_t facingValue(const StateID stateId) {
+uint16_t facingValue(const BlockStateId stateId) {
     requirePistonProperties();
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facing == BlockStateRegistry::INVALID_INDEX) {
@@ -67,7 +67,7 @@ uint16_t facingValue(const StateID stateId) {
     return facing;
 }
 
-bool isExtendedValueTrue(const StateID stateId) {
+bool isExtendedValueTrue(const BlockStateId stateId) {
     requirePistonProperties();
     const uint16_t extended = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::EXTENDED);
     if (extended != PropIndices::EXTENDED_TRUE && extended != PropIndices::EXTENDED_FALSE) {
@@ -76,7 +76,7 @@ bool isExtendedValueTrue(const StateID stateId) {
     return extended == PropIndices::EXTENDED_TRUE;
 }
 
-uint16_t headTypeForBaseState(const StateID baseState) {
+uint16_t headTypeForBaseState(const BlockStateId baseState) {
     const BlockID blockId = BlockStateRegistry::getBlockId(baseState);
     if (blockId == pistonBlockId()) {
         return PropIndices::TYPE_NORMAL;
@@ -87,7 +87,7 @@ uint16_t headTypeForBaseState(const StateID baseState) {
     throw std::runtime_error("Piston head type requested for a non-piston base");
 }
 
-uint16_t headTypeValue(const StateID headState) {
+uint16_t headTypeValue(const BlockStateId headState) {
     requirePistonProperties();
     const uint16_t type = BlockStateRegistry::getPropertyIndex(headState, PropIndices::TYPE);
     if (type != PropIndices::TYPE_NORMAL && type != PropIndices::TYPE_STICKY) {
@@ -98,25 +98,25 @@ uint16_t headTypeValue(const StateID headState) {
 
 } // namespace
 
-bool isPistonBaseState(const StateID stateId) {
-    if (stateId == RUNTIME_ID_NULL) {
+bool isPistonBaseState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
         return false;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     return blockId == pistonBlockId() || blockId == stickyPistonBlockId();
 }
 
-bool isPistonHeadState(const StateID stateId) {
-    return stateId != RUNTIME_ID_NULL &&
+bool isPistonHeadState(const BlockStateId stateId) {
+    return stateId != NULL_BLOCK_STATE &&
            BlockStateRegistry::getBlockId(stateId) == pistonHeadBlockId();
 }
 
-bool isPistonAssemblyState(const StateID stateId) {
+bool isPistonAssemblyState(const BlockStateId stateId) {
     return isPistonBaseState(stateId) || isPistonHeadState(stateId);
 }
 
 bool tryGetOtherPartPosition(const glm::ivec3& pos,
-                             const StateID stateId,
+                             const BlockStateId stateId,
                              glm::ivec3& outOtherPos) {
     if (isPistonHeadState(stateId)) {
         outOtherPos = pos - directionFromFacing(facingValue(stateId));
@@ -129,7 +129,7 @@ bool tryGetOtherPartPosition(const glm::ivec3& pos,
     return false;
 }
 
-bool isMatchingAssemblyPart(const StateID stateId, const StateID otherState) {
+bool isMatchingAssemblyPart(const BlockStateId stateId, const BlockStateId otherState) {
     if (isPistonHeadState(stateId)) {
         if (!isPistonBaseState(otherState) || !isExtendedValueTrue(otherState)) {
             return false;
@@ -152,7 +152,7 @@ bool isMatchingAssemblyPart(const StateID stateId, const StateID otherState) {
 BlockID removePistonAssembly(World& world,
                              const glm::ivec3& hitPos,
                              std::vector<glm::ivec3>* removedPositions) {
-    const StateID stateId = world.getBlockState(hitPos.x, hitPos.y, hitPos.z);
+    const BlockStateId stateId = world.getBlockState(hitPos.x, hitPos.y, hitPos.z);
     if (!isPistonAssemblyState(stateId)) {
         return RUNTIME_ID_NULL;
     }
@@ -160,21 +160,21 @@ BlockID removePistonAssembly(World& world,
     BlockID droppedBlockId = BlockStateRegistry::getBlockId(stateId);
     glm::ivec3 otherPos{};
     const bool hasOtherPos = tryGetOtherPartPosition(hitPos, stateId, otherPos);
-    const StateID otherState = hasOtherPos
+    const BlockStateId otherState = hasOtherPos
         ? world.getBlockState(otherPos.x, otherPos.y, otherPos.z)
-        : RUNTIME_ID_NULL;
+        : NULL_BLOCK_STATE;
     const bool removeOther = hasOtherPos && isMatchingAssemblyPart(stateId, otherState);
     if (removeOther && isPistonHeadState(stateId)) {
         droppedBlockId = BlockStateRegistry::getBlockId(otherState);
     }
 
-    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, RUNTIME_ID_NULL);
+    world.setBlockState(hitPos.x, hitPos.y, hitPos.z, NULL_BLOCK_STATE);
     if (removedPositions != nullptr) {
         removedPositions->push_back(hitPos);
     }
 
     if (removeOther) {
-        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, RUNTIME_ID_NULL);
+        world.setBlockState(otherPos.x, otherPos.y, otherPos.z, NULL_BLOCK_STATE);
         if (removedPositions != nullptr) {
             removedPositions->push_back(otherPos);
         }

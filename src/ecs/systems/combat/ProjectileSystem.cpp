@@ -40,9 +40,9 @@ BlockID targetBlockId() {
 bool isCollisionBlockAt(const IWorldView& worldView,
                         const glm::vec3& position,
                         const glm::vec3& halfExtents,
-                        StateID& outState,
+                        BlockStateId& outState,
                         glm::ivec3& outBlockPosition) {
-    outState = RUNTIME_ID_NULL;
+    outState = NULL_BLOCK_STATE;
     const glm::vec3 queryMin = position - halfExtents;
     const glm::vec3 queryMax = position + halfExtents;
     if (queryMin.y < 0.0f || queryMax.y >= static_cast<float>(Chunk::SIZE_Y)) {
@@ -64,12 +64,12 @@ bool isCollisionBlockAt(const IWorldView& worldView,
     bool found = false;
     float bestDistanceSq = 0.0f;
     glm::ivec3 bestPosition{};
-    StateID bestState = RUNTIME_ID_NULL;
+    BlockStateId bestState = NULL_BLOCK_STATE;
     for (int y = minY; y <= maxY; ++y) {
         for (int z = minZ; z <= maxZ; ++z) {
             for (int x = minX; x <= maxX; ++x) {
                 const glm::ivec3 blockPosition(x, y, z);
-                const StateID stateId = worldView.getBlockState(x, y, z);
+                const BlockStateId stateId = worldView.getBlockState(x, y, z);
                 if (!BlockCollision::intersects(stateId, blockPosition, queryMin, queryMax)) {
                     continue;
                 }
@@ -93,7 +93,7 @@ bool isCollisionBlockAt(const IWorldView& worldView,
     return found;
 }
 
-StateID withPowerProperty(const StateID stateId, const uint8_t power) {
+BlockStateId withPowerProperty(const BlockStateId stateId, const uint8_t power) {
     if (power > 15) {
         throw std::runtime_error("Target block power exceeds 15");
     }
@@ -101,7 +101,7 @@ StateID withPowerProperty(const StateID stateId, const uint8_t power) {
     if (value == BlockStateRegistry::INVALID_INDEX) {
         throw std::runtime_error("Target block requires registered power values 0 through 15");
     }
-    const StateID updatedState = BlockStateRegistry::withProperty(stateId, PropIndices::POWER, value);
+    const BlockStateId updatedState = BlockStateRegistry::withProperty(stateId, PropIndices::POWER, value);
     if (BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWER) != value) {
         throw std::runtime_error("Target block power state transition failed");
     }
@@ -157,13 +157,13 @@ void activateTargetBlock(World& world,
                          const uint64_t tickIndex,
                          const glm::ivec3& blockPosition,
                          const glm::vec3& impactPosition) {
-    const StateID currentState = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
+    const BlockStateId currentState = world.getBlockState(blockPosition.x, blockPosition.y, blockPosition.z);
     if (BlockStateRegistry::getBlockId(currentState) != targetBlockId()) {
         return;
     }
 
     const uint8_t power = targetPowerFromImpact(blockPosition, impactPosition);
-    const StateID updatedState = withPowerProperty(currentState, power);
+    const BlockStateId updatedState = withPowerProperty(currentState, power);
     world.setBlockState(blockPosition.x, blockPosition.y, blockPosition.z, updatedState);
     const uint64_t activationRedstoneTick = std::max(world.lastProcessedRedstoneTick(), tickIndex / 2u);
     world.redstoneScheduledUpdateQueue().reschedule(
@@ -413,21 +413,22 @@ void ProjectileSystem::update(SystemContext& ctx) {
         for (int i = 0; i < steps; ++i) {
             transform.position += step;
 
-            StateID hitState = RUNTIME_ID_NULL;
+            BlockStateId hitState = NULL_BLOCK_STATE;
             glm::ivec3 hitBlockPosition{};
             if (isCollisionBlockAt(worldView, transform.position, bounds.halfExtents, hitState, hitBlockPosition)) {
+                const BlockID hitBlockId = BlockStateRegistry::getBlockId(hitState);
                 if (ctx.services.world) {
                     activateTargetBlock(*ctx.services.world, ctx.tickIndex, hitBlockPosition, transform.position);
                 }
                 emitProjectileImpactParticles(registry,
                                               transform.position,
-                                              hitState,
+                                              hitBlockId,
                                               projectileData.entityImpactParticleCount);
                 emitProjectileSound(registry, projectileData.impactSoundId, transform.position);
                 queueProjectileImpactDespawn(reg,
                                              projectile,
                                              transform.position,
-                                             hitState,
+                                             hitBlockId,
                                              projectileData.entityImpactParticleCount,
                                              destroyList);
                 destroyed = true;

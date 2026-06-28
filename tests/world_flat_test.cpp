@@ -12,6 +12,10 @@ int fail(const char* message) {
     return EXIT_FAILURE;
 }
 
+BlockID blockIdOf(const BlockStateId stateId) {
+    return BlockStateRegistry::getBlockId(stateId);
+}
+
 bool hasDanglingNeighbor(const World& world) {
     const auto& chunks = world.getActiveChunks();
     for (const auto& entry : chunks) {
@@ -55,35 +59,36 @@ int main() {
     if (surfaceY < 8 || surfaceY > Chunk::SIZE_Y - 8) {
         return fail("surfaceY out of expected generated range");
     }
-    if (world.getBlock(0, surfaceY + 1, 0) != RUNTIME_ID_NULL) {
+    if (world.getBlockState(0, surfaceY + 1, 0) != NULL_BLOCK_STATE) {
         return fail("block above surface should be AIR");
     }
-    const BlockID topBlock = world.getBlock(0, surfaceY, 0);
+    const BlockStateId topState = world.getBlockState(0, surfaceY, 0);
+    const BlockID topBlock = blockIdOf(topState);
     if (topBlock != BlockRegistry::requireIdByName("minecraft:grass_block") && topBlock != BlockRegistry::requireIdByName("minecraft:sand") &&
         topBlock != BlockRegistry::requireIdByName("minecraft:dirt") && topBlock != BlockRegistry::requireIdByName("minecraft:stone") &&
         topBlock != BlockRegistry::requireIdByName("minecraft:oak_log") && topBlock != BlockRegistry::requireIdByName("minecraft:birch_log") &&
         topBlock != BlockRegistry::requireIdByName("minecraft:oak_leaves") && topBlock != BlockRegistry::requireIdByName("minecraft:birch_leaves") &&
-        !FluidState::isWater(topBlock) && topBlock != BlockRegistry::requireIdByName("minecraft:tall_grass") &&
+        !FluidState::isWater(topState) && topBlock != BlockRegistry::requireIdByName("minecraft:tall_grass") &&
         topBlock != BlockRegistry::requireIdByName("minecraft:rose")) {
         return fail("surface block should be a valid generated terrain block");
     }
 
     if ((topBlock == BlockRegistry::requireIdByName("minecraft:tall_grass") || topBlock == BlockRegistry::requireIdByName("minecraft:rose")) &&
-        world.getBlock(0, surfaceY - 1, 0) != BlockRegistry::requireIdByName("minecraft:grass_block")) {
+        blockIdOf(world.getBlockState(0, surfaceY - 1, 0)) != BlockRegistry::requireIdByName("minecraft:grass_block")) {
         return fail("vegetation surface block should be rooted on grass");
     }
 
-    const BlockID underBlock = world.getBlock(0, surfaceY - 2, 0);
-    if (underBlock == RUNTIME_ID_NULL) {
+    const BlockStateId underBlock = world.getBlockState(0, surfaceY - 2, 0);
+    if (underBlock == NULL_BLOCK_STATE) {
         return fail("sub-surface layer should not be AIR");
     }
 
-    if (world.getBlock(0, 1, 0) != BlockRegistry::requireIdByName("minecraft:stone")) {
+    if (blockIdOf(world.getBlockState(0, 1, 0)) != BlockRegistry::requireIdByName("minecraft:stone")) {
         return fail("deep layer should include STONE");
     }
 
     const int negSurfaceY = world.getSurfaceY(-1, 0);
-    if (world.getBlock(-1, negSurfaceY, 0) == RUNTIME_ID_NULL) {
+    if (world.getBlock(-1, negSurfaceY, 0) == NULL_BLOCK_STATE) {
         return fail("negative world coordinate mapping failed");
     }
 
@@ -109,7 +114,7 @@ int main() {
     }
 
     world.setBlock(0, surfaceY + 1, 0, BlockRegistry::requireIdByName("minecraft:oak_log"));
-    if (world.getBlock(0, surfaceY + 1, 0) != BlockRegistry::requireIdByName("minecraft:oak_log")) {
+    if (blockIdOf(world.getBlock(0, surfaceY + 1, 0)) != BlockRegistry::requireIdByName("minecraft:oak_log")) {
         return fail("setBlock/getBlock mismatch");
     }
 

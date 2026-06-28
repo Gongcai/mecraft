@@ -5,6 +5,7 @@
 #include <random>
 #include <algorithm>
 #include "../../world/block/Block.h"
+#include "../../world/block/BlockStateRegistry.h"
 #include "../../world/fluid/FluidState.h"
 
 namespace gameplay_state_detail {
@@ -32,7 +33,7 @@ struct GameplayBlockActionRequest {
     bool wantsBreak = false;
     bool wantsPlace = false;
     float placeCooldownRemaining = 0.0f;
-    BlockID targetBlock = 0;
+    BlockStateId targetBlock = NULL_BLOCK_STATE;
     bool playerWouldOverlapPlaceBlock = false;
     bool placementReplacesTarget = false;
 };
@@ -51,7 +52,7 @@ namespace gameplay_mode_rules_detail {
         if (request.placeCooldownRemaining > 0.0f) {
             return GameplayBlockAction::None;
         }
-        if (request.targetBlock != 0 &&
+        if (request.targetBlock != NULL_BLOCK_STATE &&
             !FluidState::isWater(request.targetBlock) &&
             !request.placementReplacesTarget) {
             return GameplayBlockAction::None;

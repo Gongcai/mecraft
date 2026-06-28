@@ -305,11 +305,11 @@ BlockStateId makeBlockStateId(const size_t value) {
     if (value > std::numeric_limits<uint32_t>::max()) {
         throw std::runtime_error("Block state registry exceeds the current BlockStateId value capacity");
     }
-    return BlockStateId{static_cast<uint32_t>(value)};
+    return BlockStateId::fromRaw(static_cast<uint32_t>(value));
 }
 
 size_t stateIndex(const BlockStateId stateId) {
-    return static_cast<size_t>(stateId.value);
+    return static_cast<size_t>(stateId.raw());
 }
 }
 

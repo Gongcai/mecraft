@@ -3,14 +3,14 @@
 #include <cstdint>
 #include <string>
 
-#include "../../world/block/Block.h"
+#include "../../world/block/BlockStateRegistry.h"
 
 struct ChunkMeshData;
 struct SubChunkMeshingSnapshot;
 
 using MeshBuilderFn = void(*)(ChunkMeshData& meshData,
                               const SubChunkMeshingSnapshot& snapshot,
-                              BlockID blockId,
+                              BlockStateId stateId,
                               const BlockDef& def,
                               int x,
                               int y,

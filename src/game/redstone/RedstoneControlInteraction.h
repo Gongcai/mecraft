@@ -12,7 +12,7 @@ namespace game::redstone {
 /// Compute the next state for a redstone control block after a player interaction.
 /// @param currentState  Current block state containing the required interaction property.
 /// @return Updated block state after the interaction.
-[[nodiscard]] StateID nextControlState(StateID currentState);
+[[nodiscard]] BlockStateId nextControlState(BlockStateId currentState);
 
 } // namespace game::redstone
 

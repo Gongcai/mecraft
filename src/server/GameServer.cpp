@@ -418,10 +418,10 @@ bool GameServer::buildContainerSnapshot(const ConnectedClient& client,
         return false;
     }
 
-    const StateID state = m_world.getBlockState(client.openContainerPosition.x,
+    const BlockStateId state = m_world.getBlockState(client.openContainerPosition.x,
                                                 client.openContainerPosition.y,
                                                 client.openContainerPosition.z);
-    if (state == RUNTIME_ID_NULL) {
+    if (state == NULL_BLOCK_STATE) {
         return false;
     }
 
@@ -763,7 +763,7 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
     m_world.init(seed);
 
     // Register block change callback to collect dirty blocks for BlockUpdateBatch
-    m_world.setBlockChangeCallback([this](int x, int y, int z, StateID newStateId) {
+    m_world.setBlockChangeCallback([this](int x, int y, int z, BlockStateId newStateId) {
         m_pendingBlockUpdates.push_back(makeBlockOnlyUpdateEntry(x, y, z, newStateId));
     });
 
@@ -1622,7 +1622,7 @@ void replaceSelectedServerItem(ecs::InventoryDataComponent& inventoryData, const
 BlockID removeServerTargetBlock(World& world,
                                 const glm::ivec3& hitBlock,
                                 std::vector<glm::ivec3>& removedPositions) {
-    const StateID targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+    const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
     if (BedBlockLogic::isBedState(targetState)) {
         return BedBlockLogic::removeBed(world, hitBlock, &removedPositions);
     }
@@ -1633,7 +1633,7 @@ BlockID removeServerTargetBlock(World& world,
         return PistonBlockLogic::removePistonAssembly(world, hitBlock, &removedPositions);
     }
 
-    world.setBlock(hitBlock.x, hitBlock.y, hitBlock.z, RUNTIME_ID_NULL);
+    world.setBlockState(hitBlock.x, hitBlock.y, hitBlock.z, NULL_BLOCK_STATE);
     removedPositions.push_back(hitBlock);
     return BlockStateRegistry::getBlockId(targetState);
 }
@@ -1691,10 +1691,10 @@ void GameServer::handleClientContainerOpenRequest(ConnectedClient& client,
         handleClientContainerClose(client, net::ClientContainerClose{client.openContainerId});
     }
 
-    const StateID state = m_world.getBlockState(request.blockPosition.x,
+    const BlockStateId state = m_world.getBlockState(request.blockPosition.x,
                                                 request.blockPosition.y,
                                                 request.blockPosition.z);
-    if (state == RUNTIME_ID_NULL) {
+    if (state == NULL_BLOCK_STATE) {
         return;
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(state);
@@ -1975,8 +1975,9 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
     }
 
     if (action.action == net::ClientBlockActionType::Break) {
-        const BlockID target = m_world.getBlock(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
-        if (target == RUNTIME_ID_NULL || !BlockRegistry::get(target).isSelectable) {
+        const BlockStateId targetState = m_world.getBlockState(action.targetBlock.x, action.targetBlock.y, action.targetBlock.z);
+        const BlockID target = BlockStateRegistry::getBlockId(targetState);
+        if (targetState == NULL_BLOCK_STATE || !BlockRegistry::get(target).isSelectable) {
             return;
         }
         std::vector<glm::ivec3> removedPositions;
@@ -2106,7 +2107,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             m_world.setFluidState(action.targetBlock.x,
                                   action.targetBlock.y,
                                   action.targetBlock.z,
-                                  RUNTIME_ID_NULL);
+                                  NULL_BLOCK_STATE);
             if (client.gameplayMode != net::NetworkGameplayMode::Creative) {
                 replaceSelectedServerItem(*inventoryData, pickupRule->resultItem);
             }
@@ -2121,9 +2122,9 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
 
         const ItemUseRule* placeRule =
             ItemUseRules::findRule(selectedItemDef, ItemUseBehavior::BucketPlaceFluid);
-        const StateID sourceFluid = placeRule != nullptr
+        const BlockStateId sourceFluid = placeRule != nullptr
             ? ItemUseDispatcher::makeSourceFluidState(placeRule->resultBlock)
-            : RUNTIME_ID_NULL;
+            : NULL_BLOCK_STATE;
         if (placeRule == nullptr ||
             action.blockState != sourceFluid ||
             !ItemUseDispatcher::canPlaceFluid(m_world, action.placeBlock, *placeRule)) {
@@ -2146,7 +2147,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         return;
     }
 
-    if (action.blockState == RUNTIME_ID_NULL) {
+    if (action.blockState == NULL_BLOCK_STATE) {
         return;
     }
     if (BedBlockLogic::isBedState(action.blockState)) {
@@ -2187,18 +2188,18 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         MECRAFT_LOG_FLUSH(stdout);
         return;
     }
-    const StateID existingPlaceState =
+    const BlockStateId existingPlaceState =
         m_world.getBlockState(action.placeBlock.x, action.placeBlock.y, action.placeBlock.z);
-    if (existingPlaceState != RUNTIME_ID_NULL &&
+    if (existingPlaceState != NULL_BLOCK_STATE &&
         !FluidState::isWater(existingPlaceState) &&
         !canReplaceWithMergedPlacementResult(existingPlaceState, action.blockState)) {
         return;
     }
 
-    m_world.setBlock(action.placeBlock.x,
-                     action.placeBlock.y,
-                     action.placeBlock.z,
-                     static_cast<BlockID>(action.blockState));
+    m_world.setBlockState(action.placeBlock.x,
+                          action.placeBlock.y,
+                          action.placeBlock.z,
+                          action.blockState);
     if (m_gameplayRegistry != nullptr) {
         static_cast<void>(ensureBlockEntityInventoryForPlacedBlock(
             *m_gameplayRegistry,
@@ -2210,7 +2211,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                        action.placeBlock.x,
                        action.placeBlock.y,
                        action.placeBlock.z,
-                       static_cast<unsigned>(action.blockState));
+                       action.blockState.raw());
     MECRAFT_LOG_FLUSH(stdout);
 }
 
@@ -2445,7 +2446,7 @@ void GameServer::sendBlockUpdatesToClients() {
     m_pendingBlockUpdates.clear();
 }
 
-net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const int y, const int z, const StateID stateId) const {
+net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const int y, const int z, const BlockStateId stateId) const {
     net::BlockUpdateEntry entry;
     entry.x = x;
     entry.y = y;
@@ -2468,7 +2469,7 @@ std::optional<net::BlockUpdateEntry> GameServer::makeSubChunkLightUpdateEntry(co
     entry.y = scy * SubChunk::SIZE;
     entry.z = chunk.m_chunkZ * Chunk::SIZE_Z;
     entry.kind = net::BlockUpdateKind::LightOnly;
-    entry.stateId = 0;
+    entry.stateId = NULL_BLOCK_STATE;
     entry.packedLightPatch.resize(SubChunk::BLOCK_COUNT);
     size_t index = 0;
     const int yBase = scy * SubChunk::SIZE;
@@ -2487,7 +2488,7 @@ std::optional<net::BlockUpdateEntry> GameServer::makeSubChunkLightUpdateEntry(co
 std::optional<net::BlockUpdateEntry> GameServer::makeBlockUpdateEntry(const int x,
                                                                       const int y,
                                                                       const int z,
-                                                                      const StateID stateId,
+                                                                      const BlockStateId stateId,
                                                                       const int lightPatchRadius) const {
     net::BlockUpdateEntry entry;
     entry.x = x;
@@ -2723,7 +2724,7 @@ std::vector<save::BlockEntityData> GameServer::snapshotBlockEntities() const {
             for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
                 for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                     for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                        const StateID state = subChunk->getBlock(x, ly, z);
+                        const BlockStateId state = subChunk->getBlock(x, ly, z);
                         const BlockID blockId = BlockStateRegistry::getBlockId(state);
                         std::string blockEntityType;
                         if (persistentBlockEntityTypeForBlock(blockId, blockEntityType)) {

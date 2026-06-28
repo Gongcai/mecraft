@@ -10,11 +10,15 @@ namespace {
     std::_Exit(EXIT_FAILURE);
 }
 
+BlockStateId stateForBlockName(const char* name) {
+    return BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName(name));
+}
+
 void testWaterColumnsArePreseeded() {
     Chunk chunk(0, 0);
 
     for (int y = 70; y <= 72; ++y) {
-        chunk.setBlockFast(3, y, 3, BlockRegistry::requireIdByName("minecraft:water"));
+        chunk.setBlockFast(3, y, 3, stateForBlockName("minecraft:water"));
     }
 
     chunk.seedInitialLightMap();
@@ -32,7 +36,7 @@ void testWaterColumnsArePreseeded() {
 
 void testLightSourcesSeedOwnVoxel() {
     Chunk chunk(0, 0);
-    chunk.setBlockFast(4, 80, 4, BlockRegistry::requireIdByName("minecraft:torch"));
+    chunk.setBlockFast(4, 80, 4, stateForBlockName("minecraft:torch"));
 
     chunk.seedInitialLightMap();
 

@@ -193,7 +193,7 @@ void testUnloadDropsLateLightingResults() {
     const bool cleanReload = waitUntil(world, nearPos, 120, [&]() {
         Chunk* chunk = findChunk(world, 0, 0);
         return chunk != nullptr &&
-               world.getBlock(8, torchY, 8) != BlockRegistry::requireIdByName("minecraft:torch") &&
+               BlockStateRegistry::getBlockId(world.getBlock(8, torchY, 8)) != BlockRegistry::requireIdByName("minecraft:torch") &&
                chunk->getBlockLight(8, torchY, 8) == 0;
     });
     if (!cleanReload) {
@@ -251,7 +251,7 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
         }
         Chunk* chunk = findChunk(world, 0, 0);
         const bool finalStateClean = chunk != nullptr &&
-            world.getBlock(torchX, torchY, torchZ) == RUNTIME_ID_NULL &&
+            world.getBlock(torchX, torchY, torchZ) == NULL_BLOCK_STATE &&
             chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
             chunk->getBlockLight(helperX, torchY, torchZ) == 0;
         if (sawRequeue && finalStateClean) {
@@ -265,7 +265,7 @@ void testHighFrequencyContinuousBlockChangesRequeueCleanly() {
     }
     Chunk* chunk = findChunk(world, 0, 0);
     const bool finalStateClean = chunk != nullptr &&
-        world.getBlock(torchX, torchY, torchZ) == RUNTIME_ID_NULL &&
+        world.getBlock(torchX, torchY, torchZ) == NULL_BLOCK_STATE &&
         chunk->getBlockLight(torchX, torchY, torchZ) == 0 &&
         chunk->getBlockLight(helperX, torchY, torchZ) == 0;
     if (!finalStateClean) {
