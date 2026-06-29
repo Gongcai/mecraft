@@ -7,6 +7,7 @@
 #include "../../components/Components.h"
 #include "../../../world/World.h"
 #include "../../../world/block/Block.h"
+#include "../../../world/block/AttachmentFaceGeometry.h"
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/redstone/WireFaceGeometry.h"
@@ -67,6 +68,24 @@ bool checkAttachedFace(const World& world, const glm::ivec3& pos, BlockStateId s
     return isSupportive(world, pos + WireFaceGeometry::supportOffset(facingValueIndex));
 }
 
+/// Evaluate the "face_attachment" support rule for oriented attached blocks.
+/// The `face` property identifies the outward support face, and `facing`
+/// remains available for the model or redstone output direction.
+bool checkFaceAttachment(const World& world, const glm::ivec3& pos, BlockStateId stateId) {
+    if (PropIndices::FACE == PropIndices::INVALID) {
+        throw std::runtime_error("face_attachment support requires the face property");
+    }
+    const uint16_t faceValueIndex = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACE);
+    if (faceValueIndex == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error("face_attachment support requires a face state value");
+    }
+    if (!AttachmentFaceGeometry::isAttachmentFace(faceValueIndex)) {
+        throw std::runtime_error("face_attachment support received an unsupported face value");
+    }
+
+    return isSupportive(world, pos + AttachmentFaceGeometry::supportOffset(faceValueIndex));
+}
+
 /// Returns true if the block at `pos` can survive given its supportRule.
 bool canSurvive(const World& world, const glm::ivec3& pos) {
     const BlockStateId stateId = world.getBlockState(pos.x, pos.y, pos.z);
@@ -90,6 +109,9 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
     }
     if (def.supportRule == "attached_face") {
         return checkAttachedFace(world, pos, stateId);
+    }
+    if (def.supportRule == "face_attachment") {
+        return checkFaceAttachment(world, pos, stateId);
     }
 
     throw std::runtime_error("Unsupported block support rule: " + def.supportRule);

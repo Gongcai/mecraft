@@ -1340,12 +1340,14 @@
       "redstoneBehavior": "repeater",
       "isRedstoneConductor": false,
       "properties": {
-        "facing": ["north", "south", "east", "west"],
+        "face": ["floor", "ceiling", "north", "south", "east", "west"],
+        "facing": ["north", "south", "east", "west", "up", "down"],
         "powered": ["false", "true"],
         "delay": ["1", "2", "3", "4"],
         "locked": ["false", "true"]
       },
       "defaultState": {
+        "face": "floor",
         "facing": "south",
         "powered": "false",
         "delay": "1",
@@ -1353,8 +1355,9 @@
       },
       "isSolid": false,
       "renderShape": "model",
-      "placementStrategy": "horizontal_facing",
-      "supportRule": "ground",
+      "faceOrientedModel": true,
+      "placementStrategy": "redstone_logic_unit_face",
+      "supportRule": "face_attachment",
       "timeToBreak": 100,
       "textures": {
         "all": "repeater"
@@ -1433,19 +1436,22 @@
       "redstoneBehavior": "comparator",
       "isRedstoneConductor": false,
       "properties": {
-        "facing": ["north", "south", "east", "west"],
+        "face": ["floor", "ceiling", "north", "south", "east", "west"],
+        "facing": ["north", "south", "east", "west", "up", "down"],
         "powered": ["false", "true"],
         "mode": ["compare", "subtract"]
       },
       "defaultState": {
+        "face": "floor",
         "facing": "south",
         "powered": "false",
         "mode": "compare"
       },
       "isSolid": false,
       "renderShape": "model",
-      "placementStrategy": "horizontal_facing",
-      "supportRule": "ground",
+      "faceOrientedModel": true,
+      "placementStrategy": "redstone_logic_unit_face",
+      "supportRule": "face_attachment",
       "timeToBreak": 100,
       "textures": {
         "all": "comparator"

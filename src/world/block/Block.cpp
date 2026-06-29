@@ -101,6 +101,7 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.renderShapeTag = 0;
     def.materialKind = BlockMaterialKinds::DEFAULT;
     def.derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
+    def.faceOrientedModel = false;
     def.placementStrategy = "simple";
     def.revertPlacementFacing = false;
     def.supportRule.clear();
@@ -540,6 +541,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.renderShapeTag = 0;
         def.materialKind = BlockMaterialKinds::DEFAULT;
         def.derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
+        def.faceOrientedModel = false;
         def.placementStrategy = "simple";
         def.revertPlacementFacing = false;
         def.supportRule.clear();
@@ -617,6 +619,12 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("placementStrategy") && blockJson["placementStrategy"].is_string()) {
             def.placementStrategy = blockJson["placementStrategy"].get<std::string>();
+        }
+        if (blockJson.contains("faceOrientedModel")) {
+            if (!blockJson["faceOrientedModel"].is_boolean()) {
+                throw std::runtime_error("faceOrientedModel must be a boolean for block: " + def.namespacedId.full());
+            }
+            def.faceOrientedModel = blockJson["faceOrientedModel"].get<bool>();
         }
         if (blockJson.contains("revert") && blockJson["revert"].is_boolean()) {
             def.revertPlacementFacing = blockJson["revert"].get<bool>();
@@ -1207,10 +1215,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     }
 
     BlockStateRegistry::explodeAllStates();
+    PropIndices::init();
     for (const auto& [blockId, variantsJson] : pendingModelVariants) {
         BlockStateRegistry::registerBlockModelVariants(blockId, variantsJson);
     }
-    PropIndices::init();
 
     s_initialized = true;
     FluidRegistry::init();

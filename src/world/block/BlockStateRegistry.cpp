@@ -1,12 +1,15 @@
 #include "BlockStateRegistry.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <functional>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 
+#include "AttachmentFaceGeometry.h"
 #include "BlockModelRegistry.h"
 #include "PropIndices.h"
 
@@ -308,6 +311,74 @@ BlockStateId makeBlockStateId(const size_t value) {
 size_t stateIndex(const BlockStateId stateId) {
     return stateId.registryIndex();
 }
+
+glm::ivec3 rotateDirectionX90(const glm::ivec3 direction, const uint16_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {direction.x, -direction.z, direction.y};
+        case 2: return {direction.x, -direction.y, -direction.z};
+        case 3: return {direction.x, direction.z, -direction.y};
+        case 0:
+        default: return direction;
+    }
+}
+
+glm::ivec3 rotateDirectionY90(const glm::ivec3 direction, const uint16_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {-direction.z, direction.y, direction.x};
+        case 2: return {-direction.x, direction.y, -direction.z};
+        case 3: return {direction.z, direction.y, -direction.x};
+        case 0:
+        default: return direction;
+    }
+}
+
+glm::ivec3 rotateDirectionZ90(const glm::ivec3 direction, const uint16_t rotation) {
+    switch ((rotation / 90u) % 4u) {
+        case 1: return {-direction.y, direction.x, direction.z};
+        case 2: return {-direction.x, -direction.y, direction.z};
+        case 3: return {direction.y, -direction.x, direction.z};
+        case 0:
+        default: return direction;
+    }
+}
+
+glm::ivec3 applyModelDirectionTransform(glm::ivec3 direction, const ModelTransform& transform) {
+    direction = rotateDirectionX90(direction, transform.rotX);
+    direction = rotateDirectionY90(direction, transform.rotY);
+    direction = rotateDirectionZ90(direction, transform.rotZ);
+    return direction;
+}
+
+std::optional<ModelTransform> makeFaceOrientedModelTransform(const uint16_t face, const uint16_t facing) {
+    if (!AttachmentFaceGeometry::isAttachmentFace(face)) {
+        throw std::runtime_error("Face-oriented model state contains an unsupported face value");
+    }
+    const glm::ivec3 targetNormal = AttachmentFaceGeometry::surfaceNormal(face);
+    const glm::ivec3 targetFacing = AttachmentFaceGeometry::directionFromFacing(facing);
+    if (!AttachmentFaceGeometry::isDirectionInPlane(face, targetFacing)) {
+        return std::nullopt;
+    }
+
+    constexpr std::array<uint16_t, 4> rotations = {{0, 90, 180, 270}};
+    for (const uint16_t rotX : rotations) {
+        for (const uint16_t rotY : rotations) {
+            for (const uint16_t rotZ : rotations) {
+                ModelTransform transform;
+                transform.rotX = rotX;
+                transform.rotY = rotY;
+                transform.rotZ = rotZ;
+                const glm::ivec3 normal = applyModelDirectionTransform({0, 1, 0}, transform);
+                const glm::ivec3 facingDirection = applyModelDirectionTransform({0, 0, 1}, transform);
+                if (normal == targetNormal && facingDirection == targetFacing) {
+                    return transform;
+                }
+            }
+        }
+    }
+
+    throw std::runtime_error("Face-oriented model transform table is incomplete");
+}
+
 }
 
 uint16_t BlockStateRegistry::internPropertyName(const std::string& name) {
@@ -695,6 +766,44 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
         if (!matchedState) {
             throw std::runtime_error("Model variant state key matched no states: " + it.key());
         }
+    }
+
+    const BlockDef& def = BlockRegistry::getFast(blockId);
+    if (!def.faceOrientedModel) {
+        return;
+    }
+    if (PropIndices::FACE == PropIndices::INVALID || PropIndices::FACING == PropIndices::INVALID) {
+        throw std::runtime_error("Face-oriented model requires registered face and facing properties");
+    }
+
+    for (const BlockStateId stateId : getStatesForBlock(blockId)) {
+        const uint16_t face = getPropertyIndex(stateId, PropIndices::FACE);
+        const uint16_t facing = getPropertyIndex(stateId, PropIndices::FACING);
+        if (face == INVALID_INDEX || facing == INVALID_INDEX) {
+            throw std::runtime_error("Face-oriented model block is missing face or facing state values: " +
+                                     def.namespacedId.full());
+        }
+
+        const size_t index = stateIndex(stateId);
+        if (index >= s_stateModelVariants.size()) {
+            throw std::runtime_error("Face-oriented model state id is outside state registry");
+        }
+        ModelVariant& variant = s_stateModelVariants[index];
+        if (variant.model == nullptr) {
+            const BlockStateId baseState = withProperty(stateId, PropIndices::FACING, PropIndices::FACING_SOUTH);
+            const ModelVariant* baseVariant = getModelVariant(baseState);
+            if (baseVariant == nullptr || baseVariant->model == nullptr) {
+                throw std::runtime_error("Face-oriented model state is missing a base south-facing variant: " +
+                                         stateToString(stateId));
+            }
+            variant = *baseVariant;
+        }
+
+        const std::optional<ModelTransform> transform = makeFaceOrientedModelTransform(face, facing);
+        if (!transform.has_value()) {
+            continue;
+        }
+        variant.transform = *transform;
     }
 }
 

@@ -27,6 +27,7 @@ uint16_t DELAY = INVALID;
 uint16_t MODE = INVALID;
 uint16_t LOCKED = INVALID;
 uint16_t HINGE = INVALID;
+uint16_t FACE = INVALID;
 
 uint16_t FACING_FLOOR = INVALID;
 uint16_t FACING_CEILING = INVALID;
@@ -36,6 +37,13 @@ uint16_t FACING_EAST = INVALID;
 uint16_t FACING_WEST = INVALID;
 uint16_t FACING_UP = INVALID;
 uint16_t FACING_DOWN = INVALID;
+
+uint16_t FACE_FLOOR = INVALID;
+uint16_t FACE_CEILING = INVALID;
+uint16_t FACE_NORTH = INVALID;
+uint16_t FACE_SOUTH = INVALID;
+uint16_t FACE_EAST = INVALID;
+uint16_t FACE_WEST = INVALID;
 
 uint16_t AXIS_X = INVALID;
 uint16_t AXIS_Y = INVALID;
@@ -159,6 +167,7 @@ void init() {
     MODE = lookupName("mode");
     LOCKED = lookupName("locked");
     HINGE = lookupName("hinge");
+    FACE = lookupName("face");
 
     FACING_FLOOR = lookupValue(FACING, "floor");
     FACING_CEILING = lookupValue(FACING, "ceiling");
@@ -168,6 +177,13 @@ void init() {
     FACING_WEST = lookupValue(FACING, "west");
     FACING_UP = lookupValue(FACING, "up");
     FACING_DOWN = lookupValue(FACING, "down");
+
+    FACE_FLOOR = lookupValue(FACE, "floor");
+    FACE_CEILING = lookupValue(FACE, "ceiling");
+    FACE_NORTH = lookupValue(FACE, "north");
+    FACE_SOUTH = lookupValue(FACE, "south");
+    FACE_EAST = lookupValue(FACE, "east");
+    FACE_WEST = lookupValue(FACE, "west");
 
     AXIS_X = lookupValue(AXIS, "x");
     AXIS_Y = lookupValue(AXIS, "y");

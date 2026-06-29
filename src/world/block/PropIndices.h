@@ -30,6 +30,7 @@ extern uint16_t DELAY;
 extern uint16_t MODE;
 extern uint16_t LOCKED;
 extern uint16_t HINGE;
+extern uint16_t FACE;
 
 extern uint16_t FACING_FLOOR;
 extern uint16_t FACING_CEILING;
@@ -39,6 +40,13 @@ extern uint16_t FACING_EAST;
 extern uint16_t FACING_WEST;
 extern uint16_t FACING_UP;
 extern uint16_t FACING_DOWN;
+
+extern uint16_t FACE_FLOOR;
+extern uint16_t FACE_CEILING;
+extern uint16_t FACE_NORTH;
+extern uint16_t FACE_SOUTH;
+extern uint16_t FACE_EAST;
+extern uint16_t FACE_WEST;
 
 extern uint16_t AXIS_X;
 extern uint16_t AXIS_Y;

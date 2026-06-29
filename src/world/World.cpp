@@ -8,6 +8,7 @@
 #include <iterator>
 #include <stdexcept>
 #include "engine//platform/Time.h"
+#include "block/AttachmentFaceGeometry.h"
 #include "block/BlockSelection.h"
 #include "block/BlockStateRegistry.h"
 #include "block/PropIndices.h"
@@ -111,6 +112,19 @@ bool isRedstoneTorchRuntimeState(const BlockStateId stateId) {
     return BlockRegistry::getFast(blockId).redstoneBehavior == "torch";
 }
 
+bool isFaceOrientedLogicUnitDef(const BlockDef& def) {
+    return def.redstoneBehavior == "repeater" ||
+           def.redstoneBehavior == "comparator";
+}
+
+bool faceOrientedLogicUnitMatchesWireFacing(const BlockStateId stateId, const uint16_t wireFacing) {
+    const uint16_t face = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACE);
+    if (face == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error("Face-oriented redstone logic unit is missing the face property");
+    }
+    return AttachmentFaceGeometry::facingValueForFace(face) == wireFacing;
+}
+
 bool isMatchingRedstoneWireState(const BlockStateId stateId, const uint16_t wireChannelId) {
     if (!isRedstoneWireState(stateId)) {
         return false;
@@ -193,9 +207,10 @@ bool canRedstoneWireAttachToAt(const World& world,
         return true;
     }
 
-    return def.redstoneBehavior == "repeater" ||
-           def.redstoneBehavior == "comparator" ||
-           def.redstoneBehavior == "observer";
+    if (isFaceOrientedLogicUnitDef(def)) {
+        return faceOrientedLogicUnitMatchesWireFacing(stateId, wireFacing);
+    }
+    return def.redstoneBehavior == "observer";
 }
 
 bool canPlanarRedstoneWireAttachTo(const BlockStateId stateId,
@@ -218,9 +233,10 @@ bool canPlanarRedstoneWireAttachTo(const BlockStateId stateId,
         return true;
     }
 
-    return def.redstoneBehavior == "repeater" ||
-           def.redstoneBehavior == "comparator" ||
-           def.redstoneBehavior == "observer";
+    if (isFaceOrientedLogicUnitDef(def)) {
+        return faceOrientedLogicUnitMatchesWireFacing(stateId, wireFacing);
+    }
+    return def.redstoneBehavior == "observer";
 }
 
 uint16_t redstoneWirePlanarConnectionValue(const BlockStateId neighborState,

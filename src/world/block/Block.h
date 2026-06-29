@@ -241,6 +241,7 @@ struct BlockDef {
     uint8_t renderShapeTag = 0;
     uint8_t materialKind = 0;
     uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT;
+    bool faceOrientedModel = false;
     std::string placementStrategy = "simple";
     bool revertPlacementFacing = false;
     std::string supportRule;

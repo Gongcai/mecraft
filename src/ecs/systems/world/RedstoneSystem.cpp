@@ -10,6 +10,7 @@
 #include "../../../item/Item.h"
 #include "../../../ui/inventory/ContainerUiRegistry.h"
 #include "../../../world/World.h"
+#include "../../../world/block/AttachmentFaceGeometry.h"
 #include "../../../world/block/Block.h"
 #include "../../../world/block/BlockCollision.h"
 #include "../../../world/block/DoorBlock.h"
@@ -136,6 +137,7 @@ struct RedstoneSource {
     uint8_t power = 0;
     glm::ivec3 outputDirection{};
     bool directional = false;
+    uint16_t targetWireFacing = PropIndices::INVALID;
 };
 
 struct RedstoneWorkSet {
@@ -811,22 +813,6 @@ uint64_t repeaterDelayTicks(const BlockStateId stateId) {
     throw std::runtime_error("Repeater state contains an unknown delay value");
 }
 
-glm::ivec3 horizontalDirectionFromFacing(const uint16_t facing) {
-    if (facing == PropIndices::FACING_EAST) {
-        return {1, 0, 0};
-    }
-    if (facing == PropIndices::FACING_WEST) {
-        return {-1, 0, 0};
-    }
-    if (facing == PropIndices::FACING_SOUTH) {
-        return {0, 0, 1};
-    }
-    if (facing == PropIndices::FACING_NORTH) {
-        return {0, 0, -1};
-    }
-    throw std::runtime_error("Horizontal redstone device state contains a non-horizontal facing value");
-}
-
 glm::ivec3 directionFromFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_EAST) {
         return {1, 0, 0};
@@ -849,28 +835,61 @@ glm::ivec3 directionFromFacing(const uint16_t facing) {
     throw std::runtime_error("Observer state contains an unknown facing value");
 }
 
+uint16_t logicUnitAttachmentFace(const BlockStateId stateId, const char* deviceName) {
+    const uint16_t face = getRequiredProperty(stateId, PropIndices::FACE, "face");
+    if (!AttachmentFaceGeometry::isAttachmentFace(face)) {
+        throw std::runtime_error(std::string(deviceName) + " state contains an unsupported face value");
+    }
+    return face;
+}
+
+glm::ivec3 logicUnitOutputDirection(const BlockStateId stateId, const char* deviceName) {
+    const uint16_t face = logicUnitAttachmentFace(stateId, deviceName);
+    const uint16_t facing = getRequiredProperty(stateId, PropIndices::FACING, "facing");
+    const glm::ivec3 outputDirection = AttachmentFaceGeometry::directionFromFacing(facing);
+    if (!AttachmentFaceGeometry::isDirectionInPlane(face, outputDirection)) {
+        throw std::runtime_error(std::string(deviceName) + " output direction must lie on its attached face");
+    }
+    return outputDirection;
+}
+
+glm::ivec3 crossDirection(const glm::ivec3& lhs, const glm::ivec3& rhs) {
+    return {
+        lhs.y * rhs.z - lhs.z * rhs.y,
+        lhs.z * rhs.x - lhs.x * rhs.z,
+        lhs.x * rhs.y - lhs.y * rhs.x,
+    };
+}
+
+std::array<glm::ivec3, 2> logicUnitSideDirections(const BlockStateId stateId, const char* deviceName) {
+    const uint16_t face = logicUnitAttachmentFace(stateId, deviceName);
+    const glm::ivec3 normal = AttachmentFaceGeometry::surfaceNormal(face);
+    const glm::ivec3 outputDirection = logicUnitOutputDirection(stateId, deviceName);
+    const glm::ivec3 sideDirection = crossDirection(normal, outputDirection);
+    if (sideDirection == glm::ivec3(0)) {
+        throw std::runtime_error(std::string(deviceName) + " side direction requires perpendicular face and output");
+    }
+    return {sideDirection, -sideDirection};
+}
+
+uint16_t logicUnitWireFacing(const BlockStateId stateId, const char* deviceName) {
+    return AttachmentFaceGeometry::facingValueForFace(logicUnitAttachmentFace(stateId, deviceName));
+}
+
 glm::ivec3 repeaterOutputDirection(const BlockStateId stateId) {
-    return horizontalDirectionFromFacing(getRequiredProperty(stateId, PropIndices::FACING, "facing"));
+    return logicUnitOutputDirection(stateId, "Repeater");
 }
 
 std::array<glm::ivec3, 2> repeaterSideDirections(const BlockStateId stateId) {
-    const glm::ivec3 outputDirection = repeaterOutputDirection(stateId);
-    if (outputDirection.x != 0) {
-        return {glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1)};
-    }
-    return {glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0)};
+    return logicUnitSideDirections(stateId, "Repeater");
 }
 
 glm::ivec3 comparatorOutputDirection(const BlockStateId stateId) {
-    return horizontalDirectionFromFacing(getRequiredProperty(stateId, PropIndices::FACING, "facing"));
+    return logicUnitOutputDirection(stateId, "Comparator");
 }
 
 std::array<glm::ivec3, 2> comparatorSideDirections(const BlockStateId stateId) {
-    const glm::ivec3 outputDirection = comparatorOutputDirection(stateId);
-    if (outputDirection.x != 0) {
-        return {glm::ivec3(0, 0, 1), glm::ivec3(0, 0, -1)};
-    }
-    return {glm::ivec3(1, 0, 0), glm::ivec3(-1, 0, 0)};
+    return logicUnitSideDirections(stateId, "Comparator");
 }
 
 bool comparatorUsesSubtractMode(const BlockStateId stateId) {
@@ -1919,7 +1938,13 @@ std::vector<RedstoneSource> collectPoweredRepeaterSources(const World& world,
         if (!isRepeaterState(stateId) || !isPoweredPropertyTrue(stateId)) {
             continue;
         }
-        sources.push_back({position, kMaxRedstonePower, repeaterOutputDirection(stateId), true});
+        sources.push_back({
+            position,
+            kMaxRedstonePower,
+            repeaterOutputDirection(stateId),
+            true,
+            logicUnitWireFacing(stateId, "Repeater")
+        });
     }
     return sources;
 }
@@ -1948,7 +1973,13 @@ std::vector<RedstoneSource> collectPoweredComparatorStateSources(
         if (!isComparatorState(stateId) || !isPoweredPropertyTrue(stateId)) {
             continue;
         }
-        sources.push_back({position, kMaxRedstonePower, comparatorOutputDirection(stateId), true});
+        sources.push_back({
+            position,
+            kMaxRedstonePower,
+            comparatorOutputDirection(stateId),
+            true,
+            logicUnitWireFacing(stateId, "Comparator")
+        });
     }
     return sources;
 }
@@ -1972,7 +2003,8 @@ std::vector<RedstoneSource> collectComparatorSources(const World& world,
             evaluation.position,
             evaluation.outputPower,
             comparatorOutputDirection(stateId),
-            true
+            true,
+            logicUnitWireFacing(stateId, "Comparator")
         });
     }
     return sources;
@@ -2001,12 +2033,16 @@ void setBestWirePower(WirePowerMap& wirePowers,
 }
 
 void seedTrackedWirePower(WirePowerMap& wirePowers,
-                          std::priority_queue<PowerNode>& frontier,
-                          const WireNodeSet& wires,
-                          const glm::ivec3& position,
-                          const uint8_t power) {
+                           std::priority_queue<PowerNode>& frontier,
+                           const WireNodeSet& wires,
+                           const glm::ivec3& position,
+                           const uint8_t power,
+                           const uint16_t targetWireFacing = PropIndices::INVALID) {
     for (const WireNode& wire : wires) {
         if (wire.position == position) {
+            if (targetWireFacing != PropIndices::INVALID && wire.facing != targetWireFacing) {
+                continue;
+            }
             setBestWirePower(wirePowers, frontier, wire, power);
         }
     }
@@ -2036,9 +2072,9 @@ void seedSourcePowerToward(const World& world,
                            WirePowerMap& wirePowers,
                            std::priority_queue<PowerNode>& frontier,
                            const WireNodeSet& wires,
-                           const RedstoneSource& source,
-                           const glm::ivec3& target) {
-    seedTrackedWirePower(wirePowers, frontier, wires, target, source.power);
+    const RedstoneSource& source,
+    const glm::ivec3& target) {
+    seedTrackedWirePower(wirePowers, frontier, wires, target, source.power, source.targetWireFacing);
     const BlockStateId sourceState = world.getBlockState(source.position.x, source.position.y, source.position.z);
     const bool stronglyPowersTarget =
         source.directional ||
@@ -2155,6 +2191,25 @@ uint8_t wirePowerAtPosition(const World& world,
     return power;
 }
 
+uint8_t wirePowerAtPositionForFacing(const World& world,
+                                     const WirePowerMap& wirePowers,
+                                     const glm::ivec3& position,
+                                     const uint16_t wireFacing) {
+    uint8_t power = 0;
+    forEachWireNodeAt(world, position, [&](const WireNode& wire) {
+        if (wire.facing != wireFacing) {
+            return;
+        }
+        const auto computedIt = wirePowers.find(wire);
+        if (computedIt != wirePowers.end()) {
+            power = std::max(power, computedIt->second);
+            return;
+        }
+        power = std::max(power, wirePowers.wasEvaluated(wire) ? uint8_t{0} : storedWireNodePower(world, wire));
+    });
+    return power;
+}
+
 uint8_t sourceOutputPowerToward(const World& world,
                                 const glm::ivec3& sourcePosition,
                                 const glm::ivec3& targetPosition) {
@@ -2196,6 +2251,18 @@ uint8_t directSignalPowerToward(const World& world,
     const BlockStateId signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
     if (isWireState(signalState) || isWireContainerState(signalState)) {
         return wirePowerAtPosition(world, wirePowers, signalPosition);
+    }
+    return sourceOutputPowerToward(world, signalPosition, targetPosition);
+}
+
+uint8_t directSignalPowerTowardWireFacing(const World& world,
+                                          const WirePowerMap& wirePowers,
+                                          const glm::ivec3& signalPosition,
+                                          const glm::ivec3& targetPosition,
+                                          const uint16_t targetWireFacing) {
+    const BlockStateId signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
+    if (isWireState(signalState) || isWireContainerState(signalState)) {
+        return wirePowerAtPositionForFacing(world, wirePowers, signalPosition, targetWireFacing);
     }
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
 }
@@ -2428,7 +2495,13 @@ uint8_t repeaterInputPower(const World& world,
                            const glm::ivec3& repeaterPosition,
                            const BlockStateId repeaterState) {
     const glm::ivec3 inputPosition = repeaterPosition - repeaterOutputDirection(repeaterState);
-    uint8_t inputPower = directSignalPowerToward(world, wirePowers, inputPosition, repeaterPosition);
+    const uint16_t targetWireFacing = logicUnitWireFacing(repeaterState, "Repeater");
+    uint8_t inputPower = directSignalPowerTowardWireFacing(
+        world,
+        wirePowers,
+        inputPosition,
+        repeaterPosition,
+        targetWireFacing);
     if (isConductiveBlockAt(world, inputPosition)) {
         inputPower = std::max(
             inputPower,
@@ -2442,6 +2515,25 @@ uint8_t signalPowerFromNeighbor(const World& world,
                                 const glm::ivec3& signalPosition,
                                 const glm::ivec3& targetPosition) {
     uint8_t signalPower = directSignalPowerToward(world, wirePowers, signalPosition, targetPosition);
+    if (isConductiveBlockAt(world, signalPosition)) {
+        signalPower = std::max(
+            signalPower,
+            conductedSignalPowerToward(world, wirePowers, signalPosition, targetPosition));
+    }
+    return signalPower;
+}
+
+uint8_t signalPowerFromNeighborTowardWireFacing(const World& world,
+                                                const WirePowerMap& wirePowers,
+                                                const glm::ivec3& signalPosition,
+                                                const glm::ivec3& targetPosition,
+                                                const uint16_t targetWireFacing) {
+    uint8_t signalPower = directSignalPowerTowardWireFacing(
+        world,
+        wirePowers,
+        signalPosition,
+        targetPosition,
+        targetWireFacing);
     if (isConductiveBlockAt(world, signalPosition)) {
         signalPower = std::max(
             signalPower,
@@ -2472,25 +2564,28 @@ uint8_t comparatorOutputPower(const World& world,
                               const glm::ivec3& comparatorPosition,
                               const BlockStateId comparatorState) {
     const glm::ivec3 outputDirection = comparatorOutputDirection(comparatorState);
+    const uint16_t targetWireFacing = logicUnitWireFacing(comparatorState, "Comparator");
     const glm::ivec3 rearInputPosition = comparatorPosition - outputDirection;
     const uint8_t containerPower = containerSignalPowerAt(world, registry, rearInputPosition);
     const uint8_t rearPower = containerPower > 0
         ? containerPower
-        : signalPowerFromNeighbor(
+        : signalPowerFromNeighborTowardWireFacing(
             world,
             inputWirePowers,
             rearInputPosition,
-            comparatorPosition);
+            comparatorPosition,
+            targetWireFacing);
 
     uint8_t sidePower = 0;
     for (const glm::ivec3& sideDirection : comparatorSideDirections(comparatorState)) {
         sidePower = std::max(
             sidePower,
-            signalPowerFromNeighbor(
+            signalPowerFromNeighborTowardWireFacing(
                 world,
                 inputWirePowers,
                 comparatorPosition + sideDirection,
-                comparatorPosition));
+                comparatorPosition,
+                targetWireFacing));
     }
 
     if (comparatorUsesSubtractMode(comparatorState)) {

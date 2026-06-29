@@ -1,5 +1,6 @@
 #include "Placement.h"
 
+#include "AttachmentFaceGeometry.h"
 #include "BedBlock.h"
 #include "BlockCollision.h"
 #include "DoorBlock.h"
@@ -83,6 +84,25 @@ void requireRedstoneWireFacePlacementProperties() {
     }
 }
 
+void requireRedstoneLogicUnitFacePlacementProperties() {
+    if (PropIndices::FACE == PropIndices::INVALID ||
+        PropIndices::FACE_FLOOR == PropIndices::INVALID ||
+        PropIndices::FACE_CEILING == PropIndices::INVALID ||
+        PropIndices::FACE_NORTH == PropIndices::INVALID ||
+        PropIndices::FACE_SOUTH == PropIndices::INVALID ||
+        PropIndices::FACE_EAST == PropIndices::INVALID ||
+        PropIndices::FACE_WEST == PropIndices::INVALID ||
+        PropIndices::FACING == PropIndices::INVALID ||
+        PropIndices::FACING_NORTH == PropIndices::INVALID ||
+        PropIndices::FACING_SOUTH == PropIndices::INVALID ||
+        PropIndices::FACING_EAST == PropIndices::INVALID ||
+        PropIndices::FACING_WEST == PropIndices::INVALID ||
+        PropIndices::FACING_UP == PropIndices::INVALID ||
+        PropIndices::FACING_DOWN == PropIndices::INVALID) {
+        throw std::runtime_error("Redstone logic unit placement requires face values and six-way facing values");
+    }
+}
+
 void requireSixWayFacingPlacementProperties() {
     if (PropIndices::FACING == PropIndices::INVALID ||
         PropIndices::FACING_NORTH == PropIndices::INVALID ||
@@ -120,6 +140,16 @@ uint16_t facePlaneFacingFromWallNormal(const glm::ivec3& normal) {
         return PropIndices::FACING_EAST;
     }
     throw std::runtime_error("Wall face plane placement requires a horizontal hit normal");
+}
+
+uint16_t attachmentFaceFromHitNormal(const glm::ivec3& normal) {
+    if (normal.y > 0) {
+        return PropIndices::FACE_FLOOR;
+    }
+    if (normal.y < 0) {
+        return PropIndices::FACE_CEILING;
+    }
+    return AttachmentFaceGeometry::faceFromSurfaceNormal(normal);
 }
 
 uint16_t horizontalFacingFromYaw(const float playerYaw) {
@@ -173,6 +203,41 @@ uint16_t applyPlacementFacingRevert(const BlockID blockId, const uint16_t facing
     return BlockRegistry::get(blockId).revertPlacementFacing
         ? oppositeHorizontalFacing(facing)
         : facing;
+}
+
+uint16_t planeFacingFromPlacement(const PlacementContext& ctx, const uint16_t face) {
+    if (face == PropIndices::FACE_FLOOR || face == PropIndices::FACE_CEILING) {
+        return horizontalFacingFromYaw(ctx.playerYaw);
+    }
+
+    const float localY = ctx.hitPosition.y - std::floor(ctx.hitPosition.y);
+    const float verticalOffset = localY - 0.5f;
+    const uint16_t verticalFacing = verticalOffset >= 0.0f
+        ? PropIndices::FACING_UP
+        : PropIndices::FACING_DOWN;
+
+    if (face == PropIndices::FACE_NORTH || face == PropIndices::FACE_SOUTH) {
+        const float localX = ctx.hitPosition.x - std::floor(ctx.hitPosition.x);
+        const float horizontalOffset = localX - 0.5f;
+        const uint16_t yawFacing = horizontalOffset >= 0.0f
+            ? PropIndices::FACING_EAST
+            : PropIndices::FACING_WEST;
+        return std::abs(verticalOffset) > std::abs(horizontalOffset)
+            ? verticalFacing
+            : yawFacing;
+    }
+    if (face == PropIndices::FACE_EAST || face == PropIndices::FACE_WEST) {
+        const float localZ = ctx.hitPosition.z - std::floor(ctx.hitPosition.z);
+        const float horizontalOffset = localZ - 0.5f;
+        const uint16_t yawFacing = horizontalOffset >= 0.0f
+            ? PropIndices::FACING_SOUTH
+            : PropIndices::FACING_NORTH;
+        return std::abs(verticalOffset) > std::abs(horizontalOffset)
+            ? verticalFacing
+            : yawFacing;
+    }
+
+    throw std::runtime_error("Redstone logic unit placement produced a facing outside the attachment plane");
 }
 
 uint16_t stairFacingFromSideNormal(const BlockID blockId, const glm::ivec3& normal) {
@@ -475,6 +540,19 @@ BlockStateId strategyRedstoneWireFace(const PlacementContext& ctx) {
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, facing);
 }
 
+BlockStateId strategyRedstoneLogicUnitFace(const PlacementContext& ctx) {
+    requireRedstoneLogicUnitFacePlacementProperties();
+    const uint16_t face = attachmentFaceFromHitNormal(ctx.hitNormal);
+    const uint16_t facing = planeFacingFromPlacement(ctx, face);
+
+    return BlockStateRegistry::getState(
+        ctx.blockId,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACE, face},
+            {PropIndices::FACING, facing},
+        });
+}
+
 } // namespace
 
 bool tryMergePlacementStates(const BlockStateId existingState,
@@ -547,4 +625,5 @@ void PlacementStrategyRegistry::initBuiltinStrategies() {
     registerStrategy("face_plane_wall", strategyFacePlaneWall);
     registerStrategy("face_plane_floor", strategyFacePlaneFloor);
     registerStrategy("redstone_wire_face", strategyRedstoneWireFace);
+    registerStrategy("redstone_logic_unit_face", strategyRedstoneLogicUnitFace);
 }
