@@ -119,6 +119,16 @@ inline bool isCornerNeighbor(const glm::ivec3& positionA,
            supportPosition(positionA, facingA) == supportPosition(positionB, facingB);
 }
 
+/// Returns the cell whose solid contents block an outer-corner connection.
+inline glm::ivec3 outerCornerBlockingPosition(const glm::ivec3& support,
+                                              const uint16_t facingA,
+                                              const uint16_t facingB) {
+    if (!arePerpendicularFacings(facingA, facingB)) {
+        throw std::runtime_error("Outer-corner blocking position requires perpendicular facings");
+    }
+    return support + surfaceNormal(facingA) + surfaceNormal(facingB);
+}
+
 /// Maps the north/south/east/west visual properties to world offsets for a wire face.
 inline std::array<ConnectionDirection, 4> connectionDirections(const uint16_t facing) {
     if (facing == PropIndices::FACING_FLOOR ||

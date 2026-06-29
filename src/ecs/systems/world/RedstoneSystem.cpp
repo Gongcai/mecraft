@@ -327,6 +327,25 @@ bool wireNodeExists(const World& world, const WireNode& node) {
     return false;
 }
 
+bool isSolidBlockState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isSolid;
+}
+
+bool isOuterCornerWireConnectionBlocked(const World& world,
+                                        const glm::ivec3& support,
+                                        const uint16_t wireFacing,
+                                        const uint16_t neighborFacing) {
+    const glm::ivec3 blocker = WireFaceGeometry::outerCornerBlockingPosition(
+        support,
+        wireFacing,
+        neighborFacing);
+    return isSolidBlockState(world.getBlockState(blocker.x, blocker.y, blocker.z));
+}
+
 template <typename Fn>
 void forEachOuterCornerWireNeighbor(const World& world,
                                     const WireNode& wire,
@@ -334,6 +353,9 @@ void forEachOuterCornerWireNeighbor(const World& world,
     const glm::ivec3 support = WireFaceGeometry::supportPosition(wire.position, wire.facing);
     for (const uint16_t neighborFacing : WireFaceGeometry::wireFacings()) {
         if (!WireFaceGeometry::arePerpendicularFacings(wire.facing, neighborFacing)) {
+            continue;
+        }
+        if (isOuterCornerWireConnectionBlocked(world, support, wire.facing, neighborFacing)) {
             continue;
         }
 

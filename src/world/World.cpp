@@ -46,6 +46,22 @@ void forEachWireOuterCornerPeerPosition(const glm::ivec3& position, Fn&& fn) {
 }
 
 template <typename Fn>
+void forEachWireOuterCornerPositionBlockedBy(const glm::ivec3& blocker, Fn&& fn) {
+    for (const uint16_t facingA : WireFaceGeometry::wireFacings()) {
+        for (const uint16_t facingB : WireFaceGeometry::wireFacings()) {
+            if (facingA >= facingB || !WireFaceGeometry::arePerpendicularFacings(facingA, facingB)) {
+                continue;
+            }
+
+            const glm::ivec3 support =
+                blocker - WireFaceGeometry::surfaceNormal(facingA) - WireFaceGeometry::surfaceNormal(facingB);
+            fn(WireFaceGeometry::wirePositionOnSupportFace(support, facingA));
+            fn(WireFaceGeometry::wirePositionOnSupportFace(support, facingB));
+        }
+    }
+}
+
+template <typename Fn>
 void forEachWirePositionOnSupport(const glm::ivec3& support, Fn&& fn) {
     for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
         fn(WireFaceGeometry::wirePositionOnSupportFace(support, facing));
@@ -94,6 +110,14 @@ bool isWireContainerState(const BlockStateId stateId) {
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     return BlockRegistry::getFast(blockId).isWireContainer;
+}
+
+bool isSolidBlockState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE || FluidState::decode(stateId).kind != FluidKind::None) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isSolid;
 }
 
 bool isRedstoneWireState(const BlockStateId stateId) {
@@ -272,6 +296,11 @@ bool hasOuterCornerRedstoneWireConnection(const World& world,
     }
 
     const glm::ivec3 support = WireFaceGeometry::supportPosition(pos, wireFacing);
+    const glm::ivec3 blocker = WireFaceGeometry::outerCornerBlockingPosition(support, wireFacing, peerFacing);
+    if (isSolidBlockState(world.getBlockState(blocker.x, blocker.y, blocker.z))) {
+        return false;
+    }
+
     const glm::ivec3 peerPosition = WireFaceGeometry::wirePositionOnSupportFace(support, peerFacing);
     return hasMatchingRedstoneWireAt(world, peerPosition, wireChannelId, peerFacing);
 }
@@ -1031,6 +1060,9 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
     forEachWireOuterCornerPeerPosition(glm::ivec3(x, y, z), [this](const glm::ivec3& peer) {
         m_redstoneUpdateQueue.enqueue(peer);
     });
+    forEachWireOuterCornerPositionBlockedBy(glm::ivec3(x, y, z), [this](const glm::ivec3& wirePosition) {
+        m_redstoneUpdateQueue.enqueue(wirePosition);
+    });
     // Notify block change callback (used by GameServer for BlockUpdateBatch)
     if (m_blockChangeCallback) {
         m_blockChangeCallback(x, y, z, targetState);
@@ -1341,6 +1373,9 @@ void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
     });
     forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) {
         refreshConnectedBlockAt(peer);
+    });
+    forEachWireOuterCornerPositionBlockedBy(pos, [this](const glm::ivec3& wirePosition) {
+        refreshConnectedBlockAt(wirePosition);
     });
 }
 
