@@ -67,6 +67,10 @@ int64_t blockUpdateChunkKey(const net::BlockUpdateEntry& update) {
     return World::chunkKey(blockToChunkCoord(update.x), blockToChunkCoord(update.z));
 }
 
+int64_t blockPositionChunkKey(const glm::ivec3& position) {
+    return World::chunkKey(blockToChunkCoord(position.x), blockToChunkCoord(position.z));
+}
+
 float distanceSquared(const glm::vec3& a, const glm::vec3& b) {
     const glm::vec3 delta = a - b;
     return delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
@@ -768,6 +772,10 @@ void GameServer::init(uint32_t seed, ThreadPool* threadPool, int renderDistance)
         m_pendingBlockUpdates.push_back(makeBlockOnlyUpdateEntry(x, y, z, newStateId));
     });
 
+    m_world.setWireContainerChangeCallback([this](const glm::ivec3& position) {
+        m_pendingWireContainerUpdates.push_back(position);
+    });
+
     m_world.setLightChangeCallback([this](int64_t chunkKey, uint32_t dirtySubChunkMask) {
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
             if ((dirtySubChunkMask & (1u << scy)) == 0u) {
@@ -978,6 +986,7 @@ void GameServer::tick(float dt) {
 
     // Send pending block updates to clients
     sendBlockUpdatesToClients();
+    sendWireContainerUpdatesToClients();
 
     // Check if spawn chunks are ready
     if (!m_spawnChunksReady) {
@@ -998,6 +1007,7 @@ void GameServer::tickInitialLoading(const float dt, const glm::vec3& loadCenter)
     sendInventorySnapshotsToClients();
     sendContainerSnapshotsToClients();
     sendBlockUpdatesToClients();
+    sendWireContainerUpdatesToClients();
 
     if (!m_spawnChunksReady) {
         checkSpawnChunksReady();
@@ -2462,6 +2472,85 @@ void GameServer::sendBlockUpdatesToClients() {
     m_pendingBlockUpdates.clear();
 }
 
+void GameServer::sendWireContainerUpdatesToClients() {
+    if (m_pendingWireContainerUpdates.empty()) {
+        return;
+    }
+
+    std::vector<glm::ivec3> uniquePositions;
+    uniquePositions.reserve(m_pendingWireContainerUpdates.size());
+    for (const glm::ivec3& position : m_pendingWireContainerUpdates) {
+        if (std::find(uniquePositions.begin(), uniquePositions.end(), position) == uniquePositions.end()) {
+            uniquePositions.push_back(position);
+        }
+    }
+
+    for (const glm::ivec3& position : uniquePositions) {
+        const BlockStateId stateId = m_world.getBlockState(position.x, position.y, position.z);
+        if (stateId == NULL_BLOCK_STATE) {
+            continue;
+        }
+        const BlockDef& blockDef = BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId));
+        if (!blockDef.isWireContainer) {
+            continue;
+        }
+
+        const WireContainerParts* parts = m_world.wireContainerParts().find(position);
+        if (parts == nullptr || parts->empty()) {
+            throw std::runtime_error("Server wire container state has no stored wire parts");
+        }
+
+        net::WireContainerUpdateMessage message;
+        message.position = position;
+        message.parts = *parts;
+
+        for (auto& client : m_clients) {
+            if (!client.receivedHello || !client.transport || !client.transport->hasActiveRemote()) {
+                continue;
+            }
+            if (client.sentChunks.find(blockPositionChunkKey(position)) == client.sentChunks.end()) {
+                continue;
+            }
+
+            net::Packet packet;
+            packet.channel = net::PacketChannel::ReliableWorld;
+            packet.type = net::MessageType::WireContainerUpdate;
+            packet.inProcessPayload = message;
+            client.transport->send(std::move(packet));
+        }
+    }
+
+    m_pendingWireContainerUpdates.clear();
+}
+
+void GameServer::sendWireContainersInChunkToClient(ConnectedClient& client, const int cx, const int cz) {
+    const int64_t targetChunkKey = World::chunkKey(cx, cz);
+    m_world.wireContainerParts().forEach([&](const glm::ivec3& position, const WireContainerParts& parts) {
+        if (blockPositionChunkKey(position) != targetChunkKey) {
+            return;
+        }
+        if (parts.empty()) {
+            throw std::runtime_error("Server wire container store contains an empty part set");
+        }
+
+        const BlockStateId stateId = m_world.getBlockState(position.x, position.y, position.z);
+        if (stateId == NULL_BLOCK_STATE ||
+            !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
+            throw std::runtime_error("Server wire container store points at a non-container block");
+        }
+
+        net::WireContainerUpdateMessage message;
+        message.position = position;
+        message.parts = parts;
+
+        net::Packet packet;
+        packet.channel = net::PacketChannel::ReliableWorld;
+        packet.type = net::MessageType::WireContainerUpdate;
+        packet.inProcessPayload = std::move(message);
+        client.transport->send(std::move(packet));
+    });
+}
+
 net::BlockUpdateEntry GameServer::makeBlockOnlyUpdateEntry(const int x, const int y, const int z, const BlockStateId stateId) const {
     net::BlockUpdateEntry entry;
     entry.x = x;
@@ -3272,6 +3361,7 @@ void GameServer::sendChunkDataToClient(ConnectedClient& client, int cx, int cz) 
     data.chunk = it->second;  // Zero-copy: share the Chunk pointer
     packet.inProcessPayload = std::move(data);
     client.transport->send(std::move(packet));
+    sendWireContainersInChunkToClient(client, cx, cz);
 
     ++client.totalChunksSent;
     if (client.chunkSendLogCount < 12 || client.totalChunksSent % 25 == 0) {

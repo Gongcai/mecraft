@@ -76,6 +76,14 @@ public:
     [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const override;
     [[nodiscard]] ChunkLoadProgress getChunkLoadProgress(const glm::vec3& center) const;
     [[nodiscard]] const World* asWorld() const override { return this; }
+    [[nodiscard]] bool copyWireContainerParts(const glm::ivec3& position, WireContainerParts& out) const override {
+        const WireContainerParts* parts = m_wireContainerParts.find(position);
+        if (parts == nullptr) {
+            return false;
+        }
+        out = *parts;
+        return true;
+    }
     [[nodiscard]] static const char* biomeToString(TerrainBiome biome);
 
     static int64_t chunkKey(int cx, int cz);
@@ -114,6 +122,10 @@ public:
     /// Used by GameServer to collect dirty blocks for BlockUpdateBatch messages.
     using BlockChangeCallback = std::function<void(int x, int y, int z, BlockStateId newStateId)>;
     void setBlockChangeCallback(BlockChangeCallback callback) { m_blockChangeCallback = std::move(callback); }
+    using WireContainerChangeCallback = std::function<void(const glm::ivec3& pos)>;
+    void setWireContainerChangeCallback(WireContainerChangeCallback callback) {
+        m_wireContainerChangeCallback = std::move(callback);
+    }
 
     // --- Save system integration ---
 
@@ -148,6 +160,7 @@ private:
     uint64_t m_lastProcessedRedstoneTick = 0;
     ThreadPool* m_threadPool = nullptr;
     BlockChangeCallback m_blockChangeCallback;
+    WireContainerChangeCallback m_wireContainerChangeCallback;
     LightChangeCallback m_lightChangeCallback;
     ChunkTicketManager m_ticketManager;
 

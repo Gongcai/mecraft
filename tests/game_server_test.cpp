@@ -690,6 +690,13 @@ static void testClientBlockActionAddsWireContainerPart() {
                 parts->size() == 2,
             "server should store both wire parts after the network placement action");
 
+    WireContainerParts clientParts;
+    require(client.clientWorld().copyWireContainerParts(placeBlock, clientParts) &&
+                clientParts.find(redChannel, PropIndices::FACING_FLOOR) != nullptr &&
+                clientParts.find(blueChannel, PropIndices::FACING_FLOOR) != nullptr &&
+                clientParts.size() == 2,
+            "client should receive both wire container parts after the network placement action");
+
     addWire.sequence = 2;
     client.sendBlockAction(addWire);
     harness.server.tick(1.0f / 20.0f);

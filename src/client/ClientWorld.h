@@ -5,6 +5,7 @@
 #include "../world/chunk/Chunk.h"
 #include "../world/DayNightSystem.h"
 #include "../world/WeatherSystem.h"
+#include "../world/redstone/WireContainerParts.h"
 #include <cstdint>
 #include <unordered_map>
 #include <memory>
@@ -41,6 +42,7 @@ public:
     [[nodiscard]] int getRenderDistance() const override;
     [[nodiscard]] glm::ivec2 getChunkCoords(int worldX, int worldZ) const override;
     [[nodiscard]] TerrainBiome getBiome(int x, int z) const override;
+    [[nodiscard]] bool copyWireContainerParts(const glm::ivec3& position, WireContainerParts& out) const override;
 
     // ClientWorld is not backed by a server World.
     [[nodiscard]] const World* asWorld() const override { return nullptr; }
@@ -62,6 +64,8 @@ public:
                           net::BlockUpdateKind kind,
                           BlockStateId stateId,
                           const std::vector<uint8_t>& packedLightPatch);
+    void applyWireContainerUpdate(const glm::ivec3& position, const WireContainerParts& parts);
+    void eraseWireContainerParts(const glm::ivec3& position);
 
     /// Set the render distance.
     void setRenderDistance(int distance);
@@ -90,6 +94,7 @@ private:
     uint64_t m_activeChunkRevision = 1;
     uint64_t m_blockContentRevision = 1;
     int m_renderDistance = 16;
+    WireContainerPartStore m_wireContainerParts;
 
     // Non-owning pointers to server systems (in-process mode only)
     DayNightSystem* m_dayNightSystem = nullptr;

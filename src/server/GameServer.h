@@ -149,6 +149,8 @@ private:
     void sendContainerSnapshotsToClients();
     void sendContainerClose(ConnectedClient& client);
     void sendChunkDataToClient(ConnectedClient& client, int cx, int cz);
+    void sendWireContainerUpdatesToClients();
+    void sendWireContainersInChunkToClient(ConnectedClient& client, int cx, int cz);
     void sendBlockUpdatesToClients();
     void syncEntitiesToClients();
     void ensureOwnedEcsRuntime();
@@ -184,6 +186,7 @@ private:
     std::unique_ptr<save::SaveManager> m_saveManager;
     std::vector<ConnectedClient> m_clients;
     std::vector<net::BlockUpdateEntry> m_pendingBlockUpdates;
+    std::vector<glm::ivec3> m_pendingWireContainerUpdates;
 
     // Entity sync state
     ecs::EntityNetId m_nextNetId = 1;

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <vector>
 #include <cstring>
+#include <exception>
 #include <utility>
 #include <array>
 
@@ -264,6 +265,21 @@ public:
             pushVarU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
             buf.insert(buf.end(), u.packedLightPatch.begin(), u.packedLightPatch.end());
         }
+        return buf;
+    }
+
+    static std::vector<uint8_t> encodeWireContainerUpdate(const WireContainerUpdateMessage& msg) {
+        std::vector<uint8_t> buf;
+        pushI32(buf, msg.position.x);
+        pushI32(buf, msg.position.y);
+        pushI32(buf, msg.position.z);
+        pushVarU32(buf, static_cast<uint32_t>(msg.parts.size()));
+        msg.parts.forEach([&](const WirePart& part) {
+            pushU16(buf, part.channelId);
+            pushU16(buf, part.facing);
+            pushU8(buf, part.power);
+            pushU8(buf, part.connections);
+        });
         return buf;
     }
 
@@ -695,6 +711,36 @@ public:
             offset += lightCount;
         }
         return offset == size;
+    }
+
+    static bool decodeWireContainerUpdate(const uint8_t* data, size_t size, WireContainerUpdateMessage& out) {
+        if (size < 12) return false;
+        size_t offset = 0;
+        out.position.x = readI32(data, offset);
+        out.position.y = readI32(data, offset);
+        out.position.z = readI32(data, offset);
+
+        uint32_t count = 0;
+        if (!readVarU32(data, size, offset, count)) return false;
+        if (count > WireContainerParts::MAX_PARTS) return false;
+
+        WireContainerParts parts;
+        for (uint32_t i = 0; i < count; ++i) {
+            if (offset + 6 > size) return false;
+            WirePart part;
+            part.channelId = readU16(data, offset);
+            part.facing = readU16(data, offset);
+            part.power = readU8(data, offset);
+            part.connections = readU8(data, offset);
+            try {
+                if (!parts.addPart(part)) return false;
+            } catch (const std::exception&) {
+                return false;
+            }
+        }
+        if (offset != size) return false;
+        out.parts = parts;
+        return true;
     }
 
     static bool decodeChunkUnload(const uint8_t* data, size_t size, ChunkUnloadMessage& out) {

@@ -9,6 +9,7 @@
 #include "block/Block.h"
 #include "block/BlockStateRegistry.h"
 #include "gen/TerrainGenerator.h"
+#include "redstone/WireContainerParts.h"
 
 class Chunk;
 class World;
@@ -53,6 +54,14 @@ public:
 
     /// Get the biome at the given world coordinates.
     [[nodiscard]] virtual TerrainBiome getBiome(int x, int z) const = 0;
+
+    /// Copy wire container parts at world coordinates when the view stores
+    /// part-level redstone data for a wire_container block.
+    [[nodiscard]] virtual bool copyWireContainerParts(const glm::ivec3& position, WireContainerParts& out) const {
+        static_cast<void>(position);
+        static_cast<void>(out);
+        return false;
+    }
 
     /// Downcast to concrete World if available. Returns nullptr for ClientWorld.
     /// This bridge allows renderer subsystems that still need concrete World access

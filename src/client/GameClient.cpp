@@ -239,6 +239,13 @@ void GameClient::receiveMessages() {
             }
             break;
         }
+        case net::MessageType::WireContainerUpdate: {
+            if (packet.inProcessPayload.has_value()) {
+                const auto& msg = std::any_cast<const net::WireContainerUpdateMessage&>(packet.inProcessPayload);
+                m_clientWorld.applyWireContainerUpdate(msg.position, msg.parts);
+            }
+            break;
+        }
         case net::MessageType::ServerSnapshot: {
             if (packet.inProcessPayload.has_value()) {
                 const auto& snapshot = std::any_cast<const net::ServerSnapshot&>(packet.inProcessPayload);

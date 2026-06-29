@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include "../world/block/BlockStateRegistry.h"
+#include "../world/redstone/WireContainerParts.h"
 
 class Chunk;
 
@@ -60,6 +61,7 @@ enum class MessageType : uint8_t {
     ChunkData,
     ChunkUnload,
     BlockUpdateBatch,
+    WireContainerUpdate,
     ServerSnapshot,
     EntitySpawn,
     EntityDespawn,
@@ -234,6 +236,11 @@ struct BlockUpdateEntry {
 
 struct BlockUpdateBatchMessage {
     std::vector<BlockUpdateEntry> updates;
+};
+
+struct WireContainerUpdateMessage {
+    glm::ivec3 position = glm::ivec3(0);
+    WireContainerParts parts;
 };
 
 /// Authoritative world state snapshot from the server.

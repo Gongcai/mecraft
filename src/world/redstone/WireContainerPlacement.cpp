@@ -229,6 +229,7 @@ ApplyResult apply(World& world,
         }
         world.wireContainerParts().getOrCreate(position) = parts;
         world.setBlockState(position.x, position.y, position.z, wireContainerDefaultState());
+        world.notifyWireContainerPartsChanged(position);
         return ApplyResult::Applied;
     }
 

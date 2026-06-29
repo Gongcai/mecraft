@@ -4,6 +4,7 @@
 #include "../world/fluid/FluidState.h"
 #include <cstddef>
 #include <cmath>
+#include <stdexcept>
 
 namespace client {
 namespace {
@@ -134,6 +135,16 @@ TerrainBiome ClientWorld::getBiome(int x, int z) const {
     return TerrainBiome::Temperate;
 }
 
+bool ClientWorld::copyWireContainerParts(const glm::ivec3& position, WireContainerParts& out) const {
+    std::lock_guard lock(m_chunksMutex);
+    const WireContainerParts* parts = m_wireContainerParts.find(position);
+    if (parts == nullptr) {
+        return false;
+    }
+    out = *parts;
+    return true;
+}
+
 void ClientWorld::addChunk(std::shared_ptr<Chunk> chunk) {
     if (!chunk) return;
     const int cx = chunk->m_chunkX;
@@ -229,6 +240,10 @@ void ClientWorld::applyBlockUpdate(const int x,
     Chunk& chunk = *it->second;
     if (kind == net::BlockUpdateKind::BlockState) {
         chunk.setBlock(lx, y, lz, stateId);
+        const BlockID blockId = stateId == NULL_BLOCK_STATE ? RUNTIME_ID_NULL : BlockStateRegistry::getBlockId(stateId);
+        if (blockId == RUNTIME_ID_NULL || !BlockRegistry::getFast(blockId).isWireContainer) {
+            m_wireContainerParts.erase(glm::ivec3(x, y, z));
+        }
         ++m_blockContentRevision;
         chunk.recalcHeightMap(lx, lz);
         if (lx == 0 && chunk.neighbors[1]) {
@@ -279,6 +294,40 @@ void ClientWorld::applyBlockUpdate(const int x,
             }
         }
     }
+}
+
+void ClientWorld::applyWireContainerUpdate(const glm::ivec3& position, const WireContainerParts& parts) {
+    if (position.y < 0 || position.y >= 256) {
+        return;
+    }
+
+    const int cx = static_cast<int>(std::floor(static_cast<float>(position.x) / 16.0f));
+    const int cz = static_cast<int>(std::floor(static_cast<float>(position.z) / 16.0f));
+    const int64_t key = chunkKey(cx, cz);
+
+    std::lock_guard lock(m_chunksMutex);
+    auto it = m_chunks.find(key);
+    if (it == m_chunks.end() || !it->second) {
+        return;
+    }
+
+    const int lx = position.x - cx * 16;
+    const int lz = position.z - cz * 16;
+    const BlockStateId stateId = it->second->getBlock(lx, position.y, lz);
+    if (stateId == NULL_BLOCK_STATE ||
+        !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
+        throw std::runtime_error("Client wire container update targeted a non-container block");
+    }
+
+    m_wireContainerParts.getOrCreate(position) = parts;
+    ++m_blockContentRevision;
+    it->second->markSubChunkDirty(Chunk::toSubChunkIndex(position.y));
+}
+
+void ClientWorld::eraseWireContainerParts(const glm::ivec3& position) {
+    std::lock_guard lock(m_chunksMutex);
+    m_wireContainerParts.erase(position);
+    ++m_blockContentRevision;
 }
 
 void ClientWorld::setRenderDistance(int distance) {

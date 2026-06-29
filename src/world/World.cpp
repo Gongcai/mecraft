@@ -1106,6 +1106,9 @@ void World::notifyWireContainerPartsChanged(const glm::ivec3& pos) {
     Chunk& chunk = *it->second;
 
     ++m_blockContentRevision;
+    if (m_wireContainerChangeCallback) {
+        m_wireContainerChangeCallback(pos);
+    }
     markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
     if (localX == 0) {
         auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));

@@ -3743,35 +3743,40 @@ const WireContainerParts* findWireContainerParts(const SubChunkMeshingSnapshot& 
     return nullptr;
 }
 
+bool isWireContainerMeshState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isWireContainer;
+}
+
 void captureWireContainerParts(const IWorldView* worldView, SubChunkMeshingSnapshot& snapshot) {
-    if (worldView == nullptr || worldView->asWorld() == nullptr) {
+    if (worldView == nullptr) {
         return;
     }
 
-    const World& world = *worldView->asWorld();
-    const int minX = snapshot.worldOffsetX;
-    const int maxX = snapshot.worldOffsetX + SubChunk::SIZE - 1;
-    const int minY = snapshot.yBase;
-    const int maxY = snapshot.yBase + SubChunk::SIZE - 1;
-    const int minZ = snapshot.worldOffsetZ;
-    const int maxZ = snapshot.worldOffsetZ + SubChunk::SIZE - 1;
+    for (int y = 0; y < SubChunk::SIZE; ++y) {
+        for (int z = 0; z < SubChunk::SIZE; ++z) {
+            for (int x = 0; x < SubChunk::SIZE; ++x) {
+                const BlockStateId stateId = snapshot.blocks[scToIndex(x, y, z)];
+                if (!isWireContainerMeshState(stateId)) {
+                    continue;
+                }
 
-    world.wireContainerParts().forEach([&](const glm::ivec3& position, const WireContainerParts& parts) {
-        if (position.x < minX || position.x > maxX ||
-            position.y < minY || position.y > maxY ||
-            position.z < minZ || position.z > maxZ ||
-            parts.empty()) {
-            return;
+                WireContainerParts parts;
+                const glm::ivec3 position(snapshot.worldOffsetX + x, snapshot.yBase + y, snapshot.worldOffsetZ + z);
+                if (!worldView->copyWireContainerParts(position, parts) || parts.empty()) {
+                    continue;
+                }
+
+                WireContainerMeshingEntry entry;
+                entry.localIndex = static_cast<uint16_t>(scToIndex(x, y, z));
+                entry.parts = parts;
+                snapshot.wireContainers.push_back(entry);
+            }
         }
-
-        WireContainerMeshingEntry entry;
-        const int localX = position.x - snapshot.worldOffsetX;
-        const int localY = position.y - snapshot.yBase;
-        const int localZ = position.z - snapshot.worldOffsetZ;
-        entry.localIndex = static_cast<uint16_t>(scToIndex(localX, localY, localZ));
-        entry.parts = parts;
-        snapshot.wireContainers.push_back(entry);
-    });
+    }
 }
 
 } // anonymous namespace

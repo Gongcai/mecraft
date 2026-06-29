@@ -36,6 +36,7 @@ const char* messageTypeName(MessageType type) {
     case MessageType::ContainerClose: return "ContainerClose";
     case MessageType::EntityImpact: return "EntityImpact";
     case MessageType::ChunkData: return "ChunkData";
+    case MessageType::WireContainerUpdate: return "WireContainerUpdate";
     case MessageType::ServerSnapshot: return "ServerSnapshot";
     case MessageType::ClientInput: return "ClientInput";
     default: return "Other";
@@ -300,6 +301,13 @@ void ENetTransport::poll() {
                 case MessageType::BlockUpdateBatch: {
                     BlockUpdateBatchMessage msg;
                     if (PacketCodec::decodeBlockUpdateBatch(packet.payload.data(), packet.payload.size(), msg)) {
+                        packet.inProcessPayload = std::move(msg);
+                    }
+                    break;
+                }
+                case MessageType::WireContainerUpdate: {
+                    WireContainerUpdateMessage msg;
+                    if (PacketCodec::decodeWireContainerUpdate(packet.payload.data(), packet.payload.size(), msg)) {
                         packet.inProcessPayload = std::move(msg);
                     }
                     break;
@@ -622,6 +630,10 @@ void ENetTransport::encodeTypedPayload(Packet& packet) {
     case MessageType::BlockUpdateBatch:
         typedPayload = PacketCodec::encodeBlockUpdateBatch(
             std::any_cast<const BlockUpdateBatchMessage&>(packet.inProcessPayload));
+        break;
+    case MessageType::WireContainerUpdate:
+        typedPayload = PacketCodec::encodeWireContainerUpdate(
+            std::any_cast<const WireContainerUpdateMessage&>(packet.inProcessPayload));
         break;
     case MessageType::ChunkUnload:
         typedPayload = PacketCodec::encodeChunkUnload(
