@@ -67,7 +67,7 @@ int main() {
     }
 
     const BlockStateId torchDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:torch"));
-    if (torchDefault.raw() == BlockRegistry::requireIdByName("minecraft:torch")) {
+    if (torchDefault.registryIndex() == BlockRegistry::requireIdByName("minecraft:torch")) {
         return fail("torch should expand into dedicated state ids");
     }
     if (BlockStateRegistry::getBlockId(torchDefault) != BlockRegistry::requireIdByName("minecraft:torch")) {
@@ -759,7 +759,7 @@ int main() {
     }
 
     const BlockStateId chestDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:chest"));
-    if (chestDefault.raw() == BlockRegistry::requireIdByName("minecraft:chest")) {
+    if (chestDefault.registryIndex() == BlockRegistry::requireIdByName("minecraft:chest")) {
         return fail("chest should expand into dedicated facing state ids");
     }
     if (BlockStateRegistry::getBlockId(chestDefault) != BlockRegistry::requireIdByName("minecraft:chest")) {
@@ -1825,7 +1825,7 @@ int main() {
     }
 
     const BlockStateId waterDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:water"));
-    if (!FluidState::isWater(waterDefault) || waterDefault.raw() == BlockRegistry::requireIdByName("minecraft:water")) {
+    if (!FluidState::isWater(waterDefault) || waterDefault.registryIndex() == BlockRegistry::requireIdByName("minecraft:water")) {
         return fail("water should expand into dedicated state ids");
     }
     if (!FluidState::isSource(waterDefault) || FluidState::level(waterDefault) != 0 || FluidState::isFalling(waterDefault)) {

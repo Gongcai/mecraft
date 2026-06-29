@@ -4,6 +4,7 @@
 
 #include "../world/chunk/Chunk.h"
 #include "../world/block/Block.h"
+#include "../world/block/BlockStateIdCodec.h"
 #include "../world/block/BlockStateRegistry.h"
 
 #include <cstring>
@@ -42,6 +43,16 @@ bool readVaruint(const uint8_t*& cursor, const uint8_t* end, uint32_t& outValue)
         shift += 7;
     }
     return false; // overflow
+}
+
+bool readBlockStateId(const uint8_t*& cursor, const uint8_t* end, BlockStateId& out) {
+    if (!block_state_codec::readRegisteredBlockStateId(cursor, end, out)) {
+        MECRAFT_LOG_FPRINTF(stderr,
+                            "[Save] Invalid palette block state index for registry size %zu\n",
+                            BlockStateRegistry::getStateCount());
+        return false;
+    }
+    return true;
 }
 
 void writeBytes(std::vector<uint8_t>& out, const uint8_t* data, size_t size) {
@@ -88,10 +99,9 @@ void serializeLayer(
         return;
     }
 
-    // Write palette entries as registry-owned runtime ids.
+    // Write palette entries as registry-owned block state indexes.
     for (size_t i = 0; i < paletteSize; ++i) {
-        RuntimeId rid = palette.getRuntimeId(static_cast<uint32_t>(i));
-        writeVaruint(out, rid);
+        block_state_codec::writeBlockStateId(out, palette.getStateId(static_cast<uint32_t>(i)));
     }
 
     // Write bits per entry
@@ -137,18 +147,12 @@ bool deserializeLayer(
     }
 
     // Read palette entries
-    std::vector<RuntimeId> palette;
+    std::vector<BlockStateId> palette;
     palette.reserve(paletteCount);
     for (uint32_t i = 0; i < paletteCount; ++i) {
-        RuntimeId rid = RUNTIME_ID_NULL;
-        if (!readVaruint(cursor, end, rid)) return false;
-        if (static_cast<size_t>(rid) >= BlockStateRegistry::getStateCount()) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Palette runtime id %u exceeds block state count %zu\n",
-                                rid,
-                                BlockStateRegistry::getStateCount());
-            return false;
-        }
-        palette.push_back(rid);
+        BlockStateId stateId = NULL_BLOCK_STATE;
+        if (!readBlockStateId(cursor, end, stateId)) return false;
+        palette.push_back(stateId);
     }
 
     // Read bits per entry
@@ -185,8 +189,7 @@ bool deserializeLayer(
             return false;
         }
 
-        const RuntimeId rid = palette[paletteIndex];
-        const BlockStateId stateId = BlockStateId::fromRaw(rid);
+        const BlockStateId stateId = palette[paletteIndex];
 
         if (isFluidLayer) {
             sub.setFluidLayer(static_cast<int>(lx), static_cast<int>(ly),
@@ -264,8 +267,14 @@ std::shared_ptr<Chunk> ChunkSerializer::deserializePayload(
         SubChunk* sub = chunk->getOrCreateSubChunk(scy);
         if (!sub) return nullptr;
 
-        if (!deserializeLayer(cursor, end, *sub, false)) return nullptr;
-        if (!deserializeLayer(cursor, end, *sub, true)) return nullptr;
+        if (!deserializeLayer(cursor, end, *sub, false)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to deserialize block layer for subchunk %d\n", scy);
+            return nullptr;
+        }
+        if (!deserializeLayer(cursor, end, *sub, true)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to deserialize fluid layer for subchunk %d\n", scy);
+            return nullptr;
+        }
 
         sub->inferType();
     }

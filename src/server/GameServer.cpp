@@ -2206,12 +2206,12 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             BlockStateRegistry::getBlockId(action.blockState),
             action.placeBlock));
     }
-    MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%u\n",
+    MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place client=%u block=(%d,%d,%d) state=%zu\n",
                        client.id,
                        action.placeBlock.x,
                        action.placeBlock.y,
                        action.placeBlock.z,
-                       action.blockState.raw());
+                       action.blockState.registryIndex());
     MECRAFT_LOG_FLUSH(stdout);
 }
 

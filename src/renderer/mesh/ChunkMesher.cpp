@@ -651,7 +651,7 @@ uint64_t computeMergeKeyHash(const FaceMergeKey& key) {
         h ^= v;
         h *= 1099511628211ULL;
     };
-    mix(static_cast<uint64_t>(key.stateId.raw()));
+    mix(static_cast<uint64_t>(key.stateId.registryIndex()));
     mix(static_cast<uint64_t>(key.tileIndex));
     mix(static_cast<uint64_t>(key.flipDiagonal));
     mix(static_cast<uint64_t>(key.tintKind));
@@ -750,13 +750,13 @@ void ensureMeshBlockInfoCache() {
         const std::size_t count = BlockStateRegistry::getStateCount();
         g_meshBlockInfoCache.resize(count);
         for (std::size_t i = 0; i < count; ++i) {
-            g_meshBlockInfoCache[i] = buildMeshBlockInfo(BlockStateId::fromRaw(static_cast<uint32_t>(i)));
+            g_meshBlockInfoCache[i] = buildMeshBlockInfo(BlockStateId::fromRegistryIndex(i));
         }
     });
 }
 
 MECRAFT_FORCEINLINE const MeshBlockInfo& getMeshBlockInfo(const BlockStateId stateId) {
-    return g_meshBlockInfoCache[stateId.raw()];
+    return g_meshBlockInfoCache[stateId.registryIndex()];
 }
 
 struct SubChunkMeshClassPresence {

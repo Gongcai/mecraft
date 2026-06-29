@@ -51,6 +51,14 @@ void appendVaruint(std::vector<uint8_t>& out, uint32_t value) {
     out.push_back(static_cast<uint8_t>(value));
 }
 
+void appendVaruint64(std::vector<uint8_t>& out, uint64_t value) {
+    while (value >= 0x80u) {
+        out.push_back(static_cast<uint8_t>((value & 0x7Fu) | 0x80u));
+        value >>= 7;
+    }
+    out.push_back(static_cast<uint8_t>(value));
+}
+
 void appendString(std::vector<uint8_t>& out, const std::string& value) {
     appendVaruint(out, static_cast<uint32_t>(value.size()));
     out.insert(out.end(), value.begin(), value.end());
@@ -59,7 +67,7 @@ void appendString(std::vector<uint8_t>& out, const std::string& value) {
 std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
                                                  const int32_t cz,
                                                  const uint8_t scy,
-                                                 const RuntimeId stateId,
+                                                 const BlockStateId::Index stateIndex,
                                                  const uint8_t bitsPerEntry,
                                                  const std::vector<uint8_t>& packedData) {
     std::vector<uint8_t> payload;
@@ -68,7 +76,7 @@ std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
     appendU8(payload, scy);
 
     appendVaruint(payload, 1);
-    appendVaruint(payload, stateId);
+    appendVaruint64(payload, static_cast<uint64_t>(stateIndex));
     appendU8(payload, bitsPerEntry);
     appendVaruint(payload, static_cast<uint32_t>(packedData.size()));
     payload.insert(payload.end(), packedData.begin(), packedData.end());
@@ -396,7 +404,7 @@ static void testOldStringPaletteFormatRejected() {
 
 static void testInvalidPackedPaletteIndexRejected() {
     const std::vector<uint8_t> packedData(512, 0xFFu);
-    const RuntimeId stoneState = defaultState("minecraft:stone").raw();
+    const BlockStateId::Index stoneState = defaultState("minecraft:stone").registryIndex();
     const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
         0,
         0,
@@ -413,8 +421,8 @@ static void testInvalidPackedPaletteIndexRejected() {
     std::printf("[PASS] testInvalidPackedPaletteIndexRejected\n");
 }
 
-static void testInvalidPaletteRuntimeIdRejected() {
-    const RuntimeId invalidState = static_cast<RuntimeId>(BlockStateRegistry::getStateCount() + 1);
+static void testInvalidPaletteStateIndexRejected() {
+    const BlockStateId::Index invalidState = BlockStateRegistry::getStateCount() + 1;
     const std::vector<uint8_t> fileData = buildSinglePaletteStateFile(
         0,
         0,
@@ -425,10 +433,10 @@ static void testInvalidPaletteRuntimeIdRejected() {
 
     auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
     if (loaded != nullptr) {
-        std::fprintf(stderr, "[FAIL] palette runtime ids outside the registry should be rejected\n");
+        std::fprintf(stderr, "[FAIL] palette state indexes outside the registry should be rejected\n");
         std::abort();
     }
-    std::printf("[PASS] testInvalidPaletteRuntimeIdRejected\n");
+    std::printf("[PASS] testInvalidPaletteStateIndexRejected\n");
 }
 
 static void testMalformedPaletteVaruintRejected() {
@@ -441,17 +449,17 @@ static void testMalformedPaletteVaruintRejected() {
     std::printf("[PASS] testMalformedPaletteVaruintRejected\n");
 }
 
-static void testChunkPaletteStoresRuntimeIds() {
+static void testChunkPaletteStoresStateIndexes() {
     auto original = std::make_shared<Chunk>(0, 0);
     original->setBlockFast(0, 64, 0, defaultState("minecraft:stone"));
 
     const std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
     const std::string raw(reinterpret_cast<const char*>(fileData.data()), fileData.size());
     if (raw.find("minecraft:") != std::string::npos) {
-        std::fprintf(stderr, "[FAIL] chunk palette should store runtime ids instead of state strings\n");
+        std::fprintf(stderr, "[FAIL] chunk palette should store state indexes instead of state strings\n");
         std::abort();
     }
-    std::printf("[PASS] testChunkPaletteStoresRuntimeIds\n");
+    std::printf("[PASS] testChunkPaletteStoresStateIndexes\n");
 }
 
 static void testFluidLayerRoundTrip() {
@@ -504,14 +512,14 @@ static void testPaletteIndexAboveUint16Limit() {
     Palette palette;
     uint32_t lastIndex = 0;
     constexpr uint32_t kEntryCount = 65537;
-    constexpr RuntimeId kBaseRuntimeId = 1000000000u;
+    constexpr BlockStateId::Index kBaseStateIndex = 1000000000u;
     for (uint32_t i = 0; i < kEntryCount; ++i) {
-        lastIndex = palette.getOrCreateIndex(kBaseRuntimeId + i);
+        lastIndex = palette.getOrCreateIndex(BlockStateId::fromRegistryIndex(kBaseStateIndex + i));
     }
 
     assert(lastIndex == 65536u);
     assert(palette.bitsPerEntry() == 17);
-    assert(palette.getRuntimeId(65536u) == kBaseRuntimeId + 65536u);
+    assert(palette.getStateId(65536u).registryIndex() == kBaseStateIndex + 65536u);
     std::printf("[PASS] testPaletteIndexAboveUint16Limit\n");
 }
 
@@ -935,9 +943,9 @@ int main() {
     testChestBlockStateRoundTrip();
     testOldStringPaletteFormatRejected();
     testInvalidPackedPaletteIndexRejected();
-    testInvalidPaletteRuntimeIdRejected();
+    testInvalidPaletteStateIndexRejected();
     testMalformedPaletteVaruintRejected();
-    testChunkPaletteStoresRuntimeIds();
+    testChunkPaletteStoresStateIndexes();
     testFluidLayerRoundTrip();
     testPayloadSizeReasonable();
     testPaletteIndexAboveUint16Limit();

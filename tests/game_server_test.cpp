@@ -3595,7 +3595,7 @@ static void testClientBlockActionCodecCarriesInteract() {
     action.action = net::ClientBlockActionType::Interact;
     action.targetBlock = glm::ivec3(4, 65, -2);
     action.playerPosition = glm::vec3(4.5f, 65.5f, -1.5f);
-    action.blockState = BlockStateId::fromRaw(0x00012345u);
+    action.blockState = BlockStateId::fromRegistryIndex(0x00012345u);
 
     const auto encoded = net::PacketCodec::encodeClientBlockAction(action);
     net::ClientBlockAction decoded;
@@ -3613,11 +3613,10 @@ static void testClientBlockActionCodecCarriesInteract() {
             "ClientBlockAction codec should preserve block state ids");
 
     std::vector<uint8_t> malformed(encoded.begin(), encoded.begin() + 53);
-    malformed.push_back(0x80u);
-    malformed.push_back(0x80u);
-    malformed.push_back(0x80u);
-    malformed.push_back(0x80u);
-    malformed.push_back(0x10u);
+    for (int i = 0; i < 9; ++i) {
+        malformed.push_back(0x80u);
+    }
+    malformed.push_back(0x02u);
     require(!net::PacketCodec::decodeClientBlockAction(malformed.data(), malformed.size(), decoded),
             "ClientBlockAction codec should reject overflowing block state varuints");
 
@@ -4087,7 +4086,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     entry.y = 64;
     entry.z = -2;
     entry.kind = net::BlockUpdateKind::BlockState;
-    entry.stateId = BlockStateId::fromRaw(0x00012345u);
+    entry.stateId = BlockStateId::fromRegistryIndex(0x00012345u);
     entry.packedLightPatch.resize(5 * 5 * 5);
     for (size_t i = 0; i < entry.packedLightPatch.size(); ++i) {
         entry.packedLightPatch[i] = static_cast<uint8_t>(i & 0x0F);
@@ -4099,7 +4098,7 @@ static void testBlockUpdateCodecKeepsVariableLightPatch() {
     lightOnlyEntry.y = 32;
     lightOnlyEntry.z = 8;
     lightOnlyEntry.kind = net::BlockUpdateKind::LightOnly;
-    lightOnlyEntry.stateId = BlockStateId::fromRaw(0x001ABCDEu);
+    lightOnlyEntry.stateId = BlockStateId::fromRegistryIndex(0x001ABCDEu);
     lightOnlyEntry.packedLightPatch = {1, 2, 3, 4, 5, 6, 7};
     message.updates.push_back(lightOnlyEntry);
 

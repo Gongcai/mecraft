@@ -17,18 +17,20 @@
 // The registry owns this index space; callers should treat the stored value as
 // an implementation detail of the current registry encoding.
 struct BlockStateId {
+    using Index = size_t;
+
     constexpr BlockStateId() = default;
-    [[nodiscard]] static constexpr BlockStateId fromRaw(const uint32_t rawValue) {
-        return BlockStateId(rawValue);
+    [[nodiscard]] static constexpr BlockStateId fromRegistryIndex(const Index index) {
+        return BlockStateId(index);
     }
 
-    [[nodiscard]] constexpr uint32_t raw() const { return m_value; }
-    [[nodiscard]] constexpr bool operator==(const BlockStateId& other) const { return m_value == other.m_value; }
-    [[nodiscard]] constexpr bool operator!=(const BlockStateId& other) const { return m_value != other.m_value; }
-    [[nodiscard]] constexpr bool operator<(const BlockStateId& other) const { return m_value < other.m_value; }
+    [[nodiscard]] constexpr Index registryIndex() const { return m_index; }
+    [[nodiscard]] constexpr bool operator==(const BlockStateId& other) const { return m_index == other.m_index; }
+    [[nodiscard]] constexpr bool operator!=(const BlockStateId& other) const { return m_index != other.m_index; }
+    [[nodiscard]] constexpr bool operator<(const BlockStateId& other) const { return m_index < other.m_index; }
 
     constexpr BlockStateId& operator++() {
-        ++m_value;
+        ++m_index;
         return *this;
     }
 
@@ -39,21 +41,21 @@ struct BlockStateId {
     }
 
 private:
-    explicit constexpr BlockStateId(const uint32_t rawValue) : m_value(rawValue) {}
+    explicit constexpr BlockStateId(const Index index) : m_index(index) {}
 
-    uint32_t m_value = 0;
+    Index m_index = 0;
 };
 
 namespace std {
 template <>
 struct hash<BlockStateId> {
     size_t operator()(const BlockStateId& stateId) const noexcept {
-        return hash<uint32_t>{}(stateId.raw());
+        return hash<BlockStateId::Index>{}(stateId.registryIndex());
     }
 };
 } // namespace std
 
-constexpr BlockStateId NULL_BLOCK_STATE = BlockStateId::fromRaw(0);
+constexpr BlockStateId NULL_BLOCK_STATE = BlockStateId::fromRegistryIndex(0);
 
 struct PropertyKey {
     uint16_t nameIndex = 0;

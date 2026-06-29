@@ -24,7 +24,7 @@ FarmlandMoistureProperties getMoistureProperties() {
 
 bool paletteContainsFarmland(const Palette& palette, const BlockID farmlandBlock) {
     for (size_t i = 0; i < palette.size(); ++i) {
-        const BlockStateId stateId = BlockStateId::fromRaw(palette.getRuntimeId(static_cast<uint32_t>(i)));
+        const BlockStateId stateId = palette.getStateId(static_cast<uint32_t>(i));
         if (BlockStateRegistry::getBlockId(stateId) == farmlandBlock) {
             return true;
         }

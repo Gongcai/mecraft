@@ -2,6 +2,7 @@
 #define MECRAFT_NET_PACKET_CODEC_H
 
 #include "Protocol.h"
+#include "../world/block/BlockStateIdCodec.h"
 #include "../world/chunk/Chunk.h"
 #include <cstdint>
 #include <vector>
@@ -197,7 +198,7 @@ public:
         pushFloat(buf, msg.playerPosition.x);
         pushFloat(buf, msg.playerPosition.y);
         pushFloat(buf, msg.playerPosition.z);
-        pushVarU32(buf, msg.blockState.raw());
+        block_state_codec::writeBlockStateId(buf, msg.blockState);
         return buf;
     }
 
@@ -258,7 +259,7 @@ public:
             pushI32(buf, u.z);
             pushU8(buf, static_cast<uint8_t>(u.kind));
             if (u.kind == BlockUpdateKind::BlockState) {
-                pushVarU32(buf, u.stateId.raw());
+                block_state_codec::writeBlockStateId(buf, u.stateId);
             }
             pushVarU32(buf, static_cast<uint32_t>(u.packedLightPatch.size()));
             buf.insert(buf.end(), u.packedLightPatch.begin(), u.packedLightPatch.end());
@@ -425,8 +426,6 @@ public:
 
     static bool decodeChunkData(const uint8_t* data, size_t size, ChunkDataMessage& out) {
         constexpr size_t kHeaderBytes = 13;
-        constexpr size_t kBlockBytes = Chunk::BLOCK_COUNT * sizeof(uint32_t);
-        constexpr size_t kLightBytes = Chunk::BLOCK_COUNT;
         if (size < kHeaderBytes) return false;
 
         size_t offset = 0;
@@ -438,92 +437,63 @@ public:
             out.chunk.reset();
             return true;
         }
-        if (offset < size) {
-            const uint8_t encoding = readU8(data, offset);
-            if (encoding == kChunkEncodingRleSubChunks) {
-                auto chunk = std::make_shared<Chunk>(out.chunkX, out.chunkZ);
-                std::vector<uint8_t> packedLight(Chunk::BLOCK_COUNT);
-                for (int y = 0; y < Chunk::SIZE_Y; ++y) {
-                    for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-                        for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                            packedLight[Chunk::toIndex(x, y, z)] = implicitPackedLight(*chunk, x, y, z);
-                        }
-                    }
-                }
-
-                for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-                    if (offset >= size) {
-                        return false;
-                    }
-                    const bool hasSubChunk = readU8(data, offset) != 0;
-                    if (!hasSubChunk) {
-                        continue;
-                    }
-
-                    std::array<BlockStateId, SubChunk::BLOCK_COUNT> blocks{};
-                    std::array<uint8_t, SubChunk::BLOCK_COUNT> lights{};
-                    if (!decodeRleBlockStateId(data, size, offset, blocks.data(), blocks.size()) ||
-                        !decodeRleU8(data, size, offset, lights.data(), lights.size())) {
-                        return false;
-                    }
-
-                    std::size_t index = 0;
-                    const int yBase = scy * SubChunk::SIZE;
-                    for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
-                        const int y = yBase + ly;
-                        for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-                            for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                                if (blocks[index] != NULL_BLOCK_STATE) {
-                                    chunk->setBlockFast(x, y, z, blocks[index]);
-                                }
-                                packedLight[Chunk::toIndex(x, y, z)] = lights[index];
-                                ++index;
-                            }
-                        }
-                    }
-                }
-
-                for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
-                    if (SubChunk* subChunk = chunk->getSubChunk(scy)) {
-                        subChunk->inferType();
-                    }
-                }
-                chunk->replacePackedLight(packedLight.data(), packedLight.size());
-                for (int z = 0; z < Chunk::SIZE_Z; ++z) {
-                    for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                        chunk->recalcHeightMap(x, z);
-                    }
-                }
-                chunk->markExistingSubChunksDirty();
-                out.chunk = std::move(chunk);
-                return true;
-            }
+        if (offset >= size) {
+            return false;
         }
-        if (size < kHeaderBytes + kBlockBytes + kLightBytes) {
+
+        const uint8_t encoding = readU8(data, offset);
+        if (encoding != kChunkEncodingRleSubChunks) {
             return false;
         }
 
         auto chunk = std::make_shared<Chunk>(out.chunkX, out.chunkZ);
-        offset = kHeaderBytes;
+        std::vector<uint8_t> packedLight(Chunk::BLOCK_COUNT);
         for (int y = 0; y < Chunk::SIZE_Y; ++y) {
             for (int z = 0; z < Chunk::SIZE_Z; ++z) {
                 for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                    chunk->setBlockFast(x, y, z, BlockStateId::fromRaw(readU32(data, offset)));
+                    packedLight[Chunk::toIndex(x, y, z)] = implicitPackedLight(*chunk, x, y, z);
                 }
             }
         }
+
+        for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
+            if (offset >= size) {
+                return false;
+            }
+            const bool hasSubChunk = readU8(data, offset) != 0;
+            if (!hasSubChunk) {
+                continue;
+            }
+
+            std::array<BlockStateId, SubChunk::BLOCK_COUNT> blocks{};
+            std::array<uint8_t, SubChunk::BLOCK_COUNT> lights{};
+            if (!decodeRleBlockStateId(data, size, offset, blocks.data(), blocks.size()) ||
+                !decodeRleU8(data, size, offset, lights.data(), lights.size())) {
+                return false;
+            }
+
+            std::size_t index = 0;
+            const int yBase = scy * SubChunk::SIZE;
+            for (int ly = 0; ly < SubChunk::SIZE; ++ly) {
+                const int y = yBase + ly;
+                for (int z = 0; z < Chunk::SIZE_Z; ++z) {
+                    for (int x = 0; x < Chunk::SIZE_X; ++x) {
+                        if (blocks[index] != NULL_BLOCK_STATE) {
+                            chunk->setBlockFast(x, y, z, blocks[index]);
+                        }
+                        packedLight[Chunk::toIndex(x, y, z)] = lights[index];
+                        ++index;
+                    }
+                }
+            }
+        }
+
         for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
             if (SubChunk* subChunk = chunk->getSubChunk(scy)) {
                 subChunk->inferType();
             }
         }
-
-        std::vector<uint8_t> packedLight(Chunk::BLOCK_COUNT);
-        for (uint8_t& light : packedLight) {
-            light = readU8(data, offset);
-        }
         chunk->replacePackedLight(packedLight.data(), packedLight.size());
-
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
                 chunk->recalcHeightMap(x, z);
@@ -637,11 +607,11 @@ public:
         out.playerPosition.x = readFloat(data, offset);
         out.playerPosition.y = readFloat(data, offset);
         out.playerPosition.z = readFloat(data, offset);
-        uint32_t rawBlockState = 0;
-        if (!readVarU32(data, size, offset, rawBlockState) || offset != size) {
+        BlockStateId blockState = NULL_BLOCK_STATE;
+        if (!block_state_codec::readBlockStateId(data, size, offset, blockState) || offset != size) {
             return false;
         }
-        out.blockState = BlockStateId::fromRaw(rawBlockState);
+        out.blockState = blockState;
         return true;
     }
 
@@ -714,11 +684,9 @@ public:
             out.updates[i].kind = static_cast<BlockUpdateKind>(kindRaw);
             out.updates[i].stateId = NULL_BLOCK_STATE;
             if (out.updates[i].kind == BlockUpdateKind::BlockState) {
-                uint32_t rawStateId = 0;
-                if (!readVarU32(data, size, offset, rawStateId)) {
+                if (!block_state_codec::readBlockStateId(data, size, offset, out.updates[i].stateId)) {
                     return false;
                 }
-                out.updates[i].stateId = BlockStateId::fromRaw(rawStateId);
             }
             uint32_t lightCount = 0;
             if (!readVarU32(data, size, offset, lightCount)) return false;
@@ -942,7 +910,7 @@ private:
                 ++run;
             }
             pushVarU32(buf, run);
-            pushVarU32(buf, value.raw());
+            block_state_codec::writeBlockStateId(buf, value);
             i += run;
         }
         pushVarU32(buf, 0);
@@ -976,9 +944,8 @@ private:
                 return written == count;
             }
             if (written + run > count) return false;
-            uint32_t rawValue = 0;
-            if (!readVarU32(data, size, offset, rawValue)) return false;
-            const BlockStateId value = BlockStateId::fromRaw(rawValue);
+            BlockStateId value = NULL_BLOCK_STATE;
+            if (!block_state_codec::readBlockStateId(data, size, offset, value)) return false;
             for (uint32_t i = 0; i < run; ++i) {
                 out[written++] = value;
             }

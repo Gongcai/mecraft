@@ -19,7 +19,7 @@
 // LayerPayload:
 //   varuint   paletteCount (0 = all-air, skip packed data)
 //   For each palette entry:
-//     varuint runtimeId
+//     varuint blockStateRegistryIndex
 //   uint8_t   bitsPerEntry
 //   varuint   packedDataSize (bytes)
 //   uint8_t[packedDataSize] packedIndices

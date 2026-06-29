@@ -221,7 +221,7 @@ public:
                                   static_cast<std::size_t>(z) * SIZE +
                                   static_cast<std::size_t>(y) * SIZE * SIZE;
         const uint32_t paletteIndex = m_blockData.getUnchecked(index);
-        return BlockStateId::fromRaw(m_palette.getRuntimeIdUnchecked(paletteIndex));
+        return m_palette.getStateIdUnchecked(paletteIndex);
     }
     void setBlock(int x, int y, int z, BlockStateId stateId);
     void setBlockWithoutMeshDirty(int x, int y, int z, BlockStateId stateId);
@@ -237,7 +237,7 @@ public:
                                   static_cast<std::size_t>(z) * SIZE +
                                   static_cast<std::size_t>(y) * SIZE * SIZE;
         const uint32_t paletteIndex = m_fluidData.getUnchecked(index);
-        return BlockStateId::fromRaw(m_fluidPalette.getRuntimeIdUnchecked(paletteIndex));
+        return m_fluidPalette.getStateIdUnchecked(paletteIndex);
     }
     void setFluidLayer(int x, int y, int z, BlockStateId stateId);
 

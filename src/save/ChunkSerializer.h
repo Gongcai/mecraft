@@ -4,7 +4,7 @@
 // ChunkSerializer: converts between in-memory Chunk objects and MCHK binary format.
 //
 // Serialization reads the SubChunk palette + BitPackedArray data directly,
-// writing RuntimeId palette entries as VarUInt values for disk storage.
+// writing block state palette entries as VarUInt values for disk storage.
 // Deserialization rejects malformed or out-of-range palette entries.
 //
 // All methods are stateless and thread-safe (read-only access to Chunk data).

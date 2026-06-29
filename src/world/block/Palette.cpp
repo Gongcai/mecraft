@@ -14,8 +14,8 @@ size_t estimateUnorderedMapBytes(const Map& map) {
 }
 } // namespace
 
-uint32_t Palette::getOrCreateIndex(const RuntimeId runtimeId) {
-    const auto it = m_idToIndex.find(runtimeId);
+uint32_t Palette::getOrCreateIndex(const BlockStateId stateId) {
+    const auto it = m_idToIndex.find(stateId);
     if (it != m_idToIndex.end()) {
         return it->second;
     }
@@ -25,16 +25,16 @@ uint32_t Palette::getOrCreateIndex(const RuntimeId runtimeId) {
     }
 
     const uint32_t index = static_cast<uint32_t>(m_indexToId.size());
-    m_indexToId.push_back(runtimeId);
-    m_idToIndex[runtimeId] = index;
+    m_indexToId.push_back(stateId);
+    m_idToIndex[stateId] = index;
     return index;
 }
 
-RuntimeId Palette::getRuntimeId(const uint32_t paletteIndex) const {
+BlockStateId Palette::getStateId(const uint32_t paletteIndex) const {
     if (paletteIndex < m_indexToId.size()) {
         return m_indexToId[paletteIndex];
     }
-    return RUNTIME_ID_NULL;
+    return NULL_BLOCK_STATE;
 }
 
 size_t Palette::size() const {
@@ -51,24 +51,24 @@ uint8_t Palette::bitsPerEntry() const {
 }
 
 size_t Palette::dynamicMemoryBytes() const {
-    return m_indexToId.capacity() * sizeof(RuntimeId) +
+    return m_indexToId.capacity() * sizeof(BlockStateId) +
            estimateUnorderedMapBytes(m_idToIndex);
 }
 
-std::vector<uint32_t> Palette::compact(const std::vector<RuntimeId>& usedIds) {
+std::vector<uint32_t> Palette::compact(const std::vector<BlockStateId>& usedIds) {
     std::vector<uint32_t> oldToNew(m_indexToId.size(), UINT32_MAX);
 
-    std::unordered_set<RuntimeId> seen;
-    std::vector<RuntimeId> uniqueUsed;
+    std::unordered_set<BlockStateId> seen;
+    std::vector<BlockStateId> uniqueUsed;
     uniqueUsed.reserve(usedIds.size());
-    for (const RuntimeId id : usedIds) {
+    for (const BlockStateId id : usedIds) {
         if (seen.insert(id).second) {
             uniqueUsed.push_back(id);
         }
     }
 
     uint32_t newIndex = 0;
-    for (const RuntimeId id : uniqueUsed) {
+    for (const BlockStateId id : uniqueUsed) {
         const auto it = m_idToIndex.find(id);
         if (it != m_idToIndex.end()) {
             oldToNew[it->second] = newIndex++;
@@ -77,7 +77,7 @@ std::vector<uint32_t> Palette::compact(const std::vector<RuntimeId>& usedIds) {
 
     m_indexToId.clear();
     m_idToIndex.clear();
-    for (const RuntimeId id : uniqueUsed) {
+    for (const BlockStateId id : uniqueUsed) {
         if (m_indexToId.size() > std::numeric_limits<uint32_t>::max()) {
             throw std::runtime_error("Palette compaction exceeds uint32_t index capacity");
         }
