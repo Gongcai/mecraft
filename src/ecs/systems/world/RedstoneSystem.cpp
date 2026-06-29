@@ -16,6 +16,7 @@
 #include "../../../world/block/BlockStateRegistry.h"
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/redstone/RedstoneUpdateQueue.h"
+#include "../../../world/redstone/WireContainerParts.h"
 #include "../../../world/redstone/WireFaceGeometry.h"
 
 #include <algorithm>
@@ -69,26 +70,52 @@ struct IVec3Hash {
 
 using PositionSet = std::unordered_set<glm::ivec3, IVec3Hash>;
 
+struct WireNode {
+    glm::ivec3 position;
+    uint16_t channelId = 0;
+    uint16_t facing = PropIndices::INVALID;
+
+    [[nodiscard]] bool operator==(const WireNode& other) const noexcept {
+        return position == other.position &&
+               channelId == other.channelId &&
+               facing == other.facing;
+    }
+};
+
+struct WireNodeHash {
+    std::size_t operator()(const WireNode& node) const noexcept {
+        std::size_t seed = IVec3Hash{}(node.position);
+        const auto mix = [&seed](const uint16_t component) {
+            seed ^= std::hash<uint16_t>{}(component) + 0x9e3779b9u + (seed << 6u) + (seed >> 2u);
+        };
+        mix(node.channelId);
+        mix(node.facing);
+        return seed;
+    }
+};
+
+using WireNodeSet = std::unordered_set<WireNode, WireNodeHash>;
+
 struct WirePowerMap {
-    using Map = std::unordered_map<glm::ivec3, uint8_t, IVec3Hash>;
+    using Map = std::unordered_map<WireNode, uint8_t, WireNodeHash>;
 
     Map powers;
-    const PositionSet* evaluatedWires = nullptr;
+    const WireNodeSet* evaluatedWires = nullptr;
 
     void reserve(const size_t count) {
         powers.reserve(count);
     }
 
-    auto emplace(const glm::ivec3& position, const uint8_t power) {
-        return powers.emplace(position, power);
+    auto emplace(const WireNode& node, const uint8_t power) {
+        return powers.emplace(node, power);
     }
 
-    [[nodiscard]] auto find(const glm::ivec3& position) {
-        return powers.find(position);
+    [[nodiscard]] auto find(const WireNode& node) {
+        return powers.find(node);
     }
 
-    [[nodiscard]] auto find(const glm::ivec3& position) const {
-        return powers.find(position);
+    [[nodiscard]] auto find(const WireNode& node) const {
+        return powers.find(node);
     }
 
     [[nodiscard]] auto end() {
@@ -99,8 +126,8 @@ struct WirePowerMap {
         return powers.end();
     }
 
-    [[nodiscard]] bool wasEvaluated(const glm::ivec3& position) const {
-        return evaluatedWires != nullptr && evaluatedWires->find(position) != evaluatedWires->end();
+    [[nodiscard]] bool wasEvaluated(const WireNode& node) const {
+        return evaluatedWires != nullptr && evaluatedWires->find(node) != evaluatedWires->end();
     }
 };
 
@@ -112,7 +139,7 @@ struct RedstoneSource {
 };
 
 struct RedstoneWorkSet {
-    std::vector<glm::ivec3> wires;
+    std::vector<WireNode> wires;
     std::vector<glm::ivec3> redstoneControlledBlocks;
     std::vector<glm::ivec3> torches;
     std::vector<glm::ivec3> repeaters;
@@ -121,7 +148,7 @@ struct RedstoneWorkSet {
     std::vector<glm::ivec3> pistons;
     std::vector<glm::ivec3> edgeTriggeredDevices;
     std::vector<glm::ivec3> sourcePositions;
-    PositionSet wireSet;
+    WireNodeSet wireSet;
     PositionSet redstoneControlledSet;
     PositionSet torchSet;
     PositionSet repeaterSet;
@@ -133,7 +160,7 @@ struct RedstoneWorkSet {
 };
 
 struct PowerNode {
-    glm::ivec3 position;
+    WireNode wire;
     uint8_t power = 0;
 
     bool operator<(const PowerNode& other) const {
@@ -142,7 +169,7 @@ struct PowerNode {
 };
 
 struct WireSearchNode {
-    glm::ivec3 position;
+    WireNode wire;
     uint8_t distance = 0;
 };
 
@@ -194,6 +221,14 @@ bool isWireState(const BlockStateId stateId) {
     return BlockRegistry::getFast(blockId).redstoneBehavior == "wire";
 }
 
+bool isWireContainerState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isWireContainer;
+}
+
 uint16_t redstoneWireChannelIdForState(const BlockStateId stateId) {
     if (!isWireState(stateId)) {
         throw std::runtime_error("Redstone wire channel requires a wire state");
@@ -242,24 +277,73 @@ bool isMatchingWireStateWithFacing(const BlockStateId stateId,
     return wireFacingForState(stateId) == wireFacing;
 }
 
+WireNode wireNodeFromState(const glm::ivec3& position, const BlockStateId stateId) {
+    return {position, redstoneWireChannelIdForState(stateId), wireFacingForState(stateId)};
+}
+
+bool isMatchingWireNodeState(const BlockStateId stateId, const WireNode& node) {
+    return isMatchingWireStateWithFacing(stateId, node.channelId, node.facing);
+}
+
+const WirePart* findWireContainerPart(const World& world, const WireNode& node) {
+    const WireContainerParts* parts = world.wireContainerParts().find(node.position);
+    return parts == nullptr ? nullptr : parts->find(node.channelId, node.facing);
+}
+
+bool hasMatchingWireContainerPart(const World& world, const WireNode& node) {
+    return findWireContainerPart(world, node) != nullptr;
+}
+
+template <typename Fn>
+void forEachWireNodeAt(const World& world, const glm::ivec3& position, Fn&& fn) {
+    const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
+    if (isWireState(stateId)) {
+        fn(wireNodeFromState(position, stateId));
+        return;
+    }
+    if (!isWireContainerState(stateId)) {
+        return;
+    }
+
+    const WireContainerParts* parts = world.wireContainerParts().find(position);
+    if (parts == nullptr) {
+        return;
+    }
+    parts->forEach([&](const WirePart& part) {
+        fn(WireNode{position, part.channelId, part.facing});
+    });
+}
+
+bool wireNodeExists(const World& world, const WireNode& node) {
+    const BlockStateId stateId = world.getBlockState(node.position.x, node.position.y, node.position.z);
+    if (isWireState(stateId)) {
+        return isMatchingWireNodeState(stateId, node);
+    }
+    if (isWireContainerState(stateId)) {
+        return hasMatchingWireContainerPart(world, node);
+    }
+    return false;
+}
+
 template <typename Fn>
 void forEachCornerWireNeighbor(const World& world,
-                               const glm::ivec3& pos,
-                               const uint16_t wireChannelId,
-                               const uint16_t wireFacing,
+                               const WireNode& wire,
                                Fn&& fn) {
-    const glm::ivec3 support = WireFaceGeometry::supportPosition(pos, wireFacing);
+    const glm::ivec3 support = WireFaceGeometry::supportPosition(wire.position, wire.facing);
     for (const uint16_t neighborFacing : WireFaceGeometry::wireFacings()) {
-        if (!WireFaceGeometry::arePerpendicularFacings(wireFacing, neighborFacing)) {
+        if (!WireFaceGeometry::arePerpendicularFacings(wire.facing, neighborFacing)) {
             continue;
         }
 
         const glm::ivec3 neighbor = WireFaceGeometry::wirePositionOnSupportFace(support, neighborFacing);
-        if (isMatchingWireStateWithFacing(
-                world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
-                wireChannelId,
-                neighborFacing)) {
-            fn(neighbor);
+        const WireNode neighborNode{neighbor, wire.channelId, neighborFacing};
+        const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
+        if (isWireState(neighborState) && isMatchingWireNodeState(neighborState, neighborNode)) {
+            fn(neighborNode);
+            continue;
+        }
+        if (isWireContainerState(neighborState) && hasMatchingWireContainerPart(world, neighborNode)) {
+            fn(neighborNode);
         }
     }
 }
@@ -558,40 +642,37 @@ bool isConductiveBlockAt(const World& world, const glm::ivec3& position) {
 // within their own face plane and can meet matching-color wires around a shared
 // support-block edge.
 template <typename Fn>
-void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
-    const BlockStateId selfState = world.getBlockState(pos.x, pos.y, pos.z);
-    if (!isWireState(selfState)) {
+void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
+    if (!wireNodeExists(world, wire)) {
         return;
     }
-    const uint16_t wireChannelId = redstoneWireChannelIdForState(selfState);
-    const uint16_t wireFacing = wireFacingForState(selfState);
 
-    if (wireFacing == PropIndices::FACING_FLOOR) {
-        for (const WireFaceGeometry::ConnectionDirection& connection :
-             WireFaceGeometry::connectionDirections(wireFacing)) {
-            const glm::ivec3 neighbor = pos + connection.offset;
-            if (isMatchingWireStateWithFacing(
-                    world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
-                    wireChannelId,
-                    PropIndices::FACING_FLOOR)) {
-                fn(neighbor);
-            }
+    const auto tryNeighbor = [&](const glm::ivec3& position, const uint16_t facing) {
+        const WireNode neighbor{position, wire.channelId, facing};
+        const BlockStateId neighborState = world.getBlockState(position.x, position.y, position.z);
+        if (isWireState(neighborState) && isMatchingWireNodeState(neighborState, neighbor)) {
+            fn(neighbor);
+            return;
         }
-        forEachCornerWireNeighbor(world, pos, wireChannelId, wireFacing, fn);
+        if (isWireContainerState(neighborState) && hasMatchingWireContainerPart(world, neighbor)) {
+            fn(neighbor);
+        }
+    };
+
+    if (wire.facing == PropIndices::FACING_FLOOR) {
+        for (const WireFaceGeometry::ConnectionDirection& connection :
+             WireFaceGeometry::connectionDirections(wire.facing)) {
+            tryNeighbor(wire.position + connection.offset, PropIndices::FACING_FLOOR);
+        }
+        forEachCornerWireNeighbor(world, wire, fn);
         return;
     }
 
     for (const WireFaceGeometry::ConnectionDirection& connection :
-         WireFaceGeometry::connectionDirections(wireFacing)) {
-        const glm::ivec3 neighbor = pos + connection.offset;
-        if (isMatchingWireStateWithFacing(
-                world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
-                wireChannelId,
-                wireFacing)) {
-            fn(neighbor);
-        }
+         WireFaceGeometry::connectionDirections(wire.facing)) {
+        tryNeighbor(wire.position + connection.offset, wire.facing);
     }
-    forEachCornerWireNeighbor(world, pos, wireChannelId, wireFacing, fn);
+    forEachCornerWireNeighbor(world, wire, fn);
 }
 
 bool isRedstoneControlledState(const BlockStateId stateId) {
@@ -1475,8 +1556,8 @@ void addSourceIfPresent(const World& world, const glm::ivec3& position, Redstone
 
 void collectEndpointsAround(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet);
 
-void collectWireComponent(const World& world, const glm::ivec3& start, RedstoneWorkSet& workSet) {
-    if (!isWireState(world.getBlockState(start.x, start.y, start.z))) {
+void collectWireComponent(const World& world, const WireNode& start, RedstoneWorkSet& workSet) {
+    if (!wireNodeExists(world, start)) {
         return;
     }
     if (!workSet.wireSet.insert(start).second) {
@@ -1490,14 +1571,14 @@ void collectWireComponent(const World& world, const glm::ivec3& start, RedstoneW
     while (!frontier.empty()) {
         const WireSearchNode node = frontier.front();
         frontier.pop();
-        const glm::ivec3 position = node.position;
+        const glm::ivec3 position = node.wire.position;
 
         // Redstone wire power cannot travel beyond fifteen wire steps from a
         // source. Dirty updates only need the local power radius; far-away
         // wires in the same physical dust network keep their stored state until
         // a nearby source or wire change dirties their own radius.
         if (node.distance < kMaxRedstonePower) {
-            forEachWireNeighbor(world, position, [&](const glm::ivec3& wireNeighbor) {
+            forEachWireNeighbor(world, node.wire, [&](const WireNode& wireNeighbor) {
                 if (workSet.wireSet.insert(wireNeighbor).second) {
                     workSet.wires.push_back(wireNeighbor);
                     frontier.push({wireNeighbor, static_cast<uint8_t>(node.distance + 1)});
@@ -1545,7 +1626,11 @@ void collectWireComponent(const World& world, const glm::ivec3& start, RedstoneW
 void collectEndpointIfPresent(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
     const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
     if (isWireState(stateId)) {
-        collectWireComponent(world, position, workSet);
+        collectWireComponent(world, wireNodeFromState(position, stateId), workSet);
+    } else if (isWireContainerState(stateId)) {
+        forEachWireNodeAt(world, position, [&](const WireNode& wire) {
+            collectWireComponent(world, wire, workSet);
+        });
     } else if (isRedstoneControlledState(stateId)) {
         addRedstoneControlledIfPresent(world, position, workSet);
     } else if (isTorchState(stateId)) {
@@ -1563,6 +1648,12 @@ void collectEndpointIfPresent(const World& world, const glm::ivec3& position, Re
     } else if (isPotentialSourceState(stateId)) {
         addSourceIfPresent(world, position, workSet);
     }
+}
+
+void collectWireComponentsAt(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
+    forEachWireNodeAt(world, position, [&](const WireNode& wire) {
+        collectWireComponent(world, wire, workSet);
+    });
 }
 
 void collectEndpointsAround(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
@@ -1584,8 +1675,8 @@ void collectEndpointsAroundNeighborConductors(const World& world,
 
 void collectPosition(const World& world, const glm::ivec3& position, RedstoneWorkSet& workSet) {
     const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
-    if (isWireState(stateId)) {
-        collectWireComponent(world, position, workSet);
+    if (isWireState(stateId) || isWireContainerState(stateId)) {
+        collectWireComponentsAt(world, position, workSet);
         return;
     }
 
@@ -1607,8 +1698,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
         for (const glm::ivec3& direction : kDirections) {
             const glm::ivec3 neighbor = position + direction;
             const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-            if (isWireState(neighborState)) {
-                collectWireComponent(world, neighbor, workSet);
+            if (isWireState(neighborState) || isWireContainerState(neighborState)) {
+                collectWireComponentsAt(world, neighbor, workSet);
             } else if (isRedstoneControlledState(neighborState)) {
                 addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
@@ -1634,8 +1725,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
         for (const glm::ivec3& direction : kDirections) {
             const glm::ivec3 neighbor = position + direction;
             const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-            if (isWireState(neighborState)) {
-                collectWireComponent(world, neighbor, workSet);
+            if (isWireState(neighborState) || isWireContainerState(neighborState)) {
+                collectWireComponentsAt(world, neighbor, workSet);
             } else if (isRedstoneControlledState(neighborState)) {
                 addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
@@ -1661,8 +1752,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
         for (const glm::ivec3& direction : kDirections) {
             const glm::ivec3 neighbor = position + direction;
             const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-            if (isWireState(neighborState)) {
-                collectWireComponent(world, neighbor, workSet);
+            if (isWireState(neighborState) || isWireContainerState(neighborState)) {
+                collectWireComponentsAt(world, neighbor, workSet);
             } else if (isRedstoneControlledState(neighborState)) {
                 addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
@@ -1688,8 +1779,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
         for (const glm::ivec3& direction : kDirections) {
             const glm::ivec3 neighbor = position + direction;
             const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-            if (isWireState(neighborState)) {
-                collectWireComponent(world, neighbor, workSet);
+            if (isWireState(neighborState) || isWireContainerState(neighborState)) {
+                collectWireComponentsAt(world, neighbor, workSet);
             } else if (isRedstoneControlledState(neighborState)) {
                 addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
@@ -1715,8 +1806,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
         for (const glm::ivec3& direction : kDirections) {
             const glm::ivec3 neighbor = position + direction;
             const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-            if (isWireState(neighborState)) {
-                collectWireComponent(world, neighbor, workSet);
+            if (isWireState(neighborState) || isWireContainerState(neighborState)) {
+                collectWireComponentsAt(world, neighbor, workSet);
             } else if (isRedstoneControlledState(neighborState)) {
                 addRedstoneControlledIfPresent(world, neighbor, workSet);
             } else if (isTorchState(neighborState)) {
@@ -1747,8 +1838,8 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
     for (const glm::ivec3& direction : kDirections) {
         const glm::ivec3 neighbor = position + direction;
         const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-        if (isWireState(neighborState)) {
-            collectWireComponent(world, neighbor, workSet);
+        if (isWireState(neighborState) || isWireContainerState(neighborState)) {
+            collectWireComponentsAt(world, neighbor, workSet);
         } else if (isRedstoneControlledState(neighborState)) {
             addRedstoneControlledIfPresent(world, neighbor, workSet);
         } else if (isTorchState(neighborState)) {
@@ -1879,33 +1970,35 @@ void appendSources(std::vector<RedstoneSource>& target, std::vector<RedstoneSour
 
 void setBestWirePower(WirePowerMap& wirePowers,
                       std::priority_queue<PowerNode>& frontier,
-                      const glm::ivec3& position,
+                      const WireNode& wire,
                       const uint8_t power) {
     if (power == 0) {
         return;
     }
-    auto [it, inserted] = wirePowers.emplace(position, power);
+    auto [it, inserted] = wirePowers.emplace(wire, power);
     if (!inserted && it->second >= power) {
         return;
     }
     it->second = power;
-    frontier.push({position, power});
+    frontier.push({wire, power});
 }
 
 void seedTrackedWirePower(WirePowerMap& wirePowers,
                           std::priority_queue<PowerNode>& frontier,
-                          const PositionSet& wires,
+                          const WireNodeSet& wires,
                           const glm::ivec3& position,
                           const uint8_t power) {
-    if (wires.find(position) != wires.end()) {
-        setBestWirePower(wirePowers, frontier, position, power);
+    for (const WireNode& wire : wires) {
+        if (wire.position == position) {
+            setBestWirePower(wirePowers, frontier, wire, power);
+        }
     }
 }
 
 void seedWiresPoweredByConductor(const World& world,
                                  WirePowerMap& wirePowers,
                                  std::priority_queue<PowerNode>& frontier,
-                                 const PositionSet& wires,
+                                 const WireNodeSet& wires,
                                  const glm::ivec3& conductor,
                                  const glm::ivec3& signalPosition,
                                  const uint8_t power) {
@@ -1925,7 +2018,7 @@ void seedWiresPoweredByConductor(const World& world,
 void seedSourcePowerToward(const World& world,
                            WirePowerMap& wirePowers,
                            std::priority_queue<PowerNode>& frontier,
-                           const PositionSet& wires,
+                           const WireNodeSet& wires,
                            const RedstoneSource& source,
                            const glm::ivec3& target) {
     seedTrackedWirePower(wirePowers, frontier, wires, target, source.power);
@@ -1940,7 +2033,7 @@ void seedSourcePowerToward(const World& world,
 }
 
 WirePowerMap propagateWirePower(const World& world,
-                                const PositionSet& wires,
+                                const WireNodeSet& wires,
                                 const std::vector<RedstoneSource>& sources) {
     WirePowerMap wirePowers;
     wirePowers.evaluatedWires = &wires;
@@ -1972,7 +2065,7 @@ WirePowerMap propagateWirePower(const World& world,
         const PowerNode node = frontier.top();
         frontier.pop();
 
-        const auto currentIt = wirePowers.find(node.position);
+        const auto currentIt = wirePowers.find(node.wire);
         if (currentIt == wirePowers.end() || currentIt->second != node.power) {
             continue;
         }
@@ -1981,7 +2074,7 @@ WirePowerMap propagateWirePower(const World& world,
         }
 
         const uint8_t nextPower = static_cast<uint8_t>(node.power - 1);
-        forEachWireNeighbor(world, node.position, [&](const glm::ivec3& neighbor) {
+        forEachWireNeighbor(world, node.wire, [&](const WireNode& neighbor) {
             if (wires.find(neighbor) != wires.end()) {
                 setBestWirePower(wirePowers, frontier, neighbor, nextPower);
             }
@@ -2011,9 +2104,38 @@ glm::ivec3 attachedBlockForTorch(const BlockStateId stateId, const glm::ivec3& p
     throw std::runtime_error("Redstone torch state contains an unknown facing value");
 }
 
-uint8_t computedWirePowerAt(const WirePowerMap& wirePowers, const glm::ivec3& position) {
-    const auto it = wirePowers.find(position);
+uint8_t computedWirePowerForNode(const WirePowerMap& wirePowers, const WireNode& wire) {
+    const auto it = wirePowers.find(wire);
     return it == wirePowers.end() ? 0 : it->second;
+}
+
+uint8_t storedWireNodePower(const World& world, const WireNode& wire) {
+    const BlockStateId stateId = world.getBlockState(wire.position.x, wire.position.y, wire.position.z);
+    if (isWireState(stateId) && isMatchingWireNodeState(stateId, wire)) {
+        return redstonePowerFromState(stateId);
+    }
+    if (isWireContainerState(stateId)) {
+        const WirePart* part = findWireContainerPart(world, wire);
+        if (part != nullptr) {
+            return part->power;
+        }
+    }
+    throw std::runtime_error("Redstone wire node power requires an existing wire node");
+}
+
+uint8_t wirePowerAtPosition(const World& world,
+                            const WirePowerMap& wirePowers,
+                            const glm::ivec3& position) {
+    uint8_t power = 0;
+    forEachWireNodeAt(world, position, [&](const WireNode& wire) {
+        const auto computedIt = wirePowers.find(wire);
+        if (computedIt != wirePowers.end()) {
+            power = std::max(power, computedIt->second);
+            return;
+        }
+        power = std::max(power, wirePowers.wasEvaluated(wire) ? uint8_t{0} : storedWireNodePower(world, wire));
+    });
+    return power;
 }
 
 uint8_t sourceOutputPowerToward(const World& world,
@@ -2055,12 +2177,8 @@ uint8_t directSignalPowerToward(const World& world,
                                 const glm::ivec3& signalPosition,
                                 const glm::ivec3& targetPosition) {
     const BlockStateId signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
-    if (isWireState(signalState)) {
-        const auto computedIt = wirePowers.find(signalPosition);
-        if (computedIt != wirePowers.end()) {
-            return computedIt->second;
-        }
-        return wirePowers.wasEvaluated(signalPosition) ? 0 : redstonePowerFromState(signalState);
+    if (isWireState(signalState) || isWireContainerState(signalState)) {
+        return wirePowerAtPosition(world, wirePowers, signalPosition);
     }
     return sourceOutputPowerToward(world, signalPosition, targetPosition);
 }
@@ -2069,7 +2187,7 @@ uint8_t sourceStrongPowerTowardConductor(const World& world,
                                          const glm::ivec3& sourcePosition,
                                          const glm::ivec3& conductorPosition) {
     const BlockStateId sourceState = world.getBlockState(sourcePosition.x, sourcePosition.y, sourcePosition.z);
-    if (isWireState(sourceState) || isConductiveState(sourceState)) {
+    if (isWireState(sourceState) || isWireContainerState(sourceState) || isConductiveState(sourceState)) {
         return 0;
     }
     if (isTorchState(sourceState)) {
@@ -2093,16 +2211,14 @@ uint8_t wirePowerTowardConductor(const World& world,
                                  const WirePowerMap& wirePowers,
                                  const glm::ivec3& wirePosition,
                                  const glm::ivec3& conductorPosition) {
-    if (!wirePowersConductorToward(world, wirePosition, conductorPosition)) {
+    const BlockStateId stateId = world.getBlockState(wirePosition.x, wirePosition.y, wirePosition.z);
+    if (isWireState(stateId) && !wirePowersConductorToward(world, wirePosition, conductorPosition)) {
         return 0;
     }
-    const auto computedIt = wirePowers.find(wirePosition);
-    if (computedIt != wirePowers.end()) {
-        return computedIt->second;
+    if (!isWireState(stateId) && !isWireContainerState(stateId)) {
+        return 0;
     }
-    return wirePowers.wasEvaluated(wirePosition)
-        ? 0
-        : redstonePowerFromState(world.getBlockState(wirePosition.x, wirePosition.y, wirePosition.z));
+    return wirePowerAtPosition(world, wirePowers, wirePosition);
 }
 
 uint8_t conductiveBlockInputPowerToward(const World& world,
@@ -2110,7 +2226,7 @@ uint8_t conductiveBlockInputPowerToward(const World& world,
                                         const glm::ivec3& signalPosition,
                                         const glm::ivec3& conductorPosition) {
     const BlockStateId signalState = world.getBlockState(signalPosition.x, signalPosition.y, signalPosition.z);
-    if (isWireState(signalState)) {
+    if (isWireState(signalState) || isWireContainerState(signalState)) {
         return wirePowerTowardConductor(world, wirePowers, signalPosition, conductorPosition);
     }
 
@@ -2222,7 +2338,7 @@ void compactTorchRuntimeState(RedstoneRuntimeState& runtime,
 
 size_t applyTorchStates(World& world,
                         const std::vector<glm::ivec3>& torches,
-                        const PositionSet& wires,
+                        const WireNodeSet& wires,
                         const std::vector<glm::ivec3>& sourcePositions,
                         const std::vector<glm::ivec3>& repeaterPositions,
                         const std::vector<glm::ivec3>& observerPositions,
@@ -2656,19 +2772,45 @@ size_t applyScheduledUpdates(World& world, const std::vector<RedstoneScheduledUp
     return changed;
 }
 
-size_t applyWirePowers(World& world, const std::vector<glm::ivec3>& wires, const WirePowerMap& wirePowers) {
+size_t applyWirePowers(World& world, const std::vector<WireNode>& wires, const WirePowerMap& wirePowers) {
     size_t changed = 0;
-    for (const glm::ivec3& position : wires) {
+    PositionSet changedContainers;
+    for (const WireNode& wire : wires) {
+        const glm::ivec3& position = wire.position;
         const BlockStateId currentState = world.getBlockState(position.x, position.y, position.z);
-        if (!isWireState(currentState)) {
+        const uint8_t power = computedWirePowerForNode(wirePowers, wire);
+        if (isWireState(currentState)) {
+            if (!isMatchingWireNodeState(currentState, wire)) {
+                continue;
+            }
+
+            const BlockStateId updatedState = withRedstonePower(currentState, power);
+            if (updatedState != currentState) {
+                world.setBlockState(position.x, position.y, position.z, updatedState);
+                ++changed;
+            }
             continue;
         }
 
-        const BlockStateId updatedState = withRedstonePower(currentState, computedWirePowerAt(wirePowers, position));
-        if (updatedState != currentState) {
-            world.setBlockState(position.x, position.y, position.z, updatedState);
+        if (!isWireContainerState(currentState)) {
+            continue;
+        }
+        WireContainerParts* parts = world.wireContainerParts().findMutable(position);
+        if (parts == nullptr) {
+            continue;
+        }
+        WirePart* part = parts->findMutable(wire.channelId, wire.facing);
+        if (part == nullptr) {
+            continue;
+        }
+        if (part->power != power) {
+            part->power = power;
+            changedContainers.insert(position);
             ++changed;
         }
+    }
+    for (const glm::ivec3& position : changedContainers) {
+        world.notifyWireContainerPartsChanged(position);
     }
     return changed;
 }
