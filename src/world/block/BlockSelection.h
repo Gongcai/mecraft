@@ -11,6 +11,7 @@ struct BlockSelectionBox {
 
 namespace BlockSelection {
 
+[[nodiscard]] BlockSelectionBox getFacePlaneBoxForFacing(uint16_t facing);
 [[nodiscard]] BlockSelectionBox getBox(BlockStateId stateId);
 
 } // namespace BlockSelection

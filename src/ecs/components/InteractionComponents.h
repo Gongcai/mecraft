@@ -36,6 +36,7 @@ struct BlockTargetComponent {
 struct BlockBreakComponent {
     bool active = false;
     glm::ivec3 blockPos{};
+    glm::ivec3 hitNormal{};
     float progress01 = 0.0f;
 };
 

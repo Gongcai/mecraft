@@ -269,6 +269,54 @@ ApplyResult apply(World& world,
     return ApplyResult::NotWirePlacement;
 }
 
+WireContainerParts removePartsOnFace(World& world,
+                                     const glm::ivec3& position,
+                                     const uint16_t facing) {
+    if (!WireFaceGeometry::isWireFacing(facing)) {
+        throw std::runtime_error("Wire container part removal received an unsupported wire facing");
+    }
+    if (!world.isChunkLoadedForBlock(position.x, position.y, position.z)) {
+        return {};
+    }
+
+    const BlockStateId existingState = world.getBlockState(position.x, position.y, position.z);
+    if (!isWireContainerState(existingState)) {
+        return {};
+    }
+
+    const WireContainerParts* storedParts = world.wireContainerParts().find(position);
+    if (storedParts == nullptr) {
+        throw std::runtime_error("Wire container block is missing its part store entry");
+    }
+
+    WireContainerParts remainingParts;
+    WireContainerParts removedParts;
+    storedParts->forEach([&](const WirePart& part) {
+        if (part.facing == facing) {
+            if (!removedParts.addPart(part)) {
+                throw std::runtime_error("Wire container part removal could not record the removed part");
+            }
+            return;
+        }
+        if (!remainingParts.addPart(part)) {
+            throw std::runtime_error("Wire container part removal could not preserve an existing part");
+        }
+    });
+
+    if (removedParts.empty()) {
+        return removedParts;
+    }
+
+    if (remainingParts.empty()) {
+        world.setBlockState(position.x, position.y, position.z, NULL_BLOCK_STATE);
+        return removedParts;
+    }
+
+    world.wireContainerParts().getOrCreate(position) = remainingParts;
+    world.notifyWireContainerPartsChanged(position);
+    return removedParts;
+}
+
 std::vector<BlockID> wireBlocksForParts(const WireContainerParts& parts) {
     std::vector<BlockID> blockIds;
     blockIds.reserve(parts.size());

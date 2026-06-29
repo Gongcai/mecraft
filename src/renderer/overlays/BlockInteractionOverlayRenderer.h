@@ -12,12 +12,14 @@ class IWorldView;
 struct BlockTargetRenderData {
     bool hasTarget = false;
     glm::ivec3 targetBlock{};
+    glm::ivec3 hitNormal{};
 };
 
 struct BlockBreakRenderData {
     bool active = false;
     float progress01 = 0.0f;
     glm::ivec3 blockPos{};
+    glm::ivec3 hitNormal{};
 };
 
 /// Renders block selection outline and break progress overlay.

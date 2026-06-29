@@ -21,6 +21,7 @@
 #include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/PistonBlock.h"
 #include "../../../world/redstone/WireContainerPlacement.h"
+#include "../../../world/redstone/WireFaceGeometry.h"
 #include "../../../world/World.h"
 #include "../item/ItemSpawnSystem.h"
 
@@ -46,6 +47,7 @@ void resetBreakSession(BlockBreakComponent& blockBreak,
     runtime.breakBlockPos = glm::ivec3{};
     blockBreak.active = false;
     blockBreak.blockPos = glm::ivec3{};
+    blockBreak.hitNormal = glm::ivec3{};
     blockBreak.progress01 = 0.0f;
 }
 
@@ -81,6 +83,40 @@ float survivalBreakDurationMs(const BlockID targetBlock, const ItemStack& heldSt
     }
 
     return std::max(1.0f, baseDurationMs / itemDef.toolEfficiency);
+}
+
+bool isWireContainerState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isWireContainer;
+}
+
+bool isAxisNormal(const glm::ivec3& normal) {
+    const int components =
+        (normal.x == 0 ? 0 : 1) +
+        (normal.y == 0 ? 0 : 1) +
+        (normal.z == 0 ? 0 : 1);
+    return components == 1 &&
+           normal.x >= -1 && normal.x <= 1 &&
+           normal.y >= -1 && normal.y <= 1 &&
+           normal.z >= -1 && normal.z <= 1;
+}
+
+WireContainerParts removeTargetWireContainerParts(World& world,
+                                                  const glm::ivec3& hitBlock,
+                                                  const glm::ivec3& hitNormal) {
+    const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+    if (!isWireContainerState(targetState)) {
+        return {};
+    }
+    if (!isAxisNormal(hitNormal)) {
+        throw std::runtime_error("Wire container part break requires an axis-aligned hit normal");
+    }
+
+    const uint16_t facing = WireFaceGeometry::facingFromSurfaceNormal(hitNormal);
+    return WireContainerPlacement::removePartsOnFace(world, hitBlock, facing);
 }
 
 BlockID removeTargetBlock(World& world,
@@ -204,6 +240,21 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                 continue;
             }
 
+            const WireContainerParts removedWireParts =
+                removeTargetWireContainerParts(*mutableWorld, hitBlock, target.hitNormal);
+            if (!removedWireParts.empty()) {
+                audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
+                particleBus.push({hitBlock, targetBlock});
+                runtime.creativeBreakCooldownRemaining = modeRules.breakDurationMs(targetBlock) / 1000.0f;
+                ++runtime.heldItemSwingSequence;
+                resetBreakSession(blockBreak, runtime);
+                continue;
+            }
+            if (isWireContainerState(targetState)) {
+                resetBreakSession(blockBreak, runtime);
+                continue;
+            }
+
             std::vector<glm::ivec3> removedPositions;
             const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
             const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, true);
@@ -233,6 +284,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
         runtime.breakElapsedMs += dt * 1000.0f;
         blockBreak.active = true;
         blockBreak.blockPos = hitBlock;
+        blockBreak.hitNormal = target.hitNormal;
         blockBreak.progress01 = std::clamp(runtime.breakElapsedMs / runtime.breakRequiredMs, 0.0f, 1.0f);
 
         if (runtime.breakElapsedMs >= runtime.breakRequiredMs) {
@@ -249,6 +301,21 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                 } else {
                     ++runtime.heldItemSwingSequence;
                 }
+                resetBreakSession(blockBreak, runtime);
+                continue;
+            }
+            const WireContainerParts removedWireParts =
+                removeTargetWireContainerParts(*mutableWorld, hitBlock, target.hitNormal);
+            if (!removedWireParts.empty()) {
+                audioBus.push({"block.generic.break", glm::vec3(hitBlock), true, 1.0f});
+                particleBus.push({hitBlock, targetBlock});
+                spawnWireContainerPartDrops(registry, removedWireParts, hitBlock);
+                applySelectedToolDurabilityWear(inventoryData.inventory);
+                ++runtime.heldItemSwingSequence;
+                resetBreakSession(blockBreak, runtime);
+                continue;
+            }
+            if (isWireContainerState(targetState)) {
                 resetBreakSession(blockBreak, runtime);
                 continue;
             }

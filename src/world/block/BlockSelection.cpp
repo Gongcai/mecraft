@@ -195,8 +195,12 @@ uint16_t requireFacePlaneFacing(const BlockStateId stateId) {
 }
 
 BlockSelectionBox getFacePlaneBox(const BlockStateId stateId) {
-    const uint16_t facing = requireFacePlaneFacing(stateId);
+    return BlockSelection::getFacePlaneBoxForFacing(requireFacePlaneFacing(stateId));
+}
 
+} // namespace
+
+BlockSelectionBox BlockSelection::getFacePlaneBoxForFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_FLOOR) {
         return {glm::vec3(0.0f, 0.0f, 0.0f),
                 glm::vec3(1.0f, kFacePlaneSelectionThickness, 1.0f)};
@@ -223,8 +227,6 @@ BlockSelectionBox getFacePlaneBox(const BlockStateId stateId) {
     }
     throw std::runtime_error("Face plane selection received an unsupported facing value");
 }
-
-} // namespace
 
 BlockSelectionBox BlockSelection::getBox(const BlockStateId stateId) {
     const BlockDef& def = BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId));

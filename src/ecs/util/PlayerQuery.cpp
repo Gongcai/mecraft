@@ -161,6 +161,12 @@ glm::ivec3 PlayerQuery::getTargetBlock() const {
     return {};
 }
 
+glm::ivec3 PlayerQuery::getTargetHitNormal() const {
+    auto e = findPlayer();
+    if (auto* b = m_registry.try_get<BlockTargetComponent>(e)) return b->hitNormal;
+    return {};
+}
+
 bool PlayerQuery::hasBlockBreakProgress() const {
     auto e = findPlayer();
     if (auto* b = m_registry.try_get<BlockBreakComponent>(e)) return b->active;
@@ -176,6 +182,12 @@ float PlayerQuery::getBlockBreakProgress() const {
 glm::ivec3 PlayerQuery::getBreakTargetBlock() const {
     auto e = findPlayer();
     if (auto* b = m_registry.try_get<BlockBreakComponent>(e)) return b->blockPos;
+    return {};
+}
+
+glm::ivec3 PlayerQuery::getBreakTargetHitNormal() const {
+    auto e = findPlayer();
+    if (auto* b = m_registry.try_get<BlockBreakComponent>(e)) return b->hitNormal;
     return {};
 }
 

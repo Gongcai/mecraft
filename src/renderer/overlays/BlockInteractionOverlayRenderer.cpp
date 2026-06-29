@@ -4,9 +4,36 @@
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockSelection.h"
 #include "../../world/block/BlockStateRegistry.h"
+#include "../../world/redstone/WireFaceGeometry.h"
 #include "../core/Shader.h"
 
 #include <array>
+
+namespace {
+
+bool isAxisNormal(const glm::ivec3& normal) {
+    const int components =
+        (normal.x == 0 ? 0 : 1) +
+        (normal.y == 0 ? 0 : 1) +
+        (normal.z == 0 ? 0 : 1);
+    return components == 1 &&
+           normal.x >= -1 && normal.x <= 1 &&
+           normal.y >= -1 && normal.y <= 1 &&
+           normal.z >= -1 && normal.z <= 1;
+}
+
+BlockSelectionBox selectionBoxForTarget(const BlockStateId targetState,
+                                        const glm::ivec3& hitNormal) {
+    const BlockID targetId = BlockStateRegistry::getBlockId(targetState);
+    const BlockDef& targetDef = BlockRegistry::getFast(targetId);
+    if (targetDef.isWireContainer && isAxisNormal(hitNormal)) {
+        const uint16_t facing = WireFaceGeometry::facingFromSurfaceNormal(hitNormal);
+        return BlockSelection::getFacePlaneBoxForFacing(facing);
+    }
+    return BlockSelection::getBox(targetState);
+}
+
+} // namespace
 
 void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr) {
     m_outlineShader = resourceMgr.getShader("outline");
@@ -154,7 +181,7 @@ void BlockInteractionOverlayRenderer::renderBlockOutline(const IWorldView& world
 
     const glm::ivec3 targetBlock = target.targetBlock;
     const BlockStateId targetState = worldView.getBlockState(targetBlock.x, targetBlock.y, targetBlock.z);
-    const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
+    const BlockSelectionBox selectionBox = selectionBoxForTarget(targetState, target.hitNormal);
     const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
     const glm::vec3 boxSize = selectionBox.max - selectionBox.min;
 
@@ -194,7 +221,7 @@ void BlockInteractionOverlayRenderer::renderBlockBreakOverlay(const IWorldView& 
     const BlockID targetId = BlockStateRegistry::getBlockId(targetState);
     const BlockDef& targetDef = BlockRegistry::get(targetId);
     const bool useCrossOverlay = (targetDef.renderShape == BlockRenderShape::Cross);
-    const BlockSelectionBox selectionBox = BlockSelection::getBox(targetState);
+    const BlockSelectionBox selectionBox = selectionBoxForTarget(targetState, blockBreak.hitNormal);
     const glm::vec3 boxCenter = (selectionBox.min + selectionBox.max) * 0.5f;
     const glm::vec3 boxSize = selectionBox.max - selectionBox.min;
 

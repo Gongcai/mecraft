@@ -38,6 +38,7 @@
 #include "../world/block/BlockStateRegistry.h"
 #include "../world/fluid/FluidState.h"
 #include "../world/redstone/WireContainerPlacement.h"
+#include "../world/redstone/WireFaceGeometry.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -1657,6 +1658,40 @@ WireContainerParts copyWireContainerPartsAt(const World& world, const glm::ivec3
     return parts;
 }
 
+bool isWireContainerState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isWireContainer;
+}
+
+bool isAxisNormal(const glm::ivec3& normal) {
+    const int components =
+        (normal.x == 0 ? 0 : 1) +
+        (normal.y == 0 ? 0 : 1) +
+        (normal.z == 0 ? 0 : 1);
+    return components == 1 &&
+           normal.x >= -1 && normal.x <= 1 &&
+           normal.y >= -1 && normal.y <= 1 &&
+           normal.z >= -1 && normal.z <= 1;
+}
+
+WireContainerParts removeTargetWireContainerParts(World& world,
+                                                  const glm::ivec3& hitBlock,
+                                                  const glm::ivec3& hitNormal) {
+    const BlockStateId targetState = world.getBlockState(hitBlock.x, hitBlock.y, hitBlock.z);
+    if (!isWireContainerState(targetState)) {
+        return {};
+    }
+    if (!isAxisNormal(hitNormal)) {
+        throw std::runtime_error("Wire container part break requires an axis-aligned hit normal");
+    }
+
+    const uint16_t facing = WireFaceGeometry::facingFromSurfaceNormal(hitNormal);
+    return WireContainerPlacement::removePartsOnFace(world, hitBlock, facing);
+}
+
 void spawnWireContainerPartDrops(ecs::GameplayRegistry& registry,
                                  const WireContainerParts& parts,
                                  const glm::ivec3& position) {
@@ -2012,11 +2047,28 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         if (targetState == NULL_BLOCK_STATE || !BlockRegistry::get(target).isSelectable) {
             return;
         }
+        const bool dropBrokenBlockItem = client.gameplayMode != net::NetworkGameplayMode::Creative;
+        const WireContainerParts removedWireParts =
+            removeTargetWireContainerParts(m_world, action.targetBlock, action.hitNormal);
+        if (!removedWireParts.empty()) {
+            if (m_gameplayRegistry != nullptr && dropBrokenBlockItem) {
+                spawnWireContainerPartDrops(*m_gameplayRegistry, removedWireParts, action.targetBlock);
+            }
+            MECRAFT_LOG_PRINTF("[Server] ClientBlockAction break wire_container_part client=%u block=(%d,%d,%d)\n",
+                               client.id,
+                               action.targetBlock.x,
+                               action.targetBlock.y,
+                               action.targetBlock.z);
+            MECRAFT_LOG_FLUSH(stdout);
+            return;
+        }
+        if (isWireContainerState(targetState)) {
+            return;
+        }
         const WireContainerParts brokenWireParts = copyWireContainerPartsAt(m_world, action.targetBlock);
         std::vector<glm::ivec3> removedPositions;
         const BlockID brokenBlock = removeServerTargetBlock(m_world, action.targetBlock, removedPositions);
         closeOpenContainersAtPositions(removedPositions);
-        const bool dropBrokenBlockItem = client.gameplayMode != net::NetworkGameplayMode::Creative;
         constexpr bool dropContainerContents = true;
         bool brokeStorage = false;
         bool brokeMachine = false;

@@ -11,6 +11,7 @@ class Inventory;
 struct SnapBlockTargetData {
     bool hasTarget = false;
     glm::ivec3 targetBlock{};
+    glm::ivec3 hitNormal{};
 };
 
 /// Block break data for overlay rendering (duplicated here to avoid renderer header dependency).
@@ -18,6 +19,7 @@ struct SnapBlockBreakData {
     bool active = false;
     float progress01 = 0.0f;
     glm::ivec3 blockPos{};
+    glm::ivec3 hitNormal{};
 };
 
 /// Held item motion data for first-person rendering.

@@ -325,29 +325,6 @@ bool wireNodeExists(const World& world, const WireNode& node) {
     return false;
 }
 
-template <typename Fn>
-void forEachCornerWireNeighbor(const World& world,
-                               const WireNode& wire,
-                               Fn&& fn) {
-    const glm::ivec3 support = WireFaceGeometry::supportPosition(wire.position, wire.facing);
-    for (const uint16_t neighborFacing : WireFaceGeometry::wireFacings()) {
-        if (!WireFaceGeometry::arePerpendicularFacings(wire.facing, neighborFacing)) {
-            continue;
-        }
-
-        const glm::ivec3 neighbor = WireFaceGeometry::wirePositionOnSupportFace(support, neighborFacing);
-        const WireNode neighborNode{neighbor, wire.channelId, neighborFacing};
-        const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-        if (isWireState(neighborState) && isMatchingWireNodeState(neighborState, neighborNode)) {
-            fn(neighborNode);
-            continue;
-        }
-        if (isWireContainerState(neighborState) && hasMatchingWireContainerPart(world, neighborNode)) {
-            fn(neighborNode);
-        }
-    }
-}
-
 BlockStateId withRequiredProperty(const BlockStateId stateId,
                              const uint16_t property,
                              const uint16_t value,
@@ -638,9 +615,9 @@ bool isConductiveBlockAt(const World& world, const glm::ivec3& position) {
     return isConductiveState(world.getBlockState(position.x, position.y, position.z));
 }
 
-// Calls fn for every wire position connected to the wire at pos. Wires connect
-// within their own face plane and can meet matching-color wires around a shared
-// support-block edge.
+// Calls fn for every wire node connected to the wire at pos. Wires connect
+// within their own face plane and same-color wire_container faces connect
+// across the shared edge inside one block space.
 template <typename Fn>
 void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
     if (!wireNodeExists(world, wire)) {
@@ -659,12 +636,24 @@ void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
         }
     };
 
+    const auto trySameCellFaceNeighbor = [&](const uint16_t facing) {
+        if (!WireFaceGeometry::arePerpendicularFacings(wire.facing, facing)) {
+            return;
+        }
+        const WireNode neighbor{wire.position, wire.channelId, facing};
+        if (hasMatchingWireContainerPart(world, neighbor)) {
+            fn(neighbor);
+        }
+    };
+
     if (wire.facing == PropIndices::FACING_FLOOR) {
         for (const WireFaceGeometry::ConnectionDirection& connection :
              WireFaceGeometry::connectionDirections(wire.facing)) {
             tryNeighbor(wire.position + connection.offset, PropIndices::FACING_FLOOR);
         }
-        forEachCornerWireNeighbor(world, wire, fn);
+        for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
+            trySameCellFaceNeighbor(facing);
+        }
         return;
     }
 
@@ -672,7 +661,9 @@ void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
          WireFaceGeometry::connectionDirections(wire.facing)) {
         tryNeighbor(wire.position + connection.offset, wire.facing);
     }
-    forEachCornerWireNeighbor(world, wire, fn);
+    for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
+        trySameCellFaceNeighbor(facing);
+    }
 }
 
 bool isRedstoneControlledState(const BlockStateId stateId) {

@@ -269,10 +269,12 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     BlockTargetRenderData targetData;
     targetData.hasTarget = snap.blockTarget.hasTarget;
     targetData.targetBlock = snap.blockTarget.targetBlock;
+    targetData.hitNormal = snap.blockTarget.hitNormal;
     BlockBreakRenderData breakData;
     breakData.active = snap.blockBreak.active;
     breakData.progress01 = snap.blockBreak.progress01;
     breakData.blockPos = snap.blockBreak.blockPos;
+    breakData.hitNormal = snap.blockBreak.hitNormal;
 
     FirstPersonHeldItemMotion firstPersonMotion;
     firstPersonMotion.moving = snap.heldItemMotion.moving;

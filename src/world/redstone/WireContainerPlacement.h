@@ -36,6 +36,11 @@ enum class ApplyResult : uint8_t {
                                 const glm::ivec3& position,
                                 BlockStateId incomingWireState);
 
+/// Removes every wire part hosted on one face of a wire container block.
+[[nodiscard]] WireContainerParts removePartsOnFace(World& world,
+                                                   const glm::ivec3& position,
+                                                   uint16_t facing);
+
 /// Returns the ordinary wire block ids represented by the container parts.
 [[nodiscard]] std::vector<BlockID> wireBlocksForParts(const WireContainerParts& parts);
 

@@ -47,9 +47,11 @@ public:
     // ── Block Interaction ──
     [[nodiscard]] bool hasTargetBlock() const;
     [[nodiscard]] glm::ivec3 getTargetBlock() const;
+    [[nodiscard]] glm::ivec3 getTargetHitNormal() const;
     [[nodiscard]] bool hasBlockBreakProgress() const;
     [[nodiscard]] float getBlockBreakProgress() const;
     [[nodiscard]] glm::ivec3 getBreakTargetBlock() const;
+    [[nodiscard]] glm::ivec3 getBreakTargetHitNormal() const;
 
     // ── Stats ──
     [[nodiscard]] int getHealth() const;

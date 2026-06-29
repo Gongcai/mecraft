@@ -139,9 +139,11 @@ GameplayPresentationSnapshot GameplayPresentationBuilder::build(
     // Block interaction
     snap.blockTarget.hasTarget = playerQuery.hasTargetBlock();
     snap.blockTarget.targetBlock = playerQuery.getTargetBlock();
+    snap.blockTarget.hitNormal = playerQuery.getTargetHitNormal();
     snap.blockBreak.active = playerQuery.hasBlockBreakProgress();
     snap.blockBreak.progress01 = playerQuery.getBlockBreakProgress();
     snap.blockBreak.blockPos = playerQuery.getBreakTargetBlock();
+    snap.blockBreak.hitNormal = playerQuery.getBreakTargetHitNormal();
 
     // Held item motion
     snap.heldItemMotion.moving = playerQuery.isMoving();
