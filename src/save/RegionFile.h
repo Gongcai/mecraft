@@ -25,6 +25,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <vector>
 #include <array>
 
@@ -93,7 +94,7 @@ public:
 private:
     RegionFile() = default;
 
-    // Read the chunk data at the given index entry
+    // Read the chunk data at the given index entry. The caller must hold m_ioMutex.
     [[nodiscard]] std::vector<uint8_t> readChunkData(int localX, int localZ) const;
 
     // Write chunk data and update index
@@ -102,6 +103,7 @@ private:
     std::filesystem::path m_path;
     RegionHeader m_header{};
     std::array<ChunkIndexEntry, CHUNKS_PER_REGION> m_index{};
+    mutable std::mutex m_ioMutex;
     bool m_dirty = false;
 };
 

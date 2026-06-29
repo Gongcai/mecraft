@@ -149,6 +149,7 @@ RegionFile* SaveManager::getOrCreateRegion(int cx, int cz) const {
     const int rz = RegionFile::toRegionCoord(cz);
     const int64_t key = (static_cast<int64_t>(rx) << 32) | (static_cast<int64_t>(rz) & 0xFFFFFFFF);
 
+    std::lock_guard<std::mutex> lock(m_regionCacheMutex);
     auto it = m_regionCache.find(key);
     if (it != m_regionCache.end()) {
         return it->second.get();
@@ -209,26 +210,21 @@ void SaveManager::submitSaveChunk(int cx,
     // Serialize snapshot on calling thread (reads chunk data, no mutation)
     auto fileData = std::make_shared<std::vector<uint8_t>>(
         ChunkSerializer::serializeFile(chunk, wireContainers));
+    const int64_t key = makeChunkKey(cx, cz);
+    const uint64_t saveSequence = registerSaveSequence(key);
 
-    if (!m_threadPool) {
-        // No thread pool — write synchronously
-        RegionFile* region = getOrCreateRegion(cx, cz);
-        if (region) {
-            region->writeChunkRaw(cx, cz, *fileData);
-        } else {
-            writeChunkFileAtomic(cx, cz, *fileData);
-        }
+    if (!m_threadPool || !m_threadPool->isRunning()) {
+        writeChunkSnapshotIfCurrent(cx, cz, key, saveSequence, *fileData);
         return;
     }
 
     m_pendingSaveCount.fetch_add(1, std::memory_order_relaxed);
 
-    m_threadPool->submit([this, cx, cz, fileData]() {
-        RegionFile* region = getOrCreateRegion(cx, cz);
-        if (region) {
-            region->writeChunkRaw(cx, cz, *fileData);
-        } else {
-            writeChunkFileAtomic(cx, cz, *fileData);
+    m_threadPool->submit([this, cx, cz, key, saveSequence, fileData]() {
+        try {
+            writeChunkSnapshotIfCurrent(cx, cz, key, saveSequence, *fileData);
+        } catch (const std::exception& e) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Chunk save task failed: %s\n", e.what());
         }
         m_pendingSaveCount.fetch_sub(1, std::memory_order_release);
         m_saveCv.notify_all();
@@ -247,24 +243,84 @@ void SaveManager::flushPendingSaves() {
 }
 
 bool SaveManager::chunkFileExists(int cx, int cz) const {
-    // Check region file cache
     const int rx = RegionFile::toRegionCoord(cx);
     const int rz = RegionFile::toRegionCoord(cz);
     const int64_t key = (static_cast<int64_t>(rx) << 32) | (static_cast<int64_t>(rz) & 0xFFFFFFFF);
-    auto it = m_regionCache.find(key);
-    if (it != m_regionCache.end() && it->second && it->second->hasChunk(cx, cz)) {
+
+    RegionFile* cachedRegion = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(m_regionCacheMutex);
+        auto it = m_regionCache.find(key);
+        if (it != m_regionCache.end()) {
+            cachedRegion = it->second.get();
+        }
+    }
+    if (cachedRegion && cachedRegion->hasChunk(cx, cz)) {
         return true;
     }
 
-    // Check region file on disk
     const auto regionPath = RegionFile::regionPath(m_paths.chunksDir(), rx, rz);
     std::error_code ec;
     if (std::filesystem::exists(regionPath, ec)) {
-        return true; // Conservative: assume chunk might be in region
+        RegionFile* region = getOrCreateRegion(cx, cz);
+        if (region && region->hasChunk(cx, cz)) {
+            return true;
+        }
     }
 
-    // Check the single-file chunk path after the region-file path.
+    // Single-file chunk files are still part of the supported on-disk layout.
     return m_paths.chunkFileExists(cx, cz);
+}
+
+int64_t SaveManager::makeChunkKey(int cx, int cz) {
+    return (static_cast<int64_t>(cx) << 32) | (static_cast<int64_t>(cz) & 0xFFFFFFFF);
+}
+
+uint64_t SaveManager::registerSaveSequence(const int64_t chunkKey) {
+    const uint64_t sequence = m_nextSaveSequence.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(m_latestSaveMutex);
+    m_latestSaveSequence[chunkKey] = sequence;
+    return sequence;
+}
+
+bool SaveManager::isSaveSequenceCurrent(const int64_t chunkKey, const uint64_t saveSequence) const {
+    std::lock_guard<std::mutex> lock(m_latestSaveMutex);
+    const auto it = m_latestSaveSequence.find(chunkKey);
+    return it != m_latestSaveSequence.end() && it->second == saveSequence;
+}
+
+void SaveManager::clearSaveSequence(const int64_t chunkKey, const uint64_t saveSequence) {
+    std::lock_guard<std::mutex> lock(m_latestSaveMutex);
+    const auto it = m_latestSaveSequence.find(chunkKey);
+    if (it != m_latestSaveSequence.end() && it->second == saveSequence) {
+        m_latestSaveSequence.erase(it);
+    }
+}
+
+void SaveManager::writeChunkSnapshot(int cx, int cz, const std::vector<uint8_t>& fileData) {
+    RegionFile* region = getOrCreateRegion(cx, cz);
+    if (region) {
+        if (!region->writeChunkRaw(cx, cz, fileData)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to write chunk (%d, %d) to region\n", cx, cz);
+        }
+        return;
+    }
+
+    writeChunkFileAtomic(cx, cz, fileData);
+}
+
+void SaveManager::writeChunkSnapshotIfCurrent(const int cx,
+                                              const int cz,
+                                              const int64_t chunkKey,
+                                              const uint64_t saveSequence,
+                                              const std::vector<uint8_t>& fileData) {
+    std::lock_guard<std::mutex> writeLock(m_chunkWriteMutex);
+    if (!isSaveSequenceCurrent(chunkKey, saveSequence)) {
+        return;
+    }
+
+    writeChunkSnapshot(cx, cz, fileData);
+    clearSaveSequence(chunkKey, saveSequence);
 }
 
 // ---------------------------------------------------------------------------

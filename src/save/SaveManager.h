@@ -179,11 +179,22 @@ public:
 private:
     /// Write a chunk file atomically: write .tmp, flush, rename old to .bak, rename .tmp to final.
     void writeChunkFileAtomic(int cx, int cz, const std::vector<uint8_t>& fileData);
+    void writeChunkSnapshot(int cx, int cz, const std::vector<uint8_t>& fileData);
+    void writeChunkSnapshotIfCurrent(int cx,
+                                     int cz,
+                                     int64_t chunkKey,
+                                     uint64_t saveSequence,
+                                     const std::vector<uint8_t>& fileData);
+    [[nodiscard]] static int64_t makeChunkKey(int cx, int cz);
+    [[nodiscard]] uint64_t registerSaveSequence(int64_t chunkKey);
+    [[nodiscard]] bool isSaveSequenceCurrent(int64_t chunkKey, uint64_t saveSequence) const;
+    void clearSaveSequence(int64_t chunkKey, uint64_t saveSequence);
 
     SavePaths m_paths;
     ThreadPool* m_threadPool = nullptr;
 
     // Region file cache (opened on demand, keyed by "rx,rz")
+    mutable std::mutex m_regionCacheMutex;
     mutable std::unordered_map<int64_t, std::unique_ptr<RegionFile>> m_regionCache;
     RegionFile* getOrCreateRegion(int cx, int cz) const;
 
@@ -191,6 +202,10 @@ private:
     std::mutex m_saveMutex;
     std::condition_variable m_saveCv;
     std::atomic<int> m_pendingSaveCount{0};
+    mutable std::mutex m_latestSaveMutex;
+    std::unordered_map<int64_t, uint64_t> m_latestSaveSequence;
+    std::atomic<uint64_t> m_nextSaveSequence{1};
+    std::mutex m_chunkWriteMutex;
 };
 
 } // namespace save

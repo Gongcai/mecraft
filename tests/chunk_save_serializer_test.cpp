@@ -5,6 +5,7 @@
 #include "save/SaveManager.h"
 #include "save/SaveFormat.h"
 #include "save/PlayerSerializer.h"
+#include "thread/ThreadPool.h"
 #include "world/chunk/Chunk.h"
 #include "world/chunk/BitPackedArray.h"
 #include "world/block/Block.h"
@@ -318,6 +319,26 @@ static void testMixedBlocksInSubchunk() {
         assert(loaded->getBlock(x, 68, 0) == defaultState("minecraft:oak_planks"));
     }
     std::printf("[PASS] testMixedBlocksInSubchunk\n");
+}
+
+static void testSetBlockFastMarksSubchunkPresent() {
+    auto original = std::make_shared<Chunk>(0, 0);
+    original->setBlockFast(1, 64, 1, defaultState("minecraft:stone"));
+
+    const SubChunk* sub = original->getSubChunk(Chunk::toSubChunkIndex(64));
+    if (sub == nullptr || sub->getType() == SubChunkType::Air) {
+        std::fprintf(stderr, "[FAIL] setBlockFast should update the subchunk semantic type\n");
+        std::abort();
+    }
+
+    const std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original);
+    auto loaded = save::ChunkSerializer::deserializeFile(fileData.data(), fileData.size());
+    if (loaded == nullptr || loaded->getBlock(1, 64, 1) != defaultState("minecraft:stone")) {
+        std::fprintf(stderr, "[FAIL] setBlockFast edits should be included in the serialized subchunk mask\n");
+        std::abort();
+    }
+
+    std::printf("[PASS] testSetBlockFastMarksSubchunkPresent\n");
 }
 
 static void testBlockStateRoundTrip() {
@@ -714,6 +735,121 @@ static void testSaveManagerChunkRoundTrip() {
     std::printf("[PASS] testSaveManagerChunkRoundTrip\n");
 }
 
+static void testSaveManagerRegionChunkExistenceIsExact() {
+    const std::string testRoot = "test_save_manager_region_exists";
+    std::filesystem::remove_all(testRoot);
+    save::SaveManager mgr(testRoot);
+    mgr.paths().ensureDirectories();
+
+    auto chunk = std::make_shared<Chunk>(0, 0);
+    chunk->setBlock(2, 64, 2, defaultState("minecraft:stone"));
+    mgr.submitSaveChunk(0, 0, *chunk);
+    mgr.flushPendingSaves();
+
+    if (!mgr.chunkFileExists(0, 0)) {
+        std::fprintf(stderr, "[FAIL] saved region chunk should be reported as present\n");
+        std::abort();
+    }
+    if (mgr.chunkFileExists(1, 0)) {
+        std::fprintf(stderr, "[FAIL] unsaved chunk in an existing region should not be reported as present\n");
+        std::abort();
+    }
+    if (mgr.tryLoadChunk(1, 0) != nullptr) {
+        std::fprintf(stderr, "[FAIL] unsaved region chunk should not load from disk\n");
+        std::abort();
+    }
+
+    std::filesystem::remove_all(testRoot);
+    std::printf("[PASS] testSaveManagerRegionChunkExistenceIsExact\n");
+}
+
+static void testSaveManagerConcurrentRegionWritesRoundTrip() {
+    const std::string testRoot = "test_save_manager_concurrent_region";
+    std::filesystem::remove_all(testRoot);
+
+    ThreadPool pool(8);
+    pool.start();
+
+    save::SaveManager mgr(testRoot);
+    mgr.paths().ensureDirectories();
+    mgr.setThreadPool(&pool);
+
+    struct ExpectedBlock {
+        int x = 0;
+        int y = 0;
+        int z = 0;
+        BlockStateId state = NULL_BLOCK_STATE;
+    };
+    struct ExpectedChunk {
+        int cx = 0;
+        int cz = 0;
+        std::vector<ExpectedBlock> blocks;
+    };
+
+    const std::vector<BlockStateId> states = {
+        defaultState("minecraft:stone"),
+        defaultState("minecraft:dirt"),
+        defaultState("minecraft:oak_planks"),
+        defaultState("minecraft:glass")
+    };
+
+    std::vector<ExpectedChunk> expectedChunks;
+    expectedChunks.reserve(32);
+
+    for (int i = 0; i < 32; ++i) {
+        ExpectedChunk expected;
+        expected.cx = i % 8;
+        expected.cz = i / 8;
+
+        auto chunk = std::make_shared<Chunk>(expected.cx, expected.cz);
+        for (int marker = 0; marker < 4; ++marker) {
+            ExpectedBlock block;
+            block.x = (i * 3 + marker * 5) % Chunk::SIZE_X;
+            block.y = (2 + marker * 3) * SubChunk::SIZE + ((i + marker) % SubChunk::SIZE);
+            block.z = (i * 7 + marker * 2) % Chunk::SIZE_Z;
+            block.state = states[(i + marker) % states.size()];
+            chunk->setBlock(block.x, block.y, block.z, block.state);
+            expected.blocks.push_back(block);
+        }
+
+        mgr.submitSaveChunk(expected.cx, expected.cz, *chunk);
+        expectedChunks.push_back(std::move(expected));
+    }
+
+    mgr.flushPendingSaves();
+
+    for (const ExpectedChunk& expected : expectedChunks) {
+        auto loaded = mgr.tryLoadChunk(expected.cx, expected.cz);
+        if (loaded == nullptr) {
+            std::fprintf(stderr,
+                         "[FAIL] concurrently saved chunk (%d,%d) should load from the region file\n",
+                         expected.cx,
+                         expected.cz);
+            std::abort();
+        }
+
+        for (const ExpectedBlock& block : expected.blocks) {
+            const BlockStateId loadedState = loaded->getBlock(block.x, block.y, block.z);
+            if (loadedState != block.state) {
+                std::fprintf(stderr,
+                             "[FAIL] chunk (%d,%d) marker (%d,%d,%d) mismatch: expected=%s loaded=%s\n",
+                             expected.cx,
+                             expected.cz,
+                             block.x,
+                             block.y,
+                             block.z,
+                             BlockStateRegistry::stateToString(block.state).c_str(),
+                             BlockStateRegistry::stateToString(loadedState).c_str());
+                std::abort();
+            }
+        }
+    }
+
+    pool.shutdown();
+    std::filesystem::remove_all(testRoot);
+    std::printf("[PASS] testSaveManagerConcurrentRegionWritesRoundTrip\n");
+}
+
 static void testSaveManagerWireContainerPartsRoundTrip() {
     const std::string testRoot = "test_save_manager_wire_container";
     save::SaveManager mgr(testRoot);
@@ -1055,6 +1191,7 @@ int main() {
     testMultipleSubchunksRoundTrip();
     testNegativeCoordinatesRoundTrip();
     testMixedBlocksInSubchunk();
+    testSetBlockFastMarksSubchunkPresent();
     testBlockStateRoundTrip();
     testChestBlockStateRoundTrip();
     testWireContainerPartsRoundTrip();
@@ -1076,6 +1213,8 @@ int main() {
     // SaveManager tests
     testSaveManagerLevelMeta();
     testSaveManagerChunkRoundTrip();
+    testSaveManagerRegionChunkExistenceIsExact();
+    testSaveManagerConcurrentRegionWritesRoundTrip();
     testSaveManagerWireContainerPartsRoundTrip();
     testSaveManagerNonexistentChunk();
     testSaveManagerPersistentEntitiesRoundTrip();

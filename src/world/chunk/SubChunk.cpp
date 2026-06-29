@@ -183,6 +183,8 @@ void SubChunk::setBlockFast(const int x, const int y, const int z, const BlockSt
     };
     decrementCount(oldStateId);
     ++m_blockCounts[stateId];
+
+    inferType();
 }
 
 void SubChunk::initializeFromBlocks(const std::array<BlockStateId, BLOCK_COUNT>& blocks) {

@@ -95,6 +95,8 @@ std::shared_ptr<Chunk> RegionFile::readChunk(int cx, int cz) {
 }
 
 ChunkLoadData RegionFile::readChunkWithData(int cx, int cz) {
+    std::lock_guard<std::mutex> lock(m_ioMutex);
+
     ChunkLoadData loadData;
     const int lx = toLocalCoord(cx);
     const int lz = toLocalCoord(cz);
@@ -133,6 +135,8 @@ bool RegionFile::writeChunkRaw(int cx, int cz, const std::vector<uint8_t>& data)
 }
 
 bool RegionFile::hasChunk(int cx, int cz) const {
+    std::lock_guard<std::mutex> lock(m_ioMutex);
+
     const int lx = toLocalCoord(cx);
     const int lz = toLocalCoord(cz);
     const int index = lz * REGION_SIZE + lx;
@@ -159,6 +163,8 @@ std::vector<uint8_t> RegionFile::readChunkData(int localX, int localZ) const {
 }
 
 bool RegionFile::writeChunkData(int localX, int localZ, const std::vector<uint8_t>& data) {
+    std::lock_guard<std::mutex> lock(m_ioMutex);
+
     const int index = localZ * REGION_SIZE + localX;
 
     // Append to end of file
