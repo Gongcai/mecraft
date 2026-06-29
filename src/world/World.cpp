@@ -137,6 +137,33 @@ bool isMatchingRedstoneWireStateWithFacing(const BlockStateId stateId,
            redstoneWireFacingForState(stateId) == wireFacing;
 }
 
+const WirePart* findWireContainerPartAt(const World& world,
+                                        const glm::ivec3& position,
+                                        const uint16_t wireChannelId,
+                                        const uint16_t wireFacing) {
+    const WireContainerParts* parts = world.wireContainerParts().find(position);
+    return parts == nullptr ? nullptr : parts->find(wireChannelId, wireFacing);
+}
+
+bool hasWireContainerPartAt(const World& world,
+                            const glm::ivec3& position,
+                            const uint16_t wireChannelId,
+                            const uint16_t wireFacing) {
+    return findWireContainerPartAt(world, position, wireChannelId, wireFacing) != nullptr;
+}
+
+bool hasMatchingRedstoneWireAt(const World& world,
+                               const glm::ivec3& position,
+                               const uint16_t wireChannelId,
+                               const uint16_t wireFacing) {
+    const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
+    if (isMatchingRedstoneWireStateWithFacing(stateId, wireChannelId, wireFacing)) {
+        return true;
+    }
+    return isWireContainerState(stateId) &&
+           hasWireContainerPartAt(world, position, wireChannelId, wireFacing);
+}
+
 bool canConnectedBlockAttachTo(const BlockStateId stateId) {
     if (stateId == NULL_BLOCK_STATE) {
         return false;
@@ -161,6 +188,30 @@ bool canRedstoneWireAttachTo(const BlockStateId stateId, const uint16_t wireChan
         return redstoneWireFacingForState(stateId) == PropIndices::FACING_FLOOR;
     }
 
+    if (def.isRedstonePowerSource) {
+        return true;
+    }
+
+    return def.redstoneBehavior == "repeater" ||
+           def.redstoneBehavior == "comparator" ||
+           def.redstoneBehavior == "observer";
+}
+
+bool canRedstoneWireAttachToAt(const World& world,
+                               const glm::ivec3& position,
+                               const uint16_t wireChannelId,
+                               const uint16_t wireFacing) {
+    const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+
+    if (hasMatchingRedstoneWireAt(world, position, wireChannelId, wireFacing)) {
+        return true;
+    }
+
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    const BlockDef& def = BlockRegistry::getFast(blockId);
     if (def.isRedstonePowerSource) {
         return true;
     }
@@ -217,10 +268,7 @@ bool hasCornerRedstoneWireConnection(const World& world,
 
     const glm::ivec3 support = WireFaceGeometry::supportPosition(pos, wireFacing);
     const glm::ivec3 neighbor = WireFaceGeometry::wirePositionOnSupportFace(support, neighborFacing);
-    return isMatchingRedstoneWireStateWithFacing(
-        world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
-        wireChannelId,
-        neighborFacing);
+    return hasMatchingRedstoneWireAt(world, neighbor, wireChannelId, neighborFacing);
 }
 
 uint16_t redstoneWireConnectionValueWithCorners(const World& world,
@@ -273,6 +321,75 @@ uint16_t redstoneWireFaceConnectionValue(const World& world,
     return hasCornerRedstoneWireConnection(world, pos, wireChannelId, wireFacing, connection.offset)
         ? connection.sideValue
         : connection.noneValue;
+}
+
+uint16_t redstoneWireConnectionValueAt(const World& world,
+                                       const glm::ivec3& pos,
+                                       const uint16_t wireChannelId,
+                                       const uint16_t wireFacing,
+                                       const WireFaceGeometry::ConnectionDirection& connection) {
+    const glm::ivec3 planarNeighbor = pos + connection.offset;
+    if (canRedstoneWireAttachToAt(world, planarNeighbor, wireChannelId, wireFacing)) {
+        return connection.sideValue;
+    }
+    return hasCornerRedstoneWireConnection(world, pos, wireChannelId, wireFacing, connection.offset)
+        ? connection.sideValue
+        : connection.noneValue;
+}
+
+glm::ivec3 wireAxis1PositiveOffset(const uint16_t facing) {
+    if (facing == PropIndices::FACING_EAST || facing == PropIndices::FACING_WEST) {
+        return {0, 0, 1};
+    }
+    if (WireFaceGeometry::isWireFacing(facing)) {
+        return {1, 0, 0};
+    }
+    throw std::runtime_error("Wire container connection update received an unsupported wire facing");
+}
+
+glm::ivec3 wireAxis2PositiveOffset(const uint16_t facing) {
+    if (facing == PropIndices::FACING_FLOOR || facing == PropIndices::FACING_CEILING) {
+        return {0, 0, 1};
+    }
+    if (WireFaceGeometry::isWireFacing(facing)) {
+        return {0, 1, 0};
+    }
+    throw std::runtime_error("Wire container connection update received an unsupported wire facing");
+}
+
+uint8_t wireConnectionBitForOffset(const uint16_t facing, const glm::ivec3& offset) {
+    const glm::ivec3 axis1 = wireAxis1PositiveOffset(facing);
+    const glm::ivec3 axis2 = wireAxis2PositiveOffset(facing);
+    if (offset == axis1) {
+        return WireConnectionBits::AXIS1_POS;
+    }
+    if (offset == -axis1) {
+        return WireConnectionBits::AXIS1_NEG;
+    }
+    if (offset == axis2) {
+        return WireConnectionBits::AXIS2_POS;
+    }
+    if (offset == -axis2) {
+        return WireConnectionBits::AXIS2_NEG;
+    }
+    throw std::runtime_error("Wire container connection update received a connection outside the wire plane");
+}
+
+uint8_t refreshedWireContainerConnections(const World& world,
+                                          const glm::ivec3& pos,
+                                          const WirePart& part) {
+    uint8_t connections = 0;
+    for (const WireFaceGeometry::ConnectionDirection& connection :
+         WireFaceGeometry::connectionDirections(part.facing)) {
+        const glm::ivec3 planarNeighbor = pos + connection.offset;
+        const bool connects =
+            canRedstoneWireAttachToAt(world, planarNeighbor, part.channelId, part.facing) ||
+            hasCornerRedstoneWireConnection(world, pos, part.channelId, part.facing, connection.offset);
+        if (connects) {
+            connections |= wireConnectionBitForOffset(part.facing, connection.offset);
+        }
+    }
+    return connections;
 }
 
 void requireHorizontalConnectionProperties() {
@@ -1040,7 +1157,28 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
     const bool isConnectedBlock = isConnectedBlockDef(def);
     const bool isStairsBlock = isStairsBlockDef(def);
     const bool isRedstoneWireBlock = isRedstoneWireState(currentState);
-    if (!isConnectedBlock && !isStairsBlock && !isRedstoneWireBlock) {
+    const bool isWireContainerBlock = isWireContainerState(currentState);
+    if (!isConnectedBlock && !isStairsBlock && !isRedstoneWireBlock && !isWireContainerBlock) {
+        return;
+    }
+
+    if (isWireContainerBlock) {
+        WireContainerParts* parts = m_wireContainerParts.findMutable(pos);
+        if (parts == nullptr) {
+            return;
+        }
+
+        bool changed = false;
+        parts->forEachMutable([&](WirePart& part) {
+            const uint8_t refreshedConnections = refreshedWireContainerConnections(*this, pos, part);
+            if (part.connections != refreshedConnections) {
+                part.connections = refreshedConnections;
+                changed = true;
+            }
+        });
+        if (changed) {
+            notifyWireContainerPartsChanged(pos);
+        }
         return;
     }
 
@@ -1086,15 +1224,14 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         if (wireFacing == PropIndices::FACING_FLOOR) {
             for (const WireFaceGeometry::ConnectionDirection& connection :
                  WireFaceGeometry::connectionDirections(wireFacing)) {
-                const glm::ivec3 sameLevel = pos + connection.offset;
                 updatedState = BlockStateRegistry::withProperty(
                     updatedState,
                     connection.property,
-                    redstoneWireConnectionValueWithCorners(
+                    redstoneWireConnectionValueAt(
                         *this,
                         pos,
-                        getBlockState(sameLevel.x, sameLevel.y, sameLevel.z),
                         wireChannelId,
+                        PropIndices::FACING_FLOOR,
                         connection));
             }
         } else {
@@ -1103,7 +1240,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
                 updatedState = BlockStateRegistry::withProperty(
                     updatedState,
                     connection.property,
-                    redstoneWireFaceConnectionValue(
+                    redstoneWireConnectionValueAt(
                         *this,
                         pos,
                         wireChannelId,

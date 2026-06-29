@@ -108,6 +108,14 @@ public:
         }
     }
 
+    template <typename Fn>
+    void forEachMutable(Fn&& fn) {
+        for (std::size_t i = 0; i < m_count; ++i) {
+            fn(m_parts[i]);
+            validatePart(m_parts[i]);
+        }
+    }
+
 private:
     static constexpr std::size_t npos() {
         return static_cast<std::size_t>(-1);

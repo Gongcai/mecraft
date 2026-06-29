@@ -230,9 +230,16 @@ int main() {
     if (poweredRedPart == nullptr || idleBluePart == nullptr ||
         poweredRedPart->power == 0 ||
         idleBluePart->power != 0 ||
+        poweredRedPart->connections != (WireConnectionBits::AXIS1_NEG | WireConnectionBits::AXIS1_POS) ||
+        idleBluePart->connections != WireConnectionBits::AXIS2_POS ||
         wirePower(world, redOutputPos) == 0 ||
         wirePower(world, blueOutputPos) != 0) {
         return fail("wire container parts should propagate only through matching wire channels");
+    }
+    if (BlockStateRegistry::getPropertyIndex(
+            world.getBlockState(redOutputPos.x, redOutputPos.y, redOutputPos.z),
+            PropIndices::WEST) != PropIndices::WEST_SIDE) {
+        return fail("ordinary redstone wire should visually connect to matching wire container parts");
     }
 
     std::cout << "[wire_container_placement_test] PASS\n";
