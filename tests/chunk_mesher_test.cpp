@@ -1393,6 +1393,74 @@ int main() {
         }
     }
 
+    {
+        const BlockID wireContainerBlock = BlockRegistry::requireIdByName("minecraft:wire_container");
+        const BlockID redstoneWireBlock = BlockRegistry::requireIdByName("minecraft:redstone_wire");
+        const BlockID blueRedstoneWireBlock = BlockRegistry::requireIdByName("minecraft:blue_redstone_wire");
+        const BlockDef& redstoneWireDef = BlockRegistry::getFast(redstoneWireBlock);
+        const BlockDef& blueRedstoneWireDef = BlockRegistry::getFast(blueRedstoneWireBlock);
+        if (redstoneWireDef.redstoneWireChannelId == 0 || blueRedstoneWireDef.redstoneWireChannelId == 0) {
+            return fail("wire container meshing test requires registered wire channel ids");
+        }
+
+        Chunk chunk(0, 0);
+        chunk.setBlock(0, 32, 0, BlockStateRegistry::getDefaultState(wireContainerBlock));
+
+        World world;
+        WireContainerParts& parts = world.wireContainerParts().getOrCreate(glm::ivec3(0, 32, 0));
+        if (!parts.addPart(WirePart{
+                redstoneWireDef.redstoneWireChannelId,
+                PropIndices::FACING_FLOOR,
+                15,
+                WireConnectionBits::AXIS1_POS
+            })) {
+            return fail("wire container test should add the red floor part");
+        }
+        if (!parts.addPart(WirePart{
+                blueRedstoneWireDef.redstoneWireChannelId,
+                PropIndices::FACING_NORTH,
+                7,
+                WireConnectionBits::AXIS2_POS
+            })) {
+            return fail("wire container test should add the blue north-wall part");
+        }
+
+        const SubChunkMeshingSnapshotPtr snapshot = ChunkMesher::captureSubChunkSnapshot(
+            chunk, 2, nullptr, nullptr, nullptr, nullptr, &world);
+        if (!snapshot || snapshot->wireContainers.size() != 1) {
+            return fail("wire container snapshot should capture parts from the world store");
+        }
+
+        const ChunkMeshData meshData = ChunkMesher::buildSubChunkMeshData(*snapshot);
+        if (meshData.cutoutDistanceVertices.size() != 12) {
+            return fail("wire container should render one quad for each stored wire part");
+        }
+
+        bool foundRedFloor = false;
+        bool foundBlueNorthWall = false;
+        for (const BlockVertex& vertex : meshData.cutoutDistanceVertices) {
+            const uint8_t tintKind = static_cast<uint8_t>((vertex.tintPacked >> 14u) & 0x03u);
+            const uint8_t tintU = static_cast<uint8_t>((vertex.tintPacked >> 4u) & 0x0fu);
+            const uint8_t tintV = static_cast<uint8_t>(vertex.tintPacked & 0x0fu);
+            if (tintKind != BlockTintKinds::REDSTONE) {
+                return fail("wire container parts should render with redstone tint");
+            }
+            if (tintU == 15 && tintV == 0 &&
+                approxEqual(vertex.normal, 0.0f) &&
+                approxEqual(vertex.y, 1.0f / 128.0f)) {
+                foundRedFloor = true;
+            }
+            if (tintU == 7 && tintV == 1 &&
+                approxEqual(vertex.normal, 3.0f) &&
+                approxEqual(vertex.z, 1.0f - 1.0f / 128.0f)) {
+                foundBlueNorthWall = true;
+            }
+        }
+        if (!foundRedFloor || !foundBlueNorthWall) {
+            return fail("wire container should preserve each part color, power, and face orientation");
+        }
+    }
+
     std::cout << "[chunk_mesher_test] PASS\n";
     return EXIT_SUCCESS;
 }

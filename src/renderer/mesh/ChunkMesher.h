@@ -10,6 +10,7 @@
 
 #include "../../resource/ResourceMgr.h"
 #include "../../world/chunk/Chunk.h"
+#include "../../world/redstone/WireContainerParts.h"
 
 class IWorldView;
 class World;
@@ -22,6 +23,11 @@ constexpr int SC_HALO_SIZE = SubChunk::SIZE + 2;
 constexpr std::size_t SC_HALO_BLOCK_COUNT = static_cast<std::size_t>(SC_HALO_SIZE) *
                                             SC_HALO_SIZE * SC_HALO_SIZE;
 
+struct WireContainerMeshingEntry {
+    uint16_t localIndex = 0;
+    WireContainerParts parts;
+};
+
 // Snapshot of a single SubChunk for meshing.
 // Contains the 16x16x16 block/light data plus 6-direction border slices.
 struct SubChunkMeshingSnapshot {
@@ -32,6 +38,7 @@ struct SubChunkMeshingSnapshot {
     std::array<BlockStateId, SC_HALO_BLOCK_COUNT> haloBlocks{};
     std::array<BlockStateId, SC_HALO_BLOCK_COUNT> haloFluidBlocks{};
     std::array<uint8_t, SC_HALO_BLOCK_COUNT> haloLightMap{};
+    std::vector<WireContainerMeshingEntry> wireContainers;
 
     // Horizontal borders (same as before, but now per-sub-chunk height slice)
     std::array<BlockStateId, SC_BORDER_SIZE> posXBorder{};

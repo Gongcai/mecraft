@@ -3616,6 +3616,164 @@ std::array<glm::vec2, 4> buildUvRect(const float u0,
     return {{{u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}}};
 }
 
+uint16_t redstonePowerPropertyValue(const uint8_t power) {
+    static const std::array<uint16_t, 16> kPowerValues = {{
+        PropIndices::POWER_0,
+        PropIndices::POWER_1,
+        PropIndices::POWER_2,
+        PropIndices::POWER_3,
+        PropIndices::POWER_4,
+        PropIndices::POWER_5,
+        PropIndices::POWER_6,
+        PropIndices::POWER_7,
+        PropIndices::POWER_8,
+        PropIndices::POWER_9,
+        PropIndices::POWER_10,
+        PropIndices::POWER_11,
+        PropIndices::POWER_12,
+        PropIndices::POWER_13,
+        PropIndices::POWER_14,
+        PropIndices::POWER_15
+    }};
+    if (power >= kPowerValues.size()) {
+        throw std::runtime_error("Wire container mesh received an unsupported power level");
+    }
+    return kPowerValues[power];
+}
+
+const std::unordered_map<uint16_t, BlockID>& redstoneWireBlockIdsByChannel() {
+    static const std::unordered_map<uint16_t, BlockID> kWireBlockIdsByChannel = [] {
+        std::unordered_map<uint16_t, BlockID> mapping;
+        const std::size_t blockCount = BlockRegistry::getBlockCount();
+        for (std::size_t index = 0; index < blockCount; ++index) {
+            const BlockID blockId = static_cast<BlockID>(index);
+            const BlockDef& def = BlockRegistry::getFast(blockId);
+            if (def.redstoneBehavior != "wire" || def.redstoneWireChannelId == 0) {
+                continue;
+            }
+            const auto [it, inserted] = mapping.emplace(def.redstoneWireChannelId, blockId);
+            static_cast<void>(it);
+            if (!inserted) {
+                throw std::runtime_error("Wire container mesh found multiple wire blocks for one channel");
+            }
+        }
+        return mapping;
+    }();
+    return kWireBlockIdsByChannel;
+}
+
+BlockID blockIdForWireChannel(const uint16_t channelId) {
+    if (channelId == 0) {
+        throw std::runtime_error("Wire container mesh received an empty wire channel");
+    }
+
+    const auto& mapping = redstoneWireBlockIdsByChannel();
+    const auto it = mapping.find(channelId);
+    if (it == mapping.end()) {
+        throw std::runtime_error("Wire container mesh could not resolve a wire block for the channel");
+    }
+    return it->second;
+}
+
+bool hasConnectionBit(const WirePart& part, const uint8_t bit) {
+    return (part.connections & bit) != 0;
+}
+
+uint16_t northConnectionValueForPart(const WirePart& part) {
+    if (part.facing == PropIndices::FACING_FLOOR || part.facing == PropIndices::FACING_CEILING) {
+        return hasConnectionBit(part, WireConnectionBits::AXIS2_NEG)
+            ? PropIndices::NORTH_SIDE
+            : PropIndices::NORTH_NONE;
+    }
+    return hasConnectionBit(part, WireConnectionBits::AXIS2_POS)
+        ? PropIndices::NORTH_SIDE
+        : PropIndices::NORTH_NONE;
+}
+
+uint16_t southConnectionValueForPart(const WirePart& part) {
+    if (part.facing == PropIndices::FACING_FLOOR || part.facing == PropIndices::FACING_CEILING) {
+        return hasConnectionBit(part, WireConnectionBits::AXIS2_POS)
+            ? PropIndices::SOUTH_SIDE
+            : PropIndices::SOUTH_NONE;
+    }
+    return hasConnectionBit(part, WireConnectionBits::AXIS2_NEG)
+        ? PropIndices::SOUTH_SIDE
+        : PropIndices::SOUTH_NONE;
+}
+
+uint16_t eastConnectionValueForPart(const WirePart& part) {
+    return hasConnectionBit(part, WireConnectionBits::AXIS1_POS)
+        ? PropIndices::EAST_SIDE
+        : PropIndices::EAST_NONE;
+}
+
+uint16_t westConnectionValueForPart(const WirePart& part) {
+    return hasConnectionBit(part, WireConnectionBits::AXIS1_NEG)
+        ? PropIndices::WEST_SIDE
+        : PropIndices::WEST_NONE;
+}
+
+BlockStateId stateForWirePart(const WirePart& part) {
+    if (!WireFaceGeometry::isWireFacing(part.facing)) {
+        throw std::runtime_error("Wire container mesh received an unsupported wire facing");
+    }
+    const BlockID blockId = blockIdForWireChannel(part.channelId);
+    return BlockStateRegistry::getState(
+        blockId,
+        std::vector<std::pair<uint16_t, uint16_t>>{
+            {PropIndices::FACING, part.facing},
+            {PropIndices::POWER, redstonePowerPropertyValue(part.power)},
+            {PropIndices::NORTH, northConnectionValueForPart(part)},
+            {PropIndices::SOUTH, southConnectionValueForPart(part)},
+            {PropIndices::EAST, eastConnectionValueForPart(part)},
+            {PropIndices::WEST, westConnectionValueForPart(part)}
+        });
+}
+
+const WireContainerParts* findWireContainerParts(const SubChunkMeshingSnapshot& snapshot,
+                                                 const int x,
+                                                 const int y,
+                                                 const int z) {
+    const uint16_t localIndex = static_cast<uint16_t>(scToIndex(x, y, z));
+    for (const WireContainerMeshingEntry& entry : snapshot.wireContainers) {
+        if (entry.localIndex == localIndex) {
+            return &entry.parts;
+        }
+    }
+    return nullptr;
+}
+
+void captureWireContainerParts(const IWorldView* worldView, SubChunkMeshingSnapshot& snapshot) {
+    if (worldView == nullptr || worldView->asWorld() == nullptr) {
+        return;
+    }
+
+    const World& world = *worldView->asWorld();
+    const int minX = snapshot.worldOffsetX;
+    const int maxX = snapshot.worldOffsetX + SubChunk::SIZE - 1;
+    const int minY = snapshot.yBase;
+    const int maxY = snapshot.yBase + SubChunk::SIZE - 1;
+    const int minZ = snapshot.worldOffsetZ;
+    const int maxZ = snapshot.worldOffsetZ + SubChunk::SIZE - 1;
+
+    world.wireContainerParts().forEach([&](const glm::ivec3& position, const WireContainerParts& parts) {
+        if (position.x < minX || position.x > maxX ||
+            position.y < minY || position.y > maxY ||
+            position.z < minZ || position.z > maxZ ||
+            parts.empty()) {
+            return;
+        }
+
+        WireContainerMeshingEntry entry;
+        const int localX = position.x - snapshot.worldOffsetX;
+        const int localY = position.y - snapshot.yBase;
+        const int localZ = position.z - snapshot.worldOffsetZ;
+        entry.localIndex = static_cast<uint16_t>(scToIndex(localX, localY, localZ));
+        entry.parts = parts;
+        snapshot.wireContainers.push_back(entry);
+    });
+}
+
 } // anonymous namespace
 
 void ChunkMesher::setDebugDisableGreedyMeshing(const bool disabled) {
@@ -3722,15 +3880,19 @@ void ChunkMeshBuilders::buildWireContainer(ChunkMeshData& meshData,
                                            const int x,
                                            const int y,
                                            const int z) {
-    // Wire container geometry is generated from WireContainerPartStore in the
-    // container rendering phase. The block itself has no visible body.
-    static_cast<void>(meshData);
-    static_cast<void>(snapshot);
     static_cast<void>(stateId);
     static_cast<void>(def);
-    static_cast<void>(x);
-    static_cast<void>(y);
-    static_cast<void>(z);
+
+    const WireContainerParts* parts = findWireContainerParts(snapshot, x, y, z);
+    if (parts == nullptr || parts->empty()) {
+        return;
+    }
+
+    parts->forEach([&](const WirePart& part) {
+        const BlockStateId partState = stateForWirePart(part);
+        const BlockDef& wireDef = BlockRegistry::getFast(BlockStateRegistry::getBlockId(partState));
+        ChunkMeshBuilders::buildRedstoneWire(meshData, snapshot, partState, wireDef, x, y, z);
+    });
 }
 
 void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
@@ -3953,6 +4115,7 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
         // Still capture borders for completeness
         captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
         captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
+        captureWireContainerParts(worldView, *snapshot);
         return snapshot;
     }
 
@@ -3980,6 +4143,7 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
     // Capture all 6-direction borders
     captureSubChunkBorders(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
     captureSubChunkHalo(chunk, scy, *snapshot, neighborPosX, neighborNegX, neighborPosZ, neighborNegZ, worldView);
+    captureWireContainerParts(worldView, *snapshot);
 
     return snapshot;
 }

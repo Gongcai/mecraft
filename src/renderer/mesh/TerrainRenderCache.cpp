@@ -440,7 +440,7 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
             candidate.neighborNegX.get(),
             candidate.neighborPosZ.get(),
             candidate.neighborNegZ.get(),
-            nullptr);
+            &worldView);
         if (!job.snapshot) {
             continue;
         }
