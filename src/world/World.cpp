@@ -187,44 +187,12 @@ bool canPlanarRedstoneWireAttachTo(const BlockStateId stateId,
            def.redstoneBehavior == "observer";
 }
 
-// Returns true when the given state is a solid block that redstone wire can
-// climb over. Redstone wire itself, non-solid blocks, and air are excluded.
-bool isSolidBlockForRedstoneClimb(const BlockStateId stateId) {
-    if (stateId == NULL_BLOCK_STATE) {
-        return false;
-    }
-    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    return def.isSolid;
-}
-
-// Determines the redstone wire connection value for a single horizontal direction.
-// The rules follow vanilla Minecraft:
-//   - If the same-level neighbor is a wire or attachable redstone component,
-//     the connection is "side".
-//   - If the same-level neighbor is a solid block and the block on top of it
-//     is a redstone wire, the connection is "up" (wire climbs the block side).
-//   - If the same-level neighbor is not solid and the block below it is a
-//     redstone wire, the connection is "down" (wire descends to the lower wire).
-//   - Otherwise, the connection is "none".
-uint16_t redstoneWireConnectionValue(const BlockStateId sameLevelState,
-                                     const BlockStateId upState,
-                                     const BlockStateId downState,
+uint16_t redstoneWireConnectionValue(const BlockStateId neighborState,
                                      const uint16_t wireChannelId,
                                      const uint16_t noneValue,
-                                     const uint16_t sideValue,
-                                     const uint16_t upValue,
-                                     const uint16_t downValue) {
-    if (canRedstoneWireAttachTo(sameLevelState, wireChannelId)) {
+                                     const uint16_t sideValue) {
+    if (canRedstoneWireAttachTo(neighborState, wireChannelId)) {
         return sideValue;
-    }
-    if (isSolidBlockForRedstoneClimb(sameLevelState) &&
-        isMatchingRedstoneWireStateWithFacing(upState, wireChannelId, PropIndices::FACING_FLOOR)) {
-        return upValue;
-    }
-    if (!isSolidBlockForRedstoneClimb(sameLevelState) &&
-        isMatchingRedstoneWireStateWithFacing(downState, wireChannelId, PropIndices::FACING_FLOOR)) {
-        return downValue;
     }
     return noneValue;
 }
@@ -249,20 +217,14 @@ bool hasCornerRedstoneWireConnection(const World& world,
 
 uint16_t redstoneWireConnectionValueWithCorners(const World& world,
                                                 const glm::ivec3& pos,
-                                                const BlockStateId sameLevelState,
-                                                const BlockStateId upState,
-                                                const BlockStateId downState,
+                                                const BlockStateId neighborState,
                                                 const uint16_t wireChannelId,
                                                 const WireFaceGeometry::ConnectionDirection& connection) {
     const uint16_t value = redstoneWireConnectionValue(
-        sameLevelState,
-        upState,
-        downState,
+        neighborState,
         wireChannelId,
         connection.noneValue,
-        connection.sideValue,
-        connection.upValue,
-        connection.downValue);
+        connection.sideValue);
     if (value != connection.noneValue) {
         return value;
     }
@@ -320,20 +282,12 @@ void requireHorizontalConnectionProperties() {
         PropIndices::WEST_FALSE == PropIndices::INVALID ||
         PropIndices::NORTH_NONE == PropIndices::INVALID ||
         PropIndices::NORTH_SIDE == PropIndices::INVALID ||
-        PropIndices::NORTH_UP == PropIndices::INVALID ||
-        PropIndices::NORTH_DOWN == PropIndices::INVALID ||
         PropIndices::SOUTH_NONE == PropIndices::INVALID ||
         PropIndices::SOUTH_SIDE == PropIndices::INVALID ||
-        PropIndices::SOUTH_UP == PropIndices::INVALID ||
-        PropIndices::SOUTH_DOWN == PropIndices::INVALID ||
         PropIndices::EAST_NONE == PropIndices::INVALID ||
         PropIndices::EAST_SIDE == PropIndices::INVALID ||
-        PropIndices::EAST_UP == PropIndices::INVALID ||
-        PropIndices::EAST_DOWN == PropIndices::INVALID ||
         PropIndices::WEST_NONE == PropIndices::INVALID ||
-        PropIndices::WEST_SIDE == PropIndices::INVALID ||
-        PropIndices::WEST_UP == PropIndices::INVALID ||
-        PropIndices::WEST_DOWN == PropIndices::INVALID) {
+        PropIndices::WEST_SIDE == PropIndices::INVALID) {
         throw std::runtime_error("Horizontal connection updates require north/south/east/west connection properties");
     }
 }
@@ -1062,8 +1016,6 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
             for (const WireFaceGeometry::ConnectionDirection& connection :
                  WireFaceGeometry::connectionDirections(wireFacing)) {
                 const glm::ivec3 sameLevel = pos + connection.offset;
-                const glm::ivec3 up = sameLevel + glm::ivec3(0, 1, 0);
-                const glm::ivec3 down = sameLevel + glm::ivec3(0, -1, 0);
                 updatedState = BlockStateRegistry::withProperty(
                     updatedState,
                     connection.property,
@@ -1071,8 +1023,6 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
                         *this,
                         pos,
                         getBlockState(sameLevel.x, sameLevel.y, sameLevel.z),
-                        getBlockState(up.x, up.y, up.z),
-                        getBlockState(down.x, down.y, down.z),
                         wireChannelId,
                         connection));
             }
@@ -1201,12 +1151,10 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
 void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
     // Offsets cover all positions whose redstone wire connection state may
     // change when the block at pos changes:
-    //   - Self, 4 horizontal neighbors, and direct vertical neighbors:
-    //     same-plane connection checks can use pos as their neighbor.
-    //   - 4 horizontal-up and 4 horizontal-down diagonal neighbors: these wires
-    //     may have climbing ("up") or descending ("side") connections that pass
-    //     over or under pos, so their connection state depends on pos.
-    static constexpr std::array<glm::ivec3, 15> kRefreshOffsets = {{
+    //   - Self, 4 horizontal neighbors, and direct vertical neighbors.
+    //   - Wires attached to pos as a support block and their perpendicular
+    //     face peers are covered below.
+    static constexpr std::array<glm::ivec3, 7> kRefreshOffsets = {{
         { 0,  0,  0},
         { 1,  0,  0},
         {-1,  0,  0},
@@ -1214,14 +1162,6 @@ void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
         { 0,  0, -1},
         { 0,  1,  0},
         { 0, -1,  0},
-        { 1,  1,  0},
-        {-1,  1,  0},
-        { 0,  1,  1},
-        { 0,  1, -1},
-        { 1, -1,  0},
-        {-1, -1,  0},
-        { 0, -1,  1},
-        { 0, -1, -1},
     }};
 
     for (const glm::ivec3& offset : kRefreshOffsets) {

@@ -430,6 +430,38 @@ int main() {
     }
 
     {
+        World stepWorld;
+        stepWorld.init(20260629);
+        loadOriginChunks(stepWorld);
+
+        const int stepY = 76;
+        for (int x = -1; x <= 2; ++x) {
+            for (int yOffset = -1; yOffset <= 2; ++yOffset) {
+                stepWorld.setBlockState(x, stepY + yOffset, 0, NULL_BLOCK_STATE);
+            }
+        }
+
+        stepWorld.setBlockState(-1, stepY - 1, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        stepWorld.setBlockState(0, stepY - 1, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        stepWorld.setBlockState(1, stepY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));
+        stepWorld.setBlockState(-1, stepY, 0, leverState(true));
+        stepWorld.setBlockState(0, stepY, 0, redWireState(PropIndices::FACING_FLOOR));
+        stepWorld.setBlockState(1, stepY + 1, 0, redWireState(PropIndices::FACING_FLOOR));
+        ecs::RedstoneSystem::processWorld(stepWorld, 27);
+
+        if (wirePower(stepWorld, 0, stepY, 0) != 15) {
+            return fail("source floor redstone wire should still receive power before the step gap");
+        }
+        if (wirePower(stepWorld, 1, stepY + 1, 0) != 0) {
+            return fail("floor redstone wire should not auto-propagate through the old step-climb connection");
+        }
+        if (blockProperty(stepWorld, 0, stepY, 0, PropIndices::EAST) != PropIndices::EAST_NONE ||
+            blockProperty(stepWorld, 1, stepY + 1, 0, PropIndices::WEST) != PropIndices::WEST_NONE) {
+            return fail("floor redstone wire should not generate old step-climb visual connections");
+        }
+    }
+
+    {
         const int conductorY = 112;
         prepareFlatTestLine(world, conductorY);
         world.setBlockState(0, conductorY, 0, BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:stone")));

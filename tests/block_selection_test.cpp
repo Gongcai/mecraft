@@ -76,7 +76,8 @@ int main() {
         return fail("west wall torch selection box should mirror the east wall model");
     }
 
-    const BlockSelectionBox crossBox = BlockSelection::getBox(BlockRegistry::requireIdByName("minecraft:tall_grass"));
+    const BlockSelectionBox crossBox = BlockSelection::getBox(
+        BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:tall_grass")));
     if (crossBox.min.x <= 0.1f || crossBox.max.x >= 0.9f ||
         crossBox.min.z <= 0.1f || crossBox.max.z >= 0.9f) {
         return fail("cross-shaped plants should not use a full horizontal voxel selection box");

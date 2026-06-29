@@ -14,8 +14,6 @@ struct ConnectionDirection {
     uint16_t property;
     uint16_t noneValue;
     uint16_t sideValue;
-    uint16_t upValue;
-    uint16_t downValue;
     glm::ivec3 offset;
 };
 
@@ -126,28 +124,28 @@ inline std::array<ConnectionDirection, 4> connectionDirections(const uint16_t fa
     if (facing == PropIndices::FACING_FLOOR ||
         facing == PropIndices::FACING_CEILING) {
         return {{
-            {PropIndices::NORTH, PropIndices::NORTH_NONE, PropIndices::NORTH_SIDE, PropIndices::NORTH_UP, PropIndices::NORTH_DOWN, {0, 0, -1}},
-            {PropIndices::SOUTH, PropIndices::SOUTH_NONE, PropIndices::SOUTH_SIDE, PropIndices::SOUTH_UP, PropIndices::SOUTH_DOWN, {0, 0, 1}},
-            {PropIndices::EAST,  PropIndices::EAST_NONE,  PropIndices::EAST_SIDE,  PropIndices::EAST_UP,  PropIndices::EAST_DOWN,  {1, 0, 0}},
-            {PropIndices::WEST,  PropIndices::WEST_NONE,  PropIndices::WEST_SIDE,  PropIndices::WEST_UP,  PropIndices::WEST_DOWN,  {-1, 0, 0}},
+            {PropIndices::NORTH, PropIndices::NORTH_NONE, PropIndices::NORTH_SIDE, {0, 0, -1}},
+            {PropIndices::SOUTH, PropIndices::SOUTH_NONE, PropIndices::SOUTH_SIDE, {0, 0, 1}},
+            {PropIndices::EAST,  PropIndices::EAST_NONE,  PropIndices::EAST_SIDE,  {1, 0, 0}},
+            {PropIndices::WEST,  PropIndices::WEST_NONE,  PropIndices::WEST_SIDE,  {-1, 0, 0}},
         }};
     }
     if (facing == PropIndices::FACING_NORTH ||
         facing == PropIndices::FACING_SOUTH) {
         return {{
-            {PropIndices::NORTH, PropIndices::NORTH_NONE, PropIndices::NORTH_SIDE, PropIndices::NORTH_UP, PropIndices::NORTH_DOWN, {0, 1, 0}},
-            {PropIndices::SOUTH, PropIndices::SOUTH_NONE, PropIndices::SOUTH_SIDE, PropIndices::SOUTH_UP, PropIndices::SOUTH_DOWN, {0, -1, 0}},
-            {PropIndices::EAST,  PropIndices::EAST_NONE,  PropIndices::EAST_SIDE,  PropIndices::EAST_UP,  PropIndices::EAST_DOWN,  {1, 0, 0}},
-            {PropIndices::WEST,  PropIndices::WEST_NONE,  PropIndices::WEST_SIDE,  PropIndices::WEST_UP,  PropIndices::WEST_DOWN,  {-1, 0, 0}},
+            {PropIndices::NORTH, PropIndices::NORTH_NONE, PropIndices::NORTH_SIDE, {0, 1, 0}},
+            {PropIndices::SOUTH, PropIndices::SOUTH_NONE, PropIndices::SOUTH_SIDE, {0, -1, 0}},
+            {PropIndices::EAST,  PropIndices::EAST_NONE,  PropIndices::EAST_SIDE,  {1, 0, 0}},
+            {PropIndices::WEST,  PropIndices::WEST_NONE,  PropIndices::WEST_SIDE,  {-1, 0, 0}},
         }};
     }
     if (facing == PropIndices::FACING_EAST ||
         facing == PropIndices::FACING_WEST) {
         return {{
-            {PropIndices::NORTH, PropIndices::NORTH_NONE, PropIndices::NORTH_SIDE, PropIndices::NORTH_UP, PropIndices::NORTH_DOWN, {0, 1, 0}},
-            {PropIndices::SOUTH, PropIndices::SOUTH_NONE, PropIndices::SOUTH_SIDE, PropIndices::SOUTH_UP, PropIndices::SOUTH_DOWN, {0, -1, 0}},
-            {PropIndices::EAST,  PropIndices::EAST_NONE,  PropIndices::EAST_SIDE,  PropIndices::EAST_UP,  PropIndices::EAST_DOWN,  {0, 0, 1}},
-            {PropIndices::WEST,  PropIndices::WEST_NONE,  PropIndices::WEST_SIDE,  PropIndices::WEST_UP,  PropIndices::WEST_DOWN,  {0, 0, -1}},
+            {PropIndices::NORTH, PropIndices::NORTH_NONE, PropIndices::NORTH_SIDE, {0, 1, 0}},
+            {PropIndices::SOUTH, PropIndices::SOUTH_NONE, PropIndices::SOUTH_SIDE, {0, -1, 0}},
+            {PropIndices::EAST,  PropIndices::EAST_NONE,  PropIndices::EAST_SIDE,  {0, 0, 1}},
+            {PropIndices::WEST,  PropIndices::WEST_NONE,  PropIndices::WEST_SIDE,  {0, 0, -1}},
         }};
     }
     throw std::runtime_error("Wire face geometry received an unsupported facing value");

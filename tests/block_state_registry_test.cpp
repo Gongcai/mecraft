@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <cstddef>
 #include <filesystem>
 #include <iostream>
 #include <memory>
@@ -1404,6 +1405,13 @@ int main() {
         return fail("blue_redstone_wire should declare its wire channel and tint metadata");
     }
     const BlockStateId redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
+    const std::size_t expectedWireStateCount = 6u * 16u * 2u * 2u * 2u * 2u;
+    if (BlockStateRegistry::getStatesForBlock(BlockRegistry::requireIdByName("minecraft:redstone_wire")).size() !=
+            expectedWireStateCount ||
+        BlockStateRegistry::getStatesForBlock(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")).size() !=
+            expectedWireStateCount) {
+        return fail("redstone_wire states should only expand none/side directional connections");
+    }
     if (BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::FACING) != PropIndices::FACING_FLOOR ||
         BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::POWER) != PropIndices::POWER_0 ||
         BlockStateRegistry::getPropertyIndex(redstoneWireDefault, PropIndices::NORTH) != PropIndices::NORTH_NONE ||

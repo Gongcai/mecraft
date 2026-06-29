@@ -54,14 +54,6 @@ constexpr glm::ivec3 kDirections[6] = {
     { 0,  0, -1},
 };
 
-// The four horizontal directions used for redstone wire climbing checks.
-constexpr glm::ivec3 kHorizontalDirections[4] = {
-    { 1,  0,  0},
-    {-1,  0,  0},
-    { 0,  0,  1},
-    { 0,  0, -1},
-};
-
 struct IVec3Hash {
     std::size_t operator()(const glm::ivec3& value) const noexcept {
         std::size_t seed = 0;
@@ -562,22 +554,9 @@ bool isConductiveBlockAt(const World& world, const glm::ivec3& position) {
     return isConductiveState(world.getBlockState(position.x, position.y, position.z));
 }
 
-// Returns true when the given state is a solid block that redstone wire can
-// climb over. This mirrors the World.cpp climbing check: air and non-solid
-// blocks (including redstone wire itself) do not support climbing.
-bool isSolidBlockState(const BlockStateId stateId) {
-    if (stateId == NULL_BLOCK_STATE) {
-        return false;
-    }
-    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
-    const BlockDef& def = BlockRegistry::getFast(blockId);
-    return def.isSolid;
-}
-
-// Calls fn for every wire position connected to the wire at pos, including
-// diagonal up/down connections where floor wire climbs over a solid block or
-// descends through a non-solid block. Face-attached wire also connects around
-// support-block edges to matching-color wire on perpendicular faces.
+// Calls fn for every wire position connected to the wire at pos. Wires connect
+// within their own face plane and can meet matching-color wires around a shared
+// support-block edge.
 template <typename Fn>
 void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
     const BlockStateId selfState = world.getBlockState(pos.x, pos.y, pos.z);
@@ -588,34 +567,14 @@ void forEachWireNeighbor(const World& world, const glm::ivec3& pos, Fn&& fn) {
     const uint16_t wireFacing = wireFacingForState(selfState);
 
     if (wireFacing == PropIndices::FACING_FLOOR) {
-        for (const glm::ivec3& direction : kDirections) {
-            const glm::ivec3 neighbor = pos + direction;
+        for (const WireFaceGeometry::ConnectionDirection& connection :
+             WireFaceGeometry::connectionDirections(wireFacing)) {
+            const glm::ivec3 neighbor = pos + connection.offset;
             if (isMatchingWireStateWithFacing(
                     world.getBlockState(neighbor.x, neighbor.y, neighbor.z),
                     wireChannelId,
                     PropIndices::FACING_FLOOR)) {
                 fn(neighbor);
-            }
-        }
-        for (const glm::ivec3& hDir : kHorizontalDirections) {
-            const glm::ivec3 neighbor = pos + hDir;
-            const BlockStateId neighborState = world.getBlockState(neighbor.x, neighbor.y, neighbor.z);
-            if (isSolidBlockState(neighborState)) {
-                const glm::ivec3 upPos = neighbor + glm::ivec3(0, 1, 0);
-                if (isMatchingWireStateWithFacing(
-                        world.getBlockState(upPos.x, upPos.y, upPos.z),
-                        wireChannelId,
-                        PropIndices::FACING_FLOOR)) {
-                    fn(upPos);
-                }
-            } else {
-                const glm::ivec3 downPos = neighbor + glm::ivec3(0, -1, 0);
-                if (isMatchingWireStateWithFacing(
-                        world.getBlockState(downPos.x, downPos.y, downPos.z),
-                        wireChannelId,
-                        PropIndices::FACING_FLOOR)) {
-                    fn(downPos);
-                }
             }
         }
         forEachCornerWireNeighbor(world, pos, wireChannelId, wireFacing, fn);

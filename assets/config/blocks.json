@@ -1027,10 +1027,10 @@
       "properties": {
         "facing": ["floor", "ceiling", "north", "south", "east", "west"],
         "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
-        "north": ["none", "side", "up", "down"],
-        "south": ["none", "side", "up", "down"],
-        "east": ["none", "side", "up", "down"],
-        "west": ["none", "side", "up", "down"]
+        "north": ["none", "side"],
+        "south": ["none", "side"],
+        "east": ["none", "side"],
+        "west": ["none", "side"]
       },
       "defaultState": {
         "facing": "floor",
@@ -1066,10 +1066,10 @@
       "properties": {
         "facing": ["floor", "ceiling", "north", "south", "east", "west"],
         "power": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15"],
-        "north": ["none", "side", "up", "down"],
-        "south": ["none", "side", "up", "down"],
-        "east": ["none", "side", "up", "down"],
-        "west": ["none", "side", "up", "down"]
+        "north": ["none", "side"],
+        "south": ["none", "side"],
+        "east": ["none", "side"],
+        "west": ["none", "side"]
       },
       "defaultState": {
         "facing": "floor",
