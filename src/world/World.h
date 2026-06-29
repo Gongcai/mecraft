@@ -15,6 +15,7 @@
 #include "chunk/Chunk.h"
 #include "DayNightSystem.h"
 #include "../server/ChunkTicketManager.h"
+#include "../save/ChunkSerializer.h"
 #include "fluid/FluidState.h"
 #include "fluid/FluidSystem.h"
 #include "redstone/WireContainerParts.h"
@@ -180,7 +181,12 @@ private:
     void refreshConnectedBlockAt(const glm::ivec3& pos);
     void refreshConnectedBlocksAround(const glm::ivec3& pos);
     void submitChunkLoad(int cx, int cz);
-    void finalizeChunkLoad(std::shared_ptr<Chunk> chunk);
+    void finalizeChunkLoad(save::ChunkLoadData loadData);
+    [[nodiscard]] std::vector<save::WireContainerSaveEntry> collectWireContainersForChunk(int cx, int cz) const;
+    void applyLoadedWireContainers(int cx,
+                                   int cz,
+                                   const std::vector<save::WireContainerSaveEntry>& wireContainers);
+    void eraseWireContainersInChunk(int cx, int cz);
     void updateStreaming(const glm::vec3& playerPos,
                          float dt,
                          int submitBudget,
@@ -196,7 +202,7 @@ private:
 
     std::unordered_set<int64_t> m_generationInFlight;
     std::mutex m_completedGenMutex;
-    std::vector<std::shared_ptr<Chunk>> m_completedGenQueue;
+    std::vector<save::ChunkLoadData> m_completedGenQueue;
 
     static constexpr int kMaxGenerationInFlight = 3;
     static constexpr int kMaxChunkLoadSubmitsPerFrame = 2;

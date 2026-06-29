@@ -121,11 +121,16 @@ public:
     /// Try to load a chunk from disk. Returns nullptr if file doesn't exist or is corrupt.
     /// Can be called from any thread (reads file, creates Chunk).
     [[nodiscard]] std::shared_ptr<Chunk> tryLoadChunk(int cx, int cz);
+    [[nodiscard]] ChunkLoadData tryLoadChunkData(int cx, int cz);
 
     /// Submit a chunk for async saving. The chunk data is serialized immediately
     /// on the calling thread (snapshot), then the file write is dispatched to the
     /// thread pool. Must have called setThreadPool() first.
     void submitSaveChunk(int cx, int cz, const Chunk& chunk);
+    void submitSaveChunk(int cx,
+                         int cz,
+                         const Chunk& chunk,
+                         const std::vector<WireContainerSaveEntry>& wireContainers);
 
     /// Set the thread pool for async saves.
     void setThreadPool(ThreadPool* pool);

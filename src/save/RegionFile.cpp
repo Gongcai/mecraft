@@ -90,26 +90,32 @@ std::unique_ptr<RegionFile> RegionFile::open(
 }
 
 std::shared_ptr<Chunk> RegionFile::readChunk(int cx, int cz) {
+    ChunkLoadData data = readChunkWithData(cx, cz);
+    return std::move(data.chunk);
+}
+
+ChunkLoadData RegionFile::readChunkWithData(int cx, int cz) {
+    ChunkLoadData loadData;
     const int lx = toLocalCoord(cx);
     const int lz = toLocalCoord(cz);
     const int index = lz * REGION_SIZE + lx;
 
     const auto& entry = m_index[index];
     if (entry.offset == 0 || entry.size == 0) {
-        return nullptr;
+        return loadData;
     }
 
     std::vector<uint8_t> data = readChunkData(lx, lz);
-    if (data.empty()) return nullptr;
+    if (data.empty()) return loadData;
 
     // Validate CRC
     const uint32_t computedCrc = detail::crc32(data.data(), data.size());
     if (computedCrc != entry.crc32) {
         MECRAFT_LOG_FPRINTF(stderr, "[Save] Region chunk CRC mismatch at (%d, %d)\n", cx, cz);
-        return nullptr;
+        return loadData;
     }
 
-    return ChunkSerializer::deserializeFile(data.data(), data.size());
+    return ChunkSerializer::deserializeFileData(data.data(), data.size());
 }
 
 bool RegionFile::writeChunk(int cx, int cz, const Chunk& chunk) {

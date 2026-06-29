@@ -82,6 +82,7 @@ std::vector<uint8_t> buildSinglePaletteStateFile(const int32_t cx,
     payload.insert(payload.end(), packedData.begin(), packedData.end());
 
     appendVaruint(payload, 0);
+    appendVaruint(payload, 0);
 
     save::MchkHeader header{};
     header.magic = save::MCHK_MAGIC;
@@ -386,6 +387,65 @@ static void testChestBlockStateRoundTrip() {
     std::printf("[PASS] testChestBlockStateRoundTrip\n");
 }
 
+static void testWireContainerPartsRoundTrip() {
+    auto original = std::make_shared<Chunk>(-2, 3);
+
+    const int localX = 5;
+    const int y = 70;
+    const int localZ = 11;
+    const glm::ivec3 worldPosition(
+        original->m_chunkX * Chunk::SIZE_X + localX,
+        y,
+        original->m_chunkZ * Chunk::SIZE_Z + localZ);
+
+    const BlockID wireContainerBlock = BlockRegistry::requireIdByName("minecraft:wire_container");
+    original->setBlock(localX, y, localZ, BlockStateRegistry::getDefaultState(wireContainerBlock));
+
+    const uint16_t redChannel =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_wire")).redstoneWireChannelId;
+    if (redChannel == 0) {
+        std::fprintf(stderr, "[FAIL] redstone_wire should have a registered wire channel\n");
+        std::abort();
+    }
+
+    WirePart part;
+    part.channelId = redChannel;
+    part.facing = PropIndices::FACING_FLOOR;
+    part.power = 12;
+    part.connections = WireConnectionBits::AXIS1_POS | WireConnectionBits::AXIS2_NEG;
+
+    save::WireContainerSaveEntry entry;
+    entry.position = worldPosition;
+    if (!entry.parts.addPart(part)) {
+        std::fprintf(stderr, "[FAIL] wire container test part should be accepted\n");
+        std::abort();
+    }
+
+    const std::vector<uint8_t> fileData = save::ChunkSerializer::serializeFile(*original, {entry});
+    save::ChunkLoadData loaded = save::ChunkSerializer::deserializeFileData(fileData.data(), fileData.size());
+    if (!loaded.chunk || loaded.wireContainers.size() != 1) {
+        std::fprintf(stderr, "[FAIL] chunk serializer should preserve wire container part entries\n");
+        std::abort();
+    }
+    if (BlockStateRegistry::getBlockId(loaded.chunk->getBlock(localX, y, localZ)) != wireContainerBlock) {
+        std::fprintf(stderr, "[FAIL] chunk serializer should preserve the wire_container block state\n");
+        std::abort();
+    }
+
+    const save::WireContainerSaveEntry& loadedEntry = loaded.wireContainers.front();
+    const WirePart* loadedPart = loadedEntry.parts.find(redChannel, PropIndices::FACING_FLOOR);
+    if (loadedEntry.position != worldPosition ||
+        loadedEntry.parts.size() != 1 ||
+        loadedPart == nullptr ||
+        loadedPart->power != 12 ||
+        loadedPart->connections != part.connections) {
+        std::fprintf(stderr, "[FAIL] chunk serializer should preserve wire container part data\n");
+        std::abort();
+    }
+
+    std::printf("[PASS] testWireContainerPartsRoundTrip\n");
+}
+
 static void testOldStringPaletteFormatRejected() {
     const std::vector<uint8_t> fileData = buildLegacyStringPaletteStateFile(
         0,
@@ -652,6 +712,62 @@ static void testSaveManagerChunkRoundTrip() {
     // Cleanup
     std::filesystem::remove_all(testRoot);
     std::printf("[PASS] testSaveManagerChunkRoundTrip\n");
+}
+
+static void testSaveManagerWireContainerPartsRoundTrip() {
+    const std::string testRoot = "test_save_manager_wire_container";
+    save::SaveManager mgr(testRoot);
+    mgr.paths().ensureDirectories();
+
+    const int chunkX = 4;
+    const int chunkZ = -5;
+    const int localX = 9;
+    const int y = 66;
+    const int localZ = 3;
+    const glm::ivec3 worldPosition(
+        chunkX * Chunk::SIZE_X + localX,
+        y,
+        chunkZ * Chunk::SIZE_Z + localZ);
+
+    auto chunk = std::make_shared<Chunk>(chunkX, chunkZ);
+    const BlockID wireContainerBlock = BlockRegistry::requireIdByName("minecraft:wire_container");
+    chunk->setBlock(localX, y, localZ, BlockStateRegistry::getDefaultState(wireContainerBlock));
+
+    const uint16_t redChannel =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_wire")).redstoneWireChannelId;
+    WirePart part;
+    part.channelId = redChannel;
+    part.facing = PropIndices::FACING_FLOOR;
+    part.power = 5;
+    part.connections = WireConnectionBits::AXIS1_NEG | WireConnectionBits::AXIS2_POS;
+
+    save::WireContainerSaveEntry entry;
+    entry.position = worldPosition;
+    if (!entry.parts.addPart(part)) {
+        std::fprintf(stderr, "[FAIL] SaveManager wire container test part should be accepted\n");
+        std::abort();
+    }
+
+    mgr.submitSaveChunk(chunkX, chunkZ, *chunk, {entry});
+    mgr.flushPendingSaves();
+
+    save::ChunkLoadData loaded = mgr.tryLoadChunkData(chunkX, chunkZ);
+    if (loaded.chunk == nullptr || loaded.wireContainers.size() != 1) {
+        std::fprintf(stderr, "[FAIL] SaveManager should preserve wire container entries\n");
+        std::abort();
+    }
+    const save::WireContainerSaveEntry& loadedEntry = loaded.wireContainers.front();
+    const WirePart* loadedPart = loadedEntry.parts.find(redChannel, PropIndices::FACING_FLOOR);
+    if (loadedEntry.position != worldPosition ||
+        loadedPart == nullptr ||
+        loadedPart->power != part.power ||
+        loadedPart->connections != part.connections) {
+        std::fprintf(stderr, "[FAIL] SaveManager should preserve wire container part data\n");
+        std::abort();
+    }
+
+    std::filesystem::remove_all(testRoot);
+    std::printf("[PASS] testSaveManagerWireContainerPartsRoundTrip\n");
 }
 
 static void testSaveManagerNonexistentChunk() {
@@ -941,6 +1057,7 @@ int main() {
     testMixedBlocksInSubchunk();
     testBlockStateRoundTrip();
     testChestBlockStateRoundTrip();
+    testWireContainerPartsRoundTrip();
     testOldStringPaletteFormatRejected();
     testInvalidPackedPaletteIndexRejected();
     testInvalidPaletteStateIndexRejected();
@@ -959,6 +1076,7 @@ int main() {
     // SaveManager tests
     testSaveManagerLevelMeta();
     testSaveManagerChunkRoundTrip();
+    testSaveManagerWireContainerPartsRoundTrip();
     testSaveManagerNonexistentChunk();
     testSaveManagerPersistentEntitiesRoundTrip();
     testSaveManagerBlockEntitiesRoundTrip();

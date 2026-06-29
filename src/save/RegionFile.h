@@ -28,6 +28,8 @@
 #include <vector>
 #include <array>
 
+#include "ChunkSerializer.h"
+
 class Chunk;
 
 namespace save {
@@ -73,6 +75,7 @@ public:
 
     // Read a chunk from the region. Returns nullptr if not stored.
     [[nodiscard]] std::shared_ptr<Chunk> readChunk(int cx, int cz);
+    [[nodiscard]] ChunkLoadData readChunkWithData(int cx, int cz);
 
     // Write a chunk to the region. Appends to end of file.
     bool writeChunk(int cx, int cz, const Chunk& chunk);

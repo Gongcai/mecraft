@@ -164,43 +164,57 @@ RegionFile* SaveManager::getOrCreateRegion(int cx, int cz) const {
 }
 
 std::shared_ptr<Chunk> SaveManager::tryLoadChunk(int cx, int cz) {
+    ChunkLoadData data = tryLoadChunkData(cx, cz);
+    return std::move(data.chunk);
+}
+
+ChunkLoadData SaveManager::tryLoadChunkData(int cx, int cz) {
+    ChunkLoadData loadData;
     // Try region file first
     RegionFile* region = getOrCreateRegion(cx, cz);
     if (region && region->hasChunk(cx, cz)) {
-        return region->readChunk(cx, cz);
+        return region->readChunkWithData(cx, cz);
     }
 
-    // Fall back to legacy single-file format
+    // Read the single-file chunk path after the region-file path.
     const auto path = m_paths.chunkPath(cx, cz);
     std::error_code ec;
     if (!std::filesystem::exists(path, ec)) {
-        return nullptr;
+        return loadData;
     }
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open()) return nullptr;
+    if (!file.is_open()) return loadData;
 
     const auto fileSize = file.tellg();
-    if (fileSize <= 0) return nullptr;
+    if (fileSize <= 0) return loadData;
     file.seekg(0);
 
     std::vector<uint8_t> data(static_cast<size_t>(fileSize));
     file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(fileSize));
-    if (!file) return nullptr;
+    if (!file) return loadData;
 
-    return ChunkSerializer::deserializeFile(data.data(), data.size());
+    return ChunkSerializer::deserializeFileData(data.data(), data.size());
 }
 
 void SaveManager::submitSaveChunk(int cx, int cz, const Chunk& chunk) {
+    static const std::vector<WireContainerSaveEntry> kNoWireContainers;
+    submitSaveChunk(cx, cz, chunk, kNoWireContainers);
+}
+
+void SaveManager::submitSaveChunk(int cx,
+                                  int cz,
+                                  const Chunk& chunk,
+                                  const std::vector<WireContainerSaveEntry>& wireContainers) {
     // Serialize snapshot on calling thread (reads chunk data, no mutation)
     auto fileData = std::make_shared<std::vector<uint8_t>>(
-        ChunkSerializer::serializeFile(chunk));
+        ChunkSerializer::serializeFile(chunk, wireContainers));
 
     if (!m_threadPool) {
         // No thread pool — write synchronously
         RegionFile* region = getOrCreateRegion(cx, cz);
         if (region) {
-            region->writeChunk(cx, cz, chunk);
+            region->writeChunkRaw(cx, cz, *fileData);
         } else {
             writeChunkFileAtomic(cx, cz, *fileData);
         }
@@ -249,7 +263,7 @@ bool SaveManager::chunkFileExists(int cx, int cz) const {
         return true; // Conservative: assume chunk might be in region
     }
 
-    // Fall back to legacy single-file check
+    // Check the single-file chunk path after the region-file path.
     return m_paths.chunkFileExists(cx, cz);
 }
 

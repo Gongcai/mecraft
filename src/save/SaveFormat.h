@@ -15,6 +15,17 @@
 //     uint8_t scy
 //     LayerPayload blockLayer
 //     LayerPayload fluidLayer
+//   varuint wireContainerCount
+//   For each wire container:
+//     uint8_t localX
+//     uint16_t y
+//     uint8_t localZ
+//     varuint partCount
+//     For each wire part:
+//       uint16_t channelId
+//       uint16_t facing
+//       uint8_t power
+//       uint8_t connections
 //
 // LayerPayload:
 //   varuint   paletteCount (0 = all-air, skip packed data)
@@ -31,7 +42,7 @@ namespace save {
 
 // MCHK file magic: 'M' 'C' 'H' 'K' = 0x4D43484B
 constexpr uint32_t MCHK_MAGIC = 0x4D43484Bu;
-constexpr uint16_t MCHK_VERSION = 2;
+constexpr uint16_t MCHK_VERSION = 3;
 
 // Encoding identifiers
 constexpr uint8_t MCHK_ENCODING_PALLETIZED = 1;

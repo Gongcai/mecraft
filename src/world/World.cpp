@@ -574,6 +574,7 @@ void World::init(uint32_t seed) {
     m_redstoneChangedBlockQueue.clear();
     m_redstoneScheduledUpdateQueue.clear();
     m_redstoneRuntimeState.clear();
+    m_wireContainerParts.clear();
     m_ticketManager.reset();
     m_ticketManager.setViewRadius(m_renderDistance);
     m_ticketManager.setSimulationRadius(8);
@@ -691,28 +692,32 @@ void World::updateStreaming(const glm::vec3& playerPos,
     // chunks, so batching every completed generation result at once causes
     // visible frame spikes while moving into new terrain.
     {
-        std::vector<std::shared_ptr<Chunk>> completed;
+        std::vector<save::ChunkLoadData> completed;
         {
             std::lock_guard<std::mutex> lock(m_completedGenMutex);
             completed.swap(m_completedGenQueue);
         }
         const auto finalizeStart = std::chrono::steady_clock::now();
-        std::vector<std::shared_ptr<Chunk>> deferred;
+        std::vector<save::ChunkLoadData> deferred;
         deferred.reserve(completed.size());
 
         int finalized = 0;
-        for (auto& chunk : completed) {
+        for (auto& loadData : completed) {
             const double elapsedMs = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - finalizeStart).count();
             if (finalized >= finalizeBudget ||
                 elapsedMs >= finalizeTimeBudgetMs) {
-                deferred.push_back(std::move(chunk));
+                deferred.push_back(std::move(loadData));
                 continue;
             }
 
-            const int64_t key = chunkKey(chunk->m_chunkX, chunk->m_chunkZ);
+            if (!loadData.chunk) {
+                continue;
+            }
+
+            const int64_t key = chunkKey(loadData.chunk->m_chunkX, loadData.chunk->m_chunkZ);
             m_generationInFlight.erase(key);
-            finalizeChunkLoad(std::move(chunk));
+            finalizeChunkLoad(std::move(loadData));
             ++finalized;
         }
 
@@ -1414,6 +1419,67 @@ void World::markChunkSaveDirty(int cx, int cz) {
     m_dirtySaveChunks.insert(chunkKey(cx, cz));
 }
 
+std::vector<save::WireContainerSaveEntry> World::collectWireContainersForChunk(const int cx, const int cz) const {
+    std::vector<save::WireContainerSaveEntry> entries;
+    m_wireContainerParts.forEach([&](const glm::ivec3& position, const WireContainerParts& parts) {
+        if (worldToChunkCoord(position.x, Chunk::SIZE_X) != cx ||
+            worldToChunkCoord(position.z, Chunk::SIZE_Z) != cz) {
+            return;
+        }
+        if (parts.empty()) {
+            throw std::runtime_error("Cannot save an empty wire container part set");
+        }
+        const BlockStateId stateId = getBlockState(position.x, position.y, position.z);
+        if (stateId == NULL_BLOCK_STATE ||
+            !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
+            throw std::runtime_error("Cannot save wire container parts for a non-container block");
+        }
+
+        save::WireContainerSaveEntry entry;
+        entry.position = position;
+        entry.parts = parts;
+        entries.push_back(entry);
+    });
+    return entries;
+}
+
+void World::applyLoadedWireContainers(const int cx,
+                                      const int cz,
+                                      const std::vector<save::WireContainerSaveEntry>& wireContainers) {
+    eraseWireContainersInChunk(cx, cz);
+    for (const save::WireContainerSaveEntry& entry : wireContainers) {
+        if (worldToChunkCoord(entry.position.x, Chunk::SIZE_X) != cx ||
+            worldToChunkCoord(entry.position.z, Chunk::SIZE_Z) != cz) {
+            throw std::runtime_error("Loaded wire container parts target a different chunk");
+        }
+        if (entry.parts.empty()) {
+            throw std::runtime_error("Loaded wire container parts are empty");
+        }
+        const BlockStateId stateId = getBlockState(entry.position.x, entry.position.y, entry.position.z);
+        if (stateId == NULL_BLOCK_STATE ||
+            !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
+            throw std::runtime_error("Loaded wire container parts target a non-container block");
+        }
+        if (m_wireContainerParts.find(entry.position) != nullptr) {
+            throw std::runtime_error("Loaded wire container parts contain a duplicate position");
+        }
+        m_wireContainerParts.getOrCreate(entry.position) = entry.parts;
+    }
+}
+
+void World::eraseWireContainersInChunk(const int cx, const int cz) {
+    std::vector<glm::ivec3> positions;
+    m_wireContainerParts.forEach([&](const glm::ivec3& position, const WireContainerParts&) {
+        if (worldToChunkCoord(position.x, Chunk::SIZE_X) == cx &&
+            worldToChunkCoord(position.z, Chunk::SIZE_Z) == cz) {
+            positions.push_back(position);
+        }
+    });
+    for (const glm::ivec3& position : positions) {
+        m_wireContainerParts.erase(position);
+    }
+}
+
 void World::flushSaves() {
     if (!m_saveManager) return;
 
@@ -1423,7 +1489,7 @@ void World::flushSaves() {
         int cz = static_cast<int>(static_cast<int32_t>(key & 0xFFFFFFFF));
         auto it = m_chunks.find(key);
         if (it != m_chunks.end()) {
-            m_saveManager->submitSaveChunk(cx, cz, *it->second);
+            m_saveManager->submitSaveChunk(cx, cz, *it->second, collectWireContainersForChunk(cx, cz));
         }
     }
     m_dirtySaveChunks.clear();
@@ -1542,14 +1608,13 @@ void World::submitChunkLoad(int cx, int cz) {
     if (m_chunks.find(key) != m_chunks.end()) return;
     if (m_generationInFlight.count(key)) return;
     if (!m_threadPool || !m_threadPool->isRunning()) {
-        // No thread pool — fall back to synchronous load
+        // Without a worker pool, load this chunk synchronously.
         loadChunk(cx, cz);
         return;
     }
 
     m_generationInFlight.insert(key);
 
-    // Try loading from disk first, fall back to terrain generation.
     // Both paths push to m_completedGenQueue which is consumed by finalizeChunkLoad().
     auto chunk = std::make_shared<Chunk>(cx, cz);
     TerrainGenerator* terrainGen = &m_terrainGen;
@@ -1559,9 +1624,9 @@ void World::submitChunkLoad(int cx, int cz) {
         bool loadedFromDisk = false;
 
         if (sm && sm->chunkFileExists(chunk->m_chunkX, chunk->m_chunkZ)) {
-            auto loaded = sm->tryLoadChunk(chunk->m_chunkX, chunk->m_chunkZ);
-            if (loaded) {
-                loaded->seedInitialLightMap();
+            save::ChunkLoadData loaded = sm->tryLoadChunkData(chunk->m_chunkX, chunk->m_chunkZ);
+            if (loaded.chunk) {
+                loaded.chunk->seedInitialLightMap();
                 {
                     std::lock_guard<std::mutex> lock(m_completedGenMutex);
                     m_completedGenQueue.push_back(std::move(loaded));
@@ -1573,15 +1638,21 @@ void World::submitChunkLoad(int cx, int cz) {
         if (!loadedFromDisk) {
             terrainGen->generateChunk(*chunk);
             chunk->seedInitialLightMap();
+            save::ChunkLoadData generated;
+            generated.chunk = chunk;
             {
                 std::lock_guard<std::mutex> lock(m_completedGenMutex);
-                m_completedGenQueue.push_back(chunk);
+                m_completedGenQueue.push_back(std::move(generated));
             }
         }
     }, 0);
 }
 
-void World::finalizeChunkLoad(std::shared_ptr<Chunk> chunk) {
+void World::finalizeChunkLoad(save::ChunkLoadData loadData) {
+    if (!loadData.chunk) {
+        return;
+    }
+    std::shared_ptr<Chunk> chunk = std::move(loadData.chunk);
     const int cx = chunk->m_chunkX;
     const int cz = chunk->m_chunkZ;
     const int64_t key = chunkKey(cx, cz);
@@ -1590,6 +1661,7 @@ void World::finalizeChunkLoad(std::shared_ptr<Chunk> chunk) {
     if (m_chunks.find(key) != m_chunks.end()) return;
 
     m_chunks[key] = std::move(chunk);
+    applyLoadedWireContainers(cx, cz, loadData.wireContainers);
     ++m_activeChunkRevision;
     ++m_blockContentRevision;
 
@@ -1633,18 +1705,19 @@ void World::loadChunk(int cx, int cz) {
     int64_t key = chunkKey(cx, cz);
     if (m_chunks.find(key) != m_chunks.end()) return;
 
-    // Try loading from disk first, fall back to terrain generation
-    std::shared_ptr<Chunk> chunk;
+    save::ChunkLoadData loadData;
     if (m_saveManager && m_saveManager->chunkFileExists(cx, cz)) {
-        chunk = m_saveManager->tryLoadChunk(cx, cz);
+        loadData = m_saveManager->tryLoadChunkData(cx, cz);
     }
-    if (!chunk) {
-        chunk = std::make_shared<Chunk>(cx, cz);
-        m_terrainGen.generateChunk(*chunk);
+    if (!loadData.chunk) {
+        loadData.chunk = std::make_shared<Chunk>(cx, cz);
+        m_terrainGen.generateChunk(*loadData.chunk);
     }
+    std::shared_ptr<Chunk> chunk = std::move(loadData.chunk);
     chunk->seedInitialLightMap();
 
     m_chunks[key] = std::move(chunk);
+    applyLoadedWireContainers(cx, cz, loadData.wireContainers);
     ++m_activeChunkRevision;
     ++m_blockContentRevision;
 
@@ -1688,7 +1761,7 @@ void World::unloadChunk(int cx, int cz) {
 
     // Save dirty chunk to disk before unloading
     if (m_saveManager && m_dirtySaveChunks.count(key)) {
-        m_saveManager->submitSaveChunk(cx, cz, *it->second);
+        m_saveManager->submitSaveChunk(cx, cz, *it->second, collectWireContainersForChunk(cx, cz));
         m_dirtySaveChunks.erase(key);
     }
 
@@ -1719,6 +1792,7 @@ void World::unloadChunk(int cx, int cz) {
     if (chunk->neighbors[3]) chunk->neighbors[3]->neighbors[2] = nullptr;
 
     m_chunks.erase(it);
+    eraseWireContainersInChunk(cx, cz);
     ++m_activeChunkRevision;
     ++m_blockContentRevision;
 }
