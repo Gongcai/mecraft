@@ -3715,6 +3715,24 @@ void ChunkMeshBuilders::buildBlockEntity(ChunkMeshData& meshData,
     static_cast<void>(z);
 }
 
+void ChunkMeshBuilders::buildWireContainer(ChunkMeshData& meshData,
+                                           const SubChunkMeshingSnapshot& snapshot,
+                                           const BlockStateId stateId,
+                                           const BlockDef& def,
+                                           const int x,
+                                           const int y,
+                                           const int z) {
+    // Wire container geometry is generated from WireContainerPartStore in the
+    // container rendering phase. The block itself has no visible body.
+    static_cast<void>(meshData);
+    static_cast<void>(snapshot);
+    static_cast<void>(stateId);
+    static_cast<void>(def);
+    static_cast<void>(x);
+    static_cast<void>(y);
+    static_cast<void>(z);
+}
+
 void ChunkMeshBuilders::buildFacePlane(ChunkMeshData& meshData,
                                        const SubChunkMeshingSnapshot& snapshot,
                                        const BlockStateId stateId,

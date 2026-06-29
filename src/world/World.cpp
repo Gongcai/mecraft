@@ -87,6 +87,14 @@ bool isRedstoneWireBlockDef(const BlockDef& def) {
     return def.redstoneBehavior == "wire";
 }
 
+bool isWireContainerState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE || FluidState::decode(stateId).kind != FluidKind::None) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).isWireContainer;
+}
+
 bool isRedstoneWireState(const BlockStateId stateId) {
     if (stateId == NULL_BLOCK_STATE) {
         return false;
@@ -893,6 +901,9 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
         if (isRedstoneTorchRuntimeState(oldId) && !isRedstoneTorchRuntimeState(targetState)) {
             m_redstoneRuntimeState.eraseTorch(glm::ivec3(x, y, z));
         }
+        if (isWireContainerState(oldId) && !isWireContainerState(targetState)) {
+            m_wireContainerParts.erase(glm::ivec3(x, y, z));
+        }
     }
 
     if (uncoverFluidLayer || clearFluidLayer) {
@@ -952,6 +963,66 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
     // Mark chunk dirty for persistence
     markChunkSaveDirty(chunkX, chunkZ);
     refreshConnectedBlocksAround(glm::ivec3(x, y, z));
+}
+
+void World::notifyWireContainerPartsChanged(const glm::ivec3& pos) {
+    if (pos.y < 0 || pos.y >= Chunk::SIZE_Y) {
+        return;
+    }
+
+    const int chunkX = worldToChunkCoord(pos.x, Chunk::SIZE_X);
+    const int chunkZ = worldToChunkCoord(pos.z, Chunk::SIZE_Z);
+    auto it = m_chunks.find(chunkKey(chunkX, chunkZ));
+    if (it == m_chunks.end()) {
+        return;
+    }
+
+    const BlockStateId currentState = getBlockState(pos.x, pos.y, pos.z);
+    if (!isWireContainerState(currentState)) {
+        throw std::runtime_error("Wire container parts changed at a non-container block");
+    }
+
+    const int localX = pos.x - chunkX * Chunk::SIZE_X;
+    const int localZ = pos.z - chunkZ * Chunk::SIZE_Z;
+    const int editedScy = Chunk::toSubChunkIndex(pos.y);
+    const int localY = Chunk::toSubChunkLocalY(pos.y);
+    Chunk& chunk = *it->second;
+
+    ++m_blockContentRevision;
+    markChunkSubChunkAndVerticalNeighborsDirty(chunk, editedScy, localY);
+    if (localX == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX - 1, chunkZ));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+    if (localX == Chunk::SIZE_X - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX + 1, chunkZ));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+    if (localZ == 0) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ - 1));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+    if (localZ == Chunk::SIZE_Z - 1) {
+        auto nit = m_chunks.find(chunkKey(chunkX, chunkZ + 1));
+        if (nit != m_chunks.end()) markChunkSubChunkAndVerticalNeighborsDirty(*nit->second, editedScy, localY);
+    }
+
+    static constexpr glm::ivec3 kNeighborOffsets[6] = {
+        { 1,  0,  0}, {-1,  0,  0},
+        { 0,  1,  0}, { 0, -1,  0},
+        { 0,  0,  1}, { 0,  0, -1},
+    };
+    m_redstoneUpdateQueue.enqueue(pos);
+    m_redstoneChangedBlockQueue.enqueue(pos);
+    for (const glm::ivec3& offset : kNeighborOffsets) {
+        m_redstoneUpdateQueue.enqueue(pos + offset);
+    }
+    forEachWireFaceCornerPeerPosition(pos, [this](const glm::ivec3& peer) {
+        m_redstoneUpdateQueue.enqueue(peer);
+    });
+
+    markChunkSaveDirty(chunkX, chunkZ);
+    refreshConnectedBlocksAround(pos);
 }
 
 void World::refreshConnectedBlockAt(const glm::ivec3& pos) {

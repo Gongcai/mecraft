@@ -14,6 +14,7 @@
 #include "../../../world/block/BlockCollision.h"
 #include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/Placement.h"
+#include "../../../world/redstone/WireContainerPlacement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
 #include "../../../item/Item.h"
@@ -137,6 +138,23 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
     if (tryMergePlacementStates(existingTargetState, inCellState, mergedState)) {
         result.placeBlock = target.targetBlock;
         result.stateId = mergedState;
+        result.replacesExisting = true;
+        return result;
+    }
+
+    const BlockStateId sameCellWireState = result.stateId;
+    if (WireContainerPlacement::isContainerPlacementTarget(existingTargetState, sameCellWireState)) {
+        const World* concreteWorld = worldView.asWorld();
+        const bool canAddWirePart = concreteWorld != nullptr
+            ? WireContainerPlacement::canApply(*concreteWorld, target.targetBlock, sameCellWireState)
+            : WireContainerPlacement::canApplyToBlockState(existingTargetState, sameCellWireState);
+        if (!canAddWirePart) {
+            result.stateId = NULL_BLOCK_STATE;
+            return result;
+        }
+
+        result.placeBlock = target.targetBlock;
+        result.stateId = sameCellWireState;
         result.replacesExisting = true;
     }
 
@@ -271,7 +289,14 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
                 throw std::runtime_error("Unsupported multi-block placement state");
             }
         } else {
-            mutableWorld->setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
+            const WireContainerPlacement::ApplyResult wirePlacementResult =
+                WireContainerPlacement::apply(*mutableWorld, placeBlock, placedState);
+            if (wirePlacementResult == WireContainerPlacement::ApplyResult::Rejected) {
+                continue;
+            }
+            if (wirePlacementResult == WireContainerPlacement::ApplyResult::NotWirePlacement) {
+                mutableWorld->setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, placedState);
+            }
         }
         static_cast<void>(ensureBlockEntityInventoryForPlacedBlock(registry, blockToPlace, placeBlock));
         // Notify DropSystem of placement so nearby drops resolve against new collision.

@@ -54,6 +54,7 @@ bool isKnownRedstoneBehavior(const std::string_view behavior) {
         "dropper",
         "hopper",
         "note_block",
+        "wire_container",
     };
     return std::find(std::begin(kKnownBehaviors), std::end(kKnownBehaviors), behavior) != std::end(kKnownBehaviors);
 }
@@ -121,6 +122,7 @@ BlockDef makeDefaultBlockDef(const NamespacedId& id) {
     def.redstoneWireChannel.clear();
     def.redstoneWireChannelId = 0;
     def.redstoneWireTint = 0;
+    def.isWireContainer = false;
     def.pressurePlateEntityFilter.clear();
     def.redstoneControlledProperty.clear();
     def.redstoneControlledMirrorProperties.clear();
@@ -556,6 +558,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         def.redstoneWireChannel.clear();
         def.redstoneWireChannelId = 0;
         def.redstoneWireTint = 0;
+        def.isWireContainer = false;
         def.pressurePlateEntityFilter.clear();
         def.redstoneControlledProperty.clear();
         def.redstoneControlledMirrorProperties.clear();
@@ -726,6 +729,20 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (def.redstoneBehavior == "button" && def.redstonePulseTicks == 0) {
             throw std::runtime_error("redstoneBehavior=button requires redstonePulseTicks for block: " +
+                                     def.namespacedId.full());
+        }
+        if (blockJson.contains("isWireContainer")) {
+            if (!blockJson["isWireContainer"].is_boolean()) {
+                throw std::runtime_error("isWireContainer must be a boolean for block: " + def.namespacedId.full());
+            }
+            def.isWireContainer = blockJson["isWireContainer"].get<bool>();
+        }
+        if (def.isWireContainer && def.redstoneBehavior != "wire_container") {
+            throw std::runtime_error("isWireContainer requires redstoneBehavior=wire_container for block: " +
+                                     def.namespacedId.full());
+        }
+        if (def.redstoneBehavior == "wire_container" && !def.isWireContainer) {
+            throw std::runtime_error("redstoneBehavior=wire_container requires isWireContainer=true for block: " +
                                      def.namespacedId.full());
         }
         if (blockJson.contains("redstoneWireChannel")) {

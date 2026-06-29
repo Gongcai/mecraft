@@ -37,6 +37,7 @@
 #include "../ui/inventory/ContainerUiRegistry.h"
 #include "../world/block/BlockStateRegistry.h"
 #include "../world/fluid/FluidState.h"
+#include "../world/redstone/WireContainerPlacement.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -2186,6 +2187,21 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                            doorPlacement.upperPos.y,
                            doorPlacement.upperPos.z);
         MECRAFT_LOG_FLUSH(stdout);
+        return;
+    }
+    const WireContainerPlacement::ApplyResult wirePlacementResult =
+        WireContainerPlacement::apply(m_world, action.placeBlock, action.blockState);
+    if (wirePlacementResult == WireContainerPlacement::ApplyResult::Applied) {
+        MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place wire_container_part client=%u block=(%d,%d,%d) state=%zu\n",
+                           client.id,
+                           action.placeBlock.x,
+                           action.placeBlock.y,
+                           action.placeBlock.z,
+                           action.blockState.registryIndex());
+        MECRAFT_LOG_FLUSH(stdout);
+        return;
+    }
+    if (wirePlacementResult == WireContainerPlacement::ApplyResult::Rejected) {
         return;
     }
     const BlockStateId existingPlaceState =

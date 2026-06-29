@@ -275,6 +275,7 @@ struct BlockDef {
     std::string redstoneWireChannel;       // Wire network key; wires only connect and propagate to matching channels.
     uint16_t redstoneWireChannelId = 0;    // Parsed wire network id used by hot-path wire comparisons.
     uint8_t redstoneWireTint = 0;          // Redstone shader tint palette index in the inclusive range [0, 15].
+    bool isWireContainer = false;          // True when the block hosts multiple redstone wire parts.
     std::string pressurePlateEntityFilter; // Entity filter used by pressure plate contact evaluation.
     std::string redstoneControlledProperty; // Boolean state property driven by incoming redstone power.
     std::vector<std::string> redstoneControlledMirrorProperties; // Boolean state properties updated when the controlled property changes.

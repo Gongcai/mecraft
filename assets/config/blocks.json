@@ -1096,6 +1096,20 @@
       }
     },
     {
+      "id": "minecraft:wire_container",
+      "drop": "minecraft:air",
+      "redstoneBehavior": "wire_container",
+      "isWireContainer": true,
+      "isRedstoneConductor": false,
+      "isSolid": false,
+      "isTransparent": true,
+      "renderLayer": "cutout",
+      "allowsFluidCoexistence": true,
+      "renderShape": "wire_container",
+      "timeToBreak": 0,
+      "pistonPushReaction": "block"
+    },
+    {
       "id": "minecraft:redstone_torch",
       "drop": "minecraft:redstone_torch",
       "redstoneBehavior": "torch",

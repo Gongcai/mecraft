@@ -1404,6 +1404,19 @@ int main() {
         blueRedstoneWireDef.redstoneWireTint != 1) {
         return fail("blue_redstone_wire should declare its wire channel and tint metadata");
     }
+    const BlockDef& wireContainerDef =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:wire_container"));
+    if (wireContainerDef.renderShapeName != "wire_container" ||
+        wireContainerDef.renderShapeTag != MeshBuilderRegistry::WIRE_CONTAINER_TAG ||
+        wireContainerDef.redstoneBehavior != "wire_container" ||
+        !wireContainerDef.isWireContainer ||
+        wireContainerDef.isRedstoneConductor ||
+        wireContainerDef.isSolid ||
+        !wireContainerDef.isTransparent ||
+        !wireContainerDef.allowsFluidCoexistence ||
+        wireContainerDef.pistonPushReaction != "block") {
+        return fail("wire_container should register as a non-conductive redstone wire part container");
+    }
     const BlockStateId redstoneWireDefault = BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_wire"));
     const std::size_t expectedWireStateCount = 6u * 16u * 2u * 2u * 2u * 2u;
     if (BlockStateRegistry::getStatesForBlock(BlockRegistry::requireIdByName("minecraft:redstone_wire")).size() !=

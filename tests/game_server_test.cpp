@@ -634,6 +634,72 @@ static void testClientBlockActionMergesStackedSlabs() {
     std::printf("[PASS] testClientBlockActionMergesStackedSlabs\n");
 }
 
+static void testClientBlockActionAddsWireContainerPart() {
+    ServerHarness harness;
+    client::GameClient client;
+
+    auto [clientTransport, serverTransport] = net::InProcessTransport::createPair();
+    harness.server.acceptClient(std::move(serverTransport), 1);
+    client.connect(std::move(clientTransport));
+
+    const glm::ivec3 placeBlock(2, Chunk::SIZE_Y - 8, 2);
+    for (int tick = 0;
+         tick < 240 && !harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z);
+         ++tick) {
+        harness.server.tick(1.0f / 20.0f);
+        client.receiveMessages();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    require(harness.server.world().isChunkLoadedForBlock(placeBlock.x, placeBlock.y, placeBlock.z),
+            "wire container part test chunk should be loaded");
+
+    const BlockStateId redWire = defaultState("minecraft:redstone_wire");
+    const BlockStateId blueWire = defaultState("minecraft:blue_redstone_wire");
+    harness.server.world().setBlockState(placeBlock.x,
+                                         placeBlock.y - 1,
+                                         placeBlock.z,
+                                         defaultState("minecraft:stone"));
+    harness.server.world().setBlockState(placeBlock.x, placeBlock.y, placeBlock.z, redWire);
+
+    net::ClientBlockAction addWire;
+    addWire.sequence = 1;
+    addWire.action = net::ClientBlockActionType::Place;
+    addWire.targetBlock = placeBlock;
+    addWire.placeBlock = placeBlock;
+    addWire.hitNormal = {0, 1, 0};
+    addWire.playerPosition = glm::vec3(placeBlock) + glm::vec3(0.5f);
+    addWire.blockState = blueWire;
+    client.sendBlockAction(addWire);
+
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+
+    const BlockStateId containerState =
+        harness.server.world().getBlockState(placeBlock.x, placeBlock.y, placeBlock.z);
+    require(BlockStateRegistry::getBlockId(containerState) == BlockRegistry::requireIdByName("minecraft:wire_container"),
+            "server should upgrade a plain wire cell to wire_container when another wire part is placed");
+
+    const WireContainerParts* parts = harness.server.world().wireContainerParts().find(placeBlock);
+    const uint16_t redChannel =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:redstone_wire")).redstoneWireChannelId;
+    const uint16_t blueChannel =
+        BlockRegistry::get(BlockRegistry::requireIdByName("minecraft:blue_redstone_wire")).redstoneWireChannelId;
+    require(parts != nullptr &&
+                parts->find(redChannel, PropIndices::FACING_FLOOR) != nullptr &&
+                parts->find(blueChannel, PropIndices::FACING_FLOOR) != nullptr &&
+                parts->size() == 2,
+            "server should store both wire parts after the network placement action");
+
+    addWire.sequence = 2;
+    client.sendBlockAction(addWire);
+    harness.server.tick(1.0f / 20.0f);
+    client.receiveMessages();
+    require(harness.server.world().wireContainerParts().find(placeBlock)->size() == 2,
+            "server should reject duplicate wire parts without mutating the container");
+
+    std::printf("[PASS] testClientBlockActionAddsWireContainerPart\n");
+}
+
 static void testClientBlockActionInteractIsServerAuthoritative() {
     ServerHarness harness;
     auto clientTransport = std::make_unique<ManualTransport>();
@@ -4422,6 +4488,7 @@ int main() {
     testClientAppliesInventorySnapshot();
     testClientBlockActionRoundTrip();
     testClientBlockActionMergesStackedSlabs();
+    testClientBlockActionAddsWireContainerPart();
     testClientBlockActionInteractIsServerAuthoritative();
     testMultiplayerContainerSnapshotsStayAuthoritative();
     testChatBroadcastRoundTrip();

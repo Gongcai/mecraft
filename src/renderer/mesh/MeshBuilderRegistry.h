@@ -33,6 +33,7 @@ public:
     static constexpr uint8_t BLOCK_ENTITY_TAG = 5;
     static constexpr uint8_t FACE_PLANE_TAG = 6;
     static constexpr uint8_t REDSTONE_WIRE_TAG = 7;
+    static constexpr uint8_t WIRE_CONTAINER_TAG = 8;
 
     static void registerBuilder(const std::string& shapeName,
                                 uint8_t tag,

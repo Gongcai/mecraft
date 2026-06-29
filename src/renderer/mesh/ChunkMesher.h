@@ -162,6 +162,13 @@ void buildRedstoneWire(ChunkMeshData& meshData,
                        int x,
                        int y,
                        int z);
+void buildWireContainer(ChunkMeshData& meshData,
+                        const SubChunkMeshingSnapshot& snapshot,
+                        BlockStateId stateId,
+                        const BlockDef& def,
+                        int x,
+                        int y,
+                        int z);
 void buildUnitFaces(ChunkMeshData& meshData,
                     const SubChunkMeshingSnapshot& snapshot,
                     BlockStateId stateId,

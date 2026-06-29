@@ -184,6 +184,7 @@ set(SRC_WORLD
         src/world/fluid/FluidFlow.cpp
         src/world/fluid/FluidSystem.cpp
         src/world/block/BlockNeighborUpdateQueue.cpp
+        src/world/redstone/WireContainerPlacement.cpp
         src/world/redstone/RedstoneUpdateQueue.cpp
         src/world/gen/TerrainGenerator.cpp
         src/world/WorldRaycast.cpp
@@ -707,6 +708,10 @@ if(MECRAFT_BUILD_TESTS)
     mecraft_copy_runtime_assets(redstone_advanced_test)
     add_mecraft_test(redstone_performance_benchmark tests/redstone_performance_benchmark.cpp)
     mecraft_copy_runtime_assets(redstone_performance_benchmark)
+    add_mecraft_test(wire_container_parts_test tests/wire_container_parts_test.cpp)
+    mecraft_copy_runtime_assets(wire_container_parts_test)
+    add_mecraft_test(wire_container_placement_test tests/wire_container_placement_test.cpp)
+    mecraft_copy_runtime_assets(wire_container_placement_test)
     add_mecraft_test(hopper_system_test tests/hopper_system_test.cpp)
     mecraft_copy_runtime_assets(hopper_system_test)
     add_mecraft_test(bucket_use_test tests/bucket_use_test.cpp)
