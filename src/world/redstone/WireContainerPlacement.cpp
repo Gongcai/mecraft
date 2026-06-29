@@ -155,6 +155,30 @@ BlockStateId wireContainerDefaultState() {
     return BlockStateRegistry::getDefaultState(blockId);
 }
 
+BlockID requireWireBlockForChannel(const uint16_t channelId) {
+    if (channelId == 0) {
+        throw std::runtime_error("Wire container part requires a non-zero redstone channel");
+    }
+
+    BlockID matchedBlock = RUNTIME_ID_NULL;
+    for (std::size_t i = 0; i < BlockRegistry::getBlockCount(); ++i) {
+        const BlockID blockId = static_cast<BlockID>(i);
+        const BlockDef& def = BlockRegistry::getFast(blockId);
+        if (def.redstoneBehavior != "wire" || def.redstoneWireChannelId != channelId) {
+            continue;
+        }
+        if (matchedBlock != RUNTIME_ID_NULL) {
+            throw std::runtime_error("Wire container part channel maps to multiple wire blocks");
+        }
+        matchedBlock = blockId;
+    }
+
+    if (matchedBlock == RUNTIME_ID_NULL) {
+        throw std::runtime_error("Wire container part channel has no registered wire block");
+    }
+    return matchedBlock;
+}
+
 } // namespace
 
 namespace WireContainerPlacement {
@@ -243,6 +267,15 @@ ApplyResult apply(World& world,
     }
 
     return ApplyResult::NotWirePlacement;
+}
+
+std::vector<BlockID> wireBlocksForParts(const WireContainerParts& parts) {
+    std::vector<BlockID> blockIds;
+    blockIds.reserve(parts.size());
+    parts.forEach([&](const WirePart& part) {
+        blockIds.push_back(requireWireBlockForChannel(part.channelId));
+    });
+    return blockIds;
 }
 
 } // namespace WireContainerPlacement

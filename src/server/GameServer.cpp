@@ -1649,6 +1649,27 @@ BlockID removeServerTargetBlock(World& world,
     return BlockStateRegistry::getBlockId(targetState);
 }
 
+WireContainerParts copyWireContainerPartsAt(const World& world, const glm::ivec3& position) {
+    WireContainerParts parts;
+    if (const WireContainerParts* storedParts = world.wireContainerParts().find(position)) {
+        parts = *storedParts;
+    }
+    return parts;
+}
+
+void spawnWireContainerPartDrops(ecs::GameplayRegistry& registry,
+                                 const WireContainerParts& parts,
+                                 const glm::ivec3& position) {
+    for (const BlockID blockId : WireContainerPlacement::wireBlocksForParts(parts)) {
+        const ItemID dropItem = BlockDropTable::getDropItem(blockId);
+        if (dropItem == RUNTIME_ID_NULL) {
+            throw std::runtime_error("Wire container part block has no drop item: " +
+                                     BlockRegistry::getFast(blockId).namespacedId.full());
+        }
+        ecs::ItemSpawnSystem::spawn(registry, dropItem, position, 1);
+    }
+}
+
 uint32_t addToStack(ItemStack& target, const ItemID itemId, const uint32_t count) {
     if (itemId == 0 || count == 0) {
         return count;
@@ -1991,6 +2012,7 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
         if (targetState == NULL_BLOCK_STATE || !BlockRegistry::get(target).isSelectable) {
             return;
         }
+        const WireContainerParts brokenWireParts = copyWireContainerPartsAt(m_world, action.targetBlock);
         std::vector<glm::ivec3> removedPositions;
         const BlockID brokenBlock = removeServerTargetBlock(m_world, action.targetBlock, removedPositions);
         closeOpenContainersAtPositions(removedPositions);
@@ -2030,6 +2052,9 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
             if (brokeDoor && dropBrokenBlockItem) {
                 const ItemID doorItem = BlockDropTable::getDropItem(brokenBlock);
                 ecs::ItemSpawnSystem::spawn(*m_gameplayRegistry, doorItem, action.targetBlock, 1);
+            }
+            if (!brokenWireParts.empty() && dropBrokenBlockItem) {
+                spawnWireContainerPartDrops(*m_gameplayRegistry, brokenWireParts, action.targetBlock);
             }
         } else if (m_ecsRegistry != nullptr) {
             if (m_ecsRegistry->ctx().contains<BlockEntityInventoryStore>()) {
@@ -2198,6 +2223,23 @@ void GameServer::handleClientBlockAction(ConnectedClient& client, const net::Cli
                            doorPlacement.upperPos.z);
         MECRAFT_LOG_FLUSH(stdout);
         return;
+    }
+    if (action.targetBlock != action.placeBlock) {
+        const WireContainerPlacement::ApplyResult targetWirePlacementResult =
+            WireContainerPlacement::apply(m_world, action.targetBlock, action.blockState);
+        if (targetWirePlacementResult == WireContainerPlacement::ApplyResult::Applied) {
+            MECRAFT_LOG_PRINTF("[Server] ClientBlockAction place wire_container_part client=%u block=(%d,%d,%d) state=%zu\n",
+                               client.id,
+                               action.targetBlock.x,
+                               action.targetBlock.y,
+                               action.targetBlock.z,
+                               action.blockState.registryIndex());
+            MECRAFT_LOG_FLUSH(stdout);
+            return;
+        }
+        if (targetWirePlacementResult == WireContainerPlacement::ApplyResult::Rejected) {
+            return;
+        }
     }
     const WireContainerPlacement::ApplyResult wirePlacementResult =
         WireContainerPlacement::apply(m_world, action.placeBlock, action.blockState);

@@ -14,6 +14,7 @@
 #include "../../../world/block/BlockCollision.h"
 #include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/Placement.h"
+#include "../../../world/block/PropIndices.h"
 #include "../../../world/redstone/WireContainerPlacement.h"
 #include "../../../world/World.h"
 #include "../../../world/DropSystem.h"
@@ -88,6 +89,61 @@ bool wouldOverlapPlacement(const PhysicsBody& body, const PlacementResolution& p
            wouldOverlapPlacedState(body, placement.secondaryBlock, placement.secondaryStateId);
 }
 
+bool isPlainWireState(const BlockStateId stateId) {
+    if (stateId == NULL_BLOCK_STATE) {
+        return false;
+    }
+    const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
+    return BlockRegistry::getFast(blockId).redstoneBehavior == "wire";
+}
+
+BlockStateId withExistingWireFacing(const BlockStateId existingWireState,
+                                    const BlockStateId incomingWireState) {
+    if (!isPlainWireState(existingWireState) || !isPlainWireState(incomingWireState)) {
+        return NULL_BLOCK_STATE;
+    }
+
+    const uint16_t existingFacing =
+        BlockStateRegistry::getPropertyIndex(existingWireState, PropIndices::FACING);
+    if (existingFacing == BlockStateRegistry::INVALID_INDEX) {
+        throw std::runtime_error("Wire container placement target is missing facing");
+    }
+    return BlockStateRegistry::withProperty(incomingWireState, PropIndices::FACING, existingFacing);
+}
+
+bool canAddWirePartToTarget(const IWorldView& worldView,
+                            const glm::ivec3& position,
+                            const BlockStateId existingState,
+                            const BlockStateId incomingWireState) {
+    const World* concreteWorld = worldView.asWorld();
+    return concreteWorld != nullptr
+        ? WireContainerPlacement::canApply(*concreteWorld, position, incomingWireState)
+        : WireContainerPlacement::canApplyToBlockState(existingState, incomingWireState);
+}
+
+BlockStateId resolveSameCellWireState(const IWorldView& worldView,
+                                      const glm::ivec3& position,
+                                      const BlockStateId existingState,
+                                      const BlockStateId hitFaceWireState) {
+    if (!WireContainerPlacement::isContainerPlacementTarget(existingState, hitFaceWireState)) {
+        return NULL_BLOCK_STATE;
+    }
+
+    if (canAddWirePartToTarget(worldView, position, existingState, hitFaceWireState)) {
+        return hitFaceWireState;
+    }
+
+    const BlockStateId existingFacingWireState =
+        withExistingWireFacing(existingState, hitFaceWireState);
+    if (existingFacingWireState != NULL_BLOCK_STATE &&
+        existingFacingWireState != hitFaceWireState &&
+        canAddWirePartToTarget(worldView, position, existingState, existingFacingWireState)) {
+        return existingFacingWireState;
+    }
+
+    return NULL_BLOCK_STATE;
+}
+
 PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
                                            const BlockTargetComponent& target,
                                            const BlockID blockId,
@@ -142,13 +198,10 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         return result;
     }
 
-    const BlockStateId sameCellWireState = result.stateId;
-    if (WireContainerPlacement::isContainerPlacementTarget(existingTargetState, sameCellWireState)) {
-        const World* concreteWorld = worldView.asWorld();
-        const bool canAddWirePart = concreteWorld != nullptr
-            ? WireContainerPlacement::canApply(*concreteWorld, target.targetBlock, sameCellWireState)
-            : WireContainerPlacement::canApplyToBlockState(existingTargetState, sameCellWireState);
-        if (!canAddWirePart) {
+    if (WireContainerPlacement::isContainerPlacementTarget(existingTargetState, result.stateId)) {
+        const BlockStateId sameCellWireState =
+            resolveSameCellWireState(worldView, target.targetBlock, existingTargetState, result.stateId);
+        if (sameCellWireState == NULL_BLOCK_STATE) {
             result.stateId = NULL_BLOCK_STATE;
             return result;
         }
@@ -156,6 +209,22 @@ PlacementResolution resolvePlacementTarget(const IWorldView& worldView,
         result.placeBlock = target.targetBlock;
         result.stateId = sameCellWireState;
         result.replacesExisting = true;
+        return result;
+    }
+
+    const BlockStateId existingPlaceState =
+        worldView.getBlockState(result.placeBlock.x, result.placeBlock.y, result.placeBlock.z);
+    if (WireContainerPlacement::isContainerPlacementTarget(existingPlaceState, result.stateId)) {
+        const BlockStateId placeCellWireState =
+            resolveSameCellWireState(worldView, result.placeBlock, existingPlaceState, result.stateId);
+        if (placeCellWireState == NULL_BLOCK_STATE) {
+            result.stateId = NULL_BLOCK_STATE;
+            return result;
+        }
+
+        result.stateId = placeCellWireState;
+        result.replacesExisting = true;
+        return result;
     }
 
     return result;

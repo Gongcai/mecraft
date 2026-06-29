@@ -1,6 +1,7 @@
 #include "BlockBreakSystem.h"
 
 #include <algorithm>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -19,7 +20,9 @@
 #include "../../../world/block/BedBlock.h"
 #include "../../../world/block/DoorBlock.h"
 #include "../../../world/block/PistonBlock.h"
+#include "../../../world/redstone/WireContainerPlacement.h"
 #include "../../../world/World.h"
+#include "../item/ItemSpawnSystem.h"
 
 namespace ecs {
 
@@ -97,6 +100,27 @@ BlockID removeTargetBlock(World& world,
     world.setBlockState(hitBlock.x, hitBlock.y, hitBlock.z, NULL_BLOCK_STATE);
     removedPositions.push_back(hitBlock);
     return BlockStateRegistry::getBlockId(targetState);
+}
+
+WireContainerParts copyWireContainerPartsAt(const World& world, const glm::ivec3& position) {
+    WireContainerParts parts;
+    if (const WireContainerParts* storedParts = world.wireContainerParts().find(position)) {
+        parts = *storedParts;
+    }
+    return parts;
+}
+
+void spawnWireContainerPartDrops(GameplayRegistry& registry,
+                                 const WireContainerParts& parts,
+                                 const glm::ivec3& position) {
+    for (const BlockID blockId : WireContainerPlacement::wireBlocksForParts(parts)) {
+        const ItemID dropItem = BlockDropTable::getDropItem(blockId);
+        if (dropItem == RUNTIME_ID_NULL) {
+            throw std::runtime_error("Wire container part block has no drop item: " +
+                                     BlockRegistry::getFast(blockId).namespacedId.full());
+        }
+        ItemSpawnSystem::spawn(registry, dropItem, position, 1);
+    }
 }
 
 } // namespace
@@ -229,6 +253,7 @@ void BlockBreakSystem::update(SystemContext& ctx) {
                 continue;
             }
             std::vector<glm::ivec3> removedPositions;
+            const WireContainerParts brokenWireParts = copyWireContainerPartsAt(*mutableWorld, hitBlock);
             const BlockID brokenBlock = removeTargetBlock(*mutableWorld, hitBlock, removedPositions);
             const bool handledStorage = handleBlockEntityInventoryBreak(registry, brokenBlock, hitBlock, true);
             const bool handledMachine = handleMachineInventoryBreak(registry, brokenBlock, hitBlock, true);
@@ -238,7 +263,11 @@ void BlockBreakSystem::update(SystemContext& ctx) {
             for (const glm::ivec3& removedPos : removedPositions) {
                 particleBus.push({removedPos, brokenBlock});
             }
-            dropBus.push({brokenBlock, hitBlock});
+            if (brokenWireParts.empty()) {
+                dropBus.push({brokenBlock, hitBlock});
+            } else {
+                spawnWireContainerPartDrops(registry, brokenWireParts, hitBlock);
+            }
             applySelectedToolDurabilityWear(inventoryData.inventory);
             ++runtime.heldItemSwingSequence;
             resetBreakSession(blockBreak, runtime);

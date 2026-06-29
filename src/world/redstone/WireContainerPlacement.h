@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include <glm/vec3.hpp>
 
 #include "../block/BlockStateRegistry.h"
+#include "WireContainerParts.h"
 
 class World;
 
@@ -33,5 +35,8 @@ enum class ApplyResult : uint8_t {
 [[nodiscard]] ApplyResult apply(World& world,
                                 const glm::ivec3& position,
                                 BlockStateId incomingWireState);
+
+/// Returns the ordinary wire block ids represented by the container parts.
+[[nodiscard]] std::vector<BlockID> wireBlocksForParts(const WireContainerParts& parts);
 
 } // namespace WireContainerPlacement
