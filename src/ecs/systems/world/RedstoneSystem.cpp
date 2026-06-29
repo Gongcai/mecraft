@@ -325,6 +325,30 @@ bool wireNodeExists(const World& world, const WireNode& node) {
     return false;
 }
 
+template <typename Fn>
+void forEachOuterCornerWireNeighbor(const World& world,
+                                    const WireNode& wire,
+                                    Fn&& fn) {
+    const glm::ivec3 support = WireFaceGeometry::supportPosition(wire.position, wire.facing);
+    for (const uint16_t neighborFacing : WireFaceGeometry::wireFacings()) {
+        if (!WireFaceGeometry::arePerpendicularFacings(wire.facing, neighborFacing)) {
+            continue;
+        }
+
+        const glm::ivec3 neighborPosition = WireFaceGeometry::wirePositionOnSupportFace(support, neighborFacing);
+        const WireNode neighbor{neighborPosition, wire.channelId, neighborFacing};
+        const BlockStateId neighborState =
+            world.getBlockState(neighborPosition.x, neighborPosition.y, neighborPosition.z);
+        if (isWireState(neighborState) && isMatchingWireNodeState(neighborState, neighbor)) {
+            fn(neighbor);
+            continue;
+        }
+        if (isWireContainerState(neighborState) && hasMatchingWireContainerPart(world, neighbor)) {
+            fn(neighbor);
+        }
+    }
+}
+
 BlockStateId withRequiredProperty(const BlockStateId stateId,
                              const uint16_t property,
                              const uint16_t value,
@@ -654,6 +678,7 @@ void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
         for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
             trySameCellFaceNeighbor(facing);
         }
+        forEachOuterCornerWireNeighbor(world, wire, fn);
         return;
     }
 
@@ -664,6 +689,7 @@ void forEachWireNeighbor(const World& world, const WireNode& wire, Fn&& fn) {
     for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
         trySameCellFaceNeighbor(facing);
     }
+    forEachOuterCornerWireNeighbor(world, wire, fn);
 }
 
 bool isRedstoneControlledState(const BlockStateId stateId) {

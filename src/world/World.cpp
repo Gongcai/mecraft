@@ -32,6 +32,19 @@ void markChunkSubChunkAndVerticalNeighborsDirty(Chunk& chunk, const int scy, con
 }
 
 template <typename Fn>
+void forEachWireOuterCornerPeerPosition(const glm::ivec3& position, Fn&& fn) {
+    for (const uint16_t selfFacing : WireFaceGeometry::wireFacings()) {
+        const glm::ivec3 support = WireFaceGeometry::supportPosition(position, selfFacing);
+        for (const uint16_t peerFacing : WireFaceGeometry::wireFacings()) {
+            if (!WireFaceGeometry::arePerpendicularFacings(selfFacing, peerFacing)) {
+                continue;
+            }
+            fn(WireFaceGeometry::wirePositionOnSupportFace(support, peerFacing));
+        }
+    }
+}
+
+template <typename Fn>
 void forEachWirePositionOnSupport(const glm::ivec3& support, Fn&& fn) {
     for (const uint16_t facing : WireFaceGeometry::wireFacings()) {
         fn(WireFaceGeometry::wirePositionOnSupportFace(support, facing));
@@ -232,6 +245,21 @@ bool hasSameCellRedstoneWireConnection(const World& world,
     return hasMatchingRedstoneWireAt(world, pos, wireChannelId, peerFacing);
 }
 
+bool hasOuterCornerRedstoneWireConnection(const World& world,
+                                          const glm::ivec3& pos,
+                                          const uint16_t wireChannelId,
+                                          const uint16_t wireFacing,
+                                          const glm::ivec3& connectionOffset) {
+    const uint16_t peerFacing = WireFaceGeometry::facingFromSurfaceNormal(connectionOffset);
+    if (!WireFaceGeometry::arePerpendicularFacings(wireFacing, peerFacing)) {
+        throw std::runtime_error("Redstone wire outer-corner connection requires a perpendicular face");
+    }
+
+    const glm::ivec3 support = WireFaceGeometry::supportPosition(pos, wireFacing);
+    const glm::ivec3 peerPosition = WireFaceGeometry::wirePositionOnSupportFace(support, peerFacing);
+    return hasMatchingRedstoneWireAt(world, peerPosition, wireChannelId, peerFacing);
+}
+
 uint16_t redstoneWireConnectionValueAt(const World& world,
                                        const glm::ivec3& pos,
                                        const uint16_t wireChannelId,
@@ -241,7 +269,8 @@ uint16_t redstoneWireConnectionValueAt(const World& world,
     if (canRedstoneWireAttachToAt(world, planarNeighbor, wireChannelId, wireFacing)) {
         return connection.sideValue;
     }
-    return hasSameCellRedstoneWireConnection(world, pos, wireChannelId, wireFacing, connection.offset)
+    return (hasSameCellRedstoneWireConnection(world, pos, wireChannelId, wireFacing, connection.offset) ||
+            hasOuterCornerRedstoneWireConnection(world, pos, wireChannelId, wireFacing, connection.offset))
         ? connection.sideValue
         : connection.noneValue;
 }
@@ -293,7 +322,8 @@ uint8_t refreshedWireContainerConnections(const World& world,
         const glm::ivec3 planarNeighbor = pos + connection.offset;
         const bool connects =
             canRedstoneWireAttachToAt(world, planarNeighbor, part.channelId, part.facing) ||
-            hasSameCellRedstoneWireConnection(world, pos, part.channelId, part.facing, connection.offset);
+            hasSameCellRedstoneWireConnection(world, pos, part.channelId, part.facing, connection.offset) ||
+            hasOuterCornerRedstoneWireConnection(world, pos, part.channelId, part.facing, connection.offset);
         if (connects) {
             connections |= wireConnectionBitForOffset(part.facing, connection.offset);
         }
@@ -982,6 +1012,9 @@ void World::setBlockState(int x, int y, int z, BlockStateId id) {
         m_neighborUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
         m_redstoneUpdateQueue.enqueue(glm::ivec3(x, y, z) + off);
     }
+    forEachWireOuterCornerPeerPosition(glm::ivec3(x, y, z), [this](const glm::ivec3& peer) {
+        m_redstoneUpdateQueue.enqueue(peer);
+    });
     // Notify block change callback (used by GameServer for BlockUpdateBatch)
     if (m_blockChangeCallback) {
         m_blockChangeCallback(x, y, z, targetState);
@@ -1047,6 +1080,9 @@ void World::notifyWireContainerPartsChanged(const glm::ivec3& pos) {
     for (const glm::ivec3& offset : kNeighborOffsets) {
         m_redstoneUpdateQueue.enqueue(pos + offset);
     }
+    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) {
+        m_redstoneUpdateQueue.enqueue(peer);
+    });
     markChunkSaveDirty(chunkX, chunkZ);
     refreshConnectedBlocksAround(pos);
 }
@@ -1269,7 +1305,8 @@ void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
     // Offsets cover all positions whose redstone wire connection state may
     // change when the block at pos changes:
     //   - Self, 4 horizontal neighbors, and direct vertical neighbors.
-    //   - Wires attached to pos as a support block are covered below.
+    //   - Wires attached to pos as a support block and outer-corner peers are
+    //     covered below.
     static constexpr std::array<glm::ivec3, 7> kRefreshOffsets = {{
         { 0,  0,  0},
         { 1,  0,  0},
@@ -1285,6 +1322,9 @@ void World::refreshConnectedBlocksAround(const glm::ivec3& pos) {
     }
     forEachWirePositionOnSupport(pos, [this](const glm::ivec3& wirePosition) {
         refreshConnectedBlockAt(wirePosition);
+    });
+    forEachWireOuterCornerPeerPosition(pos, [this](const glm::ivec3& peer) {
+        refreshConnectedBlockAt(peer);
     });
 }
 
