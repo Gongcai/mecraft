@@ -130,8 +130,21 @@ int computeTextureArrayLayerCount(const resource::BlockTextureManifestEntry& ent
 void uploadTextureArrayLayer(const GLuint textureId,
                              const int targetLayer,
                              const unsigned char* srcPixels,
-                             const int tileSize) {
+                             const int tileSize,
+                             const bool zeroAlpha) {
     glBindTexture(GL_TEXTURE_2D_ARRAY, textureId);
+    if (zeroAlpha) {
+        std::vector<unsigned char> pixels(static_cast<size_t>(tileSize) * static_cast<size_t>(tileSize) * 4);
+        for (size_t index = 0; index < pixels.size(); index += 4) {
+            pixels[index + 0] = srcPixels[index + 0];
+            pixels[index + 1] = srcPixels[index + 1];
+            pixels[index + 2] = srcPixels[index + 2];
+            pixels[index + 3] = 0;
+        }
+        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, targetLayer,
+                        tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+        return;
+    }
     glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, targetLayer,
                     tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, srcPixels);
 }
@@ -147,7 +160,7 @@ void uploadConstantLayer(const GLuint textureId,
         pixels[i + 2] = pixel[2];
         pixels[i + 3] = pixel[3];
     }
-    uploadTextureArrayLayer(textureId, targetLayer, pixels.data(), tileSize);
+    uploadTextureArrayLayer(textureId, targetLayer, pixels.data(), tileSize, false);
 }
 
 void uploadNeutralMaterialLayers(const GLuint textureId,
@@ -177,7 +190,7 @@ void uploadAlbedoLayers(const GLuint textureId,
         for (int frame = 0; frame < layerCount; ++frame) {
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
             const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
-            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize);
+            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize, false);
         }
         return;
     }
@@ -185,7 +198,7 @@ void uploadAlbedoLayers(const GLuint textureId,
     if (image.width != tileSize || image.height != tileSize) {
         throw std::runtime_error("Block texture array source dimensions do not match tile size for " + entry.albedoPath.string());
     }
-    uploadTextureArrayLayer(textureId, firstLayer, image.data, tileSize);
+    uploadTextureArrayLayer(textureId, firstLayer, image.data, tileSize, false);
 }
 
 void uploadMaterialMapLayers(const GLuint textureId,
@@ -195,6 +208,7 @@ void uploadMaterialMapLayers(const GLuint textureId,
                              const int tileSize,
                              const bool topFrameFirst,
                              const std::array<unsigned char, 4>& neutralPixel,
+                             const bool zeroAlphaWhenSourceHasNoAlpha,
                              const char* roleName) {
     if (!mapPath.has_value()) {
         uploadNeutralMaterialLayers(textureId, firstLayer, layerCount, tileSize, neutralPixel);
@@ -202,9 +216,10 @@ void uploadMaterialMapLayers(const GLuint textureId,
     }
 
     LoadedImage image(mapPath.value());
+    const bool zeroAlpha = zeroAlphaWhenSourceHasNoAlpha && image.channels < 4;
     if (image.width == tileSize && image.height == tileSize) {
         for (int layer = 0; layer < layerCount; ++layer) {
-            uploadTextureArrayLayer(textureId, firstLayer + layer, image.data, tileSize);
+            uploadTextureArrayLayer(textureId, firstLayer + layer, image.data, tileSize, zeroAlpha);
         }
         return;
     }
@@ -213,7 +228,7 @@ void uploadMaterialMapLayers(const GLuint textureId,
         for (int frame = 0; frame < layerCount; ++frame) {
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
             const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
-            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize);
+            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize, zeroAlpha);
         }
         return;
     }
@@ -306,11 +321,11 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
         uploadAlbedoLayers(albedoArray.id(), entry, currentLayer, layerCount, tileSize, catalogEntry);
         if (normalArray.has_value()) {
             uploadMaterialMapLayers(normalArray->id(), entry.normalPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralNormalPixel, "normal");
+                                    topFrameFirst, kNeutralNormalPixel, true, "normal");
         }
         if (specularArray.has_value()) {
             uploadMaterialMapLayers(specularArray->id(), entry.specularPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralSpecularPixel, "specular");
+                                    topFrameFirst, kNeutralSpecularPixel, false, "specular");
         }
 
         currentLayer += layerCount;

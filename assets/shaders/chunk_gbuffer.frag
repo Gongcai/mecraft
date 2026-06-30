@@ -33,6 +33,9 @@ uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform int uBlockNormalMapsEnabled;
 uniform int uBlockSpecularMapsEnabled;
+uniform int uBlockParallaxEnabled;
+uniform float uBlockParallaxDepth;
+uniform vec3 uCameraPos;
 uniform float uAnimationTime;
 uniform float uShaderTime;
 uniform float uSurfaceWetness;
@@ -108,9 +111,57 @@ mat3 buildSurfaceTbn(vec3 worldPos, vec2 uv, vec3 geometricNormal) {
     return mat3(tangent, bitangent, geometricNormal);
 }
 
-vec3 applyBlockNormalMap(vec3 geometricNormal, vec4 normalTex) {
+float sampleBlockHeight(vec2 uv, float layer) {
+    return textureLod(uBlockNormalArray, vec3(uv, layer), 0.0).a;
+}
+
+vec2 applyBlockParallax(vec2 baseUv, float layer, vec3 geometricNormal) {
+    float initialHeight = sampleBlockHeight(baseUv, layer);
+    if (initialHeight <= (1.0 / 255.0) || uBlockParallaxDepth <= 1e-5) {
+        return baseUv;
+    }
+
+    mat3 tbn = buildSurfaceTbn(vWorldPos, baseUv, geometricNormal);
+    vec3 viewDir = normalize(uCameraPos - vWorldPos);
+    vec3 tangentViewDir = transpose(tbn) * viewDir;
+    vec2 parallaxDir = tangentViewDir.xy / max(abs(tangentViewDir.z), 0.22);
+    float parallaxDirLength = length(parallaxDir);
+    if (parallaxDirLength > 3.0) {
+        parallaxDir *= 3.0 / parallaxDirLength;
+    }
+
+    const int parallaxSteps = 12;
+    const float layerDepth = 1.0 / float(parallaxSteps);
+    vec2 stepUv = parallaxDir * (uBlockParallaxDepth / float(parallaxSteps));
+
+    vec2 currentUv = baseUv;
+    vec2 previousUv = currentUv;
+    float currentDepth = 0.0;
+    float currentHeight = initialHeight;
+    float previousHeight = currentHeight;
+
+    for (int stepIndex = 0; stepIndex < parallaxSteps && currentDepth < currentHeight; ++stepIndex) {
+        previousUv = currentUv;
+        previousHeight = currentHeight;
+        currentUv -= stepUv;
+        currentDepth += layerDepth;
+        currentHeight = sampleBlockHeight(currentUv, layer);
+    }
+
+    float previousDepth = max(currentDepth - layerDepth, 0.0);
+    float beforeDelta = previousHeight - previousDepth;
+    float afterDelta = currentHeight - currentDepth;
+    float blendDenominator = beforeDelta - afterDelta;
+    if (abs(blendDenominator) <= 1e-5) {
+        return currentUv;
+    }
+    float blend = clamp(beforeDelta / blendDenominator, 0.0, 1.0);
+    return mix(previousUv, currentUv, blend);
+}
+
+vec3 applyBlockNormalMap(vec3 geometricNormal, vec2 uv, vec4 normalTex) {
     vec3 tangentNormal = normalize(normalTex.rgb * 2.0 - 1.0);
-    mat3 tbn = buildSurfaceTbn(vWorldPos, vUV, geometricNormal);
+    mat3 tbn = buildSurfaceTbn(vWorldPos, uv, geometricNormal);
     return normalize(tbn * tangentNormal);
 }
 
@@ -148,7 +199,14 @@ void main() {
         sampledLayer += frame;
     }
 
-    vec4 texColor = sampleBlockArray(texArray, vUV, sampledLayer, forceBaseLod);
+    vec3 normal = decodeFaceNormal(vNormal);
+    vec2 materialUv = vUV;
+    bool materialNormalMapsEnabled = uBlockNormalMapsEnabled != 0 && !isCrossVegetation;
+    if (uBlockParallaxEnabled != 0 && materialNormalMapsEnabled && !forceBaseLod) {
+        materialUv = applyBlockParallax(vUV, sampledLayer, normal);
+    }
+
+    vec4 texColor = sampleBlockArray(texArray, materialUv, sampledLayer, forceBaseLod);
     if (texColor.a < 0.1) {
         discard;
     }
@@ -162,7 +220,6 @@ void main() {
         albedo *= srgbToLinear(redstoneTintSrgb(vTintUV));
     }
 
-    vec3 normal = decodeFaceNormal(vNormal);
     float ao = clamp(vAO / 3.0, 0.0, 1.0);
     int derivativeMaterialId = derivativeFragmentMaterialId(materialKindId(vMaterialKind));
     bool isEmissiveMaterial = isDerivativeEmissiveMaterialId(derivativeMaterialId) ||
@@ -176,13 +233,13 @@ void main() {
     SurfaceMaterialAux aux = surfaceMaterialAuxForKind(vMaterialKind);
 
     if (uBlockSpecularMapsEnabled != 0) {
-        vec4 specTex = sampleBlockArray(uBlockSpecularArray, vUV, sampledLayer, forceBaseLod);
+        vec4 specTex = sampleBlockArray(uBlockSpecularArray, materialUv, sampledLayer, forceBaseLod);
         applyLabPbrSpecular(specTex, derivativeMaterialId, material, aux);
     }
 
-    if (uBlockNormalMapsEnabled != 0 && !isCrossVegetation) {
-        vec4 normalTex = sampleBlockArray(uBlockNormalArray, vUV, sampledLayer, forceBaseLod);
-        normal = applyBlockNormalMap(normal, normalTex);
+    if (materialNormalMapsEnabled) {
+        vec4 normalTex = sampleBlockArray(uBlockNormalArray, materialUv, sampledLayer, forceBaseLod);
+        normal = applyBlockNormalMap(normal, materialUv, normalTex);
     }
 
     bool canReceiveTerrainRain = !isCrossVegetation &&

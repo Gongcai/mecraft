@@ -279,6 +279,8 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     shader.setInt("uForceBaseLod", 0);
     shader.setInt("uBlockNormalMapsEnabled", resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
     shader.setInt("uBlockSpecularMapsEnabled", resourceMgr != nullptr && resourceMgr->hasBlockSpecularMaps() ? 1 : 0);
+    shader.setInt("uBlockParallaxEnabled", resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
+    shader.setFloat("uBlockParallaxDepth", 0.035f);
     shader.setInt("uDepthSofteningEnabled", 0);
     bindFogUniforms(shader, frame.fog);
     shader.setFloat("uAnimationTime", frame.animationTime);
