@@ -5,18 +5,16 @@
 #include "ResourceMgr.h"
 #include "BlockIconAtlasBuilder.h"
 #include "DefaultShaderCatalog.h"
+#include "EntityTexturePreloader.h"
 #include "../Diagnostics.h"
 #include "Paths.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <fstream>
 #include <iostream>
 #include <filesystem>
 #include <stdexcept>
-#include <unordered_set>
 #include <vector>
-#include <nlohmann/json.hpp>
 #include "../third_party/stb/stb_image.h"
 
 namespace {
@@ -110,22 +108,7 @@ void ResourceMgr::shutdown() {
         m_textureArray.textureID = 0;
     }
 
-    if (m_lightmapDay != 0) {
-        glDeleteTextures(1, &m_lightmapDay);
-        m_lightmapDay = 0;
-    }
-    if (m_lightmapNight != 0) {
-        glDeleteTextures(1, &m_lightmapNight);
-        m_lightmapNight = 0;
-    }
-    if (m_grassColormap != 0) {
-        glDeleteTextures(1, &m_grassColormap);
-        m_grassColormap = 0;
-    }
-    if (m_foliageColormap != 0) {
-        glDeleteTextures(1, &m_foliageColormap);
-        m_foliageColormap = 0;
-    }
+    m_environmentTextures.shutdown();
 
     m_cubemaps.shutdown();
 
@@ -199,14 +182,6 @@ GLuint ResourceMgr::getGuiTexture(const std::string& name) const {
     return m_texture2D.getGui(name);
 }
 
-GLuint ResourceMgr::getTexture(const std::string &name) const {
-    auto it = m_textures.find(name);
-    if (it != m_textures.end()) {
-        return it->second;
-    }
-    return 0;
-}
-
 #if defined(GL_TEXTURE_MAX_ANISOTROPY)
 constexpr GLenum kTextureMaxAnisotropyPName = GL_TEXTURE_MAX_ANISOTROPY;
 #elif defined(GL_TEXTURE_MAX_ANISOTROPY_EXT)
@@ -230,12 +205,12 @@ inline bool supportsAnisotropicFiltering() {
 namespace {
 int computeTextureArrayLayerCount(const std::filesystem::path& imagePath,
                                   const int tileSize,
-                                  const std::unordered_map<std::string, BlockTextureCatalogEntry>& catalog) {
+                                  const BlockTextureCatalog& catalog) {
     const std::string textureName = imagePath.stem().string();
-    const auto catalogIt = catalog.find(textureName);
-    if (catalogIt == catalog.end() ||
-        !catalogIt->second.verticalFrames ||
-        catalogIt->second.animation.frameCount <= 1) {
+    const BlockTextureCatalogEntry* catalogEntry = catalog.find(textureName);
+    if (catalogEntry == nullptr ||
+        !catalogEntry->verticalFrames ||
+        catalogEntry->animation.frameCount <= 1) {
         return 1;
     }
 
@@ -246,41 +221,18 @@ int computeTextureArrayLayerCount(const std::filesystem::path& imagePath,
         return 1;
     }
 
-    const TextureAnimationInfo& animation = catalogIt->second.animation;
+    const TextureAnimationInfo& animation = catalogEntry->animation;
     if (width != tileSize || height != tileSize * animation.frameCount) {
         throw std::runtime_error("Texture catalog dimensions do not match vertical frames for " + imagePath.string());
     }
 
     return animation.frameCount;
 }
-
-ResourceTextureTint parseResourceTextureTint(const nlohmann::json& textureJson) {
-    const auto tintIt = textureJson.find("tint");
-    if (tintIt == textureJson.end()) {
-        return ResourceTextureTint::None;
-    }
-    if (!tintIt->is_string()) {
-        throw std::runtime_error("block_textures.json texture tint must be a string");
-    }
-
-    const std::string tint = tintIt->get<std::string>();
-    if (tint == "none") {
-        return ResourceTextureTint::None;
-    }
-    if (tint == "grass") {
-        return ResourceTextureTint::Grass;
-    }
-    if (tint == "foliage") {
-        return ResourceTextureTint::Foliage;
-    }
-    throw std::runtime_error("Unknown block texture tint: " + tint);
-}
 }
 
 void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
     namespace fs = std::filesystem;
     std::vector<fs::path> imagePaths;
-    m_textures.clear();
 
     if (fs::exists(directory)) {
         for (const auto& entry : fs::directory_iterator(directory)) {
@@ -331,20 +283,20 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
         }
 
         const std::string texName = imagePaths[i].stem().string();
-        const auto catalogIt = m_blockTextureCatalog.find(texName);
+        const BlockTextureCatalogEntry* catalogEntry = m_blockTextureCatalog.find(texName);
         const bool useVerticalFrame =
-            catalogIt != m_blockTextureCatalog.end() &&
-            catalogIt->second.verticalFrames &&
-            catalogIt->second.animation.frameCount > 1;
+            catalogEntry != nullptr &&
+            catalogEntry->verticalFrames &&
+            catalogEntry->animation.frameCount > 1;
         int sourceHeight = height;
         const unsigned char* sourcePixels = data;
         if (useVerticalFrame) {
-            const int frameCount = catalogIt->second.animation.frameCount;
+            const int frameCount = catalogEntry->animation.frameCount;
             if (width != tileSize || height != tileSize * frameCount) {
                 stbi_image_free(data);
                 throw std::runtime_error("Texture catalog dimensions do not match atlas source for " + imagePaths[i].string());
             }
-            const int frameIndex = catalogIt->second.topFrameFirst ? frameCount - 1 : 0;
+            const int frameIndex = catalogEntry->topFrameFirst ? frameCount - 1 : 0;
             sourcePixels = data + static_cast<size_t>(frameIndex * tileSize * width) * 4;
             sourceHeight = tileSize;
         }
@@ -415,7 +367,6 @@ void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) 
 
         stbi_image_free(data);
 
-        m_textures[texName] = i;
     }
 
     if (m_atlas.textureID != 0) {
@@ -479,7 +430,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         m_textureArray.textureID = 0;
     }
     m_textureArrayLayers.clear();
-    for (auto& [_, texture] : m_blockTextureCatalog) {
+    for (auto& [_, texture] : m_blockTextureCatalog.entries()) {
         texture.animation.firstLayer = 0;
         if (texture.animation.frameCount > 1) {
             texture.animation.isAnimated = false;
@@ -538,12 +489,12 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
         const std::string textureName = imagePath.stem().string();
         m_textureArrayLayers[textureName] = currentLayer;
 
-        auto catalogIt = m_blockTextureCatalog.find(textureName);
-        const int declaredFrames = (catalogIt != m_blockTextureCatalog.end()) ? catalogIt->second.animation.frameCount : 1;
+        BlockTextureCatalogEntry* catalogEntry = m_blockTextureCatalog.findMutable(textureName);
+        const int declaredFrames = (catalogEntry != nullptr) ? catalogEntry->animation.frameCount : 1;
         const bool useAnimationFrames = layersPerImage[imageIndex] > 1;
-        if (catalogIt != m_blockTextureCatalog.end()) {
-            catalogIt->second.animation.firstLayer = currentLayer;
-            catalogIt->second.animation.isAnimated = useAnimationFrames && catalogIt->second.animation.frameCount > 1;
+        if (catalogEntry != nullptr) {
+            catalogEntry->animation.firstLayer = currentLayer;
+            catalogEntry->animation.isAnimated = useAnimationFrames && catalogEntry->animation.frameCount > 1;
         }
 
         int width = 0;
@@ -589,7 +540,7 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
                 stbi_image_free(data);
                 throw std::runtime_error("Texture catalog dimensions do not match texture array source for " + imagePath.string());
             } else {
-                const bool topFrameFirst = catalogIt != m_blockTextureCatalog.end() && catalogIt->second.topFrameFirst;
+                const bool topFrameFirst = catalogEntry != nullptr && catalogEntry->topFrameFirst;
                 for (int frame = 0; frame < declaredFrames; ++frame) {
                     const int flippedFrameIndex = topFrameFirst ? declaredFrames - 1 - frame : frame;
                     const unsigned char* framePixels = data + static_cast<size_t>(flippedFrameIndex * tileSize * width) * 4;
@@ -651,159 +602,11 @@ const TextureArray& ResourceMgr::getTextureArray() const {
 }
 
 void ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) {
-    m_blockTextureCatalog.clear();
-
-    std::ifstream file(textureConfigPath);
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open block texture catalog: " + textureConfigPath);
-    }
-
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception& e) {
-        throw std::runtime_error(std::string("Failed to parse block texture catalog: ") + e.what());
-    }
-
-    int tileSize = 16;
-    const auto tileSizeIt = root.find("tileSize");
-    if (tileSizeIt != root.end()) {
-        if (!tileSizeIt->is_number_integer()) {
-            throw std::runtime_error("block_textures.json tileSize must be an integer");
-        }
-        tileSize = tileSizeIt->get<int>();
-        if (tileSize <= 0) {
-            throw std::runtime_error("block_textures.json tileSize must be positive");
-        }
-    }
-
-    const auto texturesIt = root.find("textures");
-    if (texturesIt == root.end() || !texturesIt->is_array()) {
-        throw std::runtime_error("block_textures.json must contain a textures array");
-    }
-
-    for (const auto& textureJson : *texturesIt) {
-        if (!textureJson.is_object()) {
-            throw std::runtime_error("block_textures.json texture entry must be an object");
-        }
-
-        const auto nameIt = textureJson.find("name");
-        if (nameIt == textureJson.end() || !nameIt->is_string()) {
-            throw std::runtime_error("block_textures.json texture entry requires a string name");
-        }
-        const std::string name = nameIt->get<std::string>();
-        if (name.empty() || name.find('/') != std::string::npos || name.find('\\') != std::string::npos) {
-            throw std::runtime_error("Invalid block texture name: " + name);
-        }
-        if (m_blockTextureCatalog.find(name) != m_blockTextureCatalog.end()) {
-            throw std::runtime_error("Duplicate block texture catalog entry: " + name);
-        }
-
-        BlockTextureCatalogEntry entry;
-        entry.tint = parseResourceTextureTint(textureJson);
-
-        const auto framesIt = textureJson.find("frames");
-        if (framesIt != textureJson.end()) {
-            if (!framesIt->is_number_integer()) {
-                throw std::runtime_error("block_textures.json frames must be an integer for " + name);
-            }
-            entry.animation.frameCount = framesIt->get<int>();
-            if (entry.animation.frameCount <= 0 || entry.animation.frameCount > 63) {
-                throw std::runtime_error("block_textures.json frames out of range for " + name);
-            }
-        }
-
-        const auto fpsIt = textureJson.find("fps");
-        if (fpsIt != textureJson.end()) {
-            if (!fpsIt->is_number()) {
-                throw std::runtime_error("block_textures.json fps must be numeric for " + name);
-            }
-            entry.animation.fps = fpsIt->get<float>();
-            if (entry.animation.fps < 0.0f || entry.animation.fps > 63.0f) {
-                throw std::runtime_error("block_textures.json fps out of range for " + name);
-            }
-        }
-
-        if (entry.animation.frameCount > 1) {
-            const auto layoutIt = textureJson.find("frameLayout");
-            if (layoutIt == textureJson.end() || !layoutIt->is_string()) {
-                throw std::runtime_error("Animated block texture requires frameLayout for " + name);
-            }
-            const std::string frameLayout = layoutIt->get<std::string>();
-            if (frameLayout != "vertical") {
-                throw std::runtime_error("Unsupported block texture frameLayout for " + name + ": " + frameLayout);
-            }
-            entry.verticalFrames = true;
-            entry.animation.isAnimated = true;
-
-            const auto frameOrderIt = textureJson.find("frameOrder");
-            if (frameOrderIt == textureJson.end() || !frameOrderIt->is_string()) {
-                throw std::runtime_error("Animated block texture requires frameOrder for " + name);
-            }
-            const std::string frameOrder = frameOrderIt->get<std::string>();
-            if (frameOrder == "top_to_bottom") {
-                entry.topFrameFirst = true;
-            } else if (frameOrder == "bottom_to_top") {
-                entry.topFrameFirst = false;
-            } else {
-                throw std::runtime_error("Unsupported block texture frameOrder for " + name + ": " + frameOrder);
-            }
-        }
-
-        if (tileSize != 16) {
-            throw std::runtime_error("Only 16px block texture tiles are currently supported");
-        }
-
-        m_blockTextureCatalog.emplace(name, entry);
-    }
+    m_blockTextureCatalog.load(textureConfigPath);
 }
 
 void ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath) {
-    std::ifstream file(entitiesConfigPath);
-    if (!file.is_open()) {
-        return;
-    }
-
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception&) {
-        return;
-    }
-
-    const auto entitiesIt = root.find("entities");
-    if (entitiesIt == root.end() || !entitiesIt->is_array()) {
-        return;
-    }
-
-    std::unordered_set<std::string> loadedTextureKeys;
-    for (const auto& entityJson : *entitiesIt) {
-        if (!entityJson.is_object()) {
-            continue;
-        }
-
-        const auto kindIt = entityJson.find("kind");
-        if (kindIt != entityJson.end() && (!kindIt->is_string() || kindIt->get<std::string>() != "mob")) {
-            continue;
-        }
-
-        const auto textureIt = entityJson.find("texture");
-        if (textureIt == entityJson.end() || !textureIt->is_string()) {
-            continue;
-        }
-
-        const std::string textureKey = textureIt->get<std::string>();
-        if (textureKey.empty() ||
-            textureKey.find('/') != std::string::npos ||
-            textureKey.find('\\') != std::string::npos ||
-            loadedTextureKeys.find(textureKey) != loadedTextureKeys.end()) {
-            continue;
-        }
-
-        loadedTextureKeys.insert(textureKey);
-        const std::string texturePath = std::string(MOBS_TEXTURE_DIR) + "/" + textureKey + ".png";
-        loadGuiTexture(textureKey, texturePath, true);
-    }
+    resource::preloadEntityTexturesFromConfig(*this, entitiesConfigPath);
 }
 
 int ResourceMgr::getTextureArrayLayer(const std::string& name) const {
@@ -815,9 +618,9 @@ int ResourceMgr::getTextureArrayLayer(const std::string& name) const {
 }
 
 TextureAnimationInfo ResourceMgr::getTextureAnimation(const std::string& name) const {
-    const auto catalogIt = m_blockTextureCatalog.find(name);
-    if (catalogIt != m_blockTextureCatalog.end()) {
-        TextureAnimationInfo info = catalogIt->second.animation;
+    const BlockTextureCatalogEntry* catalogEntry = m_blockTextureCatalog.find(name);
+    if (catalogEntry != nullptr) {
+        TextureAnimationInfo info = catalogEntry->animation;
         if (info.firstLayer == 0) {
             info.firstLayer = getTextureArrayLayer(name);
         }
@@ -833,8 +636,7 @@ TextureAnimationInfo ResourceMgr::getTextureAnimation(const std::string& name) c
 }
 
 ResourceTextureTint ResourceMgr::getTextureTint(const std::string& name) const {
-    const auto catalogIt = m_blockTextureCatalog.find(name);
-    return catalogIt != m_blockTextureCatalog.end() ? catalogIt->second.tint : ResourceTextureTint::None;
+    return m_blockTextureCatalog.tintFor(name);
 }
 
 int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {
@@ -848,131 +650,28 @@ int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {
     return -1;
 }
 
-namespace {
-GLuint loadLightmapTexture(const std::string& path) {
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_set_flip_vertically_on_load(0);
-    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
-    if (!data) {
-#ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "Failed to load lightmap texture: " << path << "\n");
-#endif
-        return 0;
-    }
-
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    stbi_image_free(data);
-    return textureID;
-}
-
-GLuint loadColormapTexture(const std::string& path) {
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_set_flip_vertically_on_load(0);
-    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
-    if (!data) {
-#ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "Failed to load colormap texture: " << path << "\n");
-#endif
-        return 0;
-    }
-
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    stbi_image_free(data);
-    return textureID;
-}
-
-GLuint createWhiteColormapTexture() {
-    constexpr unsigned char whitePixel[4] = {255, 255, 255, 255};
-
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return textureID;
-}
-}
-
 void ResourceMgr::loadLightmapTextures(const std::string& dayPath, const std::string& nightPath) {
-    if (m_lightmapDay != 0) {
-        glDeleteTextures(1, &m_lightmapDay);
-        m_lightmapDay = 0;
-    }
-    if (m_lightmapNight != 0) {
-        glDeleteTextures(1, &m_lightmapNight);
-        m_lightmapNight = 0;
-    }
-
-    m_lightmapDay = loadLightmapTexture(dayPath);
-    m_lightmapNight = loadLightmapTexture(nightPath);
+    m_environmentTextures.loadLightmaps(dayPath, nightPath);
 }
 
 GLuint ResourceMgr::getLightmapDay() const {
-    return m_lightmapDay;
+    return m_environmentTextures.getLightmapDay();
 }
 
 GLuint ResourceMgr::getLightmapNight() const {
-    return m_lightmapNight;
+    return m_environmentTextures.getLightmapNight();
 }
 
 void ResourceMgr::loadColormapTextures(const std::string& grassPath, const std::string& foliagePath) {
-    if (m_grassColormap != 0) {
-        glDeleteTextures(1, &m_grassColormap);
-        m_grassColormap = 0;
-    }
-    if (m_foliageColormap != 0) {
-        glDeleteTextures(1, &m_foliageColormap);
-        m_foliageColormap = 0;
-    }
-
-    m_grassColormap = loadColormapTexture(grassPath);
-    m_foliageColormap = loadColormapTexture(foliagePath);
-    if (m_grassColormap == 0) {
-        m_grassColormap = createWhiteColormapTexture();
-    }
-    if (m_foliageColormap == 0) {
-        m_foliageColormap = createWhiteColormapTexture();
-    }
+    m_environmentTextures.loadColormaps(grassPath, foliagePath);
 }
 
 GLuint ResourceMgr::getGrassColormap() const {
-    return m_grassColormap;
+    return m_environmentTextures.getGrassColormap();
 }
 
 GLuint ResourceMgr::getFoliageColormap() const {
-    return m_foliageColormap;
+    return m_environmentTextures.getFoliageColormap();
 }
 
 GLuint ResourceMgr::loadCubemap(const std::string& name,

@@ -155,8 +155,11 @@ set(SRC_GAME
 set(SRC_CORE
         src/thread/ThreadPool.cpp
         src/resource/BlockIconAtlasBuilder.cpp
+        src/resource/BlockTextureCatalog.cpp
         src/resource/CubemapLibrary.cpp
         src/resource/DefaultShaderCatalog.cpp
+        src/resource/EnvironmentTextureLibrary.cpp
+        src/resource/EntityTexturePreloader.cpp
         src/resource/ResourceMgr.cpp
         src/resource/ShaderLibrary.cpp
         src/resource/Texture2DLibrary.cpp

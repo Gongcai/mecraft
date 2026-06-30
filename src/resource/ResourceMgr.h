@@ -4,14 +4,15 @@
 
 #ifndef MECRAFT_RESOURCEMGR_H
 #define MECRAFT_RESOURCEMGR_H
-#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <utility>
+#include "BlockTextureCatalog.h"
 #include "CubemapLibrary.h"
+#include "EnvironmentTextureLibrary.h"
 #include "ShaderLibrary.h"
 #include "Texture2DLibrary.h"
 struct TextureAtlas {
@@ -31,26 +32,6 @@ struct TextureArray {
     GLuint textureID = 0;
     int tileSize = 16;
     int layerCount = 0;
-};
-
-struct TextureAnimationInfo {
-    int firstLayer = 0;
-    int frameCount = 1;
-    float fps = 0.0f;
-    bool isAnimated = false;
-};
-
-enum class ResourceTextureTint : uint8_t {
-    None = 0,
-    Grass = 1,
-    Foliage = 2,
-};
-
-struct BlockTextureCatalogEntry {
-    TextureAnimationInfo animation;
-    ResourceTextureTint tint = ResourceTextureTint::None;
-    bool verticalFrames = false;
-    bool topFrameFirst = true;
 };
 
 class ResourceMgr {
@@ -74,7 +55,6 @@ public:
                             const std::string& path,
                             size_t expectedBytes = 0) const;
     [[nodiscard]] GLuint getTexture2D(const std::string& name) const;
-    [[nodiscard]] GLuint getTexture(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
     GLuint loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
@@ -136,23 +116,19 @@ public:
 
 private:
     ShaderLibrary m_shaders;
-    std::unordered_map<std::string, GLuint> m_textures;
     Texture2DLibrary m_texture2D;
     TextureAtlas m_atlas;
     TextureAtlas m_itemIconAtlas;
     TextureAtlas m_itemTextureAtlas;
     TextureAtlas m_hudIconAtlas;
     TextureArray m_textureArray;
-    GLuint m_lightmapDay = 0;
-    GLuint m_lightmapNight = 0;
-    GLuint m_grassColormap = 0;
-    GLuint m_foliageColormap = 0;
+    EnvironmentTextureLibrary m_environmentTextures;
     std::vector<unsigned char> m_blockAtlasPixels;
     std::vector<unsigned char> m_itemAtlasPixels;
     std::unordered_map<std::string, int> m_itemTextureIndices;
     std::unordered_map<std::string, int> m_hudIconIndices;
     std::unordered_map<std::string, int> m_textureArrayLayers;
-    std::unordered_map<std::string, BlockTextureCatalogEntry> m_blockTextureCatalog;
+    BlockTextureCatalog m_blockTextureCatalog;
     // Mapping from TextureArray layer -> Atlas tile index. Built during buildTextureArray.
     std::unordered_map<int, int> m_arrayLayerToAtlasTile;
     float m_atlasAnisotropy = 1.0f;
