@@ -204,7 +204,14 @@ bool parseAI(const json& node,
            readFloat(*it, "attackRange", definition.ai.attackRange, context + ".ai", error) &&
            readFloat(*it, "attackCooldownSeconds", definition.ai.attackCooldownSeconds, context + ".ai", error) &&
            readInt(*it, "attackDamage", definition.ai.attackDamage, context + ".ai", error) &&
-           readBool(*it, "targetsPlayers", definition.ai.targetsPlayers, context + ".ai", error);
+           readBool(*it, "targetsPlayers", definition.ai.targetsPlayers, context + ".ai", error) &&
+           readBool(*it, "retaliates", definition.ai.retaliates, context + ".ai", error) &&
+           readFloat(*it, "lineOfSightMemorySeconds", definition.ai.lineOfSightMemorySeconds, context + ".ai", error) &&
+           readFloat(*it, "hearingRange", definition.ai.hearingRange, context + ".ai", error) &&
+           readFloat(*it, "stuckJumpThresholdSeconds", definition.ai.stuckJumpThresholdSeconds, context + ".ai", error) &&
+           readFloat(*it, "jumpCooldownSeconds", definition.ai.jumpCooldownSeconds, context + ".ai", error) &&
+           readFloat(*it, "avoidanceSeconds", definition.ai.avoidanceSeconds, context + ".ai", error) &&
+           readFloat(*it, "avoidanceStrength", definition.ai.avoidanceStrength, context + ".ai", error);
 }
 
 bool parseDrops(const json& node,

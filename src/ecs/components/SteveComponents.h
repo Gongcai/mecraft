@@ -34,6 +34,20 @@ struct MobAIComponent {
     int attackDamage = 3;
     float yaw = 0.0f;
     bool targetsPlayers = true;
+    bool retaliates = true;
+    float lineOfSightMemorySeconds = 3.0f;
+    float targetMemoryRemaining = 0.0f;
+    float hearingRange = 16.0f;
+    float stuckTimer = 0.0f;
+    float stuckJumpThresholdSeconds = 0.35f;
+    float jumpCooldownSeconds = 0.8f;
+    float jumpCooldownRemaining = 0.0f;
+    glm::vec3 lastPosition{0.0f};
+    glm::vec2 avoidanceDir{0.0f};
+    float avoidanceTimer = 0.0f;
+    float avoidanceSeconds = 0.4f;
+    float avoidanceStrength = 0.55f;
+    uint64_t lastDamageSourceTickHandled = UINT64_MAX;
 };
 
 struct MobVisualComponent {

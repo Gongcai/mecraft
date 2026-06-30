@@ -45,6 +45,16 @@ struct DamageEvent {
     int amount = 0;
 };
 
+struct LastDamageSourceComponent {
+    LastDamageSourceComponent() = default;
+    LastDamageSourceComponent(const entt::entity sourceEntity, const uint64_t tick)
+        : source(sourceEntity),
+          tickIndex(tick) {}
+
+    entt::entity source = entt::null;
+    uint64_t tickIndex = 0;
+};
+
 struct DeathEffectComponent {
     DeathEffectComponent() = default;
     DeathEffectComponent(const BlockID particleBlock,

@@ -66,6 +66,13 @@ void applyMobDefinition(GameplayRegistry& registry,
         ai->attackCooldownSeconds = definition.ai.attackCooldownSeconds;
         ai->attackDamage = definition.ai.attackDamage;
         ai->targetsPlayers = definition.ai.targetsPlayers;
+        ai->retaliates = definition.ai.retaliates;
+        ai->lineOfSightMemorySeconds = definition.ai.lineOfSightMemorySeconds;
+        ai->hearingRange = definition.ai.hearingRange;
+        ai->stuckJumpThresholdSeconds = definition.ai.stuckJumpThresholdSeconds;
+        ai->jumpCooldownSeconds = definition.ai.jumpCooldownSeconds;
+        ai->avoidanceSeconds = definition.ai.avoidanceSeconds;
+        ai->avoidanceStrength = definition.ai.avoidanceStrength;
     }
 
     if (auto* physicsBody = reg.try_get<PhysicsBodyComponent>(entity)) {

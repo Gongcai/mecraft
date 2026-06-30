@@ -116,7 +116,8 @@
         "attackRange": 0.0,
         "attackCooldownSeconds": 1.0,
         "attackDamage": 0,
-        "targetsPlayers": false
+        "targetsPlayers": false,
+        "retaliates": false
       },
       "drops": [
         {
@@ -162,7 +163,8 @@
         "attackRange": 0.0,
         "attackCooldownSeconds": 1.0,
         "attackDamage": 0,
-        "targetsPlayers": false
+        "targetsPlayers": false,
+        "retaliates": false
       },
       "drops": [
         {
@@ -208,7 +210,8 @@
         "attackRange": 0.0,
         "attackCooldownSeconds": 1.0,
         "attackDamage": 0,
-        "targetsPlayers": false
+        "targetsPlayers": false,
+        "retaliates": false
       },
       "drops": [
         {

@@ -57,6 +57,9 @@ void DamageSystem::update(SystemContext& ctx) {
         }
 
         health->current = std::max(0, health->current - event.amount);
+        if (event.source != entt::null && reg.valid(event.source)) {
+            reg.emplace_or_replace<LastDamageSourceComponent>(event.target, event.source, ctx.tickIndex);
+        }
         if (auto* hurt = reg.try_get<HurtEffectComponent>(event.target)) {
             hurt->triggerClassicHurt();
             queueHurtAudio(ctx, event.target, *hurt);

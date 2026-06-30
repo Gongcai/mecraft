@@ -26,6 +26,13 @@ struct MobAIDefinition {
     float attackCooldownSeconds = 1.1f;
     int attackDamage = 3;
     bool targetsPlayers = true;
+    bool retaliates = true;
+    float lineOfSightMemorySeconds = 3.0f;
+    float hearingRange = 16.0f;
+    float stuckJumpThresholdSeconds = 0.35f;
+    float jumpCooldownSeconds = 0.8f;
+    float avoidanceSeconds = 0.4f;
+    float avoidanceStrength = 0.55f;
 };
 
 struct MobPhysicsDefinition {
