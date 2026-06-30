@@ -262,6 +262,23 @@ json toJson(const TransparentSettings& s) {
     };
 }
 
+void applyMaterialSettings(const json& j, MaterialRenderSettings& s) {
+    readBool(j, "normalMapsEnabled", s.normalMapsEnabled);
+    readBool(j, "specularMapsEnabled", s.specularMapsEnabled);
+    readBool(j, "parallaxEnabled", s.parallaxEnabled);
+    readFloat(j, "parallaxDepth", s.parallaxDepth);
+    s.parallaxDepth = std::clamp(s.parallaxDepth, 0.0f, 0.12f);
+}
+
+json toJson(const MaterialRenderSettings& s) {
+    return {
+        {"normalMapsEnabled", s.normalMapsEnabled},
+        {"specularMapsEnabled", s.specularMapsEnabled},
+        {"parallaxEnabled", s.parallaxEnabled},
+        {"parallaxDepth", s.parallaxDepth},
+    };
+}
+
 void applyTaaSettings(const json& j, TaaSettings& s) {
     readBool(j, "enabled", s.enabled);
     readFloat(j, "blendMin", s.blendMin);
@@ -502,6 +519,7 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("cloud", [&s](const json& value) { applyCloudSettings(value, s.cloud); });
     applyObject("reflection", [&s](const json& value) { applyReflectionSettings(value, s.reflection); });
     applyObject("transparent", [&s](const json& value) { applyTransparentSettings(value, s.transparent); });
+    applyObject("material", [&s](const json& value) { applyMaterialSettings(value, s.material); });
     applyObject("taa", [&s](const json& value) { applyTaaSettings(value, s.taa); });
     applyObject("postProcess", [&s](const json& value) { applyPostProcessSettings(value, s.postProcess); });
     applyObject("upscale", [&s](const json& value) { applyUpscaleSettings(value, s.upscale); });
@@ -519,6 +537,7 @@ json toJson(const RenderSettings& s) {
         {"cloud", toJson(s.cloud)},
         {"reflection", toJson(s.reflection)},
         {"transparent", toJson(s.transparent)},
+        {"material", toJson(s.material)},
         {"taa", toJson(s.taa)},
         {"postProcess", toJson(s.postProcess)},
         {"upscale", toJson(s.upscale)},

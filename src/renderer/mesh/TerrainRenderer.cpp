@@ -277,10 +277,14 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     shader.setInt("uCompositeInputsEnabled", 0);
     shader.setInt("uWaterCompositeEnabled", 0);
     shader.setInt("uForceBaseLod", 0);
-    shader.setInt("uBlockNormalMapsEnabled", resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
-    shader.setInt("uBlockSpecularMapsEnabled", resourceMgr != nullptr && resourceMgr->hasBlockSpecularMaps() ? 1 : 0);
-    shader.setInt("uBlockParallaxEnabled", resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
-    shader.setFloat("uBlockParallaxDepth", 0.035f);
+    shader.setInt("uBlockNormalMapsEnabled",
+                  settings.normalMapsEnabled && resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
+    shader.setInt("uBlockSpecularMapsEnabled",
+                  settings.specularMapsEnabled && resourceMgr != nullptr && resourceMgr->hasBlockSpecularMaps() ? 1 : 0);
+    shader.setInt("uBlockParallaxEnabled",
+                  settings.parallaxEnabled && settings.normalMapsEnabled &&
+                  resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
+    shader.setFloat("uBlockParallaxDepth", settings.parallaxDepth);
     shader.setInt("uDepthSofteningEnabled", 0);
     bindFogUniforms(shader, frame.fog);
     shader.setFloat("uAnimationTime", frame.animationTime);

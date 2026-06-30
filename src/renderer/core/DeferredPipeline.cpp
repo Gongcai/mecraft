@@ -41,6 +41,20 @@ private:
     GpuTimerPass m_pass = GpuTimerPass::GBuffer;
     bool m_started = false;
 };
+
+void unbindTerrainRenderTextures() {
+    for (int i = 14; i >= 0; --i) {
+        glActiveTexture(GL_TEXTURE0 + i);
+        if (i == 0 || i == 11 || i == 12) {
+            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+        } else if (i == 14) {
+            glBindTexture(GL_TEXTURE_3D, 0);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+    }
+    glActiveTexture(GL_TEXTURE0);
+}
 } // namespace
 
 void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer) {
@@ -517,6 +531,10 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     trs.fakeBounceStrength = settings.postProcess.fakeBounceStrength;
     trs.albedoDesaturation = settings.postProcess.albedoDesaturation;
     trs.shadowDesaturation = settings.postProcess.shadowDesaturation;
+    trs.normalMapsEnabled = settings.material.normalMapsEnabled;
+    trs.specularMapsEnabled = settings.material.specularMapsEnabled;
+    trs.parallaxEnabled = settings.material.parallaxEnabled;
+    trs.parallaxDepth = settings.material.parallaxDepth;
 
     const TextureArray& texArray = m_shared->resources->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
@@ -557,10 +575,7 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
 
     // Unbind textures
     glBindVertexArray(0);
-    for (int i = 10; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
-    }
+    unbindTerrainRenderTextures();
 }
 
 void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
@@ -644,6 +659,10 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     trs.fakeBounceStrength = m_currentSettings.postProcess.fakeBounceStrength;
     trs.albedoDesaturation = m_currentSettings.postProcess.albedoDesaturation;
     trs.shadowDesaturation = m_currentSettings.postProcess.shadowDesaturation;
+    trs.normalMapsEnabled = m_currentSettings.material.normalMapsEnabled;
+    trs.specularMapsEnabled = m_currentSettings.material.specularMapsEnabled;
+    trs.parallaxEnabled = m_currentSettings.material.parallaxEnabled;
+    trs.parallaxDepth = m_currentSettings.material.parallaxDepth;
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
@@ -694,11 +713,7 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     targets.copyTransparentCompositeToSceneResolved();
 
     glBindVertexArray(0);
-    for (int i = 14; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : (i == 14 ? GL_TEXTURE_3D : GL_TEXTURE_2D), 0);
-    }
-    glActiveTexture(GL_TEXTURE0);
+    unbindTerrainRenderTextures();
 }
 
 void DeferredPipeline::updateDeferredHistoryTargets() {

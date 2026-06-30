@@ -262,7 +262,7 @@ void ForwardPipeline::renderTransparent(const FrameContext& ctx, const RenderSet
 // Frame output
 // ============================================================================
 
-FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext& ctx) {
+FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext&) {
     FrameOutput output{};
     if (m_commonTargets) {
         output.sceneColorTex = m_commonTargets->sceneColorTexture();
@@ -302,8 +302,11 @@ TerrainFrameData ForwardPipeline::buildTerrainFrameData(const FrameContext& ctx)
     return tfd;
 }
 
-TerrainRenderSettings ForwardPipeline::buildTerrainRenderSettings(const RenderSettings& /*settings*/) {
-    // Forward vanilla: TerrainRenderSettings is unused by bindBasicForwardState.
-    // Return defaults. No deferred/shaderpack parameters are read.
-    return TerrainRenderSettings{};
+TerrainRenderSettings ForwardPipeline::buildTerrainRenderSettings(const RenderSettings& settings) {
+    TerrainRenderSettings terrainSettings;
+    terrainSettings.normalMapsEnabled = settings.material.normalMapsEnabled;
+    terrainSettings.specularMapsEnabled = settings.material.specularMapsEnabled;
+    terrainSettings.parallaxEnabled = settings.material.parallaxEnabled;
+    terrainSettings.parallaxDepth = settings.material.parallaxDepth;
+    return terrainSettings;
 }

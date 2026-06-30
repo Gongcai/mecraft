@@ -97,6 +97,14 @@ struct TransparentSettings {
     bool compositeEnabled = true;
 };
 
+/// Resource-pack material map settings.
+struct MaterialRenderSettings {
+    bool normalMapsEnabled = true;
+    bool specularMapsEnabled = true;
+    bool parallaxEnabled = true;
+    float parallaxDepth = 0.035f;
+};
+
 /// TAA settings
 struct TaaSettings {
     bool enabled = true;
@@ -240,6 +248,7 @@ struct RenderSettings {
     CloudSettings cloud;
     ReflectionSettings reflection;
     TransparentSettings transparent;
+    MaterialRenderSettings material;
     TaaSettings taa;
     PostProcessSettings postProcess;
     UpscaleSettings upscale;
