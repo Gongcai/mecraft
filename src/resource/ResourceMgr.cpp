@@ -3,18 +3,9 @@
 //
 
 #include "ResourceMgr.h"
-#include "BlockIconAtlasBuilder.h"
 #include "DefaultShaderCatalog.h"
 #include "EntityTexturePreloader.h"
-#include "TextureAtlasBuilders.h"
-#include "../Diagnostics.h"
 #include "Paths.h"
-#include <cstdint>
-#include <iostream>
-#include <filesystem>
-#include <stdexcept>
-#include <utility>
-#include <vector>
 
 void ResourceMgr::init() {
     resource::loadDefaultShaders(m_shaders);
@@ -32,29 +23,12 @@ void ResourceMgr::shutdown() {
     m_texture2D.shutdown();
 
     m_blockTextures.shutdown();
-
-    if (m_itemIconAtlas.textureID != 0) {
-        glDeleteTextures(1, &m_itemIconAtlas.textureID);
-        m_itemIconAtlas.textureID = 0;
-    }
-
-    if (m_itemTextureAtlas.textureID != 0) {
-        glDeleteTextures(1, &m_itemTextureAtlas.textureID);
-        m_itemTextureAtlas.textureID = 0;
-    }
-
-    if (m_hudIconAtlas.textureID != 0) {
-        glDeleteTextures(1, &m_hudIconAtlas.textureID);
-        m_hudIconAtlas.textureID = 0;
-    }
+    m_uiTextures.shutdown();
 
     m_environmentTextures.shutdown();
 
     m_cubemaps.shutdown();
 
-    m_itemAtlasPixels.clear();
-    m_itemTextureIndices.clear();
-    m_hudIconIndices.clear();
     m_shaders.clear();
 }
 
@@ -73,35 +47,6 @@ GLuint ResourceMgr::loadTexture2D(const std::string& name,
                                   const bool linear,
                                   const bool flipVertically) {
     return m_texture2D.load(name, path, srgb, repeat, linear, flipVertically);
-}
-
-bool ResourceMgr::probeAtmosphereLut(const std::string& name,
-                                     const std::string& path,
-                                     const size_t expectedBytes) const {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    const fs::path lutPath(path);
-    const bool exists = fs::exists(lutPath, ec);
-    if (ec || !exists) {
-        MECRAFT_LOG_STREAM(std::cerr << "Atmosphere LUT missing: " << name << " at " << path << "\n");
-        return false;
-    }
-
-    const uintmax_t size = fs::file_size(lutPath, ec);
-    if (ec) {
-        MECRAFT_LOG_STREAM(std::cerr << "Atmosphere LUT unreadable: " << name << " at " << path << "\n");
-        return false;
-    }
-
-    MECRAFT_LOG_STREAM(std::cerr << "Atmosphere LUT: " << name << " bytes=" << size);
-    if (expectedBytes > 0) {
-        MECRAFT_LOG_STREAM(std::cerr << " expected=" << expectedBytes);
-        if (size != static_cast<uintmax_t>(expectedBytes)) {
-            MECRAFT_LOG_STREAM(std::cerr << " mismatch");
-        }
-    }
-    MECRAFT_LOG_STREAM(std::cerr << "\n");
-    return expectedBytes == 0 || size == static_cast<uintmax_t>(expectedBytes);
 }
 
 GLuint ResourceMgr::getTexture2D(const std::string& name) const {
@@ -196,73 +141,39 @@ GLuint ResourceMgr::getCubemap(const std::string& name) const {
 }
 
 void ResourceMgr::buildBlockIconAtlas(int iconSize) {
-    const TextureAtlas& blockAtlas = m_blockTextures.atlas();
-    const std::vector<unsigned char>& blockAtlasPixels = m_blockTextures.atlasPixels();
-    if (blockAtlas.textureID == 0 || blockAtlasPixels.empty() || blockAtlas.tileSize <= 0 || blockAtlas.tilesPerRow <= 0) {
-        throw std::runtime_error("Block icon atlas requires the block texture atlas to be built first");
-    }
-
-    if (m_itemIconAtlas.textureID != 0) {
-        glDeleteTextures(1, &m_itemIconAtlas.textureID);
-        m_itemIconAtlas.textureID = 0;
-    }
-
-    m_itemIconAtlas = resource::buildBlockIconAtlas(iconSize, blockAtlas, blockAtlasPixels, *this);
+    m_uiTextures.buildBlockIconAtlas(iconSize, m_blockTextures);
 }
 
 const TextureAtlas& ResourceMgr::getItemIconAtlas() const {
-    return m_itemIconAtlas;
+    return m_uiTextures.blockIconAtlas();
 }
 
 void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSize) {
-    if (m_itemTextureAtlas.textureID != 0) {
-        glDeleteTextures(1, &m_itemTextureAtlas.textureID);
-        m_itemTextureAtlas.textureID = 0;
-    }
-
-    resource::IndexedTextureAtlas atlas = resource::buildItemTextureAtlas(directory, tileSize, m_blockTextures.catalog());
-    m_itemTextureAtlas = atlas.atlas;
-    m_itemAtlasPixels = std::move(atlas.pixels);
-    m_itemTextureIndices = std::move(atlas.indices);
+    m_uiTextures.buildItemTextureAtlas(directory, tileSize, m_blockTextures.catalog());
 }
 
 const TextureAtlas& ResourceMgr::getItemTextureAtlas() const {
-    return m_itemTextureAtlas;
+    return m_uiTextures.itemTextureAtlas();
 }
 
 int ResourceMgr::getItemTextureIndex(const std::string& textureName) const {
-    const auto it = m_itemTextureIndices.find(textureName);
-    if (it == m_itemTextureIndices.end()) {
-        return -1;
-    }
-    return it->second;
+    return m_uiTextures.itemTextureIndex(textureName);
 }
 
 const std::vector<unsigned char>& ResourceMgr::getItemTexturePixels() const {
-    return m_itemAtlasPixels;
+    return m_uiTextures.itemTexturePixels();
 }
 
 void ResourceMgr::buildHudIconAtlas(const std::string& directory, int iconSize) {
-    if (m_hudIconAtlas.textureID != 0) {
-        glDeleteTextures(1, &m_hudIconAtlas.textureID);
-        m_hudIconAtlas.textureID = 0;
-    }
-
-    resource::IndexedTextureAtlas atlas = resource::buildHudIconAtlas(directory, iconSize);
-    m_hudIconAtlas = atlas.atlas;
-    m_hudIconIndices = std::move(atlas.indices);
+    m_uiTextures.buildHudIconAtlas(directory, iconSize);
 }
 
 const TextureAtlas& ResourceMgr::getHudIconAtlas() const {
-    return m_hudIconAtlas;
+    return m_uiTextures.hudIconAtlas();
 }
 
 int ResourceMgr::getHudIconIndex(const std::string& iconName) const {
-    const auto it = m_hudIconIndices.find(iconName);
-    if (it == m_hudIconIndices.end()) {
-        return -1;
-    }
-    return it->second;
+    return m_uiTextures.hudIconIndex(iconName);
 }
 
 float ResourceMgr::getAtlasAnisotropy() const {

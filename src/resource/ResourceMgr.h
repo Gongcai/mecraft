@@ -5,17 +5,15 @@
 #ifndef MECRAFT_RESOURCEMGR_H
 #define MECRAFT_RESOURCEMGR_H
 #include <string>
-#include <unordered_map>
 #include <vector>
 #include <glad/glad.h>
-#include <glm/vec2.hpp>
-#include <utility>
 #include "BlockTextureLibrary.h"
 #include "CubemapLibrary.h"
 #include "EnvironmentTextureLibrary.h"
 #include "ShaderLibrary.h"
 #include "TextureAtlas.h"
 #include "Texture2DLibrary.h"
+#include "UiTextureAtlasLibrary.h"
 
 class ResourceMgr {
 public:
@@ -34,9 +32,6 @@ public:
                          bool repeat = false,
                          bool linear = true,
                          bool flipVertically = false);
-    bool probeAtmosphereLut(const std::string& name,
-                            const std::string& path,
-                            size_t expectedBytes = 0) const;
     [[nodiscard]] GLuint getTexture2D(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
@@ -101,13 +96,8 @@ private:
     ShaderLibrary m_shaders;
     Texture2DLibrary m_texture2D;
     BlockTextureLibrary m_blockTextures;
-    TextureAtlas m_itemIconAtlas;
-    TextureAtlas m_itemTextureAtlas;
-    TextureAtlas m_hudIconAtlas;
+    UiTextureAtlasLibrary m_uiTextures;
     EnvironmentTextureLibrary m_environmentTextures;
-    std::vector<unsigned char> m_itemAtlasPixels;
-    std::unordered_map<std::string, int> m_itemTextureIndices;
-    std::unordered_map<std::string, int> m_hudIconIndices;
     CubemapLibrary m_cubemaps;
 };
 

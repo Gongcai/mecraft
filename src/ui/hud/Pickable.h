@@ -5,6 +5,8 @@
 
 class ResourceMgr;
 class Shader;
+class TextRenderer;
+struct TextureAtlas;
 
 // Pure rendering & hit-testing for grid-based pickable slots.
 // No item data is stored — the caller provides slot layouts and item IDs at render time.
@@ -54,8 +56,8 @@ public:
                        Shader* crosshairShader,
                        Shader* inventoryShader,
                        const MeshHandles& mesh,
-                       const class ResourceMgr& resourceMgr,
-                       const class TextureAtlas& itemIconAtlas,
-                       const class TextureAtlas& itemTextureAtlas,
-                       const class TextRenderer* textRenderer = nullptr);
+                       const ResourceMgr& resourceMgr,
+                       const TextureAtlas& itemIconAtlas,
+                       const TextureAtlas& itemTextureAtlas,
+                       const TextRenderer* textRenderer = nullptr);
 };

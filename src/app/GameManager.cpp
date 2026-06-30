@@ -5,6 +5,7 @@
 #include "../Diagnostics.h"
 #include "../Paths.h"
 #include "../engine/platform/Time.h"
+#include "../resource/AtmosphereLutProbe.h"
 #include "../save/SaveManager.h"
 #include "../world/block/Block.h"
 #include "../item/Item.h"
@@ -98,10 +99,10 @@ void GameManager::initResources() {
     m_resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH, false, false, true, false);
     m_resourceMgr.loadTexture2D("rain", RAIN_TEXTURE_PATH, false, false, false, false);  // NEAREST for sharp streaks
     m_resourceMgr.loadTexture2D("snow", SNOW_TEXTURE_PATH, false, false, false, false);  // NEAREST for sharp flakes
-    m_resourceMgr.probeAtmosphereLut("Transmittance", SHADERPACK_TRANSMITTANCE_LUT_PATH, 256U * 64U * 16U);
-    m_resourceMgr.probeAtmosphereLut("Scattering", SHADERPACK_SCATTERING_LUT_PATH, 32U * 128U * 32U * 8U * 16U);
-    m_resourceMgr.probeAtmosphereLut("Irradiance", SHADERPACK_IRRADIANCE_LUT_PATH, 64U * 16U * 16U);
-    m_resourceMgr.probeAtmosphereLut("Final", SHADERPACK_FINAL_LUT_PATH);
+    resource::probeAtmosphereLut("Transmittance", SHADERPACK_TRANSMITTANCE_LUT_PATH, 256U * 64U * 16U);
+    resource::probeAtmosphereLut("Scattering", SHADERPACK_SCATTERING_LUT_PATH, 32U * 128U * 32U * 8U * 16U);
+    resource::probeAtmosphereLut("Irradiance", SHADERPACK_IRRADIANCE_LUT_PATH, 64U * 16U * 16U);
+    resource::probeAtmosphereLut("Final", SHADERPACK_FINAL_LUT_PATH);
     m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
     m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);

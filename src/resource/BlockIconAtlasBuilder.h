@@ -3,7 +3,7 @@
 
 #include <vector>
 
-class ResourceMgr;
+class BlockTextureLibrary;
 struct TextureAtlas;
 
 namespace resource {
@@ -11,7 +11,7 @@ namespace resource {
 [[nodiscard]] TextureAtlas buildBlockIconAtlas(int iconSize,
                                                const TextureAtlas& blockAtlas,
                                                const std::vector<unsigned char>& blockAtlasPixels,
-                                               const ResourceMgr& resourceMgr);
+                                               const BlockTextureLibrary& blockTextures);
 
 } // namespace resource
 

@@ -154,6 +154,7 @@ set(SRC_GAME
 # [核心基础]
 set(SRC_CORE
         src/thread/ThreadPool.cpp
+        src/resource/AtmosphereLutProbe.cpp
         src/resource/BlockIconAtlasBuilder.cpp
         src/resource/BlockTextureCatalog.cpp
         src/resource/BlockTextureArrayBuilder.cpp
@@ -168,6 +169,7 @@ set(SRC_CORE
         src/resource/TextureAtlasBuilders.cpp
         src/resource/Texture2DLibrary.cpp
         src/resource/TextureSamplerController.cpp
+        src/resource/UiTextureAtlasLibrary.cpp
         src/locale/LocaleManager.cpp
 )
 

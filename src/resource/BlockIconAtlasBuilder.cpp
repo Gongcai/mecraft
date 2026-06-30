@@ -1,6 +1,6 @@
 #include "BlockIconAtlasBuilder.h"
 
-#include "ResourceMgr.h"
+#include "BlockTextureLibrary.h"
 #include "TextureAtlas.h"
 #include "../world/block/Block.h"
 #include "../world/block/BlockStateRegistry.h"
@@ -441,7 +441,7 @@ void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
                         const int atlasHeight,
                         const TextureAtlas& srcAtlas,
                         const std::vector<unsigned char>& srcPixels,
-                        const ResourceMgr& resourceMgr,
+                        const BlockTextureLibrary& blockTextures,
                         const BlockID blockId,
                         const BlockDef& def,
                         const int iconOriginX,
@@ -475,8 +475,8 @@ void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
             }
 
             const std::string textureName = resolveIconModelFaceTextureName(model, face);
-            const TextureAnimationInfo textureInfo = resourceMgr.getTextureAnimation(textureName);
-            const int tileIndex = resourceMgr.arrayLayerToAtlasTile(textureInfo.firstLayer);
+            const TextureAnimationInfo textureInfo = blockTextures.textureAnimation(textureName);
+            const int tileIndex = blockTextures.arrayLayerToAtlasTile(textureInfo.firstLayer);
             if (tileIndex < 0) {
                 throw std::runtime_error("Model icon texture is not present in the block atlas: " + textureName);
             }
@@ -534,7 +534,7 @@ namespace resource {
 TextureAtlas buildBlockIconAtlas(int iconSize,
                                  const TextureAtlas& blockAtlas,
                                  const std::vector<unsigned char>& blockAtlasPixels,
-                                 const ResourceMgr& resourceMgr) {
+                                 const BlockTextureLibrary& blockTextures) {
     if (iconSize < 16) {
         iconSize = 16;
     }
@@ -579,7 +579,7 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
                                atlasHeight,
                                blockAtlas,
                                blockAtlasPixels,
-                               resourceMgr,
+                               blockTextures,
                                blockId,
                                def,
                                iconOriginX,
@@ -589,9 +589,9 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
         }
 
         if (def.renderShape == BlockRenderShape::Cross) {
-            int crossTex = resourceMgr.arrayLayerToAtlasTile(def.faceTop.firstLayer);
+            int crossTex = blockTextures.arrayLayerToAtlasTile(def.faceTop.firstLayer);
             if (crossTex < 0) {
-                crossTex = resourceMgr.arrayLayerToAtlasTile(def.faceFront.firstLayer);
+                crossTex = blockTextures.arrayLayerToAtlasTile(def.faceFront.firstLayer);
             }
             if (crossTex < 0) {
                 continue;
@@ -610,18 +610,18 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
             continue;
         }
 
-        int topTex = resourceMgr.arrayLayerToAtlasTile(def.faceTop.firstLayer);
-        int rightTex = resourceMgr.arrayLayerToAtlasTile(def.faceRight.firstLayer);
-        int leftTex = resourceMgr.arrayLayerToAtlasTile(def.faceFront.firstLayer);
+        int topTex = blockTextures.arrayLayerToAtlasTile(def.faceTop.firstLayer);
+        int rightTex = blockTextures.arrayLayerToAtlasTile(def.faceRight.firstLayer);
+        int leftTex = blockTextures.arrayLayerToAtlasTile(def.faceFront.firstLayer);
 
         if (topTex < 0) {
-            topTex = resourceMgr.arrayLayerToAtlasTile(def.faceFront.firstLayer);
+            topTex = blockTextures.arrayLayerToAtlasTile(def.faceFront.firstLayer);
         }
         if (rightTex < 0) {
-            rightTex = resourceMgr.arrayLayerToAtlasTile(def.faceFront.firstLayer);
+            rightTex = blockTextures.arrayLayerToAtlasTile(def.faceFront.firstLayer);
         }
         if (leftTex < 0) {
-            leftTex = resourceMgr.arrayLayerToAtlasTile(def.faceTop.firstLayer);
+            leftTex = blockTextures.arrayLayerToAtlasTile(def.faceTop.firstLayer);
         }
         if (topTex < 0 || rightTex < 0 || leftTex < 0) {
             continue;
