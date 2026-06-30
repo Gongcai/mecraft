@@ -96,6 +96,10 @@ void ResourceMgr::buildBlockTextureResources(const std::string& directory, int t
     m_impl->blockTextures.buildTextures(directory, tileSize);
 }
 
+void ResourceMgr::buildBlockTextureResources(const std::vector<std::string>& directories, int tileSize) {
+    m_impl->blockTextures.buildTextures(directories, tileSize);
+}
+
 void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
     m_impl->blockTextures.buildAtlas(directory, tileSize);
 }

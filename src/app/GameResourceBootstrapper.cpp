@@ -7,15 +7,72 @@
 #include "../ui/inventory/ContainerUiRegistry.h"
 #include "../world/block/Block.h"
 
+#include <algorithm>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace app {
+
+namespace {
+
+bool directoryContainsPng(const std::filesystem::path& directory) {
+    if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+        return false;
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".png") {
+            return true;
+        }
+    }
+    return false;
+}
+
+void appendTextureDirectoryIfPresent(std::vector<std::string>& directories,
+                                     const std::filesystem::path& directory) {
+    if (directoryContainsPng(directory)) {
+        directories.push_back(directory.string());
+    }
+}
+
+std::vector<std::string> buildBlockTextureSourceDirectories() {
+    std::vector<std::string> directories;
+    directories.push_back(BLOCKS_TEXTURES_DIR);
+
+    const std::filesystem::path packsRoot(RESOURCE_PACKS_DIR);
+    if (!std::filesystem::exists(packsRoot) || !std::filesystem::is_directory(packsRoot)) {
+        return directories;
+    }
+
+    std::vector<std::filesystem::path> packRoots;
+    for (const auto& entry : std::filesystem::directory_iterator(packsRoot)) {
+        if (entry.is_directory()) {
+            packRoots.push_back(entry.path());
+        }
+    }
+    std::sort(packRoots.begin(), packRoots.end(),
+              [](const std::filesystem::path& a, const std::filesystem::path& b) {
+                  return a.filename().string() < b.filename().string();
+              });
+
+    for (const std::filesystem::path& packRoot : packRoots) {
+        appendTextureDirectoryIfPresent(directories, packRoot);
+        appendTextureDirectoryIfPresent(directories, packRoot / "assets" / "minecraft" / "textures" / "block");
+        appendTextureDirectoryIfPresent(directories, packRoot / "assets" / "minecraft" / "textures" / "blocks");
+        appendTextureDirectoryIfPresent(directories, packRoot / "textures" / "block");
+        appendTextureDirectoryIfPresent(directories, packRoot / "textures" / "blocks");
+    }
+
+    return directories;
+}
+
+} // namespace
 
 void bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.init();
     resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH);
-    resourceMgr.buildBlockTextureResources(BLOCKS_TEXTURES_DIR, 16);
+    resourceMgr.buildBlockTextureResources(buildBlockTextureSourceDirectories(), 16);
     resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
     resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, true, true, false);

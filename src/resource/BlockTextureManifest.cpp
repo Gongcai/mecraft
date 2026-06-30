@@ -101,28 +101,44 @@ struct PendingManifestEntry {
     std::optional<std::filesystem::path> albedoPath;
     std::optional<std::filesystem::path> normalPath;
     std::optional<std::filesystem::path> specularPath;
+    int albedoSourceIndex = -1;
+    int normalSourceIndex = -1;
+    int specularSourceIndex = -1;
 };
 
 void assignTexturePath(PendingManifestEntry& entry,
-                       const ClassifiedTextureFile& file) {
+                       const ClassifiedTextureFile& file,
+                       const int sourceIndex) {
     if (file.role == TextureFileRole::Albedo) {
-        if (entry.albedoPath.has_value()) {
+        if (entry.albedoPath.has_value() && entry.albedoSourceIndex == sourceIndex) {
             throw std::runtime_error("Duplicate block albedo texture: " + file.textureName);
         }
+        if (sourceIndex < entry.albedoSourceIndex) {
+            return;
+        }
         entry.albedoPath = file.path;
+        entry.albedoSourceIndex = sourceIndex;
         return;
     }
     if (file.role == TextureFileRole::Normal) {
-        if (entry.normalPath.has_value()) {
+        if (entry.normalPath.has_value() && entry.normalSourceIndex == sourceIndex) {
             throw std::runtime_error("Duplicate block normal texture: " + file.textureName);
         }
+        if (sourceIndex < entry.normalSourceIndex) {
+            return;
+        }
         entry.normalPath = file.path;
+        entry.normalSourceIndex = sourceIndex;
         return;
     }
-    if (entry.specularPath.has_value()) {
+    if (entry.specularPath.has_value() && entry.specularSourceIndex == sourceIndex) {
         throw std::runtime_error("Duplicate block specular texture: " + file.textureName);
     }
+    if (sourceIndex < entry.specularSourceIndex) {
+        return;
+    }
     entry.specularPath = file.path;
+    entry.specularSourceIndex = sourceIndex;
 }
 
 } // namespace
@@ -176,11 +192,19 @@ bool BlockTextureManifest::hasSpecularMaps() const {
 }
 
 BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
-    const std::vector<ClassifiedTextureFile> files = collectClassifiedTextureFiles(directory);
+    return buildBlockTextureManifest(std::vector<std::string>{directory});
+}
 
+BlockTextureManifest buildBlockTextureManifest(const std::vector<std::string>& directories) {
+    if (directories.empty()) {
+        throw std::runtime_error("Block texture manifest requires at least one source directory");
+    }
     std::unordered_map<std::string, PendingManifestEntry> pendingEntries;
-    for (const ClassifiedTextureFile& file : files) {
-        assignTexturePath(pendingEntries[file.textureName], file);
+    for (size_t sourceIndex = 0; sourceIndex < directories.size(); ++sourceIndex) {
+        const std::vector<ClassifiedTextureFile> files = collectClassifiedTextureFiles(directories[sourceIndex]);
+        for (const ClassifiedTextureFile& file : files) {
+            assignTexturePath(pendingEntries[file.textureName], file, static_cast<int>(sourceIndex));
+        }
     }
 
     std::vector<std::string> names;

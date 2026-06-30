@@ -46,6 +46,7 @@ public:
 
     // Texture atlas used by block-facing UI rendering.
     void buildBlockTextureResources(const std::string& directory, int tileSize = 16);
+    void buildBlockTextureResources(const std::vector<std::string>& directories, int tileSize = 16);
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
 

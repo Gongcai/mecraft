@@ -34,6 +34,7 @@ private:
 };
 
 [[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::string& directory);
+[[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::vector<std::string>& directories);
 
 } // namespace resource
 

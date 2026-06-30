@@ -55,6 +55,10 @@ void BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath) {
 }
 
 void BlockTextureLibrary::buildTextures(const std::string& directory, const int tileSize) {
+    buildTextures(std::vector<std::string>{directory}, tileSize);
+}
+
+void BlockTextureLibrary::buildTextures(const std::vector<std::string>& directories, const int tileSize) {
     if (m_atlas.textureID != 0) {
         glDeleteTextures(1, &m_atlas.textureID);
         m_atlas.textureID = 0;
@@ -63,7 +67,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory, const int 
     deleteTextureArray(m_normalTextureArray);
     deleteTextureArray(m_specularTextureArray);
 
-    m_manifest = resource::buildBlockTextureManifest(directory);
+    m_manifest = resource::buildBlockTextureManifest(directories);
 
     resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, tileSize, m_catalog);
     m_atlas = atlasResult.atlas;
