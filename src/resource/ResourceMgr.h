@@ -4,19 +4,24 @@
 
 #ifndef MECRAFT_RESOURCEMGR_H
 #define MECRAFT_RESOURCEMGR_H
+#include <memory>
 #include <string>
 #include <vector>
 #include <glad/glad.h>
-#include "BlockTextureLibrary.h"
-#include "CubemapLibrary.h"
-#include "EnvironmentTextureLibrary.h"
-#include "ShaderLibrary.h"
+#include "BlockTextureCatalog.h"
 #include "TextureAtlas.h"
-#include "Texture2DLibrary.h"
-#include "UiTextureAtlasLibrary.h"
+#include "../renderer/core/Shader.h"
 
 class ResourceMgr {
 public:
+    ResourceMgr();
+    ~ResourceMgr();
+
+    ResourceMgr(const ResourceMgr&) = delete;
+    ResourceMgr& operator=(const ResourceMgr&) = delete;
+    ResourceMgr(ResourceMgr&&) noexcept;
+    ResourceMgr& operator=(ResourceMgr&&) noexcept;
+
     void init();
     void shutdown();
 
@@ -93,12 +98,8 @@ public:
     [[nodiscard]] float getAtlasMaxAnisotropy() const;
 
 private:
-    ShaderLibrary m_shaders;
-    Texture2DLibrary m_texture2D;
-    BlockTextureLibrary m_blockTextures;
-    UiTextureAtlasLibrary m_uiTextures;
-    EnvironmentTextureLibrary m_environmentTextures;
-    CubemapLibrary m_cubemaps;
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
 };
 
 
