@@ -10,7 +10,7 @@
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <utility>
-#include "BlockTextureCatalog.h"
+#include "BlockTextureLibrary.h"
 #include "CubemapLibrary.h"
 #include "EnvironmentTextureLibrary.h"
 #include "ShaderLibrary.h"
@@ -100,22 +100,14 @@ public:
 private:
     ShaderLibrary m_shaders;
     Texture2DLibrary m_texture2D;
-    TextureAtlas m_atlas;
+    BlockTextureLibrary m_blockTextures;
     TextureAtlas m_itemIconAtlas;
     TextureAtlas m_itemTextureAtlas;
     TextureAtlas m_hudIconAtlas;
-    TextureArray m_textureArray;
     EnvironmentTextureLibrary m_environmentTextures;
-    std::vector<unsigned char> m_blockAtlasPixels;
     std::vector<unsigned char> m_itemAtlasPixels;
     std::unordered_map<std::string, int> m_itemTextureIndices;
     std::unordered_map<std::string, int> m_hudIconIndices;
-    std::unordered_map<std::string, int> m_textureArrayLayers;
-    BlockTextureCatalog m_blockTextureCatalog;
-    // Mapping from TextureArray layer -> Atlas tile index. Built during buildTextureArray.
-    std::unordered_map<int, int> m_arrayLayerToAtlasTile;
-    float m_atlasAnisotropy = 1.0f;
-    float m_atlasMaxAnisotropy = 1.0f;
     CubemapLibrary m_cubemaps;
 };
 

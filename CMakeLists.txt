@@ -157,6 +157,7 @@ set(SRC_CORE
         src/resource/BlockIconAtlasBuilder.cpp
         src/resource/BlockTextureCatalog.cpp
         src/resource/BlockTextureArrayBuilder.cpp
+        src/resource/BlockTextureLibrary.cpp
         src/resource/CubemapLibrary.cpp
         src/resource/DefaultShaderCatalog.cpp
         src/resource/EnvironmentTextureLibrary.cpp
@@ -166,6 +167,7 @@ set(SRC_CORE
         src/resource/TextureAtlas.cpp
         src/resource/TextureAtlasBuilders.cpp
         src/resource/Texture2DLibrary.cpp
+        src/resource/TextureSamplerController.cpp
         src/locale/LocaleManager.cpp
 )
 

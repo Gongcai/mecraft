@@ -3,19 +3,17 @@
 //
 
 #include "ResourceMgr.h"
-#include "BlockTextureArrayBuilder.h"
 #include "BlockIconAtlasBuilder.h"
 #include "DefaultShaderCatalog.h"
 #include "EntityTexturePreloader.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
 #include "Paths.h"
-#include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <filesystem>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 void ResourceMgr::init() {
@@ -33,10 +31,7 @@ void ResourceMgr::init() {
 void ResourceMgr::shutdown() {
     m_texture2D.shutdown();
 
-    if (m_atlas.textureID != 0) {
-        glDeleteTextures(1, &m_atlas.textureID);
-        m_atlas.textureID = 0;
-    }
+    m_blockTextures.shutdown();
 
     if (m_itemIconAtlas.textureID != 0) {
         glDeleteTextures(1, &m_itemIconAtlas.textureID);
@@ -48,20 +43,18 @@ void ResourceMgr::shutdown() {
         m_itemTextureAtlas.textureID = 0;
     }
 
-    if (m_textureArray.textureID != 0) {
-        glDeleteTextures(1, &m_textureArray.textureID);
-        m_textureArray.textureID = 0;
+    if (m_hudIconAtlas.textureID != 0) {
+        glDeleteTextures(1, &m_hudIconAtlas.textureID);
+        m_hudIconAtlas.textureID = 0;
     }
 
     m_environmentTextures.shutdown();
 
     m_cubemaps.shutdown();
 
-    m_blockAtlasPixels.clear();
     m_itemAtlasPixels.clear();
     m_itemTextureIndices.clear();
-    m_textureArrayLayers.clear();
-    m_blockTextureCatalog.clear();
+    m_hudIconIndices.clear();
     m_shaders.clear();
 }
 
@@ -127,82 +120,24 @@ GLuint ResourceMgr::getGuiTexture(const std::string& name) const {
     return m_texture2D.getGui(name);
 }
 
-#if defined(GL_TEXTURE_MAX_ANISOTROPY)
-constexpr GLenum kTextureMaxAnisotropyPName = GL_TEXTURE_MAX_ANISOTROPY;
-#elif defined(GL_TEXTURE_MAX_ANISOTROPY_EXT)
-constexpr GLenum kTextureMaxAnisotropyPName = GL_TEXTURE_MAX_ANISOTROPY_EXT;
-#else
-constexpr GLenum kTextureMaxAnisotropyPName = 0;
-#endif
-
-#if defined(GL_MAX_TEXTURE_MAX_ANISOTROPY)
-constexpr GLenum kMaxTextureMaxAnisotropyPName = GL_MAX_TEXTURE_MAX_ANISOTROPY;
-#elif defined(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT)
-constexpr GLenum kMaxTextureMaxAnisotropyPName = GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT;
-#else
-constexpr GLenum kMaxTextureMaxAnisotropyPName = 0;
-#endif
-
-inline bool supportsAnisotropicFiltering() {
-    return kTextureMaxAnisotropyPName != 0 && kMaxTextureMaxAnisotropyPName != 0;
-}
-
 void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
-    if (m_atlas.textureID != 0) {
-        glDeleteTextures(1, &m_atlas.textureID);
-        m_atlas.textureID = 0;
-    }
-
-    resource::IndexedTextureAtlas atlas = resource::buildBlockTextureAtlas(directory, tileSize, m_blockTextureCatalog);
-    m_atlas = atlas.atlas;
-    m_blockAtlasPixels = std::move(atlas.pixels);
-
-    if (supportsAnisotropicFiltering()) {
-        GLfloat maxAniso = 1.0f;
-        glGetFloatv(kMaxTextureMaxAnisotropyPName, &maxAniso);
-        m_atlasMaxAnisotropy = std::max(1.0f, static_cast<float>(maxAniso));
-        m_atlasAnisotropy = std::clamp(m_atlasAnisotropy, 1.0f, m_atlasMaxAnisotropy);
-        glBindTexture(GL_TEXTURE_2D, m_atlas.textureID);
-        glTexParameterf(GL_TEXTURE_2D, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    } else {
-        m_atlasMaxAnisotropy = 1.0f;
-        m_atlasAnisotropy = 1.0f;
-    }
+    m_blockTextures.buildAtlas(directory, tileSize);
 }
 
 const TextureAtlas & ResourceMgr::getAtlas() const {
-    return m_atlas;
+    return m_blockTextures.atlas();
 }
 
 void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) {
-    if (m_textureArray.textureID != 0) {
-        glDeleteTextures(1, &m_textureArray.textureID);
-        m_textureArray.textureID = 0;
-    }
-
-    resource::BlockTextureArray textureArray = resource::buildBlockTextureArray(directory, tileSize, m_blockTextureCatalog);
-    m_textureArray = textureArray.textureArray;
-    m_textureArrayLayers = std::move(textureArray.layers);
-    m_arrayLayerToAtlasTile = std::move(textureArray.layerToAtlasTile);
-
-    if (supportsAnisotropicFiltering()) {
-        GLfloat maxAniso = 1.0f;
-        glGetFloatv(kMaxTextureMaxAnisotropyPName, &maxAniso);
-        m_atlasMaxAnisotropy = std::max(1.0f, static_cast<float>(maxAniso));
-        m_atlasAnisotropy = std::clamp(m_atlasAnisotropy, 1.0f, m_atlasMaxAnisotropy);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_textureArray.textureID);
-        glTexParameterf(GL_TEXTURE_2D_ARRAY, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    }
+    m_blockTextures.buildTextureArray(directory, tileSize);
 }
 
 const TextureArray& ResourceMgr::getTextureArray() const {
-    return m_textureArray;
+    return m_blockTextures.textureArray();
 }
 
 void ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) {
-    m_blockTextureCatalog.load(textureConfigPath);
+    m_blockTextures.loadCatalog(textureConfigPath);
 }
 
 void ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath) {
@@ -210,44 +145,19 @@ void ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesCon
 }
 
 int ResourceMgr::getTextureArrayLayer(const std::string& name) const {
-    const auto it = m_textureArrayLayers.find(name);
-    if (it != m_textureArrayLayers.end()) {
-        return it->second;
-    }
-    throw std::runtime_error("Unknown block texture array layer: " + name);
+    return m_blockTextures.textureArrayLayer(name);
 }
 
 TextureAnimationInfo ResourceMgr::getTextureAnimation(const std::string& name) const {
-    const BlockTextureCatalogEntry* catalogEntry = m_blockTextureCatalog.find(name);
-    if (catalogEntry != nullptr) {
-        TextureAnimationInfo info = catalogEntry->animation;
-        if (info.firstLayer == 0) {
-            info.firstLayer = getTextureArrayLayer(name);
-        }
-        return info;
-    }
-
-    TextureAnimationInfo info;
-    info.firstLayer = getTextureArrayLayer(name);
-    info.frameCount = 1;
-    info.fps = 0.0f;
-    info.isAnimated = false;
-    return info;
+    return m_blockTextures.textureAnimation(name);
 }
 
 ResourceTextureTint ResourceMgr::getTextureTint(const std::string& name) const {
-    return m_blockTextureCatalog.tintFor(name);
+    return m_blockTextures.textureTint(name);
 }
 
 int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {
-    const auto it = m_arrayLayerToAtlasTile.find(arrayLayer);
-    if (it != m_arrayLayerToAtlasTile.end()) {
-        return it->second;
-    }
-#ifdef MECRAFT_DEBUG
-    MECRAFT_LOG_STREAM(std::cerr << "[ResourceMgr] arrayLayerToAtlasTile: unmapped layer " << arrayLayer << "\n");
-#endif
-    return -1;
+    return m_blockTextures.arrayLayerToAtlasTile(arrayLayer);
 }
 
 void ResourceMgr::loadLightmapTextures(const std::string& dayPath, const std::string& nightPath) {
@@ -286,8 +196,10 @@ GLuint ResourceMgr::getCubemap(const std::string& name) const {
 }
 
 void ResourceMgr::buildBlockIconAtlas(int iconSize) {
-    if (m_atlas.textureID == 0 || m_blockAtlasPixels.empty() || m_atlas.tileSize <= 0 || m_atlas.tilesPerRow <= 0) {
-        return;
+    const TextureAtlas& blockAtlas = m_blockTextures.atlas();
+    const std::vector<unsigned char>& blockAtlasPixels = m_blockTextures.atlasPixels();
+    if (blockAtlas.textureID == 0 || blockAtlasPixels.empty() || blockAtlas.tileSize <= 0 || blockAtlas.tilesPerRow <= 0) {
+        throw std::runtime_error("Block icon atlas requires the block texture atlas to be built first");
     }
 
     if (m_itemIconAtlas.textureID != 0) {
@@ -295,7 +207,7 @@ void ResourceMgr::buildBlockIconAtlas(int iconSize) {
         m_itemIconAtlas.textureID = 0;
     }
 
-    m_itemIconAtlas = resource::buildBlockIconAtlas(iconSize, m_atlas, m_blockAtlasPixels, *this);
+    m_itemIconAtlas = resource::buildBlockIconAtlas(iconSize, blockAtlas, blockAtlasPixels, *this);
 }
 
 const TextureAtlas& ResourceMgr::getItemIconAtlas() const {
@@ -308,7 +220,7 @@ void ResourceMgr::buildItemTextureAtlas(const std::string& directory, int tileSi
         m_itemTextureAtlas.textureID = 0;
     }
 
-    resource::IndexedTextureAtlas atlas = resource::buildItemTextureAtlas(directory, tileSize, m_blockTextureCatalog);
+    resource::IndexedTextureAtlas atlas = resource::buildItemTextureAtlas(directory, tileSize, m_blockTextures.catalog());
     m_itemTextureAtlas = atlas.atlas;
     m_itemAtlasPixels = std::move(atlas.pixels);
     m_itemTextureIndices = std::move(atlas.indices);
@@ -354,32 +266,13 @@ int ResourceMgr::getHudIconIndex(const std::string& iconName) const {
 }
 
 float ResourceMgr::getAtlasAnisotropy() const {
-    return m_atlasAnisotropy;
+    return m_blockTextures.anisotropy();
 }
 
 float ResourceMgr::getAtlasMaxAnisotropy() const {
-    return m_atlasMaxAnisotropy;
+    return m_blockTextures.maxAnisotropy();
 }
 
 void ResourceMgr::setAtlasAnisotropy(const float anisotropy) {
-    const float clamped = std::clamp(anisotropy, 1.0f, std::max(1.0f, m_atlasMaxAnisotropy));
-    if (std::abs(clamped - m_atlasAnisotropy) < 1e-4f) {
-        return;
-    }
-
-    m_atlasAnisotropy = clamped;
-
-    if (supportsAnisotropicFiltering()) {
-        if (m_atlas.textureID != 0) {
-            glBindTexture(GL_TEXTURE_2D, m_atlas.textureID);
-            glTexParameterf(GL_TEXTURE_2D, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
-            glBindTexture(GL_TEXTURE_2D, 0);
-        }
-
-        if (m_textureArray.textureID != 0) {
-            glBindTexture(GL_TEXTURE_2D_ARRAY, m_textureArray.textureID);
-            glTexParameterf(GL_TEXTURE_2D_ARRAY, kTextureMaxAnisotropyPName, m_atlasAnisotropy);
-            glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-        }
-    }
+    m_blockTextures.setAnisotropy(anisotropy);
 }
