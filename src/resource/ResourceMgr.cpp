@@ -92,6 +92,10 @@ GLuint ResourceMgr::getGuiTexture(const std::string& name) const {
     return m_impl->texture2D.getGui(name);
 }
 
+void ResourceMgr::buildBlockTextureResources(const std::string& directory, int tileSize) {
+    m_impl->blockTextures.buildTextures(directory, tileSize);
+}
+
 void ResourceMgr::buildTextureAtlas(const std::string &directory, int tileSize) {
     m_impl->blockTextures.buildAtlas(directory, tileSize);
 }
@@ -106,6 +110,22 @@ void ResourceMgr::buildTextureArray(const std::string &directory, int tileSize) 
 
 const TextureArray& ResourceMgr::getTextureArray() const {
     return m_impl->blockTextures.textureArray();
+}
+
+const TextureArray& ResourceMgr::getBlockNormalTextureArray() const {
+    return m_impl->blockTextures.normalTextureArray();
+}
+
+const TextureArray& ResourceMgr::getBlockSpecularTextureArray() const {
+    return m_impl->blockTextures.specularTextureArray();
+}
+
+bool ResourceMgr::hasBlockNormalMaps() const {
+    return m_impl->blockTextures.hasNormalMaps();
+}
+
+bool ResourceMgr::hasBlockSpecularMaps() const {
+    return m_impl->blockTextures.hasSpecularMaps();
 }
 
 void ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) {

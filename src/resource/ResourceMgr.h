@@ -45,12 +45,17 @@ public:
     [[nodiscard]] GLuint getGuiTexture(const std::string& name) const;
 
     // Texture atlas used by block-facing UI rendering.
+    void buildBlockTextureResources(const std::string& directory, int tileSize = 16);
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
 
     // Texture array used by block rendering.
     void buildTextureArray(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureArray& getTextureArray() const;
+    [[nodiscard]] const TextureArray& getBlockNormalTextureArray() const;
+    [[nodiscard]] const TextureArray& getBlockSpecularTextureArray() const;
+    [[nodiscard]] bool hasBlockNormalMaps() const;
+    [[nodiscard]] bool hasBlockSpecularMaps() const;
     void loadBlockTextureCatalog(const std::string& textureConfigPath);
     void preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath);
     [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;

@@ -197,12 +197,22 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
 IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
                                            const int tileSize,
                                            const BlockTextureCatalog& catalog) {
+    return buildBlockTextureAtlas(buildBlockTextureManifest(directory), tileSize, catalog);
+}
+
+IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
+                                           const int tileSize,
+                                           const BlockTextureCatalog& catalog) {
     if (tileSize <= 0) {
         throw std::runtime_error("Block texture atlas tile size must be positive");
     }
 
-    const std::vector<std::filesystem::path> imagePaths = collectSortedPngFiles(directory);
-    const int numTiles = static_cast<int>(imagePaths.size());
+    const std::vector<BlockTextureManifestEntry>& textureEntries = manifest.entries();
+    if (textureEntries.empty()) {
+        throw std::runtime_error("Block texture atlas manifest contains no albedo textures");
+    }
+
+    const int numTiles = static_cast<int>(textureEntries.size());
     const int tilesPerRow = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(numTiles))));
     const int numRows = static_cast<int>(std::ceil(static_cast<float>(numTiles) / static_cast<float>(tilesPerRow)));
     constexpr int kTilePadding = 2;
@@ -216,18 +226,19 @@ IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
     stbi_set_flip_vertically_on_load(true);
 
     for (int i = 0; i < numTiles; ++i) {
+        const BlockTextureManifestEntry& textureEntry = textureEntries[static_cast<size_t>(i)];
         int width = 0;
         int height = 0;
         int channels = 0;
-        unsigned char* data = stbi_load(imagePaths[i].string().c_str(), &width, &height, &channels, 4);
+        unsigned char* data = stbi_load(textureEntry.albedoPath.string().c_str(), &width, &height, &channels, 4);
         if (!data || width <= 0 || height <= 0) {
             if (data != nullptr) {
                 stbi_image_free(data);
             }
-            throw std::runtime_error("Failed to load block texture: " + imagePaths[i].string());
+            throw std::runtime_error("Failed to load block texture: " + textureEntry.albedoPath.string());
         }
 
-        const std::string textureName = imagePaths[i].stem().string();
+        const std::string& textureName = textureEntry.name;
         const BlockTextureCatalogEntry* catalogEntry = catalog.find(textureName);
         const bool useVerticalFrame =
             catalogEntry != nullptr &&
@@ -240,14 +251,14 @@ IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
             const int frameCount = catalogEntry->animation.frameCount;
             if (width != tileSize || height != tileSize * frameCount) {
                 stbi_image_free(data);
-                throw std::runtime_error("Texture catalog dimensions do not match atlas source for " + imagePaths[i].string());
+                throw std::runtime_error("Texture catalog dimensions do not match atlas source for " + textureEntry.albedoPath.string());
             }
             const int frameIndex = catalogEntry->topFrameFirst ? frameCount - 1 : 0;
             sourcePixels = data + static_cast<size_t>(frameIndex * tileSize * width) * 4;
             sourceHeight = tileSize;
         } else if (width != tileSize || height != tileSize) {
             stbi_image_free(data);
-            throw std::runtime_error("Block texture dimensions do not match tile size for " + imagePaths[i].string());
+            throw std::runtime_error("Block texture dimensions do not match tile size for " + textureEntry.albedoPath.string());
         }
 
         const int tileCol = i % tilesPerRow;

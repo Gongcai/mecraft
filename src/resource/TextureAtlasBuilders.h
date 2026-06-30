@@ -2,6 +2,7 @@
 #define MECRAFT_TEXTURE_ATLAS_BUILDERS_H
 
 #include "BlockTextureCatalog.h"
+#include "BlockTextureManifest.h"
 #include "TextureAtlas.h"
 
 #include <string>
@@ -21,6 +22,10 @@ struct IndexedTextureAtlas {
                                                         const BlockTextureCatalog& catalog);
 
 [[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
+                                                         int tileSize,
+                                                         const BlockTextureCatalog& catalog);
+
+[[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
                                                          int tileSize,
                                                          const BlockTextureCatalog& catalog);
 

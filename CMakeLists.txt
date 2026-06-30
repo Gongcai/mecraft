@@ -158,6 +158,7 @@ set(SRC_CORE
         src/resource/AtmosphereLutProbe.cpp
         src/resource/BlockIconAtlasBuilder.cpp
         src/resource/BlockTextureCatalog.cpp
+        src/resource/BlockTextureManifest.cpp
         src/resource/BlockTextureArrayBuilder.cpp
         src/resource/BlockTextureLibrary.cpp
         src/resource/CubemapLibrary.cpp
