@@ -1,6 +1,7 @@
 #include "BlockIconAtlasBuilder.h"
 
 #include "ResourceMgr.h"
+#include "TextureAtlas.h"
 #include "../world/block/Block.h"
 #include "../world/block/BlockStateRegistry.h"
 
