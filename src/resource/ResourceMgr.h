@@ -4,7 +4,6 @@
 
 #ifndef MECRAFT_RESOURCEMGR_H
 #define MECRAFT_RESOURCEMGR_H
-#include <memory>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -12,17 +11,17 @@
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <utility>
-#include "../renderer/core/Shader.h"
+#include "ShaderLibrary.h"
 struct TextureAtlas {
     GLuint textureID = 0;
-    int atlasWidth  = 0;     // 像素宽度
-    int atlasHeight = 0;     // 像素高度
-    int tileSize    = 16;    // 每个贴图块的像素尺寸（不含padding）
-    int tileStride  = 16;    // 单元跨度 = tileSize + 2 * tilePadding
-    int tilePadding = 0;     // 每个tile四周复制出的gutter像素
+    int atlasWidth  = 0;     // Atlas width in pixels.
+    int atlasHeight = 0;     // Atlas height in pixels.
+    int tileSize    = 16;    // Tile size in pixels, excluding padding.
+    int tileStride  = 16;    // Tile cell stride: tileSize + 2 * tilePadding.
+    int tilePadding = 0;     // Copied edge texel padding around each tile.
     int tilesPerRow = 0;
 
-    // 根据 tile 索引计算 UV 坐标 (左下, 右上)
+    // Return UV coordinates for the tile as lower-left and upper-right corners.
     [[nodiscard]] std::pair<glm::vec2, glm::vec2> getUV(int tileIndex) const;
 };
 
@@ -88,11 +87,11 @@ public:
     GLuint loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
     [[nodiscard]] GLuint getGuiTexture(const std::string& name) const;
 
-    // 纹理图集 (UI 使用)
+    // Texture atlas used by block-facing UI rendering.
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
 
-    // 纹理数组 (方块渲染使用)
+    // Texture array used by block rendering.
     void buildTextureArray(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureArray& getTextureArray() const;
     void loadBlockTextureCatalog(const std::string& textureConfigPath);
@@ -142,7 +141,7 @@ public:
     [[nodiscard]] float getAtlasMaxAnisotropy() const;
 
 private:
-    std::unordered_map<std::string, std::unique_ptr<Shader>> m_shaders;
+    ShaderLibrary m_shaders;
     std::unordered_map<std::string, GLuint> m_textures;
     std::unordered_map<std::string, GLuint> m_texture2D;
     std::unordered_map<std::string, GuiTextureInfo> m_guiTextures;

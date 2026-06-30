@@ -154,7 +154,9 @@ set(SRC_GAME
 # [核心基础]
 set(SRC_CORE
         src/thread/ThreadPool.cpp
+        src/resource/BlockIconAtlasBuilder.cpp
         src/resource/ResourceMgr.cpp
+        src/resource/ShaderLibrary.cpp
         src/locale/LocaleManager.cpp
 )
 
