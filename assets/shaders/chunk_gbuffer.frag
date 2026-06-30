@@ -24,11 +24,15 @@ in vec2 vTintUV;
 in vec3 vWorldPos;
 
 uniform sampler2DArray texArray;
+uniform sampler2DArray uBlockNormalArray;
+uniform sampler2DArray uBlockSpecularArray;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uRippleNormalTex;
 uniform sampler2D uGrassColormap;
 uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
+uniform int uBlockNormalMapsEnabled;
+uniform int uBlockSpecularMapsEnabled;
 uniform float uAnimationTime;
 uniform float uShaderTime;
 uniform float uSurfaceWetness;
@@ -70,6 +74,71 @@ vec3 decodeFaceNormal(float face) {
     return vec3(1.0, 0.0, 0.0);
 }
 
+vec4 sampleBlockArray(sampler2DArray arraySampler, vec2 uv, float layer, bool forceBaseLod) {
+    return forceBaseLod
+        ? textureLod(arraySampler, vec3(uv, layer), 0.0)
+        : texture(arraySampler, vec3(uv, layer));
+}
+
+vec3 orthogonalTangent(vec3 normal) {
+    vec3 referenceAxis = abs(normal.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    return normalize(cross(referenceAxis, normal));
+}
+
+mat3 buildSurfaceTbn(vec3 worldPos, vec2 uv, vec3 geometricNormal) {
+    vec3 dpdx = dFdx(worldPos);
+    vec3 dpdy = dFdy(worldPos);
+    vec2 duvdx = dFdx(uv);
+    vec2 duvdy = dFdy(uv);
+
+    vec3 tangent = dpdx * duvdy.y - dpdy * duvdx.y;
+    vec3 bitangent = -dpdx * duvdy.x + dpdy * duvdx.x;
+
+    if (dot(tangent, tangent) < 1e-8 || dot(bitangent, bitangent) < 1e-8) {
+        tangent = orthogonalTangent(geometricNormal);
+        bitangent = normalize(cross(geometricNormal, tangent));
+        return mat3(tangent, bitangent, geometricNormal);
+    }
+
+    tangent = normalize(tangent - geometricNormal * dot(geometricNormal, tangent));
+    bitangent = normalize(bitangent - geometricNormal * dot(geometricNormal, bitangent));
+    if (dot(cross(tangent, bitangent), geometricNormal) < 0.0) {
+        bitangent = -bitangent;
+    }
+    return mat3(tangent, bitangent, geometricNormal);
+}
+
+vec3 applyBlockNormalMap(vec3 geometricNormal, vec4 normalTex) {
+    vec3 tangentNormal = normalize(normalTex.rgb * 2.0 - 1.0);
+    mat3 tbn = buildSurfaceTbn(vWorldPos, vUV, geometricNormal);
+    return normalize(tbn * tangentNormal);
+}
+
+void applyLabPbrSpecular(vec4 specTex,
+                         int materialId,
+                         inout SurfaceMaterial material,
+                         inout SurfaceMaterialAux aux) {
+    float smoothness = clamp(specTex.r, 0.0, 1.0);
+    material.roughness = sqr(1.0 - smoothness);
+
+    if (specTex.g > (229.5 / 255.0)) {
+        aux.metalness = 1.0;
+        material.f0 = 0.91;
+    } else {
+        aux.metalness = 0.0;
+        material.f0 = clamp(specTex.g, 0.0, 1.0);
+    }
+
+    if (isDerivativeSssMaterialId(materialId)) {
+        material.sss = max(material.sss, clamp(specTex.b, 0.0, 1.0));
+    } else {
+        aux.porosity = clamp(specTex.b, 0.0, 1.0);
+    }
+
+    float emissiveness = specTex.a >= 1.0 ? 0.0 : clamp(specTex.a, 0.0, 1.0);
+    material.emission = max(material.emission, emissiveness);
+}
+
 void main() {
     bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
     bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
@@ -79,9 +148,7 @@ void main() {
         sampledLayer += frame;
     }
 
-    vec4 texColor = forceBaseLod
-        ? textureLod(texArray, vec3(vUV, sampledLayer), 0.0)
-        : texture(texArray, vec3(vUV, sampledLayer));
+    vec4 texColor = sampleBlockArray(texArray, vUV, sampledLayer, forceBaseLod);
     if (texColor.a < 0.1) {
         discard;
     }
@@ -107,6 +174,16 @@ void main() {
     float emissiveHint = isEmissiveMaterial ? emissiveMask * clamp(vBlockLight * 1.25, 0.0, 1.0) : 0.0;
     SurfaceMaterial material = surfaceMaterialForKind(vMaterialKind, emissiveHint);
     SurfaceMaterialAux aux = surfaceMaterialAuxForKind(vMaterialKind);
+
+    if (uBlockSpecularMapsEnabled != 0) {
+        vec4 specTex = sampleBlockArray(uBlockSpecularArray, vUV, sampledLayer, forceBaseLod);
+        applyLabPbrSpecular(specTex, derivativeMaterialId, material, aux);
+    }
+
+    if (uBlockNormalMapsEnabled != 0 && !isCrossVegetation) {
+        vec4 normalTex = sampleBlockArray(uBlockNormalArray, vUV, sampledLayer, forceBaseLod);
+        normal = applyBlockNormalMap(normal, normalTex);
+    }
 
     bool canReceiveTerrainRain = !isCrossVegetation &&
                                  derivativeMaterialId != MATERIAL_WATER &&

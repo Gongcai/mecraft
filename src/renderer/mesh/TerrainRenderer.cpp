@@ -271,10 +271,14 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     shader.setInt("uWaterNoiseTex", 8);
     shader.setInt("uNoiseTex", 9);
     shader.setInt("uRippleNormalTex", 10);
+    shader.setInt("uBlockNormalArray", 11);
+    shader.setInt("uBlockSpecularArray", 12);
     shader.setInt("uSkyCaptureEnabled", deferredFrameActive ? 1 : 0);
     shader.setInt("uCompositeInputsEnabled", 0);
     shader.setInt("uWaterCompositeEnabled", 0);
     shader.setInt("uForceBaseLod", 0);
+    shader.setInt("uBlockNormalMapsEnabled", resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
+    shader.setInt("uBlockSpecularMapsEnabled", resourceMgr != nullptr && resourceMgr->hasBlockSpecularMaps() ? 1 : 0);
     shader.setInt("uDepthSofteningEnabled", 0);
     bindFogUniforms(shader, frame.fog);
     shader.setFloat("uAnimationTime", frame.animationTime);
@@ -326,6 +330,16 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_noise2d") : 0);
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_ripple_normal") : 0);
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps()
+                      ? resourceMgr->getBlockNormalTextureArray().textureID
+                      : 0);
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  resourceMgr != nullptr && resourceMgr->hasBlockSpecularMaps()
+                      ? resourceMgr->getBlockSpecularTextureArray().textureID
+                      : 0);
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
 }
