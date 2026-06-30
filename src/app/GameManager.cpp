@@ -1,16 +1,13 @@
 #include "GameManager.h"
 #include "AppSettings.h"
+#include "GameResourceBootstrapper.h"
 #include "states/LoadingAppState.h"
 #include "states/MainMenuAppState.h"
 #include "../Diagnostics.h"
 #include "../Paths.h"
 #include "../engine/platform/Time.h"
-#include "../resource/AtmosphereLutProbe.h"
 #include "../save/SaveManager.h"
-#include "../world/block/Block.h"
-#include "../item/Item.h"
 #include "../net/ENetTransport.h"
-#include "../ui/inventory/ContainerUiRegistry.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -47,7 +44,7 @@ void GameManager::init(int width, int height, const char* title, AppLaunchOption
         return;
     }
     m_threadPool.start();
-    initResources();
+    app::bootstrapGameResources(m_resourceMgr);
     
     m_audioEngine.init();
     m_bgmSystem.init(m_audioEngine);
@@ -83,64 +80,6 @@ bool GameManager::initWindow(int width, int height, const char* title) {
     m_actionMap.loadFromFile(KEYBINDINGS_PATH);
     Time::init();
     return true;
-}
-
-void GameManager::initResources() {
-    m_resourceMgr.init();
-    m_resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH);
-    m_resourceMgr.buildTextureAtlas(BLOCKS_TEXTURES_DIR, 16);
-    m_resourceMgr.buildTextureArray(BLOCKS_TEXTURES_DIR, 16);
-    m_resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
-    m_resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
-    m_resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, true, true, false);
-    m_resourceMgr.loadTexture2D("shader_bayer256", SHADERPACK_BAYER256_PATH, false, true, false, false);
-    // DerivativeMain/texture/RippleNormal.png.mcmeta uses blur=true, clamp=false.
-    m_resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH, false, true, true, false);
-    m_resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH, false, false, true, false);
-    m_resourceMgr.loadTexture2D("rain", RAIN_TEXTURE_PATH, false, false, false, false);  // NEAREST for sharp streaks
-    m_resourceMgr.loadTexture2D("snow", SNOW_TEXTURE_PATH, false, false, false, false);  // NEAREST for sharp flakes
-    resource::probeAtmosphereLut("Transmittance", SHADERPACK_TRANSMITTANCE_LUT_PATH, 256U * 64U * 16U);
-    resource::probeAtmosphereLut("Scattering", SHADERPACK_SCATTERING_LUT_PATH, 32U * 128U * 32U * 8U * 16U);
-    resource::probeAtmosphereLut("Irradiance", SHADERPACK_IRRADIANCE_LUT_PATH, 64U * 16U * 16U);
-    resource::probeAtmosphereLut("Final", SHADERPACK_FINAL_LUT_PATH);
-    m_resourceMgr.buildItemTextureAtlas(ITEMS_TEXTURES_DIR, 16);
-    m_resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
-    m_resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
-    ui::ContainerUiRegistry::init();
-    for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
-        const std::string texturePath = std::string(ASSETS_DIR) + "/" + def.backgroundTexturePath;
-        if (m_resourceMgr.loadGuiTexture(def.backgroundTexture, texturePath, true) == 0) {
-            throw std::runtime_error("Failed to load container UI texture for " + id + ": " + texturePath);
-        }
-    }
-    m_resourceMgr.loadGuiTexture("creative_tab_inventory", CREATIVE_INVENTORY_PATH, true);
-    m_resourceMgr.loadGuiTexture("creative_tab_items", CREATIVE_TAB_ITEMS_PATH, true);
-    for (int i = 1; i <= 7; ++i) {
-        const std::string suffix = std::to_string(i) + ".png";
-        m_resourceMgr.loadGuiTexture("creative_tab_top_selected_" + std::to_string(i),
-                                     std::string(CREATIVE_TABS_PATH) + "/tab_top_selected_" + suffix,
-                                     true);
-        m_resourceMgr.loadGuiTexture("creative_tab_top_unselected_" + std::to_string(i),
-                                     std::string(CREATIVE_TABS_PATH) + "/tab_top_unselected_" + suffix,
-                                     true);
-        m_resourceMgr.loadGuiTexture("creative_tab_bottom_selected_" + std::to_string(i),
-                                     std::string(CREATIVE_TABS_PATH) + "/tab_bottom_selected_" + suffix,
-                                     true);
-        m_resourceMgr.loadGuiTexture("creative_tab_bottom_unselected_" + std::to_string(i),
-                                     std::string(CREATIVE_TABS_PATH) + "/tab_bottom_unselected_" + suffix,
-                                     true);
-    }
-    m_resourceMgr.loadGuiTexture("creative_scroller", std::string(CREATIVE_TABS_PATH) + "/scroller.png", true);
-    m_resourceMgr.loadGuiTexture("creative_scroller_disabled", std::string(CREATIVE_TABS_PATH) + "/scroller_disabled.png", true);
-    m_resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
-    m_resourceMgr.loadGuiTexture("chest", CHEST_ENTITY_TEXTURE_PATH, true);
-    m_resourceMgr.preloadEntityTexturesFromConfig(ENTITIES_CONFIG_PATH);
-
-    m_resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
-
-    BlockRegistry::init(&m_resourceMgr);
-    ItemRegistry::init();
-    m_resourceMgr.buildBlockIconAtlas(64);
 }
 
 AppStateDependencies GameManager::makeAppStateDependencies() {

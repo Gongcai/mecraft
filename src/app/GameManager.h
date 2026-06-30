@@ -32,7 +32,6 @@ public:
 
 private:
     bool initWindow(int width, int height, const char* title);
-    void initResources();
     
     [[nodiscard]] AppStateDependencies makeAppStateDependencies();
 

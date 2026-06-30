@@ -107,6 +107,7 @@ find_package(EnTT CONFIG REQUIRED)
 # [应用层]
 set(SRC_APP
         src/app/AppSettings.cpp
+        src/app/GameResourceBootstrapper.cpp
         src/app/GameManager.cpp
         src/app/states/AppStateMachine.cpp
         src/app/states/GameplayAppState.cpp
