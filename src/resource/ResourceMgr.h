@@ -11,7 +11,9 @@
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <utility>
+#include "CubemapLibrary.h"
 #include "ShaderLibrary.h"
+#include "Texture2DLibrary.h"
 struct TextureAtlas {
     GLuint textureID = 0;
     int atlasWidth  = 0;     // Atlas width in pixels.
@@ -29,13 +31,6 @@ struct TextureArray {
     GLuint textureID = 0;
     int tileSize = 16;
     int layerCount = 0;
-};
-
-// Metadata for cached GUI textures: store GL id plus original image size.
-struct GuiTextureInfo {
-    GLuint textureID = 0;
-    int width = 0;
-    int height = 0;
 };
 
 struct TextureAnimationInfo {
@@ -69,7 +64,6 @@ public:
 
     Shader *getShader(const std::string &name);
 
-    GLuint loadTexture(const std::string& path, bool alpha = false);
     GLuint loadTexture2D(const std::string& name,
                          const std::string& path,
                          bool srgb = false,
@@ -143,8 +137,7 @@ public:
 private:
     ShaderLibrary m_shaders;
     std::unordered_map<std::string, GLuint> m_textures;
-    std::unordered_map<std::string, GLuint> m_texture2D;
-    std::unordered_map<std::string, GuiTextureInfo> m_guiTextures;
+    Texture2DLibrary m_texture2D;
     TextureAtlas m_atlas;
     TextureAtlas m_itemIconAtlas;
     TextureAtlas m_itemTextureAtlas;
@@ -164,7 +157,7 @@ private:
     std::unordered_map<int, int> m_arrayLayerToAtlasTile;
     float m_atlasAnisotropy = 1.0f;
     float m_atlasMaxAnisotropy = 1.0f;
-    std::unordered_map<std::string, GLuint> m_cubemaps;
+    CubemapLibrary m_cubemaps;
 };
 
 

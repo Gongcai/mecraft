@@ -4,10 +4,10 @@
 
 #include "ResourceMgr.h"
 #include "BlockIconAtlasBuilder.h"
+#include "DefaultShaderCatalog.h"
 #include "../Diagnostics.h"
 #include "Paths.h"
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -76,67 +76,7 @@ std::pair<glm::vec2, glm::vec2> TextureAtlas::getUV(int tileIndex) const {
 }
 
 void ResourceMgr::init() {
-    loadShader("chunk", SHADERS_DIR "/chunk.vert", SHADERS_DIR "/chunk.frag");
-    loadShader("chunk_lit", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/chunk_lit.frag");
-    loadShader("transparent_composite", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/transparent_composite.frag");
-    loadShader("water_composite", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/water_composite.frag");
-    loadShader("block_item_lit", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_lit.frag");
-    loadShader("block_item_forward", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_forward.frag");
-    loadShader("forward_basic_terrain", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/forward_basic_terrain.frag");
-    loadShader("chunk_gbuffer", SHADERS_DIR "/chunk_gbuffer.vert", SHADERS_DIR "/chunk_gbuffer.frag");
-    loadShader("shadow_depth", SHADERS_DIR "/shadow_depth.vert", SHADERS_DIR "/shadow_depth.frag");
-    loadShader("deferred_lighting", SHADERS_DIR "/deferred_lighting.vert", SHADERS_DIR "/deferred_lighting.frag");
-    loadShader("scene_composite", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/scene_composite.frag");
-    loadShader("deferred_debug", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/deferred_debug.frag");
-    loadShader("ssao", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssao.frag");
-    loadShader("velocity_resolve", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/velocity_resolve.frag");
-    loadShader("volumetric_fog", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/volumetric_fog.frag");
-    loadShader("volumetric_temporal", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/volumetric_temporal.frag");
-    loadShader("volumetric_composite", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/volumetric_composite.frag");
-    loadShader("reflection_probe", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/reflection_probe.frag");
-    loadShader("cloud_target", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/cloud_target.frag");
-    loadShader("temporal_resolve", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/temporal_resolve.frag");
-    loadShader("reflection_filter", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/reflection_filter.frag");
-    loadShader("ssao_filter", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssao_filter.frag");
-    loadShader("ssao_temporal", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssao_temporal.frag");
-    loadShader("ssao_upsample", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssao_upsample.frag");
-    loadShader("motion_blur", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/motion_blur.frag");
-    loadShader("dof", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/dof.frag");
-    loadShader("bloom_extract", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/bloom_extract.frag");
-    loadShader("bloom_blur", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/bloom_blur.frag");
-    loadShader("exposure_downsample", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/exposure_downsample.frag");
-    loadShader("exposure_resolve", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/exposure_resolve.frag");
-    loadShader("fsr1_easu", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/fsr1_easu.frag");
-    loadShader("fsr1_rcas", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/fsr1_rcas.frag");
-    loadShader("drop_block", SHADERS_DIR "/drop_block.vert", SHADERS_DIR "/drop_block.frag");
-    loadShader("drop_block_forward", SHADERS_DIR "/drop_block.vert", SHADERS_DIR "/drop_block_forward.frag");
-    loadShader("outline", SHADERS_DIR "/outline.vert", SHADERS_DIR "/outline.frag");
-    loadShader("break_overlay", SHADERS_DIR "/break_overlay.vert", SHADERS_DIR "/break_overlay.frag");
-    loadShader("crosshair", SHADERS_DIR "/crosshair.vert", SHADERS_DIR "/crosshair.frag");
-    loadShader("inventory", SHADERS_DIR "/inventory.vert", SHADERS_DIR "/inventory.frag");
-    loadShader("text", SHADERS_DIR "/text.vert", SHADERS_DIR "/text.frag");
-    loadShader("particle", SHADERS_DIR "/particle.vert", SHADERS_DIR "/particle.frag");
-    loadShader("particle_gbuffer", SHADERS_DIR "/particle_gbuffer.vert", SHADERS_DIR "/particle_gbuffer.frag");
-    loadShader("rain", SHADERS_DIR "/rain.vert", SHADERS_DIR "/rain.frag");
-    loadShader("postprocess", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/postprocess.frag");
-    loadShader("blit_texture", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/blit_texture.frag");
-    loadShader("item_model", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model.frag");
-    loadShader("item_model_forward", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model_forward.frag");
-    loadShader("steve", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve.frag");
-    loadShader("steve_forward", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve_forward.frag");
-    loadShader("entity_gbuffer", SHADERS_DIR "/entity_gbuffer.vert", SHADERS_DIR "/entity_gbuffer.frag");
-    loadShader("entity_shadow", SHADERS_DIR "/entity_shadow.vert", SHADERS_DIR "/entity_shadow.frag");
-    loadShader("block_entity_gbuffer", SHADERS_DIR "/block_entity_gbuffer.vert", SHADERS_DIR "/block_entity_gbuffer.frag");
-    loadShader("block_entity_shadow", SHADERS_DIR "/block_entity_shadow.vert", SHADERS_DIR "/block_entity_shadow.frag");
-    loadShader("drop_gbuffer", SHADERS_DIR "/drop_gbuffer.vert", SHADERS_DIR "/drop_gbuffer.frag");
-    loadShader("item_gbuffer", SHADERS_DIR "/item_gbuffer.vert", SHADERS_DIR "/item_gbuffer.frag");
-    loadShader("item_shadow", SHADERS_DIR "/item_shadow.vert", SHADERS_DIR "/item_shadow.frag");
-    loadShader("ui_color", SHADERS_DIR "/ui_color.vert", SHADERS_DIR "/ui_color.frag");
-    loadShader("ui_glass", SHADERS_DIR "/ui_glass.vert", SHADERS_DIR "/ui_glass.frag");
-    loadShader("skybox", SHADERS_DIR "/skybox.vert", SHADERS_DIR "/skybox.frag");
-    loadShader("gameplay_sky", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky.frag");
-    loadShader("gameplay_sky_forward", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky_forward.frag");
-    loadShader("blur", SHADERS_DIR "/blur.vert", SHADERS_DIR "/blur.frag");
+    resource::loadDefaultShaders(m_shaders);
 
     loadCubemap("menu_skybox",
                 SKYBOX_TEXTURES_DIR "/right.png",
@@ -148,12 +88,7 @@ void ResourceMgr::init() {
 }
 
 void ResourceMgr::shutdown() {
-    for (auto& [_, texInfo] : m_guiTextures) {
-        if (texInfo.textureID != 0) {
-            glDeleteTextures(1, &texInfo.textureID);
-        }
-    }
-    m_guiTextures.clear();
+    m_texture2D.shutdown();
 
     if (m_atlas.textureID != 0) {
         glDeleteTextures(1, &m_atlas.textureID);
@@ -192,19 +127,7 @@ void ResourceMgr::shutdown() {
         m_foliageColormap = 0;
     }
 
-    for (auto& [_, texId] : m_texture2D) {
-        if (texId != 0) {
-            glDeleteTextures(1, &texId);
-        }
-    }
-    m_texture2D.clear();
-
-    for (auto& [_, texId] : m_cubemaps) {
-        if (texId != 0) {
-            glDeleteTextures(1, &texId);
-        }
-    }
-    m_cubemaps.clear();
+    m_cubemaps.shutdown();
 
     m_blockAtlasPixels.clear();
     m_itemAtlasPixels.clear();
@@ -222,60 +145,13 @@ Shader *ResourceMgr::getShader(const std::string &name) {
     return m_shaders.get(name);
 }
 
-GLuint ResourceMgr::loadTexture(const std::string &path, bool alpha) {
-    //TODO: 完善贴图读取
-    return 0;
-}
-
 GLuint ResourceMgr::loadTexture2D(const std::string& name,
                                   const std::string& path,
                                   const bool srgb,
                                   const bool repeat,
                                   const bool linear,
                                   const bool flipVertically) {
-    auto existing = m_texture2D.find(name);
-    if (existing != m_texture2D.end()) {
-        return existing->second;
-    }
-
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_set_flip_vertically_on_load(flipVertically ? 1 : 0);
-    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
-    if (!data || width <= 0 || height <= 0) {
-#ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "Failed to load texture2D '" << name << "': " << path << "\n");
-#endif
-        if (data != nullptr) {
-            stbi_image_free(data);
-        }
-        return 0;
-    }
-
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8,
-                 width,
-                 height,
-                 0,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
-                 data);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(data);
-
-    m_texture2D[name] = textureID;
-    return textureID;
+    return m_texture2D.load(name, path, srgb, repeat, linear, flipVertically);
 }
 
 bool ResourceMgr::probeAtmosphereLut(const std::string& name,
@@ -308,69 +184,19 @@ bool ResourceMgr::probeAtmosphereLut(const std::string& name,
 }
 
 GLuint ResourceMgr::getTexture2D(const std::string& name) const {
-    auto it = m_texture2D.find(name);
-    if (it != m_texture2D.end()) {
-        return it->second;
-    }
-    return 0;
+    return m_texture2D.get(name);
 }
 
 GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
-    int dummyW = 0, dummyH = 0;
-    return loadGuiTexture(name, path, dummyW, dummyH, flipVertically);
+    return m_texture2D.loadGui(name, path, flipVertically);
 }
 
 GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
-    auto existing = m_guiTextures.find(name);
-    if (existing != m_guiTextures.end()) {
-        outWidth = existing->second.width;
-        outHeight = existing->second.height;
-        return existing->second.textureID;
-    }
-
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_set_flip_vertically_on_load(flipVertically ? 1 : 0);
-    unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 4);
-    if (!data) {
-#ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "Failed to load GUI texture: " << path << "\n");
-#endif
-        return 0;
-    }
-
-    outWidth = width;
-    outHeight = height;
-
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    stbi_image_free(data);
-
-    GuiTextureInfo info;
-    info.textureID = textureID;
-    info.width = width;
-    info.height = height;
-    m_guiTextures[name] = info;
-    return textureID;
+    return m_texture2D.loadGui(name, path, outWidth, outHeight, flipVertically);
 }
 
 GLuint ResourceMgr::getGuiTexture(const std::string& name) const {
-    auto it = m_guiTextures.find(name);
-    if (it != m_guiTextures.end()) {
-        return it->second.textureID;
-    }
-    return 0;
+    return m_texture2D.getGui(name);
 }
 
 GLuint ResourceMgr::getTexture(const std::string &name) const {
@@ -1153,56 +979,11 @@ GLuint ResourceMgr::loadCubemap(const std::string& name,
                                  const std::string& rightPath, const std::string& leftPath,
                                  const std::string& topPath, const std::string& bottomPath,
                                  const std::string& frontPath, const std::string& backPath) {
-    auto existing = m_cubemaps.find(name);
-    if (existing != m_cubemaps.end()) {
-        return existing->second;
-    }
-
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-
-    const std::string paths[6] = { rightPath, leftPath, topPath, bottomPath, frontPath, backPath };
-    const GLenum faces[6] = {
-        GL_TEXTURE_CUBE_MAP_POSITIVE_X, GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
-        GL_TEXTURE_CUBE_MAP_POSITIVE_Y, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
-        GL_TEXTURE_CUBE_MAP_POSITIVE_Z, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
-    };
-
-    stbi_set_flip_vertically_on_load(false);
-
-    for (int i = 0; i < 6; ++i) {
-        int width = 0, height = 0, channels = 0;
-        unsigned char* data = stbi_load(paths[i].c_str(), &width, &height, &channels, 4);
-        if (!data) {
-#ifdef MECRAFT_DEBUG
-            MECRAFT_LOG_STREAM(std::cerr << "Failed to load cubemap face: " << paths[i] << "\n");
-#endif
-            glDeleteTextures(1, &textureID);
-            return 0;
-        }
-        glTexImage2D(faces[i], 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-        stbi_image_free(data);
-    }
-
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-
-    m_cubemaps[name] = textureID;
-    return textureID;
+    return m_cubemaps.load(name, rightPath, leftPath, topPath, bottomPath, frontPath, backPath);
 }
 
 GLuint ResourceMgr::getCubemap(const std::string& name) const {
-    auto it = m_cubemaps.find(name);
-    if (it != m_cubemaps.end()) {
-        return it->second;
-    }
-    return 0;
+    return m_cubemaps.get(name);
 }
 
 void ResourceMgr::buildBlockIconAtlas(int iconSize) {
