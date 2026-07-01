@@ -750,6 +750,24 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                      auto s = m_renderScene->getSettings(); s.voxelGi.occlusionStrength = v;
                      m_renderScene->setSettings(s);
                  });
+    addSliderRow(stack, resourceMgr, "Voxel GI Sky Bounce",
+                 0.0f, 2.0f, s.voxelGi.skyBounceStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.skyBounceStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Sun Bounce",
+                 0.0f, 3.0f, s.voxelGi.sunBounceStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.sunBounceStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Shadow Boost",
+                 0.0f, 2.0f, s.voxelGi.receiverShadowBoost, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.receiverShadowBoost = v;
+                     m_renderScene->setSettings(s);
+                 });
 
     addSectionHeader(stack, resourceMgr, "SSAO");
 

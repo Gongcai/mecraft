@@ -820,6 +820,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.voxelGi.coneAperture = 0.55f;
             settings.voxelGi.occupancyScale = 0.55f;
             settings.voxelGi.occlusionStrength = 1.55f;
+            settings.voxelGi.skyBounceStrength = 0.80f;
+            settings.voxelGi.sunBounceStrength = 1.35f;
+            settings.voxelGi.receiverShadowBoost = 0.95f;
             pipelineChanged = true;
         }
         pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
@@ -1295,6 +1298,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Cone Aperture", &settings.voxelGi.coneAperture, 0.05f, 1.50f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Occupancy Scale", &settings.voxelGi.occupancyScale, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Occlusion Strength", &settings.voxelGi.occlusionStrength, 0.0f, 4.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Sky Bounce", &settings.voxelGi.skyBounceStrength, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Sun Bounce", &settings.voxelGi.sunBounceStrength, 0.0f, 3.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Shadow Boost", &settings.voxelGi.receiverShadowBoost, 0.0f, 2.0f, "%.2f");
         const VoxelGiClipmapStats& voxelGiStats = renderScene.getVoxelGiClipmapStats();
         const auto voxelGiModeName = [](const VoxelGiClipmapUpdateMode mode) {
             switch (mode) {
@@ -1323,6 +1329,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     static_cast<unsigned long long>(voxelGiStats.uploadedVoxels),
                     static_cast<unsigned long long>(voxelGiStats.copiedVoxels),
                     voxelGiStats.uploadedBoxes);
+        ImGui::Text("Voxel GI Light: sky %.3f, sun %.3f",
+                    voxelGiStats.skyRadianceScale,
+                    voxelGiStats.sunRadianceScale);
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &settings.postProcess.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);

@@ -30,6 +30,8 @@ struct VoxelGiClipmapStats {
     uint64_t uploadedVoxels = 0;
     uint64_t copiedVoxels = 0;
     int uploadedBoxes = 0;
+    float skyRadianceScale = 0.0f;
+    float sunRadianceScale = 0.0f;
 };
 
 class IBlockTextureColorProvider;
@@ -64,6 +66,16 @@ private:
         float occupancy = 0.0f;
     };
 
+    struct LightingSampleParams {
+        glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 sunTint = glm::vec3(1.0f);
+        glm::vec3 skyTint = glm::vec3(1.0f);
+        float skyRadianceScale = 0.0f;
+        float sunRadianceScale = 0.0f;
+        float skyBounceStrength = 1.0f;
+        float sunBounceStrength = 1.0f;
+    };
+
     void allocateTexture(int resolution);
     void uploadFullVolume();
     [[nodiscard]] int uploadShiftedVolume(const glm::ivec3& deltaVoxels);
@@ -71,11 +83,11 @@ private:
     void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels);
     void rebuildVolume(const IWorldView& worldView,
                        const IBlockTextureColorProvider& textureColors,
-                       float skyRadianceScale,
+                       const LightingSampleParams& lighting,
                        const glm::ivec3& originBlock);
     [[nodiscard]] bool shiftCachedVolume(const IWorldView& worldView,
                                          const IBlockTextureColorProvider& textureColors,
-                                         float skyRadianceScale,
+                                         const LightingSampleParams& lighting,
                                          const glm::ivec3& originBlock,
                                          const glm::ivec3& deltaVoxels);
     [[nodiscard]] bool computeVoxelDelta(const glm::ivec3& originBlock, glm::ivec3& outDeltaVoxels) const;
@@ -92,7 +104,7 @@ private:
                                                         const IBlockTextureColorProvider& textureColors);
     [[nodiscard]] ClipmapVoxel sampleWorldVoxel(const IWorldView& worldView,
                                                 const IBlockTextureColorProvider& textureColors,
-                                                float skyRadianceScale,
+                                                const LightingSampleParams& lighting,
                                                 const glm::ivec3& blockPos);
 
     GLuint m_texture = 0;
@@ -110,6 +122,10 @@ private:
     uint64_t m_lastActiveChunkRevision = 0;
     uint64_t m_lastBlockContentRevision = 0;
     float m_lastSkyRadianceScale = -1.0f;
+    float m_lastSunRadianceScale = -1.0f;
+    float m_lastSkyBounceStrength = -1.0f;
+    float m_lastSunBounceStrength = -1.0f;
+    glm::vec3 m_lastSunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
     uint64_t m_lastUpdateFrame = 0;
 };
 

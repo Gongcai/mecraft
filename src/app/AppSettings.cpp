@@ -193,6 +193,9 @@ void applyVoxelGiSettings(const json& j, VoxelGiSettings& s) {
     readFloat(j, "coneAperture", s.coneAperture);
     readFloat(j, "occupancyScale", s.occupancyScale);
     readFloat(j, "occlusionStrength", s.occlusionStrength);
+    readFloat(j, "skyBounceStrength", s.skyBounceStrength);
+    readFloat(j, "sunBounceStrength", s.sunBounceStrength);
+    readFloat(j, "receiverShadowBoost", s.receiverShadowBoost);
 }
 
 json toJson(const VoxelGiSettings& s) {
@@ -211,6 +214,9 @@ json toJson(const VoxelGiSettings& s) {
         {"coneAperture", s.coneAperture},
         {"occupancyScale", s.occupancyScale},
         {"occlusionStrength", s.occlusionStrength},
+        {"skyBounceStrength", s.skyBounceStrength},
+        {"sunBounceStrength", s.sunBounceStrength},
+        {"receiverShadowBoost", s.receiverShadowBoost},
     };
 }
 

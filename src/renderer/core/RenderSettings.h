@@ -70,6 +70,9 @@ struct VoxelGiSettings {
     float coneAperture = 0.55f;
     float occupancyScale = 0.55f;
     float occlusionStrength = 1.55f;
+    float skyBounceStrength = 0.70f;
+    float sunBounceStrength = 1.15f;
+    float receiverShadowBoost = 0.85f;
 };
 
 /// Volumetric fog/light settings

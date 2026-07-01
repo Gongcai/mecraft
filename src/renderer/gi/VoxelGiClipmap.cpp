@@ -17,6 +17,22 @@ constexpr int kMinClipmapResolution = 16;
 constexpr int kMaxClipmapResolution = 128;
 constexpr float kMinVoxelSize = 1.0f;
 constexpr float kMaxVoxelSize = 4.0f;
+const std::array<glm::ivec3, 6> kFaceOffsets = {
+    glm::ivec3(0, 1, 0),
+    glm::ivec3(0, -1, 0),
+    glm::ivec3(-1, 0, 0),
+    glm::ivec3(1, 0, 0),
+    glm::ivec3(0, 0, 1),
+    glm::ivec3(0, 0, -1),
+};
+const std::array<glm::vec3, 6> kFaceNormals = {
+    glm::vec3(0.0f, 1.0f, 0.0f),
+    glm::vec3(0.0f, -1.0f, 0.0f),
+    glm::vec3(-1.0f, 0.0f, 0.0f),
+    glm::vec3(1.0f, 0.0f, 0.0f),
+    glm::vec3(0.0f, 0.0f, 1.0f),
+    glm::vec3(0.0f, 0.0f, -1.0f),
+};
 
 [[nodiscard]] int normalizedResolution(const int resolution) {
     return std::clamp(resolution, kMinClipmapResolution, kMaxClipmapResolution);
@@ -46,6 +62,28 @@ constexpr float kMaxVoxelSize = 4.0f;
 
 [[nodiscard]] bool containsToken(const std::string_view text, const std::string_view token) {
     return text.find(token) != std::string_view::npos;
+}
+
+[[nodiscard]] bool transmitsGiThroughFace(const BlockDef& def) {
+    return def.opacity < 15 || def.renderLayer != BlockRenderLayer::Opaque;
+}
+
+[[nodiscard]] bool faceReceivesExteriorLight(const IWorldView& worldView,
+                                             const glm::ivec3& blockPos,
+                                             const glm::ivec3& faceOffset) {
+    const glm::ivec3 neighborPos = blockPos + faceOffset;
+    const BlockStateId neighborState = worldView.getBlockState(neighborPos.x, neighborPos.y, neighborPos.z);
+    if (neighborState == NULL_BLOCK_STATE) {
+        return true;
+    }
+
+    const BlockID neighborBlockId = BlockStateRegistry::getBlockId(neighborState);
+    return transmitsGiThroughFace(BlockRegistry::getFast(neighborBlockId));
+}
+
+[[nodiscard]] glm::vec3 normalizedColor(const glm::vec3& color) {
+    const float maxChannel = std::max(color.r, std::max(color.g, color.b));
+    return glm::clamp(color / std::max(maxChannel, 1.0f), glm::vec3(0.0f), glm::vec3(2.0f));
 }
 
 [[nodiscard]] glm::vec3 averageTextureRefColor(const IBlockTextureColorProvider& textureColors,
@@ -137,6 +175,10 @@ void VoxelGiClipmap::shutdown() {
     m_lastActiveChunkRevision = 0;
     m_lastBlockContentRevision = 0;
     m_lastSkyRadianceScale = -1.0f;
+    m_lastSunRadianceScale = -1.0f;
+    m_lastSkyBounceStrength = -1.0f;
+    m_lastSunBounceStrength = -1.0f;
+    m_lastSunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
     m_lastUpdateFrame = 0;
     m_stats = {};
 }
@@ -158,10 +200,19 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     const glm::ivec3 originBlock = computeOrigin(ctx.camera.position, resolution, voxelSize, originSnap);
     const uint64_t activeRevision = ctx.worldView->getActiveChunkRevision();
     const uint64_t blockRevision = ctx.worldView->getBlockContentRevision();
-    const float skyRadianceScale = std::clamp(ctx.skyColors.dayFactor * ctx.skyIntensity +
-                                              ctx.skyColors.moonVisibility * 0.035f,
-                                              0.0f,
-                                              1.5f);
+    LightingSampleParams lighting;
+    lighting.sunDirection = glm::normalize(ctx.skyColors.sunDirection);
+    lighting.sunTint = normalizedColor(ctx.skyColors.sunLightColor);
+    lighting.skyTint = normalizedColor(ctx.skyColors.skyAmbientColor);
+    lighting.skyRadianceScale = std::clamp(ctx.skyColors.dayFactor * ctx.skyIntensity +
+                                           ctx.skyColors.moonVisibility * 0.035f,
+                                           0.0f,
+                                           1.5f);
+    lighting.sunRadianceScale = std::clamp(ctx.skyColors.dayFactor * ctx.skyColors.sunVisibility * ctx.skyIntensity,
+                                           0.0f,
+                                           1.5f);
+    lighting.skyBounceStrength = std::max(settings.skyBounceStrength, 0.0f);
+    lighting.sunBounceStrength = std::max(settings.sunBounceStrength, 0.0f);
 
     const bool parametersChanged = resolution != m_resolution ||
                                    mipLevels != m_mipLevels ||
@@ -169,25 +220,31 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     const bool originChanged = originBlock != m_originBlock;
     const bool worldChanged = activeRevision != m_lastActiveChunkRevision ||
                               blockRevision != m_lastBlockContentRevision;
-    const bool skyRadianceChanged = std::abs(skyRadianceScale - m_lastSkyRadianceScale) > 0.025f;
+    const bool skyRadianceChanged = std::abs(lighting.skyRadianceScale - m_lastSkyRadianceScale) > 0.025f;
+    const bool sunRadianceChanged = std::abs(lighting.sunRadianceScale - m_lastSunRadianceScale) > 0.025f;
+    const bool bounceStrengthChanged = std::abs(lighting.skyBounceStrength - m_lastSkyBounceStrength) > 0.001f ||
+                                       std::abs(lighting.sunBounceStrength - m_lastSunBounceStrength) > 0.001f;
+    const bool sunDirectionChanged = glm::dot(glm::normalize(lighting.sunDirection), glm::normalize(m_lastSunDirection)) < 0.9985f;
     const bool intervalReady = ctx.frameIndex >= m_lastUpdateFrame + static_cast<uint64_t>(updateInterval);
-    if (m_valid && !parametersChanged && !originChanged && !((worldChanged || skyRadianceChanged) && intervalReady)) {
+    if (m_valid && !parametersChanged && !originChanged &&
+        !((worldChanged || skyRadianceChanged || sunRadianceChanged || sunDirectionChanged || bounceStrengthChanged) && intervalReady)) {
         updateStatsBase(VoxelGiClipmapUpdateMode::Idle, m_originBlock);
         return;
     }
 
     allocateTexture(resolution);
     glm::ivec3 deltaVoxels(0);
-    const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged && !skyRadianceChanged &&
+    const bool lightingChanged = skyRadianceChanged || sunRadianceChanged || sunDirectionChanged || bounceStrengthChanged;
+    const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged && !lightingChanged &&
                                 computeVoxelDelta(originBlock, deltaVoxels);
     m_resolution = resolution;
     m_mipLevels = mipLevels;
     m_voxelSize = voxelSize;
 
     const bool shiftedVolume = canReuseVolume &&
-                               shiftCachedVolume(*ctx.worldView, textureColors, skyRadianceScale, originBlock, deltaVoxels);
+                               shiftCachedVolume(*ctx.worldView, textureColors, lighting, originBlock, deltaVoxels);
     if (!shiftedVolume) {
-        rebuildVolume(*ctx.worldView, textureColors, skyRadianceScale, originBlock);
+        rebuildVolume(*ctx.worldView, textureColors, lighting, originBlock);
     }
 
     m_originBlock = originBlock;
@@ -216,10 +273,16 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     }
     m_lastActiveChunkRevision = activeRevision;
     m_lastBlockContentRevision = blockRevision;
-    m_lastSkyRadianceScale = skyRadianceScale;
+    m_lastSkyRadianceScale = lighting.skyRadianceScale;
+    m_lastSunRadianceScale = lighting.sunRadianceScale;
+    m_lastSkyBounceStrength = lighting.skyBounceStrength;
+    m_lastSunBounceStrength = lighting.sunBounceStrength;
+    m_lastSunDirection = lighting.sunDirection;
     m_lastUpdateFrame = ctx.frameIndex;
     m_valid = true;
     m_stats.valid = true;
+    m_stats.skyRadianceScale = lighting.skyRadianceScale;
+    m_stats.sunRadianceScale = lighting.sunRadianceScale;
 }
 
 void VoxelGiClipmap::allocateTexture(const int resolution) {
@@ -371,7 +434,7 @@ void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels) {
 
 void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
                                    const IBlockTextureColorProvider& textureColors,
-                                   const float skyRadianceScale,
+                                   const LightingSampleParams& lighting,
                                    const glm::ivec3& originBlock) {
     const size_t voxelCount = static_cast<size_t>(m_resolution) *
                               static_cast<size_t>(m_resolution) *
@@ -381,7 +444,7 @@ void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
         for (int y = 0; y < m_resolution; ++y) {
             for (int x = 0; x < m_resolution; ++x) {
                 m_voxels[voxelIndex(x, y, z)] =
-                    sampleWorldVoxel(worldView, textureColors, skyRadianceScale, voxelWorldPosition(originBlock, x, y, z));
+                    sampleWorldVoxel(worldView, textureColors, lighting, voxelWorldPosition(originBlock, x, y, z));
             }
         }
     }
@@ -389,7 +452,7 @@ void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
 
 bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView,
                                        const IBlockTextureColorProvider& textureColors,
-                                       const float skyRadianceScale,
+                                       const LightingSampleParams& lighting,
                                        const glm::ivec3& originBlock,
                                        const glm::ivec3& deltaVoxels) {
     const size_t voxelCount = static_cast<size_t>(m_resolution) *
@@ -422,7 +485,7 @@ bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView,
                     m_voxels[index] = previous[voxelIndex(oldX, oldY, oldZ)];
                 } else {
                     m_voxels[index] =
-                        sampleWorldVoxel(worldView, textureColors, skyRadianceScale, voxelWorldPosition(originBlock, x, y, z));
+                        sampleWorldVoxel(worldView, textureColors, lighting, voxelWorldPosition(originBlock, x, y, z));
                 }
             }
         }
@@ -455,6 +518,8 @@ void VoxelGiClipmap::updateStatsBase(const VoxelGiClipmapUpdateMode mode, const 
     m_stats.resolution = m_resolution;
     m_stats.mipLevels = m_mipLevels;
     m_stats.originBlock = originBlock;
+    m_stats.skyRadianceScale = std::max(m_lastSkyRadianceScale, 0.0f);
+    m_stats.sunRadianceScale = std::max(m_lastSunRadianceScale, 0.0f);
 }
 
 size_t VoxelGiClipmap::voxelIndex(const int x, const int y, const int z) const {
@@ -506,7 +571,7 @@ const glm::vec3& VoxelGiClipmap::cachedMaterialAlbedo(const BlockID blockId,
 
 VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& worldView,
                                                               const IBlockTextureColorProvider& textureColors,
-                                                              const float skyRadianceScale,
+                                                              const LightingSampleParams& lighting,
                                                               const glm::ivec3& blockPos) {
     ClipmapVoxel voxel;
     const BlockStateId stateId = worldView.getBlockState(blockPos.x, blockPos.y, blockPos.z);
@@ -523,13 +588,40 @@ VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& 
     const glm::vec3 albedo = cachedMaterialAlbedo(blockId, def, textureColors);
     const uint8_t packedLight = worldView.getPackedLight(blockPos.x, blockPos.y, blockPos.z);
     const float blockLight = static_cast<float>(packedLight & 0x0F) * (1.0f / 15.0f);
-    const float skyLight = static_cast<float>((packedLight >> 4) & 0x0F) * (1.0f / 15.0f);
     const float lightLevel = static_cast<float>(def.lightLevel) * (1.0f / 15.0f);
 
-    const glm::vec3 skyRadiance = albedo * ((0.025f + skyLight * 0.315f) * skyRadianceScale);
-    const glm::vec3 blockRadiance = albedo * (blockLight * 0.48f);
+    float openFaceWeight = 0.0f;
+    float skyFaceWeight = 0.0f;
+    float sunFaceWeight = 0.0f;
+    float blockFaceWeight = blockLight * 0.20f;
+    for (size_t face = 0; face < kFaceOffsets.size(); ++face) {
+        if (!faceReceivesExteriorLight(worldView, blockPos, kFaceOffsets[face])) {
+            continue;
+        }
+
+        const glm::ivec3 samplePos = blockPos + kFaceOffsets[face];
+        const uint8_t facePackedLight = worldView.getPackedLight(samplePos.x, samplePos.y, samplePos.z);
+        const float faceBlockLight = static_cast<float>(facePackedLight & 0x0F) * (1.0f / 15.0f);
+        const float faceSkyLight = static_cast<float>((facePackedLight >> 4) & 0x0F) * (1.0f / 15.0f);
+        const float skyHemisphere = 0.30f + 0.70f * std::max(kFaceNormals[face].y, 0.0f);
+        const float sunFacing = std::max(glm::dot(kFaceNormals[face], lighting.sunDirection), 0.0f);
+
+        openFaceWeight += 1.0f;
+        skyFaceWeight += faceSkyLight * skyHemisphere;
+        sunFaceWeight += faceSkyLight * sunFacing;
+        blockFaceWeight += faceBlockLight * 0.85f;
+    }
+
+    const float exposedRatio = openFaceWeight * (1.0f / 6.0f);
+    const float skyBounce = (0.018f * exposedRatio + skyFaceWeight * (1.0f / 6.0f) * 0.34f) *
+                            lighting.skyRadianceScale * lighting.skyBounceStrength;
+    const float sunBounce = sunFaceWeight * (1.0f / 6.0f) * 0.92f *
+                            lighting.sunRadianceScale * lighting.sunBounceStrength;
+    const glm::vec3 skyRadiance = albedo * lighting.skyTint * skyBounce;
+    const glm::vec3 sunRadiance = albedo * lighting.sunTint * sunBounce;
+    const glm::vec3 blockRadiance = albedo * (blockFaceWeight * (1.0f / 6.0f) * 0.68f);
     const glm::vec3 emission = emissiveColor(def) * (std::pow(lightLevel, 1.25f) * 2.35f);
-    const glm::vec3 radiance = skyRadiance + blockRadiance + emission;
+    const glm::vec3 radiance = skyRadiance + sunRadiance + blockRadiance + emission;
 
     voxel.r = radiance.r;
     voxel.g = radiance.g;

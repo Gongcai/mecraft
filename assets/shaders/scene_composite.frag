@@ -64,6 +64,7 @@ uniform float uVoxelGiTraceDistance;
 uniform float uVoxelGiConeAperture;
 uniform float uVoxelGiOccupancyScale;
 uniform float uVoxelGiOcclusionStrength;
+uniform float uVoxelGiReceiverShadowBoost;
 uniform int uVoxelGiConeSteps;
 uniform vec3 uVoxelGiOrigin;
 uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta, 26=reflection/scene ratio
@@ -149,7 +150,7 @@ vec4 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
     return vec4(radiance * weight, weight);
 }
 
-vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float vertexAo) {
+vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float vertexAo, vec3 sceneColor) {
     vec3 n = normalize(normal);
     vec3 up = abs(n.y) < 0.92 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     vec3 tangent = normalize(cross(up, n));
@@ -179,9 +180,16 @@ vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float ve
     }
 
     vec3 irradiance = radiance / max(weightSum, 0.0001);
-    vec3 receiverTint = mix(vec3(0.55), albedo, 0.65);
-    float aoWeight = mix(0.45, 1.0, clamp(vertexAo, 0.0, 1.0));
-    return irradiance * receiverTint * aoWeight * max(uVoxelGiStrength, 0.0);
+    vec3 receiverTint = mix(vec3(0.50), albedo, 0.70);
+    float ao = clamp(vertexAo, 0.0, 1.0);
+    float aoWeight = mix(0.58, 1.0, ao);
+    float sunFacing = max(dot(n, normalize(uSunDirection)), 0.0);
+    float daylight = clamp(uSunVisibility * uSkyIntensity, 0.0, 1.0);
+    float backlitWeight = (1.0 - smoothstep(0.08, 0.72, sunFacing)) * daylight;
+    float lowLightWeight = 1.0 - smoothstep(0.035, 0.55, luminance(sceneColor));
+    float receiverWeight = 1.0 + max(uVoxelGiReceiverShadowBoost, 0.0) *
+                           (backlitWeight * 0.75 + lowLightWeight * 0.45 + (1.0 - ao) * 0.35);
+    return irradiance * receiverTint * aoWeight * receiverWeight * max(uVoxelGiStrength, 0.0);
 }
 
 void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment env) {
@@ -275,7 +283,7 @@ void main() {
         vec4 normalAo = texture(uNormalAoTex, vTexCoord);
         vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
         vec3 albedo = texture(uAlbedoTex, vTexCoord).rgb;
-        voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, normalAo.a);
+        voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, normalAo.a, color);
         if (uVoxelGiDebugEnabled != 0) {
             FragColor = vec4(max(voxelGi, vec3(0.0)) * 6.0, 1.0);
             return;
