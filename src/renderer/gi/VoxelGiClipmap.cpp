@@ -90,6 +90,10 @@ void VoxelGiClipmap::shutdown() {
         glDeleteTextures(1, &m_texture);
         m_texture = 0;
     }
+    if (m_shiftScratchTexture != 0) {
+        glDeleteTextures(1, &m_shiftScratchTexture);
+        m_shiftScratchTexture = 0;
+    }
     m_voxels.clear();
     m_valid = false;
     m_resolution = 0;
@@ -126,18 +130,25 @@ void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& sett
     }
 
     allocateTexture(resolution);
-    const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged;
+    glm::ivec3 deltaVoxels(0);
+    const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged &&
+                                computeVoxelDelta(originBlock, deltaVoxels);
     m_resolution = resolution;
     m_mipLevels = mipLevels;
     m_voxelSize = voxelSize;
 
-    if (!canReuseVolume || !shiftCachedVolume(*ctx.worldView, originBlock)) {
+    const bool shiftedVolume = canReuseVolume && shiftCachedVolume(*ctx.worldView, originBlock, deltaVoxels);
+    if (!shiftedVolume) {
         rebuildVolume(*ctx.worldView, originBlock);
     }
 
     m_originBlock = originBlock;
     m_origin = glm::vec3(originBlock);
-    upload(m_voxels);
+    if (shiftedVolume) {
+        uploadShiftedVolume(deltaVoxels);
+    } else {
+        uploadFullVolume();
+    }
     m_lastActiveChunkRevision = activeRevision;
     m_lastBlockContentRevision = blockRevision;
     m_lastUpdateFrame = ctx.frameIndex;
@@ -153,6 +164,10 @@ void VoxelGiClipmap::allocateTexture(const int resolution) {
         glDeleteTextures(1, &m_texture);
         m_texture = 0;
     }
+    if (m_shiftScratchTexture != 0) {
+        glDeleteTextures(1, &m_shiftScratchTexture);
+        m_shiftScratchTexture = 0;
+    }
 
     glCreateTextures(GL_TEXTURE_3D, 1, &m_texture);
     const int levels = mipLevelCount(resolution);
@@ -165,13 +180,116 @@ void VoxelGiClipmap::allocateTexture(const int resolution) {
     glTextureParameteri(m_texture, GL_TEXTURE_BASE_LEVEL, 0);
     glTextureParameteri(m_texture, GL_TEXTURE_MAX_LEVEL, levels - 1);
     renderer::debug::labelTexture(m_texture, "VoxelGI.ClipmapRadiance");
+
+    glCreateTextures(GL_TEXTURE_3D, 1, &m_shiftScratchTexture);
+    glTextureStorage3D(m_shiftScratchTexture, 1, GL_RGBA16F, resolution, resolution, resolution);
+    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    renderer::debug::labelTexture(m_shiftScratchTexture, "VoxelGI.ShiftScratch");
 }
 
-void VoxelGiClipmap::upload(const std::vector<ClipmapVoxel>& voxels) {
+void VoxelGiClipmap::uploadFullVolume() {
     glTextureSubImage3D(m_texture, 0, 0, 0, 0,
                         m_resolution, m_resolution, m_resolution,
-                        GL_RGBA, GL_FLOAT, voxels.data());
+                        GL_RGBA, GL_FLOAT, m_voxels.data());
     glGenerateTextureMipmap(m_texture);
+}
+
+void VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels) {
+    copyOverlapThroughScratch(deltaVoxels);
+
+    const auto axisRange = [this](const int delta, int& start, int& end) {
+        if (delta > 0) {
+            start = 0;
+            end = m_resolution - delta;
+        } else if (delta < 0) {
+            start = -delta;
+            end = m_resolution;
+        } else {
+            start = 0;
+            end = m_resolution;
+        }
+    };
+
+    int x0 = 0;
+    int x1 = m_resolution;
+    int y0 = 0;
+    int y1 = m_resolution;
+    int z0 = 0;
+    int z1 = m_resolution;
+    axisRange(deltaVoxels.x, x0, x1);
+    axisRange(deltaVoxels.y, y0, y1);
+    axisRange(deltaVoxels.z, z0, z1);
+
+    if (x0 > 0) uploadSubVolume(0, 0, 0, x0, m_resolution, m_resolution);
+    if (x1 < m_resolution) uploadSubVolume(x1, 0, 0, m_resolution - x1, m_resolution, m_resolution);
+    if (y0 > 0 && x1 > x0) uploadSubVolume(x0, 0, 0, x1 - x0, y0, m_resolution);
+    if (y1 < m_resolution && x1 > x0) uploadSubVolume(x0, y1, 0, x1 - x0, m_resolution - y1, m_resolution);
+    if (z0 > 0 && x1 > x0 && y1 > y0) uploadSubVolume(x0, y0, 0, x1 - x0, y1 - y0, z0);
+    if (z1 < m_resolution && x1 > x0 && y1 > y0) {
+        uploadSubVolume(x0, y0, z1, x1 - x0, y1 - y0, m_resolution - z1);
+    }
+
+    glGenerateTextureMipmap(m_texture);
+}
+
+void VoxelGiClipmap::uploadSubVolume(const int x,
+                                     const int y,
+                                     const int z,
+                                     const int width,
+                                     const int height,
+                                     const int depth) {
+    if (width <= 0 || height <= 0 || depth <= 0) {
+        return;
+    }
+
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, m_resolution);
+    glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, m_resolution);
+    glTextureSubImage3D(m_texture, 0, x, y, z, width, height, depth,
+                        GL_RGBA, GL_FLOAT, m_voxels.data() + voxelIndex(x, y, z));
+    glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+}
+
+void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels) {
+    const auto axisRange = [this](const int delta, int& srcStart, int& dstStart, int& size) {
+        if (delta > 0) {
+            srcStart = delta;
+            dstStart = 0;
+            size = m_resolution - delta;
+        } else if (delta < 0) {
+            srcStart = 0;
+            dstStart = -delta;
+            size = m_resolution + delta;
+        } else {
+            srcStart = 0;
+            dstStart = 0;
+            size = m_resolution;
+        }
+    };
+
+    int srcX = 0;
+    int srcY = 0;
+    int srcZ = 0;
+    int dstX = 0;
+    int dstY = 0;
+    int dstZ = 0;
+    int sizeX = m_resolution;
+    int sizeY = m_resolution;
+    int sizeZ = m_resolution;
+    axisRange(deltaVoxels.x, srcX, dstX, sizeX);
+    axisRange(deltaVoxels.y, srcY, dstY, sizeY);
+    axisRange(deltaVoxels.z, srcZ, dstZ, sizeZ);
+
+    glCopyImageSubData(m_texture, GL_TEXTURE_3D, 0, srcX, srcY, srcZ,
+                       m_shiftScratchTexture, GL_TEXTURE_3D, 0, dstX, dstY, dstZ,
+                       sizeX, sizeY, sizeZ);
+    glCopyImageSubData(m_shiftScratchTexture, GL_TEXTURE_3D, 0, dstX, dstY, dstZ,
+                       m_texture, GL_TEXTURE_3D, 0, dstX, dstY, dstZ,
+                       sizeX, sizeY, sizeZ);
 }
 
 void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView, const glm::ivec3& originBlock) {
@@ -188,7 +306,9 @@ void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView, const glm::ivec3
     }
 }
 
-bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView, const glm::ivec3& originBlock) {
+bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView,
+                                       const glm::ivec3& originBlock,
+                                       const glm::ivec3& deltaVoxels) {
     const size_t voxelCount = static_cast<size_t>(m_resolution) *
                               static_cast<size_t>(m_resolution) *
                               static_cast<size_t>(m_resolution);
@@ -196,15 +316,6 @@ bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView, const glm::i
         return false;
     }
 
-    const glm::vec3 originDelta = glm::vec3(originBlock - m_originBlock) / m_voxelSize;
-    const glm::ivec3 deltaVoxels(
-        static_cast<int>(std::round(originDelta.x)),
-        static_cast<int>(std::round(originDelta.y)),
-        static_cast<int>(std::round(originDelta.z)));
-    const glm::vec3 snappedDelta = glm::vec3(deltaVoxels) * m_voxelSize;
-    if (glm::length(snappedDelta - glm::vec3(originBlock - m_originBlock)) > 0.01f) {
-        return false;
-    }
     if (std::abs(deltaVoxels.x) >= m_resolution ||
         std::abs(deltaVoxels.y) >= m_resolution ||
         std::abs(deltaVoxels.z) >= m_resolution) {
@@ -234,6 +345,16 @@ bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView, const glm::i
     }
 
     return true;
+}
+
+bool VoxelGiClipmap::computeVoxelDelta(const glm::ivec3& originBlock, glm::ivec3& outDeltaVoxels) const {
+    const glm::vec3 originDelta = glm::vec3(originBlock - m_originBlock) / m_voxelSize;
+    outDeltaVoxels = glm::ivec3(
+        static_cast<int>(std::round(originDelta.x)),
+        static_cast<int>(std::round(originDelta.y)),
+        static_cast<int>(std::round(originDelta.z)));
+    const glm::vec3 snappedDelta = glm::vec3(outDeltaVoxels) * m_voxelSize;
+    return glm::length(snappedDelta - glm::vec3(originBlock - m_originBlock)) <= 0.01f;
 }
 
 size_t VoxelGiClipmap::voxelIndex(const int x, const int y, const int z) const {

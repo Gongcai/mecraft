@@ -38,9 +38,15 @@ private:
     };
 
     void allocateTexture(int resolution);
-    void upload(const std::vector<ClipmapVoxel>& voxels);
+    void uploadFullVolume();
+    void uploadShiftedVolume(const glm::ivec3& deltaVoxels);
+    void uploadSubVolume(int x, int y, int z, int width, int height, int depth);
+    void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels);
     void rebuildVolume(const IWorldView& worldView, const glm::ivec3& originBlock);
-    [[nodiscard]] bool shiftCachedVolume(const IWorldView& worldView, const glm::ivec3& originBlock);
+    [[nodiscard]] bool shiftCachedVolume(const IWorldView& worldView,
+                                         const glm::ivec3& originBlock,
+                                         const glm::ivec3& deltaVoxels);
+    [[nodiscard]] bool computeVoxelDelta(const glm::ivec3& originBlock, glm::ivec3& outDeltaVoxels) const;
     [[nodiscard]] size_t voxelIndex(int x, int y, int z) const;
     [[nodiscard]] glm::ivec3 voxelWorldPosition(const glm::ivec3& originBlock, int x, int y, int z) const;
     [[nodiscard]] glm::ivec3 computeOrigin(const glm::vec3& cameraPosition,
@@ -50,6 +56,7 @@ private:
     [[nodiscard]] ClipmapVoxel sampleWorldVoxel(const IWorldView& worldView, const glm::ivec3& blockPos) const;
 
     GLuint m_texture = 0;
+    GLuint m_shiftScratchTexture = 0;
     bool m_valid = false;
     int m_resolution = 0;
     int m_mipLevels = 1;
