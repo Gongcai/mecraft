@@ -2,6 +2,8 @@
 
 #include "../third_party/stb/stb_image.h"
 
+#include <glm/vec3.hpp>
+
 #include <algorithm>
 #include <array>
 #include <optional>
@@ -136,6 +138,35 @@ void uploadTextureArrayLayer(const GLuint textureId,
                     tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, srcPixels);
 }
 
+glm::vec3 computeAlphaWeightedAverageColor(const unsigned char* srcPixels,
+                                           const int rowWidth,
+                                           const int tileSize) {
+    double red = 0.0;
+    double green = 0.0;
+    double blue = 0.0;
+    double alpha = 0.0;
+
+    for (int y = 0; y < tileSize; ++y) {
+        for (int x = 0; x < tileSize; ++x) {
+            const size_t pixelIndex = static_cast<size_t>(y * rowWidth + x) * 4u;
+            const double pixelAlpha = static_cast<double>(srcPixels[pixelIndex + 3]) * (1.0 / 255.0);
+            red += static_cast<double>(srcPixels[pixelIndex + 0]) * (1.0 / 255.0) * pixelAlpha;
+            green += static_cast<double>(srcPixels[pixelIndex + 1]) * (1.0 / 255.0) * pixelAlpha;
+            blue += static_cast<double>(srcPixels[pixelIndex + 2]) * (1.0 / 255.0) * pixelAlpha;
+            alpha += pixelAlpha;
+        }
+    }
+
+    if (alpha <= 0.0) {
+        return glm::vec3(0.0f);
+    }
+
+    const float invAlpha = static_cast<float>(1.0 / alpha);
+    return glm::vec3(static_cast<float>(red) * invAlpha,
+                     static_cast<float>(green) * invAlpha,
+                     static_cast<float>(blue) * invAlpha);
+}
+
 void uploadConstantLayer(const GLuint textureId,
                          const int targetLayer,
                          const int tileSize,
@@ -165,7 +196,8 @@ void uploadAlbedoLayers(const GLuint textureId,
                         const int firstLayer,
                         const int layerCount,
                         const int tileSize,
-                        const BlockTextureCatalogEntry* catalogEntry) {
+                        const BlockTextureCatalogEntry* catalogEntry,
+                        std::vector<glm::vec3>& layerAverageColors) {
     LoadedImage image(entry.albedoPath);
 
     if (layerCount > 1) {
@@ -178,6 +210,8 @@ void uploadAlbedoLayers(const GLuint textureId,
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
             const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
             uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize);
+            layerAverageColors[static_cast<size_t>(firstLayer + frame)] =
+                computeAlphaWeightedAverageColor(framePixels, image.width, tileSize);
         }
         return;
     }
@@ -186,6 +220,8 @@ void uploadAlbedoLayers(const GLuint textureId,
         throw std::runtime_error("Block texture array source dimensions do not match tile size for " + entry.albedoPath.string());
     }
     uploadTextureArrayLayer(textureId, firstLayer, image.data, tileSize);
+    layerAverageColors[static_cast<size_t>(firstLayer)] =
+        computeAlphaWeightedAverageColor(image.data, image.width, tileSize);
 }
 
 void uploadMaterialMapLayers(const GLuint textureId,
@@ -287,6 +323,7 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
     BlockTextureArraySet result;
     result.hasNormalMaps = manifest.hasNormalMaps();
     result.hasSpecularMaps = manifest.hasSpecularMaps();
+    result.layerAverageColors.assign(static_cast<size_t>(numLayers), glm::vec3(0.0f));
 
     int currentLayer = 0;
     for (size_t imageIndex = 0; imageIndex < textureEntries.size(); ++imageIndex) {
@@ -303,7 +340,8 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
         }
 
         const bool topFrameFirst = catalogEntry != nullptr && catalogEntry->topFrameFirst;
-        uploadAlbedoLayers(albedoArray.id(), entry, currentLayer, layerCount, tileSize, catalogEntry);
+        uploadAlbedoLayers(albedoArray.id(), entry, currentLayer, layerCount, tileSize, catalogEntry,
+                           result.layerAverageColors);
         if (normalArray.has_value()) {
             uploadMaterialMapLayers(normalArray->id(), entry.normalPath, currentLayer, layerCount, tileSize,
                                     topFrameFirst, kNeutralNormalPixel, "normal");

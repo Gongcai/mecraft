@@ -6,6 +6,7 @@
 
 #include <glad/glad.h>
 
+#include <cassert>
 #include <iostream>
 #include <stdexcept>
 #include <utility>
@@ -43,6 +44,7 @@ void BlockTextureLibrary::shutdown() {
 
     m_atlasPixels.clear();
     m_textureArrayLayers.clear();
+    m_textureAverageColors.clear();
     m_catalog.clear();
     m_manifest.clear();
     m_arrayLayerToAtlasTile.clear();
@@ -75,6 +77,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory, const int 
     m_specularTextureArray = textureArrayResult.specularArray;
     m_textureArrayLayers = std::move(textureArrayResult.layers);
     m_arrayLayerToAtlasTile = std::move(textureArrayResult.layerToAtlasTile);
+    m_textureAverageColors = std::move(textureArrayResult.layerAverageColors);
     m_hasNormalMaps = textureArrayResult.hasNormalMaps;
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
@@ -110,6 +113,7 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     m_specularTextureArray = textureArrayResult.specularArray;
     m_textureArrayLayers = std::move(textureArrayResult.layers);
     m_arrayLayerToAtlasTile = std::move(textureArrayResult.layerToAtlasTile);
+    m_textureAverageColors = std::move(textureArrayResult.layerAverageColors);
     m_hasNormalMaps = textureArrayResult.hasNormalMaps;
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
@@ -147,6 +151,12 @@ const std::vector<unsigned char>& BlockTextureLibrary::atlasPixels() const {
 
 const BlockTextureCatalog& BlockTextureLibrary::catalog() const {
     return m_catalog;
+}
+
+const glm::vec3& BlockTextureLibrary::textureAverageColor(const int arrayLayer) const {
+    assert(arrayLayer >= 0);
+    assert(static_cast<size_t>(arrayLayer) < m_textureAverageColors.size());
+    return m_textureAverageColors[static_cast<size_t>(arrayLayer)];
 }
 
 int BlockTextureLibrary::textureArrayLayer(const std::string& name) const {

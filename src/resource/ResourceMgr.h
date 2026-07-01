@@ -9,13 +9,14 @@
 #include <vector>
 #include <glad/glad.h>
 #include "BlockTextureCatalog.h"
+#include "BlockTextureColorProvider.h"
 #include "TextureAtlas.h"
 #include "../renderer/core/Shader.h"
 
-class ResourceMgr {
+class ResourceMgr : public IBlockTextureColorProvider {
 public:
     ResourceMgr();
-    ~ResourceMgr();
+    ~ResourceMgr() override;
 
     ResourceMgr(const ResourceMgr&) = delete;
     ResourceMgr& operator=(const ResourceMgr&) = delete;
@@ -61,6 +62,7 @@ public:
     [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;
     [[nodiscard]] TextureAnimationInfo getTextureAnimation(const std::string& name) const;
     [[nodiscard]] ResourceTextureTint getTextureTint(const std::string& name) const;
+    [[nodiscard]] const glm::vec3& blockTextureAverageColor(int arrayLayer) const override;
 
     // Mapping from TextureArray layer index back to Atlas tile index.
     // Used by UI icon generation (buildBlockIconAtlas) to convert face layers to atlas tiles.

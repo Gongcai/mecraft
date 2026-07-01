@@ -303,7 +303,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Voxel GI clipmap update
     if (m_voxelGiClipmap) {
         renderer::debug::ScopedDebugGroup passGroup("VoxelGI.Clipmap");
-        m_voxelGiClipmap->update(ctx, m_currentSettings.voxelGi);
+        m_voxelGiClipmap->update(ctx, m_currentSettings.voxelGi, *m_resourceMgr);
     }
 
     // Scene composite

@@ -31,6 +31,8 @@ struct VoxelGiClipmapStats {
     int uploadedBoxes = 0;
 };
 
+class IBlockTextureColorProvider;
+
 /// Maintains a camera-centered 3D radiance clipmap for stable low-frequency GI.
 class VoxelGiClipmap {
 public:
@@ -41,7 +43,9 @@ public:
     VoxelGiClipmap& operator=(const VoxelGiClipmap&) = delete;
 
     void shutdown();
-    void update(const FrameContext& ctx, const VoxelGiSettings& settings);
+    void update(const FrameContext& ctx,
+                const VoxelGiSettings& settings,
+                const IBlockTextureColorProvider& textureColors);
 
     [[nodiscard]] GLuint texture() const { return m_texture; }
     [[nodiscard]] bool valid() const { return m_valid && m_texture != 0; }
@@ -64,8 +68,11 @@ private:
     [[nodiscard]] int uploadShiftedVolume(const glm::ivec3& deltaVoxels);
     [[nodiscard]] bool uploadSubVolume(int x, int y, int z, int width, int height, int depth);
     void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels);
-    void rebuildVolume(const IWorldView& worldView, const glm::ivec3& originBlock);
+    void rebuildVolume(const IWorldView& worldView,
+                       const IBlockTextureColorProvider& textureColors,
+                       const glm::ivec3& originBlock);
     [[nodiscard]] bool shiftCachedVolume(const IWorldView& worldView,
+                                         const IBlockTextureColorProvider& textureColors,
                                          const glm::ivec3& originBlock,
                                          const glm::ivec3& deltaVoxels);
     [[nodiscard]] bool computeVoxelDelta(const glm::ivec3& originBlock, glm::ivec3& outDeltaVoxels) const;
@@ -77,7 +84,9 @@ private:
                                            int resolution,
                                            float voxelSize,
                                            int originSnap) const;
-    [[nodiscard]] ClipmapVoxel sampleWorldVoxel(const IWorldView& worldView, const glm::ivec3& blockPos) const;
+    [[nodiscard]] ClipmapVoxel sampleWorldVoxel(const IWorldView& worldView,
+                                                const IBlockTextureColorProvider& textureColors,
+                                                const glm::ivec3& blockPos) const;
 
     GLuint m_texture = 0;
     GLuint m_shiftScratchTexture = 0;

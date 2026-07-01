@@ -28,7 +28,8 @@ ResourceMgr::ResourceMgr()
     : m_impl(std::make_unique<Impl>()) {
 }
 
-ResourceMgr::~ResourceMgr() = default;
+ResourceMgr::~ResourceMgr() {
+}
 
 ResourceMgr::ResourceMgr(ResourceMgr&&) noexcept = default;
 
@@ -146,6 +147,10 @@ TextureAnimationInfo ResourceMgr::getTextureAnimation(const std::string& name) c
 
 ResourceTextureTint ResourceMgr::getTextureTint(const std::string& name) const {
     return m_impl->blockTextures.textureTint(name);
+}
+
+const glm::vec3& ResourceMgr::blockTextureAverageColor(const int arrayLayer) const {
+    return m_impl->blockTextures.textureAverageColor(arrayLayer);
 }
 
 int ResourceMgr::arrayLayerToAtlasTile(const int arrayLayer) const {

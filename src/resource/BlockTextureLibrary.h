@@ -6,6 +6,8 @@
 #include "TextureAtlas.h"
 #include "TextureSamplerController.h"
 
+#include <glm/vec3.hpp>
+
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,6 +33,7 @@ public:
     [[nodiscard]] bool hasSpecularMaps() const;
     [[nodiscard]] const std::vector<unsigned char>& atlasPixels() const;
     [[nodiscard]] const BlockTextureCatalog& catalog() const;
+    [[nodiscard]] const glm::vec3& textureAverageColor(int arrayLayer) const;
 
     [[nodiscard]] int textureArrayLayer(const std::string& name) const;
     [[nodiscard]] TextureAnimationInfo textureAnimation(const std::string& name) const;
@@ -52,6 +55,7 @@ private:
     TextureSamplerController m_sampler;
     std::vector<unsigned char> m_atlasPixels;
     std::unordered_map<std::string, int> m_textureArrayLayers;
+    std::vector<glm::vec3> m_textureAverageColors;
     BlockTextureCatalog m_catalog;
     resource::BlockTextureManifest m_manifest;
     std::unordered_map<int, int> m_arrayLayerToAtlasTile;

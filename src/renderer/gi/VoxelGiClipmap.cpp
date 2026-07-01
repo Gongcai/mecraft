@@ -4,10 +4,11 @@
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockStateRegistry.h"
+#include "../../resource/BlockTextureColorProvider.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
-#include <optional>
 #include <string_view>
 
 namespace {
@@ -47,135 +48,44 @@ constexpr float kMaxVoxelSize = 4.0f;
     return text.find(token) != std::string_view::npos;
 }
 
-[[nodiscard]] bool hasPrefix(const std::string_view text, const std::string_view prefix) {
-    return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
+[[nodiscard]] glm::vec3 averageTextureRefColor(const IBlockTextureColorProvider& textureColors,
+                                               const AnimatedTextureRef& textureRef) {
+    const int frameCount = textureRef.isAnimated ? std::max(1, static_cast<int>(textureRef.frameCount)) : 1;
+    glm::vec3 color(0.0f);
+    for (int frame = 0; frame < frameCount; ++frame) {
+        color += textureColors.blockTextureAverageColor(textureRef.firstLayer + frame);
+    }
+    return color / static_cast<float>(frameCount);
 }
 
-[[nodiscard]] std::optional<glm::vec3> dyedBlockAlbedo(const std::string_view path) {
-    struct DyeColor {
-        std::string_view prefix;
-        glm::vec3 albedo;
+[[nodiscard]] glm::vec3 biomeTintColor(const BiomeTintKind tintKind) {
+    switch (tintKind) {
+        case BiomeTintKind::Grass:
+        case BiomeTintKind::Foliage:
+            return glm::vec3(0.50f, 0.78f, 0.34f);
+        case BiomeTintKind::None:
+        default:
+            return glm::vec3(1.0f);
+    }
+}
+
+[[nodiscard]] glm::vec3 materialAlbedo(const BlockDef& def,
+                                       const IBlockTextureColorProvider& textureColors) {
+    const std::array<AnimatedTextureRef, 6> faces = {
+        def.faceTop,
+        def.faceBottom,
+        def.faceLeft,
+        def.faceRight,
+        def.faceFront,
+        def.faceBack,
     };
-    constexpr DyeColor kDyes[] = {
-        {"white_", glm::vec3(0.86f, 0.86f, 0.82f)},
-        {"light_gray_", glm::vec3(0.58f, 0.58f, 0.56f)},
-        {"gray_", glm::vec3(0.32f, 0.34f, 0.34f)},
-        {"black_", glm::vec3(0.06f, 0.06f, 0.07f)},
-        {"brown_", glm::vec3(0.34f, 0.21f, 0.13f)},
-        {"red_", glm::vec3(0.60f, 0.12f, 0.10f)},
-        {"orange_", glm::vec3(0.80f, 0.34f, 0.08f)},
-        {"yellow_", glm::vec3(0.86f, 0.70f, 0.18f)},
-        {"lime_", glm::vec3(0.46f, 0.74f, 0.17f)},
-        {"green_", glm::vec3(0.22f, 0.42f, 0.14f)},
-        {"cyan_", glm::vec3(0.12f, 0.52f, 0.58f)},
-        {"light_blue_", glm::vec3(0.36f, 0.62f, 0.82f)},
-        {"blue_", glm::vec3(0.18f, 0.28f, 0.62f)},
-        {"purple_", glm::vec3(0.42f, 0.22f, 0.62f)},
-        {"magenta_", glm::vec3(0.72f, 0.28f, 0.66f)},
-        {"pink_", glm::vec3(0.86f, 0.47f, 0.60f)},
-    };
 
-    const bool dyedSurface = containsToken(path, "wool") ||
-                             containsToken(path, "concrete") ||
-                             containsToken(path, "terracotta") ||
-                             containsToken(path, "stained_glass") ||
-                             containsToken(path, "carpet");
-    if (!dyedSurface) {
-        return std::nullopt;
+    glm::vec3 albedo(0.0f);
+    for (const AnimatedTextureRef& face : faces) {
+        albedo += averageTextureRefColor(textureColors, face);
     }
-
-    for (const DyeColor& dye : kDyes) {
-        if (hasPrefix(path, dye.prefix)) {
-            return dye.albedo;
-        }
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] std::optional<glm::vec3> namedBlockAlbedo(const BlockDef& def) {
-    const std::string_view path = def.namespacedId.path();
-    if (const std::optional<glm::vec3> dyed = dyedBlockAlbedo(path)) {
-        return dyed;
-    }
-
-    if (path == "grass_block") return glm::vec3(0.42f, 0.55f, 0.24f);
-    if (path == "podzol") return glm::vec3(0.36f, 0.25f, 0.14f);
-    if (path == "mycelium") return glm::vec3(0.46f, 0.39f, 0.47f);
-    if (path == "dirt" || path == "coarse_dirt" || path == "rooted_dirt") return glm::vec3(0.45f, 0.30f, 0.18f);
-    if (path == "mud" || containsToken(path, "mud_bricks")) return glm::vec3(0.30f, 0.25f, 0.22f);
-    if (path == "clay") return glm::vec3(0.50f, 0.56f, 0.62f);
-
-    if (path == "sand" || containsToken(path, "sandstone")) return glm::vec3(0.76f, 0.68f, 0.45f);
-    if (path == "red_sand" || containsToken(path, "red_sandstone")) return glm::vec3(0.70f, 0.35f, 0.16f);
-    if (path == "gravel") return glm::vec3(0.46f, 0.44f, 0.42f);
-    if (containsToken(path, "snow")) return glm::vec3(0.88f, 0.92f, 0.94f);
-    if (containsToken(path, "ice")) return glm::vec3(0.58f, 0.78f, 0.92f);
-
-    if (path == "stone" || containsToken(path, "cobblestone") || containsToken(path, "stone_bricks")) {
-        return glm::vec3(0.50f, 0.50f, 0.48f);
-    }
-    if (containsToken(path, "deepslate") || containsToken(path, "tuff")) return glm::vec3(0.30f, 0.31f, 0.32f);
-    if (containsToken(path, "granite")) return glm::vec3(0.58f, 0.38f, 0.31f);
-    if (containsToken(path, "diorite")) return glm::vec3(0.70f, 0.70f, 0.68f);
-    if (containsToken(path, "andesite")) return glm::vec3(0.46f, 0.48f, 0.46f);
-    if (containsToken(path, "calcite")) return glm::vec3(0.78f, 0.76f, 0.70f);
-    if (containsToken(path, "dripstone")) return glm::vec3(0.50f, 0.34f, 0.24f);
-    if (containsToken(path, "basalt") || containsToken(path, "blackstone")) return glm::vec3(0.12f, 0.12f, 0.13f);
-    if (containsToken(path, "netherrack")) return glm::vec3(0.45f, 0.13f, 0.12f);
-    if (containsToken(path, "nether_bricks")) return glm::vec3(0.15f, 0.04f, 0.05f);
-    if (containsToken(path, "end_stone")) return glm::vec3(0.76f, 0.74f, 0.47f);
-
-    if (containsToken(path, "oak")) return glm::vec3(0.57f, 0.40f, 0.20f);
-    if (containsToken(path, "spruce")) return glm::vec3(0.34f, 0.22f, 0.12f);
-    if (containsToken(path, "birch")) return glm::vec3(0.72f, 0.62f, 0.40f);
-    if (containsToken(path, "jungle")) return glm::vec3(0.50f, 0.31f, 0.16f);
-    if (containsToken(path, "acacia")) return glm::vec3(0.64f, 0.29f, 0.11f);
-    if (containsToken(path, "dark_oak")) return glm::vec3(0.28f, 0.17f, 0.09f);
-    if (containsToken(path, "mangrove")) return glm::vec3(0.45f, 0.12f, 0.08f);
-    if (containsToken(path, "cherry")) return glm::vec3(0.86f, 0.55f, 0.62f);
-    if (containsToken(path, "crimson")) return glm::vec3(0.50f, 0.08f, 0.18f);
-    if (containsToken(path, "warped")) return glm::vec3(0.10f, 0.48f, 0.42f);
-    if (containsToken(path, "bamboo")) return glm::vec3(0.62f, 0.58f, 0.18f);
-    if (containsToken(path, "leaves") || containsToken(path, "azalea")) return glm::vec3(0.24f, 0.46f, 0.16f);
-    if (containsToken(path, "moss")) return glm::vec3(0.22f, 0.42f, 0.12f);
-
-    if (containsToken(path, "diamond")) return glm::vec3(0.35f, 0.78f, 0.82f);
-    if (containsToken(path, "emerald")) return glm::vec3(0.18f, 0.70f, 0.32f);
-    if (containsToken(path, "lapis")) return glm::vec3(0.16f, 0.26f, 0.72f);
-    if (containsToken(path, "redstone")) return glm::vec3(0.65f, 0.08f, 0.06f);
-    if (containsToken(path, "copper")) return glm::vec3(0.72f, 0.42f, 0.25f);
-    if (containsToken(path, "gold")) return glm::vec3(0.86f, 0.63f, 0.18f);
-    if (containsToken(path, "iron")) return glm::vec3(0.70f, 0.68f, 0.62f);
-    if (containsToken(path, "coal")) return glm::vec3(0.09f, 0.09f, 0.09f);
-    if (containsToken(path, "quartz")) return glm::vec3(0.78f, 0.74f, 0.68f);
-    if (containsToken(path, "amethyst")) return glm::vec3(0.62f, 0.42f, 0.82f);
-    if (containsToken(path, "prismarine")) return glm::vec3(0.28f, 0.55f, 0.50f);
-
-    return std::nullopt;
-}
-
-[[nodiscard]] glm::vec3 materialAlbedo(const BlockDef& def) {
-    if (const std::optional<glm::vec3> named = namedBlockAlbedo(def)) {
-        return *named;
-    }
-
-    switch (def.materialKind) {
-        case BlockMaterialKinds::STONE: return glm::vec3(0.50f, 0.50f, 0.48f);
-        case BlockMaterialKinds::DIRT: return glm::vec3(0.46f, 0.30f, 0.18f);
-        case BlockMaterialKinds::GRASS: return glm::vec3(0.36f, 0.55f, 0.22f);
-        case BlockMaterialKinds::WOOD: return glm::vec3(0.55f, 0.34f, 0.17f);
-        case BlockMaterialKinds::LEAVES: return glm::vec3(0.25f, 0.48f, 0.16f);
-        case BlockMaterialKinds::PLANT: return glm::vec3(0.34f, 0.56f, 0.20f);
-        case BlockMaterialKinds::SAND: return glm::vec3(0.76f, 0.68f, 0.45f);
-        case BlockMaterialKinds::ORE: return glm::vec3(0.50f, 0.50f, 0.50f);
-        case BlockMaterialKinds::METAL: return glm::vec3(0.62f, 0.58f, 0.52f);
-        case BlockMaterialKinds::ICE: return glm::vec3(0.58f, 0.78f, 0.92f);
-        case BlockMaterialKinds::GLASS:
-        case BlockMaterialKinds::STAINED_GLASS:
-        case BlockMaterialKinds::WATER:
-            return glm::vec3(0.0f);
-        default: return glm::vec3(0.52f, 0.50f, 0.46f);
-    }
+    albedo *= (1.0f / static_cast<float>(faces.size()));
+    return glm::clamp(albedo * biomeTintColor(def.biomeTint), glm::vec3(0.0f), glm::vec3(1.0f));
 }
 
 [[nodiscard]] glm::vec3 emissiveColor(const BlockDef& def) {
@@ -239,7 +149,9 @@ void VoxelGiClipmap::shutdown() {
     m_stats = {};
 }
 
-void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& settings) {
+void VoxelGiClipmap::update(const FrameContext& ctx,
+                            const VoxelGiSettings& settings,
+                            const IBlockTextureColorProvider& textureColors) {
     if (!settings.enabled || ctx.worldView == nullptr) {
         m_valid = false;
         m_stats = {};
@@ -275,9 +187,10 @@ void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& sett
     m_mipLevels = mipLevels;
     m_voxelSize = voxelSize;
 
-    const bool shiftedVolume = canReuseVolume && shiftCachedVolume(*ctx.worldView, originBlock, deltaVoxels);
+    const bool shiftedVolume = canReuseVolume &&
+                               shiftCachedVolume(*ctx.worldView, textureColors, originBlock, deltaVoxels);
     if (!shiftedVolume) {
-        rebuildVolume(*ctx.worldView, originBlock);
+        rebuildVolume(*ctx.worldView, textureColors, originBlock);
     }
 
     m_originBlock = originBlock;
@@ -458,7 +371,9 @@ void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels) {
                        sizeX, sizeY, sizeZ);
 }
 
-void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView, const glm::ivec3& originBlock) {
+void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
+                                   const IBlockTextureColorProvider& textureColors,
+                                   const glm::ivec3& originBlock) {
     const size_t voxelCount = static_cast<size_t>(m_resolution) *
                               static_cast<size_t>(m_resolution) *
                               static_cast<size_t>(m_resolution);
@@ -466,13 +381,15 @@ void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView, const glm::ivec3
     for (int z = 0; z < m_resolution; ++z) {
         for (int y = 0; y < m_resolution; ++y) {
             for (int x = 0; x < m_resolution; ++x) {
-                m_voxels[voxelIndex(x, y, z)] = sampleWorldVoxel(worldView, voxelWorldPosition(originBlock, x, y, z));
+                m_voxels[voxelIndex(x, y, z)] =
+                    sampleWorldVoxel(worldView, textureColors, voxelWorldPosition(originBlock, x, y, z));
             }
         }
     }
 }
 
 bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView,
+                                       const IBlockTextureColorProvider& textureColors,
                                        const glm::ivec3& originBlock,
                                        const glm::ivec3& deltaVoxels) {
     const size_t voxelCount = static_cast<size_t>(m_resolution) *
@@ -504,7 +421,8 @@ bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView,
                     oldZ >= 0 && oldZ < m_resolution) {
                     m_voxels[index] = previous[voxelIndex(oldX, oldY, oldZ)];
                 } else {
-                    m_voxels[index] = sampleWorldVoxel(worldView, voxelWorldPosition(originBlock, x, y, z));
+                    m_voxels[index] =
+                        sampleWorldVoxel(worldView, textureColors, voxelWorldPosition(originBlock, x, y, z));
                 }
             }
         }
@@ -569,6 +487,7 @@ glm::ivec3 VoxelGiClipmap::computeOrigin(const glm::vec3& cameraPosition,
 }
 
 VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& worldView,
+                                                              const IBlockTextureColorProvider& textureColors,
                                                               const glm::ivec3& blockPos) const {
     ClipmapVoxel voxel;
     const BlockStateId stateId = worldView.getBlockState(blockPos.x, blockPos.y, blockPos.z);
@@ -582,7 +501,7 @@ VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& 
         return voxel;
     }
 
-    const glm::vec3 albedo = materialAlbedo(def);
+    const glm::vec3 albedo = materialAlbedo(def, textureColors);
     const uint8_t packedLight = worldView.getPackedLight(blockPos.x, blockPos.y, blockPos.z);
     const float blockLight = static_cast<float>(packedLight & 0x0F) * (1.0f / 15.0f);
     const float skyLight = static_cast<float>((packedLight >> 4) & 0x0F) * (1.0f / 15.0f);
