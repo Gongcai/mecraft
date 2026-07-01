@@ -16,6 +16,23 @@ namespace {
 constexpr std::array<unsigned char, 4> kNeutralNormalPixel = {128, 128, 255, 0};
 constexpr std::array<unsigned char, 4> kNeutralSpecularPixel = {0, 0, 0, 255};
 
+struct ResourceTint {
+    float r = 1.0f;
+    float g = 1.0f;
+    float b = 1.0f;
+};
+
+ResourceTint textureTintColor(const ResourceTextureTint tint) {
+    switch (tint) {
+        case ResourceTextureTint::Grass:
+        case ResourceTextureTint::Foliage:
+            return {0.50f, 0.78f, 0.34f};
+        case ResourceTextureTint::None:
+        default:
+            return {};
+    }
+}
+
 class PendingTextureArray {
 public:
     PendingTextureArray(const int tileSize, const int layerCount) {
@@ -140,7 +157,8 @@ void uploadTextureArrayLayer(const GLuint textureId,
 
 glm::vec3 computeAlphaWeightedAverageColor(const unsigned char* srcPixels,
                                            const int rowWidth,
-                                           const int tileSize) {
+                                           const int tileSize,
+                                           const ResourceTint tint) {
     double red = 0.0;
     double green = 0.0;
     double blue = 0.0;
@@ -150,9 +168,12 @@ glm::vec3 computeAlphaWeightedAverageColor(const unsigned char* srcPixels,
         for (int x = 0; x < tileSize; ++x) {
             const size_t pixelIndex = static_cast<size_t>(y * rowWidth + x) * 4u;
             const double pixelAlpha = static_cast<double>(srcPixels[pixelIndex + 3]) * (1.0 / 255.0);
-            red += static_cast<double>(srcPixels[pixelIndex + 0]) * (1.0 / 255.0) * pixelAlpha;
-            green += static_cast<double>(srcPixels[pixelIndex + 1]) * (1.0 / 255.0) * pixelAlpha;
-            blue += static_cast<double>(srcPixels[pixelIndex + 2]) * (1.0 / 255.0) * pixelAlpha;
+            red += static_cast<double>(srcPixels[pixelIndex + 0]) * (1.0 / 255.0) *
+                   static_cast<double>(tint.r) * pixelAlpha;
+            green += static_cast<double>(srcPixels[pixelIndex + 1]) * (1.0 / 255.0) *
+                     static_cast<double>(tint.g) * pixelAlpha;
+            blue += static_cast<double>(srcPixels[pixelIndex + 2]) * (1.0 / 255.0) *
+                    static_cast<double>(tint.b) * pixelAlpha;
             alpha += pixelAlpha;
         }
     }
@@ -199,6 +220,9 @@ void uploadAlbedoLayers(const GLuint textureId,
                         const BlockTextureCatalogEntry* catalogEntry,
                         std::vector<glm::vec3>& layerAverageColors) {
     LoadedImage image(entry.albedoPath);
+    const ResourceTint tint = textureTintColor(catalogEntry != nullptr
+        ? catalogEntry->tint
+        : ResourceTextureTint::None);
 
     if (layerCount > 1) {
         if (image.width != tileSize || image.height != tileSize * layerCount) {
@@ -211,7 +235,7 @@ void uploadAlbedoLayers(const GLuint textureId,
             const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
             uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize);
             layerAverageColors[static_cast<size_t>(firstLayer + frame)] =
-                computeAlphaWeightedAverageColor(framePixels, image.width, tileSize);
+                computeAlphaWeightedAverageColor(framePixels, image.width, tileSize, tint);
         }
         return;
     }
@@ -221,7 +245,7 @@ void uploadAlbedoLayers(const GLuint textureId,
     }
     uploadTextureArrayLayer(textureId, firstLayer, image.data, tileSize);
     layerAverageColors[static_cast<size_t>(firstLayer)] =
-        computeAlphaWeightedAverageColor(image.data, image.width, tileSize);
+        computeAlphaWeightedAverageColor(image.data, image.width, tileSize, tint);
 }
 
 void uploadMaterialMapLayers(const GLuint textureId,

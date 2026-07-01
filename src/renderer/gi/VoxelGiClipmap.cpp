@@ -58,17 +58,6 @@ constexpr float kMaxVoxelSize = 4.0f;
     return color / static_cast<float>(frameCount);
 }
 
-[[nodiscard]] glm::vec3 biomeTintColor(const BiomeTintKind tintKind) {
-    switch (tintKind) {
-        case BiomeTintKind::Grass:
-        case BiomeTintKind::Foliage:
-            return glm::vec3(0.50f, 0.78f, 0.34f);
-        case BiomeTintKind::None:
-        default:
-            return glm::vec3(1.0f);
-    }
-}
-
 [[nodiscard]] glm::vec3 materialAlbedo(const BlockDef& def,
                                        const IBlockTextureColorProvider& textureColors) {
     const std::array<AnimatedTextureRef, 6> faces = {
@@ -85,7 +74,7 @@ constexpr float kMaxVoxelSize = 4.0f;
         albedo += averageTextureRefColor(textureColors, face);
     }
     albedo *= (1.0f / static_cast<float>(faces.size()));
-    return glm::clamp(albedo * biomeTintColor(def.biomeTint), glm::vec3(0.0f), glm::vec3(1.0f));
+    return glm::clamp(albedo, glm::vec3(0.0f), glm::vec3(1.0f));
 }
 
 [[nodiscard]] glm::vec3 emissiveColor(const BlockDef& def) {
@@ -140,6 +129,8 @@ void VoxelGiClipmap::shutdown() {
         m_shiftScratchTexture = 0;
     }
     m_voxels.clear();
+    m_materialAlbedoCache.clear();
+    m_materialAlbedoCacheValid.clear();
     m_valid = false;
     m_resolution = 0;
     m_mipLevels = 1;
@@ -486,9 +477,27 @@ glm::ivec3 VoxelGiClipmap::computeOrigin(const glm::vec3& cameraPosition,
         static_cast<int>(std::floor(minCorner.z / static_cast<float>(snap))) * snap);
 }
 
+const glm::vec3& VoxelGiClipmap::cachedMaterialAlbedo(const BlockID blockId,
+                                                      const BlockDef& def,
+                                                      const IBlockTextureColorProvider& textureColors) {
+    const size_t cacheIndex = static_cast<size_t>(blockId);
+    if (cacheIndex >= m_materialAlbedoCache.size()) {
+        const size_t newSize = cacheIndex + 1u;
+        m_materialAlbedoCache.resize(newSize, glm::vec3(0.0f));
+        m_materialAlbedoCacheValid.resize(newSize, 0u);
+    }
+
+    if (m_materialAlbedoCacheValid[cacheIndex] == 0u) {
+        m_materialAlbedoCache[cacheIndex] = materialAlbedo(def, textureColors);
+        m_materialAlbedoCacheValid[cacheIndex] = 1u;
+    }
+
+    return m_materialAlbedoCache[cacheIndex];
+}
+
 VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& worldView,
                                                               const IBlockTextureColorProvider& textureColors,
-                                                              const glm::ivec3& blockPos) const {
+                                                              const glm::ivec3& blockPos) {
     ClipmapVoxel voxel;
     const BlockStateId stateId = worldView.getBlockState(blockPos.x, blockPos.y, blockPos.z);
     if (stateId == NULL_BLOCK_STATE) {
@@ -501,7 +510,7 @@ VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& 
         return voxel;
     }
 
-    const glm::vec3 albedo = materialAlbedo(def, textureColors);
+    const glm::vec3 albedo = cachedMaterialAlbedo(blockId, def, textureColors);
     const uint8_t packedLight = worldView.getPackedLight(blockPos.x, blockPos.y, blockPos.z);
     const float blockLight = static_cast<float>(packedLight & 0x0F) * (1.0f / 15.0f);
     const float skyLight = static_cast<float>((packedLight >> 4) & 0x0F) * (1.0f / 15.0f);

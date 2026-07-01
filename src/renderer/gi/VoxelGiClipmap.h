@@ -3,6 +3,7 @@
 
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../../world/block/Block.h"
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
@@ -84,9 +85,12 @@ private:
                                            int resolution,
                                            float voxelSize,
                                            int originSnap) const;
+    [[nodiscard]] const glm::vec3& cachedMaterialAlbedo(BlockID blockId,
+                                                        const BlockDef& def,
+                                                        const IBlockTextureColorProvider& textureColors);
     [[nodiscard]] ClipmapVoxel sampleWorldVoxel(const IWorldView& worldView,
                                                 const IBlockTextureColorProvider& textureColors,
-                                                const glm::ivec3& blockPos) const;
+                                                const glm::ivec3& blockPos);
 
     GLuint m_texture = 0;
     GLuint m_shiftScratchTexture = 0;
@@ -97,6 +101,8 @@ private:
     glm::vec3 m_origin = glm::vec3(0.0f);
     glm::ivec3 m_originBlock = glm::ivec3(0);
     std::vector<ClipmapVoxel> m_voxels;
+    std::vector<glm::vec3> m_materialAlbedoCache;
+    std::vector<uint8_t> m_materialAlbedoCacheValid;
     VoxelGiClipmapStats m_stats;
     uint64_t m_lastActiveChunkRevision = 0;
     uint64_t m_lastBlockContentRevision = 0;
