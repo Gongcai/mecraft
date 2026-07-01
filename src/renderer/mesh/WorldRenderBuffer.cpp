@@ -52,14 +52,13 @@ std::vector<PackedBlockVertex> packBlockVertices(const std::vector<BlockVertex>&
             (packSignedNormal(v.normal) << 25u) |
             ((static_cast<uint32_t>(v.sunlight) & 0xFFu) << 17u) |
             ((static_cast<uint32_t>(v.blockLight) & 0xFFu) << 9u) |
-            ((static_cast<uint32_t>(v.ao) & 0x03u) << 7u) |
-            (static_cast<uint32_t>(v.layer) & 0x7Fu);
+            ((static_cast<uint32_t>(v.ao) & 0x03u) << 7u);
         out.tintAnim =
             ((static_cast<uint32_t>(v.animationFrameCount) & 0x3Fu) << 26u) |
             ((static_cast<uint32_t>(v.animationFps) & 0x3Fu) << 20u) |
             ((static_cast<uint32_t>(v.animated) & 0x01u) << 19u) |
-            (((static_cast<uint32_t>(v.layer) >> 7u) & 0x07u) << 16u) |
             (static_cast<uint32_t>(v.tintPacked) & 0xFFFFu);
+        out.layerPacked = static_cast<uint32_t>(v.layer);
         packed.push_back(out);
     }
     return packed;
@@ -344,6 +343,9 @@ void WorldRenderBuffer::setupVertexLayout() {
 
     glEnableVertexAttribArray(14);
     glVertexAttribIPointer(14, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, tintAnim)));
+
+    glEnableVertexAttribArray(15);
+    glVertexAttribIPointer(15, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, layerPacked)));
 }
 
 void WorldRenderBuffer::init() {

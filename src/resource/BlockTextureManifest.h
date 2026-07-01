@@ -7,13 +7,27 @@
 #include <unordered_map>
 #include <vector>
 
+class BlockTextureCatalog;
+
 namespace resource {
+
+struct BlockTextureAnimationMetadata {
+    int frameTimeTicks = 1;
+    int maxExplicitFrameIndex = -1;
+};
 
 struct BlockTextureManifestEntry {
     std::string name;
     std::filesystem::path albedoPath;
     std::optional<std::filesystem::path> normalPath;
     std::optional<std::filesystem::path> specularPath;
+    std::optional<BlockTextureAnimationMetadata> animationMetadata;
+};
+
+struct BlockTextureTileSizes {
+    int albedo = 0;
+    int normal = 0;
+    int specular = 0;
 };
 
 class BlockTextureManifest {
@@ -35,6 +49,8 @@ private:
 
 [[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::string& directory);
 [[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::vector<std::string>& directories);
+[[nodiscard]] BlockTextureTileSizes inferBlockTextureTileSizes(const BlockTextureManifest& manifest,
+                                                               const BlockTextureCatalog& catalog);
 
 } // namespace resource
 

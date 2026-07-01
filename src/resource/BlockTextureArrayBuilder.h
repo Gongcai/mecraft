@@ -28,6 +28,10 @@ struct BlockTextureArraySet {
                                                              int tileSize,
                                                              BlockTextureCatalog& catalog);
 
+[[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest,
+                                                             const BlockTextureTileSizes& tileSizes,
+                                                             BlockTextureCatalog& catalog);
+
 } // namespace resource
 
 #endif // MECRAFT_BLOCK_TEXTURE_ARRAY_BUILDER_H

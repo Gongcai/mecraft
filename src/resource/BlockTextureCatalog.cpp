@@ -45,14 +45,13 @@ void BlockTextureCatalog::load(const std::string& textureConfigPath) {
         throw std::runtime_error(std::string("Failed to parse block texture catalog: ") + e.what());
     }
 
-    int tileSize = 16;
     const auto tileSizeIt = root.find("tileSize");
     if (tileSizeIt != root.end()) {
         if (!tileSizeIt->is_number_integer()) {
             throw std::runtime_error("block_textures.json tileSize must be an integer");
         }
-        tileSize = tileSizeIt->get<int>();
-        if (tileSize <= 0) {
+        const int catalogTileSize = tileSizeIt->get<int>();
+        if (catalogTileSize <= 0) {
             throw std::runtime_error("block_textures.json tileSize must be positive");
         }
     }
@@ -128,10 +127,6 @@ void BlockTextureCatalog::load(const std::string& textureConfigPath) {
             } else {
                 throw std::runtime_error("Unsupported block texture frameOrder for " + name + ": " + frameOrder);
             }
-        }
-
-        if (tileSize != 16) {
-            throw std::runtime_error("Only 16px block texture tiles are currently supported");
         }
 
         m_entries.emplace(name, entry);

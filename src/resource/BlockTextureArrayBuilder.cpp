@@ -103,12 +103,14 @@ struct LoadedImage {
 };
 
 int computeTextureArrayLayerCount(const resource::BlockTextureManifestEntry& entry,
-                                  const int tileSize,
                                   const BlockTextureCatalog& catalog) {
     const BlockTextureCatalogEntry* catalogEntry = catalog.find(entry.name);
-    if (catalogEntry == nullptr ||
-        !catalogEntry->verticalFrames ||
-        catalogEntry->animation.frameCount <= 1) {
+    const bool metadataAnimated = entry.animationMetadata.has_value();
+    const bool catalogAnimated =
+        catalogEntry != nullptr &&
+        catalogEntry->verticalFrames &&
+        catalogEntry->animation.frameCount > 1;
+    if (!metadataAnimated && !catalogAnimated) {
         return 1;
     }
 
@@ -118,13 +120,32 @@ int computeTextureArrayLayerCount(const resource::BlockTextureManifestEntry& ent
     if (!stbi_info(entry.albedoPath.string().c_str(), &width, &height, &channels)) {
         throw std::runtime_error("Failed to inspect block texture: " + entry.albedoPath.string());
     }
+    if (width <= 0 || height <= 0) {
+        throw std::runtime_error("Invalid block animated texture dimensions: " + entry.albedoPath.string());
+    }
+
+    if (!metadataAnimated && height == width) {
+        return 1;
+    }
+
+    if (metadataAnimated) {
+        if (height % width != 0) {
+            throw std::runtime_error("Texture metadata source height must be a multiple of width for " +
+                                     entry.albedoPath.string());
+        }
+        const int physicalFrameCount = height / width;
+        if (entry.animationMetadata->maxExplicitFrameIndex >= physicalFrameCount) {
+            throw std::runtime_error("Texture metadata frame index exceeds vertical frames for " + entry.albedoPath.string());
+        }
+        return physicalFrameCount;
+    }
 
     const TextureAnimationInfo& animation = catalogEntry->animation;
-    if (width != tileSize || height != tileSize * animation.frameCount) {
+    if (height != width * animation.frameCount) {
         throw std::runtime_error("Texture catalog dimensions do not match vertical frames for " + entry.albedoPath.string());
     }
 
-    return animation.frameCount;
+    return catalogEntry->animation.frameCount;
 }
 
 void uploadTextureArrayLayer(const GLuint textureId,
@@ -147,6 +168,41 @@ void uploadTextureArrayLayer(const GLuint textureId,
     }
     glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, targetLayer,
                     tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, srcPixels);
+}
+
+void uploadSourceTileToArrayLayer(const GLuint textureId,
+                                  const int targetLayer,
+                                  const unsigned char* srcPixels,
+                                  const int sourceTileSize,
+                                  const int sourceRowWidth,
+                                  const int targetTileSize,
+                                  const bool zeroAlpha) {
+    if (sourceTileSize <= 0 || sourceRowWidth <= 0 || targetTileSize <= 0) {
+        throw std::runtime_error("Block texture array tile sizes must be positive");
+    }
+
+    if (sourceTileSize == targetTileSize && sourceRowWidth == targetTileSize) {
+        uploadTextureArrayLayer(textureId, targetLayer, srcPixels, targetTileSize, zeroAlpha);
+        return;
+    }
+
+    std::vector<unsigned char> pixels(static_cast<size_t>(targetTileSize) * static_cast<size_t>(targetTileSize) * 4);
+    for (int y = 0; y < targetTileSize; ++y) {
+        const int sourceY = y * sourceTileSize / targetTileSize;
+        for (int x = 0; x < targetTileSize; ++x) {
+            const int sourceX = x * sourceTileSize / targetTileSize;
+            const int srcIndex = (sourceY * sourceRowWidth + sourceX) * 4;
+            const int dstIndex = (y * targetTileSize + x) * 4;
+            pixels[dstIndex + 0] = srcPixels[srcIndex + 0];
+            pixels[dstIndex + 1] = srcPixels[srcIndex + 1];
+            pixels[dstIndex + 2] = srcPixels[srcIndex + 2];
+            pixels[dstIndex + 3] = zeroAlpha ? 0 : srcPixels[srcIndex + 3];
+        }
+    }
+
+    glBindTexture(GL_TEXTURE_2D_ARRAY, textureId);
+    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, targetLayer,
+                    targetTileSize, targetTileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 }
 
 void uploadConstantLayer(const GLuint textureId,
@@ -180,25 +236,27 @@ void uploadAlbedoLayers(const GLuint textureId,
                         const int tileSize,
                         const BlockTextureCatalogEntry* catalogEntry) {
     LoadedImage image(entry.albedoPath);
+    const int sourceTileSize = image.width;
 
     if (layerCount > 1) {
-        if (image.width != tileSize || image.height != tileSize * layerCount) {
+        if (image.height != sourceTileSize * layerCount) {
             throw std::runtime_error("Texture catalog dimensions do not match texture array source for " + entry.albedoPath.string());
         }
 
         const bool topFrameFirst = catalogEntry != nullptr && catalogEntry->topFrameFirst;
         for (int frame = 0; frame < layerCount; ++frame) {
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
-            const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
-            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize, false);
+            const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * sourceTileSize * image.width) * 4;
+            uploadSourceTileToArrayLayer(textureId, firstLayer + frame, framePixels,
+                                         sourceTileSize, image.width, tileSize, false);
         }
         return;
     }
 
-    if (image.width != tileSize || image.height != tileSize) {
-        throw std::runtime_error("Block texture array source dimensions do not match tile size for " + entry.albedoPath.string());
+    if (image.width != image.height) {
+        throw std::runtime_error("Block texture array source dimensions must be square for " + entry.albedoPath.string());
     }
-    uploadTextureArrayLayer(textureId, firstLayer, image.data, tileSize, false);
+    uploadSourceTileToArrayLayer(textureId, firstLayer, image.data, sourceTileSize, image.width, tileSize, false);
 }
 
 void uploadMaterialMapLayers(const GLuint textureId,
@@ -216,19 +274,31 @@ void uploadMaterialMapLayers(const GLuint textureId,
     }
 
     LoadedImage image(mapPath.value());
+    const int sourceTileSize = image.width;
     const bool zeroAlpha = zeroAlphaWhenSourceHasNoAlpha && image.channels < 4;
-    if (image.width == tileSize && image.height == tileSize) {
+    if (image.width == image.height) {
         for (int layer = 0; layer < layerCount; ++layer) {
-            uploadTextureArrayLayer(textureId, firstLayer + layer, image.data, tileSize, zeroAlpha);
+            uploadSourceTileToArrayLayer(textureId, firstLayer + layer, image.data,
+                                         sourceTileSize, image.width, tileSize, zeroAlpha);
         }
         return;
     }
 
-    if (image.width == tileSize && image.height == tileSize * layerCount) {
+    if (layerCount > 1 && image.height % sourceTileSize == 0) {
+        const int sourceFrameCount = image.height / sourceTileSize;
+        if (sourceFrameCount <= 0) {
+            throw std::runtime_error(std::string("Block ") + roleName +
+                                     " texture frame count must be positive for " +
+                                     mapPath.value().string());
+        }
         for (int frame = 0; frame < layerCount; ++frame) {
-            const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
-            const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
-            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize, zeroAlpha);
+            const int frameInMaterialCycle = frame % sourceFrameCount;
+            const int sourceFrameIndex = topFrameFirst
+                ? sourceFrameCount - 1 - frameInMaterialCycle
+                : frameInMaterialCycle;
+            const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * sourceTileSize * image.width) * 4;
+            uploadSourceTileToArrayLayer(textureId, firstLayer + frame, framePixels,
+                                         sourceTileSize, image.width, tileSize, zeroAlpha);
         }
         return;
     }
@@ -258,7 +328,21 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
                                                const int tileSize,
                                                BlockTextureCatalog& catalog) {
     if (tileSize <= 0) {
-        throw std::runtime_error("Block texture array tile size must be positive");
+        return buildBlockTextureArraySet(manifest, inferBlockTextureTileSizes(manifest, catalog), catalog);
+    }
+
+    BlockTextureTileSizes tileSizes;
+    tileSizes.albedo = tileSize;
+    tileSizes.normal = tileSize;
+    tileSizes.specular = tileSize;
+    return buildBlockTextureArraySet(manifest, tileSizes, catalog);
+}
+
+BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest,
+                                               const BlockTextureTileSizes& tileSizes,
+                                               BlockTextureCatalog& catalog) {
+    if (tileSizes.albedo <= 0) {
+        throw std::runtime_error("Block texture array albedo tile size must be positive");
     }
 
     const std::vector<BlockTextureManifestEntry>& textureEntries = manifest.entries();
@@ -278,23 +362,38 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
 
     int numLayers = 0;
     for (const BlockTextureManifestEntry& entry : textureEntries) {
-        const int layerCount = computeTextureArrayLayerCount(entry, tileSize, catalog);
+        const int layerCount = computeTextureArrayLayerCount(entry, catalog);
         layersPerImage.push_back(layerCount);
         numLayers += layerCount;
     }
 
-    if (numLayers > 1024) {
-        throw std::runtime_error("Block texture array exceeds the 1024-layer vertex encoding limit");
+    if (numLayers > 65535) {
+        throw std::runtime_error("Block texture array exceeds the uint16 vertex layer encoding limit");
     }
 
-    PendingTextureArray albedoArray(tileSize, numLayers);
+    GLint maxTextureArrayLayers = 0;
+    glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &maxTextureArrayLayers);
+    if (maxTextureArrayLayers <= 0) {
+        throw std::runtime_error("Failed to query GL_MAX_ARRAY_TEXTURE_LAYERS");
+    }
+    if (numLayers > maxTextureArrayLayers) {
+        throw std::runtime_error("Block texture array exceeds GL_MAX_ARRAY_TEXTURE_LAYERS");
+    }
+
+    PendingTextureArray albedoArray(tileSizes.albedo, numLayers);
     std::optional<PendingTextureArray> normalArray;
     std::optional<PendingTextureArray> specularArray;
     if (manifest.hasNormalMaps()) {
-        normalArray.emplace(tileSize, numLayers);
+        if (tileSizes.normal <= 0) {
+            throw std::runtime_error("Block normal texture array tile size must be positive");
+        }
+        normalArray.emplace(tileSizes.normal, numLayers);
     }
     if (manifest.hasSpecularMaps()) {
-        specularArray.emplace(tileSize, numLayers);
+        if (tileSizes.specular <= 0) {
+            throw std::runtime_error("Block specular texture array tile size must be positive");
+        }
+        specularArray.emplace(tileSizes.specular, numLayers);
     }
 
     stbi_set_flip_vertically_on_load(true);
@@ -310,6 +409,15 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
 
         result.layers[entry.name] = currentLayer;
 
+        if (entry.animationMetadata.has_value() && layerCount > 1) {
+            BlockTextureCatalogEntry& metadataEntry = catalog.entries()[entry.name];
+            metadataEntry.animation.frameCount = layerCount;
+            metadataEntry.animation.fps = 20.0f / static_cast<float>(entry.animationMetadata->frameTimeTicks);
+            metadataEntry.animation.isAnimated = true;
+            metadataEntry.verticalFrames = true;
+            metadataEntry.topFrameFirst = true;
+        }
+
         BlockTextureCatalogEntry* catalogEntry = catalog.findMutable(entry.name);
         const bool useAnimationFrames = layerCount > 1;
         if (catalogEntry != nullptr) {
@@ -318,13 +426,13 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
         }
 
         const bool topFrameFirst = catalogEntry != nullptr && catalogEntry->topFrameFirst;
-        uploadAlbedoLayers(albedoArray.id(), entry, currentLayer, layerCount, tileSize, catalogEntry);
+        uploadAlbedoLayers(albedoArray.id(), entry, currentLayer, layerCount, tileSizes.albedo, catalogEntry);
         if (normalArray.has_value()) {
-            uploadMaterialMapLayers(normalArray->id(), entry.normalPath, currentLayer, layerCount, tileSize,
+            uploadMaterialMapLayers(normalArray->id(), entry.normalPath, currentLayer, layerCount, tileSizes.normal,
                                     topFrameFirst, kNeutralNormalPixel, true, "normal");
         }
         if (specularArray.has_value()) {
-            uploadMaterialMapLayers(specularArray->id(), entry.specularPath, currentLayer, layerCount, tileSize,
+            uploadMaterialMapLayers(specularArray->id(), entry.specularPath, currentLayer, layerCount, tileSizes.specular,
                                     topFrameFirst, kNeutralSpecularPixel, false, "specular");
         }
 

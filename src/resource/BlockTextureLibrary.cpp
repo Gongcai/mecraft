@@ -15,7 +15,7 @@ void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
         glDeleteTextures(1, &textureArray.textureID);
         textureArray.textureID = 0;
     }
-    textureArray.tileSize = 16;
+    textureArray.tileSize = 0;
     textureArray.layerCount = 0;
 }
 
@@ -69,11 +69,20 @@ void BlockTextureLibrary::buildTextures(const std::vector<std::string>& director
 
     m_manifest = resource::buildBlockTextureManifest(directories);
 
-    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, tileSize, m_catalog);
+    resource::BlockTextureTileSizes tileSizes;
+    if (tileSize > 0) {
+        tileSizes.albedo = tileSize;
+        tileSizes.normal = tileSize;
+        tileSizes.specular = tileSize;
+    } else {
+        tileSizes = resource::inferBlockTextureTileSizes(m_manifest, m_catalog);
+    }
+
+    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, tileSizes.albedo, m_catalog);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
-    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(m_manifest, tileSize, m_catalog);
+    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(m_manifest, tileSizes, m_catalog);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
     m_specularTextureArray = textureArrayResult.specularArray;

@@ -10,8 +10,8 @@ struct TextureAtlas {
     GLuint textureID = 0;
     int atlasWidth  = 0;     // Atlas width in pixels.
     int atlasHeight = 0;     // Atlas height in pixels.
-    int tileSize    = 16;    // Tile size in pixels, excluding padding.
-    int tileStride  = 16;    // Tile cell stride: tileSize + 2 * tilePadding.
+    int tileSize    = 0;     // Tile size in pixels, excluding padding.
+    int tileStride  = 0;     // Tile cell stride: tileSize + 2 * tilePadding.
     int tilePadding = 0;     // Copied edge texel padding around each tile.
     int tilesPerRow = 0;
 
@@ -21,7 +21,7 @@ struct TextureAtlas {
 
 struct TextureArray {
     GLuint textureID = 0;
-    int tileSize = 16;
+    int tileSize = 0;
     int layerCount = 0;
 };
 

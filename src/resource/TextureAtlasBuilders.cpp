@@ -96,6 +96,32 @@ void copyTilePadding(std::vector<unsigned char>& atlasPixels,
     }
 }
 
+void copySourceTileToAtlas(std::vector<unsigned char>& atlasPixels,
+                           const int atlasWidth,
+                           const int innerStartX,
+                           const int innerStartY,
+                           const unsigned char* sourcePixels,
+                           const int sourceTileSize,
+                           const int sourceRowWidth,
+                           const int targetTileSize) {
+    if (sourceTileSize <= 0 || sourceRowWidth <= 0 || targetTileSize <= 0) {
+        throw std::runtime_error("Block texture atlas tile sizes must be positive");
+    }
+
+    for (int y = 0; y < targetTileSize; ++y) {
+        const int sourceY = y * sourceTileSize / targetTileSize;
+        for (int x = 0; x < targetTileSize; ++x) {
+            const int sourceX = x * sourceTileSize / targetTileSize;
+            const int destIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
+            const int srcIndex = (sourceY * sourceRowWidth + sourceX) * 4;
+            atlasPixels[destIndex + 0] = sourcePixels[srcIndex + 0];
+            atlasPixels[destIndex + 1] = sourcePixels[srcIndex + 1];
+            atlasPixels[destIndex + 2] = sourcePixels[srcIndex + 2];
+            atlasPixels[destIndex + 3] = sourcePixels[srcIndex + 3];
+        }
+    }
+}
+
 void uploadNearestAtlasTexture(const TextureAtlas& atlas,
                                const std::vector<unsigned char>& pixels,
                                const bool generateMipmaps,
@@ -203,7 +229,8 @@ IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
 IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
                                            const int tileSize,
                                            const BlockTextureCatalog& catalog) {
-    if (tileSize <= 0) {
+    const int blockTileSize = tileSize > 0 ? tileSize : inferBlockTextureTileSizes(manifest, catalog).albedo;
+    if (blockTileSize <= 0) {
         throw std::runtime_error("Block texture atlas tile size must be positive");
     }
 
@@ -216,7 +243,7 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
     const int tilesPerRow = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(numTiles))));
     const int numRows = static_cast<int>(std::ceil(static_cast<float>(numTiles) / static_cast<float>(tilesPerRow)));
     constexpr int kTilePadding = 2;
-    const int tileStride = tileSize + kTilePadding * 2;
+    const int tileStride = blockTileSize + kTilePadding * 2;
     const int atlasWidth = tilesPerRow * tileStride;
     const int atlasHeight = numRows * tileStride;
 
@@ -240,25 +267,42 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
 
         const std::string& textureName = textureEntry.name;
         const BlockTextureCatalogEntry* catalogEntry = catalog.find(textureName);
-        const bool useVerticalFrame =
+        const bool catalogVerticalFrame =
             catalogEntry != nullptr &&
             catalogEntry->verticalFrames &&
-            catalogEntry->animation.frameCount > 1;
-        int sourceHeight = height;
+            catalogEntry->animation.frameCount > 1 &&
+            height != width;
+        const bool useVerticalFrame =
+            textureEntry.animationMetadata.has_value() ||
+            catalogVerticalFrame;
+        const int sourceTileSize = width;
         const unsigned char* sourcePixels = data;
 
         if (useVerticalFrame) {
-            const int frameCount = catalogEntry->animation.frameCount;
-            if (width != tileSize || height != tileSize * frameCount) {
+            if (sourceTileSize <= 0 || height % sourceTileSize != 0) {
                 stbi_image_free(data);
                 throw std::runtime_error("Texture catalog dimensions do not match atlas source for " + textureEntry.albedoPath.string());
             }
-            const int frameIndex = catalogEntry->topFrameFirst ? frameCount - 1 : 0;
-            sourcePixels = data + static_cast<size_t>(frameIndex * tileSize * width) * 4;
-            sourceHeight = tileSize;
-        } else if (width != tileSize || height != tileSize) {
+            const int frameCount = height / sourceTileSize;
+            if (!textureEntry.animationMetadata.has_value() &&
+                catalogEntry != nullptr &&
+                frameCount != catalogEntry->animation.frameCount) {
+                stbi_image_free(data);
+                throw std::runtime_error("Texture catalog dimensions do not match atlas source for " + textureEntry.albedoPath.string());
+            }
+            if (textureEntry.animationMetadata.has_value() &&
+                textureEntry.animationMetadata->maxExplicitFrameIndex >= frameCount) {
+                stbi_image_free(data);
+                throw std::runtime_error("Texture metadata frame index exceeds atlas source frames for " + textureEntry.albedoPath.string());
+            }
+            const bool topFrameFirst =
+                textureEntry.animationMetadata.has_value() ||
+                (catalogEntry != nullptr && catalogEntry->topFrameFirst);
+            const int frameIndex = topFrameFirst ? frameCount - 1 : 0;
+            sourcePixels = data + static_cast<size_t>(frameIndex * sourceTileSize * width) * 4;
+        } else if (width != height) {
             stbi_image_free(data);
-            throw std::runtime_error("Block texture dimensions do not match tile size for " + textureEntry.albedoPath.string());
+            throw std::runtime_error("Block texture atlas source dimensions must be square for " + textureEntry.albedoPath.string());
         }
 
         const int tileCol = i % tilesPerRow;
@@ -268,18 +312,9 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
         const int innerStartX = tileBaseX + kTilePadding;
         const int innerStartY = tileBaseY + kTilePadding;
 
-        for (int y = 0; y < tileSize; ++y) {
-            for (int x = 0; x < tileSize; ++x) {
-                const int destIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
-                const int srcIndex = (y * width + x) * 4;
-                result.pixels[destIndex + 0] = sourcePixels[srcIndex + 0];
-                result.pixels[destIndex + 1] = sourcePixels[srcIndex + 1];
-                result.pixels[destIndex + 2] = sourcePixels[srcIndex + 2];
-                result.pixels[destIndex + 3] = sourcePixels[srcIndex + 3];
-            }
-        }
-
-        copyTilePadding(result.pixels, atlasWidth, innerStartX, innerStartY, tileSize, sourceHeight, kTilePadding);
+        copySourceTileToAtlas(result.pixels, atlasWidth, innerStartX, innerStartY,
+                              sourcePixels, sourceTileSize, width, blockTileSize);
+        copyTilePadding(result.pixels, atlasWidth, innerStartX, innerStartY, blockTileSize, blockTileSize, kTilePadding);
 
         stbi_image_free(data);
         result.indices[textureName] = i;
@@ -288,7 +323,7 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
     glGenTextures(1, &result.atlas.textureID);
     result.atlas.atlasWidth = atlasWidth;
     result.atlas.atlasHeight = atlasHeight;
-    result.atlas.tileSize = tileSize;
+    result.atlas.tileSize = blockTileSize;
     result.atlas.tileStride = tileStride;
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;

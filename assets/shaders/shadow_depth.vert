@@ -18,6 +18,7 @@ layout (location = 11) in uint aPackedPos;
 layout (location = 12) in uint aPackedUV;
 layout (location = 13) in uint aPackedLightAoLayer;
 layout (location = 14) in uint aPackedTintAnim;
+layout (location = 15) in uint aPackedLayer;
 
 uniform mat4 viewProj;
 uniform mat4 uShadowModelView;
@@ -41,7 +42,7 @@ out vec2 vTintUV;
 
 void main() {
     TerrainVertexDecoded vertex = (uVertexFormat == 1)
-        ? decodeTerrainPackedVertex(aPackedPos, aPackedUV, aPackedLightAoLayer, aPackedTintAnim, gl_BaseInstanceARB)
+        ? decodeTerrainPackedVertex(aPackedPos, aPackedUV, aPackedLightAoLayer, aPackedTintAnim, aPackedLayer, gl_BaseInstanceARB)
         : decodeLegacyBlockVertex(aLegacyPos, aLegacyUV, aLegacyNormal, aLegacySunlight, aLegacyBlockLight,
                                   aLegacyAO, aLegacyLayer, aLegacyAnimationFrameCount, aLegacyAnimationFps,
                                   aLegacyAnimated, aLegacyTintPacked);

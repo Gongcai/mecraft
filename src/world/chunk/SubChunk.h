@@ -59,6 +59,7 @@ struct PackedBlockVertex {
     uint32_t uvPacked;
     uint32_t lightAoLayer;
     uint32_t tintAnim;
+    uint32_t layerPacked;
 };
 
 namespace BlockTintKinds {
@@ -146,7 +147,7 @@ inline BlockVertex makeBlockVertex(float x,
 }
 
 static_assert(sizeof(BlockVertex) <= 32, "BlockVertex should stay bandwidth-friendly");
-static_assert(sizeof(PackedBlockVertex) == 16, "PackedBlockVertex must stay 16 bytes");
+static_assert(sizeof(PackedBlockVertex) == 20, "PackedBlockVertex must stay 20 bytes");
 
 struct SubChunkMesh {
     GLuint vao = 0;

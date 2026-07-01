@@ -442,7 +442,7 @@ void setupSubChunkVertexLayout() {
     glEnableVertexAttribArray(10);
     glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
 
-    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
+    for (GLuint attrib = 11; attrib <= 15; ++attrib) {
         glDisableVertexAttribArray(attrib);
     }
 }

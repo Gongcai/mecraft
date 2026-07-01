@@ -26,6 +26,7 @@ TerrainVertexDecoded decodeTerrainPackedVertex(uint posPacked,
                                                 uint uvPacked,
                                                 uint lightAoLayer,
                                                 uint tintAnim,
+                                                uint layerPacked,
                                                 uint metadataIndex) {
     TerrainVertexDecoded v;
     uint x = (posPacked >> 20u) & 0x0FFFu;
@@ -42,9 +43,7 @@ TerrainVertexDecoded decodeTerrainPackedVertex(uint posPacked,
     v.sunlight = float((lightAoLayer >> 17u) & 0xFFu) * (1.0 / 255.0);
     v.blockLight = float((lightAoLayer >> 9u) & 0xFFu) * (1.0 / 255.0);
     v.ao = float((lightAoLayer >> 7u) & 0x03u);
-    uint layerLow = lightAoLayer & 0x7Fu;
-    uint layerHigh = (tintAnim >> 16u) & 0x07u;
-    v.layer = float(layerLow | (layerHigh << 7u));
+    v.layer = float(layerPacked & 0xFFFFu);
     v.animationFrameCount = float((tintAnim >> 26u) & 0x3Fu);
     v.animationFps = float((tintAnim >> 20u) & 0x3Fu);
     v.animated = float((tintAnim >> 19u) & 0x01u);

@@ -72,7 +72,7 @@ std::vector<std::string> buildBlockTextureSourceDirectories() {
 void bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.init();
     resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH);
-    resourceMgr.buildBlockTextureResources(buildBlockTextureSourceDirectories(), 16);
+    resourceMgr.buildBlockTextureResources(buildBlockTextureSourceDirectories(), 0);
     resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
     resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, true, true, false);
