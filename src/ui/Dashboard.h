@@ -10,7 +10,10 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <string>
+#include <vector>
 #include "../third_party/imgui/imgui.h"
 #include "../third_party/imgui/imgui_impl_glfw.h"
 #include "../third_party/imgui/imgui_impl_opengl3.h"
@@ -67,7 +70,7 @@ public:
         unsigned pollScrollEventCount = 0;
         unsigned pollCharEventCount = 0;
 
-        // Max-frame-time snapshot: records all timings from the worst frame
+        // Independent peak timings for each frame stage.
         double maxFrameMs = 0.0;
         double maxFixedUpdateMs = 0.0;
         double maxFixedInputMs = 0.0;
@@ -138,6 +141,15 @@ private:
         double nextRefreshTime = 0.0;
     };
 
+    struct ResourcePackDashboardEntry {
+        std::string name;
+        std::string path;
+        std::string kind;
+        std::string state;
+        std::uintmax_t bytes = 0;
+        bool activeOnStartup = false;
+    };
+
     void showPlayerStats(ecs::GameplayRegistry& registry);
     void showWorldStats(World& world,
                         ecs::GameplayRegistry& registry,
@@ -151,7 +163,9 @@ private:
     void showCraftingGridSettings(UIRenderer& uiRenderer);
     void showHeldItemPreviewSettings(FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer);
     void showTextSettings(UIRenderer& uiRenderer);
+    void showResourcePackMaterialSettings(RenderScene& renderScene);
     void refreshWorldMetricsIfNeeded(World& world, double now, bool forceRefresh);
+    void refreshResourcePackDashboard();
 
     FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
     FrameProfilerStats m_displayProfilerStats{};
@@ -160,6 +174,9 @@ private:
     RenderWorkStats m_displayRenderWorkStats{};
     LightFrameStats m_displayLightStats{};
     CachedWorldMetrics m_cachedWorldMetrics{};
+    std::vector<ResourcePackDashboardEntry> m_resourcePackEntries;
+    double m_nextResourcePackRefreshTime = 0.0;
+    bool m_resourcePackScanInitialized = false;
     double m_displayFps = 0.0;
     double m_nextProfilerStatsRefreshTime = 0.0;
     float m_profilerStatsRefreshIntervalSec = 0.5f;

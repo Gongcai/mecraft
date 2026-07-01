@@ -5,6 +5,7 @@
 #include "../../engine/input/InputManager.h"
 #ifdef MECRAFT_DEBUG
 #include <chrono>
+#include <glad/glad.h>
 #include "../debug/DebugFrameProfiler.h"
 #endif
 #include "../presentation/GameplayPresentationBuilder.h"
@@ -349,6 +350,9 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
 #endif
     }
 #ifdef MECRAFT_DEBUG
+    if (renderScene.getSettings().debug.finishBeforeSwap) {
+        glFinish();
+    }
     const auto preSwapEnd = std::chrono::steady_clock::now();
 #endif
     window.swapBuffers();

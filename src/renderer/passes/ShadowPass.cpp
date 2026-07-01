@@ -216,6 +216,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         m_shadowDepthShader->setInt("uNoiseTex", 1);
         m_shadowDepthShader->setInt("uGrassColormap", 2);
         m_shadowDepthShader->setInt("uFoliageColormap", 3);
+        m_shadowDepthShader->setInt("uOpaqueTerrainDepthOnly", 0);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
         glActiveTexture(GL_TEXTURE1);
@@ -379,6 +380,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
             m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
             m_shadowDepthShader->setInt("uShadowPassMode", 0);
+            m_shadowDepthShader->setInt("uOpaqueTerrainDepthOnly", 1);
             if (useMultiDrawIndirect) {
                 m_worldRenderBuffer->flushOpaque();
             } else {
@@ -398,6 +400,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             // Cutout geometry (grass, flowers) are single-layer planes that would otherwise
             // cast shadows on themselves, producing stripe patterns.
             if (renderCutoutCasters) {
+                m_shadowDepthShader->setInt("uOpaqueTerrainDepthOnly", 0);
                 glEnable(GL_POLYGON_OFFSET_FILL);
                 glPolygonOffset(2.0f, 4.0f);
                 m_terrainRenderer->renderCutoutChunks(m_cascadeCutoutEntries[cascade], *m_shadowDepthShader);
@@ -442,6 +445,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             if (renderTransparentCasters) {
                 bindTerrainShadowInputs();
                 m_shadowDepthShader->setInt("uShadowPassMode", 1);
+                m_shadowDepthShader->setInt("uOpaqueTerrainDepthOnly", 0);
                 m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
                 m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
                 m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);

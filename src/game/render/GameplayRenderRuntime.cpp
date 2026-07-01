@@ -196,43 +196,44 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.pollScrollEventCount = timing.currentPollEventCounts.scrollEvents;
     stats.pollCharEventCount = timing.currentPollEventCounts.charEvents;
 
-    // Snapshot max-frame-time: when current frame is the worst, record all timings
-    if (stats.frameMs > stats.maxFrameMs) {
-        stats.maxFrameMs = stats.frameMs;
-        stats.maxFixedUpdateMs = stats.fixedUpdateMs;
-        stats.maxFixedInputMs = stats.fixedInputMs;
-        stats.maxFixedStateUpdateMs = stats.fixedStateUpdateMs;
-        stats.maxFixedParticleUpdateMs = stats.fixedParticleUpdateMs;
-        stats.maxFixedDropUpdateMs = stats.fixedDropUpdateMs;
-        stats.maxFixedWorldUpdateMs = stats.fixedWorldUpdateMs;
-        stats.maxAudioMs = stats.audioMs;
-        stats.maxRenderMs = stats.renderMs;
-        stats.maxPollEventsMs = stats.pollEventsMs;
-        stats.maxAppUpdateDispatchMs = stats.appUpdateDispatchMs;
-        stats.maxAppRenderDispatchMs = stats.appRenderDispatchMs;
-        stats.maxRenderSnapshotMs = stats.renderSnapshotMs;
-        stats.maxRenderSceneMs = stats.renderSceneMs;
-        stats.maxRenderUiMs = stats.renderUiMs;
-        stats.maxRenderDashboardMs = stats.renderDashboardMs;
-        stats.maxSwapBuffersMs = stats.swapBuffersMs;
-        stats.maxRenderOtherMs = stats.renderOtherMs;
-        stats.maxUntrackedMs = stats.untrackedMs;
-        stats.maxPollInputCallbackMs = stats.pollInputCallbackMs;
-        stats.maxPollCursorPosCallbackMs = stats.pollCursorPosCallbackMs;
-        stats.maxPollImguiCallbackMs = stats.pollImguiCallbackMs;
-        stats.maxPollImguiCursorPosCallbackMs = stats.pollImguiCursorPosCallbackMs;
-        stats.maxPollImguiCursorPosBackendMs = stats.pollImguiCursorPosBackendMs;
-        stats.maxPollImguiWndProcMs = stats.pollImguiWndProcMs;
+    stats.maxFrameMs = std::max(stats.maxFrameMs, stats.frameMs);
+    stats.maxFixedUpdateMs = std::max(stats.maxFixedUpdateMs, stats.fixedUpdateMs);
+    stats.maxFixedInputMs = std::max(stats.maxFixedInputMs, stats.fixedInputMs);
+    stats.maxFixedStateUpdateMs = std::max(stats.maxFixedStateUpdateMs, stats.fixedStateUpdateMs);
+    stats.maxFixedParticleUpdateMs = std::max(stats.maxFixedParticleUpdateMs, stats.fixedParticleUpdateMs);
+    stats.maxFixedDropUpdateMs = std::max(stats.maxFixedDropUpdateMs, stats.fixedDropUpdateMs);
+    stats.maxFixedWorldUpdateMs = std::max(stats.maxFixedWorldUpdateMs, stats.fixedWorldUpdateMs);
+    stats.maxAudioMs = std::max(stats.maxAudioMs, stats.audioMs);
+    stats.maxRenderMs = std::max(stats.maxRenderMs, stats.renderMs);
+    stats.maxPollEventsMs = std::max(stats.maxPollEventsMs, stats.pollEventsMs);
+    stats.maxAppUpdateDispatchMs = std::max(stats.maxAppUpdateDispatchMs, stats.appUpdateDispatchMs);
+    stats.maxAppRenderDispatchMs = std::max(stats.maxAppRenderDispatchMs, stats.appRenderDispatchMs);
+    stats.maxRenderSnapshotMs = std::max(stats.maxRenderSnapshotMs, stats.renderSnapshotMs);
+    stats.maxRenderSceneMs = std::max(stats.maxRenderSceneMs, stats.renderSceneMs);
+    stats.maxRenderUiMs = std::max(stats.maxRenderUiMs, stats.renderUiMs);
+    stats.maxRenderDashboardMs = std::max(stats.maxRenderDashboardMs, stats.renderDashboardMs);
+    stats.maxSwapBuffersMs = std::max(stats.maxSwapBuffersMs, stats.swapBuffersMs);
+    stats.maxRenderOtherMs = std::max(stats.maxRenderOtherMs, stats.renderOtherMs);
+    stats.maxUntrackedMs = std::max(stats.maxUntrackedMs, stats.untrackedMs);
+    stats.maxPollInputCallbackMs = std::max(stats.maxPollInputCallbackMs, stats.pollInputCallbackMs);
+    stats.maxPollCursorPosCallbackMs = std::max(stats.maxPollCursorPosCallbackMs, stats.pollCursorPosCallbackMs);
+    stats.maxPollImguiCallbackMs = std::max(stats.maxPollImguiCallbackMs, stats.pollImguiCallbackMs);
+    stats.maxPollImguiCursorPosCallbackMs = std::max(stats.maxPollImguiCursorPosCallbackMs,
+                                                     stats.pollImguiCursorPosCallbackMs);
+    stats.maxPollImguiCursorPosBackendMs = std::max(stats.maxPollImguiCursorPosBackendMs,
+                                                    stats.pollImguiCursorPosBackendMs);
+    stats.maxPollImguiWndProcMs = std::max(stats.maxPollImguiWndProcMs, stats.pollImguiWndProcMs);
+    if (stats.pollImguiWndProcSlowestMs > stats.maxPollImguiWndProcSlowestMs) {
         stats.maxPollImguiWndProcSlowestMs = stats.pollImguiWndProcSlowestMs;
         stats.maxPollImguiWndProcSlowestMsg = stats.pollImguiWndProcSlowestMsg;
-        stats.maxPollImguiWndProcCount = stats.pollImguiWndProcCount;
-        stats.maxPollEventCount = stats.pollEventCount;
-        stats.maxPollKeyEventCount = stats.pollKeyEventCount;
-        stats.maxPollMouseButtonEventCount = stats.pollMouseButtonEventCount;
-        stats.maxPollCursorPosEventCount = stats.pollCursorPosEventCount;
-        stats.maxPollScrollEventCount = stats.pollScrollEventCount;
-        stats.maxPollCharEventCount = stats.pollCharEventCount;
     }
+    stats.maxPollImguiWndProcCount = std::max(stats.maxPollImguiWndProcCount, stats.pollImguiWndProcCount);
+    stats.maxPollEventCount = std::max(stats.maxPollEventCount, stats.pollEventCount);
+    stats.maxPollKeyEventCount = std::max(stats.maxPollKeyEventCount, stats.pollKeyEventCount);
+    stats.maxPollMouseButtonEventCount = std::max(stats.maxPollMouseButtonEventCount, stats.pollMouseButtonEventCount);
+    stats.maxPollCursorPosEventCount = std::max(stats.maxPollCursorPosEventCount, stats.pollCursorPosEventCount);
+    stats.maxPollScrollEventCount = std::max(stats.maxPollScrollEventCount, stats.pollScrollEventCount);
+    stats.maxPollCharEventCount = std::max(stats.maxPollCharEventCount, stats.pollCharEventCount);
     stats.frameHistoryCount = history.frameCount;
     stats.fixedHistoryCount = history.count;
 

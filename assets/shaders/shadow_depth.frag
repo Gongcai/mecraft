@@ -23,6 +23,7 @@ uniform float uTime;
 uniform vec3 uShadowLightDirection;
 uniform mat4 uShadowModelView;
 uniform int uShadowPassMode; // 0 = opaque-only, 1 = transparent shadow (DepthAll + Color)
+uniform int uOpaqueTerrainDepthOnly;
 
 vec3 redstoneTintSrgb(vec2 tintUV) {
     float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;
@@ -76,6 +77,17 @@ vec3 decodeFaceNormal(float face) {
     if (idx == 3) return vec3(0.0, 0.0, -1.0);
     if (idx == 4) return vec3(-1.0, 0.0, 0.0);
     return vec3(1.0, 0.0, 0.0);
+}
+
+vec2 tileLocalUv(vec2 uv) {
+    return uv - floor(uv);
+}
+
+vec4 sampleTerrainTex(vec2 uv, float layer, bool forceBaseLod) {
+    vec2 localUv = tileLocalUv(uv);
+    return forceBaseLod
+        ? textureLod(texArray, vec3(localUv, layer), 0.0)
+        : textureGrad(texArray, vec3(localUv, layer), dFdx(vUV), dFdy(vUV));
 }
 
 // ---- Water caustics (ported from DerivativeMain Shadow.frag) ----
@@ -154,6 +166,12 @@ void main() {
             discard;
         }
 
+        if (uShadowPassMode == 0 && uOpaqueTerrainDepthOnly != 0) {
+            ShadowColor = vec4(1.0);
+            ShadowNormal = vec4(encodeNormal(decodeFaceNormal(vNormal)), vSkylight, 1.0);
+            return;
+        }
+
         // Non-water blocks: existing behavior
         bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
         bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
@@ -162,9 +180,7 @@ void main() {
             float frame = mod(floor(uAnimationTime * vAnimationFps), vAnimationFrameCount);
             sampledLayer += frame;
         }
-        vec4 texColor = forceBaseLod
-            ? textureLod(texArray, vec3(vUV, sampledLayer), 0.0)
-            : texture(texArray, vec3(vUV, sampledLayer));
+        vec4 texColor = sampleTerrainTex(vUV, sampledLayer, forceBaseLod);
         // Cutout vegetation (grass/flowers) now casts shadows via alpha testing.
         // Standard alpha threshold of 0.1 filters out transparent pixels while
         // preserving the silhouette shape in shadow space.

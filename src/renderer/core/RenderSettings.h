@@ -209,6 +209,7 @@ struct DebugSettings {
     int reflectionDebugMode = 0;
     bool derivativeStrictMode = false;
     bool disableGreedyMeshing = false;
+    bool finishBeforeSwap = false;
 };
 
 /// Fog settings

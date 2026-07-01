@@ -61,16 +61,6 @@ void removeDirectoryTree(const std::filesystem::path& path, const char* operatio
     }
 }
 
-void renameDirectoryTree(const std::filesystem::path& source,
-                         const std::filesystem::path& destination,
-                         const char* operation) {
-    std::error_code errorCode;
-    std::filesystem::rename(source, destination, errorCode);
-    if (errorCode) {
-        throw std::runtime_error(filesystemErrorMessage(operation, source, destination, errorCode));
-    }
-}
-
 long long fileTimestampToken(const std::filesystem::path& path) {
     const auto timestamp = std::filesystem::last_write_time(path).time_since_epoch();
     return std::chrono::duration_cast<std::chrono::nanoseconds>(timestamp).count();
@@ -247,7 +237,8 @@ void extractArchive(const std::filesystem::path& archivePath, const std::filesys
 
     createDirectoryTree(targetRoot.parent_path(), "Failed to create resource pack cache directory");
     removeDirectoryTree(tempRoot, "Failed to clean resource pack extraction directory");
-    createDirectoryTree(tempRoot, "Failed to create resource pack extraction directory");
+    removeDirectoryTree(targetRoot, "Failed to remove old resource pack cache directory");
+    createDirectoryTree(targetRoot, "Failed to create resource pack cache directory");
 
     const zip_int64_t entryCount = zip_get_num_entries(archive, 0);
     if (entryCount < 0) {
@@ -258,16 +249,14 @@ void extractArchive(const std::filesystem::path& archivePath, const std::filesys
     for (zip_uint64_t index = 0; index < static_cast<zip_uint64_t>(entryCount); ++index) {
         std::string entryName = normalizedEntryName(zip_get_name(archive, index, 0), archivePath);
         entryName = stripPrefix(std::move(entryName), prefix);
-        extractArchiveEntry(archive, index, tempRoot, entryName, archivePath);
+        extractArchiveEntry(archive, index, targetRoot, entryName, archivePath);
     }
 
     if (zip_close(archive) != 0) {
         throw std::runtime_error("Failed to close resource pack archive: " + archivePath.string());
     }
 
-    writeCacheManifest(archivePath, tempRoot);
-    removeDirectoryTree(targetRoot, "Failed to remove old resource pack cache directory");
-    renameDirectoryTree(tempRoot, targetRoot, "Failed to install extracted resource pack cache");
+    writeCacheManifest(archivePath, targetRoot);
 }
 
 std::filesystem::path cacheRootForArchives(const std::filesystem::path& resourcePacksRoot) {

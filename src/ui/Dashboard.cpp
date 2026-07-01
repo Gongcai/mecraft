@@ -9,15 +9,67 @@
 
 #include "ui/core/UIRenderer.h"
 #include "../ecs/components/Components.h"
+#include "../Paths.h"
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../renderer/core/RenderSettings.h"
 #include "../renderer/debug/RenderDebugService.h"
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
+#include <filesystem>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
+
+namespace {
+
+std::string toLowerAscii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](const unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                   });
+    return value;
+}
+
+bool hasZipExtension(const std::filesystem::path& path) {
+    return toLowerAscii(path.extension().string()) == ".zip";
+}
+
+std::string formatByteSize(const std::uintmax_t bytes) {
+    constexpr double kKiB = 1024.0;
+    constexpr double kMiB = kKiB * 1024.0;
+    constexpr double kGiB = kMiB * 1024.0;
+    char buffer[64] = {};
+    if (bytes >= static_cast<std::uintmax_t>(kGiB)) {
+        std::snprintf(buffer, sizeof(buffer), "%.2f GiB", static_cast<double>(bytes) / kGiB);
+    } else if (bytes >= static_cast<std::uintmax_t>(kMiB)) {
+        std::snprintf(buffer, sizeof(buffer), "%.2f MiB", static_cast<double>(bytes) / kMiB);
+    } else if (bytes >= static_cast<std::uintmax_t>(kKiB)) {
+        std::snprintf(buffer, sizeof(buffer), "%.1f KiB", static_cast<double>(bytes) / kKiB);
+    } else {
+        std::snprintf(buffer, sizeof(buffer), "%llu B", static_cast<unsigned long long>(bytes));
+    }
+    return buffer;
+}
+
+std::uintmax_t fileSizeNoError(const std::filesystem::path& path) {
+    std::error_code errorCode;
+    const std::uintmax_t bytes = std::filesystem::file_size(path, errorCode);
+    return errorCode ? 0U : bytes;
+}
+
+std::filesystem::path resourcePackCacheRoot() {
+    const std::filesystem::path packsRoot(RESOURCE_PACKS_DIR);
+    return packsRoot.parent_path() / ".cache" / "resourcepacks";
+}
+
+} // namespace
 
 Dashboard::Dashboard() : m_initialized(false) {
     // Setup Dear ImGui context
@@ -77,6 +129,7 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
         showCameraStats(camera);
         showWorldStats(world, registry, renderDistanceSetter);
         showPerformanceStats(world, render, renderScene, postProcess, profilerStats);
+        showResourcePackMaterialSettings(renderScene);
         showGUIScaleSettings(uiRenderer);
         showCrosshairSettings(uiRenderer);
         showHotbarSettings(uiRenderer);
@@ -767,6 +820,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &settings.shadow.contactShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &settings.cloud.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &settings.debug.derivativeStrictMode);
+        pipelineChanged |= ImGui::Checkbox("glFinish Before Swap [diagnostic]", &settings.debug.finishBeforeSwap);
+        if (settings.debug.finishBeforeSwap) {
+            ImGui::TextDisabled("GPU queue wait should move from Swap Buffers into Other Render while this is enabled.");
+        }
         pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
@@ -1395,6 +1452,149 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             ImGui::Unindent();
         }
     }
+}
+
+void Dashboard::refreshResourcePackDashboard() {
+    m_resourcePackEntries.clear();
+
+    const std::filesystem::path packsRoot(RESOURCE_PACKS_DIR);
+    std::error_code errorCode;
+    if (!std::filesystem::exists(packsRoot, errorCode) || !std::filesystem::is_directory(packsRoot, errorCode)) {
+        m_resourcePackScanInitialized = true;
+        m_nextResourcePackRefreshTime = ImGui::GetTime() + 2.0;
+        return;
+    }
+
+    const std::filesystem::path cacheRoot = resourcePackCacheRoot();
+    std::filesystem::directory_iterator it(packsRoot, errorCode);
+    const std::filesystem::directory_iterator end;
+    for (; !errorCode && it != end; it.increment(errorCode)) {
+        const std::filesystem::directory_entry& entry = *it;
+        const std::filesystem::path path = entry.path();
+        ResourcePackDashboardEntry packEntry;
+        packEntry.name = path.filename().string();
+        packEntry.path = path.string();
+
+        std::error_code entryError;
+        if (entry.is_directory(entryError)) {
+            packEntry.kind = "Directory";
+            packEntry.state = "Active on next resource build";
+            packEntry.activeOnStartup = true;
+            m_resourcePackEntries.push_back(std::move(packEntry));
+            continue;
+        }
+
+        if (entry.is_regular_file(entryError) && hasZipExtension(path)) {
+            packEntry.kind = "Zip archive";
+            packEntry.bytes = fileSizeNoError(path);
+            const std::filesystem::path extractedRoot = cacheRoot / path.stem();
+            std::error_code cacheError;
+            const bool cacheReady =
+                std::filesystem::exists(extractedRoot, cacheError) &&
+                std::filesystem::is_directory(extractedRoot, cacheError);
+            packEntry.state = cacheReady ? "Extracted cache ready" : "Extracts on next startup";
+            packEntry.activeOnStartup = cacheReady;
+            m_resourcePackEntries.push_back(std::move(packEntry));
+        }
+    }
+
+    std::sort(m_resourcePackEntries.begin(), m_resourcePackEntries.end(),
+              [](const ResourcePackDashboardEntry& lhs, const ResourcePackDashboardEntry& rhs) {
+                  return lhs.name < rhs.name;
+              });
+    m_resourcePackScanInitialized = true;
+    m_nextResourcePackRefreshTime = ImGui::GetTime() + 2.0;
+}
+
+void Dashboard::showResourcePackMaterialSettings(RenderScene& renderScene) {
+    if (!ImGui::CollapsingHeader("Resource Pack Materials", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    const double now = ImGui::GetTime();
+    if (!m_resourcePackScanInitialized || now >= m_nextResourcePackRefreshTime) {
+        refreshResourcePackDashboard();
+    }
+
+    RenderSettings settings = renderScene.getSettings();
+    bool materialChanged = false;
+
+    ImGui::Text("Resource Pack Root");
+    ImGui::SameLine();
+    ImGui::TextUnformatted(RESOURCE_PACKS_DIR);
+    ImGui::SameLine();
+    if (ImGui::Button("Refresh Resource Packs")) {
+        refreshResourcePackDashboard();
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Material Chain");
+    int materialFormat = 0;
+    static constexpr const char* kMaterialFormats[] = {
+        "labPBR-style suffix chain (_n/_normal, _s/_spec/_specular)"
+    };
+    ImGui::BeginDisabled();
+    ImGui::Combo("Resource Pack Format", &materialFormat, kMaterialFormats, IM_ARRAYSIZE(kMaterialFormats));
+    ImGui::EndDisabled();
+
+    materialChanged |= ImGui::Checkbox("Normal Maps", &settings.material.normalMapsEnabled);
+    materialChanged |= ImGui::Checkbox("Specular Maps", &settings.material.specularMapsEnabled);
+    materialChanged |= ImGui::Checkbox("Parallax Mapping", &settings.material.parallaxEnabled);
+    materialChanged |= ImGui::SliderFloat("Parallax Depth", &settings.material.parallaxDepth, 0.0f, 0.12f, "%.3f");
+    settings.material.parallaxDepth = std::clamp(settings.material.parallaxDepth, 0.0f, 0.12f);
+
+    if (ImGui::Button("Reset Material Defaults")) {
+        settings.material = MaterialRenderSettings{};
+        materialChanged = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Save Current Material Settings")) {
+        materialChanged = true;
+    }
+
+    if (materialChanged) {
+        renderScene.setSettings(settings);
+    }
+
+    ImGui::Separator();
+    ImGui::Text("Detected Resource Packs");
+    if (m_resourcePackEntries.empty()) {
+        ImGui::TextDisabled("No directory packs or .zip packs were found.");
+    } else if (ImGui::BeginTable("ResourcePackMaterialTable", 4,
+                                 ImGuiTableFlags_Borders |
+                                 ImGuiTableFlags_RowBg |
+                                 ImGuiTableFlags_Resizable |
+                                 ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Name");
+        ImGui::TableSetupColumn("Kind");
+        ImGui::TableSetupColumn("Size");
+        ImGui::TableSetupColumn("State");
+        ImGui::TableHeadersRow();
+        for (const ResourcePackDashboardEntry& entry : m_resourcePackEntries) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(entry.name.c_str());
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", entry.path.c_str());
+            }
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextUnformatted(entry.kind.c_str());
+            ImGui::TableSetColumnIndex(2);
+            const std::string sizeText = entry.bytes > 0 ? formatByteSize(entry.bytes) : "-";
+            ImGui::TextUnformatted(sizeText.c_str());
+            ImGui::TableSetColumnIndex(3);
+            const ImVec4 stateColor = entry.activeOnStartup
+                ? ImVec4(0.45f, 0.90f, 0.50f, 1.0f)
+                : ImVec4(0.95f, 0.75f, 0.35f, 1.0f);
+            ImGui::TextColored(stateColor, "%s", entry.state.c_str());
+        }
+        ImGui::EndTable();
+    }
+
+    ImGui::Separator();
+    ImGui::TextDisabled("Accepted texture roots: assets/minecraft/textures/block, assets/minecraft/textures/blocks, textures/block, textures/blocks.");
+    ImGui::TextDisabled("Connected textures are scanned from optifine/ctm and mcpatcher/ctm when properties files are present.");
+    ImGui::TextDisabled("Adding, removing, or replacing a pack requires a resource rebuild or restart.");
 }
 
 void Dashboard::showGUIScaleSettings(UIRenderer& uiRenderer) {

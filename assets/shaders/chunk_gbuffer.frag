@@ -77,10 +77,19 @@ vec3 decodeFaceNormal(float face) {
     return vec3(1.0, 0.0, 0.0);
 }
 
+vec2 tileLocalUv(vec2 uv) {
+    return uv - floor(uv);
+}
+
+vec2 clampTileUv(vec2 uv, sampler2DArray arraySampler) {
+    vec2 texel = 0.5 / vec2(textureSize(arraySampler, 0).xy);
+    return clamp(uv, texel, vec2(1.0) - texel);
+}
+
 vec4 sampleBlockArray(sampler2DArray arraySampler, vec2 uv, float layer, bool forceBaseLod) {
     return forceBaseLod
         ? textureLod(arraySampler, vec3(uv, layer), 0.0)
-        : texture(arraySampler, vec3(uv, layer));
+        : textureGrad(arraySampler, vec3(uv, layer), dFdx(vUV), dFdy(vUV));
 }
 
 vec3 orthogonalTangent(vec3 normal) {
@@ -115,13 +124,13 @@ float sampleBlockHeight(vec2 uv, float layer) {
     return textureLod(uBlockNormalArray, vec3(uv, layer), 0.0).a;
 }
 
-vec2 applyBlockParallax(vec2 baseUv, float layer, vec3 geometricNormal) {
+vec2 applyBlockParallax(vec2 baseUv, vec2 surfaceUv, float layer, vec3 geometricNormal) {
     float initialHeight = sampleBlockHeight(baseUv, layer);
     if (initialHeight <= (1.0 / 255.0) || uBlockParallaxDepth <= 1e-5) {
         return baseUv;
     }
 
-    mat3 tbn = buildSurfaceTbn(vWorldPos, baseUv, geometricNormal);
+    mat3 tbn = buildSurfaceTbn(vWorldPos, surfaceUv, geometricNormal);
     vec3 viewDir = normalize(uCameraPos - vWorldPos);
     vec3 tangentViewDir = transpose(tbn) * viewDir;
     vec2 parallaxDir = tangentViewDir.xy / max(abs(tangentViewDir.z), 0.22);
@@ -143,7 +152,7 @@ vec2 applyBlockParallax(vec2 baseUv, float layer, vec3 geometricNormal) {
     for (int stepIndex = 0; stepIndex < parallaxSteps && currentDepth < currentHeight; ++stepIndex) {
         previousUv = currentUv;
         previousHeight = currentHeight;
-        currentUv -= stepUv;
+        currentUv = clampTileUv(currentUv - stepUv, uBlockNormalArray);
         currentDepth += layerDepth;
         currentHeight = sampleBlockHeight(currentUv, layer);
     }
@@ -156,12 +165,12 @@ vec2 applyBlockParallax(vec2 baseUv, float layer, vec3 geometricNormal) {
         return currentUv;
     }
     float blend = clamp(beforeDelta / blendDenominator, 0.0, 1.0);
-    return mix(previousUv, currentUv, blend);
+    return clampTileUv(mix(previousUv, currentUv, blend), uBlockNormalArray);
 }
 
-vec3 applyBlockNormalMap(vec3 geometricNormal, vec2 uv, vec4 normalTex) {
+vec3 applyBlockNormalMap(vec3 geometricNormal, vec2 materialUv, vec2 surfaceUv, vec4 normalTex) {
     vec3 tangentNormal = normalize(normalTex.rgb * 2.0 - 1.0);
-    mat3 tbn = buildSurfaceTbn(vWorldPos, uv, geometricNormal);
+    mat3 tbn = buildSurfaceTbn(vWorldPos, surfaceUv, geometricNormal);
     return normalize(tbn * tangentNormal);
 }
 
@@ -200,10 +209,10 @@ void main() {
     }
 
     vec3 normal = decodeFaceNormal(vNormal);
-    vec2 materialUv = vUV;
+    vec2 materialUv = tileLocalUv(vUV);
     bool materialNormalMapsEnabled = uBlockNormalMapsEnabled != 0 && !isCrossVegetation;
     if (uBlockParallaxEnabled != 0 && materialNormalMapsEnabled && !forceBaseLod) {
-        materialUv = applyBlockParallax(vUV, sampledLayer, normal);
+        materialUv = applyBlockParallax(materialUv, vUV, sampledLayer, normal);
     }
 
     vec4 texColor = sampleBlockArray(texArray, materialUv, sampledLayer, forceBaseLod);
@@ -239,7 +248,7 @@ void main() {
 
     if (materialNormalMapsEnabled) {
         vec4 normalTex = sampleBlockArray(uBlockNormalArray, materialUv, sampledLayer, forceBaseLod);
-        normal = applyBlockNormalMap(normal, materialUv, normalTex);
+        normal = applyBlockNormalMap(normal, materialUv, vUV, normalTex);
     }
 
     bool canReceiveTerrainRain = !isCrossVegetation &&

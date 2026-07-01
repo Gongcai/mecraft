@@ -433,6 +433,7 @@ void applyDebugSettings(const json& j, DebugSettings& s) {
     readInt(j, "reflectionDebugMode", s.reflectionDebugMode);
     readBool(j, "derivativeStrictMode", s.derivativeStrictMode);
     readBool(j, "disableGreedyMeshing", s.disableGreedyMeshing);
+    readBool(j, "finishBeforeSwap", s.finishBeforeSwap);
 }
 
 json toJson(const DebugSettings& s) {
@@ -444,6 +445,7 @@ json toJson(const DebugSettings& s) {
         {"reflectionDebugMode", s.reflectionDebugMode},
         {"derivativeStrictMode", s.derivativeStrictMode},
         {"disableGreedyMeshing", s.disableGreedyMeshing},
+        {"finishBeforeSwap", s.finishBeforeSwap},
     };
 }
 
