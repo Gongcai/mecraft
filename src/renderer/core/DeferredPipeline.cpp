@@ -426,6 +426,12 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
     targets.bindSsgiHalfRes();
     glClear(GL_COLOR_BUFFER_BIT);
 
+    targets.bindSsgiDenoise(0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    targets.bindSsgiDenoise(1);
+    glClear(GL_COLOR_BUFFER_BIT);
+
     targets.bindSsgiTemporal();
     glClear(GL_COLOR_BUFFER_BIT);
 

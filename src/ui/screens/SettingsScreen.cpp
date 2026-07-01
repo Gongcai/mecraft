@@ -600,6 +600,11 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                   auto s = m_renderScene->getSettings(); s.ssgi.temporalEnabled = v;
                   m_renderScene->setSettings(s);
               });
+    addToggle(stack, resourceMgr, "SSGI Denoise", s.ssgi.denoiseEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.ssgi.denoiseEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
     addSliderRow(stack, resourceMgr, "SSGI Radius",
                  0.5f, 24.0f, s.ssgi.radius, 0.05f,
                  [this](float v) {
@@ -628,6 +633,18 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                  0.1f, 8.0f, s.ssgi.thickness, 0.05f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings(); s.ssgi.thickness = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI Denoise Passes",
+                 0.0f, 4.0f, static_cast<float>(s.ssgi.denoiseIterations), 1.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.denoiseIterations = static_cast<int>(v);
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI Denoise Strength",
+                 0.0f, 1.0f, s.ssgi.denoiseStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.denoiseStrength = v;
                      m_renderScene->setSettings(s);
                  });
     addSliderRow(stack, resourceMgr, "SSGI History Weight",

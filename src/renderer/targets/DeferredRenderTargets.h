@@ -24,6 +24,7 @@ public:
     void bindSsaoHalfResFiltered();
     void bindSsgi();
     void bindSsgiHalfRes();
+    void bindSsgiDenoise(int slot);
     void bindSsgiTemporal();
     void bindSceneLighting();
     void bindSceneComposite();
@@ -99,10 +100,12 @@ public:
     void copySsaoTemporalToHistory();
     [[nodiscard]] GLuint ssgiTexture() const { return m_ssgiTex; }
     [[nodiscard]] GLuint ssgiHalfResTexture() const { return m_ssgiHalfResTex; }
+    [[nodiscard]] GLuint ssgiDenoiseTexture(int slot) const;
     [[nodiscard]] GLuint ssgiHistoryTexture() const { return m_ssgiHistoryTex[m_ssgiHistoryIndex]; }
     [[nodiscard]] GLuint ssgiHistoryTexturePrev() const { return m_ssgiHistoryTex[1 - m_ssgiHistoryIndex]; }
     [[nodiscard]] GLuint ssgiTemporalTexture() const { return m_ssgiTemporalTex; }
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
+    void copySsgiDenoiseToSsgi(int slot);
     void copySsgiTemporalToHistory();
     [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
     [[nodiscard]] GLuint sceneCompositeTexture() const { return m_sceneCompositeTex; }
@@ -235,6 +238,8 @@ private:
     GLuint m_ssgiTex = 0;
     GLuint m_ssgiHalfResFbo = 0;
     GLuint m_ssgiHalfResTex = 0;
+    GLuint m_ssgiDenoiseFbo[2] = {0, 0};
+    GLuint m_ssgiDenoiseTex[2] = {0, 0};
     GLuint m_ssgiHistoryFbo[2] = {0, 0};
     GLuint m_ssgiHistoryTex[2] = {0, 0};
     int m_ssgiHistoryIndex = 0;

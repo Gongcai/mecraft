@@ -11,7 +11,7 @@ class DeferredRenderTargets;
 class ResourceMgr;
 class Shader;
 
-/// Screen-space global illumination pass: half-res gather, depth-aware upsample, temporal accumulation.
+/// Screen-space global illumination pass: half-res gather, depth-aware upsample, denoise, temporal accumulation.
 class SsgiPass : public RenderPass {
 public:
     void init(ResourceMgr& resourceMgr) override;
@@ -25,11 +25,14 @@ private:
     void renderSsgiBase(const FrameContext& ctx, const RenderSettings& settings,
                         DeferredRenderTargets& targets);
     void renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets& targets);
+    void renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
+                           DeferredRenderTargets& targets);
     void renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& ssgi,
                             DeferredRenderTargets& targets);
 
     Shader* m_ssgiShader = nullptr;
     Shader* m_ssgiUpsampleShader = nullptr;
+    Shader* m_ssgiDenoiseShader = nullptr;
     Shader* m_ssgiTemporalShader = nullptr;
     GLuint m_noiseTexture = 0;
 };

@@ -3,6 +3,7 @@
 #include "../debug/RenderDebugLabels.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cstdio>
 #include <iostream>
 #include <fstream>
@@ -281,6 +282,20 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     for (int i = 0; i < 2; ++i) {
+        glCreateFramebuffers(1, &m_ssgiDenoiseFbo[i]);
+        m_ssgiDenoiseTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
+                                              GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+        glNamedFramebufferTexture(m_ssgiDenoiseFbo[i], GL_COLOR_ATTACHMENT0, m_ssgiDenoiseTex[i], 0);
+        glNamedFramebufferDrawBuffers(m_ssgiDenoiseFbo[i], 1, &ssgiDrawBuffer);
+        if (!checkFramebufferComplete(m_ssgiDenoiseFbo[i], "SSGIDenoise")) {
+            shutdown();
+            return false;
+        }
+        constexpr float clearBlack[] = {0.0f, 0.0f, 0.0f, 0.0f};
+        glClearNamedFramebufferfv(m_ssgiDenoiseFbo[i], GL_COLOR, 0, clearBlack);
+    }
+
+    for (int i = 0; i < 2; ++i) {
         glCreateFramebuffers(1, &m_ssgiHistoryFbo[i]);
         m_ssgiHistoryTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -544,6 +559,13 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     renderer::debug::labelTexture(m_ssgiTemporalTex, "DeferredTargets.SSGITemporalTex");
     for (int i = 0; i < 2; ++i) {
         char fboName[48], texName[48];
+        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.SSGIDenoise[%d]", i);
+        std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIDenoiseTex[%d]", i);
+        renderer::debug::labelFramebuffer(m_ssgiDenoiseFbo[i], fboName);
+        renderer::debug::labelTexture(m_ssgiDenoiseTex[i], texName);
+    }
+    for (int i = 0; i < 2; ++i) {
+        char fboName[48], texName[48];
         std::snprintf(fboName, sizeof(fboName), "DeferredTargets.SSGIHistory[%d]", i);
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIHistoryTex[%d]", i);
         renderer::debug::labelFramebuffer(m_ssgiHistoryFbo[i], fboName);
@@ -706,6 +728,14 @@ void DeferredRenderTargets::bindSsgi() {
 void DeferredRenderTargets::bindSsgiHalfRes() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiHalfResFbo);
     glViewport(0, 0, std::max(1, m_width / 2), std::max(1, m_height / 2));
+    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
+    glDrawBuffers(1, &drawBuffer);
+}
+
+void DeferredRenderTargets::bindSsgiDenoise(const int slot) {
+    assert(slot >= 0 && slot < 2);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiDenoiseFbo[slot]);
+    glViewport(0, 0, m_width, m_height);
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glDrawBuffers(1, &drawBuffer);
 }
@@ -1119,6 +1149,24 @@ void DeferredRenderTargets::copySsgiTemporalToHistory() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiHistoryFbo[m_ssgiHistoryIndex]);
 }
 
+GLuint DeferredRenderTargets::ssgiDenoiseTexture(const int slot) const {
+    assert(slot >= 0 && slot < 2);
+    return m_ssgiDenoiseTex[slot];
+}
+
+void DeferredRenderTargets::copySsgiDenoiseToSsgi(const int slot) {
+    assert(slot >= 0 && slot < 2);
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssgiDenoiseFbo[slot]);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssgiFbo);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiFbo);
+}
+
 void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
@@ -1280,6 +1328,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssaoTemporalTex,
         m_ssgiTex,
         m_ssgiHalfResTex,
+        m_ssgiDenoiseTex[0], m_ssgiDenoiseTex[1],
         m_ssgiHistoryTex[0], m_ssgiHistoryTex[1],
         m_ssgiTemporalTex,
         m_velocityTex,
@@ -1332,13 +1381,14 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoTemporalTex = 0;
     m_ssgiTex = 0;
     m_ssgiHalfResTex = 0;
+    m_ssgiDenoiseTex[0] = 0; m_ssgiDenoiseTex[1] = 0;
     m_ssgiHistoryTex[0] = 0; m_ssgiHistoryTex[1] = 0;
     m_ssgiTemporalTex = 0;
     m_velocityTex = 0;
     m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_reflectionTemporalScratchFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_ssgiFbo, m_ssgiHalfResFbo, m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1], m_ssgiTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
+    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_reflectionTemporalScratchFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_ssgiFbo, m_ssgiHalfResFbo, m_ssgiDenoiseFbo[0], m_ssgiDenoiseFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1], m_ssgiTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -1371,6 +1421,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoTemporalFbo = 0;
     m_ssgiFbo = 0;
     m_ssgiHalfResFbo = 0;
+    m_ssgiDenoiseFbo[0] = 0; m_ssgiDenoiseFbo[1] = 0;
     m_ssgiHistoryFbo[0] = 0; m_ssgiHistoryFbo[1] = 0;
     m_ssgiTemporalFbo = 0;
     m_velocityFbo = 0;

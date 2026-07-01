@@ -147,24 +147,30 @@ json toJson(const SsaoSettings& s) {
 void applySsgiSettings(const json& j, SsgiSettings& s) {
     readBool(j, "enabled", s.enabled);
     readBool(j, "temporalEnabled", s.temporalEnabled);
+    readBool(j, "denoiseEnabled", s.denoiseEnabled);
     readFloat(j, "historyWeight", s.historyWeight);
     readFloat(j, "radius", s.radius);
     readFloat(j, "strength", s.strength);
     readFloat(j, "maxDistance", s.maxDistance);
     readFloat(j, "thickness", s.thickness);
+    readFloat(j, "denoiseStrength", s.denoiseStrength);
     readInt(j, "samples", s.samples);
+    readInt(j, "denoiseIterations", s.denoiseIterations);
 }
 
 json toJson(const SsgiSettings& s) {
     return {
         {"enabled", s.enabled},
         {"temporalEnabled", s.temporalEnabled},
+        {"denoiseEnabled", s.denoiseEnabled},
         {"historyWeight", s.historyWeight},
         {"radius", s.radius},
         {"strength", s.strength},
         {"maxDistance", s.maxDistance},
         {"thickness", s.thickness},
+        {"denoiseStrength", s.denoiseStrength},
         {"samples", s.samples},
+        {"denoiseIterations", s.denoiseIterations},
     };
 }
 

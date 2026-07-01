@@ -784,17 +784,21 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         if (ImGui::Button("SSGI Strong Test")) {
             settings.ssgi.enabled = true;
             settings.ssgi.temporalEnabled = true;
-            settings.ssgi.historyWeight = 0.78f;
+            settings.ssgi.denoiseEnabled = true;
+            settings.ssgi.historyWeight = 0.86f;
             settings.ssgi.radius = 8.0f;
             settings.ssgi.strength = 2.2f;
             settings.ssgi.maxDistance = 24.0f;
             settings.ssgi.thickness = 2.2f;
+            settings.ssgi.denoiseStrength = 0.92f;
             settings.ssgi.samples = 16;
+            settings.ssgi.denoiseIterations = 3;
             settings.debug.viewMode = 0;
             debugViewMode = 0;
             pipelineChanged = true;
         }
         pipelineChanged |= ImGui::Checkbox("SSGI Temporal", &settings.ssgi.temporalEnabled);
+        pipelineChanged |= ImGui::Checkbox("SSGI Denoise", &settings.ssgi.denoiseEnabled);
         pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
         pipelineChanged |= ImGui::SliderFloat("FSR1 Render Scale", &settings.upscale.renderScale, 0.50f, 1.00f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("FSR1 Sharpness", &settings.upscale.sharpness, 0.00f, 2.00f, "%.2f");
@@ -1251,6 +1255,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderInt("SSGI Samples", &settings.ssgi.samples, 1, 32);
         pipelineChanged |= ImGui::SliderFloat("SSGI Max Distance", &settings.ssgi.maxDistance, 1.0f, 48.0f, "%.1f");
         pipelineChanged |= ImGui::SliderFloat("SSGI Thickness", &settings.ssgi.thickness, 0.1f, 8.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderInt("SSGI Denoise Passes", &settings.ssgi.denoiseIterations, 0, 4);
+        pipelineChanged |= ImGui::SliderFloat("SSGI Denoise Strength", &settings.ssgi.denoiseStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSGI History Weight", &settings.ssgi.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");

@@ -38,6 +38,7 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"ssao_upsample", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssao_upsample.frag"},
     {"ssgi", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssgi.frag"},
     {"ssgi_upsample", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssgi_upsample.frag"},
+    {"ssgi_denoise", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssgi_denoise.frag"},
     {"ssgi_temporal", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/ssgi_temporal.frag"},
     {"motion_blur", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/motion_blur.frag"},
     {"dof", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/dof.frag"},
