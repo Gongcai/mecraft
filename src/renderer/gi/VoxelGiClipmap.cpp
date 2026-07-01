@@ -27,6 +27,10 @@ constexpr float kMaxVoxelSize = 4.0f;
     return std::clamp(updateInterval, 1, 60);
 }
 
+[[nodiscard]] int normalizedOriginSnap(const int originSnap) {
+    return std::clamp(originSnap, 1, 64);
+}
+
 [[nodiscard]] int mipLevelCount(const int resolution) {
     int levels = 1;
     int size = std::max(1, resolution);
@@ -104,7 +108,8 @@ void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& sett
     const float voxelSize = normalizedVoxelSize(settings.voxelSize);
     const int mipLevels = mipLevelCount(resolution);
     const int updateInterval = normalizedUpdateInterval(settings.updateInterval);
-    const glm::ivec3 originBlock = computeOrigin(ctx.camera.position, resolution, voxelSize);
+    const int originSnap = normalizedOriginSnap(settings.originSnap);
+    const glm::ivec3 originBlock = computeOrigin(ctx.camera.position, resolution, voxelSize, originSnap);
     const uint64_t activeRevision = ctx.worldView->getActiveChunkRevision();
     const uint64_t blockRevision = ctx.worldView->getBlockContentRevision();
 
@@ -133,9 +138,9 @@ void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& sett
         for (int y = 0; y < resolution; ++y) {
             for (int x = 0; x < resolution; ++x) {
                 const glm::ivec3 blockPos = originBlock + glm::ivec3(
-                    static_cast<int>(std::floor(static_cast<float>(x) * voxelSize)),
-                    static_cast<int>(std::floor(static_cast<float>(y) * voxelSize)),
-                    static_cast<int>(std::floor(static_cast<float>(z) * voxelSize)));
+                    static_cast<int>(std::floor((static_cast<float>(x) + 0.5f) * voxelSize)),
+                    static_cast<int>(std::floor((static_cast<float>(y) + 0.5f) * voxelSize)),
+                    static_cast<int>(std::floor((static_cast<float>(z) + 0.5f) * voxelSize)));
                 const size_t index = (static_cast<size_t>(z) * static_cast<size_t>(resolution) +
                                       static_cast<size_t>(y)) * static_cast<size_t>(resolution) +
                                       static_cast<size_t>(x);
@@ -183,13 +188,15 @@ void VoxelGiClipmap::upload(const std::vector<ClipmapVoxel>& voxels) {
 
 glm::ivec3 VoxelGiClipmap::computeOrigin(const glm::vec3& cameraPosition,
                                          const int resolution,
-                                         const float voxelSize) const {
+                                         const float voxelSize,
+                                         const int originSnap) const {
     const float span = static_cast<float>(resolution) * voxelSize;
     const glm::vec3 minCorner = cameraPosition - glm::vec3(span * 0.5f);
+    const int snap = std::max(1, originSnap);
     return glm::ivec3(
-        static_cast<int>(std::floor(minCorner.x / voxelSize) * voxelSize),
-        static_cast<int>(std::floor(minCorner.y / voxelSize) * voxelSize),
-        static_cast<int>(std::floor(minCorner.z / voxelSize) * voxelSize));
+        static_cast<int>(std::floor(minCorner.x / static_cast<float>(snap))) * snap,
+        static_cast<int>(std::floor(minCorner.y / static_cast<float>(snap))) * snap,
+        static_cast<int>(std::floor(minCorner.z / static_cast<float>(snap))) * snap);
 }
 
 VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& worldView,

@@ -39,7 +39,10 @@ private:
 
     void allocateTexture(int resolution);
     void upload(const std::vector<ClipmapVoxel>& voxels);
-    [[nodiscard]] glm::ivec3 computeOrigin(const glm::vec3& cameraPosition, int resolution, float voxelSize) const;
+    [[nodiscard]] glm::ivec3 computeOrigin(const glm::vec3& cameraPosition,
+                                           int resolution,
+                                           float voxelSize,
+                                           int originSnap) const;
     [[nodiscard]] ClipmapVoxel sampleWorldVoxel(const IWorldView& worldView, const glm::ivec3& blockPos) const;
 
     GLuint m_texture = 0;

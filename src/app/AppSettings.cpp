@@ -184,6 +184,7 @@ void applyVoxelGiSettings(const json& j, VoxelGiSettings& s) {
     readInt(j, "resolution", s.resolution);
     readInt(j, "updateInterval", s.updateInterval);
     readInt(j, "coneSteps", s.coneSteps);
+    readInt(j, "originSnap", s.originSnap);
     readFloat(j, "voxelSize", s.voxelSize);
     readFloat(j, "strength", s.strength);
     readFloat(j, "normalBias", s.normalBias);
@@ -199,6 +200,7 @@ json toJson(const VoxelGiSettings& s) {
         {"resolution", s.resolution},
         {"updateInterval", s.updateInterval},
         {"coneSteps", s.coneSteps},
+        {"originSnap", s.originSnap},
         {"voxelSize", s.voxelSize},
         {"strength", s.strength},
         {"normalBias", s.normalBias},

@@ -702,6 +702,12 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                      auto s = m_renderScene->getSettings(); s.voxelGi.coneSteps = static_cast<int>(v);
                      m_renderScene->setSettings(s);
                  });
+    addSliderRow(stack, resourceMgr, "Voxel GI Origin Snap",
+                 1.0f, 32.0f, static_cast<float>(s.voxelGi.originSnap), 1.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.originSnap = static_cast<int>(v);
+                     m_renderScene->setSettings(s);
+                 });
     addSliderRow(stack, resourceMgr, "Voxel GI Voxel Size",
                  1.0f, 4.0f, s.voxelGi.voxelSize, 1.0f,
                  [this](float v) {

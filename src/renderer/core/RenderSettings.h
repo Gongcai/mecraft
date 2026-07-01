@@ -61,6 +61,7 @@ struct VoxelGiSettings {
     int resolution = 64;
     int updateInterval = 4;
     int coneSteps = 5;
+    int originSnap = 8;
     float voxelSize = 1.0f;
     float strength = 0.18f;
     float normalBias = 0.45f;

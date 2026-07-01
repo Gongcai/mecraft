@@ -812,6 +812,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.voxelGi.resolution = 64;
             settings.voxelGi.updateInterval = 3;
             settings.voxelGi.coneSteps = 5;
+            settings.voxelGi.originSnap = 8;
             settings.voxelGi.voxelSize = 1.0f;
             settings.voxelGi.normalBias = 0.45f;
             settings.voxelGi.sampleDistance = 3.0f;
@@ -1284,6 +1285,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderInt("Voxel GI Resolution", &settings.voxelGi.resolution, 16, 128);
         pipelineChanged |= ImGui::SliderInt("Voxel GI Update Frames", &settings.voxelGi.updateInterval, 1, 20);
         pipelineChanged |= ImGui::SliderInt("Voxel GI Cone Steps", &settings.voxelGi.coneSteps, 1, 12);
+        pipelineChanged |= ImGui::SliderInt("Voxel GI Origin Snap", &settings.voxelGi.originSnap, 1, 32);
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Voxel Size", &settings.voxelGi.voxelSize, 1.0f, 4.0f, "%.0f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Normal Bias", &settings.voxelGi.normalBias, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Sample Distance", &settings.voxelGi.sampleDistance, 1.0f, 12.0f, "%.2f");
