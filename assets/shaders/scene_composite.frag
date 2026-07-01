@@ -106,6 +106,12 @@ vec4 sampleVoxelGiRadiance(vec3 worldPos, float lod) {
     return textureLod(uVoxelGiTex, clamp(uv, vec3(0.0), vec3(1.0)), lod) * voxelGiInside(uv);
 }
 
+float voxelGiConeCoverage(float occupancy, float coneDiameter) {
+    float normalizedOccupancy = clamp(occupancy, 0.0, 1.0);
+    float footprint = max(1.0, pow(coneDiameter / max(uVoxelGiVoxelSize, 0.0001), 2.0) * 0.55);
+    return 1.0 - pow(max(1.0 - normalizedOccupancy, 0.0001), footprint);
+}
+
 vec3 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
     int steps = clamp(uVoxelGiConeSteps, 1, 12);
     float traceDistance = max(uVoxelGiTraceDistance, uVoxelGiVoxelSize);
@@ -122,9 +128,14 @@ vec3 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
         float coneDiameter = max(uVoxelGiVoxelSize, distanceAlongCone * max(uVoxelGiConeAperture, 0.05));
         float lod = clamp(log2(coneDiameter / max(uVoxelGiVoxelSize, 0.0001)), 0.0, max(uVoxelGiMipCount - 1.0, 0.0));
         vec4 sampleData = sampleVoxelGiRadiance(start + direction * distanceAlongCone, lod);
-        float sampleWeight = weight * transmittance / (1.0 + distanceAlongCone * 0.18);
+        float coverage = voxelGiConeCoverage(sampleData.a, coneDiameter);
+        float surfaceVisibility = mix(1.0, 0.58, coverage);
+        float sampleWeight = weight * transmittance * surfaceVisibility / (1.0 + distanceAlongCone * 0.18);
         radiance += sampleData.rgb * sampleWeight;
-        transmittance *= max(0.0, 1.0 - sampleData.a * 0.28);
+        transmittance *= exp(-coverage * 1.55);
+        if (transmittance < 0.035) {
+            break;
+        }
     }
 
     return radiance;
