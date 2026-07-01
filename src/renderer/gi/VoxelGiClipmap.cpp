@@ -136,6 +136,7 @@ void VoxelGiClipmap::shutdown() {
     m_mipLevels = 1;
     m_lastActiveChunkRevision = 0;
     m_lastBlockContentRevision = 0;
+    m_lastSkyRadianceScale = -1.0f;
     m_lastUpdateFrame = 0;
     m_stats = {};
 }
@@ -157,6 +158,10 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     const glm::ivec3 originBlock = computeOrigin(ctx.camera.position, resolution, voxelSize, originSnap);
     const uint64_t activeRevision = ctx.worldView->getActiveChunkRevision();
     const uint64_t blockRevision = ctx.worldView->getBlockContentRevision();
+    const float skyRadianceScale = std::clamp(ctx.skyColors.dayFactor * ctx.skyIntensity +
+                                              ctx.skyColors.moonVisibility * 0.035f,
+                                              0.0f,
+                                              1.5f);
 
     const bool parametersChanged = resolution != m_resolution ||
                                    mipLevels != m_mipLevels ||
@@ -164,24 +169,25 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     const bool originChanged = originBlock != m_originBlock;
     const bool worldChanged = activeRevision != m_lastActiveChunkRevision ||
                               blockRevision != m_lastBlockContentRevision;
+    const bool skyRadianceChanged = std::abs(skyRadianceScale - m_lastSkyRadianceScale) > 0.025f;
     const bool intervalReady = ctx.frameIndex >= m_lastUpdateFrame + static_cast<uint64_t>(updateInterval);
-    if (m_valid && !parametersChanged && !originChanged && !(worldChanged && intervalReady)) {
+    if (m_valid && !parametersChanged && !originChanged && !((worldChanged || skyRadianceChanged) && intervalReady)) {
         updateStatsBase(VoxelGiClipmapUpdateMode::Idle, m_originBlock);
         return;
     }
 
     allocateTexture(resolution);
     glm::ivec3 deltaVoxels(0);
-    const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged &&
+    const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged && !skyRadianceChanged &&
                                 computeVoxelDelta(originBlock, deltaVoxels);
     m_resolution = resolution;
     m_mipLevels = mipLevels;
     m_voxelSize = voxelSize;
 
     const bool shiftedVolume = canReuseVolume &&
-                               shiftCachedVolume(*ctx.worldView, textureColors, originBlock, deltaVoxels);
+                               shiftCachedVolume(*ctx.worldView, textureColors, skyRadianceScale, originBlock, deltaVoxels);
     if (!shiftedVolume) {
-        rebuildVolume(*ctx.worldView, textureColors, originBlock);
+        rebuildVolume(*ctx.worldView, textureColors, skyRadianceScale, originBlock);
     }
 
     m_originBlock = originBlock;
@@ -210,6 +216,7 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     }
     m_lastActiveChunkRevision = activeRevision;
     m_lastBlockContentRevision = blockRevision;
+    m_lastSkyRadianceScale = skyRadianceScale;
     m_lastUpdateFrame = ctx.frameIndex;
     m_valid = true;
     m_stats.valid = true;
@@ -364,6 +371,7 @@ void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels) {
 
 void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
                                    const IBlockTextureColorProvider& textureColors,
+                                   const float skyRadianceScale,
                                    const glm::ivec3& originBlock) {
     const size_t voxelCount = static_cast<size_t>(m_resolution) *
                               static_cast<size_t>(m_resolution) *
@@ -373,7 +381,7 @@ void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
         for (int y = 0; y < m_resolution; ++y) {
             for (int x = 0; x < m_resolution; ++x) {
                 m_voxels[voxelIndex(x, y, z)] =
-                    sampleWorldVoxel(worldView, textureColors, voxelWorldPosition(originBlock, x, y, z));
+                    sampleWorldVoxel(worldView, textureColors, skyRadianceScale, voxelWorldPosition(originBlock, x, y, z));
             }
         }
     }
@@ -381,6 +389,7 @@ void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
 
 bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView,
                                        const IBlockTextureColorProvider& textureColors,
+                                       const float skyRadianceScale,
                                        const glm::ivec3& originBlock,
                                        const glm::ivec3& deltaVoxels) {
     const size_t voxelCount = static_cast<size_t>(m_resolution) *
@@ -413,7 +422,7 @@ bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView,
                     m_voxels[index] = previous[voxelIndex(oldX, oldY, oldZ)];
                 } else {
                     m_voxels[index] =
-                        sampleWorldVoxel(worldView, textureColors, voxelWorldPosition(originBlock, x, y, z));
+                        sampleWorldVoxel(worldView, textureColors, skyRadianceScale, voxelWorldPosition(originBlock, x, y, z));
                 }
             }
         }
@@ -497,6 +506,7 @@ const glm::vec3& VoxelGiClipmap::cachedMaterialAlbedo(const BlockID blockId,
 
 VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& worldView,
                                                               const IBlockTextureColorProvider& textureColors,
+                                                              const float skyRadianceScale,
                                                               const glm::ivec3& blockPos) {
     ClipmapVoxel voxel;
     const BlockStateId stateId = worldView.getBlockState(blockPos.x, blockPos.y, blockPos.z);
@@ -516,7 +526,7 @@ VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& 
     const float skyLight = static_cast<float>((packedLight >> 4) & 0x0F) * (1.0f / 15.0f);
     const float lightLevel = static_cast<float>(def.lightLevel) * (1.0f / 15.0f);
 
-    const glm::vec3 skyRadiance = albedo * (0.055f + skyLight * 0.285f);
+    const glm::vec3 skyRadiance = albedo * ((0.025f + skyLight * 0.315f) * skyRadianceScale);
     const glm::vec3 blockRadiance = albedo * (blockLight * 0.48f);
     const glm::vec3 emission = emissiveColor(def) * (std::pow(lightLevel, 1.25f) * 2.35f);
     const glm::vec3 radiance = skyRadiance + blockRadiance + emission;

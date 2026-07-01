@@ -71,9 +71,11 @@ private:
     void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels);
     void rebuildVolume(const IWorldView& worldView,
                        const IBlockTextureColorProvider& textureColors,
+                       float skyRadianceScale,
                        const glm::ivec3& originBlock);
     [[nodiscard]] bool shiftCachedVolume(const IWorldView& worldView,
                                          const IBlockTextureColorProvider& textureColors,
+                                         float skyRadianceScale,
                                          const glm::ivec3& originBlock,
                                          const glm::ivec3& deltaVoxels);
     [[nodiscard]] bool computeVoxelDelta(const glm::ivec3& originBlock, glm::ivec3& outDeltaVoxels) const;
@@ -90,6 +92,7 @@ private:
                                                         const IBlockTextureColorProvider& textureColors);
     [[nodiscard]] ClipmapVoxel sampleWorldVoxel(const IWorldView& worldView,
                                                 const IBlockTextureColorProvider& textureColors,
+                                                float skyRadianceScale,
                                                 const glm::ivec3& blockPos);
 
     GLuint m_texture = 0;
@@ -106,6 +109,7 @@ private:
     VoxelGiClipmapStats m_stats;
     uint64_t m_lastActiveChunkRevision = 0;
     uint64_t m_lastBlockContentRevision = 0;
+    float m_lastSkyRadianceScale = -1.0f;
     uint64_t m_lastUpdateFrame = 0;
 };
 

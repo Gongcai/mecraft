@@ -28,7 +28,7 @@ void main() {
 
     vec4 current = texelFetch(uCurrentTex, texel, 0);
     float depth = texelFetch(uDepthTex, texel, 0).r;
-    if (depth >= 0.9999 || current.a <= 1e-4) {
+    if (depth >= 0.9999) {
         FragColor = current;
         return;
     }
@@ -63,9 +63,13 @@ void main() {
     vec3 meanColor = sumColor / max(sampleCount, 1.0);
     vec3 variance = max(sumColorSq / max(sampleCount, 1.0) - meanColor * meanColor, vec3(0.0));
     vec3 sigma = sqrt(variance);
-    vec3 clipMin = max(minColor, meanColor - sigma * 1.8);
-    vec3 clipMax = min(maxColor, meanColor + sigma * 1.8);
-    history.rgb = clamp(history.rgb, clipMin, clipMax);
+    float currentConfidence = smoothstep(0.02, 0.20, current.a);
+    if (currentConfidence > 0.05) {
+        float sigmaScale = mix(3.0, 1.8, currentConfidence);
+        vec3 clipMin = max(minColor, meanColor - sigma * sigmaScale);
+        vec3 clipMax = min(maxColor, meanColor + sigma * sigmaScale);
+        history.rgb = clamp(history.rgb, clipMin, clipMax);
+    }
 
     float linCurrent = linearizeDepth(depth);
     float linHistory = linearizeDepth(texture(uDepthTex, prevCoord).r);
@@ -77,7 +81,7 @@ void main() {
     float disocclusion = max(depthDisocclusion, normalDisocclusion);
     float pixelMotion = length(velocity * uScreenSize);
     float motionFactor = exp(-pixelMotion * 0.25);
-    float confidence = smoothstep(0.02, 0.20, max(current.a, history.a));
+    float confidence = mix(0.65, 1.0, max(currentConfidence, smoothstep(0.02, 0.20, history.a)));
     float blendWeight = clamp(uHistoryWeight, 0.0, 0.98) * (1.0 - disocclusion) * motionFactor * confidence;
 
     vec3 color = mix(current.rgb, history.rgb, blendWeight);

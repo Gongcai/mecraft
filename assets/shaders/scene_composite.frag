@@ -119,9 +119,8 @@ vec4 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
     float traceDistance = max(uVoxelGiTraceDistance, uVoxelGiVoxelSize);
     float firstDistance = max(uVoxelGiSampleDistance, uVoxelGiVoxelSize);
     float stepLength = max(uVoxelGiVoxelSize, (traceDistance - firstDistance) / float(steps));
-    float transmittance = 1.0;
     vec3 radiance = vec3(0.0);
-    float weightSum = 0.0;
+    float opacity = 0.0;
 
     for (int i = 0; i < 12; ++i) {
         if (i >= steps) {
@@ -132,20 +131,22 @@ vec4 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
         float lod = clamp(log2(coneDiameter / max(uVoxelGiVoxelSize, 0.0001)), 0.0, max(uVoxelGiMipCount - 1.0, 0.0));
         vec4 sampleData = sampleVoxelGiRadiance(start + direction * distanceAlongCone, lod);
         float coverage = voxelGiConeCoverage(sampleData.a, coneDiameter);
+        float stepRatio = max(stepLength / max(uVoxelGiVoxelSize, 0.0001), 1.0);
+        float correctedAlpha = 1.0 - pow(max(1.0 - coverage, 0.0001), stepRatio);
         float surfaceVisibility = mix(1.0, 0.58, coverage);
         vec3 surfaceRadiance = sampleData.a > 1e-4
             ? sampleData.rgb / max(sampleData.a, 1e-4)
             : vec3(0.0);
-        float sampleWeight = weight * transmittance * surfaceVisibility * coverage / (1.0 + distanceAlongCone * 0.18);
-        radiance += surfaceRadiance * sampleWeight;
-        weightSum += sampleWeight;
-        transmittance *= exp(-coverage * max(uVoxelGiOcclusionStrength, 0.0));
-        if (transmittance < 0.035) {
+        float alphaStep = clamp(correctedAlpha * max(uVoxelGiOcclusionStrength, 0.0), 0.0, 1.0);
+        float frontToBack = (1.0 - opacity) * alphaStep;
+        radiance += surfaceRadiance * surfaceVisibility * frontToBack;
+        opacity += frontToBack;
+        if (opacity > 0.965) {
             break;
         }
     }
 
-    return vec4(radiance, weightSum);
+    return vec4(radiance * weight, weight);
 }
 
 vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float vertexAo) {
