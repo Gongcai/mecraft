@@ -10,6 +10,27 @@
 #include <cstdint>
 #include <vector>
 
+enum class VoxelGiClipmapUpdateMode : uint8_t {
+    Disabled = 0,
+    Idle = 1,
+    Full = 2,
+    Shifted = 3,
+};
+
+struct VoxelGiClipmapStats {
+    VoxelGiClipmapUpdateMode mode = VoxelGiClipmapUpdateMode::Disabled;
+    bool valid = false;
+    int resolution = 0;
+    int mipLevels = 0;
+    glm::ivec3 originBlock = glm::ivec3(0);
+    glm::ivec3 deltaVoxels = glm::ivec3(0);
+    uint64_t sampledVoxels = 0;
+    uint64_t reusedVoxels = 0;
+    uint64_t uploadedVoxels = 0;
+    uint64_t copiedVoxels = 0;
+    int uploadedBoxes = 0;
+};
+
 /// Maintains a camera-centered 3D radiance clipmap for stable low-frequency GI.
 class VoxelGiClipmap {
 public:
@@ -28,6 +49,7 @@ public:
     [[nodiscard]] float voxelSize() const { return m_voxelSize; }
     [[nodiscard]] int resolution() const { return m_resolution; }
     [[nodiscard]] int mipLevels() const { return m_mipLevels; }
+    [[nodiscard]] const VoxelGiClipmapStats& stats() const { return m_stats; }
 
 private:
     struct ClipmapVoxel {
@@ -39,14 +61,16 @@ private:
 
     void allocateTexture(int resolution);
     void uploadFullVolume();
-    void uploadShiftedVolume(const glm::ivec3& deltaVoxels);
-    void uploadSubVolume(int x, int y, int z, int width, int height, int depth);
+    [[nodiscard]] int uploadShiftedVolume(const glm::ivec3& deltaVoxels);
+    [[nodiscard]] bool uploadSubVolume(int x, int y, int z, int width, int height, int depth);
     void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels);
     void rebuildVolume(const IWorldView& worldView, const glm::ivec3& originBlock);
     [[nodiscard]] bool shiftCachedVolume(const IWorldView& worldView,
                                          const glm::ivec3& originBlock,
                                          const glm::ivec3& deltaVoxels);
     [[nodiscard]] bool computeVoxelDelta(const glm::ivec3& originBlock, glm::ivec3& outDeltaVoxels) const;
+    [[nodiscard]] uint64_t overlapVoxelCount(const glm::ivec3& deltaVoxels) const;
+    void updateStatsBase(VoxelGiClipmapUpdateMode mode, const glm::ivec3& originBlock);
     [[nodiscard]] size_t voxelIndex(int x, int y, int z) const;
     [[nodiscard]] glm::ivec3 voxelWorldPosition(const glm::ivec3& originBlock, int x, int y, int z) const;
     [[nodiscard]] glm::ivec3 computeOrigin(const glm::vec3& cameraPosition,
@@ -64,6 +88,7 @@ private:
     glm::vec3 m_origin = glm::vec3(0.0f);
     glm::ivec3 m_originBlock = glm::ivec3(0);
     std::vector<ClipmapVoxel> m_voxels;
+    VoxelGiClipmapStats m_stats;
     uint64_t m_lastActiveChunkRevision = 0;
     uint64_t m_lastBlockContentRevision = 0;
     uint64_t m_lastUpdateFrame = 0;

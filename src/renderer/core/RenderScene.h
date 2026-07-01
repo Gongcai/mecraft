@@ -10,6 +10,7 @@
 #include "../mesh/TerrainStreamingService.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "../debug/RenderDebugService.h"
+#include "../gi/VoxelGiClipmap.h"
 
 #include <memory>
 #include <functional>
@@ -176,6 +177,7 @@ public:
     /// Access the debug service for GPU timers and stats.
     RenderDebugService& debugService() { return m_debugService; }
     const RenderDebugService& debugService() const { return m_debugService; }
+    [[nodiscard]] const VoxelGiClipmapStats& getVoxelGiClipmapStats() const;
 
     // Owned services accessors
     TerrainStreamingService& getTerrainStreamingService() { return m_terrainStreamingService; }

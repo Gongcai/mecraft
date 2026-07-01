@@ -1291,6 +1291,34 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Sample Distance", &settings.voxelGi.sampleDistance, 1.0f, 12.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Trace Distance", &settings.voxelGi.traceDistance, 4.0f, 48.0f, "%.1f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Cone Aperture", &settings.voxelGi.coneAperture, 0.05f, 1.50f, "%.2f");
+        const VoxelGiClipmapStats& voxelGiStats = renderScene.getVoxelGiClipmapStats();
+        const auto voxelGiModeName = [](const VoxelGiClipmapUpdateMode mode) {
+            switch (mode) {
+                case VoxelGiClipmapUpdateMode::Disabled: return "Disabled";
+                case VoxelGiClipmapUpdateMode::Idle: return "Idle";
+                case VoxelGiClipmapUpdateMode::Full: return "Full";
+                case VoxelGiClipmapUpdateMode::Shifted: return "Shifted";
+            }
+            return "Unknown";
+        };
+        ImGui::Text("Voxel GI Mode: %s (%s)",
+                    voxelGiModeName(voxelGiStats.mode),
+                    voxelGiStats.valid ? "valid" : "invalid");
+        ImGui::Text("Voxel GI Volume: %d^3, mips %d, origin (%d,%d,%d), delta (%d,%d,%d)",
+                    voxelGiStats.resolution,
+                    voxelGiStats.mipLevels,
+                    voxelGiStats.originBlock.x,
+                    voxelGiStats.originBlock.y,
+                    voxelGiStats.originBlock.z,
+                    voxelGiStats.deltaVoxels.x,
+                    voxelGiStats.deltaVoxels.y,
+                    voxelGiStats.deltaVoxels.z);
+        ImGui::Text("Voxel GI Work: sampled %llu, reused %llu, uploaded %llu, copied %llu, boxes %d",
+                    static_cast<unsigned long long>(voxelGiStats.sampledVoxels),
+                    static_cast<unsigned long long>(voxelGiStats.reusedVoxels),
+                    static_cast<unsigned long long>(voxelGiStats.uploadedVoxels),
+                    static_cast<unsigned long long>(voxelGiStats.copiedVoxels),
+                    voxelGiStats.uploadedBoxes);
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &settings.postProcess.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
