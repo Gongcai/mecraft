@@ -114,13 +114,14 @@ float voxelGiConeCoverage(float occupancy, float coneDiameter) {
     return 1.0 - pow(max(1.0 - normalizedOccupancy, 0.0001), footprint);
 }
 
-vec3 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
+vec4 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
     int steps = clamp(uVoxelGiConeSteps, 1, 12);
     float traceDistance = max(uVoxelGiTraceDistance, uVoxelGiVoxelSize);
     float firstDistance = max(uVoxelGiSampleDistance, uVoxelGiVoxelSize);
     float stepLength = max(uVoxelGiVoxelSize, (traceDistance - firstDistance) / float(steps));
     float transmittance = 1.0;
     vec3 radiance = vec3(0.0);
+    float weightSum = 0.0;
 
     for (int i = 0; i < 12; ++i) {
         if (i >= steps) {
@@ -134,13 +135,14 @@ vec3 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
         float surfaceVisibility = mix(1.0, 0.58, coverage);
         float sampleWeight = weight * transmittance * surfaceVisibility / (1.0 + distanceAlongCone * 0.18);
         radiance += sampleData.rgb * sampleWeight;
+        weightSum += sampleWeight;
         transmittance *= exp(-coverage * max(uVoxelGiOcclusionStrength, 0.0));
         if (transmittance < 0.035) {
             break;
         }
     }
 
-    return radiance;
+    return vec4(radiance, weightSum);
 }
 
 vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float vertexAo) {
@@ -167,8 +169,9 @@ vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float ve
 
     float directionWeights[5] = float[5](1.0, 0.58, 0.58, 0.58, 0.58);
     for (int i = 0; i < 5; ++i) {
-        radiance += traceVoxelGiCone(start, directions[i], directionWeights[i]);
-        weightSum += directionWeights[i] * float(clamp(uVoxelGiConeSteps, 1, 12));
+        vec4 coneTrace = traceVoxelGiCone(start, directions[i], directionWeights[i]);
+        radiance += coneTrace.rgb;
+        weightSum += coneTrace.a;
     }
 
     vec3 irradiance = radiance / max(weightSum, 0.0001);

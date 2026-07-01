@@ -516,9 +516,9 @@ VoxelGiClipmap::ClipmapVoxel VoxelGiClipmap::sampleWorldVoxel(const IWorldView& 
     const float skyLight = static_cast<float>((packedLight >> 4) & 0x0F) * (1.0f / 15.0f);
     const float lightLevel = static_cast<float>(def.lightLevel) * (1.0f / 15.0f);
 
-    const glm::vec3 skyRadiance = albedo * (0.035f + skyLight * 0.145f);
-    const glm::vec3 blockRadiance = albedo * (blockLight * 0.28f);
-    const glm::vec3 emission = emissiveColor(def) * (std::pow(lightLevel, 1.35f) * 1.65f);
+    const glm::vec3 skyRadiance = albedo * (0.055f + skyLight * 0.285f);
+    const glm::vec3 blockRadiance = albedo * (blockLight * 0.48f);
+    const glm::vec3 emission = emissiveColor(def) * (std::pow(lightLevel, 1.25f) * 2.35f);
     const glm::vec3 radiance = skyRadiance + blockRadiance + emission;
 
     voxel.r = radiance.r;

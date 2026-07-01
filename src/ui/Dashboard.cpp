@@ -808,14 +808,14 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         if (ImGui::Button("Voxel GI Test")) {
             settings.voxelGi.enabled = true;
             settings.voxelGi.debugEnabled = false;
-            settings.voxelGi.strength = 0.32f;
+            settings.voxelGi.strength = 0.48f;
             settings.voxelGi.resolution = 64;
             settings.voxelGi.updateInterval = 3;
-            settings.voxelGi.coneSteps = 5;
+            settings.voxelGi.coneSteps = 6;
             settings.voxelGi.originSnap = 8;
             settings.voxelGi.voxelSize = 1.0f;
             settings.voxelGi.normalBias = 0.45f;
-            settings.voxelGi.sampleDistance = 3.0f;
+            settings.voxelGi.sampleDistance = 1.5f;
             settings.voxelGi.traceDistance = 18.0f;
             settings.voxelGi.coneAperture = 0.55f;
             settings.voxelGi.occupancyScale = 0.55f;
