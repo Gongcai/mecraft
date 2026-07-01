@@ -588,6 +588,55 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
     if (!m_renderScene) { finalizeScrollTab(contentPanel, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
 
+    addSectionHeader(stack, resourceMgr, "SSGI");
+
+    addToggle(stack, resourceMgr, "SSGI", s.ssgi.enabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.ssgi.enabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addToggle(stack, resourceMgr, "SSGI Temporal", s.ssgi.temporalEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.ssgi.temporalEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addSliderRow(stack, resourceMgr, "SSGI Radius",
+                 0.5f, 24.0f, s.ssgi.radius, 0.05f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.radius = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI Strength",
+                 0.0f, 4.0f, s.ssgi.strength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.strength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI Samples",
+                 1.0f, 32.0f, static_cast<float>(s.ssgi.samples), 1.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.samples = static_cast<int>(v);
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI Max Distance",
+                 1.0f, 48.0f, s.ssgi.maxDistance, 0.5f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.maxDistance = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI Thickness",
+                 0.1f, 8.0f, s.ssgi.thickness, 0.05f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.thickness = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI History Weight",
+                 0.0f, 0.98f, s.ssgi.historyWeight, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.historyWeight = v;
+                     m_renderScene->setSettings(s);
+                 });
+
     addSectionHeader(stack, resourceMgr, "SSAO");
 
     addToggle(stack, resourceMgr, "SSAO", s.ssao.enabled,
@@ -622,55 +671,6 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                  0.0f, 0.98f, s.ssao.historyWeight, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings(); s.ssao.historyWeight = v;
-                     m_renderScene->setSettings(s);
-                 });
-
-    addSectionHeader(stack, resourceMgr, "SSGI");
-
-    addToggle(stack, resourceMgr, "SSGI", s.ssgi.enabled,
-              [this](bool v) {
-                  auto s = m_renderScene->getSettings(); s.ssgi.enabled = v;
-                  m_renderScene->setSettings(s);
-              });
-    addToggle(stack, resourceMgr, "SSGI Temporal", s.ssgi.temporalEnabled,
-              [this](bool v) {
-                  auto s = m_renderScene->getSettings(); s.ssgi.temporalEnabled = v;
-                  m_renderScene->setSettings(s);
-              });
-    addSliderRow(stack, resourceMgr, "SSGI Radius",
-                 0.5f, 12.0f, s.ssgi.radius, 0.05f,
-                 [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.ssgi.radius = v;
-                     m_renderScene->setSettings(s);
-                 });
-    addSliderRow(stack, resourceMgr, "SSGI Strength",
-                 0.0f, 2.0f, s.ssgi.strength, 0.01f,
-                 [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.ssgi.strength = v;
-                     m_renderScene->setSettings(s);
-                 });
-    addSliderRow(stack, resourceMgr, "SSGI Samples",
-                 1.0f, 32.0f, static_cast<float>(s.ssgi.samples), 1.0f,
-                 [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.ssgi.samples = static_cast<int>(v);
-                     m_renderScene->setSettings(s);
-                 });
-    addSliderRow(stack, resourceMgr, "SSGI Max Distance",
-                 1.0f, 32.0f, s.ssgi.maxDistance, 0.5f,
-                 [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.ssgi.maxDistance = v;
-                     m_renderScene->setSettings(s);
-                 });
-    addSliderRow(stack, resourceMgr, "SSGI Thickness",
-                 0.1f, 4.0f, s.ssgi.thickness, 0.05f,
-                 [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.ssgi.thickness = v;
-                     m_renderScene->setSettings(s);
-                 });
-    addSliderRow(stack, resourceMgr, "SSGI History Weight",
-                 0.0f, 0.98f, s.ssgi.historyWeight, 0.01f,
-                 [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.ssgi.historyWeight = v;
                      m_renderScene->setSettings(s);
                  });
 

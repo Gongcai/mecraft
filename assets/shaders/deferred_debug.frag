@@ -33,6 +33,7 @@ uniform sampler2D uHistoryCloudTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uShadowColorTex;
 uniform sampler2D uShadowNormalTex;
+uniform sampler2D uSsgiTex;
 uniform sampler2DArray uCsmShadowDepthTex;
 uniform mat4 uShadowModelView;
 uniform mat4 uShadowProjection;
@@ -831,6 +832,21 @@ void main() {
             ? 0.0
             : smoothstep(0.02, 0.25, aux.wetnessMask);
         FragColor = vec4(vec3(wetHistoryReject), 1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 81) {
+        FragColor = vec4(tonemapPreview(texture(uSsgiTex, vTexCoord).rgb), 1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 82) {
+        FragColor = vec4(tonemapPreview(texture(uSsgiTex, vTexCoord).rgb * 8.0), 1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 83) {
+        FragColor = vec4(vec3(texture(uSsgiTex, vTexCoord).a), 1.0);
         return;
     }
 

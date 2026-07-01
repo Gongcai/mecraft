@@ -41,12 +41,12 @@ struct SsaoSettings {
 struct SsgiSettings {
     bool enabled = true;
     bool temporalEnabled = true;
-    float historyWeight = 0.88f;
-    float radius = 3.5f;
-    float strength = 0.42f;
-    float maxDistance = 12.0f;
-    float thickness = 1.2f;
-    int samples = 8;
+    float historyWeight = 0.82f;
+    float radius = 5.5f;
+    float strength = 1.2f;
+    float maxDistance = 16.0f;
+    float thickness = 1.5f;
+    int samples = 12;
 };
 
 /// Volumetric fog/light settings

@@ -676,7 +676,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "77: Shadow Color1",
             "78: Reflection Composite Delta x32",
             "79: TAA Loss x32",
-            "80: TAA Wet Reject Mask"
+            "80: TAA Wet Reject Mask",
+            "81: SSGI",
+            "82: SSGI x8",
+            "83: SSGI Confidence"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;
@@ -770,6 +773,28 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &settings.debug.derivativeStrictMode);
         pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
+        pipelineChanged |= ImGui::Checkbox("SSGI", &settings.ssgi.enabled);
+        ImGui::SameLine();
+        if (ImGui::Button("SSGI View")) {
+            settings.debug.viewMode = 81;
+            debugViewMode = 81;
+            pipelineChanged = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("SSGI Strong Test")) {
+            settings.ssgi.enabled = true;
+            settings.ssgi.temporalEnabled = true;
+            settings.ssgi.historyWeight = 0.78f;
+            settings.ssgi.radius = 8.0f;
+            settings.ssgi.strength = 2.2f;
+            settings.ssgi.maxDistance = 24.0f;
+            settings.ssgi.thickness = 2.2f;
+            settings.ssgi.samples = 16;
+            settings.debug.viewMode = 0;
+            debugViewMode = 0;
+            pipelineChanged = true;
+        }
+        pipelineChanged |= ImGui::Checkbox("SSGI Temporal", &settings.ssgi.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
         pipelineChanged |= ImGui::SliderFloat("FSR1 Render Scale", &settings.upscale.renderScale, 0.50f, 1.00f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("FSR1 Sharpness", &settings.upscale.sharpness, 0.00f, 2.00f, "%.2f");
@@ -1221,6 +1246,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("SSAO Strength", &settings.ssao.strength, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderInt("SSAO Samples", &settings.ssao.samples, 1, 64);
         pipelineChanged |= ImGui::SliderFloat("SSAO History Weight", &settings.ssao.historyWeight, 0.0f, 0.98f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSGI Radius", &settings.ssgi.radius, 0.5f, 24.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSGI Strength", &settings.ssgi.strength, 0.0f, 4.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderInt("SSGI Samples", &settings.ssgi.samples, 1, 32);
+        pipelineChanged |= ImGui::SliderFloat("SSGI Max Distance", &settings.ssgi.maxDistance, 1.0f, 48.0f, "%.1f");
+        pipelineChanged |= ImGui::SliderFloat("SSGI Thickness", &settings.ssgi.thickness, 0.1f, 8.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSGI History Weight", &settings.ssgi.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &settings.postProcess.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);

@@ -59,6 +59,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
     m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
     m_deferredDebugShader->setInt("uCsmShadowDepthTex", 16);
+    m_deferredDebugShader->setInt("uSsgiTex", 18);
 
     // Shadow uniforms from ShadowRenderer
     if (m_shadowRenderer) {
@@ -191,10 +192,16 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthTexture());
     glActiveTexture(GL_TEXTURE17);
     glBindTexture(GL_TEXTURE_2D, targets.temporalCurrentTexture());
+    glActiveTexture(GL_TEXTURE18);
+    glBindTexture(GL_TEXTURE_2D, settings.ssgi.temporalEnabled
+        ? targets.ssgiTemporalTexture()
+        : targets.ssgiTexture());
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_deferredDebugShader);
 
     // Cleanup texture bindings
+    glActiveTexture(GL_TEXTURE18);
+    glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE17);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE16);
