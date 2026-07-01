@@ -154,6 +154,8 @@ void applySsgiSettings(const json& j, SsgiSettings& s) {
     readFloat(j, "maxDistance", s.maxDistance);
     readFloat(j, "thickness", s.thickness);
     readFloat(j, "denoiseStrength", s.denoiseStrength);
+    readFloat(j, "radianceFilterStrength", s.radianceFilterStrength);
+    readFloat(j, "colorBleedStrength", s.colorBleedStrength);
     readInt(j, "samples", s.samples);
     readInt(j, "denoiseIterations", s.denoiseIterations);
 }
@@ -169,6 +171,8 @@ json toJson(const SsgiSettings& s) {
         {"maxDistance", s.maxDistance},
         {"thickness", s.thickness},
         {"denoiseStrength", s.denoiseStrength},
+        {"radianceFilterStrength", s.radianceFilterStrength},
+        {"colorBleedStrength", s.colorBleedStrength},
         {"samples", s.samples},
         {"denoiseIterations", s.denoiseIterations},
     };

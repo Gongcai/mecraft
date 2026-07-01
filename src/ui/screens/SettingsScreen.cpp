@@ -647,6 +647,18 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                      auto s = m_renderScene->getSettings(); s.ssgi.denoiseStrength = v;
                      m_renderScene->setSettings(s);
                  });
+    addSliderRow(stack, resourceMgr, "SSGI Radiance Filter",
+                 0.0f, 1.0f, s.ssgi.radianceFilterStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.radianceFilterStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "SSGI Color Bleed",
+                 0.0f, 1.0f, s.ssgi.colorBleedStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.ssgi.colorBleedStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
     addSliderRow(stack, resourceMgr, "SSGI History Weight",
                  0.0f, 0.98f, s.ssgi.historyWeight, 0.01f,
                  [this](float v) {

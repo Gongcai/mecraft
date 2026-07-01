@@ -75,6 +75,8 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
     m_ssgiShader->setFloat("uStrength", ssgi.strength);
     m_ssgiShader->setFloat("uMaxDistance", ssgi.maxDistance);
     m_ssgiShader->setFloat("uThickness", ssgi.thickness);
+    m_ssgiShader->setFloat("uRadianceFilterStrength", ssgi.radianceFilterStrength);
+    m_ssgiShader->setFloat("uColorBleedStrength", ssgi.colorBleedStrength);
     m_ssgiShader->setInt("uSamples", std::clamp(ssgi.samples, 1, 32));
     m_ssgiShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
 

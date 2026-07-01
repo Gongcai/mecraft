@@ -791,6 +791,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.ssgi.maxDistance = 24.0f;
             settings.ssgi.thickness = 2.2f;
             settings.ssgi.denoiseStrength = 0.92f;
+            settings.ssgi.radianceFilterStrength = 0.65f;
+            settings.ssgi.colorBleedStrength = 0.42f;
             settings.ssgi.samples = 16;
             settings.ssgi.denoiseIterations = 3;
             settings.debug.viewMode = 0;
@@ -1257,6 +1259,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("SSGI Thickness", &settings.ssgi.thickness, 0.1f, 8.0f, "%.2f");
         pipelineChanged |= ImGui::SliderInt("SSGI Denoise Passes", &settings.ssgi.denoiseIterations, 0, 4);
         pipelineChanged |= ImGui::SliderFloat("SSGI Denoise Strength", &settings.ssgi.denoiseStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSGI Radiance Filter", &settings.ssgi.radianceFilterStrength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("SSGI Color Bleed", &settings.ssgi.colorBleedStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSGI History Weight", &settings.ssgi.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");

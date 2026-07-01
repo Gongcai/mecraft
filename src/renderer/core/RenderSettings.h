@@ -48,6 +48,8 @@ struct SsgiSettings {
     float maxDistance = 16.0f;
     float thickness = 1.5f;
     float denoiseStrength = 0.85f;
+    float radianceFilterStrength = 0.55f;
+    float colorBleedStrength = 0.35f;
     int samples = 12;
     int denoiseIterations = 2;
 };

@@ -20,6 +20,8 @@ uniform float uRadius;
 uniform float uStrength;
 uniform float uMaxDistance;
 uniform float uThickness;
+uniform float uRadianceFilterStrength;
+uniform float uColorBleedStrength;
 uniform int uSamples;
 uniform int uFrameIndex;
 
@@ -41,6 +43,47 @@ vec2 spiralSample(int index, int sampleCount, float jitter) {
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+vec3 filteredRadiance(vec2 uv, float depth, vec3 worldPos, vec3 normal) {
+    vec3 centerRadiance = max(texture(uSceneLightingTex, uv).rgb, vec3(0.0));
+    float filterStrength = clamp(uRadianceFilterStrength, 0.0, 1.0);
+    if (filterStrength <= 1e-4) {
+        return centerRadiance;
+    }
+
+    vec2 texelSize = 1.0 / vec2(textureSize(uSceneLightingTex, 0));
+    vec3 radianceSum = centerRadiance;
+    float weightSum = 1.0;
+    const vec2 offsets[4] = vec2[](
+        vec2(1.0, 0.0),
+        vec2(-1.0, 0.0),
+        vec2(0.0, 1.0),
+        vec2(0.0, -1.0)
+    );
+
+    for (int i = 0; i < 4; ++i) {
+        vec2 sampleUv = uv + offsets[i] * texelSize;
+        if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
+            continue;
+        }
+
+        float sampleDepth = texture(uDepthTex, sampleUv).r;
+        if (sampleDepth >= 0.9999) {
+            continue;
+        }
+
+        vec3 sampleWorld = reconstructWorldPosition(sampleUv, sampleDepth);
+        vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleUv).rgb * 2.0 - 1.0);
+        float depthWeight = exp2(-length(sampleWorld - worldPos) * 1.75);
+        float normalWeight = pow(max(dot(sampleNormal, normal), 0.0), 24.0);
+        float weight = depthWeight * normalWeight * 0.5;
+        radianceSum += max(texture(uSceneLightingTex, sampleUv).rgb, vec3(0.0)) * weight;
+        weightSum += weight;
+    }
+
+    vec3 filtered = radianceSum / max(weightSum, 1e-4);
+    return mix(centerRadiance, filtered, filterStrength);
 }
 
 void main() {
@@ -117,10 +160,10 @@ void main() {
         float weight = facing * attenuation * mix(1.0, contactThickness, 0.45);
 
         vec3 sampleAlbedo = texture(uAlbedoTex, sampleUv).rgb;
-        vec3 radiance = max(texture(uSceneLightingTex, sampleUv).rgb, vec3(0.0));
+        vec3 radiance = filteredRadiance(sampleUv, sampleDepth, sampleWorld, sampleNormal);
         radiance *= min(1.0, 16.0 / max(luminance(radiance), 1e-4));
         vec3 albedoChroma = min(sampleAlbedo / max(luminance(sampleAlbedo), 0.18), vec3(3.0));
-        radiance = mix(radiance, albedoChroma * luminance(radiance), 0.35);
+        radiance = mix(radiance, albedoChroma * luminance(radiance), clamp(uColorBleedStrength, 0.0, 1.0));
         indirect += radiance * weight;
         confidence += weight;
     }
