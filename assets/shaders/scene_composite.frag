@@ -133,8 +133,11 @@ vec4 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
         vec4 sampleData = sampleVoxelGiRadiance(start + direction * distanceAlongCone, lod);
         float coverage = voxelGiConeCoverage(sampleData.a, coneDiameter);
         float surfaceVisibility = mix(1.0, 0.58, coverage);
-        float sampleWeight = weight * transmittance * surfaceVisibility / (1.0 + distanceAlongCone * 0.18);
-        radiance += sampleData.rgb * sampleWeight;
+        vec3 surfaceRadiance = sampleData.a > 1e-4
+            ? sampleData.rgb / max(sampleData.a, 1e-4)
+            : vec3(0.0);
+        float sampleWeight = weight * transmittance * surfaceVisibility * coverage / (1.0 + distanceAlongCone * 0.18);
+        radiance += surfaceRadiance * sampleWeight;
         weightSum += sampleWeight;
         transmittance *= exp(-coverage * max(uVoxelGiOcclusionStrength, 0.0));
         if (transmittance < 0.035) {
