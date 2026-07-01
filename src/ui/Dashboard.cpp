@@ -391,13 +391,14 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         } else if (!gpuStats.valid) {
             ImGui::Text("GPU Timers: waiting");
         } else {
-            const double gpuTotalMs = gpuStats.gbufferMs + gpuStats.shadowMs + gpuStats.ssaoMs +
+            const double gpuTotalMs = gpuStats.gbufferMs + gpuStats.shadowMs + gpuStats.ssaoMs + gpuStats.ssgiMs +
                                       gpuStats.lightingMs + gpuStats.transparentMs + gpuStats.volumetricMs +
                                       gpuStats.reflectionMs + gpuStats.cloudMs + gpuStats.waterMs + gpuStats.postMs;
             ImGui::Text("GPU Total (tracked): %.3f ms", gpuTotalMs);
             ImGui::Text("GPU GBuffer: %.3f ms", gpuStats.gbufferMs);
             ImGui::Text("GPU Shadow: %.3f ms", gpuStats.shadowMs);
             ImGui::Text("GPU SSAO: %.3f ms", gpuStats.ssaoMs);
+            ImGui::Text("GPU SSGI: %.3f ms", gpuStats.ssgiMs);
             ImGui::Text("GPU Lighting: %.3f ms", gpuStats.lightingMs);
             ImGui::Text("GPU Transparent: %.3f ms", gpuStats.transparentMs);
             ImGui::Text("GPU Volumetric: %.3f ms", gpuStats.volumetricMs);

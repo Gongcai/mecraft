@@ -47,6 +47,7 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     m_sceneCompositeShader->setInt("uSkyCaptureTex", 12);
     m_sceneCompositeShader->setInt("uAlbedoTex", 13);
     m_sceneCompositeShader->setInt("uAtmosphereLut", 14);
+    m_sceneCompositeShader->setInt("uSsgiTex", 15);
 
     // Camera / TAA
     m_sceneCompositeShader->setMat4("uViewProj",
@@ -75,6 +76,7 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     // Composite strengths
     m_sceneCompositeShader->setFloat("uCloudCompositeStrength", settings.cloud.sceneCloudCompositeStrength);
     m_sceneCompositeShader->setFloat("uReflectionCompositeStrength", settings.reflection.sceneReflectionCompositeStrength);
+    m_sceneCompositeShader->setInt("uSsgiEnabled", settings.ssgi.enabled ? 1 : 0);
     m_sceneCompositeShader->setInt("uReflectionDebugMode", settings.debug.reflectionDebugMode);
 
     // State
@@ -114,9 +116,15 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glBindTexture(GL_TEXTURE_2D, targets.albedoTexture());
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
+    glActiveTexture(GL_TEXTURE15);
+    glBindTexture(GL_TEXTURE_2D, settings.ssgi.temporalEnabled
+        ? targets.ssgiTemporalTexture()
+        : targets.ssgiTexture());
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_sceneCompositeShader);
 
+    glActiveTexture(GL_TEXTURE15);
+    glBindTexture(GL_TEXTURE_2D, 0);
     for (int i = 13; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);

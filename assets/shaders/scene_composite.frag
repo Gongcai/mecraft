@@ -18,6 +18,7 @@ uniform sampler2D uHistoryDepthTex;
 uniform sampler2D uHistoryReflectionTex;
 uniform sampler2D uHistoryCloudTex;
 uniform sampler2D uSkyCaptureTex;
+uniform sampler2D uSsgiTex;
 
 // Albedo texture for refraction sampling (DerivativeMain composite1 equivalent)
 uniform sampler2D uAlbedoTex;
@@ -49,6 +50,7 @@ uniform float uMoonPhaseAngle;
 uniform float uSkyWetness;
 uniform float uCloudCompositeStrength;
 uniform float uReflectionCompositeStrength;
+uniform int uSsgiEnabled;
 uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta, 26=reflection/scene ratio
 uniform int uIsEyeInWater;
 uniform vec3 uWaterAbsorption;
@@ -162,6 +164,10 @@ void main() {
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
+    if (uSsgiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
+        color += max(texture(uSsgiTex, vTexCoord).rgb, vec3(0.0));
+    }
+
     float compositeStrength = clamp(uReflectionCompositeStrength, 0.0, 1.0);
     if (transMask.isTranslucent) {
         // DerivativeMain composite1.fsh: sceneData = sceneData * reflectionData.a + reflectionData.rgb

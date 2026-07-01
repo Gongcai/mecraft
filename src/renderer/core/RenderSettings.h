@@ -37,6 +37,18 @@ struct SsaoSettings {
     int samples = 8;
 };
 
+/// Screen-space global illumination settings.
+struct SsgiSettings {
+    bool enabled = true;
+    bool temporalEnabled = true;
+    float historyWeight = 0.88f;
+    float radius = 3.5f;
+    float strength = 0.42f;
+    float maxDistance = 12.0f;
+    float thickness = 1.2f;
+    int samples = 8;
+};
+
 /// Volumetric fog/light settings
 struct VolumetricSettings {
     bool lightEnabled = true;
@@ -236,6 +248,7 @@ struct RenderSettings {
     // Subsystem settings
     ShadowSettings shadow;
     SsaoSettings ssao;
+    SsgiSettings ssgi;
     VolumetricSettings volumetric;
     CloudSettings cloud;
     ReflectionSettings reflection;

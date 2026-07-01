@@ -117,6 +117,7 @@ void RenderDebugService::beginFrame() {
             m_gpuFrameStats.gbufferMs = readMs(GpuTimerPass::GBuffer);
             m_gpuFrameStats.shadowMs = readMs(GpuTimerPass::Shadow);
             m_gpuFrameStats.ssaoMs = readMs(GpuTimerPass::Ssao);
+            m_gpuFrameStats.ssgiMs = readMs(GpuTimerPass::Ssgi);
             m_gpuFrameStats.lightingMs = readMs(GpuTimerPass::Lighting);
             m_gpuFrameStats.transparentMs = readMs(GpuTimerPass::Transparent);
             m_gpuFrameStats.volumetricMs = readMs(GpuTimerPass::Volumetric);

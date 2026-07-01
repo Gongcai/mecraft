@@ -144,6 +144,30 @@ json toJson(const SsaoSettings& s) {
     };
 }
 
+void applySsgiSettings(const json& j, SsgiSettings& s) {
+    readBool(j, "enabled", s.enabled);
+    readBool(j, "temporalEnabled", s.temporalEnabled);
+    readFloat(j, "historyWeight", s.historyWeight);
+    readFloat(j, "radius", s.radius);
+    readFloat(j, "strength", s.strength);
+    readFloat(j, "maxDistance", s.maxDistance);
+    readFloat(j, "thickness", s.thickness);
+    readInt(j, "samples", s.samples);
+}
+
+json toJson(const SsgiSettings& s) {
+    return {
+        {"enabled", s.enabled},
+        {"temporalEnabled", s.temporalEnabled},
+        {"historyWeight", s.historyWeight},
+        {"radius", s.radius},
+        {"strength", s.strength},
+        {"maxDistance", s.maxDistance},
+        {"thickness", s.thickness},
+        {"samples", s.samples},
+    };
+}
+
 void applyVolumetricSettings(const json& j, VolumetricSettings& s) {
     readBool(j, "lightEnabled", s.lightEnabled);
     readBool(j, "uwLightEnabled", s.uwLightEnabled);
@@ -498,6 +522,7 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
 
     applyObject("shadow", [&s](const json& value) { applyShadowSettings(value, s.shadow); });
     applyObject("ssao", [&s](const json& value) { applySsaoSettings(value, s.ssao); });
+    applyObject("ssgi", [&s](const json& value) { applySsgiSettings(value, s.ssgi); });
     applyObject("volumetric", [&s](const json& value) { applyVolumetricSettings(value, s.volumetric); });
     applyObject("cloud", [&s](const json& value) { applyCloudSettings(value, s.cloud); });
     applyObject("reflection", [&s](const json& value) { applyReflectionSettings(value, s.reflection); });
@@ -515,6 +540,7 @@ json toJson(const RenderSettings& s) {
         {"pipelineMode", static_cast<int>(s.pipelineMode)},
         {"shadow", toJson(s.shadow)},
         {"ssao", toJson(s.ssao)},
+        {"ssgi", toJson(s.ssgi)},
         {"volumetric", toJson(s.volumetric)},
         {"cloud", toJson(s.cloud)},
         {"reflection", toJson(s.reflection)},

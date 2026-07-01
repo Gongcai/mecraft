@@ -53,6 +53,7 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
     m_waterCompositePass = std::make_unique<WaterCompositePass>();
     m_velocityPass = std::make_unique<VelocityPass>();
     m_ssaoPass = std::make_unique<SsaoPass>();
+    m_ssgiPass = std::make_unique<SsgiPass>();
     m_lightingPass = std::make_unique<DeferredLightingPass>();
     m_reflectionPass = std::make_unique<ReflectionPass>();
     m_cloudPass = std::make_unique<CloudPass>();
@@ -69,6 +70,7 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
     m_waterCompositePass->init(resourceMgr);
     m_velocityPass->init(resourceMgr);
     m_ssaoPass->init(resourceMgr);
+    m_ssgiPass->init(resourceMgr);
     m_lightingPass->init(resourceMgr);
     m_reflectionPass->init(resourceMgr);
     m_cloudPass->init(resourceMgr);
@@ -122,6 +124,7 @@ void DeferredPipeline::shutdown() {
     m_cloudPass.reset();
     m_reflectionPass.reset();
     m_lightingPass.reset();
+    m_ssgiPass.reset();
     m_ssaoPass.reset();
     m_velocityPass.reset();
     m_shadowPass.reset();
@@ -271,6 +274,13 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
+    // SSGI pass
+    if (m_ssgiPass) {
+        renderer::debug::ScopedDebugGroup passGroup("SSGI");
+        ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Ssgi);
+        m_ssgiPass->execute(ctx, m_currentSettings, targets);
+    }
+
     // Reflection pass
     if (m_reflectionPass) {
         renderer::debug::ScopedDebugGroup passGroup("Reflection");
@@ -407,6 +417,16 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
 
     targets.bindSceneResolved();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    targets.bindSsgi();
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    targets.bindSsgiHalfRes();
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    targets.bindSsgiTemporal();
     glClear(GL_COLOR_BUFFER_BIT);
 
     targets.clearWeatherMask();
@@ -717,6 +737,7 @@ void DeferredPipeline::updateDeferredHistoryTargets() {
     }
     targets.swapHistory();
     targets.swapSsaoHistory();
+    targets.swapSsgiHistory();
     m_deferredHistoryUpdatedThisFrame = true;
 }
 

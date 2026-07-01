@@ -7,6 +7,7 @@
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../passes/SsaoPass.h"
+#include "../passes/SsgiPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
 #include "../passes/TemporalResolvePass.h"
@@ -54,6 +55,7 @@ public:
 
     // Pass accessors
     SsaoPass* ssaoPass() const { return m_ssaoPass.get(); }
+    SsgiPass* ssgiPass() const { return m_ssgiPass.get(); }
     VelocityPass* velocityPass() const { return m_velocityPass.get(); }
     ReflectionPass* reflectionPass() const { return m_reflectionPass.get(); }
     TemporalResolvePass* taaPass() const { return m_taaPass.get(); }
@@ -72,6 +74,7 @@ public:
 private:
     // Pass instances
     std::unique_ptr<SsaoPass> m_ssaoPass;
+    std::unique_ptr<SsgiPass> m_ssgiPass;
     std::unique_ptr<VelocityPass> m_velocityPass;
     std::unique_ptr<ReflectionPass> m_reflectionPass;
     std::unique_ptr<TemporalResolvePass> m_taaPass;

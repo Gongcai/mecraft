@@ -11,14 +11,15 @@ enum class GpuTimerPass : size_t {
     GBuffer = 0,
     Shadow = 1,
     Ssao = 2,
-    Lighting = 3,
-    Transparent = 4,
-    Volumetric = 5,
-    Reflection = 6,
-    Cloud = 7,
-    Water = 8,
-    Post = 9,
-    Count = 10
+    Ssgi = 3,
+    Lighting = 4,
+    Transparent = 5,
+    Volumetric = 6,
+    Reflection = 7,
+    Cloud = 8,
+    Water = 9,
+    Post = 10,
+    Count = 11
 };
 
 /// Frustum plane identifiers for culling statistics.
@@ -39,6 +40,7 @@ struct GpuFrameStats {
     double gbufferMs = 0.0;
     double shadowMs = 0.0;
     double ssaoMs = 0.0;
+    double ssgiMs = 0.0;
     double lightingMs = 0.0;
     double transparentMs = 0.0;
     double volumetricMs = 0.0;
