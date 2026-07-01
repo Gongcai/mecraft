@@ -19,6 +19,7 @@ uniform sampler2D uHistoryReflectionTex;
 uniform sampler2D uHistoryCloudTex;
 uniform sampler2D uSkyCaptureTex;
 uniform sampler2D uSsgiTex;
+uniform sampler3D uVoxelGiTex;
 
 // Albedo texture for refraction sampling (DerivativeMain composite1 equivalent)
 uniform sampler2D uAlbedoTex;
@@ -51,6 +52,14 @@ uniform float uSkyWetness;
 uniform float uCloudCompositeStrength;
 uniform float uReflectionCompositeStrength;
 uniform int uSsgiEnabled;
+uniform int uVoxelGiEnabled;
+uniform int uVoxelGiDebugEnabled;
+uniform float uVoxelGiStrength;
+uniform float uVoxelGiVoxelSize;
+uniform float uVoxelGiResolution;
+uniform float uVoxelGiNormalBias;
+uniform float uVoxelGiSampleDistance;
+uniform vec3 uVoxelGiOrigin;
 uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta, 26=reflection/scene ratio
 uniform int uIsEyeInWater;
 uniform vec3 uWaterAbsorption;
@@ -77,6 +86,57 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+vec3 voxelGiUv(vec3 worldPos) {
+    return (worldPos - uVoxelGiOrigin) / max(uVoxelGiVoxelSize * uVoxelGiResolution, 0.0001);
+}
+
+float voxelGiInside(vec3 uv) {
+    vec3 edge = step(vec3(0.0), uv) * step(uv, vec3(1.0));
+    return edge.x * edge.y * edge.z;
+}
+
+vec3 sampleVoxelGiRadiance(vec3 worldPos) {
+    vec3 uv = voxelGiUv(worldPos);
+    return texture(uVoxelGiTex, clamp(uv, vec3(0.0), vec3(1.0))).rgb * voxelGiInside(uv);
+}
+
+vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float vertexAo) {
+    vec3 n = normalize(normal);
+    vec3 up = abs(n.y) < 0.92 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, n));
+    vec3 bitangent = normalize(cross(n, tangent));
+
+    float stepDistance = max(uVoxelGiSampleDistance, uVoxelGiVoxelSize);
+    vec3 start = worldPos + n * max(uVoxelGiNormalBias, 0.0);
+    vec3 radiance = vec3(0.0);
+    float weightSum = 0.0;
+
+    vec3 selfSample = sampleVoxelGiRadiance(worldPos - n * (uVoxelGiVoxelSize * 0.35));
+    radiance += selfSample * 0.35;
+    weightSum += 0.35;
+
+    vec3 directions[5] = vec3[5](
+        n,
+        normalize(n + tangent * 0.75),
+        normalize(n - tangent * 0.75),
+        normalize(n + bitangent * 0.75),
+        normalize(n - bitangent * 0.75)
+    );
+
+    for (int i = 0; i < 5; ++i) {
+        for (int stepIndex = 1; stepIndex <= 3; ++stepIndex) {
+            float stepWeight = 1.0 / float(stepIndex * stepIndex);
+            radiance += sampleVoxelGiRadiance(start + directions[i] * stepDistance * float(stepIndex)) * stepWeight;
+            weightSum += stepWeight;
+        }
+    }
+
+    vec3 irradiance = radiance / max(weightSum, 0.0001);
+    vec3 receiverTint = mix(vec3(0.55), albedo, 0.65);
+    float aoWeight = mix(0.45, 1.0, clamp(vertexAo, 0.0, 1.0));
+    return irradiance * receiverTint * aoWeight * max(uVoxelGiStrength, 0.0);
 }
 
 void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment env) {
@@ -164,6 +224,19 @@ void main() {
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
+    vec3 voxelGi = vec3(0.0);
+    if (uVoxelGiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
+        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec4 normalAo = texture(uNormalAoTex, vTexCoord);
+        vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
+        vec3 albedo = texture(uAlbedoTex, vTexCoord).rgb;
+        voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, normalAo.a);
+        if (uVoxelGiDebugEnabled != 0) {
+            FragColor = vec4(max(voxelGi, vec3(0.0)) * 6.0, 1.0);
+            return;
+        }
+        color += max(voxelGi, vec3(0.0));
+    }
     if (uSsgiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
         color += max(texture(uSsgiTex, vTexCoord).rgb, vec3(0.0));
     }

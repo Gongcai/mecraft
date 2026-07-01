@@ -63,6 +63,7 @@ void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* sh
     m_motionBlurPass = std::make_unique<MotionBlurPass>();
     m_dofPass = std::make_unique<DepthOfFieldPass>();
     m_debugPass = std::make_unique<DebugPass>();
+    m_voxelGiClipmap = std::make_unique<VoxelGiClipmap>();
 
     m_skyCapturePass->init(resourceMgr);
     m_gbufferPass->init(resourceMgr);
@@ -116,6 +117,9 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
 }
 
 void DeferredPipeline::shutdown() {
+    if (m_voxelGiClipmap) {
+        m_voxelGiClipmap->shutdown();
+    }
     m_dofPass.reset();
     m_motionBlurPass.reset();
     m_taaPass.reset();
@@ -132,6 +136,7 @@ void DeferredPipeline::shutdown() {
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
     m_debugPass.reset();
+    m_voxelGiClipmap.reset();
 }
 
 void DeferredPipeline::invalidateHistory() {
@@ -295,10 +300,16 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         m_cloudPass->execute(ctx, m_currentSettings, targets);
     }
 
+    // Voxel GI clipmap update
+    if (m_voxelGiClipmap) {
+        renderer::debug::ScopedDebugGroup passGroup("VoxelGI.Clipmap");
+        m_voxelGiClipmap->update(ctx, m_currentSettings.voxelGi);
+    }
+
     // Scene composite
     if (m_sceneCompositePass) {
         renderer::debug::ScopedDebugGroup passGroup("SceneComposite");
-        m_sceneCompositePass->execute(ctx, m_currentSettings, targets);
+        m_sceneCompositePass->execute(ctx, m_currentSettings, targets, m_voxelGiClipmap.get());
     }
     targets.copySceneCompositeToTransparentComposite();
     targets.copySceneCompositeToSceneResolved();

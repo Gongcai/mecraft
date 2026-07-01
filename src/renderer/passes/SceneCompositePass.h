@@ -8,6 +8,7 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class Shader;
+class VoxelGiClipmap;
 
 /// Scene composite pass: combines lighting, reflections, clouds, and atmosphere into final HDR scene.
 class SceneCompositePass : public RenderPass {
@@ -17,7 +18,7 @@ public:
     [[nodiscard]] const char* name() const override { return "SceneComposite"; }
 
     void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+                 DeferredRenderTargets& targets, const VoxelGiClipmap* voxelGiClipmap);
 
 private:
     Shader* m_sceneCompositeShader = nullptr;

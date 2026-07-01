@@ -224,6 +224,9 @@ set(SRC_RENDERER
         src/renderer/core/DeferredPipeline.cpp
         src/renderer/core/ForwardPipeline.cpp
 
+        # Global illumination
+        src/renderer/gi/VoxelGiClipmap.cpp
+
         # Render targets
         src/renderer/targets/CommonFrameTargets.cpp
         src/renderer/targets/DeferredFrameTargets.cpp

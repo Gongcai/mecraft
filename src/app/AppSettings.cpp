@@ -178,6 +178,30 @@ json toJson(const SsgiSettings& s) {
     };
 }
 
+void applyVoxelGiSettings(const json& j, VoxelGiSettings& s) {
+    readBool(j, "enabled", s.enabled);
+    readBool(j, "debugEnabled", s.debugEnabled);
+    readInt(j, "resolution", s.resolution);
+    readInt(j, "updateInterval", s.updateInterval);
+    readFloat(j, "voxelSize", s.voxelSize);
+    readFloat(j, "strength", s.strength);
+    readFloat(j, "normalBias", s.normalBias);
+    readFloat(j, "sampleDistance", s.sampleDistance);
+}
+
+json toJson(const VoxelGiSettings& s) {
+    return {
+        {"enabled", s.enabled},
+        {"debugEnabled", s.debugEnabled},
+        {"resolution", s.resolution},
+        {"updateInterval", s.updateInterval},
+        {"voxelSize", s.voxelSize},
+        {"strength", s.strength},
+        {"normalBias", s.normalBias},
+        {"sampleDistance", s.sampleDistance},
+    };
+}
+
 void applyVolumetricSettings(const json& j, VolumetricSettings& s) {
     readBool(j, "lightEnabled", s.lightEnabled);
     readBool(j, "uwLightEnabled", s.uwLightEnabled);
@@ -533,6 +557,7 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("shadow", [&s](const json& value) { applyShadowSettings(value, s.shadow); });
     applyObject("ssao", [&s](const json& value) { applySsaoSettings(value, s.ssao); });
     applyObject("ssgi", [&s](const json& value) { applySsgiSettings(value, s.ssgi); });
+    applyObject("voxelGi", [&s](const json& value) { applyVoxelGiSettings(value, s.voxelGi); });
     applyObject("volumetric", [&s](const json& value) { applyVolumetricSettings(value, s.volumetric); });
     applyObject("cloud", [&s](const json& value) { applyCloudSettings(value, s.cloud); });
     applyObject("reflection", [&s](const json& value) { applyReflectionSettings(value, s.reflection); });
@@ -551,6 +576,7 @@ json toJson(const RenderSettings& s) {
         {"shadow", toJson(s.shadow)},
         {"ssao", toJson(s.ssao)},
         {"ssgi", toJson(s.ssgi)},
+        {"voxelGi", toJson(s.voxelGi)},
         {"volumetric", toJson(s.volumetric)},
         {"cloud", toJson(s.cloud)},
         {"reflection", toJson(s.reflection)},

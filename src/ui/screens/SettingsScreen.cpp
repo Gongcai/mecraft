@@ -666,6 +666,55 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                      m_renderScene->setSettings(s);
                  });
 
+    addSectionHeader(stack, resourceMgr, "Voxel GI");
+
+    addToggle(stack, resourceMgr, "Voxel GI", s.voxelGi.enabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.voxelGi.enabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addToggle(stack, resourceMgr, "Voxel GI Debug", s.voxelGi.debugEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.voxelGi.debugEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addSliderRow(stack, resourceMgr, "Voxel GI Strength",
+                 0.0f, 1.0f, s.voxelGi.strength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.strength = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Resolution",
+                 16.0f, 128.0f, static_cast<float>(s.voxelGi.resolution), 16.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.resolution = static_cast<int>(v);
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Update Frames",
+                 1.0f, 20.0f, static_cast<float>(s.voxelGi.updateInterval), 1.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.updateInterval = static_cast<int>(v);
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Voxel Size",
+                 1.0f, 4.0f, s.voxelGi.voxelSize, 1.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.voxelSize = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Normal Bias",
+                 0.0f, 2.0f, s.voxelGi.normalBias, 0.05f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.normalBias = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Sample Distance",
+                 1.0f, 12.0f, s.voxelGi.sampleDistance, 0.25f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.sampleDistance = v;
+                     m_renderScene->setSettings(s);
+                 });
+
     addSectionHeader(stack, resourceMgr, "SSAO");
 
     addToggle(stack, resourceMgr, "SSAO", s.ssao.enabled,

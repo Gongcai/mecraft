@@ -801,6 +801,21 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         }
         pipelineChanged |= ImGui::Checkbox("SSGI Temporal", &settings.ssgi.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("SSGI Denoise", &settings.ssgi.denoiseEnabled);
+        pipelineChanged |= ImGui::Checkbox("Voxel GI", &settings.voxelGi.enabled);
+        ImGui::SameLine();
+        pipelineChanged |= ImGui::Checkbox("Voxel GI Debug", &settings.voxelGi.debugEnabled);
+        ImGui::SameLine();
+        if (ImGui::Button("Voxel GI Test")) {
+            settings.voxelGi.enabled = true;
+            settings.voxelGi.debugEnabled = false;
+            settings.voxelGi.strength = 0.32f;
+            settings.voxelGi.resolution = 64;
+            settings.voxelGi.updateInterval = 3;
+            settings.voxelGi.voxelSize = 1.0f;
+            settings.voxelGi.normalBias = 0.45f;
+            settings.voxelGi.sampleDistance = 3.0f;
+            pipelineChanged = true;
+        }
         pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
         pipelineChanged |= ImGui::SliderFloat("FSR1 Render Scale", &settings.upscale.renderScale, 0.50f, 1.00f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("FSR1 Sharpness", &settings.upscale.sharpness, 0.00f, 2.00f, "%.2f");
@@ -1262,6 +1277,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("SSGI Radiance Filter", &settings.ssgi.radianceFilterStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSGI Color Bleed", &settings.ssgi.colorBleedStrength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("SSGI History Weight", &settings.ssgi.historyWeight, 0.0f, 0.98f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Strength", &settings.voxelGi.strength, 0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderInt("Voxel GI Resolution", &settings.voxelGi.resolution, 16, 128);
+        pipelineChanged |= ImGui::SliderInt("Voxel GI Update Frames", &settings.voxelGi.updateInterval, 1, 20);
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Voxel Size", &settings.voxelGi.voxelSize, 1.0f, 4.0f, "%.0f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Normal Bias", &settings.voxelGi.normalBias, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Sample Distance", &settings.voxelGi.sampleDistance, 1.0f, 12.0f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &settings.postProcess.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
