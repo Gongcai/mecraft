@@ -183,10 +183,13 @@ void applyVoxelGiSettings(const json& j, VoxelGiSettings& s) {
     readBool(j, "debugEnabled", s.debugEnabled);
     readInt(j, "resolution", s.resolution);
     readInt(j, "updateInterval", s.updateInterval);
+    readInt(j, "coneSteps", s.coneSteps);
     readFloat(j, "voxelSize", s.voxelSize);
     readFloat(j, "strength", s.strength);
     readFloat(j, "normalBias", s.normalBias);
     readFloat(j, "sampleDistance", s.sampleDistance);
+    readFloat(j, "traceDistance", s.traceDistance);
+    readFloat(j, "coneAperture", s.coneAperture);
 }
 
 json toJson(const VoxelGiSettings& s) {
@@ -195,10 +198,13 @@ json toJson(const VoxelGiSettings& s) {
         {"debugEnabled", s.debugEnabled},
         {"resolution", s.resolution},
         {"updateInterval", s.updateInterval},
+        {"coneSteps", s.coneSteps},
         {"voxelSize", s.voxelSize},
         {"strength", s.strength},
         {"normalBias", s.normalBias},
         {"sampleDistance", s.sampleDistance},
+        {"traceDistance", s.traceDistance},
+        {"coneAperture", s.coneAperture},
     };
 }
 

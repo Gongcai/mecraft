@@ -27,6 +27,16 @@ constexpr float kMaxVoxelSize = 4.0f;
     return std::clamp(updateInterval, 1, 60);
 }
 
+[[nodiscard]] int mipLevelCount(const int resolution) {
+    int levels = 1;
+    int size = std::max(1, resolution);
+    while (size > 1) {
+        size /= 2;
+        ++levels;
+    }
+    return levels;
+}
+
 [[nodiscard]] glm::vec3 materialAlbedo(const BlockDef& def) {
     switch (def.materialKind) {
         case BlockMaterialKinds::STONE: return glm::vec3(0.50f, 0.50f, 0.48f);
@@ -78,6 +88,7 @@ void VoxelGiClipmap::shutdown() {
     }
     m_valid = false;
     m_resolution = 0;
+    m_mipLevels = 1;
     m_lastActiveChunkRevision = 0;
     m_lastBlockContentRevision = 0;
     m_lastUpdateFrame = 0;
@@ -91,12 +102,15 @@ void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& sett
 
     const int resolution = normalizedResolution(settings.resolution);
     const float voxelSize = normalizedVoxelSize(settings.voxelSize);
+    const int mipLevels = mipLevelCount(resolution);
     const int updateInterval = normalizedUpdateInterval(settings.updateInterval);
     const glm::ivec3 originBlock = computeOrigin(ctx.camera.position, resolution, voxelSize);
     const uint64_t activeRevision = ctx.worldView->getActiveChunkRevision();
     const uint64_t blockRevision = ctx.worldView->getBlockContentRevision();
 
-    const bool parametersChanged = resolution != m_resolution || std::abs(voxelSize - m_voxelSize) > 0.0001f;
+    const bool parametersChanged = resolution != m_resolution ||
+                                   mipLevels != m_mipLevels ||
+                                   std::abs(voxelSize - m_voxelSize) > 0.0001f;
     const bool originChanged = originBlock != m_originBlock;
     const bool worldChanged = activeRevision != m_lastActiveChunkRevision ||
                               blockRevision != m_lastBlockContentRevision;
@@ -107,6 +121,7 @@ void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& sett
 
     allocateTexture(resolution);
     m_resolution = resolution;
+    m_mipLevels = mipLevels;
     m_voxelSize = voxelSize;
     m_originBlock = originBlock;
     m_origin = glm::vec3(originBlock);
@@ -147,12 +162,15 @@ void VoxelGiClipmap::allocateTexture(const int resolution) {
     }
 
     glCreateTextures(GL_TEXTURE_3D, 1, &m_texture);
-    glTextureStorage3D(m_texture, 1, GL_RGBA16F, resolution, resolution, resolution);
-    glTextureParameteri(m_texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    const int levels = mipLevelCount(resolution);
+    glTextureStorage3D(m_texture, levels, GL_RGBA16F, resolution, resolution, resolution);
+    glTextureParameteri(m_texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTextureParameteri(m_texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(m_texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_texture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(m_texture, GL_TEXTURE_BASE_LEVEL, 0);
+    glTextureParameteri(m_texture, GL_TEXTURE_MAX_LEVEL, levels - 1);
     renderer::debug::labelTexture(m_texture, "VoxelGI.ClipmapRadiance");
 }
 
@@ -160,6 +178,7 @@ void VoxelGiClipmap::upload(const std::vector<ClipmapVoxel>& voxels) {
     glTextureSubImage3D(m_texture, 0, 0, 0, 0,
                         m_resolution, m_resolution, m_resolution,
                         GL_RGBA, GL_FLOAT, voxels.data());
+    glGenerateTextureMipmap(m_texture);
 }
 
 glm::ivec3 VoxelGiClipmap::computeOrigin(const glm::vec3& cameraPosition,

@@ -57,8 +57,12 @@ uniform int uVoxelGiDebugEnabled;
 uniform float uVoxelGiStrength;
 uniform float uVoxelGiVoxelSize;
 uniform float uVoxelGiResolution;
+uniform float uVoxelGiMipCount;
 uniform float uVoxelGiNormalBias;
 uniform float uVoxelGiSampleDistance;
+uniform float uVoxelGiTraceDistance;
+uniform float uVoxelGiConeAperture;
+uniform int uVoxelGiConeSteps;
 uniform vec3 uVoxelGiOrigin;
 uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta, 26=reflection/scene ratio
 uniform int uIsEyeInWater;
@@ -97,9 +101,33 @@ float voxelGiInside(vec3 uv) {
     return edge.x * edge.y * edge.z;
 }
 
-vec3 sampleVoxelGiRadiance(vec3 worldPos) {
+vec4 sampleVoxelGiRadiance(vec3 worldPos, float lod) {
     vec3 uv = voxelGiUv(worldPos);
-    return texture(uVoxelGiTex, clamp(uv, vec3(0.0), vec3(1.0))).rgb * voxelGiInside(uv);
+    return textureLod(uVoxelGiTex, clamp(uv, vec3(0.0), vec3(1.0)), lod) * voxelGiInside(uv);
+}
+
+vec3 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
+    int steps = clamp(uVoxelGiConeSteps, 1, 12);
+    float traceDistance = max(uVoxelGiTraceDistance, uVoxelGiVoxelSize);
+    float firstDistance = max(uVoxelGiSampleDistance, uVoxelGiVoxelSize);
+    float stepLength = max(uVoxelGiVoxelSize, (traceDistance - firstDistance) / float(steps));
+    float transmittance = 1.0;
+    vec3 radiance = vec3(0.0);
+
+    for (int i = 0; i < 12; ++i) {
+        if (i >= steps) {
+            break;
+        }
+        float distanceAlongCone = firstDistance + (float(i) + 0.35) * stepLength;
+        float coneDiameter = max(uVoxelGiVoxelSize, distanceAlongCone * max(uVoxelGiConeAperture, 0.05));
+        float lod = clamp(log2(coneDiameter / max(uVoxelGiVoxelSize, 0.0001)), 0.0, max(uVoxelGiMipCount - 1.0, 0.0));
+        vec4 sampleData = sampleVoxelGiRadiance(start + direction * distanceAlongCone, lod);
+        float sampleWeight = weight * transmittance / (1.0 + distanceAlongCone * 0.18);
+        radiance += sampleData.rgb * sampleWeight;
+        transmittance *= max(0.0, 1.0 - sampleData.a * 0.28);
+    }
+
+    return radiance;
 }
 
 vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float vertexAo) {
@@ -108,13 +136,12 @@ vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float ve
     vec3 tangent = normalize(cross(up, n));
     vec3 bitangent = normalize(cross(n, tangent));
 
-    float stepDistance = max(uVoxelGiSampleDistance, uVoxelGiVoxelSize);
     vec3 start = worldPos + n * max(uVoxelGiNormalBias, 0.0);
     vec3 radiance = vec3(0.0);
     float weightSum = 0.0;
 
-    vec3 selfSample = sampleVoxelGiRadiance(worldPos - n * (uVoxelGiVoxelSize * 0.35));
-    radiance += selfSample * 0.35;
+    vec3 selfSample = sampleVoxelGiRadiance(worldPos - n * (uVoxelGiVoxelSize * 0.35), 0.0).rgb;
+    radiance += selfSample * 0.25;
     weightSum += 0.35;
 
     vec3 directions[5] = vec3[5](
@@ -125,12 +152,10 @@ vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float ve
         normalize(n - bitangent * 0.75)
     );
 
+    float directionWeights[5] = float[5](1.0, 0.58, 0.58, 0.58, 0.58);
     for (int i = 0; i < 5; ++i) {
-        for (int stepIndex = 1; stepIndex <= 3; ++stepIndex) {
-            float stepWeight = 1.0 / float(stepIndex * stepIndex);
-            radiance += sampleVoxelGiRadiance(start + directions[i] * stepDistance * float(stepIndex)) * stepWeight;
-            weightSum += stepWeight;
-        }
+        radiance += traceVoxelGiCone(start, directions[i], directionWeights[i]);
+        weightSum += directionWeights[i] * float(clamp(uVoxelGiConeSteps, 1, 12));
     }
 
     vec3 irradiance = radiance / max(weightSum, 0.0001);

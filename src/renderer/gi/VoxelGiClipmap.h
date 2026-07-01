@@ -27,6 +27,7 @@ public:
     [[nodiscard]] glm::vec3 origin() const { return m_origin; }
     [[nodiscard]] float voxelSize() const { return m_voxelSize; }
     [[nodiscard]] int resolution() const { return m_resolution; }
+    [[nodiscard]] int mipLevels() const { return m_mipLevels; }
 
 private:
     struct ClipmapVoxel {
@@ -44,6 +45,7 @@ private:
     GLuint m_texture = 0;
     bool m_valid = false;
     int m_resolution = 0;
+    int m_mipLevels = 1;
     float m_voxelSize = 1.0f;
     glm::vec3 m_origin = glm::vec3(0.0f);
     glm::ivec3 m_originBlock = glm::ivec3(0);

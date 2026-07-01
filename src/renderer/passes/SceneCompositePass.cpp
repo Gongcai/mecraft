@@ -87,8 +87,12 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     m_sceneCompositeShader->setFloat("uVoxelGiStrength", settings.voxelGi.strength);
     m_sceneCompositeShader->setFloat("uVoxelGiVoxelSize", voxelGiEnabled ? voxelGiClipmap->voxelSize() : 1.0f);
     m_sceneCompositeShader->setFloat("uVoxelGiResolution", voxelGiEnabled ? static_cast<float>(voxelGiClipmap->resolution()) : 1.0f);
+    m_sceneCompositeShader->setFloat("uVoxelGiMipCount", voxelGiEnabled ? static_cast<float>(voxelGiClipmap->mipLevels()) : 1.0f);
     m_sceneCompositeShader->setFloat("uVoxelGiNormalBias", settings.voxelGi.normalBias);
     m_sceneCompositeShader->setFloat("uVoxelGiSampleDistance", settings.voxelGi.sampleDistance);
+    m_sceneCompositeShader->setFloat("uVoxelGiTraceDistance", settings.voxelGi.traceDistance);
+    m_sceneCompositeShader->setFloat("uVoxelGiConeAperture", settings.voxelGi.coneAperture);
+    m_sceneCompositeShader->setInt("uVoxelGiConeSteps", settings.voxelGi.coneSteps);
     m_sceneCompositeShader->setVec3("uVoxelGiOrigin", voxelGiEnabled ? voxelGiClipmap->origin() : glm::vec3(0.0f));
     m_sceneCompositeShader->setInt("uReflectionDebugMode", settings.debug.reflectionDebugMode);
 

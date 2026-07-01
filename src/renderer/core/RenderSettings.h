@@ -60,10 +60,13 @@ struct VoxelGiSettings {
     bool debugEnabled = false;
     int resolution = 64;
     int updateInterval = 4;
+    int coneSteps = 5;
     float voxelSize = 1.0f;
     float strength = 0.18f;
     float normalBias = 0.45f;
     float sampleDistance = 3.0f;
+    float traceDistance = 18.0f;
+    float coneAperture = 0.55f;
 };
 
 /// Volumetric fog/light settings

@@ -696,6 +696,12 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                      auto s = m_renderScene->getSettings(); s.voxelGi.updateInterval = static_cast<int>(v);
                      m_renderScene->setSettings(s);
                  });
+    addSliderRow(stack, resourceMgr, "Voxel GI Cone Steps",
+                 1.0f, 12.0f, static_cast<float>(s.voxelGi.coneSteps), 1.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.coneSteps = static_cast<int>(v);
+                     m_renderScene->setSettings(s);
+                 });
     addSliderRow(stack, resourceMgr, "Voxel GI Voxel Size",
                  1.0f, 4.0f, s.voxelGi.voxelSize, 1.0f,
                  [this](float v) {
@@ -712,6 +718,18 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                  1.0f, 12.0f, s.voxelGi.sampleDistance, 0.25f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings(); s.voxelGi.sampleDistance = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Trace Distance",
+                 4.0f, 48.0f, s.voxelGi.traceDistance, 1.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.traceDistance = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Cone Aperture",
+                 0.05f, 1.50f, s.voxelGi.coneAperture, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.coneAperture = v;
                      m_renderScene->setSettings(s);
                  });
 

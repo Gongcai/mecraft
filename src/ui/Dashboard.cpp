@@ -811,9 +811,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.voxelGi.strength = 0.32f;
             settings.voxelGi.resolution = 64;
             settings.voxelGi.updateInterval = 3;
+            settings.voxelGi.coneSteps = 5;
             settings.voxelGi.voxelSize = 1.0f;
             settings.voxelGi.normalBias = 0.45f;
             settings.voxelGi.sampleDistance = 3.0f;
+            settings.voxelGi.traceDistance = 18.0f;
+            settings.voxelGi.coneAperture = 0.55f;
             pipelineChanged = true;
         }
         pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
@@ -1280,9 +1283,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Strength", &settings.voxelGi.strength, 0.0f, 1.0f, "%.2f");
         pipelineChanged |= ImGui::SliderInt("Voxel GI Resolution", &settings.voxelGi.resolution, 16, 128);
         pipelineChanged |= ImGui::SliderInt("Voxel GI Update Frames", &settings.voxelGi.updateInterval, 1, 20);
+        pipelineChanged |= ImGui::SliderInt("Voxel GI Cone Steps", &settings.voxelGi.coneSteps, 1, 12);
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Voxel Size", &settings.voxelGi.voxelSize, 1.0f, 4.0f, "%.0f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Normal Bias", &settings.voxelGi.normalBias, 0.0f, 2.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Sample Distance", &settings.voxelGi.sampleDistance, 1.0f, 12.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Trace Distance", &settings.voxelGi.traceDistance, 4.0f, 48.0f, "%.1f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Cone Aperture", &settings.voxelGi.coneAperture, 0.05f, 1.50f, "%.2f");
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &settings.postProcess.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
