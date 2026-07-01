@@ -198,6 +198,7 @@ struct AnimatedTextureRef {
     uint16_t frameCount = 1;
     float fps = 0.0f;
     bool isAnimated = false;
+    BiomeTintKind tintKind = BiomeTintKind::None;
 };
 
 struct NamedTextureAnimation {

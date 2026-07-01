@@ -65,6 +65,10 @@ IconTint biomeIconTint(const BiomeTintKind tint) {
     }
 }
 
+IconTint textureRefIconTint(const AnimatedTextureRef& ref, const BiomeTintKind blockTint) {
+    return biomeIconTint(ref.tintKind != BiomeTintKind::None ? ref.tintKind : blockTint);
+}
+
 glm::vec3 rotateIconPointX90(const glm::vec3& p, const uint16_t rotation) {
     switch ((rotation / 90u) % 4u) {
         case 1: return {p.x, 1.0f - p.z, p.y};
@@ -597,6 +601,10 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
                 continue;
             }
 
+            const BiomeTintKind crossTint = def.faceTop.tintKind != BiomeTintKind::None
+                ? def.faceTop.tintKind
+                : def.biomeTint;
+
             drawCrossPlantIcon(iconAtlasPixels,
                                atlasWidth,
                                atlasHeight,
@@ -606,28 +614,32 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
                                iconOriginX,
                                iconOriginY,
                                unit,
-                               def.biomeTint != BiomeTintKind::None);
+                               crossTint != BiomeTintKind::None);
             continue;
         }
 
         int topTex = blockTextures.arrayLayerToAtlasTile(def.faceTop.firstLayer);
         int rightTex = blockTextures.arrayLayerToAtlasTile(def.faceRight.firstLayer);
         int leftTex = blockTextures.arrayLayerToAtlasTile(def.faceFront.firstLayer);
+        const AnimatedTextureRef* topRef = &def.faceTop;
+        const AnimatedTextureRef* rightRef = &def.faceRight;
+        const AnimatedTextureRef* leftRef = &def.faceFront;
 
         if (topTex < 0) {
             topTex = blockTextures.arrayLayerToAtlasTile(def.faceFront.firstLayer);
+            topRef = &def.faceFront;
         }
         if (rightTex < 0) {
             rightTex = blockTextures.arrayLayerToAtlasTile(def.faceFront.firstLayer);
+            rightRef = &def.faceFront;
         }
         if (leftTex < 0) {
             leftTex = blockTextures.arrayLayerToAtlasTile(def.faceTop.firstLayer);
+            leftRef = &def.faceTop;
         }
         if (topTex < 0 || rightTex < 0 || leftTex < 0) {
             continue;
         }
-
-        const IconTint tint = biomeIconTint(def.biomeTint);
 
         drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
                               blockAtlas, blockAtlasPixels, leftTex,
@@ -635,21 +647,21 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
                               leftA, leftB, leftD,
                               0.68f,
                               true,
-                              tint);
+                              textureRefIconTint(*leftRef, def.biomeTint));
         drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
                               blockAtlas, blockAtlasPixels, rightTex,
                               iconOriginX, iconOriginY,
                               rightA, rightB, rightD,
                               0.83f,
                               true,
-                              tint);
+                              textureRefIconTint(*rightRef, def.biomeTint));
         drawFaceParallelogram(iconAtlasPixels, atlasWidth, atlasHeight,
                               blockAtlas, blockAtlasPixels, topTex,
                               iconOriginX, iconOriginY,
                               topA, topB, topD,
                               1.0f,
                               false,
-                              tint);
+                              textureRefIconTint(*topRef, def.biomeTint));
     }
 
     GLuint textureID = 0;

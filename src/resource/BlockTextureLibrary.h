@@ -3,6 +3,7 @@
 
 #include "BlockTextureCatalog.h"
 #include "BlockTextureManifest.h"
+#include "BlockTextureSourceSet.h"
 #include "TextureAtlas.h"
 #include "TextureSamplerController.h"
 
@@ -21,6 +22,7 @@ public:
     void loadCatalog(const std::string& textureConfigPath);
     void buildTextures(const std::string& directory, int tileSize);
     void buildTextures(const std::vector<std::string>& directories, int tileSize);
+    void buildTextures(const resource::BlockTextureSourceSet& sourceSet, int tileSize);
     void buildAtlas(const std::string& directory, int tileSize);
     void buildTextureArray(const std::string& directory, int tileSize);
 

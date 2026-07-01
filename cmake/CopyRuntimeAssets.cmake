@@ -1,0 +1,24 @@
+if(NOT DEFINED SOURCE_ASSETS_DIR)
+    message(FATAL_ERROR "SOURCE_ASSETS_DIR is required")
+endif()
+
+if(NOT DEFINED TARGET_ASSETS_DIR)
+    message(FATAL_ERROR "TARGET_ASSETS_DIR is required")
+endif()
+
+file(MAKE_DIRECTORY "${TARGET_ASSETS_DIR}")
+file(REMOVE_RECURSE "${TARGET_ASSETS_DIR}/resourcepacks")
+file(MAKE_DIRECTORY "${TARGET_ASSETS_DIR}/resourcepacks")
+
+file(COPY "${SOURCE_ASSETS_DIR}/"
+     DESTINATION "${TARGET_ASSETS_DIR}"
+     PATTERN "resourcepacks" EXCLUDE
+     PATTERN ".cache" EXCLUDE)
+
+file(GLOB RESOURCE_PACK_ARCHIVES
+     LIST_DIRECTORIES false
+     "${SOURCE_ASSETS_DIR}/resourcepacks/*.zip")
+
+foreach(ARCHIVE_PATH IN LISTS RESOURCE_PACK_ARCHIVES)
+    file(COPY "${ARCHIVE_PATH}" DESTINATION "${TARGET_ASSETS_DIR}/resourcepacks")
+endforeach()

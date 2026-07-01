@@ -9,6 +9,7 @@
 #include <vector>
 #include <glad/glad.h>
 #include "BlockTextureCatalog.h"
+#include "BlockTextureSourceSet.h"
 #include "TextureAtlas.h"
 #include "../renderer/core/Shader.h"
 
@@ -47,6 +48,7 @@ public:
     // Texture atlas used by block-facing UI rendering.
     void buildBlockTextureResources(const std::string& directory, int tileSize = 0);
     void buildBlockTextureResources(const std::vector<std::string>& directories, int tileSize = 0);
+    void buildBlockTextureResources(const resource::BlockTextureSourceSet& sourceSet, int tileSize = 0);
     void buildTextureAtlas(const std::string& directory, int tileSize = 0);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
 

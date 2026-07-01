@@ -16,6 +16,18 @@ namespace {
 constexpr const char* kModelFormat = "mecraft_model_v1";
 constexpr const char* kBlockModelsDir = ASSETS_DIR "/models/blocks";
 
+BiomeTintKind biomeTintKindFromResourceTint(const ResourceTextureTint tint) {
+    switch (tint) {
+        case ResourceTextureTint::Grass:
+            return BiomeTintKind::Grass;
+        case ResourceTextureTint::Foliage:
+            return BiomeTintKind::Foliage;
+        case ResourceTextureTint::None:
+        default:
+            return BiomeTintKind::None;
+    }
+}
+
 uint8_t directionBitFromName(const std::string& name) {
     if (name == "up") return static_cast<uint8_t>(1u << 0u);
     if (name == "down") return static_cast<uint8_t>(1u << 1u);
@@ -143,6 +155,7 @@ AnimatedTextureRef BlockModelRegistry::resolveTextureRef(const std::string& text
     ref.frameCount = static_cast<uint16_t>(std::max(1, info.frameCount));
     ref.fps = info.fps;
     ref.isAnimated = info.isAnimated;
+    ref.tintKind = biomeTintKindFromResourceTint(s_resourceMgr->getTextureTint(textureName));
     return ref;
 }
 

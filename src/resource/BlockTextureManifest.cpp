@@ -1,6 +1,8 @@
 #include "BlockTextureManifest.h"
 
 #include "BlockTextureCatalog.h"
+#include "BlockTextureSourceSet.h"
+#include "ConnectedTexturePack.h"
 #include "../third_party/stb/stb_image.h"
 
 #include <algorithm>
@@ -215,6 +217,26 @@ void assignTexturePath(PendingManifestEntry& entry,
     entry.specularSourceIndex = sourceIndex;
 }
 
+void assignConnectedTextureReplacement(PendingManifestEntry& entry,
+                                       const resource::ConnectedTextureReplacement& replacement,
+                                       const int sourceIndex) {
+    if (sourceIndex < entry.albedoSourceIndex) {
+        return;
+    }
+    entry.albedoPath = replacement.albedoPath;
+    entry.albedoAnimationMetadata = replacement.animationMetadata;
+    entry.albedoSourceIndex = sourceIndex;
+
+    if (replacement.normalPath.has_value() && sourceIndex >= entry.normalSourceIndex) {
+        entry.normalPath = replacement.normalPath;
+        entry.normalSourceIndex = sourceIndex;
+    }
+    if (replacement.specularPath.has_value() && sourceIndex >= entry.specularSourceIndex) {
+        entry.specularPath = replacement.specularPath;
+        entry.specularSourceIndex = sourceIndex;
+    }
+}
+
 struct ImageDimensions {
     int width = 0;
     int height = 0;
@@ -377,24 +399,43 @@ BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
 }
 
 BlockTextureManifest buildBlockTextureManifest(const std::vector<std::string>& directories) {
-    if (directories.empty()) {
+    BlockTextureSourceSet sourceSet;
+    sourceSet.textureDirectories = directories;
+    return buildBlockTextureManifest(sourceSet);
+}
+
+BlockTextureManifest buildBlockTextureManifest(const BlockTextureSourceSet& sourceSet) {
+    if (sourceSet.textureDirectories.empty()) {
         throw std::runtime_error("Block texture manifest requires at least one source directory");
     }
     std::unordered_map<std::string, PendingManifestEntry> pendingEntries;
-    for (size_t sourceIndex = 0; sourceIndex < directories.size(); ++sourceIndex) {
-        const std::vector<ClassifiedTextureFile> files = collectClassifiedTextureFiles(directories[sourceIndex]);
+    for (size_t sourceIndex = 0; sourceIndex < sourceSet.textureDirectories.size(); ++sourceIndex) {
+        const std::vector<ClassifiedTextureFile> files =
+            collectClassifiedTextureFiles(sourceSet.textureDirectories[sourceIndex]);
         for (const ClassifiedTextureFile& file : files) {
             assignTexturePath(pendingEntries[file.textureName], file, static_cast<int>(sourceIndex));
+        }
+    }
+
+    const std::vector<ConnectedTextureReplacement> connectedTextureReplacements =
+        collectConnectedTextureReplacements(sourceSet.connectedTextureDirectories);
+    const int connectedTextureSourceBase = static_cast<int>(sourceSet.textureDirectories.size());
+    for (size_t replacementIndex = 0; replacementIndex < connectedTextureReplacements.size(); ++replacementIndex) {
+        const ConnectedTextureReplacement& replacement = connectedTextureReplacements[replacementIndex];
+        const auto pendingIt = pendingEntries.find(replacement.matchTextureName);
+        if (pendingIt != pendingEntries.end()) {
+            assignConnectedTextureReplacement(pendingIt->second,
+                                              replacement,
+                                              connectedTextureSourceBase + static_cast<int>(replacementIndex));
         }
     }
 
     std::vector<std::string> names;
     names.reserve(pendingEntries.size());
     for (const auto& [name, entry] : pendingEntries) {
-        if (!entry.albedoPath.has_value()) {
-            throw std::runtime_error("Block PBR texture requires a matching albedo texture: " + name);
+        if (entry.albedoPath.has_value()) {
+            names.push_back(name);
         }
-        names.push_back(name);
     }
     std::sort(names.begin(), names.end());
 

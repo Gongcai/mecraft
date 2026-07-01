@@ -10,6 +10,12 @@
 #include <stdexcept>
 #include <utility>
 
+namespace {
+
+constexpr int kBlockPreviewAtlasTileSize = 64;
+
+} // namespace
+
 void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
     if (textureArray.textureID != 0) {
         glDeleteTextures(1, &textureArray.textureID);
@@ -59,6 +65,12 @@ void BlockTextureLibrary::buildTextures(const std::string& directory, const int 
 }
 
 void BlockTextureLibrary::buildTextures(const std::vector<std::string>& directories, const int tileSize) {
+    resource::BlockTextureSourceSet sourceSet;
+    sourceSet.textureDirectories = directories;
+    buildTextures(sourceSet, tileSize);
+}
+
+void BlockTextureLibrary::buildTextures(const resource::BlockTextureSourceSet& sourceSet, const int tileSize) {
     if (m_atlas.textureID != 0) {
         glDeleteTextures(1, &m_atlas.textureID);
         m_atlas.textureID = 0;
@@ -67,7 +79,7 @@ void BlockTextureLibrary::buildTextures(const std::vector<std::string>& director
     deleteTextureArray(m_normalTextureArray);
     deleteTextureArray(m_specularTextureArray);
 
-    m_manifest = resource::buildBlockTextureManifest(directories);
+    m_manifest = resource::buildBlockTextureManifest(sourceSet);
 
     resource::BlockTextureTileSizes tileSizes;
     if (tileSize > 0) {
@@ -78,7 +90,8 @@ void BlockTextureLibrary::buildTextures(const std::vector<std::string>& director
         tileSizes = resource::inferBlockTextureTileSizes(m_manifest, m_catalog);
     }
 
-    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, tileSizes.albedo, m_catalog);
+    resource::IndexedTextureAtlas atlasResult =
+        resource::buildBlockTextureAtlas(m_manifest, kBlockPreviewAtlasTileSize, m_catalog);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 

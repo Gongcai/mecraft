@@ -34,10 +34,32 @@ else()
     set(MECRAFT_RUNTIME_ASSETS_DIR "assets")
 endif()
 file(TO_CMAKE_PATH "${MECRAFT_RUNTIME_ASSETS_DIR}" MECRAFT_ASSETS_DIR_COMPILE)
-file(GLOB_RECURSE MECRAFT_RUNTIME_ASSET_FILES
-        LIST_DIRECTORIES false
+set(MECRAFT_RUNTIME_ASSET_FILES)
+file(GLOB MECRAFT_RUNTIME_ASSET_TOP_LEVEL_ENTRIES
+        LIST_DIRECTORIES true
         CONFIGURE_DEPENDS
         "${PROJECT_SOURCE_DIR}/assets/*")
+foreach(MECRAFT_RUNTIME_ASSET_ENTRY IN LISTS MECRAFT_RUNTIME_ASSET_TOP_LEVEL_ENTRIES)
+    get_filename_component(MECRAFT_RUNTIME_ASSET_NAME "${MECRAFT_RUNTIME_ASSET_ENTRY}" NAME)
+    if(MECRAFT_RUNTIME_ASSET_NAME STREQUAL "resourcepacks" OR
+       MECRAFT_RUNTIME_ASSET_NAME STREQUAL ".cache")
+        continue()
+    endif()
+    if(IS_DIRECTORY "${MECRAFT_RUNTIME_ASSET_ENTRY}")
+        file(GLOB_RECURSE MECRAFT_RUNTIME_ASSET_ENTRY_FILES
+                LIST_DIRECTORIES false
+                CONFIGURE_DEPENDS
+                "${MECRAFT_RUNTIME_ASSET_ENTRY}/*")
+        list(APPEND MECRAFT_RUNTIME_ASSET_FILES ${MECRAFT_RUNTIME_ASSET_ENTRY_FILES})
+    else()
+        list(APPEND MECRAFT_RUNTIME_ASSET_FILES "${MECRAFT_RUNTIME_ASSET_ENTRY}")
+    endif()
+endforeach()
+file(GLOB MECRAFT_RUNTIME_RESOURCE_PACK_ARCHIVES
+        LIST_DIRECTORIES false
+        CONFIGURE_DEPENDS
+        "${PROJECT_SOURCE_DIR}/assets/resourcepacks/*.zip")
+list(APPEND MECRAFT_RUNTIME_ASSET_FILES ${MECRAFT_RUNTIME_RESOURCE_PACK_ARCHIVES})
 
 # 检查链接期优化支持
 include(CheckIPOSupported)
@@ -76,18 +98,15 @@ endfunction()
 function(mecraft_copy_runtime_assets TARGET_NAME)
     if(NOT MECRAFT_USE_SOURCE_ASSETS)
         if(NOT TARGET mecraft_runtime_assets)
-            set(ASSET_STAMP "${CMAKE_CURRENT_BINARY_DIR}/mecraft_runtime_assets.stamp")
-            add_custom_command(
-                    OUTPUT "${ASSET_STAMP}"
-                    COMMAND ${CMAKE_COMMAND} -E copy_directory
-                            "${PROJECT_SOURCE_DIR}/assets"
-                            "${CMAKE_CURRENT_BINARY_DIR}/assets"
-                    COMMAND ${CMAKE_COMMAND} -E touch "${ASSET_STAMP}"
+            add_custom_target(mecraft_runtime_assets
+                    COMMAND ${CMAKE_COMMAND}
+                            -DSOURCE_ASSETS_DIR=${PROJECT_SOURCE_DIR}/assets
+                            -DTARGET_ASSETS_DIR=${CMAKE_CURRENT_BINARY_DIR}/assets
+                            -P "${PROJECT_SOURCE_DIR}/cmake/CopyRuntimeAssets.cmake"
                     DEPENDS ${MECRAFT_RUNTIME_ASSET_FILES}
                     COMMENT "Copying runtime assets"
                     VERBATIM
             )
-            add_custom_target(mecraft_runtime_assets DEPENDS "${ASSET_STAMP}")
         endif()
         add_dependencies(${TARGET_NAME} mecraft_runtime_assets)
     endif()
@@ -102,6 +121,7 @@ find_package(OpenAL CONFIG REQUIRED)
 find_package(Vorbis CONFIG REQUIRED COMPONENTS File)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
+find_package(libzip CONFIG REQUIRED)
 
 
 # [应用层]
@@ -161,11 +181,13 @@ set(SRC_CORE
         src/resource/BlockTextureManifest.cpp
         src/resource/BlockTextureArrayBuilder.cpp
         src/resource/BlockTextureLibrary.cpp
+        src/resource/ConnectedTexturePack.cpp
         src/resource/CubemapLibrary.cpp
         src/resource/DefaultShaderCatalog.cpp
         src/resource/EnvironmentTextureLibrary.cpp
         src/resource/EntityTexturePreloader.cpp
         src/resource/ResourceMgr.cpp
+        src/resource/ResourcePackArchiveExtractor.cpp
         src/resource/ShaderLibrary.cpp
         src/resource/TextureAtlas.cpp
         src/resource/TextureAtlasBuilders.cpp
@@ -559,6 +581,7 @@ target_link_libraries(mecraft_core PUBLIC
         Vorbis::vorbisfile
         Freetype::Freetype
         EnTT::EnTT
+        libzip::zip
 )
 
 # 统一宏定义
@@ -654,6 +677,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(audio_asset_decode_test tests/audio_asset_decode_test.cpp)
     add_mecraft_test(audio_catalog_test tests/audio_catalog_test.cpp)
     add_mecraft_test(audio_decoder_registry_test tests/audio_decoder_registry_test.cpp)
+    add_mecraft_test(block_texture_manifest_test tests/block_texture_manifest_test.cpp)
     add_mecraft_test(audio_test tests/audio_test.cpp)
     add_mecraft_test(audio_sync_system_test tests/audio_sync_system_test.cpp)
     add_mecraft_test(projectile_definition_test tests/projectile_definition_test.cpp)

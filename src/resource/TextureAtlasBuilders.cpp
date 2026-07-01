@@ -66,13 +66,18 @@ void copyTilePadding(std::vector<unsigned char>& atlasPixels,
         for (int p = 1; p <= tilePadding; ++p) {
             const int dstLeftX = innerStartX - p;
             const int dstRightX = innerStartX + copyWidth - 1 + p;
-            const int leftSrcIndex = (srcY * atlasWidth + leftSrcX) * 4;
-            const int rightSrcIndex = (srcY * atlasWidth + rightSrcX) * 4;
-            const int dstLeftIndex = (srcY * atlasWidth + dstLeftX) * 4;
-            const int dstRightIndex = (srcY * atlasWidth + dstRightX) * 4;
+            const size_t leftSrcIndex =
+                (static_cast<size_t>(srcY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(leftSrcX)) * 4U;
+            const size_t rightSrcIndex =
+                (static_cast<size_t>(srcY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(rightSrcX)) * 4U;
+            const size_t dstLeftIndex =
+                (static_cast<size_t>(srcY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstLeftX)) * 4U;
+            const size_t dstRightIndex =
+                (static_cast<size_t>(srcY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(dstRightX)) * 4U;
             for (int c = 0; c < 4; ++c) {
-                atlasPixels[dstLeftIndex + c] = atlasPixels[leftSrcIndex + c];
-                atlasPixels[dstRightIndex + c] = atlasPixels[rightSrcIndex + c];
+                atlasPixels[dstLeftIndex + static_cast<size_t>(c)] = atlasPixels[leftSrcIndex + static_cast<size_t>(c)];
+                atlasPixels[dstRightIndex + static_cast<size_t>(c)] =
+                    atlasPixels[rightSrcIndex + static_cast<size_t>(c)];
             }
         }
     }
@@ -84,13 +89,18 @@ void copyTilePadding(std::vector<unsigned char>& atlasPixels,
         for (int p = 1; p <= tilePadding; ++p) {
             const int dstTopY = innerStartY - p;
             const int dstBottomY = innerStartY + copyHeight - 1 + p;
-            const int topSrcIndex = (topSrcY * atlasWidth + srcX) * 4;
-            const int bottomSrcIndex = (bottomSrcY * atlasWidth + srcX) * 4;
-            const int dstTopIndex = (dstTopY * atlasWidth + srcX) * 4;
-            const int dstBottomIndex = (dstBottomY * atlasWidth + srcX) * 4;
+            const size_t topSrcIndex =
+                (static_cast<size_t>(topSrcY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(srcX)) * 4U;
+            const size_t bottomSrcIndex =
+                (static_cast<size_t>(bottomSrcY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(srcX)) * 4U;
+            const size_t dstTopIndex =
+                (static_cast<size_t>(dstTopY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(srcX)) * 4U;
+            const size_t dstBottomIndex =
+                (static_cast<size_t>(dstBottomY) * static_cast<size_t>(atlasWidth) + static_cast<size_t>(srcX)) * 4U;
             for (int c = 0; c < 4; ++c) {
-                atlasPixels[dstTopIndex + c] = atlasPixels[topSrcIndex + c];
-                atlasPixels[dstBottomIndex + c] = atlasPixels[bottomSrcIndex + c];
+                atlasPixels[dstTopIndex + static_cast<size_t>(c)] = atlasPixels[topSrcIndex + static_cast<size_t>(c)];
+                atlasPixels[dstBottomIndex + static_cast<size_t>(c)] =
+                    atlasPixels[bottomSrcIndex + static_cast<size_t>(c)];
             }
         }
     }
@@ -112,8 +122,12 @@ void copySourceTileToAtlas(std::vector<unsigned char>& atlasPixels,
         const int sourceY = y * sourceTileSize / targetTileSize;
         for (int x = 0; x < targetTileSize; ++x) {
             const int sourceX = x * sourceTileSize / targetTileSize;
-            const int destIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
-            const int srcIndex = (sourceY * sourceRowWidth + sourceX) * 4;
+            const size_t destIndex =
+                (static_cast<size_t>(innerStartY + y) * static_cast<size_t>(atlasWidth) +
+                 static_cast<size_t>(innerStartX + x)) * 4U;
+            const size_t srcIndex =
+                (static_cast<size_t>(sourceY) * static_cast<size_t>(sourceRowWidth) + static_cast<size_t>(sourceX)) *
+                4U;
             atlasPixels[destIndex + 0] = sourcePixels[srcIndex + 0];
             atlasPixels[destIndex + 1] = sourcePixels[srcIndex + 1];
             atlasPixels[destIndex + 2] = sourcePixels[srcIndex + 2];
@@ -191,8 +205,11 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
 
         for (int y = 0; y < copyHeight; ++y) {
             for (int x = 0; x < copyWidth; ++x) {
-                const int dstIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
-                const int srcIndex = (y * width + x) * 4;
+                const size_t dstIndex =
+                    (static_cast<size_t>(innerStartY + y) * static_cast<size_t>(atlasWidth) +
+                     static_cast<size_t>(innerStartX + x)) * 4U;
+                const size_t srcIndex =
+                    (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 4U;
                 result.pixels[dstIndex + 0] = static_cast<unsigned char>(
                     std::round(std::clamp(static_cast<float>(data[srcIndex + 0]) * tint.r, 0.0f, 255.0f)));
                 result.pixels[dstIndex + 1] = static_cast<unsigned char>(
@@ -373,8 +390,11 @@ IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int ic
 
         for (int y = 0; y < copyHeight; ++y) {
             for (int x = 0; x < copyWidth; ++x) {
-                const int dstIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
-                const int srcIndex = (y * width + x) * 4;
+                const size_t dstIndex =
+                    (static_cast<size_t>(innerStartY + y) * static_cast<size_t>(atlasWidth) +
+                     static_cast<size_t>(innerStartX + x)) * 4U;
+                const size_t srcIndex =
+                    (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 4U;
                 result.pixels[dstIndex + 0] = data[srcIndex + 0];
                 result.pixels[dstIndex + 1] = data[srcIndex + 1];
                 result.pixels[dstIndex + 2] = data[srcIndex + 2];

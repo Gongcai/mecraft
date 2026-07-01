@@ -11,6 +11,8 @@ class BlockTextureCatalog;
 
 namespace resource {
 
+struct BlockTextureSourceSet;
+
 struct BlockTextureAnimationMetadata {
     int frameTimeTicks = 1;
     int maxExplicitFrameIndex = -1;
@@ -49,6 +51,7 @@ private:
 
 [[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::string& directory);
 [[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::vector<std::string>& directories);
+[[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const BlockTextureSourceSet& sourceSet);
 [[nodiscard]] BlockTextureTileSizes inferBlockTextureTileSizes(const BlockTextureManifest& manifest,
                                                                const BlockTextureCatalog& catalog);
 

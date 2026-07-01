@@ -145,6 +145,7 @@ struct MeshFaceInfo {
     float animationFrameCount = 1.0f;
     float animationFps = 0.0f;
     float animated = 0.0f;
+    BiomeTintKind tintKind = BiomeTintKind::None;
     uint8_t uvQuarterTurns = 0;
 };
 
@@ -592,6 +593,7 @@ MeshFaceInfo buildMeshFaceInfo(const BlockStateId stateId, const int face) {
     info.animationFrameCount = static_cast<float>(std::max<uint16_t>(1, faceTexture.frameCount));
     info.animationFps = faceTexture.isAnimated ? faceTexture.fps : 0.0f;
     info.animated = faceTexture.isAnimated ? 1.0f : 0.0f;
+    info.tintKind = faceTexture.tintKind;
     info.uvQuarterTurns = getFaceUvQuarterTurns(stateId, face);
     return info;
 }
@@ -611,7 +613,8 @@ FaceRenderData buildFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
     renderData.animationFrameCount = faceInfo.animationFrameCount;
     renderData.animationFps = faceInfo.animationFps;
     renderData.animated = faceInfo.animated;
-    renderData.tintKind = blockTintKindFromBiomeTint(def.biomeTint);
+    const BiomeTintKind tintKind = faceInfo.tintKind != BiomeTintKind::None ? faceInfo.tintKind : def.biomeTint;
+    renderData.tintKind = blockTintKindFromBiomeTint(tintKind);
     renderData.derivativeMaterialId = def.derivativeMaterialId;
     if (renderData.tintKind != BlockTintKinds::NONE) {
         computeTintMapPosition(snapshot, x, z, renderData.tintU, renderData.tintV);

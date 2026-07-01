@@ -45,6 +45,13 @@
       "tint": "grass"
     },
     {
+      "name": "grass_block_top",
+      "tint": "grass"
+    },
+    {
+      "name": "grass_block_side"
+    },
+    {
       "name": "tall_grass_bottom",
       "tint": "grass"
     },

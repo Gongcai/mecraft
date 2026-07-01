@@ -899,7 +899,8 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             if (resourceMgr == nullptr) {
                 return makeStaticWorldTexture(0);
             }
-            const BiomeTintKind resolvedTint = biomeTintKindFromResourceTint(resourceMgr->getTextureTint(name));
+            const ResourceTextureTint resourceTint = resourceMgr->getTextureTint(name);
+            const BiomeTintKind resolvedTint = biomeTintKindFromResourceTint(resourceTint);
             if (resolvedTint == BiomeTintKind::None) {
                 hasUntintedTexture = true;
             } else {
@@ -910,7 +911,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                     hasUntintedTexture = true;
                 }
             }
-            return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name));
+            AnimatedTextureRef ref = makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name));
+            ref.tintKind = resolvedTint;
+            return ref;
 #endif
         };
 
