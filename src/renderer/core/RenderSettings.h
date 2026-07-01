@@ -68,6 +68,8 @@ struct VoxelGiSettings {
     float sampleDistance = 3.0f;
     float traceDistance = 18.0f;
     float coneAperture = 0.55f;
+    float occupancyScale = 0.55f;
+    float occlusionStrength = 1.55f;
 };
 
 /// Volumetric fog/light settings

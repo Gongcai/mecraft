@@ -738,6 +738,18 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                      auto s = m_renderScene->getSettings(); s.voxelGi.coneAperture = v;
                      m_renderScene->setSettings(s);
                  });
+    addSliderRow(stack, resourceMgr, "Voxel GI Occupancy Scale",
+                 0.0f, 2.0f, s.voxelGi.occupancyScale, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.occupancyScale = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Voxel GI Occlusion Strength",
+                 0.0f, 4.0f, s.voxelGi.occlusionStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.voxelGi.occlusionStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
 
     addSectionHeader(stack, resourceMgr, "SSAO");
 

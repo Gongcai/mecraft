@@ -62,6 +62,8 @@ uniform float uVoxelGiNormalBias;
 uniform float uVoxelGiSampleDistance;
 uniform float uVoxelGiTraceDistance;
 uniform float uVoxelGiConeAperture;
+uniform float uVoxelGiOccupancyScale;
+uniform float uVoxelGiOcclusionStrength;
 uniform int uVoxelGiConeSteps;
 uniform vec3 uVoxelGiOrigin;
 uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta, 26=reflection/scene ratio
@@ -108,7 +110,7 @@ vec4 sampleVoxelGiRadiance(vec3 worldPos, float lod) {
 
 float voxelGiConeCoverage(float occupancy, float coneDiameter) {
     float normalizedOccupancy = clamp(occupancy, 0.0, 1.0);
-    float footprint = max(1.0, pow(coneDiameter / max(uVoxelGiVoxelSize, 0.0001), 2.0) * 0.55);
+    float footprint = max(1.0, pow(coneDiameter / max(uVoxelGiVoxelSize, 0.0001), 2.0) * max(uVoxelGiOccupancyScale, 0.0));
     return 1.0 - pow(max(1.0 - normalizedOccupancy, 0.0001), footprint);
 }
 
@@ -132,7 +134,7 @@ vec3 traceVoxelGiCone(vec3 start, vec3 direction, float weight) {
         float surfaceVisibility = mix(1.0, 0.58, coverage);
         float sampleWeight = weight * transmittance * surfaceVisibility / (1.0 + distanceAlongCone * 0.18);
         radiance += sampleData.rgb * sampleWeight;
-        transmittance *= exp(-coverage * 1.55);
+        transmittance *= exp(-coverage * max(uVoxelGiOcclusionStrength, 0.0));
         if (transmittance < 0.035) {
             break;
         }

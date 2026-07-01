@@ -191,6 +191,8 @@ void applyVoxelGiSettings(const json& j, VoxelGiSettings& s) {
     readFloat(j, "sampleDistance", s.sampleDistance);
     readFloat(j, "traceDistance", s.traceDistance);
     readFloat(j, "coneAperture", s.coneAperture);
+    readFloat(j, "occupancyScale", s.occupancyScale);
+    readFloat(j, "occlusionStrength", s.occlusionStrength);
 }
 
 json toJson(const VoxelGiSettings& s) {
@@ -207,6 +209,8 @@ json toJson(const VoxelGiSettings& s) {
         {"sampleDistance", s.sampleDistance},
         {"traceDistance", s.traceDistance},
         {"coneAperture", s.coneAperture},
+        {"occupancyScale", s.occupancyScale},
+        {"occlusionStrength", s.occlusionStrength},
     };
 }
 

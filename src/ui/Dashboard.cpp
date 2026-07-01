@@ -818,6 +818,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.voxelGi.sampleDistance = 3.0f;
             settings.voxelGi.traceDistance = 18.0f;
             settings.voxelGi.coneAperture = 0.55f;
+            settings.voxelGi.occupancyScale = 0.55f;
+            settings.voxelGi.occlusionStrength = 1.55f;
             pipelineChanged = true;
         }
         pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
@@ -1291,6 +1293,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Sample Distance", &settings.voxelGi.sampleDistance, 1.0f, 12.0f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Trace Distance", &settings.voxelGi.traceDistance, 4.0f, 48.0f, "%.1f");
         pipelineChanged |= ImGui::SliderFloat("Voxel GI Cone Aperture", &settings.voxelGi.coneAperture, 0.05f, 1.50f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Occupancy Scale", &settings.voxelGi.occupancyScale, 0.0f, 2.0f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("Voxel GI Occlusion Strength", &settings.voxelGi.occlusionStrength, 0.0f, 4.0f, "%.2f");
         const VoxelGiClipmapStats& voxelGiStats = renderScene.getVoxelGiClipmapStats();
         const auto voxelGiModeName = [](const VoxelGiClipmapUpdateMode mode) {
             switch (mode) {
