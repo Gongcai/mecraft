@@ -90,6 +90,7 @@ void VoxelGiClipmap::shutdown() {
         glDeleteTextures(1, &m_texture);
         m_texture = 0;
     }
+    m_voxels.clear();
     m_valid = false;
     m_resolution = 0;
     m_mipLevels = 1;
@@ -125,31 +126,18 @@ void VoxelGiClipmap::update(const FrameContext& ctx, const VoxelGiSettings& sett
     }
 
     allocateTexture(resolution);
+    const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged;
     m_resolution = resolution;
     m_mipLevels = mipLevels;
     m_voxelSize = voxelSize;
-    m_originBlock = originBlock;
-    m_origin = glm::vec3(originBlock);
 
-    std::vector<ClipmapVoxel> voxels(static_cast<size_t>(resolution) *
-                                     static_cast<size_t>(resolution) *
-                                     static_cast<size_t>(resolution));
-    for (int z = 0; z < resolution; ++z) {
-        for (int y = 0; y < resolution; ++y) {
-            for (int x = 0; x < resolution; ++x) {
-                const glm::ivec3 blockPos = originBlock + glm::ivec3(
-                    static_cast<int>(std::floor((static_cast<float>(x) + 0.5f) * voxelSize)),
-                    static_cast<int>(std::floor((static_cast<float>(y) + 0.5f) * voxelSize)),
-                    static_cast<int>(std::floor((static_cast<float>(z) + 0.5f) * voxelSize)));
-                const size_t index = (static_cast<size_t>(z) * static_cast<size_t>(resolution) +
-                                      static_cast<size_t>(y)) * static_cast<size_t>(resolution) +
-                                      static_cast<size_t>(x);
-                voxels[index] = sampleWorldVoxel(*ctx.worldView, blockPos);
-            }
-        }
+    if (!canReuseVolume || !shiftCachedVolume(*ctx.worldView, originBlock)) {
+        rebuildVolume(*ctx.worldView, originBlock);
     }
 
-    upload(voxels);
+    m_originBlock = originBlock;
+    m_origin = glm::vec3(originBlock);
+    upload(m_voxels);
     m_lastActiveChunkRevision = activeRevision;
     m_lastBlockContentRevision = blockRevision;
     m_lastUpdateFrame = ctx.frameIndex;
@@ -184,6 +172,84 @@ void VoxelGiClipmap::upload(const std::vector<ClipmapVoxel>& voxels) {
                         m_resolution, m_resolution, m_resolution,
                         GL_RGBA, GL_FLOAT, voxels.data());
     glGenerateTextureMipmap(m_texture);
+}
+
+void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView, const glm::ivec3& originBlock) {
+    const size_t voxelCount = static_cast<size_t>(m_resolution) *
+                              static_cast<size_t>(m_resolution) *
+                              static_cast<size_t>(m_resolution);
+    m_voxels.assign(voxelCount, ClipmapVoxel{});
+    for (int z = 0; z < m_resolution; ++z) {
+        for (int y = 0; y < m_resolution; ++y) {
+            for (int x = 0; x < m_resolution; ++x) {
+                m_voxels[voxelIndex(x, y, z)] = sampleWorldVoxel(worldView, voxelWorldPosition(originBlock, x, y, z));
+            }
+        }
+    }
+}
+
+bool VoxelGiClipmap::shiftCachedVolume(const IWorldView& worldView, const glm::ivec3& originBlock) {
+    const size_t voxelCount = static_cast<size_t>(m_resolution) *
+                              static_cast<size_t>(m_resolution) *
+                              static_cast<size_t>(m_resolution);
+    if (m_voxels.size() != voxelCount) {
+        return false;
+    }
+
+    const glm::vec3 originDelta = glm::vec3(originBlock - m_originBlock) / m_voxelSize;
+    const glm::ivec3 deltaVoxels(
+        static_cast<int>(std::round(originDelta.x)),
+        static_cast<int>(std::round(originDelta.y)),
+        static_cast<int>(std::round(originDelta.z)));
+    const glm::vec3 snappedDelta = glm::vec3(deltaVoxels) * m_voxelSize;
+    if (glm::length(snappedDelta - glm::vec3(originBlock - m_originBlock)) > 0.01f) {
+        return false;
+    }
+    if (std::abs(deltaVoxels.x) >= m_resolution ||
+        std::abs(deltaVoxels.y) >= m_resolution ||
+        std::abs(deltaVoxels.z) >= m_resolution) {
+        return false;
+    }
+
+    std::vector<ClipmapVoxel> previous;
+    previous.swap(m_voxels);
+    m_voxels.assign(voxelCount, ClipmapVoxel{});
+
+    for (int z = 0; z < m_resolution; ++z) {
+        const int oldZ = z + deltaVoxels.z;
+        for (int y = 0; y < m_resolution; ++y) {
+            const int oldY = y + deltaVoxels.y;
+            for (int x = 0; x < m_resolution; ++x) {
+                const int oldX = x + deltaVoxels.x;
+                const size_t index = voxelIndex(x, y, z);
+                if (oldX >= 0 && oldX < m_resolution &&
+                    oldY >= 0 && oldY < m_resolution &&
+                    oldZ >= 0 && oldZ < m_resolution) {
+                    m_voxels[index] = previous[voxelIndex(oldX, oldY, oldZ)];
+                } else {
+                    m_voxels[index] = sampleWorldVoxel(worldView, voxelWorldPosition(originBlock, x, y, z));
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
+size_t VoxelGiClipmap::voxelIndex(const int x, const int y, const int z) const {
+    return (static_cast<size_t>(z) * static_cast<size_t>(m_resolution) +
+            static_cast<size_t>(y)) * static_cast<size_t>(m_resolution) +
+           static_cast<size_t>(x);
+}
+
+glm::ivec3 VoxelGiClipmap::voxelWorldPosition(const glm::ivec3& originBlock,
+                                              const int x,
+                                              const int y,
+                                              const int z) const {
+    return originBlock + glm::ivec3(
+        static_cast<int>(std::floor((static_cast<float>(x) + 0.5f) * m_voxelSize)),
+        static_cast<int>(std::floor((static_cast<float>(y) + 0.5f) * m_voxelSize)),
+        static_cast<int>(std::floor((static_cast<float>(z) + 0.5f) * m_voxelSize)));
 }
 
 glm::ivec3 VoxelGiClipmap::computeOrigin(const glm::vec3& cameraPosition,

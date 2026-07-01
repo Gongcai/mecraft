@@ -39,6 +39,10 @@ private:
 
     void allocateTexture(int resolution);
     void upload(const std::vector<ClipmapVoxel>& voxels);
+    void rebuildVolume(const IWorldView& worldView, const glm::ivec3& originBlock);
+    [[nodiscard]] bool shiftCachedVolume(const IWorldView& worldView, const glm::ivec3& originBlock);
+    [[nodiscard]] size_t voxelIndex(int x, int y, int z) const;
+    [[nodiscard]] glm::ivec3 voxelWorldPosition(const glm::ivec3& originBlock, int x, int y, int z) const;
     [[nodiscard]] glm::ivec3 computeOrigin(const glm::vec3& cameraPosition,
                                            int resolution,
                                            float voxelSize,
@@ -52,6 +56,7 @@ private:
     float m_voxelSize = 1.0f;
     glm::vec3 m_origin = glm::vec3(0.0f);
     glm::ivec3 m_originBlock = glm::ivec3(0);
+    std::vector<ClipmapVoxel> m_voxels;
     uint64_t m_lastActiveChunkRevision = 0;
     uint64_t m_lastBlockContentRevision = 0;
     uint64_t m_lastUpdateFrame = 0;
