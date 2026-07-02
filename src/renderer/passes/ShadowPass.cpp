@@ -238,9 +238,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     // still update DepthAll from opaque depth and clear color layers so receivers
     // consume a coherent transparent-shadow contract without far water/glass draws.
     constexpr int kTransparentShadowCasterCascadeCount = 2;
-    // Far cutout casters are dense vegetation silhouettes whose sub-pixel shadows
-    // cost more than they contribute after cascade 1.
-    constexpr int kCutoutShadowCasterCascadeCount = 2;
+    // Cutout casters remain important in far cascades at low sun angles because
+    // tree and vegetation silhouettes project across long receiver spans.
+    constexpr int kCutoutShadowCasterCascadeCount = SHADOW_CASCADE_COUNT;
     RenderDebugService* debugService = ctx.debugService;
     const bool shadowStatsActive = debugService != nullptr &&
         debugService->beginShadowFrame(SHADOW_CASCADE_COUNT, targets.shadowResolution());
@@ -269,8 +269,16 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             std::abs(cullerMatrix[0][2]), std::abs(cullerMatrix[1][2]), std::abs(cullerMatrix[2][2]));
     }
 
+    float shadowCasterCullDistance = shadowDist;
+    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
+        shadowCasterCullDistance = std::max(
+            shadowCasterCullDistance,
+            cascadeData.radius + std::max(32.0f, cascadeData.texelWorldSize * 64.0f));
+    }
+
     shadow::ShadowCasterCuller shadowCuller;
-    shadowCuller.setup(shadowDist, 1.0f, ctx.camera.position);
+    shadowCuller.setup(shadowCasterCullDistance, 1.0f, ctx.camera.position);
     shadowCuller.resetCounters();
 
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {

@@ -280,7 +280,8 @@ VFogShadowData computeVolumetricShadowSetup(vec3 worldPos, vec3 lightDir) {
     if (shadowProjOutOfBounds(data.proj)) return data;
 
     ivec3 size = textureSize(uCsmShadowMap, 0);
-    data.texel = 1.0 / vec2(max(size.x, 1), max(size.y, 1));
+    float scale = uCsmCascades[data.cascadeIndex].resolutionScale;
+    data.texel = (1.0 / vec2(max(size.x, 1), max(size.y, 1))) / max(scale, 0.0001);
     float distanceScale = 1.0 + 0.25 * clamp(viewDistance / max(uShadowDistance, 1.0), 0.0, 1.0);
     float biasWorld = texelWorld * distanceScale * (0.5 + uShadowConstantBias * 18.0 + uShadowSlopeBias * 16.0);
     float depthExtent = max(uCsmCascades[data.cascadeIndex].depthExtent, 1.0);
@@ -382,7 +383,7 @@ float uwDepthStep(float refZ, float depthSample) {
 }
 
 float sampleCsmDepthRawStep(vec2 uv, int cascadeIndex, float refZ) {
-    float depthSample = texture(uCsmShadowDepthRaw, vec3(uv, float(cascadeIndex))).r;
+    float depthSample = sampleCsmDepthRaw(uv, cascadeIndex);
     return uwDepthStep(refZ, depthSample);
 }
 

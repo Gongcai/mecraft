@@ -56,21 +56,16 @@ int selectCsmCascade(float viewDistance) {
     return cascadeIndex;
 }
 
-// Dithered cascade selection: no double-sampling, relies on TAA to clean up.
-int selectCsmCascadeDithered(float viewDistance, float dither) {
-    int cascadeIndex = max(uCsmCascadeCount - 1, 0);
-    for (int i = 0; i < MECRAFT_CSM_CASCADE_COUNT; ++i) {
-        if (i >= uCsmCascadeCount) break;
-        float splitFar = uCsmCascades[i].splitFar;
-        float splitNear = uCsmCascades[i].splitNear;
-        float transitionWidth = (splitFar - splitNear) * 0.08;
-        float threshold = splitFar - transitionWidth * dither;
-        if (viewDistance <= threshold) {
-            cascadeIndex = i;
-            break;
-        }
+float csmCascadeTransitionWeight(float viewDistance, int cascadeIndex) {
+    if (cascadeIndex >= uCsmCascadeCount - 1) {
+        return 0.0;
     }
-    return cascadeIndex;
+    float splitNear = uCsmCascades[cascadeIndex].splitNear;
+    float splitFar = uCsmCascades[cascadeIndex].splitFar;
+    float splitSpan = max(splitFar - splitNear, 1.0);
+    float transitionWidth = max(splitSpan * 0.075,
+                                uCsmCascades[cascadeIndex].texelWorldSize * 24.0);
+    return smoothstep(splitFar - transitionWidth, splitFar, viewDistance);
 }
 
 vec3 csmProjectWorld(vec3 worldPos, int cascadeIndex) {
@@ -100,6 +95,9 @@ float csmDepthBias(float ndotl,
 
 #ifndef MECRAFT_SHADOW_NO_SAMPLER
 float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+        return 1.0;
+    }
     float scale = uCsmCascades[cascadeIndex].resolutionScale;
     return texture(uCsmShadowMap, vec4(uv * scale, float(cascadeIndex), refZ));
 }
@@ -107,16 +105,25 @@ float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
 // Transparent shadow sampling (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
 #ifndef MECRAFT_SHADOW_OPAQUE_ONLY
 float sampleCsmDepthAllCompare(vec2 uv, int cascadeIndex, float refZ) {
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+        return 1.0;
+    }
     float scale = uCsmCascades[cascadeIndex].resolutionScale;
     return texture(uCsmShadowDepthAll, vec4(uv * scale, float(cascadeIndex), refZ));
 }
 
 float sampleCsmDepthAllRaw(vec2 uv, int cascadeIndex) {
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+        return 1.0;
+    }
     float scale = uCsmCascades[cascadeIndex].resolutionScale;
     return texture(uCsmShadowDepthAllRaw, vec3(uv * scale, float(cascadeIndex))).r;
 }
 
 float sampleCsmDepthRaw(vec2 uv, int cascadeIndex) {
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+        return 1.0;
+    }
     float scale = uCsmCascades[cascadeIndex].resolutionScale;
     return texture(uCsmShadowDepthRaw, vec3(uv * scale, float(cascadeIndex))).r;
 }
@@ -136,7 +143,8 @@ ivec2 sampleCsmTexelCoord(vec2 uv, int cascadeIndex, sampler2DArray shadowTex) {
     float scale = uCsmCascades[cascadeIndex].resolutionScale;
     ivec3 size = textureSize(shadowTex, 0);
     ivec2 dims = ivec2(max(size.x, 1), max(size.y, 1));
-    return clamp(ivec2(floor(uv * scale * vec2(dims))), ivec2(0), dims - ivec2(1));
+    ivec2 logicalDims = max(ivec2(floor(vec2(dims) * scale)), ivec2(1));
+    return clamp(ivec2(floor(uv * vec2(logicalDims))), ivec2(0), logicalDims - ivec2(1));
 }
 
 float sampleCsmDepthRawTexel(vec2 uv, int cascadeIndex) {
@@ -213,14 +221,16 @@ float pcssBlockerSearch(vec2 uv, int cascadeIndex, float blockerCompareZ,
     float avgBlockerDepth = 0.0;
     float blockerWeight = 0.0;
     blockerCount = 0;
-    const vec2 offsets[12] = vec2[12](
+    const vec2 offsets[16] = vec2[16](
         vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696,  0.457),
         vec2(-0.203,  0.621), vec2( 0.962, -0.195), vec2( 0.473, -0.480),
         vec2( 0.519,  0.767), vec2( 0.185, -0.893), vec2( 0.507,  0.064),
-        vec2( 0.896,  0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598)
+        vec2( 0.896,  0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598),
+        vec2(-0.081,  0.119), vec2( 0.276, -0.162), vec2(-0.558,  0.220),
+        vec2( 0.114,  0.537)
     );
     float angle = csmKernelAngle(uv, cascadeIndex, texelUv) + 0.618;
-    for (int i = 0; i < 12; ++i) {
+    for (int i = 0; i < 16; ++i) {
         vec2 kernel = csmRotateOffset(offsets[i], angle);
         vec2 sampleUv = uv + kernel * texelUv * searchRadius;
         float depth = sampleCsmRawDepth(sampleUv, cascadeIndex);
@@ -243,7 +253,7 @@ float pcssPenumbraTexels(float receiverZ, float avgBlockerZ,
                          float lightAngularScale) {
     float blockerGapWorld = max(receiverZ - avgBlockerZ, 0.0) * (2.0 * depthExtent);
     float penumbraWorld = blockerGapWorld * lightAngularScale;
-    return clamp(0.85 + penumbraWorld / max(texelWorld, 0.0001), 0.85, 6.0);
+    return clamp(0.75 + penumbraWorld / max(texelWorld, 0.0001), 0.75, 4.0);
 }
 
 float sampleCsmPcss(vec2 uv, int cascadeIndex,
@@ -280,7 +290,7 @@ float sampleCsmPcss(vec2 uv, int cascadeIndex,
     float pcfRadius = pcssPenumbraTexels(receiverZ, avgBlocker, depthExtent,
                                          texelWorld, lightAngularScale);
     float blockerConfidence = smoothstep(1.0, 5.0, float(blockerCount));
-    pcfRadius = mix(0.85, pcfRadius, blockerConfidence);
+    pcfRadius = mix(1.0, pcfRadius, blockerConfidence);
 
     // Step 3: Variable PCF
     float lit = 0.0;
@@ -332,22 +342,15 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
     if (uSoftShadowsEnabled == 0) {
         lit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
     } else if (uPcssShadowsEnabled != 0 && cascadeIndex == 0) {
-        // PCSS early-out: if center sample is fully lit, skip expensive blocker search.
-        float centerLit = sampleCsmDepthCompare(proj.xy, cascadeIndex, refZ);
-        if (centerLit > 0.999) {
-            outBlockerDepth = 0.0;
-            lit = 1.0;
-        } else {
-            // PCSS for near cascade. Keep the sun angular scale conservative so
-            // contact shadows remain crisp and only separated casters get soft.
-            float depthExtent = max(uCsmCascades[cascadeIndex].depthExtent, 1.0);
-            float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
-            float lightAngularScale = 0.010 + strength * 0.028;
-            float searchRadius = 1.75 + strength * 2.75;
-            lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
-                                texelWorld, depthExtent, lightAngularScale, searchRadius,
-                                outBlockerDepth);
-        }
+        // PCSS for the near cascade. The blocker search is always evaluated so
+        // penumbra edges do not toggle between a hard-lit shortcut and PCSS.
+        float depthExtent = max(uCsmCascades[cascadeIndex].depthExtent, 1.0);
+        float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
+        float lightAngularScale = 0.006 + strength * 0.014;
+        float searchRadius = 1.25 + strength * 1.75;
+        lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
+                            texelWorld, depthExtent, lightAngularScale, searchRadius,
+                            outBlockerDepth);
     } else {
         if (cascadeIndex >= 2) {
             // Far cascades: 4-tap PCF (texels already coarse, 12-tap is wasted)
@@ -390,9 +393,7 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
         return result;
     }
 
-    // Select cascade with dithered selection.
-    float dither = fract(dot(floor(gl_FragCoord.xy), vec2(0.754877669, 0.569840296)));
-    int cascadeIndex = selectCsmCascadeDithered(viewDistance, dither);
+    int cascadeIndex = selectCsmCascade(viewDistance);
     result.cascadeIndex = cascadeIndex;
 
     // Sample primary cascade.
@@ -406,6 +407,19 @@ ShadowSample sampleCsmShadow(vec3 worldPos, vec3 normal, vec3 lightDir) {
 
     float lit = litPrimary;
     float projectionFade = primaryFade;
+    float transitionWeight = csmCascadeTransitionWeight(viewDistance, cascadeIndex);
+    if (transitionWeight > 0.001) {
+        float nextFade, nextBlocker;
+        float litNext = sampleCsmCascadeLit(worldPos, normal, ndotl, viewDistance,
+                                            cascadeIndex + 1, nextFade, nextBlocker);
+        if (litNext >= 0.0) {
+            lit = mix(litPrimary, litNext, transitionWeight);
+            projectionFade = mix(primaryFade, nextFade, transitionWeight);
+            if (cascadeIndex == 0 && nextBlocker < primaryBlocker) {
+                result.blockerDepth = nextBlocker;
+            }
+        }
+    }
 
     // Distance fade for the last cascade.
     if (cascadeIndex == uCsmCascadeCount - 1) {

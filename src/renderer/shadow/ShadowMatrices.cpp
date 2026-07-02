@@ -3,6 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace shadow {
 namespace ShadowMatrices {
@@ -24,15 +25,30 @@ std::array<glm::vec3, 8> buildAabbCorners(const glm::vec3& boundsMin,
     return corners;
 }
 
-float maxAbsLightDepth(const glm::mat4& lightView,
-                       const std::array<glm::vec3, 8>& corners,
-                       float currentMax) {
-    float depth = currentMax;
+void includeLightDepthRange(const glm::mat4& lightView,
+                            const std::array<glm::vec3, 8>& corners,
+                            float& minZ,
+                            float& maxZ) {
     for (const glm::vec3& corner : corners) {
         const float lightZ = (lightView * glm::vec4(corner, 1.0f)).z;
-        depth = std::max(depth, std::abs(lightZ));
+        minZ = std::min(minZ, lightZ);
+        maxZ = std::max(maxZ, lightZ);
     }
-    return depth;
+}
+
+void snapProjectionToTexelGrid(glm::mat4& projection,
+                               const glm::mat4& lightView,
+                               float effectiveResolution) {
+    const glm::mat4 viewProj = projection * lightView;
+    glm::vec4 shadowOrigin = viewProj * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    shadowOrigin *= effectiveResolution * 0.5f;
+
+    const glm::vec2 roundedOrigin(std::round(shadowOrigin.x),
+                                  std::round(shadowOrigin.y));
+    const glm::vec2 roundOffset = (roundedOrigin - glm::vec2(shadowOrigin)) *
+                                  (2.0f / effectiveResolution);
+    projection[3][0] += roundOffset.x;
+    projection[3][1] += roundOffset.y;
 }
 }
 
@@ -85,24 +101,29 @@ std::array<Cascade, CASCADE_COUNT> buildCascades(const CameraBasis& camera,
         }
         radius = std::ceil(radius * 16.0f) / 16.0f;
 
-        const float lightDistance = shadowDistance + radius * 2.0f;
+        const float resolutionScale = cascade >= 2 ? 0.5f : 1.0f;
+        const float effectiveResolution = std::max(1.0f, resolution * resolutionScale);
+        const float cascadeCasterDistance = std::max(shadowDistance, radius + 32.0f);
+        const float lightDistance = cascadeCasterDistance + radius * 2.0f;
         const glm::mat4 lightView = glm::lookAt(center + lightDir * lightDistance,
                                                 center,
                                                 upRef);
-        const float texelWorldSize = (radius * 2.0f) / resolution;
-        const glm::vec3 centerLight = glm::vec3(lightView * glm::vec4(center, 1.0f));
-        const float snappedX = std::floor(centerLight.x / texelWorldSize) * texelWorldSize;
-        const float snappedY = std::floor(centerLight.y / texelWorldSize) * texelWorldSize;
-        const glm::vec3 casterBoundsMin = camera.position - glm::vec3(shadowDistance);
-        const glm::vec3 casterBoundsMax = camera.position + glm::vec3(shadowDistance);
+        const float texelWorldSize = (radius * 2.0f) / effectiveResolution;
+        const glm::vec3 casterBoundsMin = camera.position - glm::vec3(cascadeCasterDistance);
+        const glm::vec3 casterBoundsMax = camera.position + glm::vec3(cascadeCasterDistance);
         const std::array<glm::vec3, 8> casterCorners = buildAabbCorners(casterBoundsMin, casterBoundsMax);
-        float depthExtent = shadowDistance + radius * 3.0f;
-        depthExtent = maxAbsLightDepth(lightView, corners, depthExtent);
-        depthExtent = maxAbsLightDepth(lightView, casterCorners, depthExtent);
-        depthExtent += std::max(16.0f, texelWorldSize * 32.0f);
-        const glm::mat4 projection = glm::ortho(snappedX - radius, snappedX + radius,
-                                                snappedY - radius, snappedY + radius,
-                                                -depthExtent, depthExtent);
+        float minLightZ = std::numeric_limits<float>::max();
+        float maxLightZ = std::numeric_limits<float>::lowest();
+        includeLightDepthRange(lightView, corners, minLightZ, maxLightZ);
+        includeLightDepthRange(lightView, casterCorners, minLightZ, maxLightZ);
+        const float depthPadding = std::max(16.0f, texelWorldSize * 32.0f);
+        minLightZ -= depthPadding;
+        maxLightZ += depthPadding;
+        const float depthExtent = std::max(1.0f, (maxLightZ - minLightZ) * 0.5f);
+        glm::mat4 projection = glm::ortho(-radius, radius,
+                                          -radius, radius,
+                                          -maxLightZ, -minLightZ);
+        snapProjectionToTexelGrid(projection, lightView, effectiveResolution);
 
         cascades[cascade].view = lightView;
         cascades[cascade].projection = projection;
