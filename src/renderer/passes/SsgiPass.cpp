@@ -214,6 +214,7 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     m_ssgiTemporalShader->setInt("uVelocityTex", 2);
     m_ssgiTemporalShader->setInt("uDepthTex", 3);
     m_ssgiTemporalShader->setInt("uNormalAoTex", 4);
+    m_ssgiTemporalShader->setInt("uHistoryDepthTex", 5);
     m_ssgiTemporalShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height()))));
@@ -230,10 +231,12 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiTemporalShader);
 
-    for (int i = 4; i >= 0; --i) {
+    for (int i = 5; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }

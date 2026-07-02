@@ -447,6 +447,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
             shutdown();
             return false;
         }
+        constexpr float clearHistoryDepth = 1.0f;
+        glClearNamedFramebufferfv(m_historySceneFbo[i], GL_DEPTH, 0, &clearHistoryDepth);
 
         glCreateFramebuffers(1, &m_historyReflectionFbo[i]);
         m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,

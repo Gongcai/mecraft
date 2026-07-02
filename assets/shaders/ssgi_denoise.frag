@@ -23,6 +23,31 @@ float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
+float estimateLocalNoise(ivec2 centerTexel, ivec2 maxTexel, float centerLuminance) {
+    float luminanceSum = 0.0;
+    float luminanceSqSum = 0.0;
+    float alphaSum = 0.0;
+    float sampleCount = 0.0;
+
+    for (int y = -1; y <= 1; ++y) {
+        for (int x = -1; x <= 1; ++x) {
+            ivec2 sampleTexel = clamp(centerTexel + ivec2(x, y), ivec2(0), maxTexel);
+            vec4 sampleValue = texelFetch(uInputTex, sampleTexel, 0);
+            float sampleLuminance = luminance(max(sampleValue.rgb, vec3(0.0)));
+            luminanceSum += sampleLuminance;
+            luminanceSqSum += sampleLuminance * sampleLuminance;
+            alphaSum += sampleValue.a;
+            sampleCount += 1.0;
+        }
+    }
+
+    float meanLuminance = luminanceSum / max(sampleCount, 1.0);
+    float variance = max(luminanceSqSum / max(sampleCount, 1.0) - meanLuminance * meanLuminance, 0.0);
+    float relativeSigma = sqrt(variance) / max(max(centerLuminance, meanLuminance) + 0.035, 0.035);
+    float meanConfidence = smoothstep(0.04, 0.45, alphaSum / max(sampleCount, 1.0));
+    return clamp(max(relativeSigma, 1.0 - meanConfidence), 0.0, 1.0);
+}
+
 void main() {
     float centerDepth = texture(uDepthTex, vTexCoord).r;
     if (centerDepth >= 0.9999) {
@@ -35,6 +60,10 @@ void main() {
     float centerLinearDepth = linearizeDepth(centerDepth);
     float centerLuminance = luminance(max(center.rgb, vec3(0.0)));
     vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
+    ivec2 centerTexel = ivec2(gl_FragCoord.xy);
+    ivec2 maxTexel = ivec2(uScreenSize) - 1;
+    float centerConfidence = smoothstep(0.04, 0.45, center.a);
+    float localNoise = estimateLocalNoise(centerTexel, maxTexel, centerLuminance);
 
     const float kernel[5] = float[](0.0625, 0.25, 0.375, 0.25, 0.0625);
     vec3 colorSum = center.rgb * 0.45;
@@ -61,8 +90,10 @@ void main() {
             vec3 sampleNormal = decodeNormal(sampleUv);
             float normalWeight = pow(max(dot(sampleNormal, centerNormal), 0.0), 24.0);
             float sampleLuminance = luminance(max(sampleValue.rgb, vec3(0.0)));
+            float luminanceScale = 0.035 + max(centerLuminance, sampleLuminance) *
+                                   mix(0.25, 0.70, localNoise);
             float colorWeight = exp2(-abs(sampleLuminance - centerLuminance) /
-                                     max(0.035 + max(centerLuminance, sampleLuminance) * 0.35, 1e-4));
+                                     max(luminanceScale, 1e-4));
             float confidenceWeight = mix(0.18, 1.0, clamp(sampleValue.a * 2.0, 0.0, 1.0));
             float spatialWeight = kernel[x + 2] * kernel[y + 2];
             float weight = spatialWeight * depthWeight * normalWeight * colorWeight * confidenceWeight;
@@ -76,6 +107,6 @@ void main() {
     vec4 filtered = weightSum > 1e-5
         ? vec4(colorSum / weightSum, alphaSum / weightSum)
         : center;
-    float centerConfidence = smoothstep(0.04, 0.45, center.a);
-    FragColor = mix(center, filtered, clamp(uStrength, 0.0, 1.0) * centerConfidence);
+    float filterAmount = clamp(uStrength, 0.0, 1.0) * mix(0.45, 1.0, max(centerConfidence, localNoise));
+    FragColor = mix(center, filtered, filterAmount);
 }

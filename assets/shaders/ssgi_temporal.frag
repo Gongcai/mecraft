@@ -8,6 +8,7 @@ uniform sampler2D uHistoryTex;
 uniform sampler2D uVelocityTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uNormalAoTex;
+uniform sampler2D uHistoryDepthTex;
 uniform vec2 uScreenSize;
 uniform float uHistoryWeight;
 uniform float uNear;
@@ -18,6 +19,10 @@ float linearizeDepth(float depth) {
 
 vec3 decodeNormal(vec3 packedNormal) {
     return normalize(packedNormal * 2.0 - 1.0);
+}
+
+bool invalidVec2(vec2 v) {
+    return any(isnan(v)) || any(isinf(v));
 }
 
 void main() {
@@ -35,7 +40,9 @@ void main() {
 
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
     vec2 prevCoord = screenCoord - velocity;
-    if (prevCoord.x < 0.0 || prevCoord.x > 1.0 ||
+    if (invalidVec2(velocity) || invalidVec2(prevCoord) ||
+        any(greaterThan(abs(velocity), vec2(1.0))) ||
+        prevCoord.x < 0.0 || prevCoord.x > 1.0 ||
         prevCoord.y < 0.0 || prevCoord.y > 1.0) {
         FragColor = current;
         return;
@@ -72,9 +79,9 @@ void main() {
     }
 
     float linCurrent = linearizeDepth(depth);
-    float linHistory = linearizeDepth(texture(uDepthTex, prevCoord).r);
+    float linHistory = linearizeDepth(texture(uHistoryDepthTex, prevCoord).r);
     float relDepthDiff = abs(linCurrent - linHistory) / max(linCurrent, 0.1);
-    float depthDisocclusion = smoothstep(0.04, 0.35, relDepthDiff);
+    float depthDisocclusion = smoothstep(0.035, 0.28, relDepthDiff);
     vec3 currentNormal = decodeNormal(texelFetch(uNormalAoTex, texel, 0).rgb);
     vec3 historyNormal = decodeNormal(texture(uNormalAoTex, safeHistoryUv).rgb);
     float normalDisocclusion = 1.0 - smoothstep(0.55, 0.95, max(dot(currentNormal, historyNormal), 0.0));
