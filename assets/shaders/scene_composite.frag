@@ -291,7 +291,11 @@ void main() {
         color += max(voxelGi, vec3(0.0));
     }
     if (uSsgiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
-        color += max(texture(uSsgiTex, vTexCoord).rgb, vec3(0.0));
+        vec4 ssgi = texture(uSsgiTex, vTexCoord);
+        float confidence = smoothstep(0.06, 0.45, ssgi.a);
+        float lowLightWeight = 1.0 - smoothstep(0.08, 0.85, luminance(color));
+        float surfaceWeight = mix(0.28, 1.0, lowLightWeight);
+        color += max(ssgi.rgb, vec3(0.0)) * confidence * surfaceWeight;
     }
 
     float compositeStrength = clamp(uReflectionCompositeStrength, 0.0, 1.0);

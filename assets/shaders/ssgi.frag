@@ -149,19 +149,19 @@ void main() {
         vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleUv).rgb * 2.0 - 1.0);
         float receiverTerm = max(dot(centerNormal, dir), 0.0);
         float emitterTerm = max(dot(sampleNormal, -dir), 0.0);
-        if (receiverTerm <= 1e-3 && emitterTerm <= 1e-3) {
+        if (receiverTerm <= 0.018 || emitterTerm <= 0.018) {
             continue;
         }
 
         float distanceFade = 1.0 - smoothstep(uMaxDistance * 0.35, uMaxDistance, dist);
         float contactThickness = 1.0 - smoothstep(uThickness, uThickness * 4.0, dist);
-        float facing = (0.18 + 0.82 * receiverTerm) * (0.24 + 0.76 * emitterTerm);
-        float attenuation = distanceFade / (1.0 + distSq * 0.10);
-        float weight = facing * attenuation * mix(1.0, contactThickness, 0.45);
+        float facing = pow(receiverTerm, 0.75) * pow(emitterTerm, 0.65);
+        float attenuation = distanceFade / (1.0 + distSq * 0.18);
+        float weight = facing * attenuation * mix(0.74, 1.0, contactThickness);
 
         vec3 sampleAlbedo = texture(uAlbedoTex, sampleUv).rgb;
         vec3 radiance = filteredRadiance(sampleUv, sampleDepth, sampleWorld, sampleNormal);
-        radiance *= min(1.0, 16.0 / max(luminance(radiance), 1e-4));
+        radiance *= min(1.0, 10.0 / max(luminance(radiance), 1e-4));
         vec3 albedoChroma = min(sampleAlbedo / max(luminance(sampleAlbedo), 0.18), vec3(3.0));
         radiance = mix(radiance, albedoChroma * luminance(radiance), clamp(uColorBleedStrength, 0.0, 1.0));
         indirect += radiance * weight;
