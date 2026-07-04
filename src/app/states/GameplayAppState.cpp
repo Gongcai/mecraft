@@ -3,7 +3,6 @@
 #include "../../Diagnostics.h"
 #include "game/Game.h"
 #include <algorithm>
-#include <exception>
 #include <iostream>
 
 GameplayAppState::GameplayAppState(AppStateDependencies deps, GameSessionConfig config)
@@ -43,11 +42,9 @@ void GameplayAppState::onEnter() {
         m_deps.enableDebugDashboard
     };
 
-    try {
-        m_game = std::make_unique<Game>(m_config, deps);
-        m_game->init();
-    } catch (const std::exception& ex) {
-        MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Failed to enter gameplay: " << ex.what() << '\n');
+    m_game = std::make_unique<Game>(m_config, deps);
+    if (!m_game->init()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Failed to enter gameplay\n");
         m_game.reset();
         m_enterFailed = true;
         m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
@@ -77,53 +74,56 @@ void GameplayAppState::update(double frameTime, double& accumulator) {
         return;
     }
 
-    try {
 #ifdef MECRAFT_DEBUG
-        m_game->publishDebugStats(static_cast<float>(frameTime));
+    m_game->publishDebugStats(static_cast<float>(frameTime));
 #endif
-        const auto handleQuitToMenu = [this, &accumulator]() {
-            m_game->clearQuitToMenuRequest();
-            if (m_deps.shouldCloseAppOnGameplayQuitToMenu && m_deps.shouldCloseAppOnGameplayQuitToMenu()) {
-                glfwSetWindowShouldClose(m_deps.window.getHandle(), true);
-            } else {
-                m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
-            }
-            accumulator = 0.0;
-        };
-
-        constexpr double kFixedStep = 1.0 / 60.0;
-        while (accumulator >= kFixedStep) {
-            m_game->fixedUpdate(kFixedStep, accumulator);
-            if (m_game->isQuitToMenuRequested()) {
-                handleQuitToMenu();
-                return;
-            }
+    const auto handleQuitToMenu = [this, &accumulator]() {
+        m_game->clearQuitToMenuRequest();
+        if (m_deps.shouldCloseAppOnGameplayQuitToMenu && m_deps.shouldCloseAppOnGameplayQuitToMenu()) {
+            glfwSetWindowShouldClose(m_deps.window.getHandle(), true);
+        } else {
+            m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
         }
-        m_game->setFixedInterpolationAlpha(static_cast<float>(std::clamp(accumulator / kFixedStep, 0.0, 1.0)));
-        m_game->updateFrame(static_cast<float>(frameTime));
+        accumulator = 0.0;
+    };
 
-        // Check if the pause menu requested quit-to-menu
-        if (m_game->isQuitToMenuRequested()) {
-            handleQuitToMenu();
-        }
-    } catch (const std::exception& ex) {
-        MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay update failed: " << ex.what() << '\n');
-        if (m_game) {
+    constexpr double kFixedStep = 1.0 / 60.0;
+    while (accumulator >= kFixedStep) {
+        if (!m_game->fixedUpdate(kFixedStep, accumulator)) {
+            MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay fixed update failed\n");
             m_game->shutdown();
             m_game.reset();
+            m_enterFailed = true;
+            m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+            accumulator = 0.0;
+            return;
         }
+        if (m_game->isQuitToMenuRequested()) {
+            handleQuitToMenu();
+            return;
+        }
+    }
+    m_game->setFixedInterpolationAlpha(static_cast<float>(std::clamp(accumulator / kFixedStep, 0.0, 1.0)));
+    if (!m_game->updateFrame(static_cast<float>(frameTime))) {
+        MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay frame update failed\n");
+        m_game->shutdown();
+        m_game.reset();
         m_enterFailed = true;
         m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
         accumulator = 0.0;
+        return;
+    }
+
+    // Check if the pause menu requested quit-to-menu
+    if (m_game->isQuitToMenuRequested()) {
+        handleQuitToMenu();
     }
 }
 
 void GameplayAppState::render(double frameTime) {
     if (m_game) {
-        try {
-            m_game->renderFrame(static_cast<float>(frameTime));
-        } catch (const std::exception& ex) {
-            MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay render failed: " << ex.what() << '\n');
+        if (!m_game->renderFrame(static_cast<float>(frameTime))) {
+            MECRAFT_LOG_STREAM(std::cerr << "[GameplayAppState] Gameplay render failed\n");
             m_game->shutdown();
             m_game.reset();
             m_enterFailed = true;

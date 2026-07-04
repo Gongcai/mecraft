@@ -13,7 +13,6 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <stdexcept>
 #include <string>
 #include <GLFW/glfw3.h>
 #include <nlohmann/json.hpp>
@@ -38,10 +37,10 @@ GameManager::GameManager()
 
 GameManager::~GameManager() = default;
 
-void GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
+bool GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
     m_launchOptions = std::move(launchOptions);
     if (!initWindow(width, height, title)) {
-        return;
+        return false;
     }
     m_threadPool.start();
     app::bootstrapGameResources(m_resourceMgr);
@@ -55,11 +54,17 @@ void GameManager::init(int width, int height, const char* title, AppLaunchOption
         MECRAFT_LOG_STREAM(std::cerr << "Failed to initialize ENet; multiplayer connections will fail." << std::endl);
     }
 
-    configureInputReplay();
+    if (!configureInputReplay()) {
+        return false;
+    }
 
     if (m_launchOptions.autoStartGameplay) {
+        GameSessionConfig benchmarkConfig;
+        if (!makeBenchmarkSessionConfig(benchmarkConfig)) {
+            return false;
+        }
         m_appStateMachine.pushState(std::make_unique<LoadingAppState>(makeAppStateDependencies(),
-                                                                      makeBenchmarkSessionConfig()));
+                                                                      std::move(benchmarkConfig)));
     } else {
         m_appStateMachine.pushState(std::make_unique<MainMenuAppState>(makeAppStateDependencies()));
     }
@@ -67,6 +72,7 @@ void GameManager::init(int width, int height, const char* title, AppLaunchOption
     if (m_launchOptions.inputReplayScope == AppLaunchOptions::InputReplayScope::App) {
         activateInputReplayForScope(AppLaunchOptions::InputReplayScope::App);
     }
+    return true;
 }
 
 bool GameManager::initWindow(int width, int height, const char* title) {
@@ -109,36 +115,39 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
     };
 }
 
-GameSessionConfig GameManager::makeBenchmarkSessionConfig() const {
-    GameSessionConfig config;
-    config.seed = m_launchOptions.benchmarkSeed;
-    config.renderDistance = m_launchOptions.benchmarkRenderDistanceSet
+bool GameManager::makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const {
+    outConfig = GameSessionConfig{};
+    outConfig.seed = m_launchOptions.benchmarkSeed;
+    outConfig.renderDistance = m_launchOptions.benchmarkRenderDistanceSet
         ? m_launchOptions.benchmarkRenderDistance
         : app::loadRenderDistance();
-    config.worldName = m_launchOptions.benchmarkWorldName;
-    config.worldDisplayName = m_launchOptions.benchmarkWorldDisplayName.empty()
+    outConfig.worldName = m_launchOptions.benchmarkWorldName;
+    outConfig.worldDisplayName = m_launchOptions.benchmarkWorldDisplayName.empty()
         ? m_launchOptions.benchmarkWorldName
         : m_launchOptions.benchmarkWorldDisplayName;
-    config.saveRoot = m_launchOptions.benchmarkSaveRoot;
-    config.enableSaving = m_launchOptions.benchmarkEnableSaving;
+    outConfig.saveRoot = m_launchOptions.benchmarkSaveRoot;
+    outConfig.enableSaving = m_launchOptions.benchmarkEnableSaving;
 
-    if (!m_launchOptions.benchmarkSeedSet && !config.worldName.empty()) {
-        const std::filesystem::path worldPath = config.saveRoot / config.worldName;
+    if (!m_launchOptions.benchmarkSeedSet && !outConfig.worldName.empty()) {
+        const std::filesystem::path worldPath = outConfig.saveRoot / outConfig.worldName;
         if (std::filesystem::exists(worldPath)) {
             save::SaveManager saveManager(worldPath);
             save::LevelMeta meta;
             if (!saveManager.loadLevelMeta(meta)) {
-                throw std::runtime_error("Failed to read benchmark world metadata: " + worldPath.string());
+                MECRAFT_LOG_STREAM(std::cerr << "Failed to read benchmark world metadata: "
+                                  << worldPath.string() << '\n');
+                return false;
             }
-            config.seed = static_cast<int>(meta.seed);
+            outConfig.seed = static_cast<int>(meta.seed);
         }
     }
-    return config;
+    return true;
 }
 
-void GameManager::configureInputReplay() {
+bool GameManager::configureInputReplay() {
     if (m_launchOptions.recordInput && m_launchOptions.replayInput) {
-        throw std::runtime_error("Input recording and playback cannot be enabled at the same time");
+        MECRAFT_LOG_STREAM(std::cerr << "Input recording and playback cannot be enabled at the same time\n");
+        return false;
     }
     if (m_launchOptions.recordInput) {
         m_input.configureInputRecording(m_launchOptions.inputRecordPath);
@@ -146,6 +155,7 @@ void GameManager::configureInputReplay() {
     if (m_launchOptions.replayInput) {
         m_input.configureInputPlayback(m_launchOptions.inputReplayPath);
     }
+    return true;
 }
 
 void GameManager::activateInputReplayForScope(const AppLaunchOptions::InputReplayScope scope) {

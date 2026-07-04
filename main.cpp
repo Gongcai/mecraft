@@ -1,9 +1,10 @@
 #include "src/app/GameManager.h"
 
+#include <cerrno>
+#include <charconv>
+#include <cmath>
 #include <cstdlib>
-#include <exception>
 #include <iostream>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -28,33 +29,41 @@ void printUsage() {
         << "  --no-exit-on-replay-end            Keep app open when replay frames are exhausted.\n";
 }
 
-int parseIntArg(const char* text, const char* name) {
-    char* end = nullptr;
-    const long value = std::strtol(text, &end, 10);
-    if (end == text || *end != '\0') {
-        throw std::runtime_error(std::string("Invalid integer for ") + name + ": " + text);
+bool parseIntArg(const char* text, const char* name, int& out, std::string& error) {
+    const char* end = text + std::char_traits<char>::length(text);
+    int value = 0;
+    const auto result = std::from_chars(text, end, value);
+    if (result.ec != std::errc{} || result.ptr != end) {
+        error = std::string("Invalid integer for ") + name + ": " + text;
+        return false;
     }
-    return static_cast<int>(value);
+    out = value;
+    return true;
 }
 
-double parseDoubleArg(const char* text, const char* name) {
+bool parseDoubleArg(const char* text, const char* name, double& out, std::string& error) {
+    errno = 0;
     char* end = nullptr;
     const double value = std::strtod(text, &end);
-    if (end == text || *end != '\0' || value < 0.0) {
-        throw std::runtime_error(std::string("Invalid number for ") + name + ": " + text);
+    if (errno == ERANGE || end == text || *end != '\0' || value < 0.0 || !std::isfinite(value)) {
+        error = std::string("Invalid number for ") + name + ": " + text;
+        return false;
     }
-    return value;
+    out = value;
+    return true;
 }
 
-const char* requireValue(int argc, char** argv, int& index, const char* name) {
+bool requireValue(int argc, char** argv, int& index, const char* name, const char*& out, std::string& error) {
     if (index + 1 >= argc) {
-        throw std::runtime_error(std::string("Missing value for ") + name);
+        error = std::string("Missing value for ") + name;
+        return false;
     }
-    return argv[++index];
+    out = argv[++index];
+    return true;
 }
 
-AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
-    AppLaunchOptions options;
+bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::string& error) {
+    options = AppLaunchOptions{};
     bool inputScopeSet = false;
     bool glDebugOutputSet = false;
 
@@ -65,42 +74,81 @@ AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
             std::exit(0);
         }
         if (arg == "--record-input") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--record-input", value, error)) {
+                return false;
+            }
             options.recordInput = true;
-            options.inputRecordPath = requireValue(argc, argv, index, "--record-input");
+            options.inputRecordPath = value;
         } else if (arg == "--replay-input") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--replay-input", value, error)) {
+                return false;
+            }
             options.replayInput = true;
-            options.inputReplayPath = requireValue(argc, argv, index, "--replay-input");
+            options.inputReplayPath = value;
         } else if (arg == "--input-scope") {
-            const std::string scope = requireValue(argc, argv, index, "--input-scope");
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--input-scope", value, error)) {
+                return false;
+            }
+            const std::string scope = value;
             if (scope == "app") {
                 options.inputReplayScope = AppLaunchOptions::InputReplayScope::App;
             } else if (scope == "gameplay") {
                 options.inputReplayScope = AppLaunchOptions::InputReplayScope::Gameplay;
             } else {
-                throw std::runtime_error("Input scope must be app or gameplay");
+                error = "Input scope must be app or gameplay";
+                return false;
             }
             inputScopeSet = true;
         } else if (arg == "--benchmark") {
             options.autoStartGameplay = true;
         } else if (arg == "--benchmark-world") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--benchmark-world", value, error)) {
+                return false;
+            }
             options.autoStartGameplay = true;
-            options.benchmarkWorldName = requireValue(argc, argv, index, "--benchmark-world");
+            options.benchmarkWorldName = value;
         } else if (arg == "--benchmark-world-display-name") {
-            options.benchmarkWorldDisplayName = requireValue(argc, argv, index, "--benchmark-world-display-name");
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--benchmark-world-display-name", value, error)) {
+                return false;
+            }
+            options.benchmarkWorldDisplayName = value;
         } else if (arg == "--benchmark-seed") {
-            options.benchmarkSeed = parseIntArg(requireValue(argc, argv, index, "--benchmark-seed"), "--benchmark-seed");
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--benchmark-seed", value, error) ||
+                !parseIntArg(value, "--benchmark-seed", options.benchmarkSeed, error)) {
+                return false;
+            }
             options.benchmarkSeedSet = true;
         } else if (arg == "--benchmark-render-distance") {
-            options.benchmarkRenderDistance = parseIntArg(requireValue(argc, argv, index, "--benchmark-render-distance"),
-                                                          "--benchmark-render-distance");
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--benchmark-render-distance", value, error) ||
+                !parseIntArg(value, "--benchmark-render-distance", options.benchmarkRenderDistance, error)) {
+                return false;
+            }
             options.benchmarkRenderDistanceSet = true;
         } else if (arg == "--benchmark-duration") {
-            options.benchmarkDurationSeconds = parseDoubleArg(requireValue(argc, argv, index, "--benchmark-duration"),
-                                                              "--benchmark-duration");
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--benchmark-duration", value, error) ||
+                !parseDoubleArg(value, "--benchmark-duration", options.benchmarkDurationSeconds, error)) {
+                return false;
+            }
         } else if (arg == "--benchmark-report") {
-            options.benchmarkReportPath = requireValue(argc, argv, index, "--benchmark-report");
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--benchmark-report", value, error)) {
+                return false;
+            }
+            options.benchmarkReportPath = value;
         } else if (arg == "--benchmark-save-root") {
-            options.benchmarkSaveRoot = requireValue(argc, argv, index, "--benchmark-save-root");
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--benchmark-save-root", value, error)) {
+                return false;
+            }
+            options.benchmarkSaveRoot = value;
         } else if (arg == "--benchmark-no-save") {
             options.benchmarkEnableSaving = false;
         } else if (arg == "--gl-debug-output") {
@@ -112,15 +160,18 @@ AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
         } else if (arg == "--no-exit-on-replay-end") {
             options.exitWhenPlaybackEnds = false;
         } else {
-            throw std::runtime_error("Unknown command line option: " + arg);
+            error = "Unknown command line option: " + arg;
+            return false;
         }
     }
 
     if (options.recordInput && options.replayInput) {
-        throw std::runtime_error("--record-input and --replay-input cannot be used together");
+        error = "--record-input and --replay-input cannot be used together";
+        return false;
     }
     if (!options.benchmarkReportPath.empty() && !options.autoStartGameplay) {
-        throw std::runtime_error("--benchmark-report requires --benchmark or --benchmark-world");
+        error = "--benchmark-report requires --benchmark or --benchmark-world";
+        return false;
     }
     if (options.autoStartGameplay && !inputScopeSet) {
         options.inputReplayScope = AppLaunchOptions::InputReplayScope::Gameplay;
@@ -131,23 +182,25 @@ AppLaunchOptions parseLaunchOptions(int argc, char** argv) {
             options.enableGlDebugOutput = false;
         }
     }
-    return options;
+    return true;
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
     AppLaunchOptions options;
-    try {
-        options = parseLaunchOptions(argc, argv);
-    } catch (const std::exception& ex) {
-        std::cerr << ex.what() << '\n';
+    std::string error;
+    if (!parseLaunchOptions(argc, argv, options, error)) {
+        std::cerr << error << '\n';
         printUsage();
         return 1;
     }
 
     GameManager app;
-    app.init(1280, 720, "Mecraft", std::move(options));
+    if (!app.init(1280, 720, "Mecraft", std::move(options))) {
+        app.shutdown();
+        return 1;
+    }
     app.run();
     app.shutdown();
     return 0;

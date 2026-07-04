@@ -11,6 +11,7 @@
 #include "server/GameServer.h"
 #include "save/SaveManager.h"
 #include <glad/glad.h>
+#include <iostream>
 
 #ifdef MECRAFT_DEBUG
 #include "debug/DebugFrameProfiler.h"
@@ -30,11 +31,14 @@ Game::Game(GameSessionConfig config, GameSessionDependencies deps)
 
 Game::~Game() = default;
 
-void Game::init() {
+bool Game::init() {
     beginLoading();
     while (!isLoadingComplete()) {
-        updateLoading(1.0f / 60.0f);
+        if (!updateLoading(1.0f / 60.0f)) {
+            return false;
+        }
     }
+    return true;
 }
 
 void Game::beginLoading() {
@@ -45,7 +49,7 @@ void Game::beginLoading() {
     m_loadPhase = LoadPhase::Session;
 }
 
-void Game::updateLoading(const float deltaTime) {
+bool Game::updateLoading(const float deltaTime) {
     if (m_loadPhase == LoadPhase::NotStarted) {
         beginLoading();
     }
@@ -95,13 +99,15 @@ void Game::updateLoading(const float deltaTime) {
     case LoadPhase::NotStarted:
         break;
     }
+    return m_loadPhase != LoadPhase::Failed;
 }
 
-void Game::fixedUpdate(const double fixedStep, double& accumulator) {
+bool Game::fixedUpdate(const double fixedStep, double& accumulator) {
     m_frameOrchestrator->runFixedUpdate(m_session, m_deps.input, m_renderRuntime.get(), fixedStep, accumulator);
+    return true;
 }
 
-void Game::updateFrame(const float deltaTime) {
+bool Game::updateFrame(const float deltaTime) {
     // G5: Delegate to orchestrator
 #ifdef MECRAFT_DEBUG
     const auto audioStart = std::chrono::steady_clock::now();
@@ -109,9 +115,8 @@ void Game::updateFrame(const float deltaTime) {
     if (m_audioSyncSystem) {
         m_frameOrchestrator->syncAudioListener(*m_audioSyncSystem, deltaTime, m_session);
     } else {
-        // Fallback during early init before audioSyncSystem is created
-        AudioListenerSyncSystem fallback(m_deps.bgmSystem, m_deps.audioEngine);
-        m_frameOrchestrator->syncAudioListener(fallback, deltaTime, m_session);
+        MECRAFT_LOG_STREAM(std::cerr << "[Game] Audio listener system is not initialized\n");
+        return false;
     }
 #ifdef MECRAFT_DEBUG
     const auto audioEnd = std::chrono::steady_clock::now();
@@ -121,6 +126,7 @@ void Game::updateFrame(const float deltaTime) {
         }
     }
 #endif
+    return true;
 }
 
 void Game::setFixedInterpolationAlpha(const float alpha) {
@@ -176,9 +182,9 @@ void Game::recordAppRenderDispatch(double ms) {
 }
 #endif
 
-void Game::renderFrame(const float frameTime) {
+bool Game::renderFrame(const float frameTime) {
     if (!m_initialized) {
-        return;
+        return true;
     }
 
     // Set screenshot capture callback if requested (captures before UI overlay)
@@ -195,6 +201,7 @@ void Game::renderFrame(const float frameTime) {
                                      m_hudPresenter.get(),
                                      m_deps.window, frameTime,
                                      renderInterpolationAlpha);
+    return true;
 }
 
 void Game::shutdown() {
@@ -207,7 +214,7 @@ void Game::shutdown() {
         m_captureScreenshotOnNextFrame = true;
 
         // Render one more frame to capture the screenshot
-        renderFrame(0.0f);
+        (void)renderFrame(0.0f);
     }
 
     // Session must shut down before the app-owned thread pool is stopped

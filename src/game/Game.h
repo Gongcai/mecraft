@@ -41,15 +41,15 @@ public:
     Game(GameSessionConfig config, GameSessionDependencies deps);
     ~Game();
 
-    void init();
+    [[nodiscard]] bool init();
     void beginLoading();
-    void updateLoading(float deltaTime);
+    [[nodiscard]] bool updateLoading(float deltaTime);
     void shutdown();
 
-    void fixedUpdate(double fixedStep, double& accumulator);
-    void updateFrame(float deltaTime);
+    [[nodiscard]] bool fixedUpdate(double fixedStep, double& accumulator);
+    [[nodiscard]] bool updateFrame(float deltaTime);
     void setFixedInterpolationAlpha(float alpha);
-    void renderFrame(float frameTime);
+    [[nodiscard]] bool renderFrame(float frameTime);
 #ifdef MECRAFT_DEBUG
     void publishDebugStats(float frameTime);
     void recordPollEvents(double ms,

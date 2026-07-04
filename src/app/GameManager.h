@@ -26,7 +26,7 @@ public:
     GameManager();
     ~GameManager();
 
-    void init(int width, int height, const char* title, AppLaunchOptions launchOptions = {});
+    [[nodiscard]] bool init(int width, int height, const char* title, AppLaunchOptions launchOptions = {});
     void run();
     void shutdown();
 
@@ -36,8 +36,8 @@ private:
     [[nodiscard]] AppStateDependencies makeAppStateDependencies();
 
     [[nodiscard]] static double clampFrameTime(double dt);
-    [[nodiscard]] GameSessionConfig makeBenchmarkSessionConfig() const;
-    void configureInputReplay();
+    [[nodiscard]] bool makeBenchmarkSessionConfig(GameSessionConfig& outConfig) const;
+    [[nodiscard]] bool configureInputReplay();
     void activateInputReplayForScope(AppLaunchOptions::InputReplayScope scope);
     void recordBenchmarkFrame(double frameTime);
     void closeWindowIfBenchmarkComplete();

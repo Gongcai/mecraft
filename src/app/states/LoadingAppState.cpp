@@ -6,7 +6,6 @@
 #include "../../game/Game.h"
 
 #include <cstdio>
-#include <exception>
 #include <iostream>
 
 LoadingAppState::LoadingAppState(AppStateDependencies deps, GameSessionConfig config)
@@ -46,32 +45,30 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
         return;
     }
 
-    try {
-        if (!m_game) {
-            m_game = createGame();
-            m_game->beginLoading();
-        }
+    if (!m_game) {
+        m_game = createGame();
+        m_game->beginLoading();
+    }
 
-        if (!m_game->isLoadingComplete()) {
-            m_game->updateLoading(static_cast<float>(frameTime));
-        }
-
-        refreshScreen();
-
-        if (m_game->isLoadingComplete()) {
-            m_deps.appFsm.changeState(
-                std::make_unique<GameplayAppState>(m_deps, std::move(m_game)));
-            accumulator = 0.0;
-            return;
-        }
-    } catch (const std::exception& ex) {
-        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to load gameplay: " << ex.what() << '\n');
+    if (!m_game->isLoadingComplete() && !m_game->updateLoading(static_cast<float>(frameTime))) {
+        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to load gameplay\n");
         if (m_game) {
             m_game->shutdown();
             m_game.reset();
         }
         m_failed = true;
         m_deps.appFsm.changeState(std::make_unique<MainMenuAppState>(m_deps));
+        accumulator = 0.0;
+        return;
+    }
+
+    refreshScreen();
+
+    if (m_game && m_game->isLoadingComplete()) {
+        m_deps.appFsm.changeState(
+            std::make_unique<GameplayAppState>(m_deps, std::move(m_game)));
+        accumulator = 0.0;
+        return;
     }
 
     accumulator = 0.0;
