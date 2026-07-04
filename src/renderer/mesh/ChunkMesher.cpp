@@ -5,10 +5,12 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
+#include <iostream>
 #include <memory>
 #include <mutex>
-#include <stdexcept>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
@@ -35,6 +37,11 @@
 
 namespace {
 std::atomic_bool g_debugDisableGreedyMeshing{false};
+
+[[noreturn]] void failChunkMesher(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 struct IVec3 {
     int x;
@@ -1431,7 +1438,7 @@ int faceFromDirection(const IVec3 direction) {
     if (direction.x == 0 && direction.y == 0 && direction.z == -1) return FACE_BACK;
     if (direction.x == -1 && direction.y == 0 && direction.z == 0) return FACE_LEFT;
     if (direction.x == 1 && direction.y == 0 && direction.z == 0) return FACE_RIGHT;
-    throw std::runtime_error("Model transform produced an invalid face direction");
+    failChunkMesher("Model transform produced an invalid face direction");
 }
 
 int transformFaceIndex(const int face, const ModelTransform& transform) {
@@ -1536,7 +1543,7 @@ std::string resolveModelFaceTextureName(const BlockModel& model, const ModelFace
     const std::string textureKey = face.textureVar.substr(1);
     const auto it = model.textures.find(textureKey);
     if (it == model.textures.end()) {
-        throw std::runtime_error("Model face references unknown texture variable: " + model.name + "." + textureKey);
+        failChunkMesher("Model face references unknown texture variable: " + model.name + "." + textureKey);
     }
     return it->second;
 }
@@ -1583,7 +1590,7 @@ std::shared_ptr<const CachedModelGeometry> buildCachedModelGeometry(const ModelV
 
 const CachedModelGeometry& getCachedModelGeometry(const ModelVariant& variant) {
     if (variant.model == nullptr) {
-        throw std::runtime_error("Model geometry cache requires a model");
+        failChunkMesher("Model geometry cache requires a model");
     }
 
     const ModelGeometryCacheKey key{
@@ -1687,7 +1694,7 @@ std::vector<BlockVertex>& selectModelVertexTarget(ChunkMeshData& meshData, const
         case BlockRenderLayer::Transparent:
             return meshData.transparentVertices;
     }
-    throw std::runtime_error("Unknown render layer for model block");
+    failChunkMesher("Unknown render layer for model block");
 }
 
 FaceRenderData buildCachedModelFaceRenderData(const SubChunkMeshingSnapshot& snapshot,
@@ -3256,11 +3263,11 @@ constexpr float kFacePlaneSurfaceOffset = 1.0f / 128.0f;
 
 uint16_t requireFacePlaneFacing(const BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
-        throw std::runtime_error("Face plane mesh requires the facing property");
+        failChunkMesher("Face plane mesh requires the facing property");
     }
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facing == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("Face plane mesh requires a facing state value");
+        failChunkMesher("Face plane mesh requires a facing state value");
     }
     return facing;
 }
@@ -3284,7 +3291,7 @@ int facePlaneRenderFace(const uint16_t facing) {
     if (facing == PropIndices::FACING_WEST) {
         return FACE_LEFT;
     }
-    throw std::runtime_error("Face plane mesh received an unsupported facing value");
+    failChunkMesher("Face plane mesh received an unsupported facing value");
 }
 
 std::array<glm::vec3, 4> buildFacePlaneCorners(const glm::vec3& pos, const uint16_t facing) {
@@ -3333,7 +3340,7 @@ std::array<glm::vec3, 4> buildFacePlaneCorners(const glm::vec3& pos, const uint1
                  {pos.x + x, pos.y + 1.0f, pos.z + 1.0f},
                  {pos.x + x, pos.y + 1.0f, pos.z + 0.0f}}};
     }
-    throw std::runtime_error("Face plane mesh received an unsupported facing value");
+    failChunkMesher("Face plane mesh received an unsupported facing value");
 }
 
 void requireRedstoneWireMeshProperties() {
@@ -3369,7 +3376,7 @@ void requireRedstoneWireMeshProperties() {
         PropIndices::POWER_13 == PropIndices::INVALID ||
         PropIndices::POWER_14 == PropIndices::INVALID ||
         PropIndices::POWER_15 == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone wire mesh requires facing, power, and horizontal connection properties");
+        failChunkMesher("Redstone wire mesh requires facing, power, and horizontal connection properties");
     }
 }
 
@@ -3400,7 +3407,7 @@ uint8_t redstonePowerLevel(const BlockStateId stateId) {
         }
     }
 
-    throw std::runtime_error("Redstone wire mesh received an unsupported power value");
+    failChunkMesher("Redstone wire mesh received an unsupported power value");
 }
 
 // Returns 0 for "none" and 1 for "side".
@@ -3417,13 +3424,13 @@ uint8_t redstoneWireConnectionLevel(const BlockStateId stateId,
     if (value == sideValue) {
         return 1;
     }
-    throw std::runtime_error(std::string("Redstone wire mesh received an unsupported ") + propertyName + " value");
+    failChunkMesher(std::string("Redstone wire mesh received an unsupported ") + propertyName + " value");
 }
 
 const AnimatedTextureRef& requireNamedTextureRef(const BlockDef& def, const char* name) {
     const auto it = def.namedTextureRefs.find(name);
     if (it == def.namedTextureRefs.end()) {
-        throw std::runtime_error("Redstone wire mesh requires named texture: " + std::string(name));
+        failChunkMesher("Redstone wire mesh requires named texture: " + std::string(name));
     }
     return it->second;
 }
@@ -3462,7 +3469,7 @@ PlanarWireSegmentDirection planarWireSegmentDirection(const uint16_t facing,
     if (property == PropIndices::WEST) {
         return PlanarWireSegmentDirection::NegativeA;
     }
-    throw std::runtime_error("Redstone wire segment received an unsupported connection property");
+    failChunkMesher("Redstone wire segment received an unsupported connection property");
 }
 
 PlanarWireSegmentRect planarWireSegmentRect(const PlanarWireSegmentDirection direction) {
@@ -3476,7 +3483,7 @@ PlanarWireSegmentRect planarWireSegmentRect(const PlanarWireSegmentDirection dir
         case PlanarWireSegmentDirection::PositiveB:
             return {0.0f, 0.5f, 1.0f, 1.0f};
     }
-    throw std::runtime_error("Redstone wire segment received an unsupported planar direction");
+    failChunkMesher("Redstone wire segment received an unsupported planar direction");
 }
 
 std::array<glm::vec2, 4> faceWireQuadLocalCoords(const uint16_t facing,
@@ -3493,7 +3500,7 @@ std::array<glm::vec2, 4> faceWireQuadLocalCoords(const uint16_t facing,
     if (facing == PropIndices::FACING_EAST) {
         return {{{rect.a1, rect.b0}, {rect.a0, rect.b0}, {rect.a0, rect.b1}, {rect.a1, rect.b1}}};
     }
-    throw std::runtime_error("Redstone wire segment received an unsupported facing value");
+    failChunkMesher("Redstone wire segment received an unsupported facing value");
 }
 
 glm::vec2 planarWireSegmentUv(const PlanarWireSegmentDirection direction,
@@ -3508,7 +3515,7 @@ glm::vec2 planarWireSegmentUv(const PlanarWireSegmentDirection direction,
         case PlanarWireSegmentDirection::PositiveB:
             return {local.x, 1.5f - local.y};
     }
-    throw std::runtime_error("Redstone wire segment received an unsupported planar direction");
+    failChunkMesher("Redstone wire segment received an unsupported planar direction");
 }
 
 std::array<glm::vec2, 4> buildPlanarWireSegmentUv(const uint16_t facing,
@@ -3586,7 +3593,7 @@ std::array<glm::vec3, 4> buildFaceWireQuad(const glm::vec3& pos,
                  {x, pos.y + b1, pos.z + a1},
                  {x, pos.y + b1, pos.z + a0}}};
     }
-    throw std::runtime_error("Redstone wire quad received an unsupported facing value");
+    failChunkMesher("Redstone wire quad received an unsupported facing value");
 }
 
 std::array<glm::vec3, 4> buildPlanarWireSegment(const glm::vec3& pos,
@@ -3636,7 +3643,7 @@ uint16_t redstonePowerPropertyValue(const uint8_t power) {
         PropIndices::POWER_15
     }};
     if (power >= kPowerValues.size()) {
-        throw std::runtime_error("Wire container mesh received an unsupported power level");
+        failChunkMesher("Wire container mesh received an unsupported power level");
     }
     return kPowerValues[power];
 }
@@ -3654,7 +3661,7 @@ const std::unordered_map<uint16_t, BlockID>& redstoneWireBlockIdsByChannel() {
             const auto [it, inserted] = mapping.emplace(def.redstoneWireChannelId, blockId);
             static_cast<void>(it);
             if (!inserted) {
-                throw std::runtime_error("Wire container mesh found multiple wire blocks for one channel");
+                failChunkMesher("Wire container mesh found multiple wire blocks for one channel");
             }
         }
         return mapping;
@@ -3664,13 +3671,13 @@ const std::unordered_map<uint16_t, BlockID>& redstoneWireBlockIdsByChannel() {
 
 BlockID blockIdForWireChannel(const uint16_t channelId) {
     if (channelId == 0) {
-        throw std::runtime_error("Wire container mesh received an empty wire channel");
+        failChunkMesher("Wire container mesh received an empty wire channel");
     }
 
     const auto& mapping = redstoneWireBlockIdsByChannel();
     const auto it = mapping.find(channelId);
     if (it == mapping.end()) {
-        throw std::runtime_error("Wire container mesh could not resolve a wire block for the channel");
+        failChunkMesher("Wire container mesh could not resolve a wire block for the channel");
     }
     return it->second;
 }
@@ -3715,7 +3722,7 @@ uint16_t westConnectionValueForPart(const WirePart& part) {
 
 BlockStateId stateForWirePart(const WirePart& part) {
     if (!WireFaceGeometry::isWireFacing(part.facing)) {
-        throw std::runtime_error("Wire container mesh received an unsupported wire facing");
+        failChunkMesher("Wire container mesh received an unsupported wire facing");
     }
     const BlockID blockId = blockIdForWireChannel(part.channelId);
     return BlockStateRegistry::getState(
@@ -3838,7 +3845,7 @@ void ChunkMeshBuilders::buildModelBlock(ChunkMeshData& meshData,
                                         const int z) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
-        throw std::runtime_error("Model block is missing a model variant: " +
+        failChunkMesher("Model block is missing a model variant: " +
                                  BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(stateId)).full());
     }
 
@@ -3929,7 +3936,7 @@ void ChunkMeshBuilders::buildRedstoneWire(ChunkMeshData& meshData,
 
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (!WireFaceGeometry::isWireFacing(facing)) {
-        throw std::runtime_error("Redstone wire mesh received an unsupported facing value");
+        failChunkMesher("Redstone wire mesh received an unsupported facing value");
     }
 
     // Connection level per horizontal direction: 0 = none, 1 = side.
