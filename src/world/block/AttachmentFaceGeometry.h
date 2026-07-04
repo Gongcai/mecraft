@@ -1,14 +1,21 @@
 #pragma once
 
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
-#include <stdexcept>
 
 #include <glm/vec3.hpp>
 
 #include "PropIndices.h"
 
 namespace AttachmentFaceGeometry {
+
+[[noreturn]] inline void failAttachmentFaceGeometry(const char* message) {
+    std::fputs(message, stderr);
+    std::fputc('\n', stderr);
+    std::abort();
+}
 
 /// Returns true when `face` identifies a block face that can host an attached model.
 inline bool isAttachmentFace(const uint16_t face) {
@@ -55,7 +62,7 @@ inline glm::ivec3 surfaceNormal(const uint16_t face) {
     if (face == PropIndices::FACE_WEST) {
         return {-1, 0, 0};
     }
-    throw std::runtime_error("Attachment face geometry received an unsupported face value");
+    failAttachmentFaceGeometry("Attachment face geometry received an unsupported face value");
 }
 
 /// Resolves the attachment face represented by an outward support-face normal.
@@ -78,7 +85,7 @@ inline uint16_t faceFromSurfaceNormal(const glm::ivec3& normal) {
     if (normal == glm::ivec3(-1, 0, 0)) {
         return PropIndices::FACE_WEST;
     }
-    throw std::runtime_error("Attachment face geometry received an unsupported surface normal");
+    failAttachmentFaceGeometry("Attachment face geometry received an unsupported surface normal");
 }
 
 /// Returns the relative position of the solid block that supports this face.
@@ -106,7 +113,7 @@ inline uint16_t facingValueForFace(const uint16_t face) {
     if (face == PropIndices::FACE_WEST) {
         return PropIndices::FACING_WEST;
     }
-    throw std::runtime_error("Attachment face geometry received an unsupported face value");
+    failAttachmentFaceGeometry("Attachment face geometry received an unsupported face value");
 }
 
 /// Returns the world-space direction represented by a six-way facing value.
@@ -129,7 +136,7 @@ inline glm::ivec3 directionFromFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_DOWN) {
         return {0, -1, 0};
     }
-    throw std::runtime_error("Attachment face geometry received an unsupported facing value");
+    failAttachmentFaceGeometry("Attachment face geometry received an unsupported facing value");
 }
 
 /// Returns true when `direction` lies in the plane hosted by `face`.
