@@ -81,7 +81,9 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
 
     BlockRegistry::init(&resourceMgr);
-    ItemRegistry::init();
+    if (!ItemRegistry::init()) {
+        return false;
+    }
     resourceMgr.buildBlockIconAtlas(64);
     return true;
 }

@@ -95,7 +95,7 @@ private:
 
 class ItemRegistry {
 public:
-    static void init();
+    static bool init();
     [[nodiscard]] static const ItemDef& get(ItemID id);
     [[nodiscard]] static ItemID findByName(const std::string& name);
     [[nodiscard]] static ItemID requireIdByName(const std::string& name);
