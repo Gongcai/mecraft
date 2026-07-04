@@ -1,3 +1,5 @@
+/cmake-build-*/
+/saves/
 /cmake-build-relwithdebinfo/
 /x64-Debug/
 /cmake-build-release/

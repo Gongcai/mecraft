@@ -11,6 +11,9 @@ project(mecraft VERSION 0.1.0 LANGUAGES C CXX)
 # 全局设置
 # ===========================================================================
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(MECRAFT_ENABLE_IPO "Enable IPO/LTO for optimized configurations" ON)
 option(MECRAFT_ENABLE_PCH "Enable precompiled headers" ON)

@@ -1,0 +1,14 @@
+{
+  "name": "mecraft",
+  "version-string": "0.1.0",
+  "builtin-baseline": "d87340acc46bdeda386037b38aca30136e667e47",
+  "dependencies": [
+    "entt",
+    "freetype",
+    "glfw3",
+    "glm",
+    "libvorbis",
+    "nlohmann-json",
+    "openal-soft"
+  ]
+}

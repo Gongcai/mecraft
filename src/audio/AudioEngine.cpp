@@ -12,18 +12,22 @@
 
 namespace fs = std::filesystem;
 
-// OpenAL 扩展函数指针定义
-LPALCEVENTCALLBACKSOFT alcEventCallbackSOFT = nullptr;
-LPALCEVENTCONTROLSOFT alcEventControlSOFT = nullptr;
-LPALCREOPENDEVICESOFT alcReopenDeviceSOFT = nullptr;
+namespace {
 
-// 静态成员定义
-std::atomic<bool> AudioEngine::s_needDeviceReopen{false};
+LPALCEVENTCALLBACKSOFT g_alcEventCallbackSoft = nullptr;
+LPALCEVENTCONTROLSOFT g_alcEventControlSoft = nullptr;
+LPALCREOPENDEVICESOFT g_alcReopenDeviceSoft = nullptr;
 
-// 设备切换回调（OpenAL 内部线程调用）
-void ALC_APIENTRY OnDeviceEvent(ALCenum eventType, ALCenum deviceType,
+// Receives OpenAL device events from the OpenAL internal thread.
+void ALC_APIENTRY onDeviceEvent(ALCenum eventType, ALCenum deviceType,
                                  ALCdevice* device, ALCsizei length,
                                  const ALCchar* message, void* userPtr) noexcept{
+    (void)deviceType;
+    (void)device;
+    (void)length;
+    (void)message;
+    (void)userPtr;
+
     if (eventType == ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT) {
 #ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
         MECRAFT_LOG_STREAM(std::cout << "[Audio] 系统默认音频设备已更改: " << (message ? message : "unknown") << std::endl);
@@ -32,15 +36,19 @@ void ALC_APIENTRY OnDeviceEvent(ALCenum eventType, ALCenum deviceType,
     }
 }
 
+} // namespace
+
+std::atomic<bool> AudioEngine::s_needDeviceReopen{false};
+
 void AudioEngine::init() {
-    // 打开默认音频设备
+    // Open the default audio device.
     _device = alcOpenDevice(nullptr);
     if (!_device) {
         MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to open audio device" << std::endl);
         return;
     }
 
-    // 创建上下文
+    // Create an OpenAL context for all game audio sources.
     m_context = alcCreateContext(_device, nullptr);
     if (!m_context) {
         MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to create audio context" << std::endl);
@@ -49,7 +57,7 @@ void AudioEngine::init() {
         return;
     }
 
-    // 激活上下文
+    // Make the context current before creating buffers or sources.
     if (!alcMakeContextCurrent(m_context)) {
         MECRAFT_LOG_STREAM(std::cerr << "[Audio] Failed to make context current" << std::endl);
         alcDestroyContext(m_context);
@@ -63,21 +71,21 @@ void AudioEngine::init() {
     MECRAFT_LOG_STREAM(std::cout << "[Audio] AudioEngine initialized" << std::endl);
 #endif
 
-    // 初始化设备切换扩展
+    // Enable automatic device switching when the runtime supports it.
     initDeviceSwitchExtension();
 
-    // 加载音效 catalog；运行时音效名只来自 manifest。
+    // Load the sound catalog; runtime sound identifiers are provided only by the manifest.
     loadDefaultCatalog();
 }
 
 void AudioEngine::update(const float deltaTime) {
-    // 检查并处理设备切换
+    // Handle pending default device changes before pruning stopped sources.
     checkDeviceSwitch();
 
-    // AudioEngine 只负责设备与 source 生命周期，BGM 逻辑由外部系统驱动。
+    // AudioEngine owns device and source lifetimes; BGM scheduling is driven by external systems.
     (void)deltaTime;
 
-    // 清理已停止的 source
+    // Remove sources that have finished playback.
     for (auto it = m_sources.begin(); it != m_sources.end();) {
         if ((*it)->isStopped()) {
             it = m_sources.erase(it);
@@ -88,26 +96,26 @@ void AudioEngine::update(const float deltaTime) {
 }
 
 void AudioEngine::shutdown() {
-    // 先停止所有声音并解绑 buffer
+    // Stop all sources and detach their buffers before destroying clips.
     for (auto& source : m_sources) {
         source->stop();
         source->setClip(nullptr);
     }
 
-    // 清理所有 source
+    // Release all source objects.
     m_sources.clear();
 
-    // 清理所有 clip
+    // Release all decoded clips.
     m_clips.clear();
 
-    // 销毁 OpenAL 上下文
+    // Destroy the OpenAL context after all project-owned audio objects are released.
     if (m_context) {
         alcMakeContextCurrent(nullptr);
         alcDestroyContext(m_context);
         m_context = nullptr;
     }
 
-    // 关闭设备
+    // Close the audio device last.
     if (_device) {
         alcCloseDevice(_device);
         _device = nullptr;
@@ -192,7 +200,7 @@ AudioSource* AudioEngine::playClip(const std::string& clipName, glm::vec3 positi
     source->setVolume(volume * entry->volume * m_masterVolume);
     source->setLooping(loop);
     if (!spatial) {
-        // 2D 音效：禁用衰减
+        // Non-spatial sounds must not attenuate with listener distance.
         source->setRolloffFactor(0.0f);
     }
     source->play();
@@ -310,7 +318,7 @@ size_t AudioEngine::chooseVariantIndex(const audio::SoundEntry& entry) {
     return entry.variants.size() - 1;
 }
 
-// BGM 调度已抽离到独立系统。
+// BGM scheduling is implemented by a separate system.
 
 bool AudioEngine::initDeviceSwitchExtension() {
     if (!alcIsExtensionPresent(_device, "ALC_SOFT_system_events") ||
@@ -321,21 +329,21 @@ bool AudioEngine::initDeviceSwitchExtension() {
         return false;
     }
 
-    alcEventCallbackSOFT = (LPALCEVENTCALLBACKSOFT)alcGetProcAddress(_device, "alcEventCallbackSOFT");
-    alcEventControlSOFT = (LPALCEVENTCONTROLSOFT)alcGetProcAddress(_device, "alcEventControlSOFT");
-    alcReopenDeviceSOFT = (LPALCREOPENDEVICESOFT)alcGetProcAddress(_device, "alcReopenDeviceSOFT");
+    g_alcEventCallbackSoft = (LPALCEVENTCALLBACKSOFT)alcGetProcAddress(_device, "alcEventCallbackSOFT");
+    g_alcEventControlSoft = (LPALCEVENTCONTROLSOFT)alcGetProcAddress(_device, "alcEventControlSOFT");
+    g_alcReopenDeviceSoft = (LPALCREOPENDEVICESOFT)alcGetProcAddress(_device, "alcReopenDeviceSOFT");
 
-    if (!alcEventCallbackSOFT || !alcEventControlSOFT || !alcReopenDeviceSOFT) {
+    if (!g_alcEventCallbackSoft || !g_alcEventControlSoft || !g_alcReopenDeviceSoft) {
         MECRAFT_LOG_STREAM(std::cerr << "[Audio] 获取扩展函数指针失败" << std::endl);
         return false;
     }
 
-    // 注册回调
-    alcEventCallbackSOFT(OnDeviceEvent, nullptr);
+    // Register the callback that marks device reopen requests.
+    g_alcEventCallbackSoft(onDeviceEvent, nullptr);
 
-    // 启用默认设备变更事件监听
+    // Listen only for default output device changes.
     ALCenum eventToListen = ALC_EVENT_TYPE_DEFAULT_DEVICE_CHANGED_SOFT;
-    alcEventControlSOFT(1, &eventToListen, ALC_TRUE);
+    g_alcEventControlSoft(1, &eventToListen, ALC_TRUE);
 
     m_deviceSwitchSupported = true;
 #ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
@@ -352,8 +360,8 @@ void AudioEngine::checkDeviceSwitch() {
         MECRAFT_LOG_STREAM(std::cout << "[Audio] 正在迁移音频上下文到新设备..." << std::endl);
 #endif
 
-        // alcReopenDeviceSOFT 会保留所有 AL 对象（Buffer, Source, State）
-        if (!alcReopenDeviceSOFT(_device, nullptr, nullptr)) {
+        // alcReopenDeviceSOFT preserves existing AL objects including buffers and sources.
+        if (!g_alcReopenDeviceSoft(_device, nullptr, nullptr)) {
             MECRAFT_LOG_STREAM(std::cerr << "[Audio] 设备迁移失败！" << std::endl);
         } else {
 #ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT

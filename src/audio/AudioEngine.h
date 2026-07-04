@@ -20,17 +20,6 @@
 #include "AudioClip.h"
 #include "AudioSource.h"
 
-// OpenAL 扩展函数指针类型定义
-extern LPALCEVENTCALLBACKSOFT alcEventCallbackSOFT;
-extern LPALCEVENTCONTROLSOFT alcEventControlSOFT;
-extern LPALCREOPENDEVICESOFT alcReopenDeviceSOFT;
-
-// 设备切换回调函数（OpenAL 内部线程调用）
-void ALC_APIENTRY OnDeviceEvent(ALCenum eventType, ALCenum deviceType,
-                                 ALCdevice* device, ALCsizei length,
-                                 const ALCchar* message, void* userPtr) noexcept;
-
-
 class AudioEngine {
 public:
     void init();
@@ -57,7 +46,7 @@ public:
     void stopAll();
     void setMasterVolume(float volume);
 
-    // 设备切换标记（原子操作，线程安全）
+    // Set by the OpenAL device event callback and consumed on the audio update thread.
     static std::atomic<bool> s_needDeviceReopen;
 
 private:
