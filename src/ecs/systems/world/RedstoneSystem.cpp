@@ -23,10 +23,11 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <queue>
-#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -55,6 +56,11 @@ constexpr glm::ivec3 kDirections[6] = {
     { 0,  0,  1},
     { 0,  0, -1},
 };
+
+[[noreturn]] void failRedstoneSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 struct IVec3Hash {
     std::size_t operator()(const glm::ivec3& value) const noexcept {
@@ -233,12 +239,12 @@ bool isWireContainerState(const BlockStateId stateId) {
 
 uint16_t redstoneWireChannelIdForState(const BlockStateId stateId) {
     if (!isWireState(stateId)) {
-        throw std::runtime_error("Redstone wire channel requires a wire state");
+        failRedstoneSystem("Redstone wire channel requires a wire state");
     }
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (def.redstoneWireChannelId == 0) {
-        throw std::runtime_error("Redstone wire state is missing redstoneWireChannelId");
+        failRedstoneSystem("Redstone wire state is missing redstoneWireChannelId");
     }
     return def.redstoneWireChannelId;
 }
@@ -253,11 +259,11 @@ bool isMatchingWireState(const BlockStateId stateId, const uint16_t wireChannelI
 
 uint16_t getRequiredProperty(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     if (property == PropIndices::INVALID) {
-        throw std::runtime_error(std::string("Redstone requires registered property: ") + propertyName);
+        failRedstoneSystem(std::string("Redstone requires registered property: ") + propertyName);
     }
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string("Redstone state is missing property: ") + propertyName);
+        failRedstoneSystem(std::string("Redstone state is missing property: ") + propertyName);
     }
     return value;
 }
@@ -265,7 +271,7 @@ uint16_t getRequiredProperty(const BlockStateId stateId, const uint16_t property
 uint16_t wireFacingForState(const BlockStateId stateId) {
     const uint16_t facing = getRequiredProperty(stateId, PropIndices::FACING, "facing");
     if (!WireFaceGeometry::isWireFacing(facing)) {
-        throw std::runtime_error("Redstone wire state contains an unsupported facing value");
+        failRedstoneSystem("Redstone wire state contains an unsupported facing value");
     }
     return facing;
 }
@@ -384,7 +390,7 @@ BlockStateId withRequiredProperty(const BlockStateId stateId,
 
     const BlockStateId updated = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
-        throw std::runtime_error(std::string("Redstone failed to update property: ") + propertyName);
+        failRedstoneSystem(std::string("Redstone failed to update property: ") + propertyName);
     }
     return updated;
 }
@@ -412,12 +418,12 @@ std::array<uint16_t, 16> powerPropertyValues() {
 
 uint16_t powerToPropertyValue(const uint8_t power) {
     if (power > kMaxRedstonePower) {
-        throw std::runtime_error("Redstone wire power exceeds 15");
+        failRedstoneSystem("Redstone wire power exceeds 15");
     }
     const auto values = powerPropertyValues();
     const uint16_t value = values[power];
     if (value == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone requires registered power values 0 through 15");
+        failRedstoneSystem("Redstone requires registered power values 0 through 15");
     }
     return value;
 }
@@ -430,7 +436,7 @@ uint8_t redstonePowerFromState(const BlockStateId stateId) {
             return power;
         }
     }
-    throw std::runtime_error("Redstone state contains an unknown power value");
+    failRedstoneSystem("Redstone state contains an unknown power value");
 }
 
 BlockStateId withRedstonePower(const BlockStateId stateId, const uint8_t power) {
@@ -440,7 +446,7 @@ BlockStateId withRedstonePower(const BlockStateId stateId, const uint8_t power) 
 BlockStateId withLit(const BlockStateId stateId, const bool lit) {
     const uint16_t value = lit ? PropIndices::LIT_TRUE : PropIndices::LIT_FALSE;
     if (value == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone requires registered lit boolean values");
+        failRedstoneSystem("Redstone requires registered lit boolean values");
     }
     return withRequiredProperty(stateId, PropIndices::LIT, value, "lit");
 }
@@ -448,7 +454,7 @@ BlockStateId withLit(const BlockStateId stateId, const bool lit) {
 BlockStateId withPowered(const BlockStateId stateId, const bool powered) {
     const uint16_t value = powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE;
     if (value == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone requires registered powered boolean values");
+        failRedstoneSystem("Redstone requires registered powered boolean values");
     }
     return withRequiredProperty(stateId, PropIndices::POWERED, value, "powered");
 }
@@ -456,7 +462,7 @@ BlockStateId withPowered(const BlockStateId stateId, const bool powered) {
 BlockStateId withLocked(const BlockStateId stateId, const bool locked) {
     const uint16_t value = locked ? PropIndices::LOCKED_TRUE : PropIndices::LOCKED_FALSE;
     if (value == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone requires registered locked boolean values");
+        failRedstoneSystem("Redstone requires registered locked boolean values");
     }
     return withRequiredProperty(stateId, PropIndices::LOCKED, value, "locked");
 }
@@ -501,7 +507,7 @@ uint8_t sourceOutputPower(const BlockStateId stateId) {
         return redstonePowerFromState(stateId);
     }
 
-    throw std::runtime_error("Unsupported redstone power source behavior: " + def.redstoneBehavior);
+    failRedstoneSystem("Unsupported redstone power source behavior: " + def.redstoneBehavior);
 }
 
 bool sourceCanPowerConductiveBlocks(const BlockStateId stateId) {
@@ -527,7 +533,7 @@ bool sourceCanPowerConductiveBlocks(const BlockStateId stateId) {
         return false;
     }
 
-    throw std::runtime_error("Unsupported redstone power source behavior: " + def.redstoneBehavior);
+    failRedstoneSystem("Unsupported redstone power source behavior: " + def.redstoneBehavior);
 }
 
 bool isHorizontalDirection(const glm::ivec3& direction) {
@@ -558,7 +564,7 @@ bool wirePowersConductorToward(const World& world,
 template <typename StackReader>
 uint8_t inventorySignalPower(const int slotCount, StackReader&& stackReader) {
     if (slotCount <= 0) {
-        throw std::runtime_error("Redstone container signal requires at least one inventory slot");
+        failRedstoneSystem("Redstone container signal requires at least one inventory slot");
     }
 
     double occupiedFractionSum = 0.0;
@@ -571,10 +577,10 @@ uint8_t inventorySignalPower(const int slotCount, StackReader&& stackReader) {
 
         const ItemDef& itemDef = ItemRegistry::get(stack.itemId);
         if (itemDef.maxStack == 0) {
-            throw std::runtime_error("Redstone container signal found an item with no valid stack size");
+            failRedstoneSystem("Redstone container signal found an item with no valid stack size");
         }
         if (stack.count > itemDef.maxStack) {
-            throw std::runtime_error("Redstone container signal found a stack above its maximum size");
+            failRedstoneSystem("Redstone container signal found a stack above its maximum size");
         }
 
         occupiedFractionSum += static_cast<double>(stack.count) / static_cast<double>(itemDef.maxStack);
@@ -637,7 +643,7 @@ uint8_t containerSignalPowerAt(const World& world,
         });
     }
 
-    throw std::runtime_error("Comparator signal is not implemented for container behavior handler: " +
+    failRedstoneSystem("Comparator signal is not implemented for container behavior handler: " +
                              behavior.handler);
 }
 
@@ -809,10 +815,10 @@ uint64_t buttonPulseTicks(const BlockStateId stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (def.redstoneBehavior != "button") {
-        throw std::runtime_error("Redstone pulse duration requires a button block");
+        failRedstoneSystem("Redstone pulse duration requires a button block");
     }
     if (def.redstonePulseTicks == 0) {
-        throw std::runtime_error("Redstone button has no configured pulse duration: " +
+        failRedstoneSystem("Redstone button has no configured pulse duration: " +
                                  def.namespacedId.full());
     }
     return def.redstonePulseTicks;
@@ -832,7 +838,7 @@ uint64_t repeaterDelayTicks(const BlockStateId stateId) {
     if (delay == PropIndices::DELAY_4) {
         return 4;
     }
-    throw std::runtime_error("Repeater state contains an unknown delay value");
+    failRedstoneSystem("Repeater state contains an unknown delay value");
 }
 
 glm::ivec3 directionFromFacing(const uint16_t facing) {
@@ -854,13 +860,13 @@ glm::ivec3 directionFromFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_DOWN) {
         return {0, -1, 0};
     }
-    throw std::runtime_error("Observer state contains an unknown facing value");
+    failRedstoneSystem("Observer state contains an unknown facing value");
 }
 
 uint16_t logicUnitAttachmentFace(const BlockStateId stateId, const char* deviceName) {
     const uint16_t face = getRequiredProperty(stateId, PropIndices::FACE, "face");
     if (!AttachmentFaceGeometry::isAttachmentFace(face)) {
-        throw std::runtime_error(std::string(deviceName) + " state contains an unsupported face value");
+        failRedstoneSystem(std::string(deviceName) + " state contains an unsupported face value");
     }
     return face;
 }
@@ -870,7 +876,7 @@ glm::ivec3 logicUnitOutputDirection(const BlockStateId stateId, const char* devi
     const uint16_t facing = getRequiredProperty(stateId, PropIndices::FACING, "facing");
     const glm::ivec3 outputDirection = AttachmentFaceGeometry::directionFromFacing(facing);
     if (!AttachmentFaceGeometry::isDirectionInPlane(face, outputDirection)) {
-        throw std::runtime_error(std::string(deviceName) + " output direction must lie on its attached face");
+        failRedstoneSystem(std::string(deviceName) + " output direction must lie on its attached face");
     }
     return outputDirection;
 }
@@ -889,7 +895,7 @@ std::array<glm::ivec3, 2> logicUnitSideDirections(const BlockStateId stateId, co
     const glm::ivec3 outputDirection = logicUnitOutputDirection(stateId, deviceName);
     const glm::ivec3 sideDirection = crossDirection(normal, outputDirection);
     if (sideDirection == glm::ivec3(0)) {
-        throw std::runtime_error(std::string(deviceName) + " side direction requires perpendicular face and output");
+        failRedstoneSystem(std::string(deviceName) + " side direction requires perpendicular face and output");
     }
     return {sideDirection, -sideDirection};
 }
@@ -922,7 +928,7 @@ bool comparatorUsesSubtractMode(const BlockStateId stateId) {
     if (mode == PropIndices::MODE_SUBTRACT) {
         return true;
     }
-    throw std::runtime_error("Comparator state contains an unknown mode value");
+    failRedstoneSystem("Comparator state contains an unknown mode value");
 }
 
 glm::ivec3 observerFacingDirection(const BlockStateId stateId) {
@@ -949,30 +955,30 @@ uint16_t redstoneControlledPropertyIndex(const BlockStateId stateId) {
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (!def.respondsToRedstone || def.redstoneControlledProperty.empty()) {
-        throw std::runtime_error(
+        failRedstoneSystem(
             "Redstone controlled state requires respondsToRedstone and redstoneControlledProperty");
     }
 
     const uint16_t property = BlockStateRegistry::getPropertyNameIndex(def.redstoneControlledProperty);
     if (property == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(
+        failRedstoneSystem(
             "Redstone controlled property is not registered: " + def.redstoneControlledProperty);
     }
 
     const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (currentValue == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(
+        failRedstoneSystem(
             "Redstone controlled block state is missing property: " + def.redstoneControlledProperty);
     }
 
     const uint16_t falseValue = BlockStateRegistry::getPropertyValueIndex(property, "false");
     const uint16_t trueValue = BlockStateRegistry::getPropertyValueIndex(property, "true");
     if (falseValue == BlockStateRegistry::INVALID_INDEX || trueValue == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(
+        failRedstoneSystem(
             "Redstone controlled property must define false and true values: " + def.redstoneControlledProperty);
     }
     if (currentValue != falseValue && currentValue != trueValue) {
-        throw std::runtime_error(
+        failRedstoneSystem(
             "Redstone controlled property state must be false or true: " + def.redstoneControlledProperty);
     }
     return property;
@@ -983,21 +989,21 @@ uint16_t requireBooleanStateProperty(const BlockStateId stateId,
                                      const char* context) {
     const uint16_t property = BlockStateRegistry::getPropertyNameIndex(propertyName);
     if (property == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string(context) + " property is not registered: " + propertyName);
+        failRedstoneSystem(std::string(context) + " property is not registered: " + propertyName);
     }
 
     const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (currentValue == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string(context) + " state is missing property: " + propertyName);
+        failRedstoneSystem(std::string(context) + " state is missing property: " + propertyName);
     }
 
     const uint16_t falseValue = BlockStateRegistry::getPropertyValueIndex(property, "false");
     const uint16_t trueValue = BlockStateRegistry::getPropertyValueIndex(property, "true");
     if (falseValue == BlockStateRegistry::INVALID_INDEX || trueValue == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string(context) + " property must define false and true values: " + propertyName);
+        failRedstoneSystem(std::string(context) + " property must define false and true values: " + propertyName);
     }
     if (currentValue != falseValue && currentValue != trueValue) {
-        throw std::runtime_error(std::string(context) + " property state must be false or true: " + propertyName);
+        failRedstoneSystem(std::string(context) + " property state must be false or true: " + propertyName);
     }
     return property;
 }
@@ -1014,7 +1020,7 @@ BlockStateId withRedstoneControlledPower(const BlockStateId stateId, const bool 
 
     const BlockStateId updatedState = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updatedState, property) != value) {
-        throw std::runtime_error("Redstone controlled state transition failed");
+        failRedstoneSystem("Redstone controlled state transition failed");
     }
 
     BlockStateId mirroredState = updatedState;
@@ -1027,7 +1033,7 @@ BlockStateId withRedstoneControlledPower(const BlockStateId stateId, const bool 
             BlockStateRegistry::getPropertyValueIndex(mirrorProperty, propertyValue ? "true" : "false");
         mirroredState = BlockStateRegistry::withProperty(mirroredState, mirrorProperty, mirrorValue);
         if (BlockStateRegistry::getPropertyIndex(mirroredState, mirrorProperty) != mirrorValue) {
-            throw std::runtime_error("Redstone controlled mirror state transition failed");
+            failRedstoneSystem("Redstone controlled mirror state transition failed");
         }
     }
     return mirroredState;
@@ -1040,7 +1046,7 @@ bool isExtendedPropertyTrue(const BlockStateId stateId) {
 BlockStateId withExtended(const BlockStateId stateId, const bool extended) {
     const uint16_t value = extended ? PropIndices::EXTENDED_TRUE : PropIndices::EXTENDED_FALSE;
     if (value == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone requires registered extended boolean values");
+        failRedstoneSystem("Redstone requires registered extended boolean values");
     }
     return withRequiredProperty(stateId, PropIndices::EXTENDED, value, "extended");
 }
@@ -1057,7 +1063,7 @@ uint16_t pistonHeadType(const BlockStateId pistonState) {
     if (blockId == stickyPistonBlockId()) {
         return PropIndices::TYPE_STICKY;
     }
-    throw std::runtime_error("Piston head type requested for a non-piston block");
+    failRedstoneSystem("Piston head type requested for a non-piston block");
 }
 
 BlockStateId pistonHeadState(const BlockStateId pistonState) {
@@ -1305,7 +1311,7 @@ bool pushPhysicsBodyFromMovingCollision(PhysicsBody& body,
     } else if (movementDirection.z < 0) {
         delta.z = collision.finalBox.min.z - bodyBox.max.z - kPistonEntityPushEpsilon;
     } else {
-        throw std::runtime_error("Piston entity push requires a non-zero movement direction");
+        failRedstoneSystem("Piston entity push requires a non-zero movement direction");
     }
 
     applyPhysicsBodyTranslation(body, delta);
@@ -1407,7 +1413,7 @@ bool buildPistonPushPlan(const World& world,
         plan.movedBlocks.push_back({position, stateId});
     }
 
-    throw std::runtime_error("Piston push scan exceeded its configured maximum distance");
+    failRedstoneSystem("Piston push scan exceeded its configured maximum distance");
 }
 
 void createMovingBlock(GameplayRegistry& registry,
@@ -2176,7 +2182,7 @@ glm::ivec3 attachedBlockForTorch(const BlockStateId stateId, const glm::ivec3& p
     if (facing == PropIndices::FACING_WEST) {
         return position + glm::ivec3(1, 0, 0);
     }
-    throw std::runtime_error("Redstone torch state contains an unknown facing value");
+    failRedstoneSystem("Redstone torch state contains an unknown facing value");
 }
 
 uint8_t computedWirePowerForNode(const WirePowerMap& wirePowers, const WireNode& wire) {
@@ -2195,7 +2201,7 @@ uint8_t storedWireNodePower(const World& world, const WireNode& wire) {
             return part->power;
         }
     }
-    throw std::runtime_error("Redstone wire node power requires an existing wire node");
+    failRedstoneSystem("Redstone wire node power requires an existing wire node");
 }
 
 uint8_t wirePowerAtPosition(const World& world,
@@ -3022,7 +3028,7 @@ void emitEdgeTriggeredDeviceEvent(GameplayRegistry& registry,
     if (def.redstoneBehavior != "note_block" &&
         def.redstoneBehavior != "dispenser" &&
         def.redstoneBehavior != "dropper") {
-        throw std::runtime_error("Unsupported redstone edge-triggered behavior: " + def.redstoneBehavior);
+        failRedstoneSystem("Unsupported redstone edge-triggered behavior: " + def.redstoneBehavior);
     }
     ensureRedstoneDeviceActivationEventBus(registry).push({
         position,
