@@ -10,7 +10,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -18,6 +19,11 @@
 namespace ecs {
 
 namespace {
+
+[[noreturn]] void failPressurePlateSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr float kPlateInset = 1.0f / 16.0f;
 constexpr float kPlateMaxContactHeight = 0.25f;
@@ -54,11 +60,11 @@ enum class PressurePlateEntityKind : uint8_t {
 
 uint16_t getRequiredProperty(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     if (property == PropIndices::INVALID) {
-        throw std::runtime_error(std::string("Pressure plates require registered property: ") + propertyName);
+        failPressurePlateSystem(std::string("Pressure plates require registered property: ") + propertyName);
     }
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string("Pressure plate state is missing property: ") + propertyName);
+        failPressurePlateSystem(std::string("Pressure plate state is missing property: ") + propertyName);
     }
     return value;
 }
@@ -66,7 +72,7 @@ uint16_t getRequiredProperty(const BlockStateId stateId, const uint16_t property
 BlockStateId withPowered(const BlockStateId stateId, const bool powered) {
     const uint16_t value = powered ? PropIndices::POWERED_TRUE : PropIndices::POWERED_FALSE;
     if (value == PropIndices::INVALID) {
-        throw std::runtime_error("Pressure plates require registered powered boolean values");
+        failPressurePlateSystem("Pressure plates require registered powered boolean values");
     }
 
     const uint16_t current = getRequiredProperty(stateId, PropIndices::POWERED, "powered");
@@ -76,7 +82,7 @@ BlockStateId withPowered(const BlockStateId stateId, const bool powered) {
 
     const BlockStateId updatedState = BlockStateRegistry::withProperty(stateId, PropIndices::POWERED, value);
     if (BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWERED) != value) {
-        throw std::runtime_error("Pressure plate powered state transition failed");
+        failPressurePlateSystem("Pressure plate powered state transition failed");
     }
     return updatedState;
 }
@@ -100,7 +106,7 @@ bool pressurePlateAcceptsEntity(const BlockStateId stateId, const PressurePlateE
     if (def.pressurePlateEntityFilter == "living") {
         return entityKind == PressurePlateEntityKind::Living;
     }
-    throw std::runtime_error("Pressure plate has unknown entity filter: " + def.pressurePlateEntityFilter);
+    failPressurePlateSystem("Pressure plate has unknown entity filter: " + def.pressurePlateEntityFilter);
 }
 
 bool horizontalFootprintIntersectsPlate(const EntityContactBox& box, const glm::ivec3& platePos) {
