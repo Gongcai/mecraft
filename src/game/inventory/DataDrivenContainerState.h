@@ -3,7 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <utility>
 
@@ -115,6 +116,11 @@ public:
 private:
     static constexpr int kContainerSlotBase = 20000;
 
+    [[noreturn]] static void fail(const std::string& message) {
+        std::cerr << message << '\n';
+        std::abort();
+    }
+
     enum class SlotSpace {
         None,
         Container,
@@ -133,16 +139,16 @@ private:
     static void validateStorageBehavior(const ui::ContainerUiDef& uiDef,
                                         const ContainerBehaviorDef& behavior) {
         if (behavior.handler != "storage") {
-            throw std::runtime_error(behavior.id + " requires storage handler for data-driven storage state");
+            fail(behavior.id + " requires storage handler for data-driven storage state");
         }
         if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-            throw std::runtime_error(behavior.id + " requires block_entity storage");
+            fail(behavior.id + " requires block_entity storage");
         }
         if (!behavior.processors.empty()) {
-            throw std::runtime_error(behavior.id + " storage behavior must not declare processors");
+            fail(behavior.id + " storage behavior must not declare processors");
         }
         if (behavior.storage.slots > BlockEntityInventory::SLOT_COUNT) {
-            throw std::runtime_error(behavior.id + " declares more storage slots than the backing store supports");
+            fail(behavior.id + " declares more storage slots than the backing store supports");
         }
 
         bool hasContainerSlots = false;
@@ -153,11 +159,11 @@ private:
             hasContainerSlots = true;
             const int groupEnd = group.firstSlot + group.columns * group.rows;
             if (groupEnd > behavior.storage.slots) {
-                throw std::runtime_error(uiDef.id + " container slot group exceeds behavior storage slots: " + group.id);
+                fail(uiDef.id + " container slot group exceeds behavior storage slots: " + group.id);
             }
         }
         if (!hasContainerSlots) {
-            throw std::runtime_error(uiDef.id + " requires at least one container slot group");
+            fail(uiDef.id + " requires at least one container slot group");
         }
     }
 

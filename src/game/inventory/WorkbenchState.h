@@ -2,7 +2,8 @@
 #define MECRAFT_WORKBENCHSTATE_H
 
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <utility>
 
@@ -149,6 +150,11 @@ public:
     [[nodiscard]] GameStateKind kind() const override { return GameStateKind::Workbench; }
 
 private:
+    [[noreturn]] static void fail(const std::string& message) {
+        std::cerr << message << '\n';
+        std::abort();
+    }
+
     [[nodiscard]] static bool nearlyEqual(const float lhs, const float rhs) {
         return std::fabs(lhs - rhs) <= 0.001f;
     }
@@ -158,7 +164,7 @@ private:
                                    const float actual,
                                    const float expected) {
         if (!nearlyEqual(actual, expected)) {
-            throw std::runtime_error(owner + " requires matching field: " + fieldName);
+            fail(owner + " requires matching field: " + fieldName);
         }
     }
 
@@ -171,11 +177,11 @@ private:
                 continue;
             }
             if (group.kind != kind) {
-                throw std::runtime_error(def.id + " has incompatible slot group kind: " + id);
+                fail(def.id + " has incompatible slot group kind: " + id);
             }
             return group;
         }
-        throw std::runtime_error(def.id + " is missing required slot group: " + id);
+        fail(def.id + " is missing required slot group: " + id);
     }
 
     static void requireSlotGroupShape(const ui::ContainerUiDef& def,
@@ -186,7 +192,7 @@ private:
         if (group.firstSlot != firstSlot ||
             group.columns != columns ||
             group.rows != rows) {
-            throw std::runtime_error(def.id + " has incompatible slot group shape: " + group.id);
+            fail(def.id + " has incompatible slot group shape: " + group.id);
         }
     }
 
@@ -216,7 +222,7 @@ private:
         if (craftingInput.columns != craftingInput.rows ||
             craftingInput.columns < CraftingGridLayout::MIN_GRID_SIZE ||
             craftingInput.columns > CraftingGridLayout::MAX_GRID_SIZE) {
-            throw std::runtime_error(def.id + " requires square crafting input within supported grid size");
+            fail(def.id + " requires square crafting input within supported grid size");
         }
         requireSlotGroupShape(def, craftingResult, craftingInput.columns * craftingInput.rows, 1, 1);
         requireSlotGroupShape(def, playerInventory, Inventory::HOTBAR_SIZE, Inventory::INVENTORY_COLUMNS, Inventory::MAIN_INVENTORY_ROWS);
@@ -227,7 +233,7 @@ private:
             playerInventory.y + static_cast<float>(playerInventory.rows) * (playerInventory.slotSize + playerInventory.rowGap);
         const float row4ExtraGap = hotbar.y - expectedHotbarY;
         if (row4ExtraGap < 0.0f) {
-            throw std::runtime_error(def.id + ".hotbar requires y at or below the main inventory rows");
+            fail(def.id + ".hotbar requires y at or below the main inventory rows");
         }
 
         layout.backgroundTextureName = def.backgroundTexture;
