@@ -437,6 +437,10 @@ void SaveManager::submitSaveChunk(int cx,
     // Serialize snapshot on calling thread (reads chunk data, no mutation)
     auto fileData = std::make_shared<std::vector<uint8_t>>(
         ChunkSerializer::serializeFile(chunk, wireContainers));
+    if (fileData->empty()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to serialize chunk (%d, %d)\n", cx, cz);
+        return;
+    }
     const int64_t key = makeChunkKey(cx, cz);
     const uint64_t saveSequence = registerSaveSequence(key);
 

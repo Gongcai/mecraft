@@ -9,7 +9,6 @@
 
 #include <cstring>
 #include <cstdio>
-#include <stdexcept>
 #include <vector>
 
 namespace save {
@@ -89,27 +88,33 @@ bool isWireContainerState(const BlockStateId stateId) {
     return BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer;
 }
 
-int checkedLocalX(const Chunk& chunk, const glm::ivec3& position) {
+bool checkedLocalX(const Chunk& chunk, const glm::ivec3& position, int& outLocalX) {
     const int localX = position.x - chunk.m_chunkX * Chunk::SIZE_X;
     if (localX < 0 || localX >= Chunk::SIZE_X) {
-        throw std::runtime_error("Wire container save entry is outside the chunk X range");
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entry is outside the chunk X range\n");
+        return false;
     }
-    return localX;
+    outLocalX = localX;
+    return true;
 }
 
-int checkedLocalY(const glm::ivec3& position) {
+bool checkedLocalY(const glm::ivec3& position, int& outLocalY) {
     if (position.y < 0 || position.y >= Chunk::SIZE_Y) {
-        throw std::runtime_error("Wire container save entry is outside the chunk Y range");
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entry is outside the chunk Y range\n");
+        return false;
     }
-    return position.y;
+    outLocalY = position.y;
+    return true;
 }
 
-int checkedLocalZ(const Chunk& chunk, const glm::ivec3& position) {
+bool checkedLocalZ(const Chunk& chunk, const glm::ivec3& position, int& outLocalZ) {
     const int localZ = position.z - chunk.m_chunkZ * Chunk::SIZE_Z;
     if (localZ < 0 || localZ >= Chunk::SIZE_Z) {
-        throw std::runtime_error("Wire container save entry is outside the chunk Z range");
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entry is outside the chunk Z range\n");
+        return false;
     }
-    return localZ;
+    outLocalZ = localZ;
+    return true;
 }
 
 bool containsPosition(const std::vector<glm::ivec3>& positions, const glm::ivec3& position) {
@@ -243,11 +248,12 @@ bool deserializeLayer(
     return true;
 }
 
-void serializeWireContainers(std::vector<uint8_t>& out,
+bool serializeWireContainers(std::vector<uint8_t>& out,
                              const Chunk& chunk,
                              const std::vector<WireContainerSaveEntry>& wireContainers) {
     if (wireContainers.size() > static_cast<size_t>(Chunk::SIZE_X * Chunk::SIZE_Y * Chunk::SIZE_Z)) {
-        throw std::runtime_error("Wire container save entry count exceeds the chunk block count");
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entry count exceeds the chunk block count\n");
+        return false;
     }
 
     writeVaruint(out, static_cast<uint32_t>(wireContainers.size()));
@@ -257,17 +263,25 @@ void serializeWireContainers(std::vector<uint8_t>& out,
 
     for (const WireContainerSaveEntry& entry : wireContainers) {
         if (entry.parts.empty()) {
-            throw std::runtime_error("Wire container save entry has no parts");
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entry has no parts\n");
+            return false;
         }
         if (containsPosition(writtenPositions, entry.position)) {
-            throw std::runtime_error("Wire container save entries contain a duplicate position");
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entries contain a duplicate position\n");
+            return false;
         }
 
-        const int localX = checkedLocalX(chunk, entry.position);
-        const int localY = checkedLocalY(entry.position);
-        const int localZ = checkedLocalZ(chunk, entry.position);
+        int localX = 0;
+        int localY = 0;
+        int localZ = 0;
+        if (!checkedLocalX(chunk, entry.position, localX) ||
+            !checkedLocalY(entry.position, localY) ||
+            !checkedLocalZ(chunk, entry.position, localZ)) {
+            return false;
+        }
         if (!isWireContainerState(chunk.getBlock(localX, localY, localZ))) {
-            throw std::runtime_error("Wire container save entry points at a non-container block");
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container save entry points at a non-container block\n");
+            return false;
         }
 
         writeU8(out, static_cast<uint8_t>(localX));
@@ -294,11 +308,13 @@ void serializeWireContainers(std::vector<uint8_t>& out,
                                                y,
                                                chunk.m_chunkZ * Chunk::SIZE_Z + z);
                 if (!containsPosition(writtenPositions, worldPosition)) {
-                    throw std::runtime_error("Wire container block is missing its saved parts");
+                    MECRAFT_LOG_FPRINTF(stderr, "[Save] Wire container block is missing its saved parts\n");
+                    return false;
                 }
             }
         }
     }
+    return true;
 }
 
 bool deserializeWireContainers(const uint8_t*& cursor,
@@ -426,7 +442,9 @@ std::vector<uint8_t> ChunkSerializer::serializePayload(
         serializeLayer(payload, sub->fluidPalette(), sub->fluidData());
     }
 
-    serializeWireContainers(payload, chunk, wireContainers);
+    if (!serializeWireContainers(payload, chunk, wireContainers)) {
+        return {};
+    }
 
     return payload;
 }
@@ -506,6 +524,9 @@ std::vector<uint8_t> ChunkSerializer::serializeFile(
     const Chunk& chunk,
     const std::vector<WireContainerSaveEntry>& wireContainers) {
     std::vector<uint8_t> payload = serializePayload(chunk, wireContainers);
+    if (payload.empty()) {
+        return {};
+    }
 
     MchkHeader header{};
     header.magic = MCHK_MAGIC;

@@ -125,6 +125,10 @@ bool RegionFile::writeChunk(int cx, int cz, const Chunk& chunk) {
     const int lz = toLocalCoord(cz);
 
     std::vector<uint8_t> data = ChunkSerializer::serializeFile(chunk);
+    if (data.empty()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to serialize region chunk (%d, %d)\n", cx, cz);
+        return false;
+    }
     return writeChunkData(lx, lz, data);
 }
 
