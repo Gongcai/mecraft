@@ -7,7 +7,7 @@ class ResourceMgr;
 
 namespace resource {
 
-void preloadEntityTexturesFromConfig(ResourceMgr& resourceMgr, const std::string& entitiesConfigPath);
+[[nodiscard]] bool preloadEntityTexturesFromConfig(ResourceMgr& resourceMgr, const std::string& entitiesConfigPath);
 
 } // namespace resource
 

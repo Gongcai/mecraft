@@ -133,8 +133,8 @@ void ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) 
     m_impl->blockTextures.loadCatalog(textureConfigPath);
 }
 
-void ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath) {
-    resource::preloadEntityTexturesFromConfig(*this, entitiesConfigPath);
+bool ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath) {
+    return resource::preloadEntityTexturesFromConfig(*this, entitiesConfigPath);
 }
 
 int ResourceMgr::getTextureArrayLayer(const std::string& name) const {

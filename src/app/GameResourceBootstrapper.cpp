@@ -66,7 +66,9 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.loadGuiTexture("creative_scroller_disabled", std::string(CREATIVE_TABS_PATH) + "/scroller_disabled.png", true);
     resourceMgr.loadGuiTexture("steve", STEVE_TEXTURE_PATH, true);
     resourceMgr.loadGuiTexture("chest", CHEST_ENTITY_TEXTURE_PATH, true);
-    resourceMgr.preloadEntityTexturesFromConfig(ENTITIES_CONFIG_PATH);
+    if (!resourceMgr.preloadEntityTexturesFromConfig(ENTITIES_CONFIG_PATH)) {
+        return false;
+    }
 
     resourceMgr.buildHudIconAtlas(ICONS_TEXTURE_DIR, 8);
 
