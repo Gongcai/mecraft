@@ -2,10 +2,11 @@
 
 #include "BlockIconAtlasBuilder.h"
 #include "TextureAtlasBuilders.h"
+#include "../Diagnostics.h"
 
 #include <glad/glad.h>
 
-#include <stdexcept>
+#include <cstdio>
 #include <utility>
 
 void UiTextureAtlasLibrary::shutdown() {
@@ -33,7 +34,8 @@ void UiTextureAtlasLibrary::buildBlockIconAtlas(const int iconSize, const BlockT
     const TextureAtlas& blockAtlas = blockTextures.atlas();
     const std::vector<unsigned char>& blockAtlasPixels = blockTextures.atlasPixels();
     if (blockAtlas.textureID == 0 || blockAtlasPixels.empty() || blockAtlas.tileSize <= 0 || blockAtlas.tilesPerRow <= 0) {
-        throw std::runtime_error("Block icon atlas requires the block texture atlas to be built first");
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Block icon atlas requires the block texture atlas to be built first\n");
+        return;
     }
 
     if (m_blockIconAtlas.textureID != 0) {

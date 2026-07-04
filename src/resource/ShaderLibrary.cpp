@@ -1,10 +1,13 @@
 #include "ShaderLibrary.h"
 
-#include <stdexcept>
+#include "../Diagnostics.h"
+
+#include <cstdio>
 
 Shader* ShaderLibrary::load(const std::string& name, const char* vertPath, const char* fragPath) {
     if (m_shaders.find(name) != m_shaders.end()) {
-        throw std::runtime_error("Duplicate shader resource: " + name);
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Duplicate shader resource: %s\n", name.c_str());
+        return nullptr;
     }
 
     auto shader = std::make_unique<Shader>(vertPath, fragPath);

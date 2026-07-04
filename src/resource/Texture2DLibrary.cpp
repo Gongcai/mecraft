@@ -1,8 +1,9 @@
 #include "Texture2DLibrary.h"
 
+#include "../Diagnostics.h"
 #include "../third_party/stb/stb_image.h"
 
-#include <stdexcept>
+#include <cstdio>
 
 GLuint Texture2DLibrary::load(const std::string& name,
                               const std::string& path,
@@ -24,7 +25,9 @@ GLuint Texture2DLibrary::load(const std::string& name,
         if (data != nullptr) {
             stbi_image_free(data);
         }
-        throw std::runtime_error("Failed to load texture2D '" + name + "': " + path);
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load texture2D '%s': %s\n",
+                            name.c_str(), path.c_str());
+        return 0;
     }
 
     GLuint textureID = 0;
@@ -89,7 +92,11 @@ GLuint Texture2DLibrary::loadGui(const std::string& name,
         if (data != nullptr) {
             stbi_image_free(data);
         }
-        throw std::runtime_error("Failed to load GUI texture '" + name + "': " + path);
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load GUI texture '%s': %s\n",
+                            name.c_str(), path.c_str());
+        outWidth = 0;
+        outHeight = 0;
+        return 0;
     }
 
     outWidth = width;

@@ -1,8 +1,9 @@
 #include "CubemapLibrary.h"
 
+#include "../Diagnostics.h"
 #include "../third_party/stb/stb_image.h"
 
-#include <stdexcept>
+#include <cstdio>
 
 GLuint CubemapLibrary::load(const std::string& name,
                             const std::string& rightPath,
@@ -40,7 +41,9 @@ GLuint CubemapLibrary::load(const std::string& name,
             }
             glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
             glDeleteTextures(1, &textureID);
-            throw std::runtime_error("Failed to load cubemap face '" + name + "': " + paths[i]);
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load cubemap face '%s': %s\n",
+                                name.c_str(), paths[i].c_str());
+            return 0;
         }
         glTexImage2D(faces[i], 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         stbi_image_free(data);

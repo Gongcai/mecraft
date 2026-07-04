@@ -1,8 +1,9 @@
 #include "EnvironmentTextureLibrary.h"
 
+#include "../Diagnostics.h"
 #include "../third_party/stb/stb_image.h"
 
-#include <stdexcept>
+#include <cstdio>
 
 GLuint EnvironmentTextureLibrary::loadLinearTexture(const std::string& path, const char* label) {
     int width = 0;
@@ -14,7 +15,8 @@ GLuint EnvironmentTextureLibrary::loadLinearTexture(const std::string& path, con
         if (data != nullptr) {
             stbi_image_free(data);
         }
-        throw std::runtime_error(std::string("Failed to load ") + label + " texture: " + path);
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load %s texture: %s\n", label, path.c_str());
+        return 0;
     }
 
     GLuint textureID = 0;
