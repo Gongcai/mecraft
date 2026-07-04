@@ -1,8 +1,9 @@
 #include "BlockInteractionDispatcher.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 #include <iterator>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -14,13 +15,18 @@ namespace game::interaction {
 
 namespace {
 
+[[noreturn]] void failBlockInteractionDispatcher(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
 const BlockInteractionDef& requireInteractionForBlock(const BlockID blockId) {
     if (blockId == RUNTIME_ID_NULL) {
-        throw std::runtime_error("Air cannot declare a block interaction");
+        failBlockInteractionDispatcher("Air cannot declare a block interaction");
     }
     const BlockDef& blockDef = BlockRegistry::getFast(blockId);
     if (blockDef.interaction.empty()) {
-        throw std::runtime_error("Block has no interaction binding: " + blockDef.namespacedId.full());
+        failBlockInteractionDispatcher("Block has no interaction binding: " + blockDef.namespacedId.full());
     }
     return BlockInteractionRegistry::require(blockDef.interaction);
 }
@@ -28,7 +34,7 @@ const BlockInteractionDef& requireInteractionForBlock(const BlockID blockId) {
 uint16_t requirePropertyIndex(const BlockInteractionDef& def) {
     const uint16_t property = BlockStateRegistry::getPropertyNameIndex(def.property);
     if (property == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(def.id + " references unknown property: " + def.property);
+        failBlockInteractionDispatcher(def.id + " references unknown property: " + def.property);
     }
     return property;
 }
@@ -38,7 +44,7 @@ uint16_t requirePropertyValue(const BlockInteractionDef& def,
                               const std::string& value) {
     const uint16_t valueIndex = BlockStateRegistry::getPropertyValueIndex(property, value);
     if (valueIndex == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(def.id + " references unknown value '" + value +
+        failBlockInteractionDispatcher(def.id + " references unknown value '" + value +
                                  "' for property: " + def.property);
     }
     return valueIndex;
@@ -49,7 +55,7 @@ uint16_t requireCurrentValue(const BlockStateId currentState,
                              const uint16_t property) {
     const uint16_t currentValue = BlockStateRegistry::getPropertyIndex(currentState, property);
     if (currentValue == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(def.id + " target state is missing property: " + def.property);
+        failBlockInteractionDispatcher(def.id + " target state is missing property: " + def.property);
     }
     return currentValue;
 }
@@ -60,7 +66,7 @@ BlockStateId withInteractionProperty(const BlockStateId currentState,
                                 const uint16_t value) {
     const BlockStateId updated = BlockStateRegistry::withProperty(currentState, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
-        throw std::runtime_error(def.id + " failed to update property: " + def.property);
+        failBlockInteractionDispatcher(def.id + " failed to update property: " + def.property);
     }
     return updated;
 }
@@ -78,7 +84,7 @@ BlockStateId nextToggleBooleanState(const BlockStateId currentState,
     if (currentValue == trueValue) {
         return withInteractionProperty(currentState, def, property, falseValue);
     }
-    throw std::runtime_error(def.id + " target state contains an unknown boolean value");
+    failBlockInteractionDispatcher(def.id + " target state contains an unknown boolean value");
 }
 
 BlockStateId nextSetPropertyOnceState(const BlockStateId currentState,
@@ -101,7 +107,7 @@ BlockStateId nextCyclePropertyState(const BlockStateId currentState,
     const uint16_t currentValue = requireCurrentValue(currentState, def, property);
     const auto it = std::find(values.begin(), values.end(), currentValue);
     if (it == values.end()) {
-        throw std::runtime_error(def.id + " target state contains a value outside the configured cycle");
+        failBlockInteractionDispatcher(def.id + " target state contains a value outside the configured cycle");
     }
 
     const auto nextIt = std::next(it) == values.end() ? values.begin() : std::next(it);
@@ -118,7 +124,7 @@ BlockStateId nextStateForDef(const BlockStateId currentState, const BlockInterac
         case BlockInteractionActionKind::CycleProperty:
             return nextCyclePropertyState(currentState, def, property);
     }
-    throw std::runtime_error(def.id + " has an unsupported action");
+    failBlockInteractionDispatcher(def.id + " has an unsupported action");
 }
 
 void applyPartnerSync(World& world,
@@ -135,19 +141,19 @@ void applyPartnerSync(World& world,
 
     if (def.partnerSync == BlockInteractionPartnerSync::DoorOpen) {
         if (!DoorBlockLogic::isDoorState(currentState)) {
-            throw std::runtime_error(def.id + " door partner sync requires a door state");
+            failBlockInteractionDispatcher(def.id + " door partner sync requires a door state");
         }
         const uint16_t property = requirePropertyIndex(def);
         const uint16_t trueValue = requirePropertyValue(def, property, def.trueValue);
         const uint16_t updatedValue = BlockStateRegistry::getPropertyIndex(updatedState, property);
         if (updatedValue == BlockStateRegistry::INVALID_INDEX) {
-            throw std::runtime_error(def.id + " updated door state is missing property: " + def.property);
+            failBlockInteractionDispatcher(def.id + " updated door state is missing property: " + def.property);
         }
         DoorBlockLogic::setDoorOpen(world, position, updatedValue == trueValue);
         return;
     }
 
-    throw std::runtime_error(def.id + " has an unsupported partner sync mode");
+    failBlockInteractionDispatcher(def.id + " has an unsupported partner sync mode");
 }
 
 } // namespace
