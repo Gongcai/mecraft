@@ -1,8 +1,10 @@
 #include "TextureSamplerController.h"
 
+#include "../Diagnostics.h"
+
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
+#include <cstdio>
 
 namespace {
 
@@ -56,7 +58,8 @@ float TextureSamplerController::maxAnisotropy() const {
 
 void TextureSamplerController::applyToTexture2D(const GLuint textureID) const {
     if (textureID == 0) {
-        throw std::invalid_argument("TextureSamplerController::applyToTexture2D requires a valid texture");
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] TextureSamplerController::applyToTexture2D requires a valid texture\n");
+        return;
     }
     if (!m_anisotropySupported) {
         return;
@@ -69,7 +72,8 @@ void TextureSamplerController::applyToTexture2D(const GLuint textureID) const {
 
 void TextureSamplerController::applyToTexture2DArray(const GLuint textureID) const {
     if (textureID == 0) {
-        throw std::invalid_argument("TextureSamplerController::applyToTexture2DArray requires a valid texture");
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] TextureSamplerController::applyToTexture2DArray requires a valid texture\n");
+        return;
     }
     if (!m_anisotropySupported) {
         return;
