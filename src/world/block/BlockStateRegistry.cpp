@@ -3,11 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdlib>
 #include <functional>
+#include <iostream>
 #include <limits>
 #include <optional>
 #include <sstream>
-#include <stdexcept>
+#include <string>
 
 #include "AttachmentFaceGeometry.h"
 #include "BlockModelRegistry.h"
@@ -28,6 +30,11 @@ std::unordered_map<BlockID, BlockStateRegistry::BlockPropertyLayout> BlockStateR
 StateTextureIndices BlockStateRegistry::s_fallbackTextures{};
 
 namespace {
+[[noreturn]] void failBlockStateRegistry(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
 AnimatedTextureRef makeStaticWorldRef(const int layer) {
     AnimatedTextureRef ref;
     ref.firstLayer = layer;
@@ -126,7 +133,7 @@ void applyFurnaceFacingTextures(StateTextureIndices& textures,
     } else if (value == "west") {
         textures.faceLeft = def.faceFront;
     } else {
-        throw std::runtime_error("Furnace facing state requires a horizontal value");
+        failBlockStateRegistry("Furnace facing state requires a horizontal value");
     }
 }
 
@@ -232,7 +239,7 @@ ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
         return transform;
     }
     if (!transformIt->is_object()) {
-        throw std::runtime_error("Model variant transform must be an object");
+        failBlockStateRegistry("Model variant transform must be an object");
     }
 
     const auto readRotation = [&](const char* key) -> uint16_t {
@@ -241,11 +248,11 @@ ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
             return 0;
         }
         if (!it->is_number_integer()) {
-            throw std::runtime_error(std::string("Model variant rotation must be integer: ") + key);
+            failBlockStateRegistry(std::string("Model variant rotation must be integer: ") + key);
         }
         const int rotation = it->get<int>();
         if (rotation != 0 && rotation != 90 && rotation != 180 && rotation != 270) {
-            throw std::runtime_error(std::string("Model variant rotation must be 0, 90, 180, or 270: ") + key);
+            failBlockStateRegistry(std::string("Model variant rotation must be 0, 90, 180, or 270: ") + key);
         }
         return static_cast<uint16_t>(rotation);
     };
@@ -256,7 +263,7 @@ ModelTransform parseModelTransform(const nlohmann::json& variantJson) {
     const auto uvLockIt = variantJson.find("uvLock");
     if (uvLockIt != variantJson.end()) {
         if (!uvLockIt->is_boolean()) {
-            throw std::runtime_error("Model variant uvLock must be boolean");
+            failBlockStateRegistry("Model variant uvLock must be boolean");
         }
         transform.uvLock = uvLockIt->get<bool>();
     }
@@ -276,18 +283,18 @@ std::vector<std::pair<uint16_t, uint16_t>> parseModelVariantPropertyKey(const st
         const std::string trimmedSegment = trimCopy(segment);
         const size_t equals = trimmedSegment.find('=');
         if (equals == std::string::npos) {
-            throw std::runtime_error("Model variant state key segment is missing '=': " + trimmedSegment);
+            failBlockStateRegistry("Model variant state key segment is missing '=': " + trimmedSegment);
         }
 
         const std::string propName = trimCopy(trimmedSegment.substr(0, equals));
         const std::string propValue = trimCopy(trimmedSegment.substr(equals + 1));
         const uint16_t nameIndex = BlockStateRegistry::getPropertyNameIndex(propName);
         if (nameIndex == BlockStateRegistry::INVALID_INDEX) {
-            throw std::runtime_error("Unknown model variant property name: " + propName);
+            failBlockStateRegistry("Unknown model variant property name: " + propName);
         }
         const uint16_t valueIndex = BlockStateRegistry::getPropertyValueIndex(nameIndex, propValue);
         if (valueIndex == BlockStateRegistry::INVALID_INDEX) {
-            throw std::runtime_error("Unknown model variant property value: " + propName + "=" + propValue);
+            failBlockStateRegistry("Unknown model variant property value: " + propName + "=" + propValue);
         }
         props.emplace_back(nameIndex, valueIndex);
     }
@@ -351,7 +358,7 @@ glm::ivec3 applyModelDirectionTransform(glm::ivec3 direction, const ModelTransfo
 
 std::optional<ModelTransform> makeFaceOrientedModelTransform(const uint16_t face, const uint16_t facing) {
     if (!AttachmentFaceGeometry::isAttachmentFace(face)) {
-        throw std::runtime_error("Face-oriented model state contains an unsupported face value");
+        failBlockStateRegistry("Face-oriented model state contains an unsupported face value");
     }
     const glm::ivec3 targetNormal = AttachmentFaceGeometry::surfaceNormal(face);
     const glm::ivec3 targetFacing = AttachmentFaceGeometry::directionFromFacing(facing);
@@ -376,7 +383,7 @@ std::optional<ModelTransform> makeFaceOrientedModelTransform(const uint16_t face
         }
     }
 
-    throw std::runtime_error("Face-oriented model transform table is incomplete");
+    failBlockStateRegistry("Face-oriented model transform table is incomplete");
 }
 
 }
@@ -540,7 +547,7 @@ void BlockStateRegistry::explodeAllStates() {
                 }
             }
             if (values.size() > 0 && runningStride > std::numeric_limits<size_t>::max() / values.size()) {
-                throw std::runtime_error("Block property stride exceeds size_t capacity");
+                failBlockStateRegistry("Block property stride exceeds size_t capacity");
             }
             runningStride *= values.size();
         }
@@ -722,7 +729,7 @@ const StateTextureIndices& BlockStateRegistry::getStateTextures(const BlockState
 
 void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const nlohmann::json& variantsJson) {
     if (!variantsJson.is_object()) {
-        throw std::runtime_error("modelVariants must be an object for block: " +
+        failBlockStateRegistry("modelVariants must be an object for block: " +
                                  BlockRegistry::getNamespacedId(blockId).full());
     }
 
@@ -732,18 +739,18 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
 
     for (auto it = variantsJson.begin(); it != variantsJson.end(); ++it) {
         if (!it.value().is_object()) {
-            throw std::runtime_error("Model variant entry must be an object: " + it.key());
+            failBlockStateRegistry("Model variant entry must be an object: " + it.key());
         }
 
         const auto modelIt = it.value().find("model");
         if (modelIt == it.value().end() || !modelIt->is_string()) {
-            throw std::runtime_error("Model variant entry requires model string: " + it.key());
+            failBlockStateRegistry("Model variant entry requires model string: " + it.key());
         }
 
         const std::string modelName = modelIt->get<std::string>();
         const BlockModel* model = BlockModelRegistry::get(modelName);
         if (model == nullptr) {
-            throw std::runtime_error("Unknown block model referenced by variant: " + modelName);
+            failBlockStateRegistry("Unknown block model referenced by variant: " + modelName);
         }
 
         ModelVariant variant;
@@ -758,13 +765,13 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
             }
             const size_t index = stateIndex(stateId);
             if (index >= s_stateModelVariants.size()) {
-                throw std::runtime_error("Model variant state id is outside state registry");
+                failBlockStateRegistry("Model variant state id is outside state registry");
             }
             s_stateModelVariants[index] = variant;
             matchedState = true;
         }
         if (!matchedState) {
-            throw std::runtime_error("Model variant state key matched no states: " + it.key());
+            failBlockStateRegistry("Model variant state key matched no states: " + it.key());
         }
     }
 
@@ -773,27 +780,27 @@ void BlockStateRegistry::registerBlockModelVariants(const BlockID blockId, const
         return;
     }
     if (PropIndices::FACE == PropIndices::INVALID || PropIndices::FACING == PropIndices::INVALID) {
-        throw std::runtime_error("Face-oriented model requires registered face and facing properties");
+        failBlockStateRegistry("Face-oriented model requires registered face and facing properties");
     }
 
     for (const BlockStateId stateId : getStatesForBlock(blockId)) {
         const uint16_t face = getPropertyIndex(stateId, PropIndices::FACE);
         const uint16_t facing = getPropertyIndex(stateId, PropIndices::FACING);
         if (face == INVALID_INDEX || facing == INVALID_INDEX) {
-            throw std::runtime_error("Face-oriented model block is missing face or facing state values: " +
+            failBlockStateRegistry("Face-oriented model block is missing face or facing state values: " +
                                      def.namespacedId.full());
         }
 
         const size_t index = stateIndex(stateId);
         if (index >= s_stateModelVariants.size()) {
-            throw std::runtime_error("Face-oriented model state id is outside state registry");
+            failBlockStateRegistry("Face-oriented model state id is outside state registry");
         }
         ModelVariant& variant = s_stateModelVariants[index];
         if (variant.model == nullptr) {
             const BlockStateId baseState = withProperty(stateId, PropIndices::FACING, PropIndices::FACING_SOUTH);
             const ModelVariant* baseVariant = getModelVariant(baseState);
             if (baseVariant == nullptr || baseVariant->model == nullptr) {
-                throw std::runtime_error("Face-oriented model state is missing a base south-facing variant: " +
+                failBlockStateRegistry("Face-oriented model state is missing a base south-facing variant: " +
                                          stateToString(stateId));
             }
             variant = *baseVariant;
