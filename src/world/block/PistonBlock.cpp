@@ -1,6 +1,8 @@
 #include "PistonBlock.h"
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include "../World.h"
 #include "Block.h"
@@ -8,6 +10,11 @@
 
 namespace PistonBlockLogic {
 namespace {
+
+[[noreturn]] void failPistonBlock(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 void requirePistonProperties() {
     if (PropIndices::FACING == PropIndices::INVALID ||
@@ -17,7 +24,7 @@ void requirePistonProperties() {
         PropIndices::TYPE == PropIndices::INVALID ||
         PropIndices::TYPE_NORMAL == PropIndices::INVALID ||
         PropIndices::TYPE_STICKY == PropIndices::INVALID) {
-        throw std::runtime_error("Piston blocks require facing, extended, and type properties");
+        failPistonBlock("Piston blocks require facing, extended, and type properties");
     }
 }
 
@@ -55,14 +62,14 @@ glm::ivec3 directionFromFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_DOWN) {
         return {0, -1, 0};
     }
-    throw std::runtime_error("Piston state contains an unknown facing value");
+    failPistonBlock("Piston state contains an unknown facing value");
 }
 
 uint16_t facingValue(const BlockStateId stateId) {
     requirePistonProperties();
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facing == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("Piston state is missing facing");
+        failPistonBlock("Piston state is missing facing");
     }
     return facing;
 }
@@ -71,7 +78,7 @@ bool isExtendedValueTrue(const BlockStateId stateId) {
     requirePistonProperties();
     const uint16_t extended = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::EXTENDED);
     if (extended != PropIndices::EXTENDED_TRUE && extended != PropIndices::EXTENDED_FALSE) {
-        throw std::runtime_error("Piston state requires extended=true/false");
+        failPistonBlock("Piston state requires extended=true/false");
     }
     return extended == PropIndices::EXTENDED_TRUE;
 }
@@ -84,14 +91,14 @@ uint16_t headTypeForBaseState(const BlockStateId baseState) {
     if (blockId == stickyPistonBlockId()) {
         return PropIndices::TYPE_STICKY;
     }
-    throw std::runtime_error("Piston head type requested for a non-piston base");
+    failPistonBlock("Piston head type requested for a non-piston base");
 }
 
 uint16_t headTypeValue(const BlockStateId headState) {
     requirePistonProperties();
     const uint16_t type = BlockStateRegistry::getPropertyIndex(headState, PropIndices::TYPE);
     if (type != PropIndices::TYPE_NORMAL && type != PropIndices::TYPE_STICKY) {
-        throw std::runtime_error("Piston head state requires type=normal/sticky");
+        failPistonBlock("Piston head state requires type=normal/sticky");
     }
     return type;
 }
