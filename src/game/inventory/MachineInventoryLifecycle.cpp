@@ -1,6 +1,7 @@
 #include "MachineInventoryLifecycle.h"
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/systems/item/ItemSpawnSystem.h"
@@ -25,7 +26,8 @@ const ContainerBehaviorDef* machineBehaviorForBlock(const BlockID blockId) {
         return nullptr;
     }
     if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-        throw std::runtime_error(behavior.id + " machine handler requires block_entity storage");
+        std::cerr << behavior.id << " machine handler requires block_entity storage\n";
+        std::abort();
     }
     return &behavior;
 }

@@ -7,7 +7,8 @@
 #include "BlockEntityInventoryStore.h"
 #include "ContainerBehaviorRegistry.h"
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 
 namespace {
 const ContainerBehaviorDef* storageBehaviorForBlock(const BlockID blockId) {
@@ -26,7 +27,8 @@ const ContainerBehaviorDef* storageBehaviorForBlock(const BlockID blockId) {
         return nullptr;
     }
     if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-        throw std::runtime_error(behavior.id + " storage handler requires block_entity storage");
+        std::cerr << behavior.id << " storage handler requires block_entity storage\n";
+        std::abort();
     }
     return &behavior;
 }
