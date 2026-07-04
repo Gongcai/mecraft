@@ -10,7 +10,7 @@ Options:
   -b, --build-dir PATH     Build directory. Default: cmake-build-linux-manifest
   -c, --config NAME        CMake build type. Default: Release
   -j, --jobs COUNT         Parallel build jobs. Default: nproc
-      --vcpkg-root PATH    vcpkg root. Default: $HOME/.local/share/vcpkg
+      --vcpkg-root PATH    vcpkg root. Default: ./vcpkg
       --configure-only     Configure the build directory without building a target.
       --skip-configure     Build an existing configured directory.
   -h, --help               Show this help text.
@@ -38,7 +38,7 @@ build_dir="cmake-build-linux-manifest"
 build_type="Release"
 target_name="mecraft"
 jobs="$(nproc)"
-vcpkg_root="$HOME/.local/share/vcpkg"
+vcpkg_root="$script_dir/vcpkg"
 configure_only=0
 skip_configure=0
 extra_cmake_args=()
@@ -112,7 +112,7 @@ if [[ "$skip_configure" -eq 0 ]]; then
   cmake -S "$script_dir" -B "$build_dir" -G Ninja \
     -DMECRAFT_BUILD_TESTS=OFF \
     -DCMAKE_BUILD_TYPE="$build_type" \
-    -DCMAKE_TOOLCHAIN_FILE="$toolchain_file" \
+    -DMECRAFT_VCPKG_ROOT="$vcpkg_root" \
     "${extra_cmake_args[@]}"
 fi
 

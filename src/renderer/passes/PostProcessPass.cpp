@@ -443,7 +443,7 @@ void PostProcessPass::renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex
     static_cast<void>(weatherMaskTex);
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         glActiveTexture(GL_TEXTURE1 + mip);
-        glBindTexture(GL_TEXTURE_2D, hasBloom ? m_bloomTex[mip][0] : 0);
+        glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][0]);
     }
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
