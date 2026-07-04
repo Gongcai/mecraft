@@ -1,14 +1,21 @@
 #pragma once
 
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
-#include <stdexcept>
 
 #include <glm/vec3.hpp>
 
 #include "../block/PropIndices.h"
 
 namespace WireFaceGeometry {
+
+[[noreturn]] inline void failWireFaceGeometry(const char* message) {
+    std::fputs(message, stderr);
+    std::fputc('\n', stderr);
+    std::abort();
+}
 
 struct ConnectionDirection {
     uint16_t property;
@@ -62,7 +69,7 @@ inline glm::ivec3 surfaceNormal(const uint16_t facing) {
     if (facing == PropIndices::FACING_WEST) {
         return {-1, 0, 0};
     }
-    throw std::runtime_error("Wire face geometry received an unsupported facing value");
+    failWireFaceGeometry("Wire face geometry received an unsupported facing value");
 }
 
 /// Resolves the wire facing represented by an outward support-face normal.
@@ -85,7 +92,7 @@ inline uint16_t facingFromSurfaceNormal(const glm::ivec3& normal) {
     if (normal == glm::ivec3(-1, 0, 0)) {
         return PropIndices::FACING_WEST;
     }
-    throw std::runtime_error("Wire face geometry received an unsupported surface normal");
+    failWireFaceGeometry("Wire face geometry received an unsupported surface normal");
 }
 
 /// Returns the relative position of the solid block that supports this wire face.
@@ -124,7 +131,7 @@ inline glm::ivec3 outerCornerBlockingPosition(const glm::ivec3& support,
                                               const uint16_t facingA,
                                               const uint16_t facingB) {
     if (!arePerpendicularFacings(facingA, facingB)) {
-        throw std::runtime_error("Outer-corner blocking position requires perpendicular facings");
+        failWireFaceGeometry("Outer-corner blocking position requires perpendicular facings");
     }
     return support + surfaceNormal(facingA) + surfaceNormal(facingB);
 }
@@ -158,7 +165,7 @@ inline std::array<ConnectionDirection, 4> connectionDirections(const uint16_t fa
             {PropIndices::WEST,  PropIndices::WEST_NONE,  PropIndices::WEST_SIDE,  {0, 0, -1}},
         }};
     }
-    throw std::runtime_error("Wire face geometry received an unsupported facing value");
+    failWireFaceGeometry("Wire face geometry received an unsupported facing value");
 }
 
 /// Returns the visual connection property that points along `offset` on `facing`.
@@ -169,7 +176,7 @@ inline ConnectionDirection connectionDirectionForPlanarOffset(const uint16_t fac
             return connection;
         }
     }
-    throw std::runtime_error("Wire face geometry received an offset outside the wire plane");
+    failWireFaceGeometry("Wire face geometry received an offset outside the wire plane");
 }
 
 } // namespace WireFaceGeometry
