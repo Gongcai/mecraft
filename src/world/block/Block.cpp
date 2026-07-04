@@ -18,7 +18,6 @@
 #include <initializer_list>
 #include <iostream>
 #include <map>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -32,6 +31,11 @@ bool BlockRegistry::s_initialized = false;
 
 namespace {
 constexpr const char* kBlocksConfigPath = BLOCKS_CONFIG_PATH;
+
+[[noreturn]] void failBlockRegistry(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 bool isKnownRedstoneBehavior(const std::string_view behavior) {
     constexpr std::string_view kKnownBehaviors[] = {
@@ -412,12 +416,12 @@ std::vector<NamespacedId> parseTagList(const nlohmann::json& ownerJson, const st
         return tags;
     }
     if (!tagsIt->is_array()) {
-        throw std::runtime_error("Block tags must be an array: " + ownerName);
+        failBlockRegistry("Block tags must be an array: " + ownerName);
     }
 
     for (const nlohmann::json& tagJson : *tagsIt) {
         if (!tagJson.is_string()) {
-            throw std::runtime_error("Block tag entries must be strings: " + ownerName);
+            failBlockRegistry("Block tag entries must be strings: " + ownerName);
         }
         tags.emplace_back(tagJson.get<std::string>());
     }
@@ -457,16 +461,16 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
-        throw std::runtime_error(std::string("Failed to open blocks config: ") + kBlocksConfigPath);
+        failBlockRegistry(std::string("Failed to open blocks config: ") + kBlocksConfigPath);
     }
 
     nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
     if (root.is_discarded()) {
-        throw std::runtime_error("Failed to parse blocks config: invalid JSON");
+        failBlockRegistry("Failed to parse blocks config: invalid JSON");
     }
 
     if (!root.contains("blocks") || !root["blocks"].is_array()) {
-        throw std::runtime_error("blocks.json requires a blocks array");
+        failBlockRegistry("blocks.json requires a blocks array");
     }
 
     s_idLookup.clear();
@@ -477,7 +481,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             return existing->second;
         }
         if (redstoneWireChannelIds.size() >= 65535u) {
-            throw std::runtime_error("Too many redstone wire channels while registering block: " + blockName);
+            failBlockRegistry("Too many redstone wire channels while registering block: " + blockName);
         }
         const uint16_t channelId = static_cast<uint16_t>(redstoneWireChannelIds.size() + 1u);
         redstoneWireChannelIds.emplace(channel, channelId);
@@ -494,7 +498,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
     const NamespacedId airId("minecraft", "air");
     if (s_blocks.empty() || s_blocks[0].namespacedId != airId) {
-        throw std::runtime_error("blocks.json must register minecraft:air as RuntimeId 0.");
+        failBlockRegistry("blocks.json must register minecraft:air as RuntimeId 0.");
     }
 
     s_blocks[0].isSolid = false;
@@ -624,7 +628,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("faceOrientedModel")) {
             if (!blockJson["faceOrientedModel"].is_boolean()) {
-                throw std::runtime_error("faceOrientedModel must be a boolean for block: " + def.namespacedId.full());
+                failBlockRegistry("faceOrientedModel must be a boolean for block: " + def.namespacedId.full());
             }
             def.faceOrientedModel = blockJson["faceOrientedModel"].get<bool>();
         }
@@ -636,21 +640,21 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("containerUi")) {
             if (!blockJson["containerUi"].is_string()) {
-                throw std::runtime_error("containerUi must be a string for block: " + def.namespacedId.full());
+                failBlockRegistry("containerUi must be a string for block: " + def.namespacedId.full());
             }
             const NamespacedId containerUi(blockJson["containerUi"].get<std::string>());
             if (containerUi.namespaceStr().empty() || containerUi.path().empty()) {
-                throw std::runtime_error("containerUi must not be empty for block: " + def.namespacedId.full());
+                failBlockRegistry("containerUi must not be empty for block: " + def.namespacedId.full());
             }
             def.containerUi = containerUi.full();
         }
         if (blockJson.contains("interaction")) {
             if (!blockJson["interaction"].is_string()) {
-                throw std::runtime_error("interaction must be a string for block: " + def.namespacedId.full());
+                failBlockRegistry("interaction must be a string for block: " + def.namespacedId.full());
             }
             const NamespacedId interaction(blockJson["interaction"].get<std::string>());
             if (interaction.namespaceStr().empty() || interaction.path().empty()) {
-                throw std::runtime_error("interaction must not be empty for block: " + def.namespacedId.full());
+                failBlockRegistry("interaction must not be empty for block: " + def.namespacedId.full());
             }
             def.interaction = interaction.full();
         }
@@ -671,26 +675,26 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("surfaceFriction")) {
             if (!blockJson["surfaceFriction"].is_number()) {
-                throw std::runtime_error("surfaceFriction must be numeric for block: " + def.namespacedId.full());
+                failBlockRegistry("surfaceFriction must be numeric for block: " + def.namespacedId.full());
             }
             def.surfaceFriction = std::max(0.0f, blockJson["surfaceFriction"].get<float>());
         }
         if (blockJson.contains("surfaceSpeedFactor")) {
             if (!blockJson["surfaceSpeedFactor"].is_number()) {
-                throw std::runtime_error("surfaceSpeedFactor must be numeric for block: " + def.namespacedId.full());
+                failBlockRegistry("surfaceSpeedFactor must be numeric for block: " + def.namespacedId.full());
             }
             def.surfaceSpeedFactor = std::max(0.0f, blockJson["surfaceSpeedFactor"].get<float>());
         }
         if (blockJson.contains("surfaceDamping")) {
             if (!blockJson["surfaceDamping"].is_number()) {
-                throw std::runtime_error("surfaceDamping must be numeric for block: " + def.namespacedId.full());
+                failBlockRegistry("surfaceDamping must be numeric for block: " + def.namespacedId.full());
             }
             def.surfaceDamping = std::max(0.0f, blockJson["surfaceDamping"].get<float>());
         }
         const bool hasExplicitRedstoneConductor = blockJson.contains("isRedstoneConductor");
         if (hasExplicitRedstoneConductor) {
             if (!blockJson["isRedstoneConductor"].is_boolean()) {
-                throw std::runtime_error("isRedstoneConductor must be a boolean for block: " + def.namespacedId.full());
+                failBlockRegistry("isRedstoneConductor must be a boolean for block: " + def.namespacedId.full());
             }
             def.isRedstoneConductor = blockJson["isRedstoneConductor"].get<bool>();
         } else {
@@ -698,75 +702,75 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("isRedstonePowerSource")) {
             if (!blockJson["isRedstonePowerSource"].is_boolean()) {
-                throw std::runtime_error("isRedstonePowerSource must be a boolean for block: " + def.namespacedId.full());
+                failBlockRegistry("isRedstonePowerSource must be a boolean for block: " + def.namespacedId.full());
             }
             def.isRedstonePowerSource = blockJson["isRedstonePowerSource"].get<bool>();
         }
         if (blockJson.contains("respondsToRedstone")) {
             if (!blockJson["respondsToRedstone"].is_boolean()) {
-                throw std::runtime_error("respondsToRedstone must be a boolean for block: " + def.namespacedId.full());
+                failBlockRegistry("respondsToRedstone must be a boolean for block: " + def.namespacedId.full());
             }
             def.respondsToRedstone = blockJson["respondsToRedstone"].get<bool>();
         }
         if (blockJson.contains("redstonePowerOutput")) {
             if (!blockJson["redstonePowerOutput"].is_number_integer()) {
-                throw std::runtime_error("redstonePowerOutput must be an integer for block: " + def.namespacedId.full());
+                failBlockRegistry("redstonePowerOutput must be an integer for block: " + def.namespacedId.full());
             }
             const int powerOutput = blockJson["redstonePowerOutput"].get<int>();
             if (powerOutput < 0 || powerOutput > 15) {
-                throw std::runtime_error("redstonePowerOutput must be between 0 and 15 for block: " + def.namespacedId.full());
+                failBlockRegistry("redstonePowerOutput must be between 0 and 15 for block: " + def.namespacedId.full());
             }
             def.redstonePowerOutput = static_cast<uint8_t>(powerOutput);
         }
         if (blockJson.contains("redstonePulseTicks")) {
             if (!blockJson["redstonePulseTicks"].is_number_integer()) {
-                throw std::runtime_error("redstonePulseTicks must be an integer for block: " + def.namespacedId.full());
+                failBlockRegistry("redstonePulseTicks must be an integer for block: " + def.namespacedId.full());
             }
             const int pulseTicks = blockJson["redstonePulseTicks"].get<int>();
             if (pulseTicks <= 0) {
-                throw std::runtime_error("redstonePulseTicks must be positive for block: " + def.namespacedId.full());
+                failBlockRegistry("redstonePulseTicks must be positive for block: " + def.namespacedId.full());
             }
             def.redstonePulseTicks = static_cast<uint64_t>(pulseTicks);
         }
         if (blockJson.contains("redstoneBehavior")) {
             if (!blockJson["redstoneBehavior"].is_string()) {
-                throw std::runtime_error("redstoneBehavior must be a string for block: " + def.namespacedId.full());
+                failBlockRegistry("redstoneBehavior must be a string for block: " + def.namespacedId.full());
             }
             def.redstoneBehavior = blockJson["redstoneBehavior"].get<std::string>();
             if (!isKnownRedstoneBehavior(def.redstoneBehavior)) {
-                throw std::runtime_error("Unknown redstoneBehavior '" + def.redstoneBehavior + "' for block: " + def.namespacedId.full());
+                failBlockRegistry("Unknown redstoneBehavior '" + def.redstoneBehavior + "' for block: " + def.namespacedId.full());
             }
         }
         if (def.redstoneBehavior == "button" && def.redstonePulseTicks == 0) {
-            throw std::runtime_error("redstoneBehavior=button requires redstonePulseTicks for block: " +
+            failBlockRegistry("redstoneBehavior=button requires redstonePulseTicks for block: " +
                                      def.namespacedId.full());
         }
         if (blockJson.contains("isWireContainer")) {
             if (!blockJson["isWireContainer"].is_boolean()) {
-                throw std::runtime_error("isWireContainer must be a boolean for block: " + def.namespacedId.full());
+                failBlockRegistry("isWireContainer must be a boolean for block: " + def.namespacedId.full());
             }
             def.isWireContainer = blockJson["isWireContainer"].get<bool>();
         }
         if (def.isWireContainer && def.redstoneBehavior != "wire_container") {
-            throw std::runtime_error("isWireContainer requires redstoneBehavior=wire_container for block: " +
+            failBlockRegistry("isWireContainer requires redstoneBehavior=wire_container for block: " +
                                      def.namespacedId.full());
         }
         if (def.redstoneBehavior == "wire_container" && !def.isWireContainer) {
-            throw std::runtime_error("redstoneBehavior=wire_container requires isWireContainer=true for block: " +
+            failBlockRegistry("redstoneBehavior=wire_container requires isWireContainer=true for block: " +
                                      def.namespacedId.full());
         }
         if (blockJson.contains("redstoneWireChannel")) {
             if (!blockJson["redstoneWireChannel"].is_string()) {
-                throw std::runtime_error("redstoneWireChannel must be a string for block: " +
+                failBlockRegistry("redstoneWireChannel must be a string for block: " +
                                          def.namespacedId.full());
             }
             if (def.redstoneBehavior != "wire") {
-                throw std::runtime_error("redstoneWireChannel requires redstoneBehavior=wire for block: " +
+                failBlockRegistry("redstoneWireChannel requires redstoneBehavior=wire for block: " +
                                          def.namespacedId.full());
             }
             def.redstoneWireChannel = blockJson["redstoneWireChannel"].get<std::string>();
             if (def.redstoneWireChannel.empty()) {
-                throw std::runtime_error("redstoneWireChannel must not be empty for block: " +
+                failBlockRegistry("redstoneWireChannel must not be empty for block: " +
                                          def.namespacedId.full());
             }
             def.redstoneWireChannelId =
@@ -774,101 +778,101 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("redstoneWireTint")) {
             if (!blockJson["redstoneWireTint"].is_number_integer()) {
-                throw std::runtime_error("redstoneWireTint must be an integer for block: " +
+                failBlockRegistry("redstoneWireTint must be an integer for block: " +
                                          def.namespacedId.full());
             }
             if (def.redstoneBehavior != "wire") {
-                throw std::runtime_error("redstoneWireTint requires redstoneBehavior=wire for block: " +
+                failBlockRegistry("redstoneWireTint requires redstoneBehavior=wire for block: " +
                                          def.namespacedId.full());
             }
             const int tint = blockJson["redstoneWireTint"].get<int>();
             if (tint < 0 || tint > 15) {
-                throw std::runtime_error("redstoneWireTint must be between 0 and 15 for block: " +
+                failBlockRegistry("redstoneWireTint must be between 0 and 15 for block: " +
                                          def.namespacedId.full());
             }
             def.redstoneWireTint = static_cast<uint8_t>(tint);
         }
         if (def.redstoneBehavior == "wire" && def.redstoneWireChannel.empty()) {
-            throw std::runtime_error("redstoneBehavior=wire requires redstoneWireChannel for block: " +
+            failBlockRegistry("redstoneBehavior=wire requires redstoneWireChannel for block: " +
                                      def.namespacedId.full());
         }
         if (def.redstoneBehavior == "wire" && !blockJson.contains("redstoneWireTint")) {
-            throw std::runtime_error("redstoneBehavior=wire requires redstoneWireTint for block: " +
+            failBlockRegistry("redstoneBehavior=wire requires redstoneWireTint for block: " +
                                      def.namespacedId.full());
         }
         if (def.redstoneBehavior == "wire" && def.redstoneWireChannelId == 0) {
-            throw std::runtime_error("redstoneBehavior=wire requires a parsed redstoneWireChannelId for block: " +
+            failBlockRegistry("redstoneBehavior=wire requires a parsed redstoneWireChannelId for block: " +
                                      def.namespacedId.full());
         }
         if (blockJson.contains("pressurePlateEntityFilter")) {
             if (!blockJson["pressurePlateEntityFilter"].is_string()) {
-                throw std::runtime_error("pressurePlateEntityFilter must be a string for block: " +
+                failBlockRegistry("pressurePlateEntityFilter must be a string for block: " +
                                          def.namespacedId.full());
             }
             if (def.redstoneBehavior != "plate") {
-                throw std::runtime_error("pressurePlateEntityFilter requires redstoneBehavior=plate for block: " +
+                failBlockRegistry("pressurePlateEntityFilter requires redstoneBehavior=plate for block: " +
                                          def.namespacedId.full());
             }
             def.pressurePlateEntityFilter = blockJson["pressurePlateEntityFilter"].get<std::string>();
             if (!isKnownPressurePlateEntityFilter(def.pressurePlateEntityFilter)) {
-                throw std::runtime_error("Unknown pressurePlateEntityFilter '" + def.pressurePlateEntityFilter +
+                failBlockRegistry("Unknown pressurePlateEntityFilter '" + def.pressurePlateEntityFilter +
                                          "' for block: " + def.namespacedId.full());
             }
         }
         if (def.redstoneBehavior == "plate" && def.pressurePlateEntityFilter.empty()) {
-            throw std::runtime_error("redstoneBehavior=plate requires pressurePlateEntityFilter for block: " +
+            failBlockRegistry("redstoneBehavior=plate requires pressurePlateEntityFilter for block: " +
                                      def.namespacedId.full());
         }
         if (blockJson.contains("pistonPushReaction")) {
             if (!blockJson["pistonPushReaction"].is_string()) {
-                throw std::runtime_error("pistonPushReaction must be a string for block: " +
+                failBlockRegistry("pistonPushReaction must be a string for block: " +
                                          def.namespacedId.full());
             }
             def.pistonPushReaction = blockJson["pistonPushReaction"].get<std::string>();
             if (!isKnownPistonPushReaction(def.pistonPushReaction)) {
-                throw std::runtime_error("Unknown pistonPushReaction '" + def.pistonPushReaction +
+                failBlockRegistry("Unknown pistonPushReaction '" + def.pistonPushReaction +
                                          "' for block: " + def.namespacedId.full());
             }
         }
         if (blockJson.contains("redstoneControlledProperty")) {
             if (!blockJson["redstoneControlledProperty"].is_string()) {
-                throw std::runtime_error("redstoneControlledProperty must be a string for block: " + def.namespacedId.full());
+                failBlockRegistry("redstoneControlledProperty must be a string for block: " + def.namespacedId.full());
             }
             def.redstoneControlledProperty = blockJson["redstoneControlledProperty"].get<std::string>();
             if (def.redstoneControlledProperty.empty()) {
-                throw std::runtime_error("redstoneControlledProperty must not be empty for block: " + def.namespacedId.full());
+                failBlockRegistry("redstoneControlledProperty must not be empty for block: " + def.namespacedId.full());
             }
             if (!def.respondsToRedstone) {
-                throw std::runtime_error("redstoneControlledProperty requires respondsToRedstone=true for block: " + def.namespacedId.full());
+                failBlockRegistry("redstoneControlledProperty requires respondsToRedstone=true for block: " + def.namespacedId.full());
             }
         }
         if (blockJson.contains("redstoneControlledMirrorProperties")) {
             if (!blockJson["redstoneControlledMirrorProperties"].is_array()) {
-                throw std::runtime_error("redstoneControlledMirrorProperties must be an array for block: " +
+                failBlockRegistry("redstoneControlledMirrorProperties must be an array for block: " +
                                          def.namespacedId.full());
             }
             if (def.redstoneControlledProperty.empty()) {
-                throw std::runtime_error("redstoneControlledMirrorProperties requires redstoneControlledProperty for block: " +
+                failBlockRegistry("redstoneControlledMirrorProperties requires redstoneControlledProperty for block: " +
                                          def.namespacedId.full());
             }
             for (const nlohmann::json& mirrorJson : blockJson["redstoneControlledMirrorProperties"]) {
                 if (!mirrorJson.is_string()) {
-                    throw std::runtime_error("redstoneControlledMirrorProperties entries must be strings for block: " +
+                    failBlockRegistry("redstoneControlledMirrorProperties entries must be strings for block: " +
                                              def.namespacedId.full());
                 }
                 const std::string mirrorProperty = mirrorJson.get<std::string>();
                 if (mirrorProperty.empty()) {
-                    throw std::runtime_error("redstoneControlledMirrorProperties entries must not be empty for block: " +
+                    failBlockRegistry("redstoneControlledMirrorProperties entries must not be empty for block: " +
                                              def.namespacedId.full());
                 }
                 if (mirrorProperty == def.redstoneControlledProperty) {
-                    throw std::runtime_error("redstoneControlledMirrorProperties must not repeat redstoneControlledProperty for block: " +
+                    failBlockRegistry("redstoneControlledMirrorProperties must not repeat redstoneControlledProperty for block: " +
                                              def.namespacedId.full());
                 }
                 if (std::find(def.redstoneControlledMirrorProperties.begin(),
                               def.redstoneControlledMirrorProperties.end(),
                               mirrorProperty) != def.redstoneControlledMirrorProperties.end()) {
-                    throw std::runtime_error("redstoneControlledMirrorProperties must not contain duplicates for block: " +
+                    failBlockRegistry("redstoneControlledMirrorProperties must not contain duplicates for block: " +
                                              def.namespacedId.full());
                 }
                 def.redstoneControlledMirrorProperties.push_back(mirrorProperty);
@@ -876,11 +880,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         }
         if (blockJson.contains("redstoneControlledPowerInverted")) {
             if (!blockJson["redstoneControlledPowerInverted"].is_boolean()) {
-                throw std::runtime_error("redstoneControlledPowerInverted must be a boolean for block: " +
+                failBlockRegistry("redstoneControlledPowerInverted must be a boolean for block: " +
                                          def.namespacedId.full());
             }
             if (def.redstoneControlledProperty.empty()) {
-                throw std::runtime_error(
+                failBlockRegistry(
                     "redstoneControlledPowerInverted requires redstoneControlledProperty for block: " +
                     def.namespacedId.full());
             }
@@ -923,7 +927,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 return makeStaticWorldTexture(0);
             }
             if (!tex[key].is_string()) {
-                throw std::runtime_error("Block texture key must be a string: " + context + "." + key);
+                failBlockRegistry("Block texture key must be a string: " + context + "." + key);
             }
             return resolveTextureName(tex[key].get<std::string>());
         };
@@ -932,7 +936,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                                              const std::string& context) {
             for (auto it = tex.begin(); it != tex.end(); ++it) {
                 if (!it.value().is_string()) {
-                    throw std::runtime_error("Block texture key must be a string: " + context + "." + it.key());
+                    failBlockRegistry("Block texture key must be a string: " + context + "." + it.key());
                 }
                 def.namedTextureRefs[it.key()] = resolveTextureName(it.value().get<std::string>());
             }
@@ -970,7 +974,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                                      const BlockDef& baseDef,
                                      const std::string& context) -> BlockTextureFaces {
             if (!tex.is_object()) {
-                throw std::runtime_error("State texture entry must be an object: " + context);
+                failBlockRegistry("State texture entry must be an object: " + context);
             }
 
             BlockTextureFaces faces = textureFacesFromBlock(baseDef);
@@ -1012,14 +1016,14 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
 
         if (blockJson.contains("stateTextures")) {
             if (!blockJson["stateTextures"].is_object()) {
-                throw std::runtime_error("stateTextures must be an object for block: " + def.namespacedId.full());
+                failBlockRegistry("stateTextures must be an object for block: " + def.namespacedId.full());
             }
 
             for (auto propertyIt = blockJson["stateTextures"].begin();
                  propertyIt != blockJson["stateTextures"].end();
                  ++propertyIt) {
                 if (!propertyIt.value().is_object()) {
-                    throw std::runtime_error("stateTextures property entry must be an object: " +
+                    failBlockRegistry("stateTextures property entry must be an object: " +
                                              def.namespacedId.full() + "." + propertyIt.key());
                 }
 
@@ -1039,11 +1043,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         if (blockJson.contains("randomTick")) {
             const auto& randomTickJson = blockJson["randomTick"];
             if (!randomTickJson.is_object()) {
-                throw std::runtime_error("randomTick must be an object for block: " + def.namespacedId.full());
+                failBlockRegistry("randomTick must be an object for block: " + def.namespacedId.full());
             }
             const auto behaviorIt = randomTickJson.find("behavior");
             if (behaviorIt == randomTickJson.end() || !behaviorIt->is_string()) {
-                throw std::runtime_error("randomTick.behavior must be a string for block: " + def.namespacedId.full());
+                failBlockRegistry("randomTick.behavior must be a string for block: " + def.namespacedId.full());
             }
 
             def.randomTick.enabled = true;
@@ -1052,7 +1056,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             const auto propertyIt = randomTickJson.find("property");
             if (propertyIt != randomTickJson.end()) {
                 if (!propertyIt->is_string()) {
-                    throw std::runtime_error("randomTick.property must be a string for block: " + def.namespacedId.full());
+                    failBlockRegistry("randomTick.property must be a string for block: " + def.namespacedId.full());
                 }
                 def.randomTick.propertyName = propertyIt->get<std::string>();
             }
@@ -1060,11 +1064,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             const auto chanceIt = randomTickJson.find("chance");
             if (chanceIt != randomTickJson.end()) {
                 if (!chanceIt->is_number()) {
-                    throw std::runtime_error("randomTick.chance must be numeric for block: " + def.namespacedId.full());
+                    failBlockRegistry("randomTick.chance must be numeric for block: " + def.namespacedId.full());
                 }
                 def.randomTick.chance = chanceIt->get<float>();
                 if (def.randomTick.chance < 0.0f || def.randomTick.chance > 1.0f) {
-                    throw std::runtime_error("randomTick.chance must be between 0 and 1 for block: " + def.namespacedId.full());
+                    failBlockRegistry("randomTick.chance must be between 0 and 1 for block: " + def.namespacedId.full());
                 }
             }
         }
@@ -1097,7 +1101,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                 if (resourceMgr != nullptr) {
                     const TextureAnimationInfo resolved = resourceMgr->getTextureAnimation(animation.textureName);
                     if (!resolved.isAnimated) {
-                        throw std::runtime_error("Block animated texture is not declared as animated: " +
+                        failBlockRegistry("Block animated texture is not declared as animated: " +
                                                  def.namespacedId.full() + "." + it.key());
                     }
                     animation.ref.firstLayer = resolved.firstLayer;
@@ -1146,13 +1150,13 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                         return property.first == def.redstoneControlledProperty;
                     });
                 if (propertyIt == properties.end()) {
-                    throw std::runtime_error("redstoneControlledProperty must be declared in properties for block: " +
+                    failBlockRegistry("redstoneControlledProperty must be declared in properties for block: " +
                                              def.namespacedId.full());
                 }
                 const auto& values = propertyIt->second;
                 if (std::find(values.begin(), values.end(), "false") == values.end() ||
                     std::find(values.begin(), values.end(), "true") == values.end()) {
-                    throw std::runtime_error(
+                    failBlockRegistry(
                         "redstoneControlledProperty must declare false and true values for block: " +
                         def.namespacedId.full());
                 }
@@ -1167,13 +1171,13 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                             return property.first == mirrorProperty;
                         });
                     if (propertyIt == properties.end()) {
-                        throw std::runtime_error("redstoneControlledMirrorProperties entry must be declared in properties for block: " +
+                        failBlockRegistry("redstoneControlledMirrorProperties entry must be declared in properties for block: " +
                                                  def.namespacedId.full() + "." + mirrorProperty);
                     }
                     const auto& values = propertyIt->second;
                     if (std::find(values.begin(), values.end(), "false") == values.end() ||
                         std::find(values.begin(), values.end(), "true") == values.end()) {
-                        throw std::runtime_error(
+                        failBlockRegistry(
                             "redstoneControlledMirrorProperties entries must declare false and true values for block: " +
                             def.namespacedId.full() + "." + mirrorProperty);
                     }
@@ -1194,11 +1198,11 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
             }
         }
         if (!redstoneControlledPropertyValidated) {
-            throw std::runtime_error("redstoneControlledProperty requires a properties object for block: " +
+            failBlockRegistry("redstoneControlledProperty requires a properties object for block: " +
                                      def.namespacedId.full());
         }
         if (!redstoneControlledMirrorPropertiesValidated) {
-            throw std::runtime_error("redstoneControlledMirrorProperties requires a properties object for block: " +
+            failBlockRegistry("redstoneControlledMirrorProperties requires a properties object for block: " +
                                      def.namespacedId.full());
         }
 
@@ -1259,7 +1263,7 @@ bool BlockRegistry::isLightSourceFast(const BlockID id) {
 BlockID BlockRegistry::findByName(const std::string& name) {
     BlockID outId = 0;
     if (!tryGetIdByName(name, outId)) {
-        throw std::runtime_error("Block is not registered: " + name);
+        failBlockRegistry("Block is not registered: " + name);
     }
     return outId;
 }
@@ -1267,7 +1271,7 @@ BlockID BlockRegistry::findByName(const std::string& name) {
 BlockID BlockRegistry::requireIdByName(const std::string& name) {
     BlockID outId = 0;
     if (!tryGetIdByName(name, outId)) {
-        throw std::runtime_error("Required block is not registered: " + name);
+        failBlockRegistry("Required block is not registered: " + name);
     }
     return outId;
 }
@@ -1292,7 +1296,7 @@ BlockID BlockRegistry::getId(const NamespacedId& namespacedId) {
     if (it != s_idLookup.end()) {
         return it->second;
     }
-    throw std::runtime_error("Block is not registered: " + namespacedId.full());
+    failBlockRegistry("Block is not registered: " + namespacedId.full());
 }
 
 bool BlockRegistry::tryGetId(const NamespacedId& namespacedId, BlockID& outId) {
