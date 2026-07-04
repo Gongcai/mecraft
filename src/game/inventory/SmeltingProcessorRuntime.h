@@ -1,6 +1,7 @@
 #pragma once
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -16,27 +17,27 @@ public:
                                                          const ContainerBehaviorDef& behavior,
                                                          int storageSlotCount) {
         if (behavior.handler != "smelting") {
-            throw std::runtime_error(behavior.id + " requires smelting handler");
+            fail(behavior.id + " requires smelting handler");
         }
         if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-            throw std::runtime_error(behavior.id + " smelting handler requires block_entity storage");
+            fail(behavior.id + " smelting handler requires block_entity storage");
         }
         if (behavior.storage.slots != storageSlotCount) {
-            throw std::runtime_error(behavior.id + " storage slot count does not match smelting storage");
+            fail(behavior.id + " storage slot count does not match smelting storage");
         }
 
         const ContainerProcessorDef* smeltingProcessor = nullptr;
         for (const ContainerProcessorDef& processor : behavior.processors) {
             if (processor.type != "smelting") {
-                throw std::runtime_error(behavior.id + " smelting runtime only supports smelting processors");
+                fail(behavior.id + " smelting runtime only supports smelting processors");
             }
             if (smeltingProcessor != nullptr) {
-                throw std::runtime_error(behavior.id + " smelting runtime requires exactly one processor");
+                fail(behavior.id + " smelting runtime requires exactly one processor");
             }
             smeltingProcessor = &processor;
         }
         if (smeltingProcessor == nullptr) {
-            throw std::runtime_error(behavior.id + " smelting runtime requires a processor");
+            fail(behavior.id + " smelting runtime requires a processor");
         }
 
         SmeltingProcessorRuntime runtime;
@@ -78,10 +79,15 @@ public:
         if (rule->accepts == "any") {
             return true;
         }
-        throw std::runtime_error("Smelting runtime found an unknown slot accepts rule: " + rule->accepts);
+        fail("Smelting runtime found an unknown slot accepts rule: " + rule->accepts);
     }
 
 private:
+    [[noreturn]] static void fail(const std::string& message) {
+        std::cerr << message << '\n';
+        std::abort();
+    }
+
     [[nodiscard]] static bool uiExposesSlot(const ui::ContainerUiDef& uiDef, const int slot) {
         for (const ui::ContainerSlotGroupDef& group : uiDef.slotGroups) {
             if (group.kind != ui::ContainerSlotGroupKind::Container) {
@@ -98,14 +104,12 @@ private:
     static void validateConfiguredSlot(const ui::ContainerUiDef& uiDef,
                                        const int storageSlotCount,
                                        const int slot,
-                                       const char* slotName) {
+        const char* slotName) {
         if (slot < 0 || slot >= storageSlotCount) {
-            throw std::runtime_error(uiDef.id + " smelting processor has invalid " +
-                                     std::string(slotName) + " slot");
+            fail(uiDef.id + " smelting processor has invalid " + std::string(slotName) + " slot");
         }
         if (!uiExposesSlot(uiDef, slot)) {
-            throw std::runtime_error(uiDef.id + " does not expose smelting processor " +
-                                     std::string(slotName) + " slot");
+            fail(uiDef.id + " does not expose smelting processor " + std::string(slotName) + " slot");
         }
     }
 
@@ -124,10 +128,10 @@ private:
                          const std::string& behaviorId) const {
         const ContainerSlotRuleDef* rule = slotRuleFor(slot);
         if (rule == nullptr) {
-            throw std::runtime_error(behaviorId + " is missing a required smelting slot rule");
+            fail(behaviorId + " is missing a required smelting slot rule");
         }
         if (rule->accepts != accepts || rule->outputOnly != outputOnly) {
-            throw std::runtime_error(behaviorId + " smelting slot rule does not match its processor role");
+            fail(behaviorId + " smelting slot rule does not match its processor role");
         }
     }
 
