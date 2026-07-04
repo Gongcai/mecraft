@@ -1,6 +1,6 @@
 #include "HumanoidSkinLayoutCatalog.h"
 
-#include <exception>
+#include <cstdlib>
 
 namespace renderer {
 namespace {
@@ -108,7 +108,7 @@ std::size_t humanoidPartTypeIndex(const ecs::StevePartType partType) {
     case ecs::StevePartType::LeftLeg:
         return 5;
     }
-    std::terminate();
+    std::abort();
 }
 
 std::size_t humanoidSkinLayoutIndex(const ecs::EntitySkinLayoutKind skinLayout) {
@@ -120,7 +120,7 @@ std::size_t humanoidSkinLayoutIndex(const ecs::EntitySkinLayoutKind skinLayout) 
     case ecs::EntitySkinLayoutKind::Classic64x32:
         return 2;
     }
-    std::terminate();
+    std::abort();
 }
 
 const HumanoidSkinLayoutDefinitions& humanoidSkinLayoutDefinitions() {

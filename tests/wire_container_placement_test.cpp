@@ -1,7 +1,6 @@
 #include <array>
 #include <cstdlib>
 #include <iostream>
-#include <stdexcept>
 #include <vector>
 
 #include <glm/vec3.hpp>
@@ -94,7 +93,8 @@ uint8_t wirePower(const World& world, const glm::ivec3& position) {
             return power;
         }
     }
-    throw std::runtime_error("Wire container placement test found an unknown wire power value");
+    std::cerr << "[wire_container_placement_test] FAIL: Wire container placement test found an unknown wire power value\n";
+    std::abort();
 }
 
 } // namespace

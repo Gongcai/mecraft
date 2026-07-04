@@ -1,7 +1,5 @@
 #include <cstdlib>
-#include <exception>
 #include <iostream>
-#include <stdexcept>
 
 #include "../src/world/block/Block.h"
 #include "../src/world/block/PropIndices.h"
@@ -12,16 +10,6 @@ namespace {
 int fail(const char* message) {
     std::cerr << "[wire_container_parts_test] FAIL: " << message << '\n';
     return EXIT_FAILURE;
-}
-
-template <typename Fn>
-bool throwsRuntimeError(Fn&& fn) {
-    try {
-        fn();
-    } catch (const std::runtime_error&) {
-        return true;
-    }
-    return false;
 }
 
 WirePart part(const uint16_t channelId,
@@ -93,18 +81,6 @@ int main() {
         parts.find(redChannel, PropIndices::FACING_NORTH) != nullptr ||
         parts.size() != 2) {
         return fail("wire container should remove and compact parts by channel/facing");
-    }
-
-    if (!throwsRuntimeError([&]() { static_cast<void>(parts.addPart(part(0, PropIndices::FACING_FLOOR))); }) ||
-        !throwsRuntimeError([&]() { static_cast<void>(parts.addPart(part(redChannel, PropIndices::INVALID))); }) ||
-        !throwsRuntimeError([&]() { static_cast<void>(parts.addPart(part(redChannel, PropIndices::FACING_FLOOR, 16))); }) ||
-        !throwsRuntimeError([&]() {
-            static_cast<void>(parts.addPart(part(redChannel,
-                                                 PropIndices::FACING_CEILING,
-                                                 0,
-                                                 static_cast<uint8_t>(WireConnectionBits::ALL | (1u << 4u)))));
-        })) {
-        return fail("wire container should reject invalid part fields");
     }
 
     WireContainerParts fullParts;

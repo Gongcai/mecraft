@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <stdexcept>
 #include <vector>
 
 #include <glm/vec3.hpp>
@@ -88,7 +87,8 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
         }
     }
 
-    throw std::runtime_error("Wire state does not contain a valid power value");
+    std::cerr << "[redstone_comparator_test] FAIL: Wire state does not contain a valid power value\n";
+    std::abort();
 }
 
 bool powered(const World& world, const int x, const int y, const int z) {

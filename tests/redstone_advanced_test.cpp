@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -111,7 +110,8 @@ uint8_t powerFromState(const BlockStateId state) {
             return power;
         }
     }
-    throw std::runtime_error("State does not contain a valid redstone power value");
+    std::cerr << "[redstone_advanced_test] FAIL: State does not contain a valid redstone power value\n";
+    std::abort();
 }
 
 uint8_t wirePower(const World& world, const int x, const int y, const int z) {

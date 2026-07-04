@@ -107,7 +107,7 @@ int main() {
         std::vector<std::pair<uint16_t, uint16_t>>{
             {PropIndices::AXIS, PropIndices::AXIS_X}
         });
-    stateDropSystem.spawnBlockDrop(birchLogX, glm::ivec3(1, 122, 1));
+    stateDropSystem.spawnBlockDrop(BlockStateRegistry::getBlockId(birchLogX), glm::ivec3(1, 122, 1));
     if (stateDropSystem.getDrops().empty()) {
         return fail("stateful blocks should still spawn drops");
     }

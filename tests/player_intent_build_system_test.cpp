@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "../src/ecs/GameplayRegistry.h"
+#include "../src/ecs/SystemContext.h"
 #include "../src/ecs/components/Components.h"
 #include "../src/ecs/systems/player/PlayerIntentBuildSystem.h"
 #include "../src/ecs/util/InputFrameState.h"
@@ -22,6 +23,9 @@ bool nearlyEqual(const float a, const float b, const float epsilon = 0.001f) {
 
 int main() {
     ecs::GameplayRegistry registry;
+    ecs::GameplayServices services;
+    ecs::SystemContext ctx{registry, services};
+    ecs::PlayerIntentBuildSystem system;
     auto& frame = registry.ctxSet<ecs::InputFrameState>();
 
     const auto entity = registry.create();
@@ -48,7 +52,7 @@ int main() {
     frame.hotbarScrollDown = true;
     frame.gameplayContextActive = true;
 
-    ecs::PlayerIntentBuildSystem::update(registry);
+    system.update(ctx);
 
     const auto& move = registry.get<ecs::MoveIntentComponent>(entity);
     const auto& look = registry.get<ecs::LookIntentComponent>(entity);
@@ -76,7 +80,7 @@ int main() {
 
     frame = {};
     frame.gameplayContextActive = false;
-    ecs::PlayerIntentBuildSystem::update(registry);
+    system.update(ctx);
 
     const auto& clearedMove = registry.get<ecs::MoveIntentComponent>(entity);
     if (clearedMove.toggleFlightMode || clearedMove.wantsJump || clearedMove.wantsCrouch || clearedMove.wantsSprint) {

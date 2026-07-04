@@ -2,7 +2,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <stdexcept>
 #include <vector>
 
 #include <glm/vec3.hpp>
@@ -139,7 +138,8 @@ uint16_t powerPropertyValue(const uint8_t power) {
         PropIndices::POWER_15,
     };
     if (power >= kPowerValues.size()) {
-        throw std::runtime_error("Redstone power test value must be in the range 0 through 15");
+        std::cerr << "[redstone_basic_test] FAIL: Redstone power test value must be in the range 0 through 15\n";
+        std::abort();
     }
     return kPowerValues[power];
 }
@@ -212,7 +212,8 @@ uint8_t wirePower(const World& world, const int x, const int y, const int z) {
         }
     }
 
-    throw std::runtime_error("Wire state does not contain a valid power value");
+    std::cerr << "[redstone_basic_test] FAIL: Wire state does not contain a valid power value\n";
+    std::abort();
 }
 
 bool lampLit(const World& world, const int x, const int y, const int z) {
@@ -275,7 +276,8 @@ uint8_t targetPower(const World& world, const int x, const int y, const int z) {
             return power;
         }
     }
-    throw std::runtime_error("Target state does not contain a valid power value");
+    std::cerr << "[redstone_basic_test] FAIL: Target state does not contain a valid power value\n";
+    std::abort();
 }
 
 } // namespace

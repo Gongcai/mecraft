@@ -24,8 +24,8 @@ public:
         return 1;
     }
 
-    [[nodiscard]] BlockID getBlock(int, int, int) const override {
-        return RUNTIME_ID_NULL;
+    [[nodiscard]] BlockStateId getBlock(int, int, int) const override {
+        return NULL_BLOCK_STATE;
     }
 
     [[nodiscard]] uint8_t getPackedLight(int, int, int) const override {
@@ -33,11 +33,11 @@ public:
     }
 
     [[nodiscard]] BlockStateId getBlockState(int, int, int) const override {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
 
     [[nodiscard]] BlockStateId getFluidState(int, int, int) const override {
-        return RUNTIME_ID_NULL;
+        return NULL_BLOCK_STATE;
     }
 
     [[nodiscard]] bool isChunkLoadedForBlock(int, int, int) const override {

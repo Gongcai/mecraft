@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include "../src/renderer/mesh/ChunkMesher.h"
+#include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/gen/TerrainGenerator.h"
 #include "../src/world/light/LightSolver.h"
 
@@ -53,7 +54,7 @@ std::vector<BlockID> snapshotBlocks(const Chunk& chunk) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                blocks[Chunk::toIndex(x, y, z)] = chunk.getBlock(x, y, z);
+                blocks[Chunk::toIndex(x, y, z)] = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
             }
         }
     }
@@ -441,9 +442,11 @@ int main() {
                 checksum ^= static_cast<uint64_t>(chunk.getHeightMap(static_cast<int>(i) % Chunk::SIZE_X,
                                                                       static_cast<int>(i * 3U) % Chunk::SIZE_Z))
                             << (i % 17U);
-                checksum ^= static_cast<uint64_t>(chunk.getBlock(static_cast<int>(i) % Chunk::SIZE_X,
-                                                                 32 + static_cast<int>(i % 48U),
-                                                                 static_cast<int>(i * 5U) % Chunk::SIZE_Z));
+                checksum ^= static_cast<uint64_t>(
+                    chunk.getBlock(static_cast<int>(i) % Chunk::SIZE_X,
+                                   32 + static_cast<int>(i % 48U),
+                                   static_cast<int>(i * 5U) % Chunk::SIZE_Z)
+                        .registryIndex());
             }
             return checksum;
         });

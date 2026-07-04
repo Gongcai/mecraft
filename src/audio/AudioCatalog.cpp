@@ -4,7 +4,6 @@
 #include "AudioFileDiscovery.h"
 
 #include <algorithm>
-#include <exception>
 #include <fstream>
 #include <utility>
 

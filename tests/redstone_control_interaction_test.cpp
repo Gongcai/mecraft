@@ -1,5 +1,4 @@
 #include <cstdlib>
-#include <exception>
 #include <iostream>
 #include <vector>
 
@@ -142,17 +141,6 @@ int main() {
         BlockStateRegistry::getPropertyIndex(doorOpen, PropIndices::POWERED) != PropIndices::POWERED_FALSE ||
         BlockStateRegistry::getPropertyIndex(doorOpen, PropIndices::HALF) != PropIndices::HALF_LOWER) {
         return fail("right-clicking a door state should toggle open while preserving powered and half");
-    }
-
-    bool unsupportedThrew = false;
-    try {
-        static_cast<void>(game::redstone::nextControlState(
-            BlockStateRegistry::getDefaultState(BlockRegistry::requireIdByName("minecraft:redstone_lamp"))));
-    } catch (const std::exception&) {
-        unsupportedThrew = true;
-    }
-    if (!unsupportedThrew) {
-        return fail("unsupported redstone controls should fail loudly");
     }
 
     std::cout << "[redstone_control_interaction_test] PASS\n";

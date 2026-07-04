@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include "../src/renderer/mesh/ChunkMesher.h"
+#include "../src/world/block/BlockStateRegistry.h"
 #include "../src/world/gen/TerrainGenerator.h"
 #include "../src/world/light/LightSolver.h"
 
@@ -47,7 +48,7 @@ std::vector<BlockID> snapshotBlocks(const Chunk& chunk) {
     for (int y = 0; y < Chunk::SIZE_Y; ++y) {
         for (int z = 0; z < Chunk::SIZE_Z; ++z) {
             for (int x = 0; x < Chunk::SIZE_X; ++x) {
-                blocks[Chunk::toIndex(x, y, z)] = chunk.getBlock(x, y, z);
+                blocks[Chunk::toIndex(x, y, z)] = BlockStateRegistry::getBlockId(chunk.getBlock(x, y, z));
             }
         }
     }

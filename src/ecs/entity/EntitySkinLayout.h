@@ -1,7 +1,7 @@
 #ifndef MECRAFT_ECS_ENTITY_SKIN_LAYOUT_H
 #define MECRAFT_ECS_ENTITY_SKIN_LAYOUT_H
 
-#include <exception>
+#include <cstdlib>
 #include <optional>
 #include <string_view>
 
@@ -41,7 +41,7 @@ inline std::string_view entitySkinLayoutId(const EntitySkinLayoutKind kind) {
     case EntitySkinLayoutKind::Classic64x32:
         return EntitySkinLayoutIds::CLASSIC_64X32;
     }
-    std::terminate();
+    std::abort();
 }
 
 inline bool entitySkinLayoutUsesMirroredLeftLimbs(const EntitySkinLayoutKind kind) {
@@ -53,7 +53,7 @@ inline bool entitySkinLayoutUsesMirroredLeftLimbs(const EntitySkinLayoutKind kin
     case EntitySkinLayoutKind::Classic64x32:
         return true;
     }
-    std::terminate();
+    std::abort();
 }
 
 } // namespace ecs

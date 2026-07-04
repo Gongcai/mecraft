@@ -130,9 +130,11 @@ int main() {
                     Chunk chunk(0, 0);
                     generator.generateChunk(chunk);
                     uint64_t checksum = 0;
-                    checksum ^= static_cast<uint64_t>(chunk.getBlock(0, 0, 0));
-                    checksum ^= static_cast<uint64_t>(chunk.getBlock(0, Chunk::SIZE_Y / 2, 0)) << 8U;
-                    checksum ^= static_cast<uint64_t>(chunk.getBlock(Chunk::SIZE_X - 1, 0, Chunk::SIZE_Z - 1)) << 16U;
+                    checksum ^= static_cast<uint64_t>(chunk.getBlock(0, 0, 0).registryIndex());
+                    checksum ^= static_cast<uint64_t>(chunk.getBlock(0, Chunk::SIZE_Y / 2, 0).registryIndex()) << 8U;
+                    checksum ^= static_cast<uint64_t>(
+                                    chunk.getBlock(Chunk::SIZE_X - 1, 0, Chunk::SIZE_Z - 1).registryIndex())
+                                << 16U;
                     return checksum;
                 });
         globalChecksum ^= stats.checksum;
@@ -152,7 +154,8 @@ int main() {
                     for (int i = 0; i < chunkCount; ++i) {
                         Chunk chunk(i, i / 10);
                         generator.generateChunk(chunk);
-                        checksum ^= static_cast<uint64_t>(chunk.getBlock(i % Chunk::SIZE_X, 0, (i * 3) % Chunk::SIZE_Z));
+                        checksum ^= static_cast<uint64_t>(
+                            chunk.getBlock(i % Chunk::SIZE_X, 0, (i * 3) % Chunk::SIZE_Z).registryIndex());
                     }
                     return checksum;
                 });

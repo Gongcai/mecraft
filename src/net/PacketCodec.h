@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <vector>
 #include <cstring>
-#include <exception>
 #include <utility>
 #include <array>
 

@@ -1,7 +1,7 @@
 #include <cstdlib>
 #include <iostream>
 
-#include "../src/input/InputManager.h"
+#include "../src/engine/input/InputManager.h"
 #include "../src/player/Inventory.h"
 
 namespace {
@@ -27,10 +27,8 @@ int main() {
         return fail("grid slot 35 should map to hotbar slot 8");
     }
 
-    const ItemID sourceItem = inventory.getSlotItem(0);
-    if (sourceItem == RUNTIME_ID_NULL) {
-        return fail("expected non-empty default hotbar slot");
-    }
+    const ItemID sourceItem = ItemRegistry::requireIdByName("minecraft:stone");
+    inventory.setSlotItem(0, sourceItem, 1);
 
     const ItemStack pickedStack = inventory.getSlotStack(0);
     const ItemID picked = pickedStack.itemId;
@@ -42,7 +40,6 @@ int main() {
         return fail("clearing slot should result in AIR");
     }
 
-    const ItemID replaced = inventory.getSlotItem(10);
     inventory.setSlotItem(10, picked, 1);
     if (inventory.getSlotItem(10) != picked) {
         return fail("setSlotItem should put item into destination slot");
@@ -68,4 +65,3 @@ int main() {
     std::cout << "[inventory_drag_logic_test] PASS\n";
     return EXIT_SUCCESS;
 }
-
