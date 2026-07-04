@@ -16,49 +16,49 @@
 
 // GPU buffer range handle used by the global vertex pool (MDI path).
 struct GpuMeshRange {
-    uint32_t firstVertex = 0;
-    uint32_t vertexCount = 0;
-    uint64_t generation = 0;
-    uint32_t metadataIndex = 0xFFFFFFFFu;
+  uint32_t firstVertex = 0;
+  uint32_t vertexCount = 0;
+  uint64_t generation = 0;
+  uint32_t metadataIndex = 0xFFFFFFFFu;
 };
 
 // Logical handle for a sub-chunk mesh in the global GPU buffer pool.
 struct WorldGpuMesh {
-    GpuMeshRange opaque;
-    GpuMeshRange cutout;
-    GpuMeshRange cutoutDistance;
-    GpuMeshRange transparent;
-    GpuMeshRange water;
-    uint32_t metadataIndex = 0xFFFFFFFFu;
-    bool hasBounds = false;
-    glm::vec3 boundsMin{};
-    glm::vec3 boundsMax{};
+  GpuMeshRange opaque;
+  GpuMeshRange cutout;
+  GpuMeshRange cutoutDistance;
+  GpuMeshRange transparent;
+  GpuMeshRange water;
+  uint32_t metadataIndex = 0xFFFFFFFFu;
+  bool hasBounds = false;
+  glm::vec3 boundsMin{};
+  glm::vec3 boundsMax{};
 };
 
 class WorldRenderBuffer;
 
 struct BlockVertex {
-    float x;
-    float y;
-    float z;
-    float u;
-    float v;
-    int8_t normal;
-    uint8_t sunlight;
-    uint8_t blockLight;
-    uint8_t ao;
-    uint16_t layer;
-    uint16_t animationFrameCount;
-    uint8_t animationFps;
-    uint8_t animated;
-    uint16_t tintPacked;
+  float x;
+  float y;
+  float z;
+  float u;
+  float v;
+  int8_t normal;
+  uint8_t sunlight;
+  uint8_t blockLight;
+  uint8_t ao;
+  uint16_t layer;
+  uint16_t animationFrameCount;
+  uint8_t animationFps;
+  uint8_t animated;
+  uint16_t tintPacked;
 };
 
 struct PackedBlockVertex {
-    uint32_t posPacked;
-    uint32_t uvPacked;
-    uint32_t lightAoLayer;
-    uint32_t tintAnim;
+  uint32_t posPacked;
+  uint32_t uvPacked;
+  uint32_t lightAoLayer;
+  uint32_t tintAnim;
 };
 
 namespace BlockTintKinds {
@@ -66,239 +66,241 @@ constexpr uint8_t NONE = 0;
 constexpr uint8_t GRASS = 1;
 constexpr uint8_t FOLIAGE = 2;
 constexpr uint8_t REDSTONE = 3;
-}
+} // namespace BlockTintKinds
 
 inline uint8_t blockTintKindFromBiomeTint(const BiomeTintKind tintKind) {
-    switch (tintKind) {
-        case BiomeTintKind::Grass:
-            return BlockTintKinds::GRASS;
-        case BiomeTintKind::Foliage:
-            return BlockTintKinds::FOLIAGE;
-        case BiomeTintKind::None:
-        default:
-            return BlockTintKinds::NONE;
-    }
+  switch (tintKind) {
+  case BiomeTintKind::Grass:
+    return BlockTintKinds::GRASS;
+  case BiomeTintKind::Foliage:
+    return BlockTintKinds::FOLIAGE;
+  case BiomeTintKind::None:
+  default:
+    return BlockTintKinds::NONE;
+  }
 }
 
-inline void computeDefaultBlockTintMapPosition(uint8_t& outU, uint8_t& outV) {
-    constexpr double temperature = 0.70;
-    constexpr double moisture = 0.65;
-    outU = static_cast<uint8_t>((1.0 - temperature) * 255.0 + 0.5);
-    outV = static_cast<uint8_t>((1.0 - moisture * temperature) * 255.0 + 0.5);
+inline void computeDefaultBlockTintMapPosition(uint8_t &outU, uint8_t &outV) {
+  constexpr double temperature = 0.70;
+  constexpr double moisture = 0.65;
+  outU = static_cast<uint8_t>((1.0 - temperature) * 255.0 + 0.5);
+  outV = static_cast<uint8_t>((1.0 - moisture * temperature) * 255.0 + 0.5);
 }
 
 inline uint8_t packBlockVertexNormalizedByte(float value) {
-    value = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
-    return static_cast<uint8_t>(value * 255.0f + 0.5f);
+  value = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
+  return static_cast<uint8_t>(value * 255.0f + 0.5f);
 }
 
 inline uint8_t packBlockVertexByte(float value) {
-    value = value < 0.0f ? 0.0f : (value > 255.0f ? 255.0f : value);
-    return static_cast<uint8_t>(value + 0.5f);
+  value = value < 0.0f ? 0.0f : (value > 255.0f ? 255.0f : value);
+  return static_cast<uint8_t>(value + 0.5f);
 }
 
 inline uint16_t packBlockVertexU16(float value) {
-    value = value < 0.0f ? 0.0f : (value > 65535.0f ? 65535.0f : value);
-    return static_cast<uint16_t>(value + 0.5f);
+  value = value < 0.0f ? 0.0f : (value > 65535.0f ? 65535.0f : value);
+  return static_cast<uint16_t>(value + 0.5f);
 }
 
-inline uint16_t packBlockVertexTint(uint8_t kind, uint8_t u, uint8_t v, uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT) {
-    const uint16_t packedKind = static_cast<uint16_t>(kind & 0x03U);
-    const uint16_t packedMaterial = static_cast<uint16_t>(derivativeMaterialId & 0x3FU);
-    const uint16_t packedU = static_cast<uint16_t>((u >> 4U) & 0x0FU);
-    const uint16_t packedV = static_cast<uint16_t>((v >> 4U) & 0x0FU);
-    return static_cast<uint16_t>((packedKind << 14U) | (packedMaterial << 8U) | (packedU << 4U) | packedV);
+inline uint16_t packBlockVertexTint(
+    uint8_t kind, uint8_t u, uint8_t v,
+    uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT) {
+  const uint16_t packedKind = static_cast<uint16_t>(kind & 0x03U);
+  const uint16_t packedMaterial =
+      static_cast<uint16_t>(derivativeMaterialId & 0x3FU);
+  const uint16_t packedU = static_cast<uint16_t>((u >> 4U) & 0x0FU);
+  const uint16_t packedV = static_cast<uint16_t>((v >> 4U) & 0x0FU);
+  return static_cast<uint16_t>((packedKind << 14U) | (packedMaterial << 8U) |
+                               (packedU << 4U) | packedV);
 }
 
-inline BlockVertex makeBlockVertex(float x,
-                                   float y,
-                                   float z,
-                                   float u,
-                                   float v,
-                                   float normal,
-                                   float sunlight,
-                                   float blockLight,
-                                   float ao,
-                                   float layer,
-                                   float animationFrameCount = 1.0f,
-                                   float animationFps = 0.0f,
-                                   float animated = 0.0f,
-                                   uint8_t tintKind = BlockTintKinds::NONE,
-                                   uint8_t tintU = 0,
-                                   uint8_t tintV = 0,
-                                   uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT) {
-    return {
-        x,
-        y,
-        z,
-        u,
-        v,
-        static_cast<int8_t>(normal),
-        packBlockVertexNormalizedByte(sunlight),
-        packBlockVertexNormalizedByte(blockLight),
-        packBlockVertexByte(ao),
-        packBlockVertexU16(layer),
-        packBlockVertexU16(animationFrameCount),
-        packBlockVertexByte(animationFps),
-        animated > 0.5f ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0),
-        packBlockVertexTint(tintKind, tintU, tintV, derivativeMaterialId)
-    };
+inline BlockVertex
+makeBlockVertex(float x, float y, float z, float u, float v, float normal,
+                float sunlight, float blockLight, float ao, float layer,
+                float animationFrameCount = 1.0f, float animationFps = 0.0f,
+                float animated = 0.0f, uint8_t tintKind = BlockTintKinds::NONE,
+                uint8_t tintU = 0, uint8_t tintV = 0,
+                uint8_t derivativeMaterialId = DerivativeMaterialIds::DEFAULT) {
+  return {x,
+          y,
+          z,
+          u,
+          v,
+          static_cast<int8_t>(normal),
+          packBlockVertexNormalizedByte(sunlight),
+          packBlockVertexNormalizedByte(blockLight),
+          packBlockVertexByte(ao),
+          packBlockVertexU16(layer),
+          packBlockVertexU16(animationFrameCount),
+          packBlockVertexByte(animationFps),
+          animated > 0.5f ? static_cast<uint8_t>(1) : static_cast<uint8_t>(0),
+          packBlockVertexTint(tintKind, tintU, tintV, derivativeMaterialId)};
 }
 
-static_assert(sizeof(BlockVertex) <= 32, "BlockVertex should stay bandwidth-friendly");
-static_assert(sizeof(PackedBlockVertex) == 16, "PackedBlockVertex must stay 16 bytes");
+static_assert(sizeof(BlockVertex) <= 32,
+              "BlockVertex should stay bandwidth-friendly");
+static_assert(sizeof(PackedBlockVertex) == 16,
+              "PackedBlockVertex must stay 16 bytes");
 
 struct SubChunkMesh {
-    GLuint vao = 0;
-    GLuint vbo = 0;
-    uint32_t vertexCount = 0;
-    GLsizeiptr vboCapacity = 0;
+  GLuint vao = 0;
+  GLuint vbo = 0;
+  uint32_t vertexCount = 0;
+  GLsizeiptr vboCapacity = 0;
 
-    GLuint transparentVao = 0;
-    GLuint transparentVbo = 0;
-    uint32_t transparentVertexCount = 0;
-    GLsizeiptr transparentVboCapacity = 0;
+  GLuint transparentVao = 0;
+  GLuint transparentVbo = 0;
+  uint32_t transparentVertexCount = 0;
+  GLsizeiptr transparentVboCapacity = 0;
 
-    GLuint cutoutVao = 0;
-    GLuint cutoutVbo = 0;
-    uint32_t cutoutVertexCount = 0;
-    GLsizeiptr cutoutVboCapacity = 0;
+  GLuint cutoutVao = 0;
+  GLuint cutoutVbo = 0;
+  uint32_t cutoutVertexCount = 0;
+  GLsizeiptr cutoutVboCapacity = 0;
 
-    GLuint cutoutDistanceVao = 0;
-    GLuint cutoutDistanceVbo = 0;
-    uint32_t cutoutDistanceVertexCount = 0;
-    GLsizeiptr cutoutDistanceVboCapacity = 0;
+  GLuint cutoutDistanceVao = 0;
+  GLuint cutoutDistanceVbo = 0;
+  uint32_t cutoutDistanceVertexCount = 0;
+  GLsizeiptr cutoutDistanceVboCapacity = 0;
 
-    bool hasBounds = false;
-    glm::vec3 boundsMin = glm::vec3(0.0f);
-    glm::vec3 boundsMax = glm::vec3(0.0f);
+  bool hasBounds = false;
+  glm::vec3 boundsMin = glm::vec3(0.0f);
+  glm::vec3 boundsMax = glm::vec3(0.0f);
 
-    // MDI path: GPU ranges in the global buffer pool
-    GpuMeshRange opaqueRange;
-    GpuMeshRange cutoutRange;
-    GpuMeshRange cutoutDistanceRange;
-    GpuMeshRange transparentRange;
-    GpuMeshRange waterRange;
-    uint32_t waterVertexCount = 0;
-    bool inGlobalPool = false;
-    uint64_t metadataFingerprint = 0;
+  // MDI path: GPU ranges in the global buffer pool
+  GpuMeshRange opaqueRange;
+  GpuMeshRange cutoutRange;
+  GpuMeshRange cutoutDistanceRange;
+  GpuMeshRange transparentRange;
+  GpuMeshRange waterRange;
+  uint32_t waterVertexCount = 0;
+  bool inGlobalPool = false;
+  uint64_t metadataFingerprint = 0;
 
-    void upload(const std::vector<BlockVertex>& vertices);
-    void uploadCutout(const std::vector<BlockVertex>& cutoutVerts);
-    void uploadCutoutDistance(const std::vector<BlockVertex>& cutoutDistanceVerts);
-    void uploadTransparent(const std::vector<BlockVertex>& transparentVerts);
-    [[nodiscard]] uint64_t computeMetadataFingerprint() const;
-    void destroy();
+  void upload(const std::vector<BlockVertex> &vertices);
+  void uploadCutout(const std::vector<BlockVertex> &cutoutVerts);
+  void
+  uploadCutoutDistance(const std::vector<BlockVertex> &cutoutDistanceVerts);
+  void uploadTransparent(const std::vector<BlockVertex> &transparentVerts);
+  [[nodiscard]] uint64_t computeMetadataFingerprint() const;
+  void destroy();
 };
 
-// Semantic type for a sub-chunk — enables zero-cost skipping during rendering/meshing
+// Semantic type for a sub-chunk — enables zero-cost skipping during
+// rendering/meshing
 enum class SubChunkType : uint8_t {
-    Air     = 0,  // Entire sub-chunk is air — no storage, no mesh, no render
-    Solid   = 1,  // Entire sub-chunk is a single non-air block — minimal storage, rarely rendered
-    Normal  = 2   // Mixed content — needs full storage, meshing, and rendering
+  Air = 0,   // Entire sub-chunk is air — no storage, no mesh, no render
+  Solid = 1, // Entire sub-chunk is a single non-air block — minimal storage,
+             // rarely rendered
+  Normal = 2 // Mixed content — needs full storage, meshing, and rendering
 };
 
 // SubChunk: a 16x16x16 slice of a ChunkColumn.
 // Each SubChunk owns its own mesh for per-section draw calls.
 class SubChunk {
 public:
-    static constexpr int SIZE = 16;
-    static constexpr std::size_t BLOCK_COUNT = static_cast<std::size_t>(SIZE) * SIZE * SIZE; // 4096
+  static constexpr int SIZE = 16;
+  static constexpr std::size_t BLOCK_COUNT =
+      static_cast<std::size_t>(SIZE) * SIZE * SIZE; // 4096
 
-    SubChunk();
-    ~SubChunk();
+  SubChunk();
+  ~SubChunk();
 
-    // Disallow copy
-    SubChunk(const SubChunk&) = delete;
-    SubChunk& operator=(const SubChunk&) = delete;
-    SubChunk(SubChunk&& other) noexcept;
-    SubChunk& operator=(SubChunk&& other) noexcept;
+  // Disallow copy
+  SubChunk(const SubChunk &) = delete;
+  SubChunk &operator=(const SubChunk &) = delete;
+  SubChunk(SubChunk &&other) noexcept;
+  SubChunk &operator=(SubChunk &&other) noexcept;
 
-    [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const;
-    // Read a block when the caller has already validated local coordinates.
-    [[nodiscard]] BlockStateId getBlockUnchecked(int x, int y, int z) const {
-        const std::size_t index = static_cast<std::size_t>(x) +
-                                  static_cast<std::size_t>(z) * SIZE +
-                                  static_cast<std::size_t>(y) * SIZE * SIZE;
-        const uint32_t paletteIndex = m_blockData.getUnchecked(index);
-        return m_palette.getStateIdUnchecked(paletteIndex);
-    }
-    void setBlock(int x, int y, int z, BlockStateId stateId);
-    void setBlockWithoutMeshDirty(int x, int y, int z, BlockStateId stateId);
-    void setBlockFast(int x, int y, int z, BlockStateId stateId);
-    void initializeFromBlocks(const std::array<BlockStateId, BLOCK_COUNT>& blocks);
-    void copyBlocksTo(std::array<BlockStateId, BLOCK_COUNT>& out) const;
+  [[nodiscard]] BlockStateId getBlock(int x, int y, int z) const;
+  // Read a block when the caller has already validated local coordinates.
+  [[nodiscard]] BlockStateId getBlockUnchecked(int x, int y, int z) const {
+    const std::size_t index = static_cast<std::size_t>(x) +
+                              static_cast<std::size_t>(z) * SIZE +
+                              static_cast<std::size_t>(y) * SIZE * SIZE;
+    const uint32_t paletteIndex = m_blockData.getUnchecked(index);
+    return m_palette.getStateIdUnchecked(paletteIndex);
+  }
+  void setBlock(int x, int y, int z, BlockStateId stateId);
+  void setBlockWithoutMeshDirty(int x, int y, int z, BlockStateId stateId);
+  void setBlockFast(int x, int y, int z, BlockStateId stateId);
+  void
+  initializeFromBlocks(const std::array<BlockStateId, BLOCK_COUNT> &blocks);
+  void copyBlocksTo(std::array<BlockStateId, BLOCK_COUNT> &out) const;
 
-    // --- Fluid layer access (for waterlogged blocks) ---
-    [[nodiscard]] BlockStateId getFluidLayer(int x, int y, int z) const;
-    // Read a fluid layer when the caller has already validated local coordinates.
-    [[nodiscard]] BlockStateId getFluidLayerUnchecked(int x, int y, int z) const {
-        const std::size_t index = static_cast<std::size_t>(x) +
-                                  static_cast<std::size_t>(z) * SIZE +
-                                  static_cast<std::size_t>(y) * SIZE * SIZE;
-        const uint32_t paletteIndex = m_fluidData.getUnchecked(index);
-        return m_fluidPalette.getStateIdUnchecked(paletteIndex);
-    }
-    void setFluidLayer(int x, int y, int z, BlockStateId stateId);
+  // --- Fluid layer access (for waterlogged blocks) ---
+  [[nodiscard]] BlockStateId getFluidLayer(int x, int y, int z) const;
+  // Read a fluid layer when the caller has already validated local coordinates.
+  [[nodiscard]] BlockStateId getFluidLayerUnchecked(int x, int y, int z) const {
+    const std::size_t index = static_cast<std::size_t>(x) +
+                              static_cast<std::size_t>(z) * SIZE +
+                              static_cast<std::size_t>(y) * SIZE * SIZE;
+    const uint32_t paletteIndex = m_fluidData.getUnchecked(index);
+    return m_fluidPalette.getStateIdUnchecked(paletteIndex);
+  }
+  void setFluidLayer(int x, int y, int z, BlockStateId stateId);
 
-    void optimizePalette();
+  void optimizePalette();
 
-    // Direct palette and packed data access for serialization.
-    // These expose read-only references to the internal storage.
-    [[nodiscard]] const Palette& blockPalette() const { return m_palette; }
-    [[nodiscard]] const BitPackedArray& blockData() const { return m_blockData; }
-    [[nodiscard]] const Palette& fluidPalette() const { return m_fluidPalette; }
-    [[nodiscard]] const BitPackedArray& fluidData() const { return m_fluidData; }
+  // Direct palette and packed data access for serialization.
+  // These expose read-only references to the internal storage.
+  [[nodiscard]] const Palette &blockPalette() const { return m_palette; }
+  [[nodiscard]] const BitPackedArray &blockData() const { return m_blockData; }
+  [[nodiscard]] const Palette &fluidPalette() const { return m_fluidPalette; }
+  [[nodiscard]] const BitPackedArray &fluidData() const { return m_fluidData; }
 
-    [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
+  [[nodiscard]] static std::size_t toIndex(int x, int y, int z);
 
-    [[nodiscard]] bool isDirty() const { return m_dirty; }
-    void markDirty();
-    [[nodiscard]] uint64_t getMeshRevision() const;
-    void markMeshClean();
+  [[nodiscard]] bool isDirty() const { return m_dirty; }
+  void markDirty();
+  [[nodiscard]] uint64_t getMeshRevision() const;
+  void markMeshClean();
 
-    // Light access — same packing as before: high nibble = sun, low nibble = block
-    [[nodiscard]] uint8_t getSunlight(int x, int y, int z) const;
-    void setSunlight(int x, int y, int z, uint8_t level);
-    [[nodiscard]] uint8_t getBlockLight(int x, int y, int z) const;
-    void setBlockLight(int x, int y, int z, uint8_t level);
+  // Light access — same packing as before: high nibble = sun, low nibble =
+  // block
+  [[nodiscard]] uint8_t getSunlight(int x, int y, int z) const;
+  void setSunlight(int x, int y, int z, uint8_t level);
+  [[nodiscard]] uint8_t getBlockLight(int x, int y, int z) const;
+  void setBlockLight(int x, int y, int z, uint8_t level);
 
-    // Sub-chunk type — for semantic culling
-    [[nodiscard]] SubChunkType getType() const { return m_type; }
-    void setType(SubChunkType type) { m_type = type; }
-    void inferType();  // Scan contents and set type accordingly
+  // Sub-chunk type — for semantic culling
+  [[nodiscard]] SubChunkType getType() const { return m_type; }
+  void setType(SubChunkType type) { m_type = type; }
+  void inferType(); // Scan contents and set type accordingly
 
-    // Per-sub-chunk mesh
-    [[nodiscard]] const SubChunkMesh& getMesh() const;
-    [[nodiscard]] SubChunkMesh& getMesh();
-    void setMesh(const SubChunkMesh& mesh);
-    [[nodiscard]] std::size_t estimatedMemoryBytes() const;
+  // Per-sub-chunk mesh
+  [[nodiscard]] const SubChunkMesh &getMesh() const;
+  [[nodiscard]] SubChunkMesh &getMesh();
+  void setMesh(const SubChunkMesh &mesh);
+  [[nodiscard]] std::size_t estimatedMemoryBytes() const;
 
-    // 6-direction neighbor pointers: [0]=+X, [1]=-X, [2]=+Y, [3]=-Y, [4]=+Z, [5]=-Z
-    SubChunk* neighbors[6] = {};
+  // 6-direction neighbor pointers: [0]=+X, [1]=-X, [2]=+Y, [3]=-Y, [4]=+Z,
+  // [5]=-Z
+  SubChunk *neighbors[6] = {};
 
-    // Public for snapshot capture (same pattern as old Chunk)
-    std::array<uint8_t, BLOCK_COUNT> m_lightMap{};
+  // Public for snapshot capture (same pattern as old Chunk)
+  std::array<uint8_t, BLOCK_COUNT> m_lightMap{};
 
-    // Which sub-chunk index (0..15) within the column — set by Chunk on creation
-    int m_subChunkY = 0;
+  // Which sub-chunk index (0..15) within the column — set by Chunk on creation
+  int m_subChunkY = 0;
 
 private:
-    [[nodiscard]] static bool isInBounds(int x, int y, int z);
-    void setBlockImpl(int x, int y, int z, BlockStateId stateId, bool markMeshDirty);
+  [[nodiscard]] static bool isInBounds(int x, int y, int z);
+  void setBlockImpl(int x, int y, int z, BlockStateId stateId,
+                    bool markMeshDirty);
 
-    Palette m_palette;
-    BitPackedArray m_blockData;
-    std::unordered_map<BlockStateId, uint32_t> m_blockCounts;
+  Palette m_palette;
+  BitPackedArray m_blockData;
+  std::unordered_map<BlockStateId, uint32_t> m_blockCounts;
 
-    Palette m_fluidPalette;
-    BitPackedArray m_fluidData;
-    std::unordered_map<BlockStateId, uint32_t> m_fluidCounts;
+  Palette m_fluidPalette;
+  BitPackedArray m_fluidData;
+  std::unordered_map<BlockStateId, uint32_t> m_fluidCounts;
 
-    SubChunkType m_type = SubChunkType::Air;
-    bool m_dirty = true;
-    uint64_t m_meshRevision = 1;
-    SubChunkMesh m_mesh;
+  SubChunkType m_type = SubChunkType::Air;
+  bool m_dirty = true;
+  uint64_t m_meshRevision = 1;
+  SubChunkMesh m_mesh;
 };
 
 #endif // MECRAFT_SUBCHUNK_H

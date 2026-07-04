@@ -1,4 +1,5 @@
 /cmake-build-*/
+/compile_commands.json
 /saves/
 /cmake-build-relwithdebinfo/
 /x64-Debug/

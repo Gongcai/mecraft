@@ -195,6 +195,7 @@ static void ImGui_ImplGlfw_DebugRecordCallback(const std::chrono::steady_clock::
     ++g_ImGui_ImplGlfw_DebugPollStats.callbackCount;
 }
 
+#ifdef _WIN32
 static int ImGui_ImplGlfw_DebugWndProcMessageSlot(UINT msg)
 {
     switch (msg)
@@ -207,6 +208,7 @@ static int ImGui_ImplGlfw_DebugWndProcMessageSlot(UINT msg)
     default: return 4;
     }
 }
+#endif
 
 void ImGui_ImplGlfw_ResetDebugPollStats()
 {
