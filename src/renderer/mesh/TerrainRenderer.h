@@ -59,6 +59,9 @@ struct TerrainRenderSettings {
     float fakeBounceStrength = 0.06f;
     float albedoDesaturation = 0.0f;
     float shadowDesaturation = 0.22f;
+    bool blockMaterialMapsEnabled = true;
+    bool blockNormalMapsEnabled = true;
+    bool blockSpecularMapsEnabled = true;
 };
 
 /// Sky lighting data required by bindChunkRenderState.

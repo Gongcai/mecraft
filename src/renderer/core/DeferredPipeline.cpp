@@ -554,6 +554,9 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     trs.fakeBounceStrength = settings.postProcess.fakeBounceStrength;
     trs.albedoDesaturation = settings.postProcess.albedoDesaturation;
     trs.shadowDesaturation = settings.postProcess.shadowDesaturation;
+    trs.blockMaterialMapsEnabled = settings.blockMaterialMaps.enabled;
+    trs.blockNormalMapsEnabled = settings.blockMaterialMaps.normalMapsEnabled;
+    trs.blockSpecularMapsEnabled = settings.blockMaterialMaps.specularMapsEnabled;
 
     const TextureArray& texArray = m_shared->resources->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
@@ -681,6 +684,9 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     trs.fakeBounceStrength = m_currentSettings.postProcess.fakeBounceStrength;
     trs.albedoDesaturation = m_currentSettings.postProcess.albedoDesaturation;
     trs.shadowDesaturation = m_currentSettings.postProcess.shadowDesaturation;
+    trs.blockMaterialMapsEnabled = m_currentSettings.blockMaterialMaps.enabled;
+    trs.blockNormalMapsEnabled = m_currentSettings.blockMaterialMaps.normalMapsEnabled;
+    trs.blockSpecularMapsEnabled = m_currentSettings.blockMaterialMaps.specularMapsEnabled;
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();

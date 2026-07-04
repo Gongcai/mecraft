@@ -771,6 +771,16 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &settings.shadow.contactShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &settings.cloud.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &settings.debug.derivativeStrictMode);
+        pipelineChanged |= ImGui::Checkbox("Block PBR Maps", &settings.blockMaterialMaps.enabled);
+        if (!settings.blockMaterialMaps.enabled) {
+            ImGui::BeginDisabled();
+        }
+        pipelineChanged |= ImGui::Checkbox("Block Normal Maps", &settings.blockMaterialMaps.normalMapsEnabled);
+        ImGui::SameLine();
+        pipelineChanged |= ImGui::Checkbox("Block Specular Maps", &settings.blockMaterialMaps.specularMapsEnabled);
+        if (!settings.blockMaterialMaps.enabled) {
+            ImGui::EndDisabled();
+        }
         pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("SSGI", &settings.ssgi.enabled);

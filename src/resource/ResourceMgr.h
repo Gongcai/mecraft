@@ -6,6 +6,7 @@
 #define MECRAFT_RESOURCEMGR_H
 #include <memory>
 #include <string>
+#include <unordered_set>
 #include <vector>
 #include <glad/glad.h>
 #include "BlockTextureCatalog.h"
@@ -47,6 +48,9 @@ public:
 
     // Texture atlas used by block-facing UI rendering.
     void buildBlockTextureResources(const std::string& directory, int tileSize = 16);
+    void buildBlockTextureResources(const std::string& directory,
+                                    int tileSize,
+                                    const std::unordered_set<std::string>& registeredTextureNames);
     void buildTextureAtlas(const std::string& directory, int tileSize = 16);
     [[nodiscard]] const TextureAtlas& getAtlas() const;
 

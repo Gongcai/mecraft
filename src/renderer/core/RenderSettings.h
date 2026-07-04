@@ -135,6 +135,13 @@ struct TransparentSettings {
     bool compositeEnabled = true;
 };
 
+/// Block material sidecar texture settings.
+struct BlockMaterialMapSettings {
+    bool enabled = true;
+    bool normalMapsEnabled = true;
+    bool specularMapsEnabled = true;
+};
+
 /// TAA settings
 struct TaaSettings {
     bool enabled = true;
@@ -280,6 +287,7 @@ struct RenderSettings {
     CloudSettings cloud;
     ReflectionSettings reflection;
     TransparentSettings transparent;
+    BlockMaterialMapSettings blockMaterialMaps;
     TaaSettings taa;
     PostProcessSettings postProcess;
     UpscaleSettings upscale;

@@ -556,6 +556,20 @@ json toJson(const WeatherRenderSettings& s) {
     };
 }
 
+void applyBlockMaterialMapSettings(const json& j, BlockMaterialMapSettings& s) {
+    readBool(j, "enabled", s.enabled);
+    readBool(j, "normalMapsEnabled", s.normalMapsEnabled);
+    readBool(j, "specularMapsEnabled", s.specularMapsEnabled);
+}
+
+json toJson(const BlockMaterialMapSettings& s) {
+    return {
+        {"enabled", s.enabled},
+        {"normalMapsEnabled", s.normalMapsEnabled},
+        {"specularMapsEnabled", s.specularMapsEnabled},
+    };
+}
+
 void applyRenderSettings(const json& j, RenderSettings& s) {
     int pipelineMode = static_cast<int>(s.pipelineMode);
     readInt(j, "pipelineMode", pipelineMode);
@@ -578,6 +592,7 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("cloud", [&s](const json& value) { applyCloudSettings(value, s.cloud); });
     applyObject("reflection", [&s](const json& value) { applyReflectionSettings(value, s.reflection); });
     applyObject("transparent", [&s](const json& value) { applyTransparentSettings(value, s.transparent); });
+    applyObject("blockMaterialMaps", [&s](const json& value) { applyBlockMaterialMapSettings(value, s.blockMaterialMaps); });
     applyObject("taa", [&s](const json& value) { applyTaaSettings(value, s.taa); });
     applyObject("postProcess", [&s](const json& value) { applyPostProcessSettings(value, s.postProcess); });
     applyObject("upscale", [&s](const json& value) { applyUpscaleSettings(value, s.upscale); });
@@ -597,6 +612,7 @@ json toJson(const RenderSettings& s) {
         {"cloud", toJson(s.cloud)},
         {"reflection", toJson(s.reflection)},
         {"transparent", toJson(s.transparent)},
+        {"blockMaterialMaps", toJson(s.blockMaterialMaps)},
         {"taa", toJson(s.taa)},
         {"postProcess", toJson(s.postProcess)},
         {"upscale", toJson(s.upscale)},

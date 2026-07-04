@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <unordered_map>
 #include <vector>
 
@@ -34,6 +35,8 @@ private:
 };
 
 [[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::string& directory);
+[[nodiscard]] BlockTextureManifest buildBlockTextureManifest(const std::string& directory,
+                                                             const std::unordered_set<std::string>& registeredTextureNames);
 
 } // namespace resource
 

@@ -37,12 +37,11 @@
       "frameOrder": "top_to_bottom"
     },
     {
-      "name": "grass_top",
+      "name": "grass_block_top",
       "tint": "grass"
     },
     {
-      "name": "grass_side",
-      "tint": "grass"
+      "name": "grass_block_side"
     },
     {
       "name": "tall_grass_bottom",

@@ -10,6 +10,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class BlockTextureLibrary {
@@ -22,6 +23,9 @@ public:
 
     [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath);
     void buildTextures(const std::string& directory, int tileSize);
+    void buildTextures(const std::string& directory,
+                       int tileSize,
+                       const std::unordered_set<std::string>& registeredTextureNames);
     void buildAtlas(const std::string& directory, int tileSize);
     void buildTextureArray(const std::string& directory, int tileSize);
 

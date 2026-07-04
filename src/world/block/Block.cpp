@@ -72,12 +72,14 @@ bool isKnownPressurePlateEntityFilter(const std::string_view filter) {
     return filter == "living" || filter == "all";
 }
 
-AnimatedTextureRef makeStaticWorldTexture(const int layer) {
+AnimatedTextureRef makeStaticWorldTexture(const int layer,
+                                          const BiomeTintKind tint = BiomeTintKind::None) {
     AnimatedTextureRef ref;
     ref.firstLayer = layer;
     ref.frameCount = 1;
     ref.fps = 0.0f;
     ref.isAnimated = false;
+    ref.tint = tint;
     return ref;
 }
 
@@ -916,7 +918,7 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
                     hasUntintedTexture = true;
                 }
             }
-            return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name));
+            return makeStaticWorldTexture(resourceMgr->getTextureArrayLayer(name), resolvedTint);
 #endif
         };
 

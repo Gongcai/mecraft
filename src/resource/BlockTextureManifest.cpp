@@ -7,6 +7,7 @@
 #include <string>
 #include <system_error>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace {
@@ -207,11 +208,20 @@ bool BlockTextureManifest::hasSpecularMaps() const {
     return m_hasSpecularMaps;
 }
 
-BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
+namespace {
+
+BlockTextureManifest buildBlockTextureManifestImpl(const std::string& directory,
+                                                   const std::unordered_set<std::string>* registeredTextureNames) {
     const std::vector<ClassifiedTextureFile> files = collectClassifiedTextureFiles(directory);
 
     std::unordered_map<std::string, PendingManifestEntry> pendingEntries;
+    size_t ignoredUnregisteredFiles = 0;
     for (const ClassifiedTextureFile& file : files) {
+        if (registeredTextureNames != nullptr &&
+            registeredTextureNames->find(file.textureName) == registeredTextureNames->end()) {
+            ++ignoredUnregisteredFiles;
+            continue;
+        }
         assignTexturePath(pendingEntries[file.textureName], file);
     }
 
@@ -230,6 +240,12 @@ BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
 
     if (names.empty()) {
         failBlockTextureManifest("Block texture directory contains no albedo PNG files: " + directory);
+    }
+
+    if (ignoredUnregisteredFiles > 0) {
+        std::cerr << "[Resource] Ignored " << ignoredUnregisteredFiles
+                  << " unregistered block texture file"
+                  << (ignoredUnregisteredFiles == 1 ? "" : "s") << '\n';
     }
 
     if (!orphanMaterialNames.empty()) {
@@ -263,6 +279,17 @@ BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
         manifest.addEntry(std::move(entry));
     }
     return manifest;
+}
+
+} // namespace
+
+BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
+    return buildBlockTextureManifestImpl(directory, nullptr);
+}
+
+BlockTextureManifest buildBlockTextureManifest(const std::string& directory,
+                                               const std::unordered_set<std::string>& registeredTextureNames) {
+    return buildBlockTextureManifestImpl(directory, &registeredTextureNames);
 }
 
 } // namespace resource

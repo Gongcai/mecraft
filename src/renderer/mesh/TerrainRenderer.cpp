@@ -273,8 +273,16 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     shader.setInt("uRippleNormalTex", 10);
     shader.setInt("uBlockNormalTex", 11);
     shader.setInt("uBlockSpecularTex", 12);
-    shader.setInt("uHasBlockNormalMaps", resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
-    shader.setInt("uHasBlockSpecularMaps", resourceMgr != nullptr && resourceMgr->hasBlockSpecularMaps() ? 1 : 0);
+    const bool useBlockNormalMaps = resourceMgr != nullptr &&
+                                    settings.blockMaterialMapsEnabled &&
+                                    settings.blockNormalMapsEnabled &&
+                                    resourceMgr->hasBlockNormalMaps();
+    const bool useBlockSpecularMaps = resourceMgr != nullptr &&
+                                      settings.blockMaterialMapsEnabled &&
+                                      settings.blockSpecularMapsEnabled &&
+                                      resourceMgr->hasBlockSpecularMaps();
+    shader.setInt("uHasBlockNormalMaps", useBlockNormalMaps ? 1 : 0);
+    shader.setInt("uHasBlockSpecularMaps", useBlockSpecularMaps ? 1 : 0);
     shader.setInt("uSkyCaptureEnabled", deferredFrameActive ? 1 : 0);
     shader.setInt("uCompositeInputsEnabled", 0);
     shader.setInt("uWaterCompositeEnabled", 0);
@@ -331,9 +339,9 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_ripple_normal") : 0);
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, resourceMgr != nullptr ? resourceMgr->getBlockNormalTextureArray().textureID : 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, useBlockNormalMaps ? resourceMgr->getBlockNormalTextureArray().textureID : 0);
     glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, resourceMgr != nullptr ? resourceMgr->getBlockSpecularTextureArray().textureID : 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, useBlockSpecularMaps ? resourceMgr->getBlockSpecularTextureArray().textureID : 0);
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
 }
