@@ -42,8 +42,8 @@ struct ContainerBehaviorDef {
 
 class ContainerBehaviorRegistry final {
 public:
-    static void init();
-    static void ensureInitialized();
+    [[nodiscard]] static bool init();
+    [[nodiscard]] static bool ensureInitialized();
     [[nodiscard]] static const ContainerBehaviorDef& require(const std::string& id);
     [[nodiscard]] static const std::unordered_map<std::string, ContainerBehaviorDef>& all();
 

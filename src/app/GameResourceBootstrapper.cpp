@@ -1,6 +1,7 @@
 #include "GameResourceBootstrapper.h"
 
 #include "../Paths.h"
+#include "../game/inventory/ContainerBehaviorRegistry.h"
 #include "../item/Item.h"
 #include "../resource/AtmosphereLutProbe.h"
 #include "../resource/ResourceMgr.h"
@@ -37,7 +38,9 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
 
-    ui::ContainerUiRegistry::init();
+    if (!ContainerBehaviorRegistry::init() || !ui::ContainerUiRegistry::init()) {
+        return false;
+    }
     for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
         const std::string texturePath = std::string(ASSETS_DIR) + "/" + def.backgroundTexturePath;
         if (resourceMgr.loadGuiTexture(def.backgroundTexture, texturePath, true) == 0) {

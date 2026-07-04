@@ -68,8 +68,8 @@ struct ContainerUiDef {
 
 class ContainerUiRegistry {
 public:
-    static void init();
-    static void ensureInitialized();
+    [[nodiscard]] static bool init();
+    [[nodiscard]] static bool ensureInitialized();
     [[nodiscard]] static const ContainerUiDef& require(const std::string& id);
     [[nodiscard]] static bool tryGet(const std::string& id, const ContainerUiDef*& outDef);
     [[nodiscard]] static const std::unordered_map<std::string, ContainerUiDef>& all();

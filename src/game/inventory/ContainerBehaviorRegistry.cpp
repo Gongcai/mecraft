@@ -1,8 +1,11 @@
 #include "ContainerBehaviorRegistry.h"
 
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <stdexcept>
+#include <iostream>
+#include <limits>
+#include <utility>
 
 #include <nlohmann/json.hpp>
 
@@ -15,282 +18,394 @@ std::unordered_map<std::string, ContainerBehaviorDef> ContainerBehaviorRegistry:
 namespace {
 constexpr const char* kContainerBehaviorConfigDir = CONTAINER_BEHAVIOR_CONFIG_DIR;
 
-const nlohmann::json& requireField(const nlohmann::json& owner,
-                                   const std::string& ownerName,
-                                   const char* fieldName) {
-    if (!owner.contains(fieldName)) {
-        throw std::runtime_error(ownerName + " is missing required field: " + fieldName);
-    }
-    return owner[fieldName];
+bool fail(std::string& error, std::string message) {
+    error = std::move(message);
+    return false;
 }
 
-std::string requireString(const nlohmann::json& owner,
-                          const std::string& ownerName,
-                          const char* fieldName) {
-    const nlohmann::json& value = requireField(owner, ownerName, fieldName);
-    if (!value.is_string()) {
-        throw std::runtime_error(ownerName + " requires string field: " + fieldName);
+const nlohmann::json* findRequiredField(const nlohmann::json& owner,
+                                        const std::string& ownerName,
+                                        const char* fieldName,
+                                        std::string& error) {
+    const auto it = owner.find(fieldName);
+    if (it == owner.end()) {
+        fail(error, ownerName + " is missing required field: " + fieldName);
+        return nullptr;
     }
-    const std::string parsed = value.get<std::string>();
+    return &(*it);
+}
+
+bool readString(const nlohmann::json& owner,
+                const std::string& ownerName,
+                const char* fieldName,
+                std::string& out,
+                std::string& error) {
+    const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
+    if (value == nullptr) {
+        return false;
+    }
+    if (!value->is_string()) {
+        return fail(error, ownerName + " requires string field: " + fieldName);
+    }
+    const std::string parsed = value->get<std::string>();
     if (parsed.empty()) {
-        throw std::runtime_error(ownerName + " requires non-empty field: " + fieldName);
+        return fail(error, ownerName + " requires non-empty field: " + fieldName);
     }
-    return parsed;
+    out = parsed;
+    return true;
 }
 
-int requireInteger(const nlohmann::json& owner,
-                   const std::string& ownerName,
-                   const char* fieldName) {
-    const nlohmann::json& value = requireField(owner, ownerName, fieldName);
-    if (!value.is_number_integer()) {
-        throw std::runtime_error(ownerName + " requires integer field: " + fieldName);
+bool readInteger(const nlohmann::json& owner,
+                 const std::string& ownerName,
+                 const char* fieldName,
+                 int& out,
+                 std::string& error) {
+    const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
+    if (value == nullptr) {
+        return false;
     }
-    return value.get<int>();
+    if (!value->is_number_integer()) {
+        return fail(error, ownerName + " requires integer field: " + fieldName);
+    }
+    const int64_t parsed = value->get<int64_t>();
+    if (parsed < std::numeric_limits<int>::min() || parsed > std::numeric_limits<int>::max()) {
+        return fail(error, ownerName + " integer field is out of range: " + fieldName);
+    }
+    out = static_cast<int>(parsed);
+    return true;
 }
 
-int requireNonNegativeInteger(const nlohmann::json& owner,
-                              const std::string& ownerName,
-                              const char* fieldName) {
-    const int parsed = requireInteger(owner, ownerName, fieldName);
-    if (parsed < 0) {
-        throw std::runtime_error(ownerName + " requires non-negative field: " + fieldName);
+bool readNonNegativeInteger(const nlohmann::json& owner,
+                            const std::string& ownerName,
+                            const char* fieldName,
+                            int& out,
+                            std::string& error) {
+    if (!readInteger(owner, ownerName, fieldName, out, error)) {
+        return false;
     }
-    return parsed;
+    if (out < 0) {
+        return fail(error, ownerName + " requires non-negative field: " + fieldName);
+    }
+    return true;
 }
 
-int requirePositiveInteger(const nlohmann::json& owner,
-                           const std::string& ownerName,
-                           const char* fieldName) {
-    const int parsed = requireInteger(owner, ownerName, fieldName);
-    if (parsed <= 0) {
-        throw std::runtime_error(ownerName + " requires positive field: " + fieldName);
+bool readPositiveInteger(const nlohmann::json& owner,
+                         const std::string& ownerName,
+                         const char* fieldName,
+                         int& out,
+                         std::string& error) {
+    if (!readInteger(owner, ownerName, fieldName, out, error)) {
+        return false;
     }
-    return parsed;
+    if (out <= 0) {
+        return fail(error, ownerName + " requires positive field: " + fieldName);
+    }
+    return true;
 }
 
-bool requireBoolean(const nlohmann::json& owner,
-                    const std::string& ownerName,
-                    const char* fieldName) {
-    const nlohmann::json& value = requireField(owner, ownerName, fieldName);
-    if (!value.is_boolean()) {
-        throw std::runtime_error(ownerName + " requires boolean field: " + fieldName);
+bool readBoolean(const nlohmann::json& owner,
+                 const std::string& ownerName,
+                 const char* fieldName,
+                 bool& out,
+                 std::string& error) {
+    const nlohmann::json* value = findRequiredField(owner, ownerName, fieldName, error);
+    if (value == nullptr) {
+        return false;
     }
-    return value.get<bool>();
+    if (!value->is_boolean()) {
+        return fail(error, ownerName + " requires boolean field: " + fieldName);
+    }
+    out = value->get<bool>();
+    return true;
 }
 
-std::string parseNamespacedField(const nlohmann::json& owner,
-                                 const std::string& ownerName,
-                                 const char* fieldName) {
-    const NamespacedId id(requireString(owner, ownerName, fieldName));
+bool readNamespacedField(const nlohmann::json& owner,
+                         const std::string& ownerName,
+                         const char* fieldName,
+                         std::string& out,
+                         std::string& error) {
+    std::string raw;
+    if (!readString(owner, ownerName, fieldName, raw, error)) {
+        return false;
+    }
+    const NamespacedId id(raw);
     if (id.namespaceStr().empty() || id.path().empty()) {
-        throw std::runtime_error(ownerName + " requires valid namespaced field: " + fieldName);
+        return fail(error, ownerName + " requires valid namespaced field: " + fieldName);
     }
-    return id.full();
+    out = id.full();
+    return true;
 }
 
-ContainerStorageKind parseStorageKind(const std::string& value, const std::string& ownerName) {
+bool parseStorageKind(const std::string& value,
+                      const std::string& ownerName,
+                      ContainerStorageKind& out,
+                      std::string& error) {
     if (value == "block_entity") {
-        return ContainerStorageKind::BlockEntity;
+        out = ContainerStorageKind::BlockEntity;
+        return true;
     }
     if (value == "transient") {
-        return ContainerStorageKind::Transient;
+        out = ContainerStorageKind::Transient;
+        return true;
     }
-    throw std::runtime_error(ownerName + " has unknown storage kind: " + value);
+    return fail(error, ownerName + " has unknown storage kind: " + value);
 }
 
-void requireKnownHandler(const std::string& handler, const std::string& ownerName) {
+bool validateKnownHandler(const std::string& handler, const std::string& ownerName, std::string& error) {
     if (handler == "storage" || handler == "smelting" || handler == "crafting") {
-        return;
+        return true;
     }
-    throw std::runtime_error(ownerName + " has unknown container behavior handler: " + handler);
+    return fail(error, ownerName + " has unknown container behavior handler: " + handler);
 }
 
-void requireKnownAccepts(const std::string& accepts, const std::string& ownerName) {
+bool validateKnownAccepts(const std::string& accepts, const std::string& ownerName, std::string& error) {
     if (accepts == "any" || accepts == "smelting_input" || accepts == "fuel") {
-        return;
+        return true;
     }
-    throw std::runtime_error(ownerName + " has unknown slot accepts rule: " + accepts);
+    return fail(error, ownerName + " has unknown slot accepts rule: " + accepts);
 }
 
-ContainerStorageDef parseStorage(const nlohmann::json& storageJson, const std::string& behaviorId) {
+bool parseStorage(const nlohmann::json& storageJson,
+                  const std::string& behaviorId,
+                  ContainerStorageDef& storage,
+                  std::string& error) {
     if (!storageJson.is_object()) {
-        throw std::runtime_error(behaviorId + ".storage must be an object");
+        return fail(error, behaviorId + ".storage must be an object");
     }
 
-    ContainerStorageDef storage;
-    storage.kind = parseStorageKind(requireString(storageJson, behaviorId + ".storage", "kind"),
-                                    behaviorId + ".storage");
-    storage.slots = requirePositiveInteger(storageJson, behaviorId + ".storage", "slots");
-    return storage;
+    std::string kind;
+    return readString(storageJson, behaviorId + ".storage", "kind", kind, error) &&
+           parseStorageKind(kind, behaviorId + ".storage", storage.kind, error) &&
+           readPositiveInteger(storageJson, behaviorId + ".storage", "slots", storage.slots, error);
 }
 
-ContainerSlotRuleDef parseSlotRule(const nlohmann::json& ruleJson,
-                                   const std::string& behaviorId,
-                                   const int index,
-                                   const int storageSlots) {
+bool parseSlotRule(const nlohmann::json& ruleJson,
+                   const std::string& behaviorId,
+                   const int index,
+                   const int storageSlots,
+                   ContainerSlotRuleDef& rule,
+                   std::string& error) {
     if (!ruleJson.is_object()) {
-        throw std::runtime_error(behaviorId + ".slotRules[" + std::to_string(index) + "] must be an object");
+        return fail(error, behaviorId + ".slotRules[" + std::to_string(index) + "] must be an object");
     }
     const std::string ownerName = behaviorId + ".slotRules[" + std::to_string(index) + "]";
 
-    ContainerSlotRuleDef rule;
-    rule.id = requireString(ruleJson, ownerName, "id");
-    rule.slot = requireNonNegativeInteger(ruleJson, ownerName, "slot");
-    if (rule.slot >= storageSlots) {
-        throw std::runtime_error(ownerName + " slot exceeds storage slot count");
+    if (!readString(ruleJson, ownerName, "id", rule.id, error) ||
+        !readNonNegativeInteger(ruleJson, ownerName, "slot", rule.slot, error)) {
+        return false;
     }
-    rule.accepts = requireString(ruleJson, ownerName, "accepts");
-    requireKnownAccepts(rule.accepts, ownerName);
-    rule.outputOnly = requireBoolean(ruleJson, ownerName, "outputOnly");
-    return rule;
+    if (rule.slot >= storageSlots) {
+        return fail(error, ownerName + " slot exceeds storage slot count");
+    }
+    return readString(ruleJson, ownerName, "accepts", rule.accepts, error) &&
+           validateKnownAccepts(rule.accepts, ownerName, error) &&
+           readBoolean(ruleJson, ownerName, "outputOnly", rule.outputOnly, error);
 }
 
-ContainerProcessorDef parseProcessor(const nlohmann::json& processorJson,
-                                     const std::string& behaviorId,
-                                     const int index,
-                                     const int storageSlots) {
+bool parseProcessor(const nlohmann::json& processorJson,
+                    const std::string& behaviorId,
+                    const int index,
+                    const int storageSlots,
+                    ContainerProcessorDef& processor,
+                    std::string& error) {
     if (!processorJson.is_object()) {
-        throw std::runtime_error(behaviorId + ".processors[" + std::to_string(index) + "] must be an object");
+        return fail(error, behaviorId + ".processors[" + std::to_string(index) + "] must be an object");
     }
     const std::string ownerName = behaviorId + ".processors[" + std::to_string(index) + "]";
 
-    ContainerProcessorDef processor;
-    processor.id = requireString(processorJson, ownerName, "id");
-    processor.type = requireString(processorJson, ownerName, "type");
+    if (!readString(processorJson, ownerName, "id", processor.id, error) ||
+        !readString(processorJson, ownerName, "type", processor.type, error)) {
+        return false;
+    }
     if (processor.type == "smelting") {
-        processor.inputSlot = requireNonNegativeInteger(processorJson, ownerName, "inputSlot");
-        processor.fuelSlot = requireNonNegativeInteger(processorJson, ownerName, "fuelSlot");
-        processor.outputSlot = requireNonNegativeInteger(processorJson, ownerName, "outputSlot");
+        if (!readNonNegativeInteger(processorJson, ownerName, "inputSlot", processor.inputSlot, error) ||
+            !readNonNegativeInteger(processorJson, ownerName, "fuelSlot", processor.fuelSlot, error) ||
+            !readNonNegativeInteger(processorJson, ownerName, "outputSlot", processor.outputSlot, error)) {
+            return false;
+        }
         if (processor.inputSlot >= storageSlots ||
             processor.fuelSlot >= storageSlots ||
             processor.outputSlot >= storageSlots) {
-            throw std::runtime_error(ownerName + " references a slot outside storage");
+            return fail(error, ownerName + " references a slot outside storage");
         }
-        return processor;
+        return true;
     }
     if (processor.type == "crafting") {
-        processor.gridSize = requirePositiveInteger(processorJson, ownerName, "gridSize");
-        processor.resultSlot = requireNonNegativeInteger(processorJson, ownerName, "resultSlot");
-        if (processor.resultSlot >= storageSlots) {
-            throw std::runtime_error(ownerName + " resultSlot references a slot outside storage");
+        if (!readPositiveInteger(processorJson, ownerName, "gridSize", processor.gridSize, error) ||
+            !readNonNegativeInteger(processorJson, ownerName, "resultSlot", processor.resultSlot, error)) {
+            return false;
         }
-        return processor;
+        if (processor.resultSlot >= storageSlots) {
+            return fail(error, ownerName + " resultSlot references a slot outside storage");
+        }
+        return true;
     }
-    throw std::runtime_error(ownerName + " has unknown processor type: " + processor.type);
+    return fail(error, ownerName + " has unknown processor type: " + processor.type);
 }
 
-ContainerBehaviorDef parseContainerBehaviorDef(const nlohmann::json& root, const std::string& sourceName) {
+bool parseContainerBehaviorDef(const nlohmann::json& root,
+                               const std::string& sourceName,
+                               ContainerBehaviorDef& def,
+                               std::string& error) {
     if (!root.is_object()) {
-        throw std::runtime_error("Container behavior file must contain an object: " + sourceName);
+        return fail(error, "Container behavior file must contain an object: " + sourceName);
     }
 
-    ContainerBehaviorDef def;
-    def.id = parseNamespacedField(root, sourceName, "id");
-    def.handler = requireString(root, def.id, "handler");
-    requireKnownHandler(def.handler, def.id);
-    def.storage = parseStorage(requireField(root, def.id, "storage"), def.id);
+    def = ContainerBehaviorDef{};
+    if (!readNamespacedField(root, sourceName, "id", def.id, error) ||
+        !readString(root, def.id, "handler", def.handler, error) ||
+        !validateKnownHandler(def.handler, def.id, error)) {
+        return false;
+    }
+    const nlohmann::json* storage = findRequiredField(root, def.id, "storage", error);
+    if (storage == nullptr || !parseStorage(*storage, def.id, def.storage, error)) {
+        return false;
+    }
     const auto comparatorSignalIt = root.find("comparatorSignal");
     if (comparatorSignalIt != root.end()) {
         if (!comparatorSignalIt->is_boolean()) {
-            throw std::runtime_error(def.id + " requires boolean field: comparatorSignal");
+            return fail(error, def.id + " requires boolean field: comparatorSignal");
         }
         def.comparatorSignal = comparatorSignalIt->get<bool>();
         if (def.comparatorSignal &&
             def.storage.kind != ContainerStorageKind::BlockEntity) {
-            throw std::runtime_error(def.id + " comparatorSignal requires block_entity storage");
+            return fail(error, def.id + " comparatorSignal requires block_entity storage");
         }
     }
 
-    const nlohmann::json& slotRules = requireField(root, def.id, "slotRules");
-    if (!slotRules.is_array()) {
-        throw std::runtime_error(def.id + " requires array field: slotRules");
+    const nlohmann::json* slotRules = findRequiredField(root, def.id, "slotRules", error);
+    if (slotRules == nullptr) {
+        return false;
     }
-    for (int i = 0; i < static_cast<int>(slotRules.size()); ++i) {
-        def.slotRules.push_back(parseSlotRule(slotRules[static_cast<std::size_t>(i)],
-                                              def.id,
-                                              i,
-                                              def.storage.slots));
+    if (!slotRules->is_array()) {
+        return fail(error, def.id + " requires array field: slotRules");
     }
-
-    const nlohmann::json& processors = requireField(root, def.id, "processors");
-    if (!processors.is_array()) {
-        throw std::runtime_error(def.id + " requires array field: processors");
-    }
-    for (int i = 0; i < static_cast<int>(processors.size()); ++i) {
-        def.processors.push_back(parseProcessor(processors[static_cast<std::size_t>(i)],
-                                                def.id,
-                                                i,
-                                                def.storage.slots));
+    for (int i = 0; i < static_cast<int>(slotRules->size()); ++i) {
+        ContainerSlotRuleDef rule;
+        if (!parseSlotRule((*slotRules)[static_cast<std::size_t>(i)], def.id, i, def.storage.slots, rule, error)) {
+            return false;
+        }
+        def.slotRules.push_back(std::move(rule));
     }
 
-    return def;
+    const nlohmann::json* processors = findRequiredField(root, def.id, "processors", error);
+    if (processors == nullptr) {
+        return false;
+    }
+    if (!processors->is_array()) {
+        return fail(error, def.id + " requires array field: processors");
+    }
+    for (int i = 0; i < static_cast<int>(processors->size()); ++i) {
+        ContainerProcessorDef processor;
+        if (!parseProcessor((*processors)[static_cast<std::size_t>(i)], def.id, i, def.storage.slots, processor, error)) {
+            return false;
+        }
+        def.processors.push_back(std::move(processor));
+    }
+
+    return true;
 }
 
-void loadContainerBehaviorFile(const std::filesystem::path& path,
-                               std::unordered_map<std::string, ContainerBehaviorDef>& defs) {
+bool loadContainerBehaviorFile(const std::filesystem::path& path,
+                               std::unordered_map<std::string, ContainerBehaviorDef>& defs,
+                               std::string& error) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open container behavior config: " + path.string());
+        return fail(error, "Failed to open container behavior config: " + path.string());
     }
 
     nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
     if (root.is_discarded()) {
-        throw std::runtime_error("Failed to parse container behavior config " + path.string() + ": invalid JSON");
+        return fail(error, "Failed to parse container behavior config " + path.string() + ": invalid JSON");
     }
 
-    ContainerBehaviorDef def = parseContainerBehaviorDef(root, path.string());
+    ContainerBehaviorDef def;
+    if (!parseContainerBehaviorDef(root, path.string(), def, error)) {
+        return false;
+    }
     if (defs.find(def.id) != defs.end()) {
-        throw std::runtime_error("Duplicate container behavior id: " + def.id);
+        return fail(error, "Duplicate container behavior id: " + def.id);
     }
     defs.emplace(def.id, std::move(def));
+    return true;
 }
 }
 
-void ContainerBehaviorRegistry::init() {
+bool ContainerBehaviorRegistry::init() {
     if (s_initialized) {
-        return;
+        return true;
     }
 
     const std::filesystem::path configDir(kContainerBehaviorConfigDir);
-    if (!std::filesystem::exists(configDir) || !std::filesystem::is_directory(configDir)) {
-        throw std::runtime_error("Container behavior config directory is missing: " + configDir.string());
+    std::error_code fsError;
+    if (!std::filesystem::exists(configDir, fsError) ||
+        fsError ||
+        !std::filesystem::is_directory(configDir, fsError) ||
+        fsError) {
+        std::cerr << "Container behavior config directory is missing: " << configDir.string() << '\n';
+        return false;
     }
 
     std::unordered_map<std::string, ContainerBehaviorDef> defs;
-    for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(configDir)) {
-        if (!entry.is_regular_file() || entry.path().extension() != ".json") {
+    std::filesystem::directory_iterator it(configDir, fsError);
+    if (fsError) {
+        std::cerr << "Failed to enumerate container behavior config directory: "
+                  << configDir.string() << ": " << fsError.message() << '\n';
+        return false;
+    }
+    const std::filesystem::directory_iterator end;
+    for (; it != end; it.increment(fsError)) {
+        if (fsError) {
+            std::cerr << "Failed to advance container behavior config iterator: "
+                      << configDir.string() << ": " << fsError.message() << '\n';
+            return false;
+        }
+        const std::filesystem::directory_entry& entry = *it;
+        if (!entry.is_regular_file(fsError) || fsError || entry.path().extension() != ".json") {
+            fsError.clear();
             continue;
         }
-        loadContainerBehaviorFile(entry.path(), defs);
+        std::string error;
+        if (!loadContainerBehaviorFile(entry.path(), defs, error)) {
+            std::cerr << error << '\n';
+            return false;
+        }
     }
 
     if (defs.empty()) {
-        throw std::runtime_error("Container behavior config directory contains no JSON definitions: " +
-                                 configDir.string());
+        std::cerr << "Container behavior config directory contains no JSON definitions: "
+                  << configDir.string() << '\n';
+        return false;
     }
 
     s_defs = std::move(defs);
     s_initialized = true;
+    return true;
 }
 
-void ContainerBehaviorRegistry::ensureInitialized() {
-    if (!s_initialized) {
-        init();
-    }
+bool ContainerBehaviorRegistry::ensureInitialized() {
+    return s_initialized || init();
 }
 
 const ContainerBehaviorDef& ContainerBehaviorRegistry::require(const std::string& id) {
-    ensureInitialized();
+    if (!ensureInitialized()) {
+        std::cerr << "Container behavior registry failed to initialize\n";
+        std::abort();
+    }
     const NamespacedId namespacedId(id);
     const std::string canonicalId = namespacedId.full();
     const auto it = s_defs.find(canonicalId);
     if (it == s_defs.end()) {
-        throw std::runtime_error("Container behavior is not registered: " + canonicalId);
+        std::cerr << "Container behavior is not registered: " << canonicalId << '\n';
+        std::abort();
     }
     return it->second;
 }
 
 const std::unordered_map<std::string, ContainerBehaviorDef>& ContainerBehaviorRegistry::all() {
-    ensureInitialized();
+    if (!ensureInitialized()) {
+        std::cerr << "Container behavior registry failed to initialize\n";
+        std::abort();
+    }
     return s_defs;
 }
