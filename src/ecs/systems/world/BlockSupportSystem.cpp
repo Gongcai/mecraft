@@ -12,11 +12,18 @@
 #include "../../../world/block/PropIndices.h"
 #include "../../../world/redstone/WireFaceGeometry.h"
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 namespace ecs {
 
 namespace {
+
+[[noreturn]] void failBlockSupportSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 /// 6 cardinal neighbor offsets (in the same order Minecraft uses).
 constexpr glm::ivec3 kNeighborOffsets[6] = {
@@ -55,14 +62,14 @@ bool checkFarmland(const World& world, const glm::ivec3& pos) {
 /// the opposite direction from that face normal.
 bool checkAttachedFace(const World& world, const glm::ivec3& pos, BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
-        throw std::runtime_error("attached_face support requires the facing property");
+        failBlockSupportSystem("attached_face support requires the facing property");
     }
     const uint16_t facingValueIndex = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facingValueIndex == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("attached_face support requires a facing state value");
+        failBlockSupportSystem("attached_face support requires a facing state value");
     }
     if (!WireFaceGeometry::isWireFacing(facingValueIndex)) {
-        throw std::runtime_error("attached_face support received an unsupported facing value");
+        failBlockSupportSystem("attached_face support received an unsupported facing value");
     }
 
     return isSupportive(world, pos + WireFaceGeometry::supportOffset(facingValueIndex));
@@ -73,14 +80,14 @@ bool checkAttachedFace(const World& world, const glm::ivec3& pos, BlockStateId s
 /// remains available for the model or redstone output direction.
 bool checkFaceAttachment(const World& world, const glm::ivec3& pos, BlockStateId stateId) {
     if (PropIndices::FACE == PropIndices::INVALID) {
-        throw std::runtime_error("face_attachment support requires the face property");
+        failBlockSupportSystem("face_attachment support requires the face property");
     }
     const uint16_t faceValueIndex = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACE);
     if (faceValueIndex == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("face_attachment support requires a face state value");
+        failBlockSupportSystem("face_attachment support requires a face state value");
     }
     if (!AttachmentFaceGeometry::isAttachmentFace(faceValueIndex)) {
-        throw std::runtime_error("face_attachment support received an unsupported face value");
+        failBlockSupportSystem("face_attachment support received an unsupported face value");
     }
 
     return isSupportive(world, pos + AttachmentFaceGeometry::supportOffset(faceValueIndex));
@@ -114,7 +121,7 @@ bool canSurvive(const World& world, const glm::ivec3& pos) {
         return checkFaceAttachment(world, pos, stateId);
     }
 
-    throw std::runtime_error("Unsupported block support rule: " + def.supportRule);
+    failBlockSupportSystem("Unsupported block support rule: " + def.supportRule);
 }
 
 struct SupportEventSinks {
