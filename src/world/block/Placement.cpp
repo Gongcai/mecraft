@@ -9,7 +9,9 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -27,6 +29,11 @@ PlacementStrategyFn PlacementStrategyRegistry::getStrategy(const std::string& na
 namespace {
 
 constexpr float kPlacementEpsilon = 0.0001f;
+
+[[noreturn]] void failPlacement(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 BlockStateId strategySimple(const PlacementContext& ctx) {
     return BlockStateRegistry::getDefaultState(ctx.blockId);
@@ -61,14 +68,14 @@ void requireWallFacePlanePlacementProperties() {
         PropIndices::FACING_SOUTH == PropIndices::INVALID ||
         PropIndices::FACING_EAST == PropIndices::INVALID ||
         PropIndices::FACING_WEST == PropIndices::INVALID) {
-        throw std::runtime_error("Wall face plane placement requires facing=north/south/east/west properties");
+        failPlacement("Wall face plane placement requires facing=north/south/east/west properties");
     }
 }
 
 void requireFloorFacePlanePlacementProperties() {
     if (PropIndices::FACING == PropIndices::INVALID ||
         PropIndices::FACING_FLOOR == PropIndices::INVALID) {
-        throw std::runtime_error("Floor face plane placement requires facing=floor properties");
+        failPlacement("Floor face plane placement requires facing=floor properties");
     }
 }
 
@@ -80,7 +87,7 @@ void requireRedstoneWireFacePlacementProperties() {
         PropIndices::FACING_SOUTH == PropIndices::INVALID ||
         PropIndices::FACING_EAST == PropIndices::INVALID ||
         PropIndices::FACING_WEST == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone wire placement requires floor, ceiling, and wall facing values");
+        failPlacement("Redstone wire placement requires floor, ceiling, and wall facing values");
     }
 }
 
@@ -99,7 +106,7 @@ void requireRedstoneLogicUnitFacePlacementProperties() {
         PropIndices::FACING_WEST == PropIndices::INVALID ||
         PropIndices::FACING_UP == PropIndices::INVALID ||
         PropIndices::FACING_DOWN == PropIndices::INVALID) {
-        throw std::runtime_error("Redstone logic unit placement requires face values and six-way facing values");
+        failPlacement("Redstone logic unit placement requires face values and six-way facing values");
     }
 }
 
@@ -111,7 +118,7 @@ void requireSixWayFacingPlacementProperties() {
         PropIndices::FACING_WEST == PropIndices::INVALID ||
         PropIndices::FACING_UP == PropIndices::INVALID ||
         PropIndices::FACING_DOWN == PropIndices::INVALID) {
-        throw std::runtime_error("Six-way placement requires facing=north/south/east/west/up/down properties");
+        failPlacement("Six-way placement requires facing=north/south/east/west/up/down properties");
     }
 }
 
@@ -122,7 +129,7 @@ void requireHopperFacingPlacementProperties() {
         PropIndices::FACING_EAST == PropIndices::INVALID ||
         PropIndices::FACING_WEST == PropIndices::INVALID ||
         PropIndices::FACING_DOWN == PropIndices::INVALID) {
-        throw std::runtime_error("Hopper placement requires facing=north/south/east/west/down properties");
+        failPlacement("Hopper placement requires facing=north/south/east/west/down properties");
     }
 }
 
@@ -139,7 +146,7 @@ uint16_t facePlaneFacingFromWallNormal(const glm::ivec3& normal) {
     if (normal.x == 1) {
         return PropIndices::FACING_EAST;
     }
-    throw std::runtime_error("Wall face plane placement requires a horizontal hit normal");
+    failPlacement("Wall face plane placement requires a horizontal hit normal");
 }
 
 uint16_t attachmentFaceFromHitNormal(const glm::ivec3& normal) {
@@ -180,7 +187,7 @@ uint16_t facingFromSideNormal(const glm::ivec3& normal) {
     if (normal.z < 0) {
         return PropIndices::FACING_NORTH;
     }
-    throw std::runtime_error("Stair side placement requires a horizontal hit normal");
+    failPlacement("Stair side placement requires a horizontal hit normal");
 }
 
 uint16_t oppositeHorizontalFacing(const uint16_t facing) {
@@ -196,7 +203,7 @@ uint16_t oppositeHorizontalFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_NORTH) {
         return PropIndices::FACING_SOUTH;
     }
-    throw std::runtime_error("Stair side placement requires a horizontal facing value");
+    failPlacement("Stair side placement requires a horizontal facing value");
 }
 
 uint16_t applyPlacementFacingRevert(const BlockID blockId, const uint16_t facing) {
@@ -237,7 +244,7 @@ uint16_t planeFacingFromPlacement(const PlacementContext& ctx, const uint16_t fa
             : yawFacing;
     }
 
-    throw std::runtime_error("Redstone logic unit placement produced a facing outside the attachment plane");
+    failPlacement("Redstone logic unit placement produced a facing outside the attachment plane");
 }
 
 uint16_t stairFacingFromSideNormal(const BlockID blockId, const glm::ivec3& normal) {
@@ -305,7 +312,7 @@ uint16_t halfFromHit(const PlacementContext& ctx) {
     if (PropIndices::HALF == PropIndices::INVALID ||
         PropIndices::HALF_TOP == PropIndices::INVALID ||
         PropIndices::HALF_BOTTOM == PropIndices::INVALID) {
-        throw std::runtime_error("Half-block placement requires registered half=top/bottom properties");
+        failPlacement("Half-block placement requires registered half=top/bottom properties");
     }
 
     uint16_t halfValue = PropIndices::HALF_BOTTOM;
@@ -335,7 +342,7 @@ uint16_t halfFromHorizontalFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_WEST) {
         return PropIndices::HALF_WEST;
     }
-    throw std::runtime_error("Vertical slab placement requires a horizontal facing value");
+    failPlacement("Vertical slab placement requires a horizontal facing value");
 }
 
 uint16_t oppositeVerticalHalf(const uint16_t halfValue) {
@@ -351,7 +358,7 @@ uint16_t oppositeVerticalHalf(const uint16_t halfValue) {
     if (halfValue == PropIndices::HALF_WEST) {
         return PropIndices::HALF_EAST;
     }
-    throw std::runtime_error("Vertical slab placement requires a vertical half value");
+    failPlacement("Vertical slab placement requires a vertical half value");
 }
 
 uint16_t verticalHalfFromHitPosition(const PlacementContext& ctx) {
@@ -376,7 +383,7 @@ uint16_t verticalHalfFromHit(const PlacementContext& ctx) {
         PropIndices::HALF_SOUTH == PropIndices::INVALID ||
         PropIndices::HALF_EAST == PropIndices::INVALID ||
         PropIndices::HALF_WEST == PropIndices::INVALID) {
-        throw std::runtime_error("Vertical slab placement requires registered horizontal half properties");
+        failPlacement("Vertical slab placement requires registered horizontal half properties");
     }
 
     uint16_t halfValue = PropIndices::HALF_NORTH;
@@ -438,7 +445,7 @@ BlockStateId strategyAxisOriented(const PlacementContext& ctx) {
 BlockStateId strategyStairs(const PlacementContext& ctx) {
     if (PropIndices::SHAPE == PropIndices::INVALID ||
         PropIndices::SHAPE_STRAIGHT == PropIndices::INVALID) {
-        throw std::runtime_error("Stair placement requires registered shape=straight property");
+        failPlacement("Stair placement requires registered shape=straight property");
     }
 
     const uint16_t facingValue = (ctx.hitNormal.y == 0)
@@ -482,7 +489,7 @@ BlockStateId strategyTrapdoor(const PlacementContext& ctx) {
         PropIndices::OPEN_FALSE == PropIndices::INVALID ||
         PropIndices::POWERED == PropIndices::INVALID ||
         PropIndices::POWERED_FALSE == PropIndices::INVALID) {
-        throw std::runtime_error("Trapdoor placement requires open=false and powered=false properties");
+        failPlacement("Trapdoor placement requires open=false and powered=false properties");
     }
 
     const uint16_t facing = ctx.hitNormal.y == 0
@@ -535,7 +542,7 @@ BlockStateId strategyRedstoneWireFace(const PlacementContext& ctx) {
     }
 
     if (!WireFaceGeometry::isWireFacing(facing)) {
-        throw std::runtime_error("Redstone wire placement produced an unsupported facing value");
+        failPlacement("Redstone wire placement produced an unsupported facing value");
     }
     return BlockStateRegistry::getState(ctx.blockId, PropIndices::FACING, facing);
 }
