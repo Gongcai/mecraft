@@ -22,8 +22,8 @@ struct FluidDesc {
 
 class FluidRegistry {
 public:
-    static void init();
-    static void ensureInitialized();
+    [[nodiscard]] static bool init();
+    [[nodiscard]] static bool ensureInitialized();
 
     [[nodiscard]] static const FluidDesc& get(FluidKind kind);
     [[nodiscard]] static const FluidDesc* tryGet(FluidKind kind);

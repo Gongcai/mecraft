@@ -1219,7 +1219,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     }
 
     s_initialized = true;
-    FluidRegistry::init();
+    if (!FluidRegistry::init()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[BlockRegistry] Failed to initialize fluid registry\n");
+    }
 }
 
 void BlockRegistry::ensureInitialized() {
