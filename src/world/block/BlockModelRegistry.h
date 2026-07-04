@@ -11,16 +11,19 @@ class ResourceMgr;
 
 class BlockModelRegistry {
 public:
-    static void init(ResourceMgr* resourceMgr);
+    [[nodiscard]] static bool init(ResourceMgr* resourceMgr);
     [[nodiscard]] static const BlockModel* get(const std::string& name);
     [[nodiscard]] static AnimatedTextureRef resolveTextureRef(const std::string& textureName);
 
 private:
-    static std::unique_ptr<BlockModel> parseModel(const nlohmann::json& json, const std::string& name);
-    static ModelElement parseElement(const nlohmann::json& json);
-    static std::unique_ptr<ModelFace> parseFace(const nlohmann::json& json);
-    static void resolveTextureVariables(BlockModel& model);
-    static void validateFaceTextureVariables(const BlockModel& model);
+    static bool parseModel(const nlohmann::json& json,
+                           const std::string& name,
+                           std::unique_ptr<BlockModel>& outModel,
+                           std::string& error);
+    static bool parseElement(const nlohmann::json& json, ModelElement& outElement, std::string& error);
+    static bool parseFace(const nlohmann::json& json, std::unique_ptr<ModelFace>& outFace, std::string& error);
+    static bool resolveTextureVariables(BlockModel& model, std::string& error);
+    static bool validateFaceTextureVariables(const BlockModel& model, std::string& error);
 
     static std::unordered_map<std::string, std::unique_ptr<BlockModel>> s_models;
     static ResourceMgr* s_resourceMgr;

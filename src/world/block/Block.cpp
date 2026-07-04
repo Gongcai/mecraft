@@ -13,6 +13,7 @@
 #include "../../renderer/mesh/MeshBuilderRegistry.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <initializer_list>
 #include <iostream>
@@ -449,7 +450,10 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
     // Load config from JSON before registering blocks so RuntimeId order follows the data file.
     PlacementStrategyRegistry::initBuiltinStrategies();
     MeshBuilderRegistry::initBuiltinBuilders();
-    BlockModelRegistry::init(resourceMgr);
+    if (!BlockModelRegistry::init(resourceMgr)) {
+        std::cerr << "Failed to initialize block model registry\n";
+        std::abort();
+    }
 
     std::ifstream file(kBlocksConfigPath);
     if (!file.is_open()) {
