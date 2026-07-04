@@ -15,14 +15,20 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
+#include <iostream>
 #include <optional>
-#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace ecs {
 namespace {
+
+[[noreturn]] void failHopperSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr const char* kHopperBehaviorId = "minecraft:hopper";
 constexpr int kHopperSlotCount = 5;
@@ -82,12 +88,12 @@ bool positionTicks(const World& world, const glm::vec3& position) {
 
 uint16_t requiredProperty(const BlockStateId stateId, const uint16_t property, const char* propertyName) {
     if (property == PropIndices::INVALID) {
-        throw std::runtime_error(std::string("Hopper state requires registered property: ") + propertyName);
+        failHopperSystem(std::string("Hopper state requires registered property: ") + propertyName);
     }
 
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string("Hopper state is missing property: ") + propertyName);
+        failHopperSystem(std::string("Hopper state is missing property: ") + propertyName);
     }
     return value;
 }
@@ -105,10 +111,10 @@ bool hopperEnabled(const BlockStateId stateId) {
     const uint16_t enabled = requiredProperty(stateId, PropIndices::ENABLED, "enabled");
     if (PropIndices::ENABLED_TRUE == PropIndices::INVALID ||
         PropIndices::ENABLED_FALSE == PropIndices::INVALID) {
-        throw std::runtime_error("Hopper state requires registered enabled boolean values");
+        failHopperSystem("Hopper state requires registered enabled boolean values");
     }
     if (enabled != PropIndices::ENABLED_TRUE && enabled != PropIndices::ENABLED_FALSE) {
-        throw std::runtime_error("Hopper enabled property must be a boolean value");
+        failHopperSystem("Hopper enabled property must be a boolean value");
     }
     return enabled == PropIndices::ENABLED_TRUE;
 }
@@ -130,7 +136,7 @@ glm::ivec3 hopperFacingDirection(const BlockStateId stateId) {
     if (facing == PropIndices::FACING_WEST) {
         return {-1, 0, 0};
     }
-    throw std::runtime_error("Hopper state contains an unsupported facing value");
+    failHopperSystem("Hopper state contains an unsupported facing value");
 }
 
 const ContainerSlotRuleDef* findSlotRule(const ContainerBehaviorDef& behavior, const int slot) {
@@ -147,12 +153,12 @@ const ContainerSlotRuleDef* slotRuleForConfiguredSlot(const ContainerBehaviorDef
     if (rule != nullptr || behavior.slotRules.empty()) {
         return rule;
     }
-    throw std::runtime_error(behavior.id + " is missing a slot rule for slot " + std::to_string(slot));
+    failHopperSystem(behavior.id + " is missing a slot rule for slot " + std::to_string(slot));
 }
 
 const SmeltingSystem& requireSmeltingSystem(GameplayRegistry& registry, const std::string& behaviorId) {
     if (!registry.ctxHas<SmeltingSystem>()) {
-        throw std::runtime_error(behaviorId + " hopper transfer requires loaded smelting recipes");
+        failHopperSystem(behaviorId + " hopper transfer requires loaded smelting recipes");
     }
     return registry.ctxGet<SmeltingSystem>();
 }
@@ -184,7 +190,7 @@ bool slotAcceptsItem(GameplayRegistry& registry,
         return smelting.findRecipe(itemId) != nullptr;
     }
 
-    throw std::runtime_error(behavior.id + " has an unsupported slot accepts rule: " + rule->accepts);
+    failHopperSystem(behavior.id + " has an unsupported slot accepts rule: " + rule->accepts);
 }
 
 bool hasOutputOnlySlot(const ContainerBehaviorDef& behavior) {
@@ -255,12 +261,12 @@ std::optional<InventoryAccess> containerAt(World& world,
         return std::nullopt;
     }
 
-    throw std::runtime_error("Unsupported hopper container handler: " + behavior.handler);
+    failHopperSystem("Unsupported hopper container handler: " + behavior.handler);
 }
 
 ItemStack getSlotStack(const InventoryAccess& inventory, const int slot) {
     if (slot < 0 || slot >= inventory.slotCount) {
-        throw std::runtime_error("Hopper transfer slot index is outside inventory bounds");
+        failHopperSystem("Hopper transfer slot index is outside inventory bounds");
     }
     if (inventory.kind == InventoryKind::Storage) {
         return inventory.storage->getSlotStack(slot);
@@ -270,7 +276,7 @@ ItemStack getSlotStack(const InventoryAccess& inventory, const int slot) {
 
 void setSlotStack(const InventoryAccess& inventory, const int slot, const ItemStack& stack) {
     if (slot < 0 || slot >= inventory.slotCount) {
-        throw std::runtime_error("Hopper transfer slot index is outside inventory bounds");
+        failHopperSystem("Hopper transfer slot index is outside inventory bounds");
     }
     if (inventory.kind == InventoryKind::Storage) {
         inventory.storage->setSlotStack(slot, stack);
@@ -284,7 +290,7 @@ bool insertOneItem(GameplayRegistry& registry,
                    const ItemID itemId,
                    const uint16_t durability) {
     if (target.behavior == nullptr) {
-        throw std::runtime_error("Hopper transfer target has no container behavior");
+        failHopperSystem("Hopper transfer target has no container behavior");
     }
     if (itemId == RUNTIME_ID_NULL) {
         return false;
@@ -338,7 +344,7 @@ bool moveOneItem(GameplayRegistry& registry,
                  const int sourceSlot,
                  const InventoryAccess& target) {
     if (source.behavior == nullptr) {
-        throw std::runtime_error("Hopper transfer source has no container behavior");
+        failHopperSystem("Hopper transfer source has no container behavior");
     }
     if (!slotCanExtract(*source.behavior, sourceSlot)) {
         return false;
@@ -485,7 +491,7 @@ std::vector<glm::ivec3> collectHopperPositions(BlockEntityInventoryStore& store)
             return;
         }
         if (slotCount != kHopperSlotCount) {
-            throw std::runtime_error("Hopper inventory has an invalid slot count");
+            failHopperSystem("Hopper inventory has an invalid slot count");
         }
         positions.push_back(position);
     });
@@ -527,7 +533,7 @@ std::size_t HopperSystem::processWorld(World& world,
 
         const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
         if (!isHopperState(stateId)) {
-            throw std::runtime_error("Hopper inventory is not backed by a hopper block");
+            failHopperSystem("Hopper inventory is not backed by a hopper block");
         }
         if (!hopperEnabled(stateId)) {
             continue;
