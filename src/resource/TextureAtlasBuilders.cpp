@@ -4,10 +4,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
-#include <stdexcept>
+#include <iostream>
+#include <string>
+#include <system_error>
 
 namespace {
+
+[[noreturn]] void failTextureAtlasBuilders(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 struct ResourceTint {
     float r = 1.0f;
@@ -30,13 +38,30 @@ std::vector<std::filesystem::path> collectSortedPngFiles(const std::string& dire
     namespace fs = std::filesystem;
     std::vector<fs::path> imagePaths;
 
-    if (!fs::exists(directory)) {
-        throw std::runtime_error("Texture atlas directory does not exist: " + directory);
+    std::error_code fsError;
+    if (!fs::exists(directory, fsError)) {
+        if (fsError) {
+            failTextureAtlasBuilders("Failed to inspect texture atlas directory: " +
+                                     directory + ": " + fsError.message());
+        }
+        failTextureAtlasBuilders("Texture atlas directory does not exist: " + directory);
     }
 
-    for (const auto& entry : fs::directory_iterator(directory)) {
+    fs::directory_iterator it(directory, fsError);
+    if (fsError) {
+        failTextureAtlasBuilders("Failed to iterate texture atlas directory: " +
+                                 directory + ": " + fsError.message());
+    }
+    const fs::directory_iterator end;
+    while (it != end) {
+        const fs::directory_entry& entry = *it;
         if (entry.path().extension() == ".png") {
             imagePaths.push_back(entry.path());
+        }
+        it.increment(fsError);
+        if (fsError) {
+            failTextureAtlasBuilders("Failed to continue iterating texture atlas directory: " +
+                                     directory + ": " + fsError.message());
         }
     }
 
@@ -46,7 +71,7 @@ std::vector<std::filesystem::path> collectSortedPngFiles(const std::string& dire
               });
 
     if (imagePaths.empty()) {
-        throw std::runtime_error("Texture atlas directory contains no PNG files: " + directory);
+        failTextureAtlasBuilders("Texture atlas directory contains no PNG files: " + directory);
     }
 
     return imagePaths;
@@ -122,7 +147,7 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
                                           const int tileSize,
                                           const BlockTextureCatalog& catalog) {
     if (tileSize <= 0) {
-        throw std::runtime_error("Item texture atlas tile size must be positive");
+        failTextureAtlasBuilders("Item texture atlas tile size must be positive");
     }
 
     const std::vector<std::filesystem::path> imagePaths = collectSortedPngFiles(directory);
@@ -148,7 +173,7 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
             if (data != nullptr) {
                 stbi_image_free(data);
             }
-            throw std::runtime_error("Failed to load item texture: " + imagePaths[i].string());
+            failTextureAtlasBuilders("Failed to load item texture: " + imagePaths[i].string());
         }
 
         const std::string textureName = imagePaths[i].stem().string();
@@ -204,12 +229,12 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
                                            const int tileSize,
                                            const BlockTextureCatalog& catalog) {
     if (tileSize <= 0) {
-        throw std::runtime_error("Block texture atlas tile size must be positive");
+        failTextureAtlasBuilders("Block texture atlas tile size must be positive");
     }
 
     const std::vector<BlockTextureManifestEntry>& textureEntries = manifest.entries();
     if (textureEntries.empty()) {
-        throw std::runtime_error("Block texture atlas manifest contains no albedo textures");
+        failTextureAtlasBuilders("Block texture atlas manifest contains no albedo textures");
     }
 
     const int numTiles = static_cast<int>(textureEntries.size());
@@ -235,7 +260,7 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
             if (data != nullptr) {
                 stbi_image_free(data);
             }
-            throw std::runtime_error("Failed to load block texture: " + textureEntry.albedoPath.string());
+            failTextureAtlasBuilders("Failed to load block texture: " + textureEntry.albedoPath.string());
         }
 
         const std::string& textureName = textureEntry.name;
@@ -251,14 +276,14 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
             const int frameCount = catalogEntry->animation.frameCount;
             if (width != tileSize || height != tileSize * frameCount) {
                 stbi_image_free(data);
-                throw std::runtime_error("Texture catalog dimensions do not match atlas source for " + textureEntry.albedoPath.string());
+                failTextureAtlasBuilders("Texture catalog dimensions do not match atlas source for " + textureEntry.albedoPath.string());
             }
             const int frameIndex = catalogEntry->topFrameFirst ? frameCount - 1 : 0;
             sourcePixels = data + static_cast<size_t>(frameIndex * tileSize * width) * 4;
             sourceHeight = tileSize;
         } else if (width != tileSize || height != tileSize) {
             stbi_image_free(data);
-            throw std::runtime_error("Block texture dimensions do not match tile size for " + textureEntry.albedoPath.string());
+            failTextureAtlasBuilders("Block texture dimensions do not match tile size for " + textureEntry.albedoPath.string());
         }
 
         const int tileCol = i % tilesPerRow;
@@ -302,7 +327,7 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
 
 IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int iconSize) {
     if (iconSize <= 0) {
-        throw std::runtime_error("HUD icon atlas icon size must be positive");
+        failTextureAtlasBuilders("HUD icon atlas icon size must be positive");
     }
 
     const std::vector<std::filesystem::path> imagePaths = collectSortedPngFiles(directory);
@@ -327,7 +352,7 @@ IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int ic
             if (data != nullptr) {
                 stbi_image_free(data);
             }
-            throw std::runtime_error("Failed to load HUD icon texture: " + imagePaths[i].string());
+            failTextureAtlasBuilders("Failed to load HUD icon texture: " + imagePaths[i].string());
         }
 
         const int copyWidth = std::min(iconSize, width);
