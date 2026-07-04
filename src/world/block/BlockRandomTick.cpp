@@ -1,7 +1,8 @@
 #include "BlockRandomTick.h"
 
 #include <charconv>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -11,6 +12,11 @@
 #include "FarmlandRules.h"
 
 namespace {
+
+[[noreturn]] void failBlockRandomTick(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 bool chancePassed(const BlockRandomTickRule& rule, const uint32_t randomBits) {
     constexpr float kUnitScale = 1.0f / 16777216.0f;
@@ -27,7 +33,7 @@ bool parseDecimalInt(const std::string& value, int& outValue) {
 
 bool incrementNumericProperty(const BlockRandomTickRule& rule, const BlockRandomTickContext& ctx) {
     if (rule.propertyName.empty()) {
-        throw std::runtime_error("increment_property random tick requires a property name");
+        failBlockRandomTick("increment_property random tick requires a property name");
     }
     if (!chancePassed(rule, ctx.randomBits)) {
         return false;
@@ -35,17 +41,17 @@ bool incrementNumericProperty(const BlockRandomTickRule& rule, const BlockRandom
 
     const uint16_t property = BlockStateRegistry::getPropertyNameIndex(rule.propertyName);
     if (property == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("increment_property random tick references an unknown property: " + rule.propertyName);
+        failBlockRandomTick("increment_property random tick references an unknown property: " + rule.propertyName);
     }
 
     const uint16_t currentValueIndex = BlockStateRegistry::getPropertyIndex(ctx.state, property);
     if (currentValueIndex == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("increment_property random tick state does not contain property: " + rule.propertyName);
+        failBlockRandomTick("increment_property random tick state does not contain property: " + rule.propertyName);
     }
 
     int currentValue = 0;
     if (!parseDecimalInt(BlockStateRegistry::getPropertyValue(property, currentValueIndex), currentValue)) {
-        throw std::runtime_error("increment_property random tick requires decimal property values: " + rule.propertyName);
+        failBlockRandomTick("increment_property random tick requires decimal property values: " + rule.propertyName);
     }
 
     const uint16_t nextValueIndex = BlockStateRegistry::getPropertyValueIndex(
@@ -71,18 +77,18 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
 
     const uint16_t moisture = BlockStateRegistry::getPropertyNameIndex("moisture");
     if (moisture == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("farmland_moisture random tick requires a moisture property");
+        failBlockRandomTick("farmland_moisture random tick requires a moisture property");
     }
 
     const uint16_t currentValueIndex = BlockStateRegistry::getPropertyIndex(ctx.state, moisture);
     if (currentValueIndex == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("farmland_moisture random tick state does not contain moisture");
+        failBlockRandomTick("farmland_moisture random tick state does not contain moisture");
     }
 
     if (FarmlandRules::hasHydrationWater(ctx.world, ctx.pos)) {
         const uint16_t moistValue = BlockStateRegistry::getPropertyValueIndex(moisture, "7");
         if (moistValue == BlockStateRegistry::INVALID_INDEX) {
-            throw std::runtime_error("farmland_moisture random tick requires moisture value 7");
+            failBlockRandomTick("farmland_moisture random tick requires moisture value 7");
         }
         const BlockStateId moistState = BlockStateRegistry::withProperty(ctx.state, moisture, moistValue);
         if (moistState != ctx.state) {
@@ -94,7 +100,7 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
 
     int currentMoisture = 0;
     if (!parseDecimalInt(BlockStateRegistry::getPropertyValue(moisture, currentValueIndex), currentMoisture)) {
-        throw std::runtime_error("farmland_moisture random tick requires decimal moisture values");
+        failBlockRandomTick("farmland_moisture random tick requires decimal moisture values");
     }
 
     if (currentMoisture > 0) {
@@ -102,7 +108,7 @@ bool updateFarmlandMoisture(const BlockRandomTickRule& rule, const BlockRandomTi
             moisture,
             std::to_string(currentMoisture - 1));
         if (nextValueIndex == BlockStateRegistry::INVALID_INDEX) {
-            throw std::runtime_error("farmland_moisture random tick could not resolve the next moisture value");
+            failBlockRandomTick("farmland_moisture random tick could not resolve the next moisture value");
         }
 
         const BlockStateId dryState = BlockStateRegistry::withProperty(ctx.state, moisture, nextValueIndex);
@@ -138,7 +144,7 @@ bool dispatch(const BlockRandomTickRule& rule, const BlockRandomTickContext& ctx
     if (behavior == "farmland_moisture") {
         return updateFarmlandMoisture(rule, ctx);
     }
-    throw std::runtime_error("Unknown block random tick behavior: " + rule.behavior);
+    failBlockRandomTick("Unknown block random tick behavior: " + rule.behavior);
 }
 
 } // namespace BlockRandomTick
