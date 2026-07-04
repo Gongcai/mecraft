@@ -5,12 +5,19 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <glm/common.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/vec4.hpp>
 
 namespace {
+
+[[noreturn]] void failBlockSelection(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr float kPixel = 1.0f / 16.0f;
 constexpr float kTorchCoreMin = 7.0f * kPixel;
@@ -144,10 +151,10 @@ glm::vec3 applyModelSelectionTransform(glm::vec3 point, const ModelTransform& tr
 BlockSelectionBox getModelBox(const BlockStateId stateId) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
-        throw std::runtime_error("Model selection requires a registered model variant");
+        failBlockSelection("Model selection requires a registered model variant");
     }
     if (variant->model->elements.empty()) {
-        throw std::runtime_error("Model selection requires at least one element");
+        failBlockSelection("Model selection requires at least one element");
     }
 
     bool hasPoint = false;
@@ -185,11 +192,11 @@ BlockSelectionBox getModelBox(const BlockStateId stateId) {
 
 uint16_t requireFacePlaneFacing(const BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
-        throw std::runtime_error("Face plane selection requires the facing property");
+        failBlockSelection("Face plane selection requires the facing property");
     }
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facing == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("Face plane selection requires a facing state value");
+        failBlockSelection("Face plane selection requires a facing state value");
     }
     return facing;
 }
@@ -225,7 +232,7 @@ BlockSelectionBox BlockSelection::getFacePlaneBoxForFacing(const uint16_t facing
         return {glm::vec3(1.0f - kFacePlaneSelectionThickness, 0.0f, 0.0f),
                 glm::vec3(1.0f, 1.0f, 1.0f)};
     }
-    throw std::runtime_error("Face plane selection received an unsupported facing value");
+    failBlockSelection("Face plane selection received an unsupported facing value");
 }
 
 BlockSelectionBox BlockSelection::getBox(const BlockStateId stateId) {
