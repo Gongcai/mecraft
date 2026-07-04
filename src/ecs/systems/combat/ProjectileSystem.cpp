@@ -2,7 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,11 @@
 
 namespace ecs {
 namespace {
+
+[[noreturn]] void failProjectileSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr float kProjectileStepLength = 0.25f;
 constexpr uint64_t kTargetPulseTicks = 4;
@@ -95,15 +101,15 @@ bool isCollisionBlockAt(const IWorldView& worldView,
 
 BlockStateId withPowerProperty(const BlockStateId stateId, const uint8_t power) {
     if (power > 15) {
-        throw std::runtime_error("Target block power exceeds 15");
+        failProjectileSystem("Target block power exceeds 15");
     }
     const uint16_t value = BlockStateRegistry::getPropertyValueIndex(PropIndices::POWER, std::to_string(power));
     if (value == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("Target block requires registered power values 0 through 15");
+        failProjectileSystem("Target block requires registered power values 0 through 15");
     }
     const BlockStateId updatedState = BlockStateRegistry::withProperty(stateId, PropIndices::POWER, value);
     if (BlockStateRegistry::getPropertyIndex(updatedState, PropIndices::POWER) != value) {
-        throw std::runtime_error("Target block power state transition failed");
+        failProjectileSystem("Target block power state transition failed");
     }
     return updatedState;
 }
@@ -144,7 +150,7 @@ uint8_t targetPowerFromImpact(const glm::ivec3& blockPosition, const glm::vec3& 
         v = local.y - 0.5f;
         break;
     default:
-        throw std::runtime_error("Target impact selected an invalid face");
+        failProjectileSystem("Target impact selected an invalid face");
     }
 
     constexpr float kMaxFaceDistance = 0.70710678118f;
