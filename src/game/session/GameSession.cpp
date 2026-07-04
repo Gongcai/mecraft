@@ -39,13 +39,20 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <thread>
 #include <chrono>
 
 namespace {
 
 constexpr float kPlacementContactEpsilon = 0.001f;
+
+[[noreturn]] void failGameSession(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 struct PlayerPlacementBox {
     glm::vec3 min{};
@@ -201,7 +208,7 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
         // Create ENet transport and connect to remote server
         auto enetTransport = std::make_unique<net::ENetTransport>();
         if (!enetTransport->connect(config.serverAddress, config.serverPort)) {
-            throw std::runtime_error("Failed to connect to multiplayer server " +
+            failGameSession("Failed to connect to multiplayer server " +
                                      config.serverAddress + ":" +
                                      std::to_string(config.serverPort));
         }
@@ -240,7 +247,7 @@ void GameSession::init(const GameSessionConfig& config, ResourceMgr& resourceMgr
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         if (!m_client->hasServerHello()) {
-            throw std::runtime_error("Connected to multiplayer server but did not receive ServerHello from " +
+            failGameSession("Connected to multiplayer server but did not receive ServerHello from " +
                                      config.serverAddress + ":" +
                                      std::to_string(config.serverPort));
         }
@@ -301,7 +308,7 @@ World& GameSession::world() {
     if (m_fallbackWorld) {
         return *m_fallbackWorld;
     }
-    throw std::runtime_error("Session world is not initialized.");
+    failGameSession("Session world is not initialized.");
 }
 
 const World& GameSession::world() const {
@@ -311,7 +318,7 @@ const World& GameSession::world() const {
     if (m_fallbackWorld) {
         return *m_fallbackWorld;
     }
-    throw std::runtime_error("Session world is not initialized.");
+    failGameSession("Session world is not initialized.");
 }
 
 const IWorldView& GameSession::worldView() const {
@@ -352,91 +359,91 @@ const WeatherSystem& GameSession::weatherSystem() const {
 
 server::GameServer& GameSession::server() {
     if (!m_server) {
-        throw std::runtime_error("Server is not available in this session.");
+        failGameSession("Server is not available in this session.");
     }
     return *m_server;
 }
 
 const server::GameServer& GameSession::server() const {
     if (!m_server) {
-        throw std::runtime_error("Server is not available in this session.");
+        failGameSession("Server is not available in this session.");
     }
     return *m_server;
 }
 
 client::GameClient& GameSession::client() {
     if (!m_client) {
-        throw std::runtime_error("Client is not initialized.");
+        failGameSession("Client is not initialized.");
     }
     return *m_client;
 }
 
 const client::GameClient& GameSession::client() const {
     if (!m_client) {
-        throw std::runtime_error("Client is not initialized.");
+        failGameSession("Client is not initialized.");
     }
     return *m_client;
 }
 
 physics::PhysicsSystem& GameSession::physicsSystem() {
     if (!m_physicsSystem) {
-        throw std::runtime_error("Physics system is not initialized.");
+        failGameSession("Physics system is not initialized.");
     }
     return *m_physicsSystem;
 }
 
 ecs::GameplayScene& GameSession::gameplayScene() {
     if (!m_gameplayScene) {
-        throw std::runtime_error("Gameplay scene is not initialized.");
+        failGameSession("Gameplay scene is not initialized.");
     }
     return *m_gameplayScene;
 }
 
 const ecs::GameplayScene& GameSession::gameplayScene() const {
     if (!m_gameplayScene) {
-        throw std::runtime_error("Gameplay scene is not initialized.");
+        failGameSession("Gameplay scene is not initialized.");
     }
     return *m_gameplayScene;
 }
 
 DropSystem& GameSession::dropSystem() {
     if (!m_dropSystem) {
-        throw std::runtime_error("Drop system is not initialized.");
+        failGameSession("Drop system is not initialized.");
     }
     return *m_dropSystem;
 }
 
 ParticleSystem& GameSession::particleSystem() {
     if (!m_particleSystem) {
-        throw std::runtime_error("Particle system is not initialized.");
+        failGameSession("Particle system is not initialized.");
     }
     return *m_particleSystem;
 }
 
 RainRenderer& GameSession::rainRenderer() {
     if (!m_rainRenderer) {
-        throw std::runtime_error("Rain renderer is not initialized.");
+        failGameSession("Rain renderer is not initialized.");
     }
     return *m_rainRenderer;
 }
 
 CraftingSystem& GameSession::craftingSystem() {
     if (!m_craftingSystem) {
-        throw std::runtime_error("Crafting system is not initialized.");
+        failGameSession("Crafting system is not initialized.");
     }
     return *m_craftingSystem;
 }
 
 CameraController& GameSession::cameraController() {
     if (!m_cameraController) {
-        throw std::runtime_error("Camera controller is not initialized.");
+        failGameSession("Camera controller is not initialized.");
     }
     return *m_cameraController;
 }
 
 GameplayPresentationBuilder& GameSession::presentationBuilder() {
     if (!m_presentationBuilder) {
-        throw std::runtime_error("Presentation builder is not initialized.");
+        failGameSession("Presentation builder is not initialized.");
     }
     return *m_presentationBuilder;
 }
@@ -732,7 +739,7 @@ Inventory& GameSession::getPlayerInventory() {
     for (auto e : view) {
         return view.get<ecs::InventoryDataComponent>(e).inventory;
     }
-    throw std::runtime_error("Local player inventory is not initialized.");
+    failGameSession("Local player inventory is not initialized.");
 }
 
 void GameSession::shutdown() {
