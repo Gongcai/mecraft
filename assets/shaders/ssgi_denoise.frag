@@ -6,10 +6,12 @@ out vec4 FragColor;
 uniform sampler2D uInputTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uNormalAoTex;
+uniform sampler2D uMomentsTex;
 uniform vec2 uScreenSize;
 uniform float uNear;
 uniform float uStepWidth;
 uniform float uStrength;
+uniform int uMomentsAvailable;
 
 float linearizeDepth(float depth) {
     return 2.0 * uNear / max(1.0 - depth, 1e-7);
@@ -48,6 +50,18 @@ float estimateLocalNoise(ivec2 centerTexel, ivec2 maxTexel, float centerLuminanc
     return clamp(max(relativeSigma, 1.0 - meanConfidence), 0.0, 1.0);
 }
 
+float estimateTemporalNoise(vec2 uv, float centerLuminance) {
+    if (uMomentsAvailable == 0) {
+        return 0.0;
+    }
+
+    vec4 moments = texture(uMomentsTex, uv);
+    float variance = max(max(moments.y - moments.x * moments.x, 0.0), moments.w);
+    float relativeSigma = sqrt(variance) / max(centerLuminance + 0.035, 0.035);
+    float shortHistory = 1.0 - smoothstep(1.0, 16.0, moments.z);
+    return clamp(max(relativeSigma, shortHistory), 0.0, 1.0);
+}
+
 void main() {
     float centerDepth = texture(uDepthTex, vTexCoord).r;
     if (centerDepth >= 0.9999) {
@@ -63,7 +77,8 @@ void main() {
     ivec2 centerTexel = ivec2(gl_FragCoord.xy);
     ivec2 maxTexel = ivec2(uScreenSize) - 1;
     float centerConfidence = smoothstep(0.04, 0.45, center.a);
-    float localNoise = estimateLocalNoise(centerTexel, maxTexel, centerLuminance);
+    float localNoise = max(estimateLocalNoise(centerTexel, maxTexel, centerLuminance),
+                           estimateTemporalNoise(vTexCoord, centerLuminance));
 
     const float kernel[5] = float[](0.0625, 0.25, 0.375, 0.25, 0.0625);
     vec3 colorSum = center.rgb * 0.45;

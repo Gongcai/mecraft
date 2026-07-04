@@ -299,28 +299,38 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         glCreateFramebuffers(1, &m_ssgiHistoryFbo[i]);
         m_ssgiHistoryTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+        m_ssgiMomentsHistoryTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
+                                                     GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
         glNamedFramebufferTexture(m_ssgiHistoryFbo[i], GL_COLOR_ATTACHMENT0, m_ssgiHistoryTex[i], 0);
-        glNamedFramebufferDrawBuffers(m_ssgiHistoryFbo[i], 1, &ssgiDrawBuffer);
+        glNamedFramebufferTexture(m_ssgiHistoryFbo[i], GL_COLOR_ATTACHMENT1, m_ssgiMomentsHistoryTex[i], 0);
+        const GLenum ssgiHistoryDrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glNamedFramebufferDrawBuffers(m_ssgiHistoryFbo[i], 2, ssgiHistoryDrawBuffers);
         if (!checkFramebufferComplete(m_ssgiHistoryFbo[i], "SSGIHistory")) {
             shutdown();
             return false;
         }
         constexpr float clearBlack[] = {0.0f, 0.0f, 0.0f, 0.0f};
         glClearNamedFramebufferfv(m_ssgiHistoryFbo[i], GL_COLOR, 0, clearBlack);
+        glClearNamedFramebufferfv(m_ssgiHistoryFbo[i], GL_COLOR, 1, clearBlack);
     }
     m_ssgiHistoryIndex = 0;
 
     glCreateFramebuffers(1, &m_ssgiTemporalFbo);
     m_ssgiTemporalTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                         GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
+    m_ssgiTemporalMomentsTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
+                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0, m_ssgiTemporalTex, 0);
-    glNamedFramebufferDrawBuffers(m_ssgiTemporalFbo, 1, &ssgiDrawBuffer);
+    glNamedFramebufferTexture(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT1, m_ssgiTemporalMomentsTex, 0);
+    const GLenum ssgiTemporalDrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+    glNamedFramebufferDrawBuffers(m_ssgiTemporalFbo, 2, ssgiTemporalDrawBuffers);
     if (!checkFramebufferComplete(m_ssgiTemporalFbo, "SSGITemporal")) {
         shutdown();
         return false;
     }
     constexpr float clearSsgiTemporal[] = {0.0f, 0.0f, 0.0f, 0.0f};
     glClearNamedFramebufferfv(m_ssgiTemporalFbo, GL_COLOR, 0, clearSsgiTemporal);
+    glClearNamedFramebufferfv(m_ssgiTemporalFbo, GL_COLOR, 1, clearSsgiTemporal);
 
     glCreateFramebuffers(1, &m_sceneLightingFbo);
     m_sceneLightingTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -559,6 +569,7 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     renderer::debug::labelTexture(m_ssgiHalfResTex, "DeferredTargets.SSGIHalfResTex");
     renderer::debug::labelFramebuffer(m_ssgiTemporalFbo, "DeferredTargets.SSGITemporal");
     renderer::debug::labelTexture(m_ssgiTemporalTex, "DeferredTargets.SSGITemporalTex");
+    renderer::debug::labelTexture(m_ssgiTemporalMomentsTex, "DeferredTargets.SSGITemporalMomentsTex");
     for (int i = 0; i < 2; ++i) {
         char fboName[48], texName[48];
         std::snprintf(fboName, sizeof(fboName), "DeferredTargets.SSGIDenoise[%d]", i);
@@ -572,6 +583,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIHistoryTex[%d]", i);
         renderer::debug::labelFramebuffer(m_ssgiHistoryFbo[i], fboName);
         renderer::debug::labelTexture(m_ssgiHistoryTex[i], texName);
+        std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
+        renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
     }
     renderer::debug::labelFramebuffer(m_sceneLightingFbo, "DeferredTargets.SceneLighting");
     renderer::debug::labelTexture(m_sceneLightingTex, "DeferredTargets.SceneLightingTex");
@@ -745,8 +758,8 @@ void DeferredRenderTargets::bindSsgiDenoise(const int slot) {
 void DeferredRenderTargets::bindSsgiTemporal() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiTemporalFbo);
     glViewport(0, 0, m_width, m_height);
-    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-    glDrawBuffers(1, &drawBuffer);
+    const GLenum drawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+    glDrawBuffers(2, drawBuffers);
 }
 
 void DeferredRenderTargets::bindSceneLighting() {
@@ -1145,9 +1158,18 @@ void DeferredRenderTargets::copySsgiTemporalToHistory() {
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssgiTemporalFbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssgiHistoryFbo[m_ssgiHistoryIndex]);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
     glBlitFramebuffer(0, 0, m_width, m_height,
                       0, 0, m_width, m_height,
                       GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glReadBuffer(GL_COLOR_ATTACHMENT1);
+    glDrawBuffer(GL_COLOR_ATTACHMENT1);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiHistoryFbo[m_ssgiHistoryIndex]);
 }
 
@@ -1163,6 +1185,22 @@ void DeferredRenderTargets::copySsgiDenoiseToSsgi(const int slot) {
     }
     glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssgiDenoiseFbo[slot]);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssgiFbo);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glBlitFramebuffer(0, 0, m_width, m_height,
+                      0, 0, m_width, m_height,
+                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiFbo);
+}
+
+void DeferredRenderTargets::copySsgiTemporalToSsgi() {
+    if (!m_ready) {
+        return;
+    }
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssgiTemporalFbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssgiFbo);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    glDrawBuffer(GL_COLOR_ATTACHMENT0);
     glBlitFramebuffer(0, 0, m_width, m_height,
                       0, 0, m_width, m_height,
                       GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -1332,7 +1370,9 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssgiHalfResTex,
         m_ssgiDenoiseTex[0], m_ssgiDenoiseTex[1],
         m_ssgiHistoryTex[0], m_ssgiHistoryTex[1],
+        m_ssgiMomentsHistoryTex[0], m_ssgiMomentsHistoryTex[1],
         m_ssgiTemporalTex,
+        m_ssgiTemporalMomentsTex,
         m_velocityTex,
         m_perObjectVelocityTex,
         m_weatherMaskTex
@@ -1385,7 +1425,9 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssgiHalfResTex = 0;
     m_ssgiDenoiseTex[0] = 0; m_ssgiDenoiseTex[1] = 0;
     m_ssgiHistoryTex[0] = 0; m_ssgiHistoryTex[1] = 0;
+    m_ssgiMomentsHistoryTex[0] = 0; m_ssgiMomentsHistoryTex[1] = 0;
     m_ssgiTemporalTex = 0;
+    m_ssgiTemporalMomentsTex = 0;
     m_velocityTex = 0;
     m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;

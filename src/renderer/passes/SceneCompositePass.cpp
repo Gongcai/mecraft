@@ -137,9 +137,7 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D, settings.ssgi.temporalEnabled
-        ? targets.ssgiTemporalTexture()
-        : targets.ssgiTexture());
+    glBindTexture(GL_TEXTURE_2D, targets.ssgiTexture());
     glActiveTexture(GL_TEXTURE16);
     glBindTexture(GL_TEXTURE_3D, voxelGiEnabled ? voxelGiClipmap->texture() : 0);
 

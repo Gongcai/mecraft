@@ -103,9 +103,13 @@ public:
     [[nodiscard]] GLuint ssgiDenoiseTexture(int slot) const;
     [[nodiscard]] GLuint ssgiHistoryTexture() const { return m_ssgiHistoryTex[m_ssgiHistoryIndex]; }
     [[nodiscard]] GLuint ssgiHistoryTexturePrev() const { return m_ssgiHistoryTex[1 - m_ssgiHistoryIndex]; }
+    [[nodiscard]] GLuint ssgiMomentsHistoryTexture() const { return m_ssgiMomentsHistoryTex[m_ssgiHistoryIndex]; }
+    [[nodiscard]] GLuint ssgiMomentsHistoryTexturePrev() const { return m_ssgiMomentsHistoryTex[1 - m_ssgiHistoryIndex]; }
     [[nodiscard]] GLuint ssgiTemporalTexture() const { return m_ssgiTemporalTex; }
+    [[nodiscard]] GLuint ssgiTemporalMomentsTexture() const { return m_ssgiTemporalMomentsTex; }
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
     void copySsgiDenoiseToSsgi(int slot);
+    void copySsgiTemporalToSsgi();
     void copySsgiTemporalToHistory();
     [[nodiscard]] GLuint sceneLightingTexture() const { return m_sceneLightingTex; }
     [[nodiscard]] GLuint sceneCompositeTexture() const { return m_sceneCompositeTex; }
@@ -242,9 +246,11 @@ private:
     GLuint m_ssgiDenoiseTex[2] = {0, 0};
     GLuint m_ssgiHistoryFbo[2] = {0, 0};
     GLuint m_ssgiHistoryTex[2] = {0, 0};
+    GLuint m_ssgiMomentsHistoryTex[2] = {0, 0};
     int m_ssgiHistoryIndex = 0;
     GLuint m_ssgiTemporalFbo = 0;
     GLuint m_ssgiTemporalTex = 0;
+    GLuint m_ssgiTemporalMomentsTex = 0;
 
     GLuint m_sceneLightingFbo = 0;
     GLuint m_sceneLightingTex = 0;

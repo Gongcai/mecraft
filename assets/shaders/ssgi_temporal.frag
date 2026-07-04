@@ -1,10 +1,12 @@
 #version 450 core
 
 in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
+layout(location = 1) out vec4 MomentsColor;
 
 uniform sampler2D uCurrentTex;
 uniform sampler2D uHistoryTex;
+uniform sampler2D uHistoryMomentsTex;
 uniform sampler2D uVelocityTex;
 uniform sampler2D uDepthTex;
 uniform sampler2D uNormalAoTex;
@@ -21,8 +23,18 @@ vec3 decodeNormal(vec3 packedNormal) {
     return normalize(packedNormal * 2.0 - 1.0);
 }
 
+float luminance(vec3 color) {
+    return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
 bool invalidVec2(vec2 v) {
     return any(isnan(v)) || any(isinf(v));
+}
+
+void writeCurrent(vec4 current) {
+    float currentLuminance = luminance(max(current.rgb, vec3(0.0)));
+    FragColor = current;
+    MomentsColor = vec4(currentLuminance, currentLuminance * currentLuminance, 1.0, 0.0);
 }
 
 void main() {
@@ -35,6 +47,7 @@ void main() {
     float depth = texelFetch(uDepthTex, texel, 0).r;
     if (depth >= 0.9999) {
         FragColor = current;
+        MomentsColor = vec4(0.0);
         return;
     }
 
@@ -44,7 +57,7 @@ void main() {
         any(greaterThan(abs(velocity), vec2(1.0))) ||
         prevCoord.x < 0.0 || prevCoord.x > 1.0 ||
         prevCoord.y < 0.0 || prevCoord.y > 1.0) {
-        FragColor = current;
+        writeCurrent(current);
         return;
     }
 
@@ -67,6 +80,7 @@ void main() {
 
     vec2 safeHistoryUv = clamp(prevCoord, texelSize * 0.5, 1.0 - texelSize * 0.5);
     vec4 history = texture(uHistoryTex, safeHistoryUv);
+    vec4 historyMoments = texture(uHistoryMomentsTex, safeHistoryUv);
     vec3 meanColor = sumColor / max(sampleCount, 1.0);
     vec3 variance = max(sumColorSq / max(sampleCount, 1.0) - meanColor * meanColor, vec3(0.0));
     vec3 sigma = sqrt(variance);
@@ -94,4 +108,15 @@ void main() {
     vec3 color = mix(current.rgb, history.rgb, blendWeight);
     float alpha = mix(current.a, history.a, blendWeight);
     FragColor = vec4(max(color, vec3(0.0)), alpha);
+
+    float currentLuminance = luminance(max(current.rgb, vec3(0.0)));
+    float currentSecondMoment = currentLuminance * currentLuminance;
+    float momentWeight = clamp(blendWeight, 0.0, 0.98);
+    float firstMoment = mix(currentLuminance, historyMoments.x, momentWeight);
+    float secondMoment = mix(currentSecondMoment, historyMoments.y, momentWeight);
+    float historyFrames = min(historyMoments.z + 1.0, 32.0);
+    float historyContribution = smoothstep(0.02, 0.45, blendWeight);
+    float accumulatedFrames = mix(1.0, historyFrames, historyContribution);
+    float momentVariance = max(secondMoment - firstMoment * firstMoment, 0.0);
+    MomentsColor = vec4(firstMoment, secondMoment, accumulatedFrames, momentVariance);
 }

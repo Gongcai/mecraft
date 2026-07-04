@@ -26,7 +26,8 @@ private:
                         DeferredRenderTargets& targets);
     void renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets& targets);
     void renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
-                           DeferredRenderTargets& targets);
+                           DeferredRenderTargets& targets, GLuint inputTexture,
+                           GLuint momentsTexture);
     void renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& ssgi,
                             DeferredRenderTargets& targets);
 

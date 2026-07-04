@@ -32,11 +32,19 @@ void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     if (m_ssgiUpsampleShader != nullptr) {
         renderSsgiUpsample(ctx, targets);
     }
-    if (settings.ssgi.denoiseEnabled && m_ssgiDenoiseShader != nullptr) {
-        renderSsgiDenoise(ctx, settings.ssgi, targets);
-    }
-    if (settings.ssgi.temporalEnabled && m_ssgiTemporalShader != nullptr) {
+    const bool temporalActive = settings.ssgi.temporalEnabled && m_ssgiTemporalShader != nullptr;
+    if (temporalActive) {
         renderSsgiTemporal(ctx, settings.ssgi, targets);
+    }
+    const bool denoiseActive = settings.ssgi.denoiseEnabled &&
+        m_ssgiDenoiseShader != nullptr &&
+        std::clamp(settings.ssgi.denoiseIterations, 0, 4) > 0;
+    if (denoiseActive) {
+        renderSsgiDenoise(ctx, settings.ssgi, targets,
+                          temporalActive ? targets.ssgiTemporalTexture() : targets.ssgiTexture(),
+                          temporalActive ? targets.ssgiTemporalMomentsTexture() : 0);
+    } else if (temporalActive) {
+        targets.copySsgiTemporalToSsgi();
     }
 }
 
@@ -138,7 +146,8 @@ void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets
 }
 
 void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
-                                 DeferredRenderTargets& targets) {
+                                 DeferredRenderTargets& targets, const GLuint initialInputTexture,
+                                 const GLuint momentsTexture) {
     if (m_ssgiDenoiseShader == nullptr) {
         return;
     }
@@ -160,6 +169,8 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
     m_ssgiDenoiseShader->setInt("uInputTex", 0);
     m_ssgiDenoiseShader->setInt("uDepthTex", 1);
     m_ssgiDenoiseShader->setInt("uNormalAoTex", 2);
+    m_ssgiDenoiseShader->setInt("uMomentsTex", 3);
+    m_ssgiDenoiseShader->setInt("uMomentsAvailable", momentsTexture != 0 ? 1 : 0);
     m_ssgiDenoiseShader->setVec2("uScreenSize", screenSize);
     m_ssgiDenoiseShader->setFloat("uNear", ctx.camera.nearPlane);
     m_ssgiDenoiseShader->setFloat("uStrength", ssgi.denoiseStrength);
@@ -171,24 +182,26 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
         glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        const GLuint inputTexture = (i == 0)
-            ? targets.ssgiTexture()
+        const GLuint passInputTexture = (i == 0)
+            ? initialInputTexture
             : targets.ssgiDenoiseTexture(1 - outputSlot);
         m_ssgiDenoiseShader->setFloat("uStepWidth", static_cast<float>(1 << i));
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, inputTexture);
+        glBindTexture(GL_TEXTURE_2D, passInputTexture);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, momentsTexture);
 
         RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiDenoiseShader);
     }
 
     targets.copySsgiDenoiseToSsgi(outputSlot);
 
-    for (int i = 2; i >= 0; --i) {
+    for (int i = 3; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
@@ -215,6 +228,7 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     m_ssgiTemporalShader->setInt("uDepthTex", 3);
     m_ssgiTemporalShader->setInt("uNormalAoTex", 4);
     m_ssgiTemporalShader->setInt("uHistoryDepthTex", 5);
+    m_ssgiTemporalShader->setInt("uHistoryMomentsTex", 6);
     m_ssgiTemporalShader->setVec2("uScreenSize",
         glm::vec2(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height()))));
@@ -233,10 +247,12 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, targets.ssgiMomentsHistoryTexturePrev());
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiTemporalShader);
 
-    for (int i = 5; i >= 0; --i) {
+    for (int i = 6; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
