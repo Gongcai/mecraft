@@ -1,6 +1,8 @@
 #include "DoorBlock.h"
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include "../IWorldView.h"
 #include "../World.h"
@@ -8,6 +10,11 @@
 
 namespace DoorBlockLogic {
 namespace {
+
+[[noreturn]] void failDoorBlock(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 void requireDoorProperties() {
     if (PropIndices::FACING == PropIndices::INVALID ||
@@ -23,7 +30,7 @@ void requireDoorProperties() {
         PropIndices::POWERED == PropIndices::INVALID ||
         PropIndices::POWERED_TRUE == PropIndices::INVALID ||
         PropIndices::POWERED_FALSE == PropIndices::INVALID) {
-        throw std::runtime_error("Door blocks require facing, half=lower/upper, hinge, open, and powered properties");
+        failDoorBlock("Door blocks require facing, half=lower/upper, hinge, open, and powered properties");
     }
 }
 
@@ -36,7 +43,7 @@ bool isHorizontalFacingValue(const uint16_t facingValue) {
 
 void requireHorizontalFacingValue(const uint16_t facingValue) {
     if (!isHorizontalFacingValue(facingValue)) {
-        throw std::runtime_error("Door blocks require a horizontal facing value");
+        failDoorBlock("Door blocks require a horizontal facing value");
     }
 }
 
@@ -54,7 +61,7 @@ BlockStateId withRequiredProperty(const BlockStateId stateId,
                              const char* context) {
     const BlockStateId updated = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
-        throw std::runtime_error(context);
+        failDoorBlock(context);
     }
     return updated;
 }
@@ -70,7 +77,7 @@ uint16_t halfValue(const BlockStateId stateId) {
     requireDoorProperties();
     const uint16_t half = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::HALF);
     if (half != PropIndices::HALF_LOWER && half != PropIndices::HALF_UPPER) {
-        throw std::runtime_error("Door state requires half=lower or half=upper");
+        failDoorBlock("Door state requires half=lower or half=upper");
     }
     return half;
 }
@@ -79,7 +86,7 @@ uint16_t hingeValue(const BlockStateId stateId) {
     requireDoorProperties();
     const uint16_t hinge = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::HINGE);
     if (!isHingeValue(hinge)) {
-        throw std::runtime_error("Door state requires hinge=left or hinge=right");
+        failDoorBlock("Door state requires hinge=left or hinge=right");
     }
     return hinge;
 }
@@ -88,7 +95,7 @@ bool openValue(const BlockStateId stateId) {
     requireDoorProperties();
     const uint16_t open = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::OPEN);
     if (!isBooleanValue(open, PropIndices::OPEN_FALSE, PropIndices::OPEN_TRUE)) {
-        throw std::runtime_error("Door state requires open=false or open=true");
+        failDoorBlock("Door state requires open=false or open=true");
     }
     return open == PropIndices::OPEN_TRUE;
 }
@@ -97,7 +104,7 @@ bool poweredValue(const BlockStateId stateId) {
     requireDoorProperties();
     const uint16_t powered = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::POWERED);
     if (!isBooleanValue(powered, PropIndices::POWERED_FALSE, PropIndices::POWERED_TRUE)) {
-        throw std::runtime_error("Door state requires powered=false or powered=true");
+        failDoorBlock("Door state requires powered=false or powered=true");
     }
     return powered == PropIndices::POWERED_TRUE;
 }
@@ -109,7 +116,7 @@ uint16_t oppositeHalfValue(const uint16_t half) {
     if (half == PropIndices::HALF_UPPER) {
         return PropIndices::HALF_LOWER;
     }
-    throw std::runtime_error("Door state requires half=lower or half=upper");
+    failDoorBlock("Door state requires half=lower or half=upper");
 }
 
 bool isEmptyDoorCell(const IWorldView& worldView, const glm::ivec3& pos) {
@@ -186,13 +193,13 @@ BlockStateId makeDoorState(const BlockID blockId,
     requireDoorProperties();
     requireHorizontalFacingValue(facingValue);
     if (!isDoorBlock(blockId)) {
-        throw std::runtime_error("Door state construction requires a door block id");
+        failDoorBlock("Door state construction requires a door block id");
     }
     if (halfValue != PropIndices::HALF_LOWER && halfValue != PropIndices::HALF_UPPER) {
-        throw std::runtime_error("Door state construction requires half=lower or half=upper");
+        failDoorBlock("Door state construction requires half=lower or half=upper");
     }
     if (!isHingeValue(hingeValue)) {
-        throw std::runtime_error("Door state construction requires hinge=left or hinge=right");
+        failDoorBlock("Door state construction requires hinge=left or hinge=right");
     }
 
     BlockStateId stateId = BlockStateRegistry::getDefaultState(blockId);
@@ -266,7 +273,7 @@ bool isMatchingOtherHalf(const BlockStateId stateId, const BlockStateId otherSta
 
 void placeDoor(World& world, const DoorPlacement& placement) {
     if (!placement.valid) {
-        throw std::runtime_error("Cannot place an invalid door placement");
+        failDoorBlock("Cannot place an invalid door placement");
     }
     world.setBlockState(placement.lowerPos.x, placement.lowerPos.y, placement.lowerPos.z, placement.lowerState);
     world.setBlockState(placement.upperPos.x, placement.upperPos.y, placement.upperPos.z, placement.upperState);
