@@ -42,10 +42,10 @@
 // │ Entity skin             │ 60 │ Mecraft extension: player/mob humanoid renderer                                  │
 // └─────────────────────────┴────┴──────────────────────────────────────────────────────────────────────────────────┘
 //
-// Roughness/F0/Emission/SSS defaults (no PBR specular map):
-// - DerivativeMain Material.inc: without MC_SPECULAR_MAP, roughness=specTex.r, f0=specTex.g, emissiveness=0.0
-// - Mecraft: hardcoded per ID since no PBR texture pipeline; emission from BlockLighting.glsl logic
-// - SSS from DerivativeMain hardcoded fallback: grass=0.45, leaves/snow_ice=0.70, banner=0.65
+// Roughness/F0/Emission/SSS defaults:
+// - Block LabPBR _s textures can override the material channels in chunk_gbuffer.frag.
+// - When a block has no authored _s contribution, Mecraft keeps per-ID material defaults.
+// - SSS defaults follow DerivativeMain: grass=0.45, leaves/snow_ice=0.70, banner=0.65
 
 #ifndef MECRAFT_GBUFFER_CONTRACT_GLSL
 #define MECRAFT_GBUFFER_CONTRACT_GLSL
@@ -92,11 +92,11 @@ const float MATERIAL_ID_MAX = 63.0;
 const float EMISSIVE_CURVE = 2.2;
 
 struct SurfaceMaterial {
-    // DerivativeMain GetMaterialData(vec2): roughness=specTex.r,
-    // f0=specTex.g when MC_SPECULAR_MAP is disabled.
+    // Chunk G-buffer stores roughness directly. LabPBR smoothness is converted
+    // to roughness before packing this value.
     float roughness;
     float f0;
-    // Packed SSS/emission hints from DerivativeMain's specTex.ba fallback.
+    // Packed emission and SSS contributions.
     float emission;
     float sss;
 };
@@ -164,7 +164,7 @@ SurfaceMaterialAux defaultSurfaceMaterialAux() {
 }
 
 float derivativeHardcodedSss(int materialId) {
-    // Matches DerivativeMain Terrain/DH/Block hardcoded fallback when no
+    // Matches DerivativeMain Terrain/DH/Block per-ID values when no
     // resource-pack specular map is present: specularData.a carries SSS.
     if (materialId == MATERIAL_GRASS_LIKE) {
         return 0.45;
@@ -199,8 +199,7 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
     SurfaceMaterial material = defaultSurfaceMaterial();
     int materialId = derivativeFragmentMaterialId(materialKindId(materialKind));
 
-    // DerivativeMain Material.inc: roughness/f0 from specTex when no PBR map.
-    // Mecraft hardcodes per ID since no PBR texture pipeline.
+    // Per-ID material defaults used when no block _s texture contribution is present.
     if (materialId == MATERIAL_STAINED_GLASS) {
         material.roughness = 0.04;
         material.f0 = 0.04;
@@ -216,7 +215,7 @@ SurfaceMaterial surfaceMaterialForKind(float materialKind, float emissiveHint) {
         material.f0 = 0.04;
     }
 
-    // SSS from DerivativeMain hardcoded fallback (no PBR specular map).
+    // SSS from DerivativeMain per-ID defaults.
     // grass=0.45, leaves/snow_ice=0.70, banner=0.65, skin=0.35
     material.sss = derivativeHardcodedSss(materialId);
     // Emission from BlockLighting.glsl per-ID logic; pass albedo-based hint through.
@@ -234,9 +233,7 @@ SurfaceMaterialAux surfaceMaterialAuxForKind(float materialKind) {
         aux.wetnessMask = 1.0;
     }
     // Porosity: skin has moderate porosity for wetness absorption.
-    // Metalness: DerivativeMain sets isMetal from PBR specTex; without PBR maps,
-    // all blocks default to non-metal (metalness=0.0). Metal blocks (iron/gold/copper)
-    // would need PBR specular maps to be properly identified.
+    // LabPBR _s textures can raise metalness in chunk_gbuffer.frag.
     if (materialId == MATERIAL_SKIN) {
         aux.wetnessMask = 0.6;
         aux.porosity = 0.3;

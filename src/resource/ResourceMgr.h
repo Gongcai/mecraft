@@ -58,6 +58,7 @@ public:
     [[nodiscard]] bool hasBlockNormalMaps() const;
     [[nodiscard]] bool hasBlockSpecularMaps() const;
     [[nodiscard]] bool loadBlockTextureCatalog(const std::string& textureConfigPath);
+    [[nodiscard]] int getBlockTextureTileSize() const;
     [[nodiscard]] bool preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath);
     [[nodiscard]] int getTextureArrayLayer(const std::string& name) const;
     [[nodiscard]] TextureAnimationInfo getTextureAnimation(const std::string& name) const;

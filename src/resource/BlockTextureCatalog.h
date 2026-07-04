@@ -35,12 +35,14 @@ public:
     [[nodiscard]] const BlockTextureCatalogEntry* find(const std::string& name) const;
     [[nodiscard]] BlockTextureCatalogEntry* findMutable(const std::string& name);
     [[nodiscard]] ResourceTextureTint tintFor(const std::string& name) const;
+    [[nodiscard]] int tileSize() const;
 
     [[nodiscard]] const EntryMap& entries() const;
     [[nodiscard]] EntryMap& entries();
 
 private:
     EntryMap m_entries;
+    int m_tileSize = 16;
 };
 
 #endif // MECRAFT_BLOCK_TEXTURE_CATALOG_H

@@ -133,6 +133,10 @@ bool ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) 
     return m_impl->blockTextures.loadCatalog(textureConfigPath);
 }
 
+int ResourceMgr::getBlockTextureTileSize() const {
+    return m_impl->blockTextures.tileSize();
+}
+
 bool ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath) {
     return resource::preloadEntityTexturesFromConfig(*this, entitiesConfigPath);
 }

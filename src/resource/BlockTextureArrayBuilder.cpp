@@ -21,7 +21,7 @@ namespace {
 }
 
 constexpr std::array<unsigned char, 4> kNeutralNormalPixel = {128, 128, 255, 0};
-constexpr std::array<unsigned char, 4> kNeutralSpecularPixel = {0, 0, 0, 255};
+constexpr std::array<unsigned char, 4> kNeutralSpecularPixel = {0, 0, 0, 0};
 
 struct ResourceTint {
     float r = 1.0f;

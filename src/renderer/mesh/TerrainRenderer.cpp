@@ -271,6 +271,10 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     shader.setInt("uWaterNoiseTex", 8);
     shader.setInt("uNoiseTex", 9);
     shader.setInt("uRippleNormalTex", 10);
+    shader.setInt("uBlockNormalTex", 11);
+    shader.setInt("uBlockSpecularTex", 12);
+    shader.setInt("uHasBlockNormalMaps", resourceMgr != nullptr && resourceMgr->hasBlockNormalMaps() ? 1 : 0);
+    shader.setInt("uHasBlockSpecularMaps", resourceMgr != nullptr && resourceMgr->hasBlockSpecularMaps() ? 1 : 0);
     shader.setInt("uSkyCaptureEnabled", deferredFrameActive ? 1 : 0);
     shader.setInt("uCompositeInputsEnabled", 0);
     shader.setInt("uWaterCompositeEnabled", 0);
@@ -326,6 +330,10 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_noise2d") : 0);
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_ripple_normal") : 0);
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, resourceMgr != nullptr ? resourceMgr->getBlockNormalTextureArray().textureID : 0);
+    glActiveTexture(GL_TEXTURE12);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, resourceMgr != nullptr ? resourceMgr->getBlockSpecularTextureArray().textureID : 0);
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
 }
@@ -537,16 +545,16 @@ void TerrainRenderer::renderOpaqueChunksAndCollectPasses(const IWorldView& world
                     ++m_chunkTestsThisFrame;
 #endif
                     const int yBase = scy * SubChunk::SIZE;
-                    const glm::vec3 fallbackMin(
+                    const glm::vec3 derivedMin(
                         static_cast<float>(offset.x),
                         static_cast<float>(offset.y + yBase),
                         static_cast<float>(offset.z));
-                    const glm::vec3 fallbackMax(
+                    const glm::vec3 derivedMax(
                         static_cast<float>(offset.x + Chunk::SIZE_X),
                         static_cast<float>(offset.y + yBase + SubChunk::SIZE),
                         static_cast<float>(offset.z + Chunk::SIZE_Z));
-                    const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : fallbackMin;
-                    const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : fallbackMax;
+                    const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : derivedMin;
+                    const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : derivedMax;
                     if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
                         continue;
                     }
@@ -795,16 +803,16 @@ void TerrainRenderer::collectShadowChunks(
                     }
 
                     const int yBase = scy * SubChunk::SIZE;
-                    const glm::vec3 fallbackMin(
+                    const glm::vec3 derivedMin(
                         offset.x,
                         offset.y + static_cast<float>(yBase),
                         offset.z);
-                    const glm::vec3 fallbackMax(
+                    const glm::vec3 derivedMax(
                         offset.x + static_cast<float>(Chunk::SIZE_X),
                         offset.y + static_cast<float>(yBase + SubChunk::SIZE),
                         offset.z + static_cast<float>(Chunk::SIZE_Z));
-                    const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : fallbackMin;
-                    const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : fallbackMax;
+                    const glm::vec3 boundsMin = mesh.hasBounds ? mesh.boundsMin : derivedMin;
+                    const glm::vec3 boundsMax = mesh.hasBounds ? mesh.boundsMax : derivedMax;
                     if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
                         continue;
                     }

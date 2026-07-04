@@ -19,7 +19,7 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     if (!resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH)) {
         return false;
     }
-    resourceMgr.buildBlockTextureResources(BLOCKS_TEXTURES_DIR, 16);
+    resourceMgr.buildBlockTextureResources(BLOCKS_TEXTURES_DIR, resourceMgr.getBlockTextureTileSize());
     resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
     resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, true, true, false);

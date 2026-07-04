@@ -178,20 +178,17 @@ bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
             }
         }
 
-        if (tileSize != 16) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Only 16px block texture tiles are currently supported\n");
-            return false;
-        }
-
         entries.emplace(name, entry);
     }
 
     m_entries = std::move(entries);
+    m_tileSize = tileSize;
     return true;
 }
 
 void BlockTextureCatalog::clear() {
     m_entries.clear();
+    m_tileSize = 16;
 }
 
 const BlockTextureCatalogEntry* BlockTextureCatalog::find(const std::string& name) const {
@@ -207,6 +204,10 @@ BlockTextureCatalogEntry* BlockTextureCatalog::findMutable(const std::string& na
 ResourceTextureTint BlockTextureCatalog::tintFor(const std::string& name) const {
     const BlockTextureCatalogEntry* entry = find(name);
     return entry != nullptr ? entry->tint : ResourceTextureTint::None;
+}
+
+int BlockTextureCatalog::tileSize() const {
+    return m_tileSize;
 }
 
 const BlockTextureCatalog::EntryMap& BlockTextureCatalog::entries() const {

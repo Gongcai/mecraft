@@ -24,11 +24,15 @@ in vec2 vTintUV;
 in vec3 vWorldPos;
 
 uniform sampler2DArray texArray;
+uniform sampler2DArray uBlockNormalTex;
+uniform sampler2DArray uBlockSpecularTex;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uRippleNormalTex;
 uniform sampler2D uGrassColormap;
 uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
+uniform int uHasBlockNormalMaps;
+uniform int uHasBlockSpecularMaps;
 uniform float uAnimationTime;
 uniform float uShaderTime;
 uniform float uSurfaceWetness;
@@ -70,6 +74,42 @@ vec3 decodeFaceNormal(float face) {
     return vec3(1.0, 0.0, 0.0);
 }
 
+mat3 cotangentFrame(vec3 normal, vec3 position, vec2 uv) {
+    vec3 dp1 = dFdx(position);
+    vec3 dp2 = dFdy(position);
+    vec2 duv1 = dFdx(uv);
+    vec2 duv2 = dFdy(uv);
+
+    vec3 dp2perp = cross(dp2, normal);
+    vec3 dp1perp = cross(normal, dp1);
+    vec3 tangent = dp2perp * duv1.x + dp1perp * duv2.x;
+    vec3 bitangent = dp2perp * duv1.y + dp1perp * duv2.y;
+    float invLength = inversesqrt(max(dot(tangent, tangent), dot(bitangent, bitangent)));
+    return mat3(tangent * invLength, bitangent * invLength, normal);
+}
+
+vec3 applyBlockNormalMap(vec3 geometricNormal, vec3 position, vec2 uv, vec4 normalTexel) {
+    vec3 tangentNormal = normalize(normalTexel.xyz * 2.0 - 1.0);
+    return normalize(cotangentFrame(geometricNormal, position, uv) * tangentNormal);
+}
+
+bool hasAuthoredSpecularData(vec4 specularTexel) {
+    return dot(specularTexel, vec4(1.0)) > (1.0 / 255.0);
+}
+
+void applyLabPbrSpecularMap(vec4 specularTexel,
+                            int materialId,
+                            float emissiveHint,
+                            inout SurfaceMaterial material,
+                            inout SurfaceMaterialAux aux) {
+    float smoothness = clamp(specularTexel.r, 0.0, 1.0);
+    material.roughness = sqr(1.0 - smoothness);
+    material.f0 = clamp(specularTexel.g, 0.0, 1.0);
+    material.emission = max(material.emission, derivativeEmissionHint(materialId, max(specularTexel.b, emissiveHint)));
+    material.sss = max(material.sss, clamp(specularTexel.a, 0.0, 1.0));
+    aux.metalness = max(aux.metalness, smoothstep(229.5 / 255.0, 230.5 / 255.0, specularTexel.g));
+}
+
 void main() {
     bool isCrossVegetation = (vNormal > -2.5 && vNormal < -0.5);
     bool forceBaseLod = (uForceBaseLod != 0) || isCrossVegetation;
@@ -107,6 +147,22 @@ void main() {
     float emissiveHint = isEmissiveMaterial ? emissiveMask * clamp(vBlockLight * 1.25, 0.0, 1.0) : 0.0;
     SurfaceMaterial material = surfaceMaterialForKind(vMaterialKind, emissiveHint);
     SurfaceMaterialAux aux = surfaceMaterialAuxForKind(vMaterialKind);
+
+    if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
+        vec4 normalTexel = forceBaseLod
+            ? textureLod(uBlockNormalTex, vec3(vUV, sampledLayer), 0.0)
+            : texture(uBlockNormalTex, vec3(vUV, sampledLayer));
+        normal = applyBlockNormalMap(normal, vWorldPos, vUV, normalTexel);
+    }
+
+    if (uHasBlockSpecularMaps != 0) {
+        vec4 specularTexel = forceBaseLod
+            ? textureLod(uBlockSpecularTex, vec3(vUV, sampledLayer), 0.0)
+            : texture(uBlockSpecularTex, vec3(vUV, sampledLayer));
+        if (hasAuthoredSpecularData(specularTexel)) {
+            applyLabPbrSpecularMap(specularTexel, derivativeMaterialId, emissiveHint, material, aux);
+        }
+    }
 
     bool canReceiveTerrainRain = !isCrossVegetation &&
                                  derivativeMaterialId != MATERIAL_WATER &&

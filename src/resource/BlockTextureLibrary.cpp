@@ -153,6 +153,10 @@ const BlockTextureCatalog& BlockTextureLibrary::catalog() const {
     return m_catalog;
 }
 
+int BlockTextureLibrary::tileSize() const {
+    return m_catalog.tileSize();
+}
+
 const glm::vec3& BlockTextureLibrary::textureAverageColor(const int arrayLayer) const {
     assert(arrayLayer >= 0);
     assert(static_cast<size_t>(arrayLayer) < m_textureAverageColors.size());

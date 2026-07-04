@@ -33,6 +33,7 @@ public:
     [[nodiscard]] bool hasSpecularMaps() const;
     [[nodiscard]] const std::vector<unsigned char>& atlasPixels() const;
     [[nodiscard]] const BlockTextureCatalog& catalog() const;
+    [[nodiscard]] int tileSize() const;
     [[nodiscard]] const glm::vec3& textureAverageColor(int arrayLayer) const;
 
     [[nodiscard]] int textureArrayLayer(const std::string& name) const;
