@@ -1,6 +1,7 @@
 #include "GameResourceBootstrapper.h"
 
 #include "../Paths.h"
+#include "../game/interaction/BlockInteractionRegistry.h"
 #include "../game/inventory/ContainerBehaviorRegistry.h"
 #include "../item/Item.h"
 #include "../resource/AtmosphereLutProbe.h"
@@ -38,7 +39,9 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.loadGuiTexture("widgets", WIDGETS_TEXTURE_PATH, true);
     resourceMgr.loadGuiTexture("inventory", INVENTORY_TEX_PATH, true);
 
-    if (!ContainerBehaviorRegistry::init() || !ui::ContainerUiRegistry::init()) {
+    if (!ContainerBehaviorRegistry::init() ||
+        !BlockInteractionRegistry::init() ||
+        !ui::ContainerUiRegistry::init()) {
         return false;
     }
     for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
