@@ -13,7 +13,8 @@
 #include "../../../world/block/PropIndices.h"
 
 #include <array>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,11 @@
 
 namespace ecs {
 namespace {
+
+[[noreturn]] void failRedstoneDeviceActionSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr float kDispensedItemSpeed = 4.0f;
 constexpr float kDispensedItemOffset = 0.72f;
@@ -30,12 +36,12 @@ uint16_t requiredPropertyValue(const BlockStateId stateId,
                                const uint16_t property,
                                const char* propertyName) {
     if (property == PropIndices::INVALID) {
-        throw std::runtime_error(std::string("Redstone device property is not registered: ") + propertyName);
+        failRedstoneDeviceActionSystem(std::string("Redstone device property is not registered: ") + propertyName);
     }
 
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string("Redstone device state is missing property: ") + propertyName);
+        failRedstoneDeviceActionSystem(std::string("Redstone device state is missing property: ") + propertyName);
     }
     return value;
 }
@@ -59,7 +65,7 @@ glm::ivec3 directionFromFacingValue(const uint16_t facing) {
     if (facing == PropIndices::FACING_DOWN) {
         return {0, -1, 0};
     }
-    throw std::runtime_error("Redstone device state contains an unknown facing value");
+    failRedstoneDeviceActionSystem("Redstone device state contains an unknown facing value");
 }
 
 glm::ivec3 facingDirection(const BlockStateId stateId) {
@@ -101,16 +107,16 @@ int selectTriggeredSlot(const BlockEntityInventory& inventory,
 
 const ContainerBehaviorDef& storageBehaviorForDevice(const BlockDef& blockDef) {
     if (blockDef.containerUi.empty()) {
-        throw std::runtime_error(blockDef.namespacedId.full() + " redstone device requires a container UI binding");
+        failRedstoneDeviceActionSystem(blockDef.namespacedId.full() + " redstone device requires a container UI binding");
     }
 
     const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(blockDef.containerUi);
     const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
     if (behavior.handler != "storage") {
-        throw std::runtime_error(behavior.id + " redstone device requires storage container behavior");
+        failRedstoneDeviceActionSystem(behavior.id + " redstone device requires storage container behavior");
     }
     if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-        throw std::runtime_error(behavior.id + " redstone device requires block_entity storage");
+        failRedstoneDeviceActionSystem(behavior.id + " redstone device requires block_entity storage");
     }
     return behavior;
 }
@@ -140,7 +146,7 @@ void replaceSingleItemInSlot(BlockEntityInventory& inventory,
                              const ItemStack& stack,
                              const ItemID resultItem) {
     if (stack.count != 1) {
-        throw std::runtime_error("Single-result redstone device action received a multi-item stack");
+        failRedstoneDeviceActionSystem("Single-result redstone device action received a multi-item stack");
     }
 
     if (resultItem == RUNTIME_ID_NULL) {
@@ -219,7 +225,7 @@ bool launchProjectile(GameplayRegistry& registry,
                       const glm::ivec3& direction) {
     std::string projectileLoadError;
     if (!ensureThrowableProjectileDefinitionsLoaded(&projectileLoadError)) {
-        throw std::runtime_error("Failed to load projectile definitions: " + projectileLoadError);
+        failRedstoneDeviceActionSystem("Failed to load projectile definitions: " + projectileLoadError);
     }
 
     ProjectileDefinition definition;
@@ -314,7 +320,7 @@ bool executeDeviceEvent(World& world,
         world.getBlockState(event.position.x, event.position.y, event.position.z);
     if (currentState == NULL_BLOCK_STATE ||
         BlockStateRegistry::getBlockId(currentState) != event.blockId) {
-        throw std::runtime_error("Redstone device activation event does not match the current block state");
+        failRedstoneDeviceActionSystem("Redstone device activation event does not match the current block state");
     }
 
     const BlockDef& blockDef = BlockRegistry::getFast(event.blockId);
@@ -327,7 +333,7 @@ bool executeDeviceEvent(World& world,
     if (blockDef.redstoneBehavior == "dropper") {
         return executeDispenser(world, registry, event, false);
     }
-    throw std::runtime_error("Unsupported redstone device action: " + blockDef.redstoneBehavior);
+    failRedstoneDeviceActionSystem("Unsupported redstone device action: " + blockDef.redstoneBehavior);
 }
 
 } // namespace
