@@ -1,7 +1,9 @@
 #include "WireContainerPlacement.h"
 
 #include <array>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include "../World.h"
 #include "../block/Block.h"
@@ -11,6 +13,11 @@
 #include "WireFaceGeometry.h"
 
 namespace {
+
+[[noreturn]] void failWireContainerPlacement(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 bool isPlainWireState(const BlockStateId stateId) {
     if (stateId == NULL_BLOCK_STATE || FluidState::decode(stateId).kind != FluidKind::None) {
@@ -35,7 +42,7 @@ uint16_t requiredProperty(const BlockStateId stateId,
                           const char* propertyName) {
     const uint16_t value = BlockStateRegistry::getPropertyIndex(stateId, property);
     if (value == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error(std::string("Wire container placement requires property: ") + propertyName);
+        failWireContainerPlacement(std::string("Wire container placement requires property: ") + propertyName);
     }
     return value;
 }
@@ -69,7 +76,7 @@ uint8_t powerFromState(const BlockStateId stateId) {
             return power;
         }
     }
-    throw std::runtime_error("Wire container placement received an unknown redstone power value");
+    failWireContainerPlacement("Wire container placement received an unknown redstone power value");
 }
 
 glm::ivec3 axis1PositiveOffset(const uint16_t facing) {
@@ -79,7 +86,7 @@ glm::ivec3 axis1PositiveOffset(const uint16_t facing) {
     if (WireFaceGeometry::isWireFacing(facing)) {
         return {1, 0, 0};
     }
-    throw std::runtime_error("Wire container placement received an unsupported wire facing");
+    failWireContainerPlacement("Wire container placement received an unsupported wire facing");
 }
 
 glm::ivec3 axis2PositiveOffset(const uint16_t facing) {
@@ -89,7 +96,7 @@ glm::ivec3 axis2PositiveOffset(const uint16_t facing) {
     if (WireFaceGeometry::isWireFacing(facing)) {
         return {0, 1, 0};
     }
-    throw std::runtime_error("Wire container placement received an unsupported wire facing");
+    failWireContainerPlacement("Wire container placement received an unsupported wire facing");
 }
 
 uint8_t connectionBitForOffset(const uint16_t facing, const glm::ivec3& offset) {
@@ -107,7 +114,7 @@ uint8_t connectionBitForOffset(const uint16_t facing, const glm::ivec3& offset) 
     if (offset == -axis2) {
         return WireConnectionBits::AXIS2_NEG;
     }
-    throw std::runtime_error("Wire container placement received a connection outside the wire plane");
+    failWireContainerPlacement("Wire container placement received a connection outside the wire plane");
 }
 
 uint8_t connectionsFromState(const BlockStateId stateId, const uint16_t facing) {
@@ -118,7 +125,7 @@ uint8_t connectionsFromState(const BlockStateId stateId, const uint16_t facing) 
             continue;
         }
         if (value != direction.sideValue) {
-            throw std::runtime_error("Wire container placement requires none/side wire connection values");
+            failWireContainerPlacement("Wire container placement requires none/side wire connection values");
         }
         connections |= connectionBitForOffset(facing, direction.offset);
     }
@@ -128,7 +135,7 @@ uint8_t connectionsFromState(const BlockStateId stateId, const uint16_t facing) 
 uint16_t wireFacingFromState(const BlockStateId stateId) {
     const uint16_t facing = requiredProperty(stateId, PropIndices::FACING, "facing");
     if (!WireFaceGeometry::isWireFacing(facing)) {
-        throw std::runtime_error("Wire container placement received an unsupported wire facing");
+        failWireContainerPlacement("Wire container placement received an unsupported wire facing");
     }
     return facing;
 }
@@ -137,7 +144,7 @@ WirePart partFromWireState(const BlockStateId stateId, const bool preserveRuntim
     const BlockID blockId = BlockStateRegistry::getBlockId(stateId);
     const BlockDef& def = BlockRegistry::getFast(blockId);
     if (def.redstoneWireChannelId == 0) {
-        throw std::runtime_error("Wire container placement requires a registered wire channel");
+        failWireContainerPlacement("Wire container placement requires a registered wire channel");
     }
 
     WirePart part;
@@ -157,7 +164,7 @@ BlockStateId wireContainerDefaultState() {
 
 BlockID requireWireBlockForChannel(const uint16_t channelId) {
     if (channelId == 0) {
-        throw std::runtime_error("Wire container part requires a non-zero redstone channel");
+        failWireContainerPlacement("Wire container part requires a non-zero redstone channel");
     }
 
     BlockID matchedBlock = RUNTIME_ID_NULL;
@@ -168,13 +175,13 @@ BlockID requireWireBlockForChannel(const uint16_t channelId) {
             continue;
         }
         if (matchedBlock != RUNTIME_ID_NULL) {
-            throw std::runtime_error("Wire container part channel maps to multiple wire blocks");
+            failWireContainerPlacement("Wire container part channel maps to multiple wire blocks");
         }
         matchedBlock = blockId;
     }
 
     if (matchedBlock == RUNTIME_ID_NULL) {
-        throw std::runtime_error("Wire container part channel has no registered wire block");
+        failWireContainerPlacement("Wire container part channel has no registered wire block");
     }
     return matchedBlock;
 }
@@ -249,7 +256,7 @@ ApplyResult apply(World& world,
         }
 
         if (world.wireContainerParts().find(position) != nullptr) {
-            throw std::runtime_error("Plain wire cell unexpectedly has wire container parts");
+            failWireContainerPlacement("Plain wire cell unexpectedly has wire container parts");
         }
         world.wireContainerParts().getOrCreate(position) = parts;
         world.setBlockState(position.x, position.y, position.z, wireContainerDefaultState());
@@ -273,7 +280,7 @@ WireContainerParts removePartsOnFace(World& world,
                                      const glm::ivec3& position,
                                      const uint16_t facing) {
     if (!WireFaceGeometry::isWireFacing(facing)) {
-        throw std::runtime_error("Wire container part removal received an unsupported wire facing");
+        failWireContainerPlacement("Wire container part removal received an unsupported wire facing");
     }
     if (!world.isChunkLoadedForBlock(position.x, position.y, position.z)) {
         return {};
@@ -286,7 +293,7 @@ WireContainerParts removePartsOnFace(World& world,
 
     const WireContainerParts* storedParts = world.wireContainerParts().find(position);
     if (storedParts == nullptr) {
-        throw std::runtime_error("Wire container block is missing its part store entry");
+        failWireContainerPlacement("Wire container block is missing its part store entry");
     }
 
     WireContainerParts remainingParts;
@@ -294,12 +301,12 @@ WireContainerParts removePartsOnFace(World& world,
     storedParts->forEach([&](const WirePart& part) {
         if (part.facing == facing) {
             if (!removedParts.addPart(part)) {
-                throw std::runtime_error("Wire container part removal could not record the removed part");
+                failWireContainerPlacement("Wire container part removal could not record the removed part");
             }
             return;
         }
         if (!remainingParts.addPart(part)) {
-            throw std::runtime_error("Wire container part removal could not preserve an existing part");
+            failWireContainerPlacement("Wire container part removal could not preserve an existing part");
         }
     });
 
