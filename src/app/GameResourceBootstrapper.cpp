@@ -7,12 +7,12 @@
 #include "../ui/inventory/ContainerUiRegistry.h"
 #include "../world/block/Block.h"
 
-#include <stdexcept>
+#include <iostream>
 #include <string>
 
 namespace app {
 
-void bootstrapGameResources(ResourceMgr& resourceMgr) {
+bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.init();
     resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH);
     resourceMgr.buildBlockTextureResources(BLOCKS_TEXTURES_DIR, 16);
@@ -39,7 +39,8 @@ void bootstrapGameResources(ResourceMgr& resourceMgr) {
     for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
         const std::string texturePath = std::string(ASSETS_DIR) + "/" + def.backgroundTexturePath;
         if (resourceMgr.loadGuiTexture(def.backgroundTexture, texturePath, true) == 0) {
-            throw std::runtime_error("Failed to load container UI texture for " + id + ": " + texturePath);
+            std::cerr << "Failed to load container UI texture for " << id << ": " << texturePath << '\n';
+            return false;
         }
     }
 
@@ -72,6 +73,7 @@ void bootstrapGameResources(ResourceMgr& resourceMgr) {
     BlockRegistry::init(&resourceMgr);
     ItemRegistry::init();
     resourceMgr.buildBlockIconAtlas(64);
+    return true;
 }
 
 } // namespace app

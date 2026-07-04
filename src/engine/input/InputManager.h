@@ -121,8 +121,8 @@ public:
     void update();
     [[nodiscard]] const InputSnapshot& snapshot() const;
 
-    void configureInputRecording(const std::filesystem::path& path);
-    void configureInputPlayback(const std::filesystem::path& path);
+    [[nodiscard]] bool configureInputRecording(const std::filesystem::path& path);
+    [[nodiscard]] bool configureInputPlayback(const std::filesystem::path& path);
     void setInputReplayActive(bool active);
     void shutdownInputReplay();
     [[nodiscard]] bool isInputReplayConfigured() const { return m_replayMode != ReplayMode::None; }
@@ -221,4 +221,3 @@ private:
 
 
 #endif //MECRAFT_INPUTMANAGER_H
-

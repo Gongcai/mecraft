@@ -5,7 +5,7 @@ class ResourceMgr;
 
 namespace app {
 
-void bootstrapGameResources(ResourceMgr& resourceMgr);
+[[nodiscard]] bool bootstrapGameResources(ResourceMgr& resourceMgr);
 
 } // namespace app
 

@@ -3,7 +3,6 @@
 #include "../../Diagnostics.h"
 
 #include <iostream>
-#include <stdexcept>
 
 namespace {
 
@@ -15,6 +14,7 @@ void glfwErrorCallback(int error, const char* description) {
 } // namespace
 
 bool Window::init(int width, int height, const char *title, bool enableGlDebugOutput) {
+    (void)enableGlDebugOutput;
     glfwSetErrorCallback(glfwErrorCallback);
     if (!glfwInit()) {
         const char* description = nullptr;
@@ -55,7 +55,11 @@ bool Window::init(int width, int height, const char *title, bool enableGlDebugOu
     MECRAFT_LOG_STREAM(std::cout << "GLSL: " << (glslVersion != nullptr ? glslVersion : "unknown") << "\n");
     MECRAFT_LOG_STREAM(std::cout << "GLAD OpenGL 4.5: " << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << "\n");
     if (!GLAD_GL_VERSION_4_5) {
-        throw std::runtime_error("OpenGL 4.5 core is required for the hybrid deferred renderer.");
+        MECRAFT_LOG_STREAM(std::cerr << "OpenGL 4.5 core is required for the hybrid deferred renderer.\n");
+        glfwDestroyWindow(m_window);
+        m_window = nullptr;
+        glfwTerminate();
+        return false;
     }
 #ifdef MECRAFT_DEBUG
     if (enableGlDebugOutput && GLAD_GL_VERSION_4_3) {

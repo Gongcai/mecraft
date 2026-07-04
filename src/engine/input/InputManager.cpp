@@ -6,10 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <iterator>
-#include <stdexcept>
+#include <limits>
 
 #ifdef MECRAFT_DEBUG
 #include <chrono>
@@ -33,18 +34,25 @@ json boolArrayToIndices(const bool (&values)[Count]) {
 }
 
 template <size_t Count>
-void indicesToBoolArray(const json& indices, bool (&values)[Count]) {
+bool indicesToBoolArray(const json& indices, bool (&values)[Count]) {
     std::fill(std::begin(values), std::end(values), false);
     if (!indices.is_array()) {
-        throw std::runtime_error("Input replay index list must be an array");
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Index list must be an array\n");
+        return false;
     }
     for (const json& item : indices) {
-        const int index = item.get<int>();
-        if (index < 0 || index >= static_cast<int>(Count)) {
-            throw std::runtime_error("Input replay index is out of range");
+        if (!item.is_number_integer()) {
+            MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Index list contains a non-integer value\n");
+            return false;
+        }
+        const auto index = item.get<int64_t>();
+        if (index < 0 || index >= static_cast<int64_t>(Count)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Index is out of range\n");
+            return false;
         }
         values[static_cast<size_t>(index)] = true;
     }
+    return true;
 }
 
 json snapshotToJson(const InputSnapshot& snapshot) {
@@ -91,57 +99,186 @@ json snapshotToJson(const InputSnapshot& snapshot) {
     return frame;
 }
 
-glm::vec2 readVec2(const json& value, const char* fieldName) {
-    if (!value.is_array() || value.size() != 2) {
-        throw std::runtime_error(std::string("Input replay field must be a vec2: ") + fieldName);
+const json* findField(const json& object, const char* fieldName) {
+    if (!object.is_object()) {
+        return nullptr;
     }
-    return {value[0].get<float>(), value[1].get<float>()};
+    const auto it = object.find(fieldName);
+    return it != object.end() ? &(*it) : nullptr;
 }
 
-InputSnapshot snapshotFromJson(const json& frame) {
-    InputSnapshot snapshot;
-    indicesToBoolArray(frame.at("keys"), snapshot.keys);
-    indicesToBoolArray(frame.at("keysJustPressed"), snapshot.keysJustPressed);
-    indicesToBoolArray(frame.at("keysJustReleased"), snapshot.keysJustReleased);
-    indicesToBoolArray(frame.at("keysDoubleTapped"), snapshot.keysDoubleTapped);
-    indicesToBoolArray(frame.at("mouseButtons"), snapshot.mouseButtons);
-    indicesToBoolArray(frame.at("mouseButtonsJustPressed"), snapshot.mouseButtonsJustPressed);
-    indicesToBoolArray(frame.at("mouseButtonsJustReleased"), snapshot.mouseButtonsJustReleased);
-    indicesToBoolArray(frame.at("mouseButtonsDoubleTapped"), snapshot.mouseButtonsDoubleTapped);
-    snapshot.mousePosition = readVec2(frame.at("mousePosition"), "mousePosition");
-    snapshot.mouseDelta = readVec2(frame.at("mouseDelta"), "mouseDelta");
-    snapshot.scrollDelta = frame.at("scrollDelta").get<double>();
-
-    const json& typedChars = frame.at("typedChars");
-    if (!typedChars.is_array() || typedChars.size() > InputSnapshot::kMaxTypedCharsPerFrame) {
-        throw std::runtime_error("Input replay typed character list is invalid");
+bool readBoolField(const json& object, const char* fieldName, bool& out) {
+    const json* value = findField(object, fieldName);
+    if (value == nullptr || !value->is_boolean()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Field must be a boolean: %s\n", fieldName);
+        return false;
     }
-    snapshot.typedCharCount = typedChars.size();
+    out = value->get<bool>();
+    return true;
+}
+
+bool readIntField(const json& object, const char* fieldName, int& out) {
+    const json* value = findField(object, fieldName);
+    if (value == nullptr || !value->is_number_integer()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Field must be an integer: %s\n", fieldName);
+        return false;
+    }
+    const auto raw = value->get<int64_t>();
+    if (raw < std::numeric_limits<int>::min() || raw > std::numeric_limits<int>::max()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Integer field is out of range: %s\n", fieldName);
+        return false;
+    }
+    out = static_cast<int>(raw);
+    return true;
+}
+
+bool readUint32Value(const json& value, const char* fieldName, uint32_t& out) {
+    if (!value.is_number_integer()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Field must be an unsigned integer: %s\n", fieldName);
+        return false;
+    }
+    const auto raw = value.get<int64_t>();
+    if (raw < 0 || raw > std::numeric_limits<uint32_t>::max()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Unsigned integer field is out of range: %s\n", fieldName);
+        return false;
+    }
+    out = static_cast<uint32_t>(raw);
+    return true;
+}
+
+bool readDoubleField(const json& object, const char* fieldName, double& out) {
+    const json* value = findField(object, fieldName);
+    if (value == nullptr || !value->is_number()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Field must be numeric: %s\n", fieldName);
+        return false;
+    }
+    out = value->get<double>();
+    return true;
+}
+
+bool readFloatValue(const json& value, const char* fieldName, float& out) {
+    if (!value.is_number()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Field must be numeric: %s\n", fieldName);
+        return false;
+    }
+    out = value.get<float>();
+    return true;
+}
+
+bool readStringField(const json& object, const char* fieldName, std::string& out) {
+    const json* value = findField(object, fieldName);
+    if (value == nullptr || !value->is_string()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Field must be a string: %s\n", fieldName);
+        return false;
+    }
+    out = value->get<std::string>();
+    return true;
+}
+
+bool readVec2(const json& value, const char* fieldName, glm::vec2& out) {
+    if (!value.is_array() || value.size() != 2) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Field must be a vec2: %s\n", fieldName);
+        return false;
+    }
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!readFloatValue(value[0], fieldName, x) || !readFloatValue(value[1], fieldName, y)) {
+        return false;
+    }
+    out = {x, y};
+    return true;
+}
+
+template <size_t Count>
+bool readIndexArrayField(const json& object, const char* fieldName, bool (&values)[Count]) {
+    const json* field = findField(object, fieldName);
+    if (field == nullptr) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Missing index array field: %s\n", fieldName);
+        return false;
+    }
+    return indicesToBoolArray(*field, values);
+}
+
+bool snapshotFromJson(const json& frame, InputSnapshot& snapshot) {
+    if (!frame.is_object()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Frame must be an object\n");
+        return false;
+    }
+
+    const json* mousePosition = findField(frame, "mousePosition");
+    const json* mouseDelta = findField(frame, "mouseDelta");
+    const json* typedChars = findField(frame, "typedChars");
+    const json* drag = findField(frame, "draggedItem");
+    const json* gamepad = findField(frame, "gamepad");
+
+    if (mousePosition == nullptr || mouseDelta == nullptr || typedChars == nullptr ||
+        drag == nullptr || gamepad == nullptr) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Frame is missing required fields\n");
+        return false;
+    }
+
+    if (!readIndexArrayField(frame, "keys", snapshot.keys) ||
+        !readIndexArrayField(frame, "keysJustPressed", snapshot.keysJustPressed) ||
+        !readIndexArrayField(frame, "keysJustReleased", snapshot.keysJustReleased) ||
+        !readIndexArrayField(frame, "keysDoubleTapped", snapshot.keysDoubleTapped) ||
+        !readIndexArrayField(frame, "mouseButtons", snapshot.mouseButtons) ||
+        !readIndexArrayField(frame, "mouseButtonsJustPressed", snapshot.mouseButtonsJustPressed) ||
+        !readIndexArrayField(frame, "mouseButtonsJustReleased", snapshot.mouseButtonsJustReleased) ||
+        !readIndexArrayField(frame, "mouseButtonsDoubleTapped", snapshot.mouseButtonsDoubleTapped) ||
+        !readVec2(*mousePosition, "mousePosition", snapshot.mousePosition) ||
+        !readVec2(*mouseDelta, "mouseDelta", snapshot.mouseDelta) ||
+        !readDoubleField(frame, "scrollDelta", snapshot.scrollDelta)) {
+        return false;
+    }
+
+    if (!typedChars->is_array() || typedChars->size() > InputSnapshot::kMaxTypedCharsPerFrame) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Typed character list is invalid\n");
+        return false;
+    }
+    snapshot.typedCharCount = typedChars->size();
     for (size_t index = 0; index < snapshot.typedCharCount; ++index) {
-        snapshot.typedChars[index] = typedChars[index].get<uint32_t>();
+        if (!readUint32Value((*typedChars)[index], "typedChars", snapshot.typedChars[index])) {
+            return false;
+        }
     }
 
-    const json& drag = frame.at("draggedItem");
-    snapshot.draggedItem.active = drag.at("active").get<bool>();
-    snapshot.draggedItem.itemId = drag.at("itemId").get<int>();
-    snapshot.draggedItem.count = drag.at("count").get<int>();
-    snapshot.draggedItem.sourceSlot = drag.at("sourceSlot").get<int>();
-    snapshot.draggedItem.pointerPosition = readVec2(drag.at("pointerPosition"), "draggedItem.pointerPosition");
-
-    const json& gamepad = frame.at("gamepad");
-    snapshot.gamepad.connected = gamepad.at("connected").get<bool>();
-    indicesToBoolArray(gamepad.at("buttons"), snapshot.gamepad.buttons);
-    indicesToBoolArray(gamepad.at("buttonsJustPressed"), snapshot.gamepad.buttonsJustPressed);
-    indicesToBoolArray(gamepad.at("buttonsJustReleased"), snapshot.gamepad.buttonsJustReleased);
-    indicesToBoolArray(gamepad.at("buttonsDoubleTapped"), snapshot.gamepad.buttonsDoubleTapped);
-    const json& axes = gamepad.at("axes");
-    if (!axes.is_array() || axes.size() != std::size(snapshot.gamepad.axes)) {
-        throw std::runtime_error("Input replay gamepad axis list is invalid");
+    if (!drag->is_object()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Dragged item field must be an object\n");
+        return false;
     }
+    const json* pointerPosition = findField(*drag, "pointerPosition");
+    if (pointerPosition == nullptr ||
+        !readBoolField(*drag, "active", snapshot.draggedItem.active) ||
+        !readIntField(*drag, "itemId", snapshot.draggedItem.itemId) ||
+        !readIntField(*drag, "count", snapshot.draggedItem.count) ||
+        !readIntField(*drag, "sourceSlot", snapshot.draggedItem.sourceSlot) ||
+        !readVec2(*pointerPosition, "draggedItem.pointerPosition", snapshot.draggedItem.pointerPosition)) {
+        return false;
+    }
+
+    if (!gamepad->is_object()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Gamepad field must be an object\n");
+        return false;
+    }
+    const json* axes = findField(*gamepad, "axes");
+    if (axes == nullptr || !axes->is_array() || axes->size() != std::size(snapshot.gamepad.axes)) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Gamepad axis list is invalid\n");
+        return false;
+    }
+    if (!readBoolField(*gamepad, "connected", snapshot.gamepad.connected) ||
+        !readIndexArrayField(*gamepad, "buttons", snapshot.gamepad.buttons) ||
+        !readIndexArrayField(*gamepad, "buttonsJustPressed", snapshot.gamepad.buttonsJustPressed) ||
+        !readIndexArrayField(*gamepad, "buttonsJustReleased", snapshot.gamepad.buttonsJustReleased) ||
+        !readIndexArrayField(*gamepad, "buttonsDoubleTapped", snapshot.gamepad.buttonsDoubleTapped)) {
+        return false;
+    }
+
     for (size_t index = 0; index < std::size(snapshot.gamepad.axes); ++index) {
-        snapshot.gamepad.axes[index] = axes[index].get<float>();
+        if (!readFloatValue((*axes)[index], "gamepad.axes", snapshot.gamepad.axes[index])) {
+            return false;
+        }
     }
-    return snapshot;
+    return true;
 }
 
 json replayFileFromFrames(const std::vector<InputSnapshot>& frames) {
@@ -155,40 +292,67 @@ json replayFileFromFrames(const std::vector<InputSnapshot>& frames) {
     return root;
 }
 
-std::vector<InputSnapshot> framesFromReplayFile(const std::filesystem::path& path) {
+bool framesFromReplayFile(const std::filesystem::path& path, std::vector<InputSnapshot>& outFrames) {
+    outFrames.clear();
     std::ifstream input(path);
     if (!input) {
-        throw std::runtime_error("Failed to open input replay file: " + path.string());
-    }
-    json root = json::parse(input);
-    if (root.at("kind").get<std::string>() != "mecraft.input_replay" ||
-        root.at("version").get<int>() != 1) {
-        throw std::runtime_error("Unsupported input replay file: " + path.string());
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Failed to open input replay file: %s\n", path.string().c_str());
+        return false;
     }
 
-    const json& framesJson = root.at("frames");
-    if (!framesJson.is_array()) {
-        throw std::runtime_error("Input replay frames field must be an array");
+    json root = json::parse(input, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Invalid input replay JSON: %s\n", path.string().c_str());
+        return false;
+    }
+
+    std::string kind;
+    int version = 0;
+    if (!readStringField(root, "kind", kind) ||
+        !readIntField(root, "version", version) ||
+        kind != "mecraft.input_replay" ||
+        version != 1) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Unsupported input replay file: %s\n", path.string().c_str());
+        return false;
+    }
+
+    const json* framesJson = findField(root, "frames");
+    if (framesJson == nullptr || !framesJson->is_array()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Frames field must be an array\n");
+        return false;
     }
 
     std::vector<InputSnapshot> frames;
-    frames.reserve(framesJson.size());
-    for (const json& frameJson : framesJson) {
-        frames.push_back(snapshotFromJson(frameJson));
+    frames.reserve(framesJson->size());
+    for (const json& frameJson : *framesJson) {
+        InputSnapshot snapshot;
+        if (!snapshotFromJson(frameJson, snapshot)) {
+            return false;
+        }
+        frames.push_back(snapshot);
     }
-    return frames;
+    outFrames = std::move(frames);
+    return true;
 }
 
-void writeReplayFile(const std::filesystem::path& path, const std::vector<InputSnapshot>& frames) {
+bool writeReplayFile(const std::filesystem::path& path, const std::vector<InputSnapshot>& frames) {
     const std::filesystem::path parent = path.parent_path();
     if (!parent.empty()) {
-        std::filesystem::create_directories(parent);
+        std::error_code createError;
+        std::filesystem::create_directories(parent, createError);
+        if (createError) {
+            MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Failed to create replay directory %s: %s\n",
+                                parent.string().c_str(), createError.message().c_str());
+            return false;
+        }
     }
     std::ofstream output(path);
     if (!output) {
-        throw std::runtime_error("Failed to write input replay file: " + path.string());
+        MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Failed to write input replay file: %s\n", path.string().c_str());
+        return false;
     }
     output << replayFileFromFrames(frames).dump(2);
+    return static_cast<bool>(output);
 }
 
 #ifdef MECRAFT_DEBUG
@@ -463,7 +627,7 @@ const InputSnapshot& InputManager::snapshot() const {
     return m_snapshot;
 }
 
-void InputManager::configureInputRecording(const std::filesystem::path& path) {
+bool InputManager::configureInputRecording(const std::filesystem::path& path) {
     shutdownInputReplay();
     m_replayPath = path;
     m_recordedFrames.clear();
@@ -473,18 +637,25 @@ void InputManager::configureInputRecording(const std::filesystem::path& path) {
     m_recordingDirty = false;
     m_replayActive = false;
     m_replayMode = ReplayMode::Recording;
+    return true;
 }
 
-void InputManager::configureInputPlayback(const std::filesystem::path& path) {
+bool InputManager::configureInputPlayback(const std::filesystem::path& path) {
     shutdownInputReplay();
     m_replayPath = path;
     m_recordedFrames.clear();
-    m_playbackFrames = framesFromReplayFile(path);
+    if (!framesFromReplayFile(path, m_playbackFrames)) {
+        m_replayPath.clear();
+        m_playbackFrames.clear();
+        m_replayMode = ReplayMode::None;
+        return false;
+    }
     m_playbackFrameIndex = 0;
     m_playbackFinished = m_playbackFrames.empty();
     m_recordingDirty = false;
     m_replayActive = false;
     m_replayMode = ReplayMode::Playback;
+    return true;
 }
 
 void InputManager::setInputReplayActive(const bool active) {
@@ -501,14 +672,18 @@ void InputManager::setInputReplayActive(const bool active) {
         return;
     }
     if (m_replayMode == ReplayMode::Recording && m_recordingDirty) {
-        writeReplayFile(m_replayPath, m_recordedFrames);
+        if (!writeReplayFile(m_replayPath, m_recordedFrames)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Failed to flush input recording\n");
+        }
         m_recordingDirty = false;
     }
 }
 
 void InputManager::shutdownInputReplay() {
     if (m_replayMode == ReplayMode::Recording && m_recordingDirty) {
-        writeReplayFile(m_replayPath, m_recordedFrames);
+        if (!writeReplayFile(m_replayPath, m_recordedFrames)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[InputReplay] Failed to flush input recording during shutdown\n");
+        }
     }
     m_replayMode = ReplayMode::None;
     m_replayActive = false;
@@ -712,4 +887,3 @@ float InputManager::applyDeadZone(float value, float deadZone) {
     }
     return 0.0f;
 }
-

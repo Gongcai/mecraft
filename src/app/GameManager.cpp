@@ -43,7 +43,9 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
         return false;
     }
     m_threadPool.start();
-    app::bootstrapGameResources(m_resourceMgr);
+    if (!app::bootstrapGameResources(m_resourceMgr)) {
+        return false;
+    }
     
     m_audioEngine.init();
     m_bgmSystem.init(m_audioEngine);
@@ -150,10 +152,14 @@ bool GameManager::configureInputReplay() {
         return false;
     }
     if (m_launchOptions.recordInput) {
-        m_input.configureInputRecording(m_launchOptions.inputRecordPath);
+        if (!m_input.configureInputRecording(m_launchOptions.inputRecordPath)) {
+            return false;
+        }
     }
     if (m_launchOptions.replayInput) {
-        m_input.configureInputPlayback(m_launchOptions.inputReplayPath);
+        if (!m_input.configureInputPlayback(m_launchOptions.inputReplayPath)) {
+            return false;
+        }
     }
     return true;
 }
