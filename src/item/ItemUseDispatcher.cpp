@@ -1,6 +1,7 @@
 #include "ItemUseDispatcher.h"
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 
 #include "../world/IWorldView.h"
 #include "../world/fluid/FluidRegistry.h"
@@ -73,7 +74,8 @@ bool canPlaceFluid(const IWorldView& worldView,
     const FluidKind fluidKind = FluidRegistry::kindForBlock(rule.resultBlock);
     const FluidDesc* fluidDesc = FluidRegistry::tryGet(fluidKind);
     if (fluidDesc == nullptr) {
-        throw std::runtime_error("Item use rule references unsupported fluid block.");
+        std::cerr << "Item use rule references unsupported fluid block.\n";
+        return false;
     }
     return canPlaceFluidAt(worldView, blockPosition, *fluidDesc);
 }
@@ -81,7 +83,8 @@ bool canPlaceFluid(const IWorldView& worldView,
 BlockStateId makeSourceFluidState(const BlockID fluidBlock) {
     const FluidKind fluidKind = FluidRegistry::kindForBlock(fluidBlock);
     if (FluidRegistry::tryGet(fluidKind) == nullptr) {
-        throw std::runtime_error("Item use rule references unsupported fluid block.");
+        std::cerr << "Item use rule references unsupported fluid block.\n";
+        std::abort();
     }
     return FluidState::encode(DecodedFluid{fluidKind, 0, false, true});
 }

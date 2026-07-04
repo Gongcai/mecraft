@@ -1,7 +1,8 @@
 #include "Inventory.h"
 #include "../item/Item.h"
 #include <algorithm>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <utility>
 
@@ -10,7 +11,8 @@ ItemID requiredBlockItem(const char* blockName) {
     const BlockID blockId = BlockRegistry::requireIdByName(blockName);
     const ItemID itemId = ItemRegistry::fromBlock(blockId);
     if (itemId == 0) {
-        throw std::runtime_error(std::string("Required block item is not registered: ") + blockName);
+        std::cerr << "Required block item is not registered: " << blockName << '\n';
+        std::abort();
     }
     return itemId;
 }
