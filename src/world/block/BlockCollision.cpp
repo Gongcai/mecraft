@@ -2,13 +2,20 @@
 
 #include <algorithm>
 #include <array>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include <glm/common.hpp>
 
 #include "Block.h"
 
 namespace {
+
+[[noreturn]] void failBlockCollision(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 void expand(BlockCollisionBox& box, const glm::vec3& point) {
     box.min = glm::min(box.min, point);
@@ -82,7 +89,7 @@ BlockCollisionBox makeElementBox(const ModelElement& element, const ModelTransfo
     box.min = glm::clamp(box.min, glm::vec3(0.0f), glm::vec3(1.0f));
     box.max = glm::clamp(box.max, glm::vec3(0.0f), glm::vec3(1.0f));
     if (box.min.x >= box.max.x || box.min.y >= box.max.y || box.min.z >= box.max.z) {
-        throw std::runtime_error("Model collision element has an empty box");
+        failBlockCollision("Model collision element has an empty box");
     }
     return box;
 }
@@ -105,10 +112,10 @@ bool pointInside(const glm::vec3& point, const glm::vec3& boxMin, const glm::vec
 const ModelVariant& requireModelVariant(const BlockStateId stateId) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
-        throw std::runtime_error("Model collision requires a registered model variant");
+        failBlockCollision("Model collision requires a registered model variant");
     }
     if (variant->model->elements.empty()) {
-        throw std::runtime_error("Model collision requires at least one element");
+        failBlockCollision("Model collision requires at least one element");
     }
     return *variant;
 }

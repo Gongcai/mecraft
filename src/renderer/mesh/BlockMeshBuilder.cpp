@@ -1,7 +1,9 @@
 #include "BlockMeshBuilder.h"
 
 #include <array>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -16,6 +18,11 @@
 namespace renderer {
 
 namespace {
+
+[[noreturn]] void failBlockMeshBuilder(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
     {{{0, 1, 1}, {1, 1, 1}, {1, 1, 0}, {0, 1, 0}}}, // top
@@ -157,7 +164,7 @@ int faceFromDirection(const IVec3 direction) {
     if (direction.x == 0 && direction.y == 0 && direction.z == -1) return 3;
     if (direction.x == -1 && direction.y == 0 && direction.z == 0) return 4;
     if (direction.x == 1 && direction.y == 0 && direction.z == 0) return 5;
-    throw std::runtime_error("Model transform produced an invalid face direction");
+    failBlockMeshBuilder("Model transform produced an invalid face direction");
 }
 
 int transformFaceIndex(const int face, const ModelTransform& transform) {
@@ -231,7 +238,7 @@ std::string resolveModelFaceTextureName(const BlockModel& model, const ModelFace
     const std::string textureKey = face.textureVar.substr(1);
     const auto it = model.textures.find(textureKey);
     if (it == model.textures.end()) {
-        throw std::runtime_error("Model face references unknown texture variable: " + model.name + "." + textureKey);
+        failBlockMeshBuilder("Model face references unknown texture variable: " + model.name + "." + textureKey);
     }
     return it->second;
 }
@@ -330,7 +337,7 @@ void appendModelVertices(std::vector<BlockVertex>& vertices,
                          const ResourceMgr& resourceMgr) {
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
-        throw std::runtime_error("Model block is missing a model variant: " +
+        failBlockMeshBuilder("Model block is missing a model variant: " +
                                  BlockRegistry::getNamespacedId(BlockStateRegistry::getBlockId(stateId)).full());
     }
 

@@ -4,7 +4,9 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -18,6 +20,11 @@
 #include "../../world/chunk/SubChunk.h"
 
 namespace {
+
+[[noreturn]] void failBlockEntityRenderer(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr unsigned int kQuadIndices[] = {0, 1, 2, 0, 2, 3};
 constexpr float kPixel = 1.0f / 16.0f;
@@ -122,7 +129,7 @@ void appendCuboidVertices(std::vector<BlockEntityVertex>& vertices,
 
 float chestYawRadians(const BlockStateId stateId) {
     if (PropIndices::FACING == PropIndices::INVALID) {
-        throw std::runtime_error("Chest block entity rendering requires the facing property index");
+        failBlockEntityRenderer("Chest block entity rendering requires the facing property index");
     }
 
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
@@ -139,7 +146,7 @@ float chestYawRadians(const BlockStateId stateId) {
         return glm::radians(-90.0f);
     }
 
-    throw std::runtime_error("Chest block entity state has an unsupported facing value");
+    failBlockEntityRenderer("Chest block entity state has an unsupported facing value");
 }
 
 } // namespace
@@ -156,7 +163,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     ModelDefinition chest = makeChestDefinition();
     const GLuint chestTexture = resourceMgr.getGuiTexture(chest.textureKey);
     if (chestTexture == 0) {
-        throw std::runtime_error("Chest block entity texture is not loaded");
+        failBlockEntityRenderer("Chest block entity texture is not loaded");
     }
 
     ModelEntry entry;

@@ -2,8 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
-#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "../../GameplayRegistry.h"
@@ -13,6 +15,11 @@
 
 namespace ecs {
 namespace {
+
+[[noreturn]] void failMovingBlockSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr float kMovingBlockPushEpsilon = 0.001f;
 constexpr float kMovingBlockSupportContactTolerance = 0.02f;
@@ -236,7 +243,7 @@ bool pushPhysicsBodyFromMovingBlock(PhysicsBody& body,
     } else if (movementDirection.z < 0) {
         delta.z = collision.currentBox.min.z - bodyBox.max.z - kMovingBlockPushEpsilon;
     } else {
-        throw std::runtime_error("Moving block push requires a non-zero movement direction");
+        failMovingBlockSystem("Moving block push requires a non-zero movement direction");
     }
 
     applyPhysicsBodyTranslation(body, delta);
@@ -346,7 +353,7 @@ std::size_t MovingBlockSystem::processWorld(World& world, GameplayRegistry& regi
         auto& transform = view.get<TransformComponent>(entity);
 
         if (block.durationSeconds <= 0.0f) {
-            throw std::runtime_error("Moving block entity has a non-positive duration");
+            failMovingBlockSystem("Moving block entity has a non-positive duration");
         }
 
         const float previousProgress = std::clamp(block.elapsedSeconds / block.durationSeconds, 0.0f, 1.0f);
@@ -368,7 +375,7 @@ std::size_t MovingBlockSystem::processWorld(World& world, GameplayRegistry& regi
 
         if (block.elapsedSeconds >= block.durationSeconds) {
             if (!targetCellIsReadyForPlacement(world, block)) {
-                throw std::runtime_error("Moving block target cell is occupied at placement time");
+                failMovingBlockSystem("Moving block target cell is occupied at placement time");
             }
             if (block.placeAtTarget) {
                 world.setBlockState(block.targetPosition.x, block.targetPosition.y, block.targetPosition.z, block.stateId);

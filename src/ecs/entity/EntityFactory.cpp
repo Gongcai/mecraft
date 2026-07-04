@@ -11,11 +11,18 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <utility>
 
 namespace ecs {
 namespace {
+
+[[noreturn]] void failEntityFactory(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 template <typename Component, typename... Args>
 void ensureComponent(entt::registry& registry, const entt::entity entity, Args&&... args) {
@@ -292,14 +299,14 @@ entt::entity EntityFactory::createMovingBlock(GameplayRegistry& registry, const 
         return entt::null;
     }
     if (params.durationSeconds <= 0.0f) {
-        throw std::runtime_error("Moving block duration must be positive");
+        failEntityFactory("Moving block duration must be positive");
     }
     const glm::ivec3 expectedDirection = params.targetPosition - params.sourcePosition;
     if (expectedDirection != params.direction) {
-        throw std::runtime_error("Moving block direction must match source and target positions");
+        failEntityFactory("Moving block direction must match source and target positions");
     }
     if (std::abs(params.direction.x) + std::abs(params.direction.y) + std::abs(params.direction.z) != 1) {
-        throw std::runtime_error("Moving block direction must be a single grid step");
+        failEntityFactory("Moving block direction must be a single grid step");
     }
 
     entt::registry& reg = registry.registry();

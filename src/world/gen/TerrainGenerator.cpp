@@ -3,7 +3,8 @@
 #include <array>
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 
 #include "../block/BlockStateRegistry.h"
@@ -31,6 +32,11 @@
 #endif
 
 namespace {
+
+[[noreturn]] void failTerrainGenerator(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 double saturate(double v) {
     return std::clamp(v, 0.0, 1.0);
@@ -214,7 +220,7 @@ struct TerrainColumnSample {
 BlockID requireBlockId(const char* path) {
     BlockID id = 0;
     if (!BlockRegistry::tryGetId(NamespacedId("minecraft", path), id)) {
-        throw std::runtime_error(std::string("Missing required world generation block: minecraft:") + path);
+        failTerrainGenerator(std::string("Missing required world generation block: minecraft:") + path);
     }
     return id;
 }
@@ -229,12 +235,12 @@ BlockStateId requireDefaultState(const char* path) {
 
 BlockStateId requireFacingState(const char* path, const uint16_t facing) {
     if (PropIndices::FACING == PropIndices::INVALID || facing == PropIndices::INVALID) {
-        throw std::runtime_error("World generation facing states require registered facing properties");
+        failTerrainGenerator("World generation facing states require registered facing properties");
     }
     const BlockID blockId = requireBlockId(path);
     const BlockStateId state = BlockStateRegistry::getState(blockId, PropIndices::FACING, facing);
     if (state == NULL_BLOCK_STATE || BlockStateRegistry::getBlockId(state) != blockId) {
-        throw std::runtime_error(std::string("Missing required facing state for world generation block: minecraft:") + path);
+        failTerrainGenerator(std::string("Missing required facing state for world generation block: minecraft:") + path);
     }
     return state;
 }
@@ -1833,4 +1839,3 @@ void TerrainGenerator::generateChunk(Chunk& chunk) const {
         }
     }
 }
-
