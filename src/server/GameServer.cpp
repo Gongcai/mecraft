@@ -44,7 +44,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <functional>
-#include <stdexcept>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -57,6 +57,11 @@ constexpr int kPlayerRespawnSnapshotRepeatTicks = 5;
 constexpr int kMaxClientViewDistance = 32;
 constexpr float kPlayerPoseSyncEpsilonSq = 0.000001f;
 constexpr float kPlayerPoseCorrectionAcceptDistanceSq = 0.1225f;
+
+[[noreturn]] void failGameServer(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 void clearOpenContainerSession(ConnectedClient& client);
 
@@ -259,7 +264,7 @@ bool persistentBlockEntityTypeForBlock(const BlockID blockId, std::string& outTy
         return false;
     }
     if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-        throw std::runtime_error(behavior.id + " persistent block entity requires block_entity storage");
+        failGameServer(behavior.id + " persistent block entity requires block_entity storage");
     }
 
     outType = behavior.id;
@@ -1685,7 +1690,7 @@ WireContainerParts removeTargetWireContainerParts(World& world,
         return {};
     }
     if (!isAxisNormal(hitNormal)) {
-        throw std::runtime_error("Wire container part break requires an axis-aligned hit normal");
+        failGameServer("Wire container part break requires an axis-aligned hit normal");
     }
 
     const uint16_t facing = WireFaceGeometry::facingFromSurfaceNormal(hitNormal);
@@ -1698,7 +1703,7 @@ void spawnWireContainerPartDrops(ecs::GameplayRegistry& registry,
     for (const BlockID blockId : WireContainerPlacement::wireBlocksForParts(parts)) {
         const ItemID dropItem = BlockDropTable::getDropItem(blockId);
         if (dropItem == RUNTIME_ID_NULL) {
-            throw std::runtime_error("Wire container part block has no drop item: " +
+            failGameServer("Wire container part block has no drop item: " +
                                      BlockRegistry::getFast(blockId).namespacedId.full());
         }
         ecs::ItemSpawnSystem::spawn(registry, dropItem, position, 1);
@@ -1773,7 +1778,7 @@ void GameServer::handleClientContainerOpenRequest(ConnectedClient& client,
     const ui::ContainerUiDef& uiDef = ui::ContainerUiRegistry::require(blockDef.containerUi);
     const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(uiDef.behavior);
     if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-        throw std::runtime_error(behavior.id + " network container requires block_entity storage");
+        failGameServer(behavior.id + " network container requires block_entity storage");
     }
 
     if (behavior.handler == "storage") {
@@ -2591,7 +2596,7 @@ void GameServer::sendWireContainerUpdatesToClients() {
 
         const WireContainerParts* parts = m_world.wireContainerParts().find(position);
         if (parts == nullptr || parts->empty()) {
-            throw std::runtime_error("Server wire container state has no stored wire parts");
+            failGameServer("Server wire container state has no stored wire parts");
         }
 
         net::WireContainerUpdateMessage message;
@@ -2624,13 +2629,13 @@ void GameServer::sendWireContainersInChunkToClient(ConnectedClient& client, cons
             return;
         }
         if (parts.empty()) {
-            throw std::runtime_error("Server wire container store contains an empty part set");
+            failGameServer("Server wire container store contains an empty part set");
         }
 
         const BlockStateId stateId = m_world.getBlockState(position.x, position.y, position.z);
         if (stateId == NULL_BLOCK_STATE ||
             !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
-            throw std::runtime_error("Server wire container store points at a non-container block");
+            failGameServer("Server wire container store points at a non-container block");
         }
 
         net::WireContainerUpdateMessage message;
@@ -3098,7 +3103,7 @@ void GameServer::restoreBlockEntities() {
     for (const save::BlockEntityData& data : entities) {
         const ContainerBehaviorDef& behavior = ContainerBehaviorRegistry::require(data.type);
         if (behavior.storage.kind != ContainerStorageKind::BlockEntity) {
-            throw std::runtime_error(behavior.id + " block entity restore requires block_entity storage");
+            failGameServer(behavior.id + " block entity restore requires block_entity storage");
         }
 
         if (behavior.handler == "smelting") {
