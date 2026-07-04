@@ -4,8 +4,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
-#include <stdexcept>
+#include <iostream>
 #include <string>
 #include <unordered_map>
 
@@ -111,7 +112,7 @@ public:
             return entry.inventory;
         }
         if (entry.typeId != typeId || entry.slotCount != slotCount) {
-            throw std::runtime_error("Block entity inventory metadata mismatch at position");
+            fail("Block entity inventory metadata mismatch at position");
         }
         return entry.inventory;
     }
@@ -156,6 +157,11 @@ public:
     }
 
 private:
+    [[noreturn]] static void fail(const char* message) {
+        std::cerr << message << '\n';
+        std::abort();
+    }
+
     struct Key {
         int x = 0;
         int y = 0;
@@ -184,10 +190,10 @@ private:
 
     static void validateTypeAndSlotCount(const std::string& typeId, const int slotCount) {
         if (typeId.empty()) {
-            throw std::runtime_error("Block entity inventory requires a type id");
+            fail("Block entity inventory requires a type id");
         }
         if (slotCount <= 0 || slotCount > BlockEntityInventory::SLOT_COUNT) {
-            throw std::runtime_error("Block entity inventory slot count is outside the supported range");
+            fail("Block entity inventory slot count is outside the supported range");
         }
     }
 

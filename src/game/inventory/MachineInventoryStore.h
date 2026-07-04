@@ -4,8 +4,9 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
-#include <stdexcept>
+#include <iostream>
 #include <string>
 #include <unordered_map>
 
@@ -136,16 +137,21 @@ public:
 private:
     friend class MachineInventoryStore;
 
+    [[noreturn]] static void fail(const char* message) {
+        std::cerr << message << '\n';
+        std::abort();
+    }
+
     static void validateSlotCount(const int slotCount) {
         if (slotCount < 0 || slotCount > MAX_SLOT_COUNT) {
-            throw std::runtime_error("Machine inventory slot count is outside the supported range");
+            fail("Machine inventory slot count is outside the supported range");
         }
     }
 
     void configureSlotCount(const int slotCount) {
         validateSlotCount(slotCount);
         if (m_slotCount != 0 && m_slotCount != slotCount) {
-            throw std::runtime_error("Machine inventory slot count cannot change after creation");
+            fail("Machine inventory slot count cannot change after creation");
         }
         m_slotCount = slotCount;
     }
@@ -157,12 +163,12 @@ private:
             processor.fuelSlot >= m_slotCount ||
             processor.outputSlot < 0 ||
             processor.outputSlot >= m_slotCount) {
-            throw std::runtime_error("Machine smelting processor references a slot outside machine storage");
+            fail("Machine smelting processor references a slot outside machine storage");
         }
         if (processor.inputSlot == processor.fuelSlot ||
             processor.inputSlot == processor.outputSlot ||
             processor.fuelSlot == processor.outputSlot) {
-            throw std::runtime_error("Machine smelting processor requires distinct input, fuel, and output slots");
+            fail("Machine smelting processor requires distinct input, fuel, and output slots");
         }
     }
 
@@ -252,7 +258,7 @@ public:
             return entry.inventory;
         }
         if (entry.typeId != typeId || entry.slotCount != slotCount) {
-            throw std::runtime_error("Machine inventory metadata mismatch at position");
+            fail("Machine inventory metadata mismatch at position");
         }
         return entry.inventory;
     }
@@ -304,6 +310,11 @@ public:
     }
 
 private:
+    [[noreturn]] static void fail(const char* message) {
+        std::cerr << message << '\n';
+        std::abort();
+    }
+
     struct Key {
         int x = 0;
         int y = 0;
@@ -331,10 +342,10 @@ private:
 
     static void validateTypeAndSlotCount(const std::string& typeId, const int slotCount) {
         if (typeId.empty()) {
-            throw std::runtime_error("Machine inventory requires a type id");
+            fail("Machine inventory requires a type id");
         }
         if (slotCount <= 0 || slotCount > MachineInventory::MAX_SLOT_COUNT) {
-            throw std::runtime_error("Machine inventory slot count is outside the supported range");
+            fail("Machine inventory slot count is outside the supported range");
         }
     }
 
