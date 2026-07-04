@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <system_error>
+#include <unordered_map>
 #include <utility>
 
 namespace {
@@ -215,14 +216,41 @@ BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
     }
 
     std::vector<std::string> names;
+    std::vector<std::string> orphanMaterialNames;
     names.reserve(pendingEntries.size());
     for (const auto& [name, entry] : pendingEntries) {
         if (!entry.albedoPath.has_value()) {
-            failBlockTextureManifest("Block PBR texture requires a matching albedo texture: " + name);
+            orphanMaterialNames.push_back(name);
+            continue;
         }
         names.push_back(name);
     }
     std::sort(names.begin(), names.end());
+    std::sort(orphanMaterialNames.begin(), orphanMaterialNames.end());
+
+    if (names.empty()) {
+        failBlockTextureManifest("Block texture directory contains no albedo PNG files: " + directory);
+    }
+
+    if (!orphanMaterialNames.empty()) {
+        constexpr size_t kMaxReportedOrphanMaterialNames = 8;
+        std::cerr << "[Resource] Ignored " << orphanMaterialNames.size()
+                  << " block material sidecar texture"
+                  << (orphanMaterialNames.size() == 1 ? "" : "s")
+                  << " without albedo";
+        const size_t reportedCount = std::min(orphanMaterialNames.size(), kMaxReportedOrphanMaterialNames);
+        std::cerr << ": ";
+        for (size_t i = 0; i < reportedCount; ++i) {
+            if (i > 0) {
+                std::cerr << ", ";
+            }
+            std::cerr << orphanMaterialNames[i];
+        }
+        if (orphanMaterialNames.size() > reportedCount) {
+            std::cerr << ", ...";
+        }
+        std::cerr << '\n';
+    }
 
     BlockTextureManifest manifest;
     for (const std::string& name : names) {
