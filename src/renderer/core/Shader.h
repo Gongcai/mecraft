@@ -9,6 +9,7 @@
 #include<glad/glad.h>
 #include<string>
 #include<fstream>
+#include <optional>
 #include<sstream>
 #include<iostream>
 #include <unordered_set>
@@ -20,15 +21,15 @@ using namespace std;
 class Shader
 {
 public:
-    unsigned int ID;
-    //读取代码并构建着色器
+    unsigned int ID = 0;
+    // Read source files and build a shader program.
     Shader(const char* vertexPath,const char* fragmentPath, const char* geometryPath);
     Shader(const char* vertexPath,const char* fragmentPath);
 
     // Compute shader factory: compiles a single compute shader program.
     static Shader* createCompute(const char* computePath);
 
-    //使用着色器
+    // Bind the program for rendering.
     void use();
 
     // Dispatch a compute shader. numGroups can be 0 to skip that dimension.
@@ -38,7 +39,7 @@ public:
     static void bindImage(GLuint unit, GLuint texture, GLint level, GLboolean layered,
                           GLint layer, GLenum access, GLenum internalFormat);
 
-    //uniform值设置
+    // Uniform setters.
     void setBool(const string& name, bool value) const;
     void setInt(const string& name,int value) const;
     void setFloat(const string& name,float value) const;
@@ -56,10 +57,10 @@ public:
 
 private:
     Shader() : ID(0) { uniformLocationCache.reserve(128); } // private default for factory
-    static std::string loadShaderSource(const std::string& path);
-    static std::string resolveIncludes(const std::string& source,
-                                       const std::string& sourcePath,
-                                       std::unordered_set<std::string>& includeStack);
+    static std::optional<std::string> loadShaderSource(const std::string& path);
+    static std::optional<std::string> resolveIncludes(const std::string& source,
+                                                      const std::string& sourcePath,
+                                                      std::unordered_set<std::string>& includeStack);
     mutable std::unordered_map<std::string,int> uniformLocationCache;
 };
 

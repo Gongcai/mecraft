@@ -263,11 +263,11 @@ void ItemRegistry::init() {
     bool hasItemConfig = false;
     std::ifstream file(kItemsConfigPath);
     if (file.is_open()) {
-        try {
-            file >> root;
+        root = nlohmann::json::parse(file, nullptr, false);
+        if (!root.is_discarded()) {
             hasItemConfig = root.contains("items") && root["items"].is_array();
-        } catch (const std::exception& e) {
-            throw std::runtime_error(std::string("Failed to parse items.json: ") + e.what());
+        } else {
+            throw std::runtime_error("Failed to parse items.json: invalid JSON");
         }
     }
 

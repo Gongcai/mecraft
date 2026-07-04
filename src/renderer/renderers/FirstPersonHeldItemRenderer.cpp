@@ -241,10 +241,12 @@ void FirstPersonHeldItemRenderer::loadConfig() {
         return;
     }
 
-    nlohmann::json json;
-    try {
-        file >> json;
-    } catch (...) {
+    nlohmann::json json = nlohmann::json::parse(file, nullptr, false);
+    if (json.is_discarded()) {
+#ifdef MECRAFT_DEBUG
+        MECRAFT_LOG_STREAM(std::cerr << "[FirstPersonHeldItemRenderer] Failed to parse config: "
+                                     << FIRST_PERSON_HELD_ITEM_CONFIG_PATH << std::endl);
+#endif
         return;
     }
 

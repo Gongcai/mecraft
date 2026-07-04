@@ -9,8 +9,236 @@
 #include <stb/stb_image_write.h>
 #include <fstream>
 #include <cstdio>
+#include <limits>
 
 namespace save {
+
+namespace {
+
+const nlohmann::json* findField(const nlohmann::json& object, const char* key) {
+    if (!object.is_object()) {
+        return nullptr;
+    }
+    const auto it = object.find(key);
+    return it != object.end() ? &(*it) : nullptr;
+}
+
+bool readIntField(const nlohmann::json& object, const char* key, int& out, const bool required = false) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing integer field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (!value->is_number_integer()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid integer field: %s\n", key);
+        return false;
+    }
+    const auto raw = value->get<int64_t>();
+    if (raw < std::numeric_limits<int>::min() || raw > std::numeric_limits<int>::max()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Integer field out of range: %s\n", key);
+        return false;
+    }
+    out = static_cast<int>(raw);
+    return true;
+}
+
+bool readUnsignedRaw(const nlohmann::json& object, const char* key, uint64_t& out, const bool required) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing unsigned integer field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (value->is_number_unsigned()) {
+        out = value->get<uint64_t>();
+        return true;
+    }
+    if (value->is_number_integer()) {
+        const auto raw = value->get<int64_t>();
+        if (raw < 0) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Negative value for unsigned field: %s\n", key);
+            return false;
+        }
+        out = static_cast<uint64_t>(raw);
+        return true;
+    }
+    MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid unsigned integer field: %s\n", key);
+    return false;
+}
+
+bool readUint32Field(const nlohmann::json& object, const char* key, uint32_t& out, const bool required = false) {
+    uint64_t raw = out;
+    if (!readUnsignedRaw(object, key, raw, required)) {
+        return false;
+    }
+    if (raw > std::numeric_limits<uint32_t>::max()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsigned integer field out of range: %s\n", key);
+        return false;
+    }
+    out = static_cast<uint32_t>(raw);
+    return true;
+}
+
+bool readUint64Field(const nlohmann::json& object, const char* key, uint64_t& out, const bool required = false) {
+    uint64_t raw = out;
+    if (!readUnsignedRaw(object, key, raw, required)) {
+        return false;
+    }
+    out = raw;
+    return true;
+}
+
+bool readFloatField(const nlohmann::json& object, const char* key, float& out, const bool required = false) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing number field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (!value->is_number()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid number field: %s\n", key);
+        return false;
+    }
+    out = value->get<float>();
+    return true;
+}
+
+bool readDoubleField(const nlohmann::json& object, const char* key, double& out, const bool required = false) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing number field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (!value->is_number()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid number field: %s\n", key);
+        return false;
+    }
+    out = value->get<double>();
+    return true;
+}
+
+bool readBoolField(const nlohmann::json& object, const char* key, bool& out, const bool required = false) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing boolean field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (!value->is_boolean()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid boolean field: %s\n", key);
+        return false;
+    }
+    out = value->get<bool>();
+    return true;
+}
+
+bool readStringField(const nlohmann::json& object,
+                     const char* key,
+                     std::string& out,
+                     const bool required = false) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing string field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (!value->is_string()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid string field: %s\n", key);
+        return false;
+    }
+    out = value->get<std::string>();
+    return true;
+}
+
+bool readFloat3Field(const nlohmann::json& object,
+                     const char* key,
+                     float& x,
+                     float& y,
+                     float& z,
+                     const bool required = false) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing vec3 field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (!value->is_array() || value->size() < 3 ||
+        !(*value)[0].is_number() || !(*value)[1].is_number() || !(*value)[2].is_number()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid vec3 field: %s\n", key);
+        return false;
+    }
+    x = (*value)[0].get<float>();
+    y = (*value)[1].get<float>();
+    z = (*value)[2].get<float>();
+    return true;
+}
+
+bool readInt3Field(const nlohmann::json& object,
+                   const char* key,
+                   int& x,
+                   int& y,
+                   int& z,
+                   const bool required = false) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        if (required) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Missing ivec3 field: %s\n", key);
+            return false;
+        }
+        return true;
+    }
+    if (!value->is_array() || value->size() < 3 ||
+        !(*value)[0].is_number_integer() ||
+        !(*value)[1].is_number_integer() ||
+        !(*value)[2].is_number_integer()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid ivec3 field: %s\n", key);
+        return false;
+    }
+    const auto rawX = (*value)[0].get<int64_t>();
+    const auto rawY = (*value)[1].get<int64_t>();
+    const auto rawZ = (*value)[2].get<int64_t>();
+    if (rawX < std::numeric_limits<int>::min() || rawX > std::numeric_limits<int>::max() ||
+        rawY < std::numeric_limits<int>::min() || rawY > std::numeric_limits<int>::max() ||
+        rawZ < std::numeric_limits<int>::min() || rawZ > std::numeric_limits<int>::max()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] ivec3 field out of range: %s\n", key);
+        return false;
+    }
+    x = static_cast<int>(rawX);
+    y = static_cast<int>(rawY);
+    z = static_cast<int>(rawZ);
+    return true;
+}
+
+bool parseJsonFile(std::ifstream& file, const char* label, nlohmann::json& out) {
+    out = nlohmann::json::parse(file, nullptr, false);
+    if (out.is_discarded()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to parse %s: invalid JSON\n", label);
+        return false;
+    }
+    if (!out.is_object()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to parse %s: root must be an object\n", label);
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 SaveManager::SaveManager(std::filesystem::path saveRoot)
     : m_paths(std::move(saveRoot)) {}
@@ -37,52 +265,51 @@ bool SaveManager::loadLevelMeta(LevelMeta& outMeta) {
         return false;
     }
 
-    try {
-        nlohmann::json j;
-        file >> j;
-
-        const int version = j.value("version", 0);
-        if (version != 1) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported level.json version: %d\n", version);
-            return false;
-        }
-
-        outMeta.seed = j["seed"].get<uint32_t>();
-
-        // Spawn position (optional, defaults preserved)
-        if (j.contains("spawn") && j["spawn"].is_array() && j["spawn"].size() >= 3) {
-            outMeta.spawnX = j["spawn"][0].get<float>();
-            outMeta.spawnY = j["spawn"][1].get<float>();
-            outMeta.spawnZ = j["spawn"][2].get<float>();
-        }
-
-        // Time (optional)
-        if (j.contains("time") && j["time"].is_object()) {
-            outMeta.timeOfDay = j["time"].value("timeOfDay", 300.0f);
-            outMeta.totalGameTime = j["time"].value("totalGameTime", 300.0);
-            outMeta.elapsedDays = j["time"].value("elapsedDays", 0);
-        }
-
-        // Weather (optional)
-        if (j.contains("weather") && j["weather"].is_object()) {
-            outMeta.weatherType = j["weather"].value("type", "clear");
-            outMeta.weatherWetness = j["weather"].value("wetness", 0.0f);
-            outMeta.weatherStorm = j["weather"].value("storm", 0.0f);
-            outMeta.weatherAerialReduction = j["weather"].value("aerialReduction", 0.55f);
-        }
-
-        // Extended metadata (optional)
-        outMeta.displayName = j.value("displayName", "");
-        outMeta.createdUtc = j.value("createdUtc", "");
-        outMeta.lastSavedUtc = j.value("lastSavedUtc", "");
-        outMeta.screenshotPath = j.value("screenshotPath", "");
-        outMeta.gameMode = j.value("gameMode", outMeta.gameMode);
-
-        return true;
-    } catch (const std::exception& e) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to parse level.json: %s\n", e.what());
+    nlohmann::json j;
+    if (!parseJsonFile(file, "level.json", j)) {
         return false;
     }
+
+    int version = 0;
+    if (!readIntField(j, "version", version)) {
+        return false;
+    }
+    if (version != 1) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported level.json version: %d\n", version);
+        return false;
+    }
+
+    if (!readUint32Field(j, "seed", outMeta.seed, true) ||
+        !readFloat3Field(j, "spawn", outMeta.spawnX, outMeta.spawnY, outMeta.spawnZ)) {
+        return false;
+    }
+
+    if (const nlohmann::json* time = findField(j, "time")) {
+        if (!time->is_object() ||
+            !readFloatField(*time, "timeOfDay", outMeta.timeOfDay) ||
+            !readDoubleField(*time, "totalGameTime", outMeta.totalGameTime) ||
+            !readIntField(*time, "elapsedDays", outMeta.elapsedDays)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid time object in level.json\n");
+            return false;
+        }
+    }
+
+    if (const nlohmann::json* weather = findField(j, "weather")) {
+        if (!weather->is_object() ||
+            !readStringField(*weather, "type", outMeta.weatherType) ||
+            !readFloatField(*weather, "wetness", outMeta.weatherWetness) ||
+            !readFloatField(*weather, "storm", outMeta.weatherStorm) ||
+            !readFloatField(*weather, "aerialReduction", outMeta.weatherAerialReduction)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid weather object in level.json\n");
+            return false;
+        }
+    }
+
+    return readStringField(j, "displayName", outMeta.displayName) &&
+           readStringField(j, "createdUtc", outMeta.createdUtc) &&
+           readStringField(j, "lastSavedUtc", outMeta.lastSavedUtc) &&
+           readStringField(j, "screenshotPath", outMeta.screenshotPath) &&
+           readStringField(j, "gameMode", outMeta.gameMode);
 }
 
 void SaveManager::saveLevelMeta(const LevelMeta& meta) {
@@ -221,11 +448,7 @@ void SaveManager::submitSaveChunk(int cx,
     m_pendingSaveCount.fetch_add(1, std::memory_order_relaxed);
 
     m_threadPool->submit([this, cx, cz, key, saveSequence, fileData]() {
-        try {
-            writeChunkSnapshotIfCurrent(cx, cz, key, saveSequence, *fileData);
-        } catch (const std::exception& e) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Chunk save task failed: %s\n", e.what());
-        }
+        writeChunkSnapshotIfCurrent(cx, cz, key, saveSequence, *fileData);
         m_pendingSaveCount.fetch_sub(1, std::memory_order_release);
         m_saveCv.notify_all();
     }, 0);
@@ -419,82 +642,102 @@ bool SaveManager::loadPersistentEntities(std::vector<PersistentEntityData>& out)
         return false;
     }
 
-    try {
-        nlohmann::json root;
-        file >> root;
-
-        const int version = root.value("version", 0);
-        if (version != 1 || !root.contains("entities") || !root["entities"].is_array()) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported entity save file\n");
-            return false;
-        }
-
-        for (const auto& j : root["entities"]) {
-            if (!j.is_object()) {
-                continue;
-            }
-
-            PersistentEntityData entity;
-            entity.type = j.value("type", "");
-            if (entity.type.empty()) {
-                continue;
-            }
-
-            if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 3) {
-                entity.posX = j["position"][0].get<float>();
-                entity.posY = j["position"][1].get<float>();
-                entity.posZ = j["position"][2].get<float>();
-            }
-            if (j.contains("velocity") && j["velocity"].is_array() && j["velocity"].size() >= 3) {
-                entity.velX = j["velocity"][0].get<float>();
-                entity.velY = j["velocity"][1].get<float>();
-                entity.velZ = j["velocity"][2].get<float>();
-            }
-            entity.yaw = j.value("yaw", entity.yaw);
-            entity.pitch = j.value("pitch", entity.pitch);
-            entity.dropId = j.value("dropId", entity.dropId);
-            entity.grounded = j.value("grounded", entity.grounded);
-
-            if (j.contains("health") && j["health"].is_object()) {
-                entity.health = j["health"].value("current", entity.health);
-                entity.healthMax = j["health"].value("max", entity.healthMax);
-            }
-            if (j.contains("item") && j["item"].is_object()) {
-                entity.itemId = j["item"].value("id", entity.itemId);
-                entity.stackCount = j["item"].value("count", entity.stackCount);
-            } else {
-                entity.itemId = j.value("itemId", entity.itemId);
-                entity.stackCount = j.value("stackCount", entity.stackCount);
-            }
-            if (j.contains("bounds") && j["bounds"].is_array() && j["bounds"].size() >= 3) {
-                entity.halfExtentX = j["bounds"][0].get<float>();
-                entity.halfExtentY = j["bounds"][1].get<float>();
-                entity.halfExtentZ = j["bounds"][2].get<float>();
-            }
-            if (j.contains("spin") && j["spin"].is_object()) {
-                entity.yaw = j["spin"].value("yaw", entity.yaw);
-                entity.spinSpeed = j["spin"].value("speed", entity.spinSpeed);
-            }
-            if (j.contains("lifetime") && j["lifetime"].is_object()) {
-                entity.ageSeconds = j["lifetime"].value("age", entity.ageSeconds);
-                entity.lifeTimeSeconds = j["lifetime"].value("max", entity.lifeTimeSeconds);
-            }
-
-            if (entity.type == "minecraft:item") {
-                if (entity.itemId != 0 && entity.stackCount != 0) {
-                    out.push_back(entity);
-                }
-            } else if (entity.health > 0) {
-                out.push_back(entity);
-            }
-        }
-
-        return true;
-    } catch (const std::exception& e) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read entity file: %s\n", e.what());
+    nlohmann::json root;
+    if (!parseJsonFile(file, "entity save file", root)) {
         out.clear();
         return false;
     }
+
+    int version = 0;
+    const nlohmann::json* entities = findField(root, "entities");
+    if (!readIntField(root, "version", version) ||
+        version != 1 ||
+        entities == nullptr ||
+        !entities->is_array()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported entity save file\n");
+        out.clear();
+        return false;
+    }
+
+    for (const auto& j : *entities) {
+        if (!j.is_object()) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity entry\n");
+            out.clear();
+            return false;
+        }
+
+        PersistentEntityData entity;
+        if (!readStringField(j, "type", entity.type, true) ||
+            entity.type.empty() ||
+            !readFloat3Field(j, "position", entity.posX, entity.posY, entity.posZ) ||
+            !readFloat3Field(j, "velocity", entity.velX, entity.velY, entity.velZ) ||
+            !readFloatField(j, "yaw", entity.yaw) ||
+            !readFloatField(j, "pitch", entity.pitch) ||
+            !readUint64Field(j, "dropId", entity.dropId) ||
+            !readBoolField(j, "grounded", entity.grounded)) {
+            out.clear();
+            return false;
+        }
+
+        if (const nlohmann::json* health = findField(j, "health")) {
+            if (!health->is_object() ||
+                !readIntField(*health, "current", entity.health) ||
+                !readIntField(*health, "max", entity.healthMax)) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity health object\n");
+                out.clear();
+                return false;
+            }
+        }
+
+        if (const nlohmann::json* item = findField(j, "item")) {
+            if (!item->is_object() ||
+                !readUint32Field(*item, "id", entity.itemId) ||
+                !readUint32Field(*item, "count", entity.stackCount)) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity item object\n");
+                out.clear();
+                return false;
+            }
+        } else if (!readUint32Field(j, "itemId", entity.itemId) ||
+                   !readUint32Field(j, "stackCount", entity.stackCount)) {
+            out.clear();
+            return false;
+        }
+
+        if (!readFloat3Field(j, "bounds", entity.halfExtentX, entity.halfExtentY, entity.halfExtentZ)) {
+            out.clear();
+            return false;
+        }
+
+        if (const nlohmann::json* spin = findField(j, "spin")) {
+            if (!spin->is_object() ||
+                !readFloatField(*spin, "yaw", entity.yaw) ||
+                !readFloatField(*spin, "speed", entity.spinSpeed)) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity spin object\n");
+                out.clear();
+                return false;
+            }
+        }
+
+        if (const nlohmann::json* lifetime = findField(j, "lifetime")) {
+            if (!lifetime->is_object() ||
+                !readFloatField(*lifetime, "age", entity.ageSeconds) ||
+                !readFloatField(*lifetime, "max", entity.lifeTimeSeconds)) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid persistent entity lifetime object\n");
+                out.clear();
+                return false;
+            }
+        }
+
+        if (entity.type == "minecraft:item") {
+            if (entity.itemId != 0 && entity.stackCount != 0) {
+                out.push_back(entity);
+            }
+        } else if (entity.health > 0) {
+            out.push_back(entity);
+        }
+    }
+
+    return true;
 }
 
 void SaveManager::saveBlockEntities(const std::vector<BlockEntityData>& entities) {
@@ -574,75 +817,93 @@ bool SaveManager::loadBlockEntities(std::vector<BlockEntityData>& out) {
         return false;
     }
 
-    try {
-        nlohmann::json root;
-        file >> root;
-
-        const int version = root.value("version", 0);
-        if (version != 1 || !root.contains("blockEntities") || !root["blockEntities"].is_array()) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported block entity save file\n");
-            return false;
-        }
-
-        for (const auto& j : root["blockEntities"]) {
-            if (!j.is_object()) {
-                continue;
-            }
-
-            BlockEntityData entity;
-            entity.type = j.value("type", "");
-            if (entity.type.empty()) {
-                continue;
-            }
-            if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 3) {
-                entity.x = j["position"][0].get<int>();
-                entity.y = j["position"][1].get<int>();
-                entity.z = j["position"][2].get<int>();
-            }
-            if (!j.contains("slots") || !j["slots"].is_array()) {
-                continue;
-            }
-
-            if (entity.type == "minecraft:furnace") {
-                entity.burnSecondsRemaining = j.value("burnSecondsRemaining", 0.0f);
-                entity.burnSecondsTotal = j.value("burnSecondsTotal", 0.0f);
-                entity.cookSeconds = j.value("cookSeconds", 0.0f);
-                entity.cookTargetSeconds = j.value("cookTargetSeconds", 0.0f);
-            }
-
-            for (const auto& slotJson : j["slots"]) {
-                if (!slotJson.is_object()) {
-                    continue;
-                }
-
-                BlockEntitySlotData slot;
-                slot.slot = slotJson.value("slot", -1);
-                if (slotJson.contains("item") && slotJson["item"].is_object()) {
-                    const auto& item = slotJson["item"];
-                    slot.itemId = item.value("id", slot.itemId);
-                    slot.count = item.value("count", slot.count);
-                    slot.durability = item.value("durability", slot.durability);
-                } else {
-                    slot.itemId = slotJson.value("itemId", slot.itemId);
-                    slot.count = slotJson.value("count", slot.count);
-                    slot.durability = slotJson.value("durability", slot.durability);
-                }
-
-                if (slot.slot < 0 || slot.itemId == 0 || slot.count == 0) {
-                    continue;
-                }
-                entity.slots.push_back(slot);
-            }
-
-            out.push_back(std::move(entity));
-        }
-
-        return true;
-    } catch (const std::exception& e) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read block entity file: %s\n", e.what());
+    nlohmann::json root;
+    if (!parseJsonFile(file, "block entity save file", root)) {
         out.clear();
         return false;
     }
+
+    int version = 0;
+    const nlohmann::json* blockEntities = findField(root, "blockEntities");
+    if (!readIntField(root, "version", version) ||
+        version != 1 ||
+        blockEntities == nullptr ||
+        !blockEntities->is_array()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported block entity save file\n");
+        out.clear();
+        return false;
+    }
+
+    for (const auto& j : *blockEntities) {
+        if (!j.is_object()) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid block entity entry\n");
+            out.clear();
+            return false;
+        }
+
+        BlockEntityData entity;
+        if (!readStringField(j, "type", entity.type, true) ||
+            entity.type.empty() ||
+            !readInt3Field(j, "position", entity.x, entity.y, entity.z, true)) {
+            out.clear();
+            return false;
+        }
+
+        const nlohmann::json* slots = findField(j, "slots");
+        if (slots == nullptr || !slots->is_array()) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid block entity slots array\n");
+            out.clear();
+            return false;
+        }
+
+        if (entity.type == "minecraft:furnace" &&
+            (!readFloatField(j, "burnSecondsRemaining", entity.burnSecondsRemaining) ||
+             !readFloatField(j, "burnSecondsTotal", entity.burnSecondsTotal) ||
+             !readFloatField(j, "cookSeconds", entity.cookSeconds) ||
+             !readFloatField(j, "cookTargetSeconds", entity.cookTargetSeconds))) {
+            out.clear();
+            return false;
+        }
+
+        for (const auto& slotJson : *slots) {
+            if (!slotJson.is_object()) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid block entity slot entry\n");
+                out.clear();
+                return false;
+            }
+
+            BlockEntitySlotData slot;
+            if (!readIntField(slotJson, "slot", slot.slot, true)) {
+                out.clear();
+                return false;
+            }
+
+            if (const nlohmann::json* item = findField(slotJson, "item")) {
+                if (!item->is_object() ||
+                    !readUint32Field(*item, "id", slot.itemId) ||
+                    !readUint32Field(*item, "count", slot.count) ||
+                    !readUint32Field(*item, "durability", slot.durability)) {
+                    MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid block entity slot item object\n");
+                    out.clear();
+                    return false;
+                }
+            } else if (!readUint32Field(slotJson, "itemId", slot.itemId) ||
+                       !readUint32Field(slotJson, "count", slot.count) ||
+                       !readUint32Field(slotJson, "durability", slot.durability)) {
+                out.clear();
+                return false;
+            }
+
+            if (slot.slot < 0 || slot.itemId == 0 || slot.count == 0) {
+                continue;
+            }
+            entity.slots.push_back(slot);
+        }
+
+        out.push_back(std::move(entity));
+    }
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------

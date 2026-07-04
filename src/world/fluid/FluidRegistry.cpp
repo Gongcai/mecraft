@@ -100,11 +100,9 @@ void FluidRegistry::init() {
         throw std::runtime_error(std::string("Failed to open fluids config: ") + kFluidsConfigPath);
     }
 
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception& e) {
-        throw std::runtime_error(std::string("Failed to parse fluids config: ") + e.what());
+    nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        throw std::runtime_error("Failed to parse fluids config: invalid JSON");
     }
 
     if (!root.contains("fluids") || !root["fluids"].is_array()) {

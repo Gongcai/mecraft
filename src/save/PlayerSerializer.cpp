@@ -6,8 +6,127 @@
 
 #include <fstream>
 #include <cstdio>
+#include <limits>
 
 namespace save {
+
+namespace {
+
+const nlohmann::json* findField(const nlohmann::json& object, const char* key) {
+    if (!object.is_object()) {
+        return nullptr;
+    }
+    const auto it = object.find(key);
+    return it != object.end() ? &(*it) : nullptr;
+}
+
+bool readIntField(const nlohmann::json& object, const char* key, int& out) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        return true;
+    }
+    if (!value->is_number_integer()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid integer field: %s\n", key);
+        return false;
+    }
+    const auto raw = value->get<int64_t>();
+    if (raw < std::numeric_limits<int>::min() || raw > std::numeric_limits<int>::max()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Integer field out of range: %s\n", key);
+        return false;
+    }
+    out = static_cast<int>(raw);
+    return true;
+}
+
+bool readUint16Field(const nlohmann::json& object, const char* key, uint16_t& out) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        return true;
+    }
+
+    uint64_t raw = 0;
+    if (value->is_number_unsigned()) {
+        raw = value->get<uint64_t>();
+    } else if (value->is_number_integer()) {
+        const auto signedRaw = value->get<int64_t>();
+        if (signedRaw < 0) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Negative value for unsigned field: %s\n", key);
+            return false;
+        }
+        raw = static_cast<uint64_t>(signedRaw);
+    } else {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid unsigned integer field: %s\n", key);
+        return false;
+    }
+
+    if (raw > std::numeric_limits<uint16_t>::max()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsigned integer field out of range: %s\n", key);
+        return false;
+    }
+    out = static_cast<uint16_t>(raw);
+    return true;
+}
+
+bool readFloatField(const nlohmann::json& object, const char* key, float& out) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        return true;
+    }
+    if (!value->is_number()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid number field: %s\n", key);
+        return false;
+    }
+    out = value->get<float>();
+    return true;
+}
+
+bool readBoolField(const nlohmann::json& object, const char* key, bool& out) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        return true;
+    }
+    if (!value->is_boolean()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid boolean field: %s\n", key);
+        return false;
+    }
+    out = value->get<bool>();
+    return true;
+}
+
+bool readStringField(const nlohmann::json& object, const char* key, std::string& out) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        return true;
+    }
+    if (!value->is_string()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid string field: %s\n", key);
+        return false;
+    }
+    out = value->get<std::string>();
+    return true;
+}
+
+bool readFloat3Field(const nlohmann::json& object,
+                     const char* key,
+                     float& x,
+                     float& y,
+                     float& z) {
+    const nlohmann::json* value = findField(object, key);
+    if (value == nullptr) {
+        return true;
+    }
+    if (!value->is_array() || value->size() < 3 ||
+        !(*value)[0].is_number() || !(*value)[1].is_number() || !(*value)[2].is_number()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid vec3 field: %s\n", key);
+        return false;
+    }
+    x = (*value)[0].get<float>();
+    y = (*value)[1].get<float>();
+    z = (*value)[2].get<float>();
+    return true;
+}
+
+} // namespace
 
 nlohmann::json PlayerSerializer::serialize(const PlayerData& data) {
     nlohmann::json j;
@@ -48,80 +167,96 @@ nlohmann::json PlayerSerializer::serialize(const PlayerData& data) {
 }
 
 bool PlayerSerializer::deserialize(const nlohmann::json& j, PlayerData& out) {
-    try {
-        const int version = j.value("version", 0);
-        if (version != 1) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported player data version: %d\n", version);
+    if (!j.is_object()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Player data root must be an object\n");
+        return false;
+    }
+
+    int version = 0;
+    if (!readIntField(j, "version", version)) {
+        return false;
+    }
+    if (version != 1) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Unsupported player data version: %d\n", version);
+        return false;
+    }
+
+    if (!readFloat3Field(j, "position", out.posX, out.posY, out.posZ) ||
+        !readFloat3Field(j, "velocity", out.velX, out.velY, out.velZ) ||
+        !readFloatField(j, "yaw", out.yaw) ||
+        !readFloatField(j, "pitch", out.pitch) ||
+        !readIntField(j, "selectedSlot", out.selectedSlot)) {
+        return false;
+    }
+
+    if (const nlohmann::json* health = findField(j, "health")) {
+        if (!health->is_object() ||
+            !readIntField(*health, "current", out.health) ||
+            !readIntField(*health, "max", out.healthMax)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid health object\n");
+            return false;
+        }
+    }
+
+    if (const nlohmann::json* armor = findField(j, "armor")) {
+        if (!armor->is_object() ||
+            !readIntField(*armor, "current", out.armor) ||
+            !readIntField(*armor, "max", out.armorMax)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid armor object\n");
+            return false;
+        }
+    }
+
+    if (const nlohmann::json* food = findField(j, "food")) {
+        if (!food->is_object() ||
+            !readIntField(*food, "current", out.food) ||
+            !readIntField(*food, "max", out.foodMax) ||
+            !readIntField(*food, "saturation", out.saturation)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid food object\n");
+            return false;
+        }
+    }
+
+    if (const nlohmann::json* flight = findField(j, "flight")) {
+        if (!flight->is_object() || !readBoolField(*flight, "isFlying", out.isFlying)) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid flight object\n");
+            return false;
+        }
+    }
+
+    if (const nlohmann::json* inventory = findField(j, "inventory")) {
+        if (!inventory->is_array()) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid inventory array\n");
             return false;
         }
 
-        // Position
-        if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 3) {
-            out.posX = j["position"][0].get<float>();
-            out.posY = j["position"][1].get<float>();
-            out.posZ = j["position"][2].get<float>();
-        }
-
-        // Velocity
-        if (j.contains("velocity") && j["velocity"].is_array() && j["velocity"].size() >= 3) {
-            out.velX = j["velocity"][0].get<float>();
-            out.velY = j["velocity"][1].get<float>();
-            out.velZ = j["velocity"][2].get<float>();
-        }
-
-        // Rotation
-        out.yaw = j.value("yaw", out.yaw);
-        out.pitch = j.value("pitch", out.pitch);
-        out.selectedSlot = j.value("selectedSlot", out.selectedSlot);
-
-        // Health
-        if (j.contains("health") && j["health"].is_object()) {
-            out.health = j["health"].value("current", out.health);
-            out.healthMax = j["health"].value("max", out.healthMax);
-        }
-
-        // Armor
-        if (j.contains("armor") && j["armor"].is_object()) {
-            out.armor = j["armor"].value("current", out.armor);
-            out.armorMax = j["armor"].value("max", out.armorMax);
-        }
-
-        // Food
-        if (j.contains("food") && j["food"].is_object()) {
-            out.food = j["food"].value("current", out.food);
-            out.foodMax = j["food"].value("max", out.foodMax);
-            out.saturation = j["food"].value("saturation", out.saturation);
-        }
-
-        // Flight
-        if (j.contains("flight") && j["flight"].is_object()) {
-            out.isFlying = j["flight"].value("isFlying", out.isFlying);
-        }
-
-        // Inventory
-        if (j.contains("inventory") && j["inventory"].is_array()) {
-            for (const auto& s : j["inventory"]) {
-                const int slot = s.value("slot", -1);
-                if (slot < 0 || slot >= Inventory::INVENTORY_SIZE) continue;
-
-                PlayerData::Slot slotData;
-                slotData.item = s.value("item", "");
-                slotData.count = s.value("count", static_cast<uint16_t>(0));
-                slotData.durability = s.value("durability", static_cast<uint16_t>(0));
-
-                // Ensure inventory vector is large enough
-                if (out.inventory.size() <= static_cast<size_t>(slot)) {
-                    out.inventory.resize(static_cast<size_t>(slot) + 1);
-                }
-                out.inventory[static_cast<size_t>(slot)] = std::move(slotData);
+        for (const auto& s : *inventory) {
+            if (!s.is_object()) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Save] Invalid inventory slot object\n");
+                return false;
             }
-        }
 
-        return true;
-    } catch (const std::exception& e) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to parse player data: %s\n", e.what());
-        return false;
+            int slot = -1;
+            PlayerData::Slot slotData;
+            if (!readIntField(s, "slot", slot) ||
+                !readStringField(s, "item", slotData.item) ||
+                !readUint16Field(s, "count", slotData.count) ||
+                !readUint16Field(s, "durability", slotData.durability)) {
+                return false;
+            }
+            if (slot < 0 || slot >= Inventory::INVENTORY_SIZE) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Save] Inventory slot index out of range: %d\n", slot);
+                return false;
+            }
+
+            if (out.inventory.size() <= static_cast<size_t>(slot)) {
+                out.inventory.resize(static_cast<size_t>(slot) + 1);
+            }
+            out.inventory[static_cast<size_t>(slot)] = std::move(slotData);
+        }
     }
+
+    return true;
 }
 
 void PlayerSerializer::saveToFile(const std::string& path, const PlayerData& data) {
@@ -160,14 +295,12 @@ bool PlayerSerializer::loadFromFile(const std::string& path, PlayerData& out) {
         return false;
     }
 
-    try {
-        nlohmann::json j;
-        file >> j;
-        return deserialize(j, out);
-    } catch (const std::exception& e) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to read player file: %s\n", e.what());
+    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    if (j.is_discarded()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Save] Failed to parse player file: invalid JSON\n");
         return false;
     }
+    return deserialize(j, out);
 }
 
 } // namespace save

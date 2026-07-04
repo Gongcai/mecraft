@@ -24,12 +24,10 @@ bool LocaleManager::loadLanguage(const std::string& langCode) {
         return false;
     }
 
-    nlohmann::json j;
-    try {
-        file >> j;
-    } catch (const std::exception& e) {
+    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    if (j.is_discarded()) {
 #ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "[LocaleManager] Failed to parse: " << path << " - " << e.what() << std::endl);
+        MECRAFT_LOG_STREAM(std::cerr << "[LocaleManager] Failed to parse: " << path << std::endl);
 #endif
         return false;
     }
@@ -65,10 +63,8 @@ void LocaleManager::loadSettings() {
         return;
     }
 
-    nlohmann::json j;
-    try {
-        file >> j;
-    } catch (...) {
+    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    if (j.is_discarded()) {
         loadLanguage("en_us");
         return;
     }
@@ -86,9 +82,8 @@ void LocaleManager::saveSettings() const {
     nlohmann::json j = nlohmann::json::object();
     std::ifstream existing(SETTINGS_PATH);
     if (existing.is_open()) {
-        try {
-            existing >> j;
-        } catch (...) {
+        j = nlohmann::json::parse(existing, nullptr, false);
+        if (j.is_discarded()) {
             j = nlohmann::json::object();
         }
     }
@@ -173,8 +168,10 @@ std::string LocaleManager::getLanguageDisplayName(const std::string& langCode) {
     std::ifstream file(path);
     if (!file.is_open()) return langCode;
 
-    nlohmann::json j;
-    try { file >> j; } catch (...) { return langCode; }
+    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    if (j.is_discarded()) {
+        return langCode;
+    }
 
     if (j.contains("language_name") && j["language_name"].is_string()) {
         return j["language_name"].get<std::string>();

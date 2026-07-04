@@ -190,11 +190,9 @@ bool loadProjectileDefinitionsFromFile(const std::string& path, std::string* err
         return false;
     }
 
-    json root;
-    try {
-        file >> root;
-    } catch (const std::exception& ex) {
-        setError(error, std::string("failed to parse projectile definitions: ") + ex.what());
+    json root = json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        setError(error, "failed to parse projectile definitions: invalid JSON");
         return false;
     }
 

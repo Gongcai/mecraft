@@ -25,18 +25,22 @@ string trimShaderIncludeToken(string token) {
 }
 } // namespace
 
-string Shader::loadShaderSource(const string& path) {
-	ifstream shaderFile;
-	shaderFile.exceptions(ifstream::failbit | ifstream::badbit);
-	shaderFile.open(path);
+optional<string> Shader::loadShaderSource(const string& path) {
+	ifstream shaderFile(path);
+	if (!shaderFile.is_open()) {
+		return nullopt;
+	}
 	stringstream shaderStream;
 	shaderStream << shaderFile.rdbuf();
+	if (shaderFile.bad()) {
+		return nullopt;
+	}
 	return shaderStream.str();
 }
 
-string Shader::resolveIncludes(const string& source,
-                               const string& sourcePath,
-                               unordered_set<string>& includeStack) {
+optional<string> Shader::resolveIncludes(const string& source,
+                                         const string& sourcePath,
+                                         unordered_set<string>& includeStack) {
 	const filesystem::path currentPath = filesystem::absolute(sourcePath).lexically_normal();
 	const filesystem::path currentDir = currentPath.parent_path();
 	stringstream input(source);
@@ -51,15 +55,23 @@ string Shader::resolveIncludes(const string& source,
 				const string includeKey = includePath.string();
 				output += "#line 1 0\n";
 				if (includeStack.insert(includeKey).second) {
-					try {
-						output += resolveIncludes(loadShaderSource(includeKey), includeKey, includeStack);
-					} catch (ifstream::failure&) {
+					optional<string> includeSource = loadShaderSource(includeKey);
+					if (!includeSource) {
 						cout << "ERROR::SHADER::INCLUDE_NOT_SUCCESSFULLY_READ" << endl;
 						cout << "ERROR::SHADER::FILENAME:" << includeKey << endl;
+						includeStack.erase(includeKey);
+						return nullopt;
 					}
+					optional<string> resolvedInclude = resolveIncludes(*includeSource, includeKey, includeStack);
+					if (!resolvedInclude) {
+						includeStack.erase(includeKey);
+						return nullopt;
+					}
+					output += *resolvedInclude;
 					includeStack.erase(includeKey);
 				} else {
 					cout << "ERROR::SHADER::CYCLIC_INCLUDE:" << includeKey << endl;
+					return nullopt;
 				}
 				output += "\n#line 1 0\n";
 				continue;
@@ -75,52 +87,39 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 {
 	uniformLocationCache.reserve(128);
 
-	//从文件中读取着色器并写到字符串里转成const char* c
+	// Read shader sources and resolve local include directives.
 	string vertexCode;
 	string framentCode;
 	string geometryCode;
-	ifstream vShaderFile;
-	ifstream fShaderFile;
-	ifstream gShaderFile;
-
-	vShaderFile.exceptions(ifstream::failbit|ifstream::badbit);
-	fShaderFile.exceptions(ifstream::failbit | ifstream::badbit);
-	gShaderFile.exceptions(ifstream::failbit | ifstream::badbit);
-	try
-	{
-		vShaderFile.open(vertexPath);
-		fShaderFile.open(fragmentPath);
-		gShaderFile.open(geometryPath);
-		stringstream vShaderStream, fShaderStream,gShaderStream;
-		vShaderStream << vShaderFile.rdbuf();
-		fShaderStream << fShaderFile.rdbuf();
-		gShaderStream << gShaderFile.rdbuf();
-		vShaderFile.close();
-		fShaderFile.close();
-		gShaderFile.close();
-		unordered_set<string> includeStack;
-		vertexCode = resolveIncludes(vShaderStream.str(), vertexPath, includeStack);
-		framentCode = resolveIncludes(fShaderStream.str(), fragmentPath, includeStack);
-		geometryCode = resolveIncludes(gShaderStream.str(), geometryPath, includeStack);
-	}
-	catch (ifstream::failure e)
-	{
+	const optional<string> vertexSource = loadShaderSource(vertexPath);
+	const optional<string> fragmentSource = loadShaderSource(fragmentPath);
+	const optional<string> geometrySource = loadShaderSource(geometryPath);
+	if (!vertexSource || !fragmentSource || !geometrySource) {
 		cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << endl;
 		cout << "ERROR::SHADER::FILENAME:" << vertexPath << endl;
 		cout << "ERROR::SHADER::FILENAME:" << fragmentPath << endl;
 		cout << "ERROR::SHADER::FILENAME:" << geometryPath << endl;
-
-
+		return;
 	}
+	unordered_set<string> includeStack;
+	optional<string> resolvedVertex = resolveIncludes(*vertexSource, vertexPath, includeStack);
+	optional<string> resolvedFragment = resolveIncludes(*fragmentSource, fragmentPath, includeStack);
+	optional<string> resolvedGeometry = resolveIncludes(*geometrySource, geometryPath, includeStack);
+	if (!resolvedVertex || !resolvedFragment || !resolvedGeometry) {
+		return;
+	}
+	vertexCode = std::move(*resolvedVertex);
+	framentCode = std::move(*resolvedFragment);
+	geometryCode = std::move(*resolvedGeometry);
 	const char* vShaderCode = vertexCode.c_str();
 	const char* fShaderCode = framentCode.c_str();
 	const char* gShaderCode = geometryCode.c_str();
-	//着色器的编译和链接
+	// Compile shader stages and link the final program.
 	unsigned int vertex, fragment, geometry;
 	int success;
 	char infolog[512];
 
-	//顶点着色器
+	// Vertex shader.
 	vertex = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vertex,1,&vShaderCode,NULL);
 	glCompileShader(vertex);
@@ -131,7 +130,7 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 		cout << "ERROR:SHADER::VERTEX::COMPILATION_FAILED [" << vertexPath << "]\n" << infolog << endl;
 
 	}
-	//片段着色器
+	// Fragment shader.
 	fragment = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fragment, 1, &fShaderCode, NULL);
 	glCompileShader(fragment);
@@ -142,7 +141,7 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 		cout << "ERROR:SHADER::FRAGMENT::COMPILATION_FAILED [" << fragmentPath << "]\n" << infolog << endl;
 
 	}
-	//几何着色器
+	// Geometry shader.
 	geometry = glCreateShader(GL_GEOMETRY_SHADER);
 	glShaderSource(geometry,1,&gShaderCode,NULL);
 	glCompileShader(geometry);
@@ -173,51 +172,35 @@ Shader::Shader(const char* vertexPath, const char* fragmentPath, const char* geo
 }
 Shader::Shader(const char* vertexPath,const char* fragmentPath){
 	uniformLocationCache.reserve(128);
-	//从文件中读取着色器并写到字符串里转成const char* c
+	// Read shader sources and resolve local include directives.
 	string vertexCode;
 	string framentCode;
 	string geometryCode;
-	ifstream vShaderFile;
-	ifstream fShaderFile;
-	ifstream gShaderFile;
-
-	vShaderFile.exceptions(ifstream::failbit|ifstream::badbit);
-	fShaderFile.exceptions(ifstream::failbit | ifstream::badbit);
-	gShaderFile.exceptions(ifstream::failbit | ifstream::badbit);
-	try
-	{
-		vShaderFile.open(vertexPath);
-		fShaderFile.open(fragmentPath);
-
-		stringstream vShaderStream, fShaderStream,gShaderStream;
-		vShaderStream << vShaderFile.rdbuf();
-		fShaderStream << fShaderFile.rdbuf();
-
-		vShaderFile.close();
-		fShaderFile.close();
-
-		unordered_set<string> includeStack;
-		vertexCode = resolveIncludes(vShaderStream.str(), vertexPath, includeStack);
-		framentCode = resolveIncludes(fShaderStream.str(), fragmentPath, includeStack);
-
-	}
-	catch (ifstream::failure e)
-	{
+	const optional<string> vertexSource = loadShaderSource(vertexPath);
+	const optional<string> fragmentSource = loadShaderSource(fragmentPath);
+	if (!vertexSource || !fragmentSource) {
 		cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << endl;
 		cout << "ERROR::SHADER::FILENAME:" << vertexPath << endl;
 		cout << "ERROR::SHADER::FILENAME:" << fragmentPath << endl;
-
-
+		return;
 	}
+	unordered_set<string> includeStack;
+	optional<string> resolvedVertex = resolveIncludes(*vertexSource, vertexPath, includeStack);
+	optional<string> resolvedFragment = resolveIncludes(*fragmentSource, fragmentPath, includeStack);
+	if (!resolvedVertex || !resolvedFragment) {
+		return;
+	}
+	vertexCode = std::move(*resolvedVertex);
+	framentCode = std::move(*resolvedFragment);
 	const char* vShaderCode = vertexCode.c_str();
 	const char* fShaderCode = framentCode.c_str();
 
-	//着色器的编译和链接
-	unsigned int vertex, fragment, geometry;
+	// Compile shader stages and link the final program.
+	unsigned int vertex, fragment;
 	int success;
 	char infolog[512];
 
-	//顶点着色器
+	// Vertex shader.
 	vertex = glCreateShader(GL_VERTEX_SHADER);
 	glShaderSource(vertex,1,&vShaderCode,NULL);
 	glCompileShader(vertex);
@@ -228,7 +211,7 @@ Shader::Shader(const char* vertexPath,const char* fragmentPath){
 		cout << "ERROR:SHADER::VERTEX::COMPILATION_FAILED [" << vertexPath << "]\n" << infolog << endl;
 
 	}
-	//片段着色器
+	// Fragment shader.
 	fragment = glCreateShader(GL_FRAGMENT_SHADER);
 	glShaderSource(fragment, 1, &fShaderCode, NULL);
 	glCompileShader(fragment);
@@ -332,21 +315,18 @@ void Shader::setUint(const string& name, unsigned int value) const
 }
 
 Shader* Shader::createCompute(const char* computePath) {
-    string computeCode;
-    try {
-        ifstream file;
-        file.exceptions(ifstream::failbit | ifstream::badbit);
-        file.open(computePath);
-        stringstream stream;
-        stream << file.rdbuf();
-        file.close();
-        unordered_set<string> includeStack;
-        computeCode = resolveIncludes(stream.str(), computePath, includeStack);
-    } catch (ifstream::failure& e) {
+    const optional<string> computeSource = loadShaderSource(computePath);
+    if (!computeSource) {
         cout << "ERROR::SHADER::COMPUTE::FILE_NOT_SUCCESSFULLY_READ" << endl;
         cout << "ERROR::SHADER::FILENAME:" << computePath << endl;
         return nullptr;
     }
+    unordered_set<string> includeStack;
+    optional<string> resolvedCompute = resolveIncludes(*computeSource, computePath, includeStack);
+    if (!resolvedCompute) {
+        return nullptr;
+    }
+    string computeCode = std::move(*resolvedCompute);
 
     const char* code = computeCode.c_str();
     GLuint compute = glCreateShader(GL_COMPUTE_SHADER);

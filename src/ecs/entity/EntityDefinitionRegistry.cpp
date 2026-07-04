@@ -423,11 +423,9 @@ bool EntityDefinitionRegistry::loadFromFile(const std::string& path, std::string
         return false;
     }
 
-    json root;
-    try {
-        file >> root;
-    } catch (const std::exception& ex) {
-        setError(error, std::string("failed to parse entity definitions: ") + ex.what());
+    json root = json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        setError(error, "failed to parse entity definitions: invalid JSON");
         return false;
     }
 

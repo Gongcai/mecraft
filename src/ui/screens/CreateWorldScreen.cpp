@@ -7,6 +7,7 @@
 #include "../../resource/ResourceMgr.h"
 #include "../../locale/LocaleManager.h"
 
+#include <charconv>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -164,24 +165,20 @@ void CreateWorldScreen::updateAnimations(float dt) {
 }
 
 // ---------------------------------------------------------------------------
-// Seed parsing: numeric → direct value; text → std::hash; empty → default
+// Seed parsing: numeric text maps directly; other text maps through std::hash.
 // ---------------------------------------------------------------------------
 
 int CreateWorldScreen::parseSeed(const std::string& text) {
     if (text.empty()) return 1234;
 
-    // Try parsing as a signed integer first
-    try {
-        size_t pos = 0;
-        long long val = std::stoll(text, &pos);
-        if (pos == text.size()) {
-            return static_cast<int>(val);
-        }
-    } catch (...) {
-        // Not a number — fall through to hash
+    long long value = 0;
+    const char* begin = text.data();
+    const char* end = begin + text.size();
+    const auto result = std::from_chars(begin, end, value);
+    if (result.ec == std::errc{} && result.ptr == end) {
+        return static_cast<int>(value);
     }
 
-    // Hash the string to produce a deterministic seed
     return static_cast<int>(std::hash<std::string>{}(text));
 }
 

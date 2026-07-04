@@ -354,11 +354,10 @@ bool deserializeWireContainers(const uint8_t*& cursor,
                 !readU8(cursor, end, part.connections)) {
                 return false;
             }
-            try {
-                if (!parts.addPart(part)) {
-                    return false;
-                }
-            } catch (const std::exception&) {
+            if (!WireContainerParts::isValidPart(part)) {
+                return false;
+            }
+            if (!parts.addPart(part)) {
                 return false;
             }
         }

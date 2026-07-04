@@ -204,11 +204,9 @@ bool AudioCatalog::loadFromFile(const fs::path& manifestPath,
         return false;
     }
 
-    json manifest;
-    try {
-        file >> manifest;
-    } catch (const std::exception& ex) {
-        error = "failed to parse audio catalog " + pathToUtf8(manifestPath) + ": " + ex.what();
+    json manifest = json::parse(file, nullptr, false);
+    if (manifest.is_discarded()) {
+        error = "failed to parse audio catalog " + pathToUtf8(manifestPath) + ": invalid JSON";
         return false;
     }
 

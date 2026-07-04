@@ -144,11 +144,9 @@ void loadBlockInteractionFile(const std::filesystem::path& path,
         throw std::runtime_error("Failed to open block interaction config: " + path.string());
     }
 
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception& e) {
-        throw std::runtime_error("Failed to parse block interaction config " + path.string() + ": " + e.what());
+    nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        throw std::runtime_error("Failed to parse block interaction config " + path.string() + ": invalid JSON");
     }
 
     BlockInteractionDef def = parseBlockInteractionDef(root, path.string());

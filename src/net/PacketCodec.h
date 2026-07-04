@@ -732,11 +732,10 @@ public:
             part.facing = readU16(data, offset);
             part.power = readU8(data, offset);
             part.connections = readU8(data, offset);
-            try {
-                if (!parts.addPart(part)) return false;
-            } catch (const std::exception&) {
+            if (!WireContainerParts::isValidPart(part)) {
                 return false;
             }
+            if (!parts.addPart(part)) return false;
         }
         if (offset != size) return false;
         out.parts = parts;

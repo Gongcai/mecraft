@@ -16,11 +16,9 @@ void preloadEntityTexturesFromConfig(ResourceMgr& resourceMgr, const std::string
         throw std::runtime_error("Failed to open entity config for texture preload: " + entitiesConfigPath);
     }
 
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception& e) {
-        throw std::runtime_error(std::string("Failed to parse entity config for texture preload: ") + e.what());
+    nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        throw std::runtime_error("Failed to parse entity config for texture preload: invalid JSON");
     }
 
     const auto entitiesIt = root.find("entities");

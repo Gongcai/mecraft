@@ -45,12 +45,10 @@ bool UITheme::loadFromFile(const std::string& path) {
         return false;
     }
 
-    nlohmann::json j;
-    try {
-        file >> j;
-    } catch (const std::exception& e) {
+    nlohmann::json j = nlohmann::json::parse(file, nullptr, false);
+    if (j.is_discarded()) {
 #ifdef MECRAFT_DEBUG
-        MECRAFT_LOG_STREAM(std::cerr << "[UITheme] Failed to parse: " << path << " - " << e.what() << std::endl);
+        MECRAFT_LOG_STREAM(std::cerr << "[UITheme] Failed to parse: " << path << std::endl);
 #endif
         return false;
     }

@@ -36,6 +36,13 @@ class WireContainerParts {
 public:
     static constexpr std::size_t MAX_PARTS = 24;
 
+    [[nodiscard]] static bool isValidPart(const WirePart& part) {
+        return part.channelId != 0 &&
+               WireFaceGeometry::isWireFacing(part.facing) &&
+               part.power <= 15 &&
+               (part.connections & ~WireConnectionBits::ALL) == 0;
+    }
+
     [[nodiscard]] bool addPart(const WirePart& part) {
         validatePart(part);
         if (find(part.channelId, part.facing) != nullptr) {
@@ -122,17 +129,8 @@ private:
     }
 
     static void validatePart(const WirePart& part) {
-        if (part.channelId == 0) {
-            throw std::runtime_error("Wire container part requires a non-zero channel id");
-        }
-        if (!WireFaceGeometry::isWireFacing(part.facing)) {
-            throw std::runtime_error("Wire container part requires a supported wire facing");
-        }
-        if (part.power > 15) {
-            throw std::runtime_error("Wire container part power must be in the range 0 through 15");
-        }
-        if ((part.connections & ~WireConnectionBits::ALL) != 0) {
-            throw std::runtime_error("Wire container part connections must use the lower four bits");
+        if (!isValidPart(part)) {
+            throw std::runtime_error("Wire container part contains invalid channel, facing, power, or connection data");
         }
     }
 

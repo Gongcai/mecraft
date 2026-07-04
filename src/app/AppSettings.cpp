@@ -22,10 +22,8 @@ json readSettingsFile() {
         return json::object();
     }
 
-    json root;
-    try {
-        file >> root;
-    } catch (...) {
+    json root = json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
         return json::object();
     }
     return root.is_object() ? root : json::object();

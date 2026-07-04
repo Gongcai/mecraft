@@ -456,11 +456,9 @@ void BlockRegistry::init(ResourceMgr* resourceMgr) {
         throw std::runtime_error(std::string("Failed to open blocks config: ") + kBlocksConfigPath);
     }
 
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception& e) {
-        throw std::runtime_error(std::string("Failed to parse blocks config: ") + e.what());
+    nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        throw std::runtime_error("Failed to parse blocks config: invalid JSON");
     }
 
     if (!root.contains("blocks") || !root["blocks"].is_array()) {

@@ -258,11 +258,9 @@ void loadContainerUiFile(const std::filesystem::path& path,
         throw std::runtime_error("Failed to open container UI config: " + path.string());
     }
 
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception& e) {
-        throw std::runtime_error("Failed to parse container UI config " + path.string() + ": " + e.what());
+    nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        throw std::runtime_error("Failed to parse container UI config " + path.string() + ": invalid JSON");
     }
 
     ContainerUiDef def = parseContainerUiDef(root, path.string());

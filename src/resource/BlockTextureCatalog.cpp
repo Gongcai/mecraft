@@ -38,11 +38,9 @@ void BlockTextureCatalog::load(const std::string& textureConfigPath) {
         throw std::runtime_error("Failed to open block texture catalog: " + textureConfigPath);
     }
 
-    nlohmann::json root;
-    try {
-        file >> root;
-    } catch (const std::exception& e) {
-        throw std::runtime_error(std::string("Failed to parse block texture catalog: ") + e.what());
+    nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
+    if (root.is_discarded()) {
+        throw std::runtime_error("Failed to parse block texture catalog: invalid JSON");
     }
 
     int tileSize = 16;
