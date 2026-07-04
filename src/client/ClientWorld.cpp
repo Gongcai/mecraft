@@ -4,10 +4,17 @@
 #include "../world/fluid/FluidState.h"
 #include <cstddef>
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 namespace client {
 namespace {
+[[noreturn]] void failClientWorld(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
 void markRenderableBorderDirty(Chunk& chunk) {
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         if (chunk.getSubChunk(scy) != nullptr) {
@@ -316,7 +323,7 @@ void ClientWorld::applyWireContainerUpdate(const glm::ivec3& position, const Wir
     const BlockStateId stateId = it->second->getBlock(lx, position.y, lz);
     if (stateId == NULL_BLOCK_STATE ||
         !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
-        throw std::runtime_error("Client wire container update targeted a non-container block");
+        failClientWorld("Client wire container update targeted a non-container block");
     }
 
     m_wireContainerParts.getOrCreate(position) = parts;

@@ -1,7 +1,9 @@
 #include "BlockPlaceSystem.h"
 
 #include <algorithm>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include "../../util/AudioEventBuffer.h"
 #include "../../util/GameplayRuntimeContext.h"
@@ -23,6 +25,11 @@
 namespace ecs {
 
 namespace {
+
+[[noreturn]] void failBlockPlaceSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
     if (registry.ctxHas<GameplayRuntimeContext>()) {
@@ -106,7 +113,7 @@ BlockStateId withExistingWireFacing(const BlockStateId existingWireState,
     const uint16_t existingFacing =
         BlockStateRegistry::getPropertyIndex(existingWireState, PropIndices::FACING);
     if (existingFacing == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("Wire container placement target is missing facing");
+        failBlockPlaceSystem("Wire container placement target is missing facing");
     }
     return BlockStateRegistry::withProperty(incomingWireState, PropIndices::FACING, existingFacing);
 }
@@ -355,7 +362,7 @@ void BlockPlaceSystem::update(SystemContext& ctx) {
                 doorPlacement.upperState = placement.secondaryStateId;
                 DoorBlockLogic::placeDoor(*mutableWorld, doorPlacement);
             } else {
-                throw std::runtime_error("Unsupported multi-block placement state");
+                failBlockPlaceSystem("Unsupported multi-block placement state");
             }
         } else {
             const WireContainerPlacement::ApplyResult wirePlacementResult =

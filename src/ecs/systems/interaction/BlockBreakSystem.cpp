@@ -1,7 +1,9 @@
 #include "BlockBreakSystem.h"
 
 #include <algorithm>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -28,6 +30,11 @@
 namespace ecs {
 
 namespace {
+
+[[noreturn]] void failBlockBreakSystem(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 const IGameplayModeRules& resolveModeRules(const GameplayRegistry& registry) {
     if (registry.ctxHas<GameplayRuntimeContext>()) {
@@ -112,7 +119,7 @@ WireContainerParts removeTargetWireContainerParts(World& world,
         return {};
     }
     if (!isAxisNormal(hitNormal)) {
-        throw std::runtime_error("Wire container part break requires an axis-aligned hit normal");
+        failBlockBreakSystem("Wire container part break requires an axis-aligned hit normal");
     }
 
     const uint16_t facing = WireFaceGeometry::facingFromSurfaceNormal(hitNormal);
@@ -152,7 +159,7 @@ void spawnWireContainerPartDrops(GameplayRegistry& registry,
     for (const BlockID blockId : WireContainerPlacement::wireBlocksForParts(parts)) {
         const ItemID dropItem = BlockDropTable::getDropItem(blockId);
         if (dropItem == RUNTIME_ID_NULL) {
-            throw std::runtime_error("Wire container part block has no drop item: " +
+            failBlockBreakSystem("Wire container part block has no drop item: " +
                                      BlockRegistry::getFast(blockId).namespacedId.full());
         }
         ItemSpawnSystem::spawn(registry, dropItem, position, 1);

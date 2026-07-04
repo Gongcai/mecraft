@@ -2,9 +2,10 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <functional>
-#include <stdexcept>
 #include <unordered_map>
 #include <utility>
 
@@ -12,6 +13,12 @@
 
 #include "../block/PropIndices.h"
 #include "WireFaceGeometry.h"
+
+[[noreturn]] inline void failWireContainerParts(const char* message) {
+    std::fputs(message, stderr);
+    std::fputc('\n', stderr);
+    std::abort();
+}
 
 namespace WireConnectionBits {
 constexpr uint8_t AXIS1_POS = 1u << 0u;
@@ -83,7 +90,7 @@ public:
 
     [[nodiscard]] bool setPower(const uint16_t channelId, const uint16_t facing, const uint8_t power) {
         if (power > 15) {
-            throw std::runtime_error("Wire container part power must be in the range 0 through 15");
+            failWireContainerParts("Wire container part power must be in the range 0 through 15");
         }
         WirePart* part = findMutable(channelId, facing);
         if (part == nullptr) {
@@ -130,7 +137,7 @@ private:
 
     static void validatePart(const WirePart& part) {
         if (!isValidPart(part)) {
-            throw std::runtime_error("Wire container part contains invalid channel, facing, power, or connection data");
+            failWireContainerParts("Wire container part contains invalid channel, facing, power, or connection data");
         }
     }
 

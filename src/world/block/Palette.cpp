@@ -2,11 +2,19 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
-#include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 namespace {
+
+[[noreturn]] void failPalette(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
 template <typename Map>
 size_t estimateUnorderedMapBytes(const Map& map) {
     return map.bucket_count() * sizeof(void*) +
@@ -21,7 +29,7 @@ uint32_t Palette::getOrCreateIndex(const BlockStateId stateId) {
     }
 
     if (m_indexToId.size() > std::numeric_limits<uint32_t>::max()) {
-        throw std::runtime_error("Palette exceeds uint32_t index capacity");
+        failPalette("Palette exceeds uint32_t index capacity");
     }
 
     const uint32_t index = static_cast<uint32_t>(m_indexToId.size());
@@ -79,7 +87,7 @@ std::vector<uint32_t> Palette::compact(const std::vector<BlockStateId>& usedIds)
     m_idToIndex.clear();
     for (const BlockStateId id : uniqueUsed) {
         if (m_indexToId.size() > std::numeric_limits<uint32_t>::max()) {
-            throw std::runtime_error("Palette compaction exceeds uint32_t index capacity");
+            failPalette("Palette compaction exceeds uint32_t index capacity");
         }
         const uint32_t idx = static_cast<uint32_t>(m_indexToId.size());
         m_indexToId.push_back(id);

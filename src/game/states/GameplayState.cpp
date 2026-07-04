@@ -1,8 +1,9 @@
 #include "GameplayState.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 #include <memory>
-#include <stdexcept>
 #include <string>
 
 #include "GameStateMachine.h"
@@ -27,6 +28,15 @@
 #include "../../world/World.h"
 #include "../../world/block/BedBlock.h"
 #include "../../world/block/BlockStateRegistry.h"
+
+namespace {
+
+[[noreturn]] void failGameplayState(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
+} // namespace
 
 GameplayState::GameplayState(StateDependencies deps,
                              const IGameplayModeRules& modeRules,
@@ -165,7 +175,7 @@ bool GameplayState::handleBlockContainerInteraction(const InputSnapshot& snapsho
         }
 
         if (m_ctx.world == nullptr) {
-            throw std::runtime_error("Block interaction requires an active world context");
+            failGameplayState("Block interaction requires an active world context");
         }
 
         const BlockStateId targetState = m_ctx.world->getBlockState(

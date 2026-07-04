@@ -2,9 +2,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <memory>
-#include <stdexcept>
 #include <string>
 
 #include <glm/vec3.hpp>
@@ -24,6 +25,12 @@
 #include "../../ui/core/UIRenderer.h"
 #include "../../ui/inventory/ContainerUiRegistry.h"
 
+[[noreturn]] inline void failNetworkContainerState(const std::string& message) {
+    std::fputs(message.c_str(), stderr);
+    std::fputc('\n', stderr);
+    std::abort();
+}
+
 class NetworkContainerState final : public IGameState {
 public:
     NetworkContainerState(InventoryStateContext deps,
@@ -35,7 +42,7 @@ public:
 
     void onEnter() override {
         if (m_deps.gameClient == nullptr) {
-            throw std::runtime_error("Network container state requires a game client");
+            failNetworkContainerState("Network container state requires a game client");
         }
 
         m_deps.context.pushContext(InputContextType::UI);
@@ -165,7 +172,7 @@ private:
             m_deps.uiRenderer.setMachinePanelSource(m_machineMirror.get());
             m_deps.uiRenderer.setMachinePanelVisible(true);
         } else {
-            throw std::runtime_error("Network container does not support behavior handler: " + behavior.handler);
+            failNetworkContainerState("Network container does not support behavior handler: " + behavior.handler);
         }
         m_panelConfigured = true;
     }

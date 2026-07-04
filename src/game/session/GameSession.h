@@ -71,7 +71,7 @@ public:
     [[nodiscard]] bool stabilizeLocalPlayerAfterInitialLoad();
 
     /// Get the local player's inventory from ECS.
-    /// @throws std::runtime_error if inventory is not initialized
+    /// Aborts if inventory is not initialized.
     [[nodiscard]] Inventory& getPlayerInventory();
 
     /// Shutdown and release all session resources.

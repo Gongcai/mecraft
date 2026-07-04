@@ -1,14 +1,25 @@
 #include "BitPackedArray.h"
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
-#include <stdexcept>
+#include <string>
+
+namespace {
+
+[[noreturn]] void failBitPackedArray(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
+} // namespace
 
 uint8_t BitPackedArray::normalizeBitsPerEntry(uint8_t bitsPerEntry) {
     if (bitsPerEntry == 0) {
         bitsPerEntry = 1;
     }
     if (bitsPerEntry > 32) {
-        throw std::runtime_error("BitPackedArray supports at most 32 bits per entry");
+        failBitPackedArray("BitPackedArray supports at most 32 bits per entry");
     }
     return bitsPerEntry;
 }
@@ -18,7 +29,7 @@ size_t BitPackedArray::wordCountFor(const size_t count, const uint8_t bitsPerEnt
         return 0;
     }
     if (count > std::numeric_limits<size_t>::max() / bitsPerEntry) {
-        throw std::runtime_error("BitPackedArray bit count exceeds size_t capacity");
+        failBitPackedArray("BitPackedArray bit count exceeds size_t capacity");
     }
     const size_t totalBits = count * static_cast<size_t>(bitsPerEntry);
     return (totalBits + BITS_PER_WORD - 1) / BITS_PER_WORD;
