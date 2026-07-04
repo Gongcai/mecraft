@@ -5,8 +5,10 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <iostream>
 #include <iterator>
-#include <stdexcept>
+#include <string>
 #include "engine//platform/Time.h"
 #include "block/AttachmentFaceGeometry.h"
 #include "block/BlockSelection.h"
@@ -17,6 +19,11 @@
 #include "redstone/WireFaceGeometry.h"
 
 namespace {
+[[noreturn]] void failWorld(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
 int worldToChunkCoord(const int world, const int chunkSize) {
     // floor-divide for negative coordinates
     return static_cast<int>(std::floor(static_cast<float>(world) / static_cast<float>(chunkSize)));
@@ -144,7 +151,7 @@ bool isFaceOrientedLogicUnitDef(const BlockDef& def) {
 bool faceOrientedLogicUnitMatchesWireFacing(const BlockStateId stateId, const uint16_t wireFacing) {
     const uint16_t face = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACE);
     if (face == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("Face-oriented redstone logic unit is missing the face property");
+        failWorld("Face-oriented redstone logic unit is missing the face property");
     }
     return AttachmentFaceGeometry::facingValueForFace(face) == wireFacing;
 }
@@ -160,10 +167,10 @@ bool isMatchingRedstoneWireState(const BlockStateId stateId, const uint16_t wire
 uint16_t redstoneWireFacingForState(const BlockStateId stateId) {
     const uint16_t facing = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::FACING);
     if (facing == BlockStateRegistry::INVALID_INDEX) {
-        throw std::runtime_error("Redstone wire connection update requires wire facing values");
+        failWorld("Redstone wire connection update requires wire facing values");
     }
     if (!WireFaceGeometry::isWireFacing(facing)) {
-        throw std::runtime_error("Redstone wire connection update received an unsupported facing value");
+        failWorld("Redstone wire connection update received an unsupported facing value");
     }
     return facing;
 }
@@ -280,7 +287,7 @@ bool hasSameCellRedstoneWireConnection(const World& world,
                                        const glm::ivec3& connectionOffset) {
     const uint16_t peerFacing = WireFaceGeometry::facingFromSurfaceNormal(-connectionOffset);
     if (!WireFaceGeometry::arePerpendicularFacings(wireFacing, peerFacing)) {
-        throw std::runtime_error("Redstone wire same-cell connection requires a perpendicular face");
+        failWorld("Redstone wire same-cell connection requires a perpendicular face");
     }
     return hasMatchingRedstoneWireAt(world, pos, wireChannelId, peerFacing);
 }
@@ -292,7 +299,7 @@ bool hasOuterCornerRedstoneWireConnection(const World& world,
                                           const glm::ivec3& connectionOffset) {
     const uint16_t peerFacing = WireFaceGeometry::facingFromSurfaceNormal(connectionOffset);
     if (!WireFaceGeometry::arePerpendicularFacings(wireFacing, peerFacing)) {
-        throw std::runtime_error("Redstone wire outer-corner connection requires a perpendicular face");
+        failWorld("Redstone wire outer-corner connection requires a perpendicular face");
     }
 
     const glm::ivec3 support = WireFaceGeometry::supportPosition(pos, wireFacing);
@@ -327,7 +334,7 @@ glm::ivec3 wireAxis1PositiveOffset(const uint16_t facing) {
     if (WireFaceGeometry::isWireFacing(facing)) {
         return {1, 0, 0};
     }
-    throw std::runtime_error("Wire container connection update received an unsupported wire facing");
+    failWorld("Wire container connection update received an unsupported wire facing");
 }
 
 glm::ivec3 wireAxis2PositiveOffset(const uint16_t facing) {
@@ -337,7 +344,7 @@ glm::ivec3 wireAxis2PositiveOffset(const uint16_t facing) {
     if (WireFaceGeometry::isWireFacing(facing)) {
         return {0, 1, 0};
     }
-    throw std::runtime_error("Wire container connection update received an unsupported wire facing");
+    failWorld("Wire container connection update received an unsupported wire facing");
 }
 
 uint8_t wireConnectionBitForOffset(const uint16_t facing, const glm::ivec3& offset) {
@@ -355,7 +362,7 @@ uint8_t wireConnectionBitForOffset(const uint16_t facing, const glm::ivec3& offs
     if (offset == -axis2) {
         return WireConnectionBits::AXIS2_NEG;
     }
-    throw std::runtime_error("Wire container connection update received a connection outside the wire plane");
+    failWorld("Wire container connection update received a connection outside the wire plane");
 }
 
 uint8_t refreshedWireContainerConnections(const World& world,
@@ -397,7 +404,7 @@ void requireHorizontalConnectionProperties() {
         PropIndices::EAST_SIDE == PropIndices::INVALID ||
         PropIndices::WEST_NONE == PropIndices::INVALID ||
         PropIndices::WEST_SIDE == PropIndices::INVALID) {
-        throw std::runtime_error("Horizontal connection updates require north/south/east/west connection properties");
+        failWorld("Horizontal connection updates require north/south/east/west connection properties");
     }
 }
 
@@ -410,7 +417,7 @@ void requireStairShapeProperties() {
         PropIndices::SHAPE_INNER_RIGHT == PropIndices::INVALID ||
         PropIndices::SHAPE_OUTER_LEFT == PropIndices::INVALID ||
         PropIndices::SHAPE_OUTER_RIGHT == PropIndices::INVALID) {
-        throw std::runtime_error("Stair shape updates require facing, half, and shape properties");
+        failWorld("Stair shape updates require facing, half, and shape properties");
     }
 }
 
@@ -427,7 +434,7 @@ glm::ivec3 offsetForHorizontalFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_NORTH) {
         return {0, 0, -1};
     }
-    throw std::runtime_error("Stair shape updates require a horizontal facing value");
+    failWorld("Stair shape updates require a horizontal facing value");
 }
 
 uint16_t oppositeHorizontalFacing(const uint16_t facing) {
@@ -443,7 +450,7 @@ uint16_t oppositeHorizontalFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_NORTH) {
         return PropIndices::FACING_SOUTH;
     }
-    throw std::runtime_error("Stair shape updates require a horizontal facing value");
+    failWorld("Stair shape updates require a horizontal facing value");
 }
 
 uint16_t counterClockwiseHorizontalFacing(const uint16_t facing) {
@@ -459,7 +466,7 @@ uint16_t counterClockwiseHorizontalFacing(const uint16_t facing) {
     if (facing == PropIndices::FACING_SOUTH) {
         return PropIndices::FACING_EAST;
     }
-    throw std::runtime_error("Stair shape updates require a horizontal facing value");
+    failWorld("Stair shape updates require a horizontal facing value");
 }
 
 bool arePerpendicularHorizontalFacings(const uint16_t a, const uint16_t b) {
@@ -469,7 +476,7 @@ bool arePerpendicularHorizontalFacings(const uint16_t a, const uint16_t b) {
         (bEastWest || b == PropIndices::FACING_NORTH || b == PropIndices::FACING_SOUTH)) {
         return aEastWest != bEastWest;
     }
-    throw std::runtime_error("Stair shape updates require horizontal facing values");
+    failWorld("Stair shape updates require horizontal facing values");
 }
 
 bool isWithinChunkRenderDistance(const int cx,
@@ -1087,7 +1094,7 @@ void World::notifyWireContainerPartsChanged(const glm::ivec3& pos) {
 
     const BlockStateId currentState = getBlockState(pos.x, pos.y, pos.z);
     if (!isWireContainerState(currentState)) {
-        throw std::runtime_error("Wire container parts changed at a non-container block");
+        failWorld("Wire container parts changed at a non-container block");
     }
 
     const int localX = pos.x - chunkX * Chunk::SIZE_X;
@@ -1207,11 +1214,11 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         requireHorizontalConnectionProperties();
         const uint16_t wireChannelId = def.redstoneWireChannelId;
         if (wireChannelId == 0) {
-            throw std::runtime_error("Redstone wire block is missing redstoneWireChannelId");
+            failWorld("Redstone wire block is missing redstoneWireChannelId");
         }
         const uint16_t wireFacing = BlockStateRegistry::getPropertyIndex(currentState, PropIndices::FACING);
         if (!WireFaceGeometry::isWireFacing(wireFacing)) {
-            throw std::runtime_error("Redstone wire connection update requires a supported facing value");
+            failWorld("Redstone wire connection update requires a supported facing value");
         }
 
         if (wireFacing == PropIndices::FACING_FLOOR) {
@@ -1250,7 +1257,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
         if (currentFacing == BlockStateRegistry::INVALID_INDEX ||
             currentHalf == BlockStateRegistry::INVALID_INDEX ||
             currentShape == BlockStateRegistry::INVALID_INDEX) {
-            throw std::runtime_error("Stair shape updates require state facing, half, and shape values");
+            failWorld("Stair shape updates require state facing, half, and shape values");
         }
 
         const auto isStairWithSameHalf = [&](const BlockStateId state) {
@@ -1279,7 +1286,7 @@ void World::refreshConnectedBlockAt(const glm::ivec3& pos) {
             }
             neighborFacing = BlockStateRegistry::getPropertyIndex(neighborState, PropIndices::FACING);
             if (neighborFacing == BlockStateRegistry::INVALID_INDEX) {
-                throw std::runtime_error("Stair shape updates require neighbor facing values");
+                failWorld("Stair shape updates require neighbor facing values");
             }
             return arePerpendicularHorizontalFacings(currentFacing, neighborFacing);
         };
@@ -1415,12 +1422,12 @@ std::vector<save::WireContainerSaveEntry> World::collectWireContainersForChunk(c
             return;
         }
         if (parts.empty()) {
-            throw std::runtime_error("Cannot save an empty wire container part set");
+            failWorld("Cannot save an empty wire container part set");
         }
         const BlockStateId stateId = getBlockState(position.x, position.y, position.z);
         if (stateId == NULL_BLOCK_STATE ||
             !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
-            throw std::runtime_error("Cannot save wire container parts for a non-container block");
+            failWorld("Cannot save wire container parts for a non-container block");
         }
 
         save::WireContainerSaveEntry entry;
@@ -1438,18 +1445,18 @@ void World::applyLoadedWireContainers(const int cx,
     for (const save::WireContainerSaveEntry& entry : wireContainers) {
         if (worldToChunkCoord(entry.position.x, Chunk::SIZE_X) != cx ||
             worldToChunkCoord(entry.position.z, Chunk::SIZE_Z) != cz) {
-            throw std::runtime_error("Loaded wire container parts target a different chunk");
+            failWorld("Loaded wire container parts target a different chunk");
         }
         if (entry.parts.empty()) {
-            throw std::runtime_error("Loaded wire container parts are empty");
+            failWorld("Loaded wire container parts are empty");
         }
         const BlockStateId stateId = getBlockState(entry.position.x, entry.position.y, entry.position.z);
         if (stateId == NULL_BLOCK_STATE ||
             !BlockRegistry::getFast(BlockStateRegistry::getBlockId(stateId)).isWireContainer) {
-            throw std::runtime_error("Loaded wire container parts target a non-container block");
+            failWorld("Loaded wire container parts target a non-container block");
         }
         if (m_wireContainerParts.find(entry.position) != nullptr) {
-            throw std::runtime_error("Loaded wire container parts contain a duplicate position");
+            failWorld("Loaded wire container parts contain a duplicate position");
         }
         m_wireContainerParts.getOrCreate(entry.position) = entry.parts;
     }
