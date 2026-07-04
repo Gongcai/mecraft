@@ -2,10 +2,18 @@
 
 #include <algorithm>
 #include <cctype>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <system_error>
 #include <utility>
 
 namespace {
+
+[[noreturn]] void failBlockTextureManifest(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 enum class TextureFileRole {
     Albedo,
@@ -71,14 +79,37 @@ ClassifiedTextureFile classifyTextureFile(const std::filesystem::path& path) {
 std::vector<ClassifiedTextureFile> collectClassifiedTextureFiles(const std::string& directory) {
     namespace fs = std::filesystem;
 
-    if (!fs::exists(directory)) {
-        throw std::runtime_error("Block texture directory does not exist: " + directory);
+    std::error_code fsError;
+    if (!fs::exists(directory, fsError)) {
+        if (fsError) {
+            failBlockTextureManifest("Failed to inspect block texture directory: " +
+                                     directory + ": " + fsError.message());
+        }
+        failBlockTextureManifest("Block texture directory does not exist: " + directory);
     }
 
     std::vector<ClassifiedTextureFile> files;
-    for (const auto& entry : fs::directory_iterator(directory)) {
-        if (entry.is_regular_file() && hasPngExtension(entry.path())) {
+    fs::directory_iterator it(directory, fsError);
+    if (fsError) {
+        failBlockTextureManifest("Failed to iterate block texture directory: " +
+                                 directory + ": " + fsError.message());
+    }
+    const fs::directory_iterator end;
+    while (it != end) {
+        const fs::directory_entry& entry = *it;
+        fsError.clear();
+        const bool regularFile = entry.is_regular_file(fsError);
+        if (fsError) {
+            failBlockTextureManifest("Failed to inspect block texture path: " +
+                                     entry.path().string() + ": " + fsError.message());
+        }
+        if (regularFile && hasPngExtension(entry.path())) {
             files.push_back(classifyTextureFile(entry.path()));
+        }
+        it.increment(fsError);
+        if (fsError) {
+            failBlockTextureManifest("Failed to continue iterating block texture directory: " +
+                                     directory + ": " + fsError.message());
         }
     }
 
@@ -91,7 +122,7 @@ std::vector<ClassifiedTextureFile> collectClassifiedTextureFiles(const std::stri
               });
 
     if (files.empty()) {
-        throw std::runtime_error("Block texture directory contains no PNG files: " + directory);
+        failBlockTextureManifest("Block texture directory contains no PNG files: " + directory);
     }
 
     return files;
@@ -107,20 +138,20 @@ void assignTexturePath(PendingManifestEntry& entry,
                        const ClassifiedTextureFile& file) {
     if (file.role == TextureFileRole::Albedo) {
         if (entry.albedoPath.has_value()) {
-            throw std::runtime_error("Duplicate block albedo texture: " + file.textureName);
+            failBlockTextureManifest("Duplicate block albedo texture: " + file.textureName);
         }
         entry.albedoPath = file.path;
         return;
     }
     if (file.role == TextureFileRole::Normal) {
         if (entry.normalPath.has_value()) {
-            throw std::runtime_error("Duplicate block normal texture: " + file.textureName);
+            failBlockTextureManifest("Duplicate block normal texture: " + file.textureName);
         }
         entry.normalPath = file.path;
         return;
     }
     if (entry.specularPath.has_value()) {
-        throw std::runtime_error("Duplicate block specular texture: " + file.textureName);
+        failBlockTextureManifest("Duplicate block specular texture: " + file.textureName);
     }
     entry.specularPath = file.path;
 }
@@ -131,10 +162,10 @@ namespace resource {
 
 void BlockTextureManifest::addEntry(BlockTextureManifestEntry entry) {
     if (entry.name.empty()) {
-        throw std::runtime_error("Block texture manifest entry requires a name");
+        failBlockTextureManifest("Block texture manifest entry requires a name");
     }
     if (m_indicesByName.find(entry.name) != m_indicesByName.end()) {
-        throw std::runtime_error("Duplicate block texture manifest entry: " + entry.name);
+        failBlockTextureManifest("Duplicate block texture manifest entry: " + entry.name);
     }
 
     if (entry.normalPath.has_value()) {
@@ -187,7 +218,7 @@ BlockTextureManifest buildBlockTextureManifest(const std::string& directory) {
     names.reserve(pendingEntries.size());
     for (const auto& [name, entry] : pendingEntries) {
         if (!entry.albedoPath.has_value()) {
-            throw std::runtime_error("Block PBR texture requires a matching albedo texture: " + name);
+            failBlockTextureManifest("Block PBR texture requires a matching albedo texture: " + name);
         }
         names.push_back(name);
     }
