@@ -39,8 +39,9 @@ static std::string formatSliderValue(float value, float step) {
     return out.str();
 }
 
-class UIStackLayout;
-static void resizeSettingsStack(UIStackLayout* stack, float availableWidth);
+static void resizeSettingsStack(UIStackLayout* stack,
+                                const std::vector<UIStackLayout*>& rowWidgets,
+                                float availableWidth);
 
 namespace {
 constexpr float kSettingsRowHeight = 48.0f;
@@ -55,6 +56,8 @@ constexpr float kSettingsSectionTextScale = 1.70f;
 
 void SettingsScreen::buildUI(ResourceMgr& resourceMgr) {
     (void)resourceMgr;
+    m_tabLayouts.clear();
+    m_settingRows.clear();
 
     // -- Dark overlay covering the whole screen --
     auto overlay = std::make_unique<UIPanel>();
@@ -205,19 +208,17 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
 
     const float headerH = m_tabControl->getHeaderHeight(ctx);
     const float contentH = std::max(80.0f, tabsH - headerH);
-    for (int i = 0; i < m_tabControl->getTabCount(); ++i) {
+    for (int i = 0; i < m_tabControl->getTabCount() && i < static_cast<int>(m_tabLayouts.size()); ++i) {
+        const SettingsTabLayout& tabLayout = m_tabLayouts[static_cast<size_t>(i)];
         UIWidget* contentPanel = m_tabControl->getContentPanel(i);
         if (!contentPanel) {
             continue;
         }
         contentPanel->width = tabsW;
         contentPanel->height = contentH;
-        const auto& children = contentPanel->getChildren();
-        if (children.empty()) {
-            continue;
-        }
-        auto* scroll = dynamic_cast<UIScrollArea*>(children[0].get());
-        if (!scroll) {
+        UIScrollArea* scroll = tabLayout.scroll;
+        UIStackLayout* stack = tabLayout.stack;
+        if (!scroll || !stack) {
             continue;
         }
 
@@ -227,15 +228,10 @@ void SettingsScreen::layout(const UIRenderContext& ctx) {
         scroll->x = 0.0f;
         scroll->y = 0.0f;
 
-        const auto& scrollChildren = scroll->getChildren();
-        if (!scrollChildren.empty()) {
-            if (auto* stack = dynamic_cast<UIStackLayout*>(scrollChildren[0].get())) {
-                stack->x = 18.0f;
-                resizeSettingsStack(stack, std::max(1.0f, tabsW - 48.0f));
-                stack->y = scroll->height - stack->height;
-                scroll->setContentHeight(stack->height);
-            }
-        }
+        stack->x = 18.0f;
+        resizeSettingsStack(stack, m_settingRows, std::max(1.0f, tabsW - 48.0f));
+        stack->y = scroll->height - stack->height;
+        scroll->setContentHeight(stack->height);
     }
 }
 
@@ -254,8 +250,10 @@ void SettingsScreen::updateAnimations(float dt) {
 // Helper: add a scrollable stack to a tab content panel
 // ===========================================================================
 
-static UIStackLayout* setupScrollableTab(UIWidget* contentPanel, ResourceMgr& /*resourceMgr*/,
-                                         float tabWidth, float tabHeight) {
+SettingsScreen::SettingsTabLayout SettingsScreen::setupScrollableTab(UIWidget* contentPanel,
+                                                                     ResourceMgr& /*resourceMgr*/,
+                                                                     float tabWidth,
+                                                                     float tabHeight) {
     auto scroll = std::make_unique<UIScrollArea>();
     scroll->width = tabWidth;
     scroll->height = tabHeight;
@@ -271,60 +269,73 @@ static UIStackLayout* setupScrollableTab(UIWidget* contentPanel, ResourceMgr& /*
     stack->width = tabWidth - 48.0f;
 
     UIStackLayout* stackPtr = stack.get();
+    UIScrollArea* scrollPtr = scroll.get();
     scroll->addChild(std::move(stack));
     contentPanel->addChild(std::move(scroll));
 
-    return stackPtr;
+    return SettingsScreen::SettingsTabLayout{scrollPtr, stackPtr};
 }
 
 // After all rows are added, call this to finalize the scroll area height
-static void finalizeScrollTab(UIWidget* contentPanel, UIStackLayout* stack) {
-    stack->layout();
-    // Find the scroll area (first child of contentPanel)
-    auto& children = contentPanel->getChildren();
-    if (!children.empty()) {
-        if (auto* scroll = dynamic_cast<UIScrollArea*>(children[0].get())) {
-            stack->x = 18.0f;
-            stack->y = scroll->height - stack->height;
-            scroll->setContentHeight(stack->height);
-            scroll->setScrollOffset(0.0f);
-        }
+static void finalizeScrollTab(UIScrollArea* scroll, UIStackLayout* stack) {
+    if (!scroll || !stack) {
+        return;
     }
+
+    stack->layout();
+    stack->x = 18.0f;
+    stack->y = scroll->height - stack->height;
+    scroll->setContentHeight(stack->height);
+    scroll->setScrollOffset(0.0f);
 }
 
-static void resizeSettingsStack(UIStackLayout* stack, float availableWidth) {
+static UIStackLayout* findRegisteredSettingsRow(const UIStackLayout* stack,
+                                                const UIWidget* child,
+                                                const std::vector<UIStackLayout*>& rowWidgets) {
+    if (!stack || !child) {
+        return nullptr;
+    }
+    const auto it = std::find_if(rowWidgets.begin(), rowWidgets.end(),
+                                 [stack, child](const UIStackLayout* row) {
+                                     return row != nullptr && row->getParent() == stack && row == child;
+                                 });
+    return it == rowWidgets.end() ? nullptr : *it;
+}
+
+static void resizeSettingsStack(UIStackLayout* stack,
+                                const std::vector<UIStackLayout*>& rowWidgets,
+                                float availableWidth) {
     if (!stack) {
         return;
     }
 
     const float rowWidth = std::max(260.0f, availableWidth);
     for (const auto& child : stack->getChildren()) {
-        if (auto* row = dynamic_cast<UIStackLayout*>(child.get())) {
-            if (row->getDirection() == StackDirection::Horizontal) {
-                auto& rowChildren = row->getChildren();
-                const bool hasValueText = rowChildren.size() >= 3;
-                const float spacing = row->getSpacing();
-                const float valueW = hasValueText ? 120.0f : 0.0f;
-                const float totalSpacing = spacing * static_cast<float>(rowChildren.size() > 0 ? rowChildren.size() - 1 : 0);
-                const float labelW = std::clamp(rowWidth * 0.34f, 220.0f, 330.0f);
-                const float controlW = std::max(180.0f, rowWidth - labelW - valueW - totalSpacing);
+        UIStackLayout* row = findRegisteredSettingsRow(stack, child.get(), rowWidgets);
+        if (row != nullptr) {
+            auto& rowChildren = row->getChildren();
+            const bool hasValueText = rowChildren.size() >= 3;
+            const float spacing = row->getSpacing();
+            const float valueW = hasValueText ? 120.0f : 0.0f;
+            const float totalSpacing = spacing * static_cast<float>(rowChildren.size() > 0 ? rowChildren.size() - 1 : 0);
+            const float labelW = std::clamp(rowWidth * 0.34f, 220.0f, 330.0f);
+            const float controlW = std::max(180.0f, rowWidth - labelW - valueW - totalSpacing);
 
-                row->width = rowWidth;
-                row->height = kSettingsRowHeight;
-                if (rowChildren.size() >= 1) {
-                    rowChildren[0]->width = labelW;
-                    rowChildren[0]->height = kSettingsRowHeight;
-                }
-                if (rowChildren.size() >= 2) {
-                    rowChildren[1]->width = controlW;
-                    rowChildren[1]->height = kSettingsRowHeight;
-                }
-                if (rowChildren.size() >= 3) {
-                    rowChildren[2]->width = valueW;
-                    rowChildren[2]->height = kSettingsRowHeight;
-                }
-                row->layout();
+            row->width = rowWidth;
+            row->height = kSettingsRowHeight;
+            if (rowChildren.size() >= 1) {
+                rowChildren[0]->width = labelW;
+                rowChildren[0]->height = kSettingsRowHeight;
             }
+            if (rowChildren.size() >= 2) {
+                rowChildren[1]->width = controlW;
+                rowChildren[1]->height = kSettingsRowHeight;
+            }
+            if (rowChildren.size() >= 3) {
+                rowChildren[2]->width = valueW;
+                rowChildren[2]->height = kSettingsRowHeight;
+            }
+            row->layout();
         } else {
             child->width = rowWidth;
         }
@@ -409,6 +420,7 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
     row->addChild(std::move(valueText));
     row->layout();
 
+    m_settingRows.push_back(row.get());
     parent->addChild(std::move(row));
 }
 
@@ -442,6 +454,7 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
     row->addChild(std::move(dropdown));
     row->layout();
 
+    m_settingRows.push_back(row.get());
     parent->addChild(std::move(row));
 }
 
@@ -452,7 +465,9 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
 void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
     // Tab content area is approximately 700 x (460 - headerHeight)
     constexpr float tabContentH = 420.0f;
-    auto* stack = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    m_tabLayouts.push_back(tabLayout);
+    UIStackLayout* stack = tabLayout.stack;
 
     addSectionHeader(stack, resourceMgr,
                      loc(getLocaleManager(), "setting_render_distance", "Render Distance"));
@@ -473,14 +488,16 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
                      });
     }
 
-    finalizeScrollTab(contentPanel, stack);
+    finalizeScrollTab(tabLayout.scroll, stack);
 }
 
 void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
     constexpr float tabContentH = 420.0f;
-    auto* stack = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    m_tabLayouts.push_back(tabLayout);
+    UIStackLayout* stack = tabLayout.stack;
 
-    if (!m_renderScene) { finalizeScrollTab(contentPanel, stack); return; }
+    if (!m_renderScene) { finalizeScrollTab(tabLayout.scroll, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
 
     addSectionHeader(stack, resourceMgr, "Shadows");
@@ -578,14 +595,16 @@ void SettingsScreen::buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resour
                      m_renderScene->setSettings(s);
                  });
 
-    finalizeScrollTab(contentPanel, stack);
+    finalizeScrollTab(tabLayout.scroll, stack);
 }
 
 void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
     constexpr float tabContentH = 420.0f;
-    auto* stack = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    m_tabLayouts.push_back(tabLayout);
+    UIStackLayout* stack = tabLayout.stack;
 
-    if (!m_renderScene) { finalizeScrollTab(contentPanel, stack); return; }
+    if (!m_renderScene) { finalizeScrollTab(tabLayout.scroll, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
 
     addSectionHeader(stack, resourceMgr, "SSGI");
@@ -888,14 +907,16 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                   m_renderScene->setSettings(s);
               });
 
-    finalizeScrollTab(contentPanel, stack);
+    finalizeScrollTab(tabLayout.scroll, stack);
 }
 
 void SettingsScreen::buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
     constexpr float tabContentH = 420.0f;
-    auto* stack = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    m_tabLayouts.push_back(tabLayout);
+    UIStackLayout* stack = tabLayout.stack;
 
-    if (!m_renderScene) { finalizeScrollTab(contentPanel, stack); return; }
+    if (!m_renderScene) { finalizeScrollTab(tabLayout.scroll, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
 
     addSectionHeader(stack, resourceMgr, "Bloom");
@@ -1092,14 +1113,16 @@ void SettingsScreen::buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& re
                      m_renderScene->setSettings(s);
                  });
 
-    finalizeScrollTab(contentPanel, stack);
+    finalizeScrollTab(tabLayout.scroll, stack);
 }
 
 void SettingsScreen::buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
     constexpr float tabContentH = 420.0f;
-    auto* stack = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    m_tabLayouts.push_back(tabLayout);
+    UIStackLayout* stack = tabLayout.stack;
 
-    if (!m_renderScene) { finalizeScrollTab(contentPanel, stack); return; }
+    if (!m_renderScene) { finalizeScrollTab(tabLayout.scroll, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
 
     addSectionHeader(stack, resourceMgr, "Volumetric Light & Fog");
@@ -1228,14 +1251,16 @@ void SettingsScreen::buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& res
                      m_renderScene->setSettings(s);
                  });
 
-    finalizeScrollTab(contentPanel, stack);
+    finalizeScrollTab(tabLayout.scroll, stack);
 }
 
 void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resourceMgr) {
     constexpr float tabContentH = 420.0f;
-    auto* stack = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    const SettingsTabLayout tabLayout = setupScrollableTab(contentPanel, resourceMgr, 700.0f, tabContentH);
+    m_tabLayouts.push_back(tabLayout);
+    UIStackLayout* stack = tabLayout.stack;
 
-    if (!m_renderScene) { finalizeScrollTab(contentPanel, stack); return; }
+    if (!m_renderScene) { finalizeScrollTab(tabLayout.scroll, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
 
     addSectionHeader(stack, resourceMgr, "Upscaling");
@@ -1308,5 +1333,5 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
                      m_renderScene->setSettings(s);
                  });
 
-    finalizeScrollTab(contentPanel, stack);
+    finalizeScrollTab(tabLayout.scroll, stack);
 }

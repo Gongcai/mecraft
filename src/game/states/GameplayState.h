@@ -30,10 +30,11 @@ public:
 
     void onEnter() override;
     void update(float dt, const InputSnapshot& snapshot) override;
+    [[nodiscard]] GameStateKind kind() const override { return GameStateKind::Gameplay; }
 
     /// The gameplay mode represented by this state (survival or creative).
     /// Used to keep the local player's PlayerModeComponent in sync.
-    [[nodiscard]] GameplayMode gameplayMode() const { return m_gameplayMode; }
+    [[nodiscard]] GameplayMode gameplayMode() const override { return m_gameplayMode; }
 
 private:
     bool handleBlockContainerInteraction(const InputSnapshot& snapshot);

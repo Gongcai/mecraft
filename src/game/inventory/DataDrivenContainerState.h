@@ -110,6 +110,8 @@ public:
         m_deps.uiRenderer.clearStoragePanelActivations();
     }
 
+    [[nodiscard]] GameStateKind kind() const override { return GameStateKind::DataDrivenContainer; }
+
 private:
     static constexpr int kContainerSlotBase = 20000;
 

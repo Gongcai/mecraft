@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 
 #include "../core/UIScene.h"
 #include "../core/Tween.h"
@@ -9,6 +10,8 @@ class UIPanel;
 class UIText;
 class UIButton;
 class UITabControl;
+class UIScrollArea;
+class UIStackLayout;
 struct RenderSettings;
 class RenderScene;
 class World;
@@ -32,6 +35,11 @@ protected:
     void onSceneExit() override;
 
 private:
+    struct SettingsTabLayout {
+        UIScrollArea* scroll = nullptr;
+        UIStackLayout* stack = nullptr;
+    };
+
     // Tab builders
     void buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
     void buildShadowsTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
@@ -39,6 +47,10 @@ private:
     void buildPostProcessTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
     void buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
     void buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resourceMgr);
+    SettingsTabLayout setupScrollableTab(UIWidget* contentPanel,
+                                         ResourceMgr& resourceMgr,
+                                         float tabWidth,
+                                         float tabHeight);
 
     // Helper to create a labeled slider row
     void addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
@@ -65,6 +77,8 @@ private:
     UIText* m_title = nullptr;
     UIButton* m_backButton = nullptr;
     UITabControl* m_tabControl = nullptr;
+    std::vector<SettingsTabLayout> m_tabLayouts;
+    std::vector<UIStackLayout*> m_settingRows;
 
     // Overlay fade-in
     Tween<float> m_overlayAlpha;

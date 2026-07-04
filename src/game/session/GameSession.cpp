@@ -933,12 +933,10 @@ void GameSession::loadLocalPlayer() {
 void GameSession::syncLocalPlayerMode() {
     if (!m_gameplayScene || !m_stateMachine) return;
 
-    // Read the active gameplay mode from the state machine's base state.
-    // CreativeModeState derives from GameplayState and reports GameplayMode::Creative.
     bool creative = false;
     if (auto* base = m_stateMachine->baseState()) {
-        if (auto* gameplay = dynamic_cast<GameplayState*>(base)) {
-            creative = (gameplay->gameplayMode() == GameplayMode::Creative);
+        if (base->kind() == GameStateKind::Gameplay) {
+            creative = (base->gameplayMode() == GameplayMode::Creative);
         }
     }
 

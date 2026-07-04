@@ -113,6 +113,8 @@ public:
         m_deps.uiRenderer.clearMachinePanelActivations();
     }
 
+    [[nodiscard]] GameStateKind kind() const override { return GameStateKind::SmeltingContainer; }
+
 private:
     static constexpr int kMachineSlotBase = 30000;
 

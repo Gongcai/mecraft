@@ -5,8 +5,8 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string_view>
 #include <tuple>
-#include <typeinfo>
 #include <utility>
 #include <vector>
 #ifdef MECRAFT_DEBUG
@@ -88,7 +88,7 @@ private:
 
 #ifdef MECRAFT_DEBUG
     struct SystemDepInfo {
-        const char* systemName;
+        std::string_view systemName;
         std::vector<uint32_t> required;
         std::vector<uint32_t> written;
     };
@@ -111,7 +111,7 @@ private:
     template <typename TSystem>
     void registerSystemDep() {
         SystemDepInfo info;
-        info.systemName = typeid(TSystem).name();
+        info.systemName = entt::type_name<TSystem>::value();
         info.required = getComponentHashes<typename TSystem::Dependencies::Required>();
         info.written = getComponentHashes<typename TSystem::Dependencies::Written>();
         m_systemDeps.push_back(std::move(info));

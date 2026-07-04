@@ -146,6 +146,8 @@ public:
         m_dragCtrl.handleSlotClick(inventorySlot);
     }
 
+    [[nodiscard]] GameStateKind kind() const override { return GameStateKind::Workbench; }
+
 private:
     [[nodiscard]] static bool nearlyEqual(const float lhs, const float rhs) {
         return std::fabs(lhs - rhs) <= 0.001f;

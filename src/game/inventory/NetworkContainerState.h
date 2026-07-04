@@ -125,6 +125,8 @@ public:
         m_deps.uiRenderer.clearMachinePanelActivations();
     }
 
+    [[nodiscard]] GameStateKind kind() const override { return GameStateKind::NetworkContainer; }
+
 private:
     struct SlotRef {
         net::ContainerSlotSpace space = net::ContainerSlotSpace::None;
