@@ -1,6 +1,8 @@
 #include "BedBlock.h"
 
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include "../IWorldView.h"
 #include "../World.h"
@@ -9,12 +11,17 @@
 namespace BedBlockLogic {
 namespace {
 
+[[noreturn]] void failBedBlock(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
+
 void requireBedProperties() {
     if (PropIndices::FACING == PropIndices::INVALID ||
         PropIndices::PART == PropIndices::INVALID ||
         PropIndices::PART_HEAD == PropIndices::INVALID ||
         PropIndices::PART_FOOT == PropIndices::INVALID) {
-        throw std::runtime_error("Bed blocks require facing and part=head/foot properties");
+        failBedBlock("Bed blocks require facing and part=head/foot properties");
     }
 }
 
@@ -27,7 +34,7 @@ bool isHorizontalFacingValue(const uint16_t facingValue) {
 
 void requireHorizontalFacingValue(const uint16_t facingValue) {
     if (!isHorizontalFacingValue(facingValue)) {
-        throw std::runtime_error("Bed blocks require a horizontal facing value");
+        failBedBlock("Bed blocks require a horizontal facing value");
     }
 }
 
@@ -37,7 +44,7 @@ BlockStateId withRequiredProperty(const BlockStateId stateId,
                              const char* context) {
     const BlockStateId updated = BlockStateRegistry::withProperty(stateId, property, value);
     if (BlockStateRegistry::getPropertyIndex(updated, property) != value) {
-        throw std::runtime_error(context);
+        failBedBlock(context);
     }
     return updated;
 }
@@ -46,7 +53,7 @@ uint16_t partValue(const BlockStateId stateId) {
     requireBedProperties();
     const uint16_t part = BlockStateRegistry::getPropertyIndex(stateId, PropIndices::PART);
     if (part != PropIndices::PART_HEAD && part != PropIndices::PART_FOOT) {
-        throw std::runtime_error("Bed state requires part=head or part=foot");
+        failBedBlock("Bed state requires part=head or part=foot");
     }
     return part;
 }
@@ -71,7 +78,7 @@ uint16_t oppositePartValue(const uint16_t part) {
     if (part == PropIndices::PART_HEAD) {
         return PropIndices::PART_FOOT;
     }
-    throw std::runtime_error("Bed state requires part=head or part=foot");
+    failBedBlock("Bed state requires part=head or part=foot");
 }
 
 } // namespace
@@ -120,10 +127,10 @@ BlockStateId makeBedState(const BlockID blockId, const uint16_t facingValue, con
     requireBedProperties();
     requireHorizontalFacingValue(facingValue);
     if (!isBedBlock(blockId)) {
-        throw std::runtime_error("Bed state construction requires a bed block id");
+        failBedBlock("Bed state construction requires a bed block id");
     }
     if (partValue != PropIndices::PART_HEAD && partValue != PropIndices::PART_FOOT) {
-        throw std::runtime_error("Bed state construction requires part=head or part=foot");
+        failBedBlock("Bed state construction requires part=head or part=foot");
     }
 
     BlockStateId stateId = BlockStateRegistry::getDefaultState(blockId);
@@ -180,7 +187,7 @@ bool isMatchingOtherHalf(const BlockStateId stateId, const BlockStateId otherSta
 
 void placeBed(World& world, const BedPlacement& placement) {
     if (!placement.valid) {
-        throw std::runtime_error("Cannot place an invalid bed placement");
+        failBedBlock("Cannot place an invalid bed placement");
     }
     world.setBlockState(placement.footPos.x, placement.footPos.y, placement.footPos.z, placement.footState);
     world.setBlockState(placement.headPos.x, placement.headPos.y, placement.headPos.z, placement.headState);
