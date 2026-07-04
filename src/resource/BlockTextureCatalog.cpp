@@ -1,122 +1,170 @@
 #include "BlockTextureCatalog.h"
 
+#include "../Diagnostics.h"
+
+#include <cstdio>
 #include <fstream>
-#include <stdexcept>
 #include <nlohmann/json.hpp>
 
 namespace {
 
-ResourceTextureTint parseResourceTextureTint(const nlohmann::json& textureJson) {
+bool parseResourceTextureTint(const nlohmann::json& textureJson,
+                              const std::string& textureName,
+                              ResourceTextureTint& outTint) {
     const auto tintIt = textureJson.find("tint");
     if (tintIt == textureJson.end()) {
-        return ResourceTextureTint::None;
+        outTint = ResourceTextureTint::None;
+        return true;
     }
     if (!tintIt->is_string()) {
-        throw std::runtime_error("block_textures.json texture tint must be a string");
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json texture tint must be a string for %s\n",
+                            textureName.c_str());
+        return false;
     }
 
     const std::string tint = tintIt->get<std::string>();
     if (tint == "none") {
-        return ResourceTextureTint::None;
+        outTint = ResourceTextureTint::None;
+        return true;
     }
     if (tint == "grass") {
-        return ResourceTextureTint::Grass;
+        outTint = ResourceTextureTint::Grass;
+        return true;
     }
     if (tint == "foliage") {
-        return ResourceTextureTint::Foliage;
+        outTint = ResourceTextureTint::Foliage;
+        return true;
     }
-    throw std::runtime_error("Unknown block texture tint: " + tint);
+    MECRAFT_LOG_FPRINTF(stderr, "[Resource] Unknown block texture tint for %s: %s\n",
+                        textureName.c_str(), tint.c_str());
+    return false;
 }
 
 } // namespace
 
-void BlockTextureCatalog::load(const std::string& textureConfigPath) {
-    m_entries.clear();
-
+bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
     std::ifstream file(textureConfigPath);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open block texture catalog: " + textureConfigPath);
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to open block texture catalog: %s\n",
+                            textureConfigPath.c_str());
+        return false;
     }
 
     nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
     if (root.is_discarded()) {
-        throw std::runtime_error("Failed to parse block texture catalog: invalid JSON");
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to parse block texture catalog: invalid JSON\n");
+        return false;
     }
 
     int tileSize = 16;
     const auto tileSizeIt = root.find("tileSize");
     if (tileSizeIt != root.end()) {
         if (!tileSizeIt->is_number_integer()) {
-            throw std::runtime_error("block_textures.json tileSize must be an integer");
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json tileSize must be an integer\n");
+            return false;
         }
-        tileSize = tileSizeIt->get<int>();
+        const int64_t parsedTileSize = tileSizeIt->get<int64_t>();
+        if (parsedTileSize < 1 || parsedTileSize > 1024) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json tileSize must be in range [1, 1024]\n");
+            return false;
+        }
+        tileSize = static_cast<int>(parsedTileSize);
         if (tileSize <= 0) {
-            throw std::runtime_error("block_textures.json tileSize must be positive");
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json tileSize must be positive\n");
+            return false;
         }
     }
 
     const auto texturesIt = root.find("textures");
     if (texturesIt == root.end() || !texturesIt->is_array()) {
-        throw std::runtime_error("block_textures.json must contain a textures array");
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json must contain a textures array\n");
+        return false;
     }
 
+    EntryMap entries;
     for (const auto& textureJson : *texturesIt) {
         if (!textureJson.is_object()) {
-            throw std::runtime_error("block_textures.json texture entry must be an object");
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json texture entry must be an object\n");
+            return false;
         }
 
         const auto nameIt = textureJson.find("name");
         if (nameIt == textureJson.end() || !nameIt->is_string()) {
-            throw std::runtime_error("block_textures.json texture entry requires a string name");
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json texture entry requires a string name\n");
+            return false;
         }
         const std::string name = nameIt->get<std::string>();
         if (name.empty() || name.find('/') != std::string::npos || name.find('\\') != std::string::npos) {
-            throw std::runtime_error("Invalid block texture name: " + name);
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Invalid block texture name: %s\n", name.c_str());
+            return false;
         }
-        if (m_entries.find(name) != m_entries.end()) {
-            throw std::runtime_error("Duplicate block texture catalog entry: " + name);
+        if (entries.find(name) != entries.end()) {
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Duplicate block texture catalog entry: %s\n", name.c_str());
+            return false;
         }
 
         BlockTextureCatalogEntry entry;
-        entry.tint = parseResourceTextureTint(textureJson);
+        if (!parseResourceTextureTint(textureJson, name, entry.tint)) {
+            return false;
+        }
 
         const auto framesIt = textureJson.find("frames");
         if (framesIt != textureJson.end()) {
             if (!framesIt->is_number_integer()) {
-                throw std::runtime_error("block_textures.json frames must be an integer for " + name);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json frames must be an integer for %s\n",
+                                    name.c_str());
+                return false;
             }
-            entry.animation.frameCount = framesIt->get<int>();
+            const int64_t frameCount = framesIt->get<int64_t>();
+            if (frameCount < 1 || frameCount > 63) {
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json frames out of range for %s\n",
+                                    name.c_str());
+                return false;
+            }
+            entry.animation.frameCount = static_cast<int>(frameCount);
             if (entry.animation.frameCount <= 0 || entry.animation.frameCount > 63) {
-                throw std::runtime_error("block_textures.json frames out of range for " + name);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json frames out of range for %s\n",
+                                    name.c_str());
+                return false;
             }
         }
 
         const auto fpsIt = textureJson.find("fps");
         if (fpsIt != textureJson.end()) {
             if (!fpsIt->is_number()) {
-                throw std::runtime_error("block_textures.json fps must be numeric for " + name);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json fps must be numeric for %s\n",
+                                    name.c_str());
+                return false;
             }
             entry.animation.fps = fpsIt->get<float>();
             if (entry.animation.fps < 0.0f || entry.animation.fps > 63.0f) {
-                throw std::runtime_error("block_textures.json fps out of range for " + name);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json fps out of range for %s\n",
+                                    name.c_str());
+                return false;
             }
         }
 
         if (entry.animation.frameCount > 1) {
             const auto layoutIt = textureJson.find("frameLayout");
             if (layoutIt == textureJson.end() || !layoutIt->is_string()) {
-                throw std::runtime_error("Animated block texture requires frameLayout for " + name);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] Animated block texture requires frameLayout for %s\n",
+                                    name.c_str());
+                return false;
             }
             const std::string frameLayout = layoutIt->get<std::string>();
             if (frameLayout != "vertical") {
-                throw std::runtime_error("Unsupported block texture frameLayout for " + name + ": " + frameLayout);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] Unsupported block texture frameLayout for %s: %s\n",
+                                    name.c_str(), frameLayout.c_str());
+                return false;
             }
             entry.verticalFrames = true;
             entry.animation.isAnimated = true;
 
             const auto frameOrderIt = textureJson.find("frameOrder");
             if (frameOrderIt == textureJson.end() || !frameOrderIt->is_string()) {
-                throw std::runtime_error("Animated block texture requires frameOrder for " + name);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] Animated block texture requires frameOrder for %s\n",
+                                    name.c_str());
+                return false;
             }
             const std::string frameOrder = frameOrderIt->get<std::string>();
             if (frameOrder == "top_to_bottom") {
@@ -124,16 +172,22 @@ void BlockTextureCatalog::load(const std::string& textureConfigPath) {
             } else if (frameOrder == "bottom_to_top") {
                 entry.topFrameFirst = false;
             } else {
-                throw std::runtime_error("Unsupported block texture frameOrder for " + name + ": " + frameOrder);
+                MECRAFT_LOG_FPRINTF(stderr, "[Resource] Unsupported block texture frameOrder for %s: %s\n",
+                                    name.c_str(), frameOrder.c_str());
+                return false;
             }
         }
 
         if (tileSize != 16) {
-            throw std::runtime_error("Only 16px block texture tiles are currently supported");
+            MECRAFT_LOG_FPRINTF(stderr, "[Resource] Only 16px block texture tiles are currently supported\n");
+            return false;
         }
 
-        m_entries.emplace(name, entry);
+        entries.emplace(name, entry);
     }
+
+    m_entries = std::move(entries);
+    return true;
 }
 
 void BlockTextureCatalog::clear() {

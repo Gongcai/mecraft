@@ -20,7 +20,7 @@ public:
 
     void shutdown();
 
-    void loadCatalog(const std::string& textureConfigPath);
+    [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath);
     void buildTextures(const std::string& directory, int tileSize);
     void buildAtlas(const std::string& directory, int tileSize);
     void buildTextureArray(const std::string& directory, int tileSize);

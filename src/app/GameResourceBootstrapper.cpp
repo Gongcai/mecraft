@@ -14,7 +14,9 @@ namespace app {
 
 bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.init();
-    resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH);
+    if (!resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH)) {
+        return false;
+    }
     resourceMgr.buildBlockTextureResources(BLOCKS_TEXTURES_DIR, 16);
     resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);

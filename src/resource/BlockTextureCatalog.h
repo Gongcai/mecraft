@@ -29,7 +29,7 @@ class BlockTextureCatalog {
 public:
     using EntryMap = std::unordered_map<std::string, BlockTextureCatalogEntry>;
 
-    void load(const std::string& textureConfigPath);
+    [[nodiscard]] bool load(const std::string& textureConfigPath);
     void clear();
 
     [[nodiscard]] const BlockTextureCatalogEntry* find(const std::string& name) const;

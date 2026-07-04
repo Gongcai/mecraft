@@ -129,8 +129,8 @@ bool ResourceMgr::hasBlockSpecularMaps() const {
     return m_impl->blockTextures.hasSpecularMaps();
 }
 
-void ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) {
-    m_impl->blockTextures.loadCatalog(textureConfigPath);
+bool ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) {
+    return m_impl->blockTextures.loadCatalog(textureConfigPath);
 }
 
 bool ResourceMgr::preloadEntityTexturesFromConfig(const std::string& entitiesConfigPath) {

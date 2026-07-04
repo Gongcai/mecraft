@@ -52,8 +52,8 @@ void BlockTextureLibrary::shutdown() {
     m_hasSpecularMaps = false;
 }
 
-void BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath) {
-    m_catalog.load(textureConfigPath);
+bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath) {
+    return m_catalog.load(textureConfigPath);
 }
 
 void BlockTextureLibrary::buildTextures(const std::string& directory, const int tileSize) {
