@@ -2,7 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
+#include <cstdlib>
+#include <iostream>
 
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
@@ -103,8 +104,12 @@ UIEventResult DataDrivenContainerPanelControl::onInput(const UIInputEvent& event
 }
 
 void DataDrivenContainerPanelControl::setVisible(const bool isVisible) {
-    if (isVisible) {
-        static_cast<void>(requireDefinition());
+    if (isVisible && m_definition == nullptr) {
+        std::cerr << "Data-driven container panel requires a UI definition.\n";
+        visible = false;
+        m_containerGrid.setVisible(false);
+        m_playerGrid.setVisible(false);
+        return;
     }
     visible = isVisible;
     m_containerGrid.setVisible(isVisible);
@@ -184,7 +189,8 @@ void DataDrivenContainerPanelControl::renderSelf(const UIRenderContext& context)
 
 const ui::ContainerUiDef& DataDrivenContainerPanelControl::requireDefinition() const {
     if (m_definition == nullptr) {
-        throw std::runtime_error("Data-driven container panel requires a UI definition.");
+        std::cerr << "Data-driven container panel requires a UI definition.\n";
+        std::abort();
     }
     return *m_definition;
 }
@@ -397,7 +403,8 @@ void DataDrivenContainerPanelControl::drawTextureQuad(const UIRenderContext& con
     const ui::ContainerUiDef& def = requireDefinition();
     const unsigned int texture = m_resourceMgr->getGuiTexture(def.backgroundTexture);
     if (texture == 0) {
-        throw std::runtime_error("Container UI texture is not loaded: " + def.backgroundTexture);
+        std::cerr << "Container UI texture is not loaded: " << def.backgroundTexture << '\n';
+        return;
     }
 
     std::vector<float> vertices;

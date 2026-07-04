@@ -1,6 +1,6 @@
 #include "ContainerStateFactory.h"
 
-#include <stdexcept>
+#include <iostream>
 #include <unordered_map>
 
 #include "ContainerBehaviorRegistry.h"
@@ -59,7 +59,8 @@ std::unique_ptr<IGameState> ContainerStateFactory::create(InventoryStateContext 
     const auto& creators = containerStateCreators();
     const auto it = creators.find(behavior.handler);
     if (it == creators.end()) {
-        throw std::runtime_error("Unknown container behavior handler for block interaction: " + behavior.handler);
+        std::cerr << "Unknown container behavior handler for block interaction: " << behavior.handler << '\n';
+        return nullptr;
     }
     return it->second(deps, def, behavior, blockPosition);
 }
