@@ -7,8 +7,8 @@
 #include <glad/glad.h>
 
 #include <cassert>
+#include <cstdio>
 #include <iostream>
-#include <stdexcept>
 #include <utility>
 
 void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
@@ -164,7 +164,8 @@ int BlockTextureLibrary::textureArrayLayer(const std::string& name) const {
     if (it != m_textureArrayLayers.end()) {
         return it->second;
     }
-    throw std::runtime_error("Unknown block texture array layer: " + name);
+    MECRAFT_LOG_FPRINTF(stderr, "[Resource] Unknown block texture array layer: %s\n", name.c_str());
+    return -1;
 }
 
 TextureAnimationInfo BlockTextureLibrary::textureAnimation(const std::string& name) const {
