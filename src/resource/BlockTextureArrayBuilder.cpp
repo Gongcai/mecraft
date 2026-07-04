@@ -6,12 +6,19 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
+#include <iostream>
 #include <optional>
-#include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
 namespace {
+
+[[noreturn]] void failBlockTextureArrayBuilder(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 constexpr std::array<unsigned char, 4> kNeutralNormalPixel = {128, 128, 255, 0};
 constexpr std::array<unsigned char, 4> kNeutralSpecularPixel = {0, 0, 0, 255};
@@ -97,7 +104,7 @@ struct LoadedImage {
         data = stbi_load(path.string().c_str(), &width, &height, &channels, 4);
         if (data == nullptr || width <= 0 || height <= 0) {
             reset();
-            throw std::runtime_error("Failed to load block texture array source: " + path.string());
+            failBlockTextureArrayBuilder("Failed to load block texture array source: " + path.string());
         }
     }
 
@@ -135,12 +142,12 @@ int computeTextureArrayLayerCount(const resource::BlockTextureManifestEntry& ent
     int height = 0;
     int channels = 0;
     if (!stbi_info(entry.albedoPath.string().c_str(), &width, &height, &channels)) {
-        throw std::runtime_error("Failed to inspect block texture: " + entry.albedoPath.string());
+        failBlockTextureArrayBuilder("Failed to inspect block texture: " + entry.albedoPath.string());
     }
 
     const TextureAnimationInfo& animation = catalogEntry->animation;
     if (width != tileSize || height != tileSize * animation.frameCount) {
-        throw std::runtime_error("Texture catalog dimensions do not match vertical frames for " + entry.albedoPath.string());
+        failBlockTextureArrayBuilder("Texture catalog dimensions do not match vertical frames for " + entry.albedoPath.string());
     }
 
     return animation.frameCount;
@@ -226,7 +233,7 @@ void uploadAlbedoLayers(const GLuint textureId,
 
     if (layerCount > 1) {
         if (image.width != tileSize || image.height != tileSize * layerCount) {
-            throw std::runtime_error("Texture catalog dimensions do not match texture array source for " + entry.albedoPath.string());
+            failBlockTextureArrayBuilder("Texture catalog dimensions do not match texture array source for " + entry.albedoPath.string());
         }
 
         const bool topFrameFirst = catalogEntry != nullptr && catalogEntry->topFrameFirst;
@@ -241,7 +248,7 @@ void uploadAlbedoLayers(const GLuint textureId,
     }
 
     if (image.width != tileSize || image.height != tileSize) {
-        throw std::runtime_error("Block texture array source dimensions do not match tile size for " + entry.albedoPath.string());
+        failBlockTextureArrayBuilder("Block texture array source dimensions do not match tile size for " + entry.albedoPath.string());
     }
     uploadTextureArrayLayer(textureId, firstLayer, image.data, tileSize);
     layerAverageColors[static_cast<size_t>(firstLayer)] =
@@ -278,7 +285,7 @@ void uploadMaterialMapLayers(const GLuint textureId,
         return;
     }
 
-    throw std::runtime_error(std::string("Block ") + roleName +
+    failBlockTextureArrayBuilder(std::string("Block ") + roleName +
                              " texture dimensions do not match layer layout for " +
                              mapPath.value().string());
 }
@@ -303,12 +310,12 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
                                                const int tileSize,
                                                BlockTextureCatalog& catalog) {
     if (tileSize <= 0) {
-        throw std::runtime_error("Block texture array tile size must be positive");
+        failBlockTextureArrayBuilder("Block texture array tile size must be positive");
     }
 
     const std::vector<BlockTextureManifestEntry>& textureEntries = manifest.entries();
     if (textureEntries.empty()) {
-        throw std::runtime_error("Block texture array manifest contains no albedo textures");
+        failBlockTextureArrayBuilder("Block texture array manifest contains no albedo textures");
     }
 
     for (auto& [_, texture] : catalog.entries()) {
@@ -329,7 +336,7 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
     }
 
     if (numLayers > 1024) {
-        throw std::runtime_error("Block texture array exceeds the 1024-layer vertex encoding limit");
+        failBlockTextureArrayBuilder("Block texture array exceeds the 1024-layer vertex encoding limit");
     }
 
     PendingTextureArray albedoArray(tileSize, numLayers);
