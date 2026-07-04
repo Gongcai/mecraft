@@ -8,14 +8,21 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
+#include <iostream>
 #include <memory>
-#include <stdexcept>
+#include <string>
 #include <vector>
 #include <glad/glad.h>
 #include <glm/vec3.hpp>
 
 namespace {
+
+[[noreturn]] void failBlockIconAtlasBuilder(const std::string& message) {
+    std::cerr << message << '\n';
+    std::abort();
+}
 
 struct Vec2f {
     float x = 0.0f;
@@ -146,7 +153,7 @@ int iconFaceFromDirection(const IVec3 direction) {
     if (direction.x == 0 && direction.y == 0 && direction.z == -1) return 3;
     if (direction.x == -1 && direction.y == 0 && direction.z == 0) return 4;
     if (direction.x == 1 && direction.y == 0 && direction.z == 0) return 5;
-    throw std::runtime_error("Model transform produced an invalid icon face direction");
+    failBlockIconAtlasBuilder("Model transform produced an invalid icon face direction");
 }
 
 int transformIconFaceIndex(const int face, const ModelTransform& transform) {
@@ -225,7 +232,7 @@ std::string resolveIconModelFaceTextureName(const BlockModel& model, const Model
     const std::string textureKey = face.textureVar.substr(1);
     const auto it = model.textures.find(textureKey);
     if (it == model.textures.end()) {
-        throw std::runtime_error("Model icon face references unknown texture variable: " + model.name + "." + textureKey);
+        failBlockIconAtlasBuilder("Model icon face references unknown texture variable: " + model.name + "." + textureKey);
     }
     return it->second;
 }
@@ -450,7 +457,7 @@ void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
     const BlockStateId stateId = BlockStateRegistry::getDefaultState(blockId);
     const ModelVariant* variant = BlockStateRegistry::getModelVariant(stateId);
     if (variant == nullptr || variant->model == nullptr) {
-        throw std::runtime_error("Model block is missing an icon model variant: " +
+        failBlockIconAtlasBuilder("Model block is missing an icon model variant: " +
                                  BlockRegistry::getNamespacedId(blockId).full());
     }
 
@@ -478,7 +485,7 @@ void drawModelBlockIcon(std::vector<unsigned char>& iconAtlasPixels,
             const TextureAnimationInfo textureInfo = blockTextures.textureAnimation(textureName);
             const int tileIndex = blockTextures.arrayLayerToAtlasTile(textureInfo.firstLayer);
             if (tileIndex < 0) {
-                throw std::runtime_error("Model icon texture is not present in the block atlas: " + textureName);
+                failBlockIconAtlasBuilder("Model icon texture is not present in the block atlas: " + textureName);
             }
 
             const std::array<Vec2f, 4> uv = buildIconModelFaceUv(face);
