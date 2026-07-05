@@ -387,6 +387,7 @@ vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
     float bias = csmDepthBias(ndotl, viewDistance, cascadeIndex, shadowSize,
                               uShadowDistance, uShadowConstantBias, uShadowSlopeBias);
     float refZ = proj.z - bias;
+    vec2 receiverDepthGradient = csmReceiverPlaneDepthGradient(proj);
 
     vec3 tint = transparentShadowTintSample(proj.xy, cascadeIndex, refZ) * 1.5;
     float weight = 1.5;
@@ -397,7 +398,8 @@ vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
         float angle = csmKernelAngle(proj.xy, cascadeIndex, texelUv);
         for (int i = 0; i < 12; ++i) {
             vec2 offset = csmRotateOffset(spiralDiskSample(i, 12, jitter), angle) * texelUv * radius;
-            tint += transparentShadowTintSample(proj.xy + offset, cascadeIndex, refZ);
+            tint += transparentShadowTintSample(proj.xy + offset, cascadeIndex,
+                                                csmReceiverPlaneRefZ(refZ, offset, receiverDepthGradient));
             weight += 1.0;
         }
     }
