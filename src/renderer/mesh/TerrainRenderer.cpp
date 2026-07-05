@@ -47,9 +47,13 @@ bool isCascadeAabbVisible(const glm::vec3& boundsMin,
 
 unsigned int buildCascadeVisibilityMask(const glm::vec3& boundsMin,
                                         const glm::vec3& boundsMax,
-                                        const std::array<CascadeAabbCuller, 4>& cascadeCullers) {
+                                        const std::array<CascadeAabbCuller, 4>& cascadeCullers,
+                                        const unsigned int candidateMask = 0xFu) {
     unsigned int mask = 0;
     for (int c = 0; c < 4; ++c) {
+        if ((candidateMask & (1u << c)) == 0) {
+            continue;
+        }
         if (isCascadeAabbVisible(boundsMin, boundsMax, cascadeCullers[c])) {
             mask |= 1u << c;
         }
@@ -775,7 +779,8 @@ void TerrainRenderer::collectShadowChunks(
             regionBegin = regionEnd;
             continue;
         }
-        if (buildCascadeVisibilityMask(regionMin, regionMax, cascadeCullers) == 0) {
+        const unsigned int regionCascadeMask = buildCascadeVisibilityMask(regionMin, regionMax, cascadeCullers);
+        if (regionCascadeMask == 0) {
             regionBegin = regionEnd;
             continue;
         }
@@ -789,7 +794,12 @@ void TerrainRenderer::collectShadowChunks(
             if (!boundsWithinCameraDistance(column.columnBoundsMin, column.columnBoundsMax)) {
                 continue;
             }
-            if (buildCascadeVisibilityMask(column.columnBoundsMin, column.columnBoundsMax, cascadeCullers) == 0) {
+            const unsigned int columnCascadeMask = buildCascadeVisibilityMask(
+                column.columnBoundsMin,
+                column.columnBoundsMax,
+                cascadeCullers,
+                regionCascadeMask);
+            if (columnCascadeMask == 0) {
                 continue;
             }
 
@@ -824,7 +834,11 @@ void TerrainRenderer::collectShadowChunks(
                     if (!boundsWithinCameraDistance(boundsMin, boundsMax)) {
                         continue;
                     }
-                    const unsigned int cascadeMask = buildCascadeVisibilityMask(boundsMin, boundsMax, cascadeCullers);
+                    const unsigned int cascadeMask = buildCascadeVisibilityMask(
+                        boundsMin,
+                        boundsMax,
+                        cascadeCullers,
+                        columnCascadeMask);
                     if (cascadeMask == 0) {
                         continue;
                     }
@@ -843,6 +857,9 @@ void TerrainRenderer::collectShadowChunks(
 
                     // Bin to cascades from the visibility mask computed for this sub-chunk.
                     for (int c = 0; c < 4; ++c) {
+                        if ((columnCascadeMask & (1u << c)) == 0) {
+                            continue;
+                        }
                         if ((cascadeMask & (1u << c)) != 0) {
                             cascadeCullers[c].visibleCount++;
                             if (mesh.opaqueRange.vertexCount > 0) {
@@ -869,9 +886,12 @@ void TerrainRenderer::collectShadowChunks(
                 // Non-MDI path
                 if (column.aggregatedPresent) {
                     const unsigned int cascadeMask = buildCascadeVisibilityMask(
-                        column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers);
+                        column.aggregatedBoundsMin, column.aggregatedBoundsMax, cascadeCullers, columnCascadeMask);
                     if (cascadeMask != 0) {
                         for (int c = 0; c < 4; ++c) {
+                            if ((columnCascadeMask & (1u << c)) == 0) {
+                                continue;
+                            }
                             if ((cascadeMask & (1u << c)) != 0) {
                                 cascadeCullers[c].visibleCount++;
                                 const SubChunkMesh& mesh = column.chunk->getColumnMesh();
@@ -893,9 +913,12 @@ void TerrainRenderer::collectShadowChunks(
                     const TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
 
                     const unsigned int cascadeMask = buildCascadeVisibilityMask(
-                        transparent.boundsMin, transparent.boundsMax, cascadeCullers);
+                        transparent.boundsMin, transparent.boundsMax, cascadeCullers, columnCascadeMask);
                     if (cascadeMask != 0) {
                         for (int c = 0; c < 4; ++c) {
+                            if ((columnCascadeMask & (1u << c)) == 0) {
+                                continue;
+                            }
                             if ((cascadeMask & (1u << c)) != 0) {
                                 cascadeCullers[c].visibleCount++;
                                 outTransparentEntries[c].push_back({column.chunk, scy, false});
