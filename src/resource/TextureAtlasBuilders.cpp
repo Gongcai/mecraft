@@ -1,4 +1,5 @@
 #include "TextureAtlasBuilders.h"
+#include "TextureResampler.h"
 
 #include "../third_party/stb/stb_image.h"
 
@@ -117,6 +118,27 @@ void copyTilePadding(std::vector<unsigned char>& atlasPixels,
                 atlasPixels[dstTopIndex + c] = atlasPixels[topSrcIndex + c];
                 atlasPixels[dstBottomIndex + c] = atlasPixels[bottomSrcIndex + c];
             }
+        }
+    }
+}
+
+void copyTilePixelsToAtlas(std::vector<unsigned char>& atlasPixels,
+                           const int atlasWidth,
+                           const int innerStartX,
+                           const int innerStartY,
+                           const int tileSize,
+                           const std::vector<unsigned char>& tilePixels) {
+    if (tilePixels.size() != static_cast<size_t>(tileSize) * static_cast<size_t>(tileSize) * 4U) {
+        failTextureAtlasBuilders("Block texture atlas tile pixel buffer size is invalid");
+    }
+    for (int y = 0; y < tileSize; ++y) {
+        for (int x = 0; x < tileSize; ++x) {
+            const size_t destIndex = static_cast<size_t>((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4U;
+            const size_t sourceIndex = static_cast<size_t>(y * tileSize + x) * 4U;
+            atlasPixels[destIndex + 0U] = tilePixels[sourceIndex + 0U];
+            atlasPixels[destIndex + 1U] = tilePixels[sourceIndex + 1U];
+            atlasPixels[destIndex + 2U] = tilePixels[sourceIndex + 2U];
+            atlasPixels[destIndex + 3U] = tilePixels[sourceIndex + 3U];
         }
     }
 }
@@ -274,16 +296,16 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
 
         if (useVerticalFrame) {
             const int frameCount = catalogEntry->animation.frameCount;
-            if (width != tileSize || height != tileSize * frameCount) {
+            if (height != width * frameCount) {
                 stbi_image_free(data);
                 failTextureAtlasBuilders("Texture catalog dimensions do not match atlas source for " + textureEntry.albedoPath.string());
             }
             const int frameIndex = catalogEntry->topFrameFirst ? frameCount - 1 : 0;
-            sourcePixels = data + static_cast<size_t>(frameIndex * tileSize * width) * 4;
-            sourceHeight = tileSize;
-        } else if (width != tileSize || height != tileSize) {
+            sourcePixels = data + static_cast<size_t>(frameIndex * width * width) * 4U;
+            sourceHeight = width;
+        } else if (height != width) {
             stbi_image_free(data);
-            failTextureAtlasBuilders("Block texture dimensions do not match tile size for " + textureEntry.albedoPath.string());
+            failTextureAtlasBuilders("Block texture must be square for " + textureEntry.albedoPath.string());
         }
 
         const int tileCol = i % tilesPerRow;
@@ -293,18 +315,17 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
         const int innerStartX = tileBaseX + kTilePadding;
         const int innerStartY = tileBaseY + kTilePadding;
 
-        for (int y = 0; y < tileSize; ++y) {
-            for (int x = 0; x < tileSize; ++x) {
-                const int destIndex = ((innerStartY + y) * atlasWidth + (innerStartX + x)) * 4;
-                const int srcIndex = (y * width + x) * 4;
-                result.pixels[destIndex + 0] = sourcePixels[srcIndex + 0];
-                result.pixels[destIndex + 1] = sourcePixels[srcIndex + 1];
-                result.pixels[destIndex + 2] = sourcePixels[srcIndex + 2];
-                result.pixels[destIndex + 3] = sourcePixels[srcIndex + 3];
-            }
-        }
+        const TextureResampleFilter filter = selectTextureTileResampleFilter(width, sourceHeight, tileSize);
+        const std::vector<unsigned char> tilePixels = resampleRgba8(sourcePixels,
+                                                                    width,
+                                                                    sourceHeight,
+                                                                    width,
+                                                                    tileSize,
+                                                                    tileSize,
+                                                                    filter);
+        copyTilePixelsToAtlas(result.pixels, atlasWidth, innerStartX, innerStartY, tileSize, tilePixels);
 
-        copyTilePadding(result.pixels, atlasWidth, innerStartX, innerStartY, tileSize, sourceHeight, kTilePadding);
+        copyTilePadding(result.pixels, atlasWidth, innerStartX, innerStartY, tileSize, tileSize, kTilePadding);
 
         stbi_image_free(data);
         result.indices[textureName] = i;

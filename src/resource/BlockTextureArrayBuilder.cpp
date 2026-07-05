@@ -1,4 +1,5 @@
 #include "BlockTextureArrayBuilder.h"
+#include "TextureResampler.h"
 
 #include "../third_party/stb/stb_image.h"
 
@@ -131,6 +132,10 @@ struct LoadedImage {
 int computeTextureArrayLayerCount(const resource::BlockTextureManifestEntry& entry,
                                   const int tileSize,
                                   const BlockTextureCatalog& catalog) {
+    if (tileSize <= 0) {
+        failBlockTextureArrayBuilder("Block texture array tile size must be positive");
+    }
+
     const BlockTextureCatalogEntry* catalogEntry = catalog.find(entry.name);
     if (catalogEntry == nullptr ||
         !catalogEntry->verticalFrames ||
@@ -144,9 +149,12 @@ int computeTextureArrayLayerCount(const resource::BlockTextureManifestEntry& ent
     if (!stbi_info(entry.albedoPath.string().c_str(), &width, &height, &channels)) {
         failBlockTextureArrayBuilder("Failed to inspect block texture: " + entry.albedoPath.string());
     }
+    if (width <= 0 || height <= 0) {
+        failBlockTextureArrayBuilder("Block texture dimensions must be positive for " + entry.albedoPath.string());
+    }
 
     const TextureAnimationInfo& animation = catalogEntry->animation;
-    if (width != tileSize || height != tileSize * animation.frameCount) {
+    if (height != width * animation.frameCount) {
         failBlockTextureArrayBuilder("Texture catalog dimensions do not match vertical frames for " + entry.albedoPath.string());
     }
 
@@ -219,6 +227,22 @@ void uploadNeutralMaterialLayers(const GLuint textureId,
     }
 }
 
+std::vector<unsigned char> makeTextureArrayTilePixels(const unsigned char* sourcePixels,
+                                                      const int sourceWidth,
+                                                      const int sourceHeight,
+                                                      const int sourceRowStridePixels,
+                                                      const int tileSize) {
+    const resource::TextureResampleFilter filter =
+        resource::selectTextureTileResampleFilter(sourceWidth, sourceHeight, tileSize);
+    return resource::resampleRgba8(sourcePixels,
+                                   sourceWidth,
+                                   sourceHeight,
+                                   sourceRowStridePixels,
+                                   tileSize,
+                                   tileSize,
+                                   filter);
+}
+
 void uploadAlbedoLayers(const GLuint textureId,
                         const resource::BlockTextureManifestEntry& entry,
                         const int firstLayer,
@@ -232,27 +256,32 @@ void uploadAlbedoLayers(const GLuint textureId,
         : ResourceTextureTint::None);
 
     if (layerCount > 1) {
-        if (image.width != tileSize || image.height != tileSize * layerCount) {
+        if (image.height != image.width * layerCount) {
             failBlockTextureArrayBuilder("Texture catalog dimensions do not match texture array source for " + entry.albedoPath.string());
         }
 
         const bool topFrameFirst = catalogEntry != nullptr && catalogEntry->topFrameFirst;
         for (int frame = 0; frame < layerCount; ++frame) {
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
-            const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
-            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize);
+            const unsigned char* framePixels =
+                image.data + static_cast<size_t>(sourceFrameIndex * image.width * image.width) * 4U;
+            const std::vector<unsigned char> tilePixels =
+                makeTextureArrayTilePixels(framePixels, image.width, image.width, image.width, tileSize);
+            uploadTextureArrayLayer(textureId, firstLayer + frame, tilePixels.data(), tileSize);
             layerAverageColors[static_cast<size_t>(firstLayer + frame)] =
-                computeAlphaWeightedAverageColor(framePixels, image.width, tileSize, tint);
+                computeAlphaWeightedAverageColor(tilePixels.data(), tileSize, tileSize, tint);
         }
         return;
     }
 
-    if (image.width != tileSize || image.height != tileSize) {
-        failBlockTextureArrayBuilder("Block texture array source dimensions do not match tile size for " + entry.albedoPath.string());
+    if (image.height != image.width) {
+        failBlockTextureArrayBuilder("Block texture array source must be square for " + entry.albedoPath.string());
     }
-    uploadTextureArrayLayer(textureId, firstLayer, image.data, tileSize);
+    const std::vector<unsigned char> tilePixels =
+        makeTextureArrayTilePixels(image.data, image.width, image.height, image.width, tileSize);
+    uploadTextureArrayLayer(textureId, firstLayer, tilePixels.data(), tileSize);
     layerAverageColors[static_cast<size_t>(firstLayer)] =
-        computeAlphaWeightedAverageColor(image.data, image.width, tileSize, tint);
+        computeAlphaWeightedAverageColor(tilePixels.data(), tileSize, tileSize, tint);
 }
 
 void uploadMaterialMapLayers(const GLuint textureId,
@@ -269,18 +298,23 @@ void uploadMaterialMapLayers(const GLuint textureId,
     }
 
     LoadedImage image(mapPath.value());
-    if (image.width == tileSize && image.height == tileSize) {
+    if (image.height == image.width) {
+        const std::vector<unsigned char> tilePixels =
+            makeTextureArrayTilePixels(image.data, image.width, image.height, image.width, tileSize);
         for (int layer = 0; layer < layerCount; ++layer) {
-            uploadTextureArrayLayer(textureId, firstLayer + layer, image.data, tileSize);
+            uploadTextureArrayLayer(textureId, firstLayer + layer, tilePixels.data(), tileSize);
         }
         return;
     }
 
-    if (image.width == tileSize && image.height == tileSize * layerCount) {
+    if (image.height == image.width * layerCount) {
         for (int frame = 0; frame < layerCount; ++frame) {
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
-            const unsigned char* framePixels = image.data + static_cast<size_t>(sourceFrameIndex * tileSize * image.width) * 4;
-            uploadTextureArrayLayer(textureId, firstLayer + frame, framePixels, tileSize);
+            const unsigned char* framePixels =
+                image.data + static_cast<size_t>(sourceFrameIndex * image.width * image.width) * 4U;
+            const std::vector<unsigned char> tilePixels =
+                makeTextureArrayTilePixels(framePixels, image.width, image.width, image.width, tileSize);
+            uploadTextureArrayLayer(textureId, firstLayer + frame, tilePixels.data(), tileSize);
         }
         return;
     }

@@ -30,6 +30,7 @@ public:
     using EntryMap = std::unordered_map<std::string, BlockTextureCatalogEntry>;
 
     [[nodiscard]] bool load(const std::string& textureConfigPath);
+    [[nodiscard]] bool loadPackConfig(const std::string& packConfigPath);
     void clear();
 
     [[nodiscard]] const BlockTextureCatalogEntry* find(const std::string& name) const;

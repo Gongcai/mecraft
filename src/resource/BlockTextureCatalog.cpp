@@ -56,25 +56,6 @@ bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
         return false;
     }
 
-    int tileSize = 16;
-    const auto tileSizeIt = root.find("tileSize");
-    if (tileSizeIt != root.end()) {
-        if (!tileSizeIt->is_number_integer()) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json tileSize must be an integer\n");
-            return false;
-        }
-        const int64_t parsedTileSize = tileSizeIt->get<int64_t>();
-        if (parsedTileSize < 1 || parsedTileSize > 1024) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json tileSize must be in range [1, 1024]\n");
-            return false;
-        }
-        tileSize = static_cast<int>(parsedTileSize);
-        if (tileSize <= 0) {
-            MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json tileSize must be positive\n");
-            return false;
-        }
-    }
-
     const auto texturesIt = root.find("textures");
     if (texturesIt == root.end() || !texturesIt->is_array()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_textures.json must contain a textures array\n");
@@ -182,7 +163,43 @@ bool BlockTextureCatalog::load(const std::string& textureConfigPath) {
     }
 
     m_entries = std::move(entries);
-    m_tileSize = tileSize;
+    m_tileSize = 16;
+    return true;
+}
+
+bool BlockTextureCatalog::loadPackConfig(const std::string& packConfigPath) {
+    std::ifstream file(packConfigPath);
+    if (!file.is_open()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to open block texture pack config: %s\n",
+                            packConfigPath.c_str());
+        return false;
+    }
+
+    nlohmann::json root = nlohmann::json::parse(file, nullptr, false);
+    if (root.is_discarded() || !root.is_object()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to parse block texture pack config: invalid JSON\n");
+        return false;
+    }
+
+    const auto gpuTileSizeIt = root.find("gpuTileSize");
+    if (gpuTileSizeIt == root.end() || !gpuTileSizeIt->is_number_integer()) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_texture_pack.json gpuTileSize must be an integer\n");
+        return false;
+    }
+
+    const int64_t parsedGpuTileSize = gpuTileSizeIt->get<int64_t>();
+    if (parsedGpuTileSize < 1 || parsedGpuTileSize > 1024) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_texture_pack.json gpuTileSize must be in range [1, 1024]\n");
+        return false;
+    }
+
+    const int gpuTileSize = static_cast<int>(parsedGpuTileSize);
+    if (gpuTileSize <= 0) {
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] block_texture_pack.json gpuTileSize must be positive\n");
+        return false;
+    }
+
+    m_tileSize = gpuTileSize;
     return true;
 }
 

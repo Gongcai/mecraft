@@ -206,7 +206,7 @@ bool collectRegisteredBlockTextureNames(BlockTextureNameSet& textureNames) {
 
 bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     resourceMgr.init();
-    if (!resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH)) {
+    if (!resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH, BLOCK_TEXTURE_PACK_CONFIG_PATH)) {
         return false;
     }
     BlockTextureNameSet blockTextureNames;

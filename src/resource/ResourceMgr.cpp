@@ -139,6 +139,11 @@ bool ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath) 
     return m_impl->blockTextures.loadCatalog(textureConfigPath);
 }
 
+bool ResourceMgr::loadBlockTextureCatalog(const std::string& textureConfigPath,
+                                          const std::string& packConfigPath) {
+    return m_impl->blockTextures.loadCatalog(textureConfigPath, packConfigPath);
+}
+
 int ResourceMgr::getBlockTextureTileSize() const {
     return m_impl->blockTextures.tileSize();
 }

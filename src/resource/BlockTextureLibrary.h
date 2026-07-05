@@ -22,6 +22,8 @@ public:
     void shutdown();
 
     [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath);
+    [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath,
+                                   const std::string& packConfigPath);
     void buildTextures(const std::string& directory, int tileSize);
     void buildTextures(const std::string& directory,
                        int tileSize,

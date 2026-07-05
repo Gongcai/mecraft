@@ -3,7 +3,6 @@
 #include "BlockTextureArrayBuilder.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
-#include "../third_party/stb/stb_image.h"
 
 #include <glad/glad.h>
 
@@ -20,61 +19,11 @@ namespace {
     std::abort();
 }
 
-int textureFrameCountForTileSize(const BlockTextureCatalog& catalog,
-                                 const resource::BlockTextureManifestEntry& entry) {
-    const BlockTextureCatalogEntry* catalogEntry = catalog.find(entry.name);
-    if (catalogEntry == nullptr ||
-        !catalogEntry->verticalFrames ||
-        catalogEntry->animation.frameCount <= 1) {
-        return 1;
-    }
-    return catalogEntry->animation.frameCount;
-}
-
-int resolveBlockTextureTileSize(const resource::BlockTextureManifest& manifest,
-                                const int configuredTileSize,
-                                const BlockTextureCatalog& catalog) {
+int validateBlockTextureTileSize(const int configuredTileSize) {
     if (configuredTileSize <= 0) {
         failBlockTextureLibrary("Block texture tile size must be positive");
     }
-
-    int resolvedTileSize = 0;
-    for (const resource::BlockTextureManifestEntry& entry : manifest.entries()) {
-        int width = 0;
-        int height = 0;
-        int channels = 0;
-        if (!stbi_info(entry.albedoPath.string().c_str(), &width, &height, &channels)) {
-            failBlockTextureLibrary("Failed to inspect block texture: " + entry.albedoPath.string());
-        }
-        if (width <= 0 || height <= 0) {
-            failBlockTextureLibrary("Block texture dimensions must be positive: " + entry.albedoPath.string());
-        }
-
-        const int frameCount = textureFrameCountForTileSize(catalog, entry);
-        if (frameCount > 1) {
-            if (height != width * frameCount) {
-                failBlockTextureLibrary("Animated block texture dimensions do not match declared frames: " +
-                                        entry.albedoPath.string());
-            }
-        } else if (height != width) {
-            failBlockTextureLibrary("Block texture must be square: " + entry.albedoPath.string());
-        }
-
-        if (resolvedTileSize == 0) {
-            resolvedTileSize = width;
-        } else if (resolvedTileSize != width) {
-            failBlockTextureLibrary("Block texture directory mixes tile sizes: " + entry.albedoPath.string());
-        }
-    }
-
-    if (resolvedTileSize == 0) {
-        return configuredTileSize;
-    }
-    if (resolvedTileSize != configuredTileSize) {
-        std::cerr << "[Resource] Block texture tile size inferred from registered textures: "
-                  << resolvedTileSize << "px (catalog: " << configuredTileSize << "px)\n";
-    }
-    return resolvedTileSize;
+    return configuredTileSize;
 }
 
 } // namespace
@@ -124,6 +73,14 @@ bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath) {
     return m_catalog.load(textureConfigPath);
 }
 
+bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath,
+                                      const std::string& packConfigPath) {
+    if (!m_catalog.load(textureConfigPath)) {
+        return false;
+    }
+    return m_catalog.loadPackConfig(packConfigPath);
+}
+
 void BlockTextureLibrary::buildTextures(const std::string& directory, const int tileSize) {
     buildTextures(directory, tileSize, {});
 }
@@ -143,7 +100,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
         ? resource::buildBlockTextureManifest(directory)
         : resource::buildBlockTextureManifest(directory, registeredTextureNames);
 
-    const int resolvedTileSize = resolveBlockTextureTileSize(m_manifest, tileSize, m_catalog);
+    const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
 
     resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, resolvedTileSize, m_catalog);
     m_atlas = atlasResult.atlas;
@@ -171,7 +128,7 @@ void BlockTextureLibrary::buildAtlas(const std::string& directory, const int til
     }
 
     m_manifest = resource::buildBlockTextureManifest(directory);
-    const int resolvedTileSize = resolveBlockTextureTileSize(m_manifest, tileSize, m_catalog);
+    const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
     resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, resolvedTileSize, m_catalog);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
@@ -186,7 +143,7 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     deleteTextureArray(m_specularTextureArray);
 
     m_manifest = resource::buildBlockTextureManifest(directory);
-    const int resolvedTileSize = resolveBlockTextureTileSize(m_manifest, tileSize, m_catalog);
+    const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
     resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(m_manifest, resolvedTileSize, m_catalog);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
