@@ -1,5 +1,22 @@
 cmake_minimum_required(VERSION 3.20)
 
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE OR CMAKE_TOOLCHAIN_FILE STREQUAL "")
+    if(NOT DEFINED MECRAFT_VCPKG_ROOT OR MECRAFT_VCPKG_ROOT STREQUAL "")
+        if(CMAKE_HOST_WIN32)
+            set(MECRAFT_VCPKG_ROOT "D:/vcpkg/vcpkg")
+        else()
+            set(MECRAFT_VCPKG_ROOT "$ENV{HOME}/.local/share/vcpkg")
+        endif()
+    endif()
+
+    set(MECRAFT_VCPKG_ROOT "${MECRAFT_VCPKG_ROOT}" CACHE PATH "vcpkg root directory")
+    set(MECRAFT_VCPKG_TOOLCHAIN "${MECRAFT_VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+    if(NOT EXISTS "${MECRAFT_VCPKG_TOOLCHAIN}")
+        message(FATAL_ERROR "Missing vcpkg toolchain: ${MECRAFT_VCPKG_TOOLCHAIN}")
+    endif()
+    set(CMAKE_TOOLCHAIN_FILE "${MECRAFT_VCPKG_TOOLCHAIN}" CACHE FILEPATH "vcpkg toolchain file")
+endif()
+
 if(WIN32)
     # Keep MSVC diagnostics stable so Ninja can filter /showIncludes output.
     set(ENV{VSLANG} "1033")

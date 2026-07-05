@@ -33,11 +33,17 @@ uniform sampler2D uFoliageColormap;
 uniform int uForceBaseLod;
 uniform int uHasBlockNormalMaps;
 uniform int uHasBlockSpecularMaps;
+uniform int uBlockParallaxEnabled;
+uniform float uBlockParallaxDepth;
 uniform float uAnimationTime;
 uniform float uShaderTime;
 uniform float uSurfaceWetness;
 uniform int uRainWetSurfacesEnabled;
 uniform int uRainSurfaceRipplesEnabled;
+uniform vec3 uCameraPos;
+
+const int kBlockParallaxMaxSteps = 12;
+const float kBlockParallaxMinViewZ = 0.18;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -88,9 +94,82 @@ mat3 cotangentFrame(vec3 normal, vec3 position, vec2 uv) {
     return mat3(tangent * invLength, bitangent * invLength, normal);
 }
 
-vec3 applyBlockNormalMap(vec3 geometricNormal, vec3 position, vec2 uv, vec4 normalTexel) {
+vec4 sampleBlockMap(sampler2DArray mapTex,
+                    vec2 uv,
+                    float layer,
+                    bool forceBaseLod,
+                    vec2 uvDx,
+                    vec2 uvDy) {
+    vec3 coord = vec3(uv, layer);
+    return forceBaseLod
+        ? textureLod(mapTex, coord, 0.0)
+        : textureGrad(mapTex, coord, uvDx, uvDy);
+}
+
+float sampleLabPbrHeight(vec2 uv, float layer, bool forceBaseLod, vec2 uvDx, vec2 uvDy) {
+    return sampleBlockMap(uBlockNormalTex, uv, layer, forceBaseLod, uvDx, uvDy).a;
+}
+
+vec2 composeBlockTileUv(vec2 baseUv, vec2 tileUv) {
+    return floor(baseUv) + fract(tileUv);
+}
+
+vec2 applyBlockParallaxMap(vec3 geometricNormal,
+                           vec3 position,
+                           vec2 baseUv,
+                           float layer,
+                           bool forceBaseLod,
+                           vec2 uvDx,
+                           vec2 uvDy) {
+    if (uBlockParallaxEnabled == 0 || uBlockParallaxDepth <= 0.0) {
+        return baseUv;
+    }
+
+    mat3 frame = cotangentFrame(geometricNormal, position, baseUv);
+    vec3 viewDir = normalize(uCameraPos - position);
+    vec3 tangentViewDir = transpose(frame) * viewDir;
+    if (tangentViewDir.z <= 0.001) {
+        return baseUv;
+    }
+
+    float viewZ = max(tangentViewDir.z, kBlockParallaxMinViewZ);
+    float grazing = 1.0 - clamp(viewZ, 0.0, 1.0);
+    int stepCount = int(mix(5.0, float(kBlockParallaxMaxSteps), grazing));
+    float layerStep = 1.0 / float(stepCount);
+    vec2 parallaxVector = (tangentViewDir.xy / viewZ) * uBlockParallaxDepth;
+    vec2 uvStep = parallaxVector / float(stepCount);
+
+    vec2 tileUv = fract(baseUv);
+    vec2 currentUv = composeBlockTileUv(baseUv, tileUv);
+    float currentLayerDepth = 0.0;
+    float currentDepth = 1.0 - sampleLabPbrHeight(currentUv, layer, forceBaseLod, uvDx, uvDy);
+
+    for (int i = 0; i < kBlockParallaxMaxSteps; ++i) {
+        if (i >= stepCount || currentLayerDepth >= currentDepth) {
+            break;
+        }
+        tileUv -= uvStep;
+        currentLayerDepth += layerStep;
+        currentUv = composeBlockTileUv(baseUv, tileUv);
+        currentDepth = 1.0 - sampleLabPbrHeight(currentUv, layer, forceBaseLod, uvDx, uvDy);
+    }
+
+    if (currentLayerDepth <= 0.0) {
+        return baseUv;
+    }
+
+    vec2 previousUv = composeBlockTileUv(baseUv, tileUv + uvStep);
+    float previousDepth = 1.0 - sampleLabPbrHeight(previousUv, layer, forceBaseLod, uvDx, uvDy);
+    float afterDepth = currentDepth - currentLayerDepth;
+    float beforeDepth = previousDepth - currentLayerDepth + layerStep;
+    float denom = afterDepth - beforeDepth;
+    float weight = abs(denom) > 1e-5 ? clamp(afterDepth / denom, 0.0, 1.0) : 0.0;
+    return mix(currentUv, previousUv, weight);
+}
+
+vec3 applyBlockNormalMap(vec3 geometricNormal, vec3 position, vec2 derivativeUv, vec4 normalTexel) {
     vec3 tangentNormal = normalize(normalTexel.xyz * 2.0 - 1.0);
-    return normalize(cotangentFrame(geometricNormal, position, uv) * tangentNormal);
+    return normalize(cotangentFrame(geometricNormal, position, derivativeUv) * tangentNormal);
 }
 
 bool hasAuthoredSpecularData(vec4 specularTexel) {
@@ -119,9 +198,15 @@ void main() {
         sampledLayer += frame;
     }
 
-    vec4 texColor = forceBaseLod
-        ? textureLod(texArray, vec3(vUV, sampledLayer), 0.0)
-        : texture(texArray, vec3(vUV, sampledLayer));
+    vec2 uvDx = dFdx(vUV);
+    vec2 uvDy = dFdy(vUV);
+    vec3 geometricNormal = decodeFaceNormal(vNormal);
+    vec2 sampleUv = vUV;
+    if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
+        sampleUv = applyBlockParallaxMap(geometricNormal, vWorldPos, vUV, sampledLayer, forceBaseLod, uvDx, uvDy);
+    }
+
+    vec4 texColor = sampleBlockMap(texArray, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
     if (texColor.a < 0.1) {
         discard;
     }
@@ -135,7 +220,7 @@ void main() {
         albedo *= srgbToLinear(redstoneTintSrgb(vTintUV));
     }
 
-    vec3 normal = decodeFaceNormal(vNormal);
+    vec3 normal = geometricNormal;
     float ao = clamp(vAO / 3.0, 0.0, 1.0);
     int derivativeMaterialId = derivativeFragmentMaterialId(materialKindId(vMaterialKind));
     bool isEmissiveMaterial = isDerivativeEmissiveMaterialId(derivativeMaterialId) ||
@@ -149,16 +234,12 @@ void main() {
     SurfaceMaterialAux aux = surfaceMaterialAuxForKind(vMaterialKind);
 
     if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
-        vec4 normalTexel = forceBaseLod
-            ? textureLod(uBlockNormalTex, vec3(vUV, sampledLayer), 0.0)
-            : texture(uBlockNormalTex, vec3(vUV, sampledLayer));
+        vec4 normalTexel = sampleBlockMap(uBlockNormalTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
         normal = applyBlockNormalMap(normal, vWorldPos, vUV, normalTexel);
     }
 
     if (uHasBlockSpecularMaps != 0) {
-        vec4 specularTexel = forceBaseLod
-            ? textureLod(uBlockSpecularTex, vec3(vUV, sampledLayer), 0.0)
-            : texture(uBlockSpecularTex, vec3(vUV, sampledLayer));
+        vec4 specularTexel = sampleBlockMap(uBlockSpecularTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
         if (hasAuthoredSpecularData(specularTexel)) {
             applyLabPbrSpecularMap(specularTexel, derivativeMaterialId, emissiveHint, material, aux);
         }

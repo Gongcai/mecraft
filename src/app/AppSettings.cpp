@@ -560,6 +560,8 @@ void applyBlockMaterialMapSettings(const json& j, BlockMaterialMapSettings& s) {
     readBool(j, "enabled", s.enabled);
     readBool(j, "normalMapsEnabled", s.normalMapsEnabled);
     readBool(j, "specularMapsEnabled", s.specularMapsEnabled);
+    readBool(j, "parallaxMapsEnabled", s.parallaxMapsEnabled);
+    readFloat(j, "parallaxDepth", s.parallaxDepth);
 }
 
 json toJson(const BlockMaterialMapSettings& s) {
@@ -567,6 +569,8 @@ json toJson(const BlockMaterialMapSettings& s) {
         {"enabled", s.enabled},
         {"normalMapsEnabled", s.normalMapsEnabled},
         {"specularMapsEnabled", s.specularMapsEnabled},
+        {"parallaxMapsEnabled", s.parallaxMapsEnabled},
+        {"parallaxDepth", s.parallaxDepth},
     };
 }
 

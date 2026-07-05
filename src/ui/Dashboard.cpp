@@ -778,6 +778,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Block Normal Maps", &settings.blockMaterialMaps.normalMapsEnabled);
         ImGui::SameLine();
         pipelineChanged |= ImGui::Checkbox("Block Specular Maps", &settings.blockMaterialMaps.specularMapsEnabled);
+        ImGui::SameLine();
+        pipelineChanged |= ImGui::Checkbox("Block Parallax Maps", &settings.blockMaterialMaps.parallaxMapsEnabled);
+        pipelineChanged |= ImGui::SliderFloat("Block Parallax Depth", &settings.blockMaterialMaps.parallaxDepth, 0.0f, 0.12f, "%.3f");
         if (!settings.blockMaterialMaps.enabled) {
             ImGui::EndDisabled();
         }

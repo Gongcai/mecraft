@@ -557,6 +557,8 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     trs.blockMaterialMapsEnabled = settings.blockMaterialMaps.enabled;
     trs.blockNormalMapsEnabled = settings.blockMaterialMaps.normalMapsEnabled;
     trs.blockSpecularMapsEnabled = settings.blockMaterialMaps.specularMapsEnabled;
+    trs.blockParallaxMapsEnabled = settings.blockMaterialMaps.parallaxMapsEnabled;
+    trs.blockParallaxDepth = settings.blockMaterialMaps.parallaxDepth;
 
     const TextureArray& texArray = m_shared->resources->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
@@ -687,6 +689,8 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     trs.blockMaterialMapsEnabled = m_currentSettings.blockMaterialMaps.enabled;
     trs.blockNormalMapsEnabled = m_currentSettings.blockMaterialMaps.normalMapsEnabled;
     trs.blockSpecularMapsEnabled = m_currentSettings.blockMaterialMaps.specularMapsEnabled;
+    trs.blockParallaxMapsEnabled = m_currentSettings.blockMaterialMaps.parallaxMapsEnabled;
+    trs.blockParallaxDepth = m_currentSettings.blockMaterialMaps.parallaxDepth;
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();

@@ -21,7 +21,7 @@ namespace {
     std::abort();
 }
 
-constexpr std::array<unsigned char, 4> kNeutralNormalPixel = {128, 128, 255, 0};
+constexpr std::array<unsigned char, 4> kNeutralNormalPixel = {128, 128, 255, 255};
 constexpr std::array<unsigned char, 4> kNeutralSpecularPixel = {0, 0, 0, 0};
 
 struct ResourceTint {
@@ -243,6 +243,12 @@ std::vector<unsigned char> makeTextureArrayTilePixels(const unsigned char* sourc
                                    filter);
 }
 
+void setTileAlpha(std::vector<unsigned char>& tilePixels, const unsigned char alpha) {
+    for (size_t i = 3; i < tilePixels.size(); i += 4) {
+        tilePixels[i] = alpha;
+    }
+}
+
 void uploadAlbedoLayers(const GLuint textureId,
                         const resource::BlockTextureManifestEntry& entry,
                         const int firstLayer,
@@ -291,7 +297,8 @@ void uploadMaterialMapLayers(const GLuint textureId,
                              const int tileSize,
                              const bool topFrameFirst,
                              const std::array<unsigned char, 4>& neutralPixel,
-                             const char* roleName) {
+                             const char* roleName,
+                             const bool neutralizeSourceAlpha) {
     if (!mapPath.has_value()) {
         uploadNeutralMaterialLayers(textureId, firstLayer, layerCount, tileSize, neutralPixel);
         return;
@@ -299,8 +306,11 @@ void uploadMaterialMapLayers(const GLuint textureId,
 
     LoadedImage image(mapPath.value());
     if (image.height == image.width) {
-        const std::vector<unsigned char> tilePixels =
+        std::vector<unsigned char> tilePixels =
             makeTextureArrayTilePixels(image.data, image.width, image.height, image.width, tileSize);
+        if (neutralizeSourceAlpha && image.channels < 4) {
+            setTileAlpha(tilePixels, neutralPixel[3]);
+        }
         for (int layer = 0; layer < layerCount; ++layer) {
             uploadTextureArrayLayer(textureId, firstLayer + layer, tilePixels.data(), tileSize);
         }
@@ -312,8 +322,11 @@ void uploadMaterialMapLayers(const GLuint textureId,
             const int sourceFrameIndex = topFrameFirst ? layerCount - 1 - frame : frame;
             const unsigned char* framePixels =
                 image.data + static_cast<size_t>(sourceFrameIndex * image.width * image.width) * 4U;
-            const std::vector<unsigned char> tilePixels =
+            std::vector<unsigned char> tilePixels =
                 makeTextureArrayTilePixels(framePixels, image.width, image.width, image.width, tileSize);
+            if (neutralizeSourceAlpha && image.channels < 4) {
+                setTileAlpha(tilePixels, neutralPixel[3]);
+            }
             uploadTextureArrayLayer(textureId, firstLayer + frame, tilePixels.data(), tileSize);
         }
         return;
@@ -409,11 +422,11 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
                            result.layerAverageColors);
         if (normalArray.has_value()) {
             uploadMaterialMapLayers(normalArray->id(), entry.normalPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralNormalPixel, "normal");
+                                    topFrameFirst, kNeutralNormalPixel, "normal", true);
         }
         if (specularArray.has_value()) {
             uploadMaterialMapLayers(specularArray->id(), entry.specularPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralSpecularPixel, "specular");
+                                    topFrameFirst, kNeutralSpecularPixel, "specular", false);
         }
 
         currentLayer += layerCount;

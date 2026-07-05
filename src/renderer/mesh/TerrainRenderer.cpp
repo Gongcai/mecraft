@@ -285,8 +285,13 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
                                       settings.blockMaterialMapsEnabled &&
                                       settings.blockSpecularMapsEnabled &&
                                       resourceMgr->hasBlockSpecularMaps();
+    const bool useBlockParallaxMaps = useBlockNormalMaps &&
+                                      settings.blockParallaxMapsEnabled &&
+                                      settings.blockParallaxDepth > 0.0f;
     shader.setInt("uHasBlockNormalMaps", useBlockNormalMaps ? 1 : 0);
     shader.setInt("uHasBlockSpecularMaps", useBlockSpecularMaps ? 1 : 0);
+    shader.setInt("uBlockParallaxEnabled", useBlockParallaxMaps ? 1 : 0);
+    shader.setFloat("uBlockParallaxDepth", useBlockParallaxMaps ? settings.blockParallaxDepth : 0.0f);
     shader.setInt("uSkyCaptureEnabled", deferredFrameActive ? 1 : 0);
     shader.setInt("uCompositeInputsEnabled", 0);
     shader.setInt("uWaterCompositeEnabled", 0);
