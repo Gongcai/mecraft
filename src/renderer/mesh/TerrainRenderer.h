@@ -63,7 +63,7 @@ struct TerrainRenderSettings {
     bool blockNormalMapsEnabled = true;
     bool blockSpecularMapsEnabled = true;
     bool blockParallaxMapsEnabled = true;
-    float blockParallaxDepth = 0.045f;
+    float blockParallaxDepth = 0.075f;
 };
 
 /// Sky lighting data required by bindChunkRenderState.

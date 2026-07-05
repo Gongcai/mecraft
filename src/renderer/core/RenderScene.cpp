@@ -832,11 +832,16 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.cloud.shadowSpeed = m_settings.cloud.shadowSpeed;
     ctx.cloud.timeScale = m_settings.cloud.timeScale;
     const float cloudWetForCoverage = std::clamp(ctx.weather.wetness + ctx.weather.storm * (4.0f / 3.0f), 0.0f, 1.0f);
-    ctx.cloud.coverage = std::clamp(1.0f + cloudWetForCoverage * 0.2f, 0.0f, 1.5f);
-    ctx.cloud.density = 0.85f + ctx.weather.wetness * 0.35f + ctx.weather.storm * 0.55f;
+    const float userCoverageBias = (std::clamp(m_settings.cloud.coverage, 0.0f, 1.0f) - 0.35f) * 0.45f;
+    ctx.cloud.coverage = std::clamp(1.0f + cloudWetForCoverage * 0.2f + userCoverageBias, 0.5f, 1.5f);
+    ctx.cloud.density = (0.85f + ctx.weather.wetness * 0.35f + ctx.weather.storm * 0.55f) *
+                        std::clamp(m_settings.cloud.density, 0.0f, 2.5f);
     float cloudWet = std::clamp(ctx.weather.cloudWetness, 0.0f, 1.0f);
-    ctx.cloud.height = 1000.0f + cloudWet * (800.0f - 1000.0f);
-    ctx.cloud.thickness = 1400.0f + cloudWet * (3000.0f - 1400.0f);
+    ctx.cloud.height = std::max(100.0f, m_settings.cloud.height - cloudWet * 200.0f);
+    ctx.cloud.thickness = std::max(50.0f, m_settings.cloud.thickness + cloudWet * 1600.0f);
+    ctx.cloud.planarCoverage = m_settings.cloud.planarCoverage;
+    ctx.cloud.planarDensity = m_settings.cloud.planarDensity;
+    ctx.cloud.planarAltitude = m_settings.cloud.planarAltitude;
 
     // Atmosphere settings (from PostProcessSettings and WeatherRenderSettings)
     ctx.atmosphere.aerialStrength = m_settings.postProcess.aerialStrength;

@@ -894,6 +894,35 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
                      m_renderScene->setSettings(s);
                  });
 
+    addSectionHeader(stack, resourceMgr, "Block Materials");
+
+    addToggle(stack, resourceMgr, "Block PBR Maps", s.blockMaterialMaps.enabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.blockMaterialMaps.enabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addToggle(stack, resourceMgr, "Block Normal Maps", s.blockMaterialMaps.normalMapsEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.blockMaterialMaps.normalMapsEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addToggle(stack, resourceMgr, "Block Specular Maps", s.blockMaterialMaps.specularMapsEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.blockMaterialMaps.specularMapsEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addToggle(stack, resourceMgr, "Block Parallax Maps", s.blockMaterialMaps.parallaxMapsEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.blockMaterialMaps.parallaxMapsEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addSliderRow(stack, resourceMgr, "Block Parallax Depth",
+                 0.0f, 0.12f, s.blockMaterialMaps.parallaxDepth, 0.001f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.blockMaterialMaps.parallaxDepth = v;
+                     m_renderScene->setSettings(s);
+                 });
+
     addSectionHeader(stack, resourceMgr, "Transparent");
 
     addToggle(stack, resourceMgr, "Water Effects", s.transparent.waterEffectsEnabled,
@@ -904,6 +933,19 @@ void SettingsScreen::buildLightingTab(UIWidget* contentPanel, ResourceMgr& resou
     addToggle(stack, resourceMgr, "Transparent Composite", s.transparent.compositeEnabled,
               [this](bool v) {
                   auto s = m_renderScene->getSettings(); s.transparent.compositeEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+
+    addSectionHeader(stack, resourceMgr, "Rain Surfaces");
+
+    addToggle(stack, resourceMgr, "Wet Surfaces", s.weather.wetSurfacesEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.weather.wetSurfacesEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
+    addToggle(stack, resourceMgr, "Surface Ripples", s.weather.surfaceRipplesEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.weather.surfaceRipplesEnabled = v;
                   m_renderScene->setSettings(s);
               });
 
@@ -1226,6 +1268,30 @@ void SettingsScreen::buildVolumetricTab(UIWidget* contentPanel, ResourceMgr& res
                   auto s = m_renderScene->getSettings(); s.cloud.shadowsEnabled = v;
                   m_renderScene->setSettings(s);
               });
+    addSliderRow(stack, resourceMgr, "Cloud Coverage",
+                 0.0f, 1.0f, s.cloud.coverage, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.cloud.coverage = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Cloud Density",
+                 0.0f, 2.5f, s.cloud.density, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.cloud.density = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Cloud Height",
+                 300.0f, 9000.0f, s.cloud.height, 50.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.cloud.height = v;
+                     m_renderScene->setSettings(s);
+                 });
+    addSliderRow(stack, resourceMgr, "Cloud Thickness",
+                 100.0f, 3000.0f, s.cloud.thickness, 25.0f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.cloud.thickness = v;
+                     m_renderScene->setSettings(s);
+                 });
     addSliderRow(stack, resourceMgr, "Cloud Shadow Strength",
                  0.0f, 0.8f, s.cloud.shadowStrength, 0.01f,
                  [this](float v) {
@@ -1293,11 +1359,22 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
 
     addSectionHeader(stack, resourceMgr, "Reflection");
 
+    addToggle(stack, resourceMgr, "Reflection Filter", s.reflection.filterEnabled,
+              [this](bool v) {
+                  auto s = m_renderScene->getSettings(); s.reflection.filterEnabled = v;
+                  m_renderScene->setSettings(s);
+              });
     addToggle(stack, resourceMgr, "Reflection Temporal", s.reflection.temporalEnabled,
               [this](bool v) {
                   auto s = m_renderScene->getSettings(); s.reflection.temporalEnabled = v;
                   m_renderScene->setSettings(s);
               });
+    addSliderRow(stack, resourceMgr, "Reflection Filter Strength",
+                 0.0f, 2.0f, s.reflection.filterStrength, 0.01f,
+                 [this](float v) {
+                     auto s = m_renderScene->getSettings(); s.reflection.filterStrength = v;
+                     m_renderScene->setSettings(s);
+                 });
     addSliderRow(stack, resourceMgr, "Reflection History Weight",
                  0.0f, 0.98f, s.reflection.historyWeight, 0.01f,
                  [this](float v) {

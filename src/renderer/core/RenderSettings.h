@@ -141,7 +141,7 @@ struct BlockMaterialMapSettings {
     bool normalMapsEnabled = true;
     bool specularMapsEnabled = true;
     bool parallaxMapsEnabled = true;
-    float parallaxDepth = 0.045f;
+    float parallaxDepth = 0.075f;
 };
 
 /// TAA settings
