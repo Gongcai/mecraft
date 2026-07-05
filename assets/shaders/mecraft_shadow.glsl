@@ -210,6 +210,9 @@ float cascadePcfRadius(int cascadeIndex, float baseSoftness) {
 // ---- PCSS (Percentage Closer Soft Shadows) ----
 
 float sampleCsmRawDepth(vec2 uv, int cascadeIndex) {
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
+        return 1.0;
+    }
     float scale = uCsmCascades[cascadeIndex].resolutionScale;
     return texture(uCsmShadowDepthRaw, vec3(uv * scale, float(cascadeIndex))).r;
 }
@@ -257,16 +260,18 @@ float pcssPenumbraTexels(float receiverZ, float avgBlockerZ,
 }
 
 float sampleCsmPcss(vec2 uv, int cascadeIndex,
-                    float receiverZ, float refZ,
+                    float receiverZ, float refZ, float blockerReceiverZ,
                     vec2 texelUv, float texelWorld, float depthExtent,
                     float lightAngularScale, float searchRadius,
                     out float outBlockerDepth) {
     // Step 1: Blocker search
-    // Search more conservatively than the final PCF compare. Otherwise the
-    // receiver's own depth can become a near blocker after normal offset and
-    // PCSS amplifies that into dirty gray patches on lit flat surfaces.
+    // Blocker search uses the geometric receiver depth, while final PCF uses
+    // the normal-offset depth. This prevents the receiver's own shadow texels
+    // from being averaged as blockers when the light is nearly vertical.
     float receiverBias = max(receiverZ - refZ, 2.0e-5);
-    float blockerCompareZ = receiverZ - receiverBias * 1.35;
+    float texelDepth = texelWorld / max(2.0 * depthExtent, 1.0);
+    float blockerExclusion = max(receiverBias * 1.35, texelDepth * 1.5);
+    float blockerCompareZ = blockerReceiverZ - blockerExclusion;
     int blockerCount = 0;
     float avgBlocker = pcssBlockerSearch(uv, cascadeIndex, blockerCompareZ, texelUv, searchRadius, blockerCount);
     if (avgBlocker < 0.0) {
@@ -287,7 +292,7 @@ float sampleCsmPcss(vec2 uv, int cascadeIndex,
         : 0.0;
 
     // Step 2: Penumbra estimation
-    float pcfRadius = pcssPenumbraTexels(receiverZ, avgBlocker, depthExtent,
+    float pcfRadius = pcssPenumbraTexels(blockerReceiverZ, avgBlocker, depthExtent,
                                          texelWorld, lightAngularScale);
     float blockerConfidence = smoothstep(1.0, 5.0, float(blockerCount));
     pcfRadius = mix(1.0, pcfRadius, blockerConfidence);
@@ -348,7 +353,8 @@ float sampleCsmCascadeLit(vec3 worldPos, vec3 normal, float ndotl,
         float strength = clamp(uShadowPcssStrength, 0.0, 1.5);
         float lightAngularScale = 0.006 + strength * 0.014;
         float searchRadius = 1.25 + strength * 1.75;
-        lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, texelUv,
+        float blockerReceiverZ = csmProjectWorld(worldPos, cascadeIndex).z;
+        lit = sampleCsmPcss(proj.xy, cascadeIndex, receiverZ, refZ, blockerReceiverZ, texelUv,
                             texelWorld, depthExtent, lightAngularScale, searchRadius,
                             outBlockerDepth);
     } else {
