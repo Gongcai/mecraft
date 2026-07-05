@@ -42,8 +42,8 @@ uniform int uRainWetSurfacesEnabled;
 uniform int uRainSurfaceRipplesEnabled;
 uniform vec3 uCameraPos;
 
-const int kBlockParallaxMaxSteps = 12;
-const float kBlockParallaxMinViewZ = 0.18;
+const int kBlockParallaxMaxSteps = 28;
+const float kBlockParallaxMinViewZ = 0.10;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -80,18 +80,16 @@ vec3 decodeFaceNormal(float face) {
     return vec3(1.0, 0.0, 0.0);
 }
 
-mat3 cotangentFrame(vec3 normal, vec3 position, vec2 uv) {
-    vec3 dp1 = dFdx(position);
-    vec3 dp2 = dFdy(position);
-    vec2 duv1 = dFdx(uv);
-    vec2 duv2 = dFdy(uv);
+mat3 tangentFrame(vec3 normal, vec3 position, vec2 uv) {
+    vec3 dpdx = dFdx(position);
+    vec3 dpdy = dFdy(position);
+    vec2 duvdx = dFdx(uv);
+    vec2 duvdy = dFdy(uv);
 
-    vec3 dp2perp = cross(dp2, normal);
-    vec3 dp1perp = cross(normal, dp1);
-    vec3 tangent = dp2perp * duv1.x + dp1perp * duv2.x;
-    vec3 bitangent = dp2perp * duv1.y + dp1perp * duv2.y;
-    float invLength = inversesqrt(max(dot(tangent, tangent), dot(bitangent, bitangent)));
-    return mat3(tangent * invLength, bitangent * invLength, normal);
+    float invDet = 1.0 / (duvdx.x * duvdy.y - duvdx.y * duvdy.x);
+    vec3 tangent = normalize((dpdx * duvdy.y - dpdy * duvdx.y) * invDet);
+    vec3 bitangent = normalize((dpdy * duvdx.x - dpdx * duvdy.x) * invDet);
+    return mat3(tangent, bitangent, normal);
 }
 
 vec4 sampleBlockMap(sampler2DArray mapTex,
@@ -125,7 +123,7 @@ vec2 applyBlockParallaxMap(vec3 geometricNormal,
         return baseUv;
     }
 
-    mat3 frame = cotangentFrame(geometricNormal, position, baseUv);
+    mat3 frame = tangentFrame(geometricNormal, position, baseUv);
     vec3 viewDir = normalize(uCameraPos - position);
     vec3 tangentViewDir = transpose(frame) * viewDir;
     if (tangentViewDir.z <= 0.001) {
@@ -134,7 +132,7 @@ vec2 applyBlockParallaxMap(vec3 geometricNormal,
 
     float viewZ = max(tangentViewDir.z, kBlockParallaxMinViewZ);
     float grazing = 1.0 - clamp(viewZ, 0.0, 1.0);
-    int stepCount = int(mix(5.0, float(kBlockParallaxMaxSteps), grazing));
+    int stepCount = int(mix(8.0, float(kBlockParallaxMaxSteps), grazing));
     float layerStep = 1.0 / float(stepCount);
     vec2 parallaxVector = (tangentViewDir.xy / viewZ) * uBlockParallaxDepth;
     vec2 uvStep = parallaxVector / float(stepCount);
@@ -169,7 +167,7 @@ vec2 applyBlockParallaxMap(vec3 geometricNormal,
 
 vec3 applyBlockNormalMap(vec3 geometricNormal, vec3 position, vec2 derivativeUv, vec4 normalTexel) {
     vec3 tangentNormal = normalize(normalTexel.xyz * 2.0 - 1.0);
-    return normalize(cotangentFrame(geometricNormal, position, derivativeUv) * tangentNormal);
+    return normalize(tangentFrame(geometricNormal, position, derivativeUv) * tangentNormal);
 }
 
 bool hasAuthoredSpecularData(vec4 specularTexel) {

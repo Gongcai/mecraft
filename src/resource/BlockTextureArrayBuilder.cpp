@@ -249,6 +249,34 @@ void setTileAlpha(std::vector<unsigned char>& tilePixels, const unsigned char al
     }
 }
 
+void transformNormalMapTile(std::vector<unsigned char>& tilePixels, const bool sourceHasAlpha) {
+    for (size_t i = 0; i < tilePixels.size(); i += 4) {
+        tilePixels[i + 1] = static_cast<unsigned char>(255u - tilePixels[i + 1]);
+    }
+
+    if (!sourceHasAlpha) {
+        setTileAlpha(tilePixels, kNeutralNormalPixel[3]);
+        return;
+    }
+
+    unsigned char minAlpha = 255;
+    unsigned char maxAlpha = 0;
+    for (size_t i = 3; i < tilePixels.size(); i += 4) {
+        minAlpha = std::min(minAlpha, tilePixels[i]);
+        maxAlpha = std::max(maxAlpha, tilePixels[i]);
+    }
+    if (maxAlpha == minAlpha) {
+        setTileAlpha(tilePixels, kNeutralNormalPixel[3]);
+        return;
+    }
+
+    const float invRange = 255.0f / static_cast<float>(maxAlpha - minAlpha);
+    for (size_t i = 3; i < tilePixels.size(); i += 4) {
+        const float normalized = static_cast<float>(tilePixels[i] - minAlpha) * invRange;
+        tilePixels[i] = static_cast<unsigned char>(std::clamp(normalized + 0.5f, 0.0f, 255.0f));
+    }
+}
+
 void uploadAlbedoLayers(const GLuint textureId,
                         const resource::BlockTextureManifestEntry& entry,
                         const int firstLayer,
@@ -298,17 +326,21 @@ void uploadMaterialMapLayers(const GLuint textureId,
                              const bool topFrameFirst,
                              const std::array<unsigned char, 4>& neutralPixel,
                              const char* roleName,
-                             const bool neutralizeSourceAlpha) {
+                             const bool neutralizeSourceAlpha,
+                             const bool transformNormalMap) {
     if (!mapPath.has_value()) {
         uploadNeutralMaterialLayers(textureId, firstLayer, layerCount, tileSize, neutralPixel);
         return;
     }
 
     LoadedImage image(mapPath.value());
+    const bool sourceHasAlpha = image.channels >= 4;
     if (image.height == image.width) {
         std::vector<unsigned char> tilePixels =
             makeTextureArrayTilePixels(image.data, image.width, image.height, image.width, tileSize);
-        if (neutralizeSourceAlpha && image.channels < 4) {
+        if (transformNormalMap) {
+            transformNormalMapTile(tilePixels, sourceHasAlpha);
+        } else if (neutralizeSourceAlpha && !sourceHasAlpha) {
             setTileAlpha(tilePixels, neutralPixel[3]);
         }
         for (int layer = 0; layer < layerCount; ++layer) {
@@ -324,7 +356,9 @@ void uploadMaterialMapLayers(const GLuint textureId,
                 image.data + static_cast<size_t>(sourceFrameIndex * image.width * image.width) * 4U;
             std::vector<unsigned char> tilePixels =
                 makeTextureArrayTilePixels(framePixels, image.width, image.width, image.width, tileSize);
-            if (neutralizeSourceAlpha && image.channels < 4) {
+            if (transformNormalMap) {
+                transformNormalMapTile(tilePixels, sourceHasAlpha);
+            } else if (neutralizeSourceAlpha && !sourceHasAlpha) {
                 setTileAlpha(tilePixels, neutralPixel[3]);
             }
             uploadTextureArrayLayer(textureId, firstLayer + frame, tilePixels.data(), tileSize);
@@ -422,11 +456,11 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
                            result.layerAverageColors);
         if (normalArray.has_value()) {
             uploadMaterialMapLayers(normalArray->id(), entry.normalPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralNormalPixel, "normal", true);
+                                    topFrameFirst, kNeutralNormalPixel, "normal", true, true);
         }
         if (specularArray.has_value()) {
             uploadMaterialMapLayers(specularArray->id(), entry.specularPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralSpecularPixel, "specular", false);
+                                    topFrameFirst, kNeutralSpecularPixel, "specular", false, false);
         }
 
         currentLayer += layerCount;
