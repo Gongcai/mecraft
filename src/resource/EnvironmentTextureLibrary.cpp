@@ -3,9 +3,11 @@
 #include "../Diagnostics.h"
 #include "../third_party/stb/stb_image.h"
 
+#include <glad/glad.h>
+
 #include <cstdio>
 
-GLuint EnvironmentTextureLibrary::loadLinearTexture(const std::string& path, const char* label) {
+uint32_t EnvironmentTextureLibrary::loadLinearTexture(const std::string& path, const char* label) {
     int width = 0;
     int height = 0;
     int channels = 0;
@@ -35,7 +37,7 @@ GLuint EnvironmentTextureLibrary::loadLinearTexture(const std::string& path, con
     return textureID;
 }
 
-void EnvironmentTextureLibrary::deleteTexture(GLuint& texture) {
+void EnvironmentTextureLibrary::deleteTexture(uint32_t& texture) {
     if (texture != 0) {
         glDeleteTextures(1, &texture);
         texture = 0;
@@ -58,19 +60,19 @@ void EnvironmentTextureLibrary::loadColormaps(const std::string& grassPath, cons
     m_foliageColormap = loadLinearTexture(foliagePath, "foliage colormap");
 }
 
-GLuint EnvironmentTextureLibrary::getLightmapDay() const {
+uint32_t EnvironmentTextureLibrary::getLightmapDay() const {
     return m_lightmapDay;
 }
 
-GLuint EnvironmentTextureLibrary::getLightmapNight() const {
+uint32_t EnvironmentTextureLibrary::getLightmapNight() const {
     return m_lightmapNight;
 }
 
-GLuint EnvironmentTextureLibrary::getGrassColormap() const {
+uint32_t EnvironmentTextureLibrary::getGrassColormap() const {
     return m_grassColormap;
 }
 
-GLuint EnvironmentTextureLibrary::getFoliageColormap() const {
+uint32_t EnvironmentTextureLibrary::getFoliageColormap() const {
     return m_foliageColormap;
 }
 

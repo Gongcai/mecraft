@@ -3,15 +3,17 @@
 #include "../Diagnostics.h"
 #include "../third_party/stb/stb_image.h"
 
+#include <glad/glad.h>
+
 #include <cstdio>
 
-GLuint CubemapLibrary::load(const std::string& name,
-                            const std::string& rightPath,
-                            const std::string& leftPath,
-                            const std::string& topPath,
-                            const std::string& bottomPath,
-                            const std::string& frontPath,
-                            const std::string& backPath) {
+uint32_t CubemapLibrary::load(const std::string& name,
+                              const std::string& rightPath,
+                              const std::string& leftPath,
+                              const std::string& topPath,
+                              const std::string& bottomPath,
+                              const std::string& frontPath,
+                              const std::string& backPath) {
     const auto existing = m_cubemaps.find(name);
     if (existing != m_cubemaps.end()) {
         return existing->second;
@@ -61,7 +63,7 @@ GLuint CubemapLibrary::load(const std::string& name,
     return textureID;
 }
 
-GLuint CubemapLibrary::get(const std::string& name) const {
+uint32_t CubemapLibrary::get(const std::string& name) const {
     const auto it = m_cubemaps.find(name);
     if (it != m_cubemaps.end()) {
         return it->second;

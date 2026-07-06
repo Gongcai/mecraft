@@ -1,7 +1,7 @@
 #ifndef MECRAFT_TEXTURE_SAMPLER_CONTROLLER_H
 #define MECRAFT_TEXTURE_SAMPLER_CONTROLLER_H
 
-#include <glad/glad.h>
+#include <cstdint>
 
 class TextureSamplerController {
 public:
@@ -11,8 +11,8 @@ public:
     [[nodiscard]] float anisotropy() const;
     [[nodiscard]] float maxAnisotropy() const;
 
-    void applyToTexture2D(GLuint textureID) const;
-    void applyToTexture2DArray(GLuint textureID) const;
+    void applyToTexture2D(uint32_t textureID) const;
+    void applyToTexture2DArray(uint32_t textureID) const;
 
 private:
     float m_anisotropy = 1.0f;

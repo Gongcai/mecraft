@@ -3,14 +3,16 @@
 #include "../Diagnostics.h"
 #include "../third_party/stb/stb_image.h"
 
+#include <glad/glad.h>
+
 #include <cstdio>
 
-GLuint Texture2DLibrary::load(const std::string& name,
-                              const std::string& path,
-                              const bool srgb,
-                              const bool repeat,
-                              const bool linear,
-                              const bool flipVertically) {
+uint32_t Texture2DLibrary::load(const std::string& name,
+                                const std::string& path,
+                                const bool srgb,
+                                const bool repeat,
+                                const bool linear,
+                                const bool flipVertically) {
     const auto existing = m_textures.find(name);
     if (existing != m_textures.end()) {
         return existing->second;
@@ -55,7 +57,7 @@ GLuint Texture2DLibrary::load(const std::string& name,
     return textureID;
 }
 
-GLuint Texture2DLibrary::get(const std::string& name) const {
+uint32_t Texture2DLibrary::get(const std::string& name) const {
     const auto it = m_textures.find(name);
     if (it != m_textures.end()) {
         return it->second;
@@ -63,19 +65,19 @@ GLuint Texture2DLibrary::get(const std::string& name) const {
     return 0;
 }
 
-GLuint Texture2DLibrary::loadGui(const std::string& name,
-                                 const std::string& path,
-                                 const bool flipVertically) {
+uint32_t Texture2DLibrary::loadGui(const std::string& name,
+                                   const std::string& path,
+                                   const bool flipVertically) {
     int dummyW = 0;
     int dummyH = 0;
     return loadGui(name, path, dummyW, dummyH, flipVertically);
 }
 
-GLuint Texture2DLibrary::loadGui(const std::string& name,
-                                 const std::string& path,
-                                 int& outWidth,
-                                 int& outHeight,
-                                 const bool flipVertically) {
+uint32_t Texture2DLibrary::loadGui(const std::string& name,
+                                   const std::string& path,
+                                   int& outWidth,
+                                   int& outHeight,
+                                   const bool flipVertically) {
     const auto existing = m_guiTextures.find(name);
     if (existing != m_guiTextures.end()) {
         outWidth = existing->second.width;
@@ -124,7 +126,7 @@ GLuint Texture2DLibrary::loadGui(const std::string& name,
     return textureID;
 }
 
-GLuint Texture2DLibrary::getGui(const std::string& name) const {
+uint32_t Texture2DLibrary::getGui(const std::string& name) const {
     const auto it = m_guiTextures.find(name);
     if (it != m_guiTextures.end()) {
         return it->second.textureID;

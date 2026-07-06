@@ -2,6 +2,8 @@
 
 #include "../Diagnostics.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -56,7 +58,7 @@ float TextureSamplerController::maxAnisotropy() const {
     return m_maxAnisotropy;
 }
 
-void TextureSamplerController::applyToTexture2D(const GLuint textureID) const {
+void TextureSamplerController::applyToTexture2D(const uint32_t textureID) const {
     if (textureID == 0) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] TextureSamplerController::applyToTexture2D requires a valid texture\n");
         return;
@@ -70,7 +72,7 @@ void TextureSamplerController::applyToTexture2D(const GLuint textureID) const {
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void TextureSamplerController::applyToTexture2DArray(const GLuint textureID) const {
+void TextureSamplerController::applyToTexture2DArray(const uint32_t textureID) const {
     if (textureID == 0) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] TextureSamplerController::applyToTexture2DArray requires a valid texture\n");
         return;

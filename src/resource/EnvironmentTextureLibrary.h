@@ -1,8 +1,7 @@
 #ifndef MECRAFT_ENVIRONMENT_TEXTURE_LIBRARY_H
 #define MECRAFT_ENVIRONMENT_TEXTURE_LIBRARY_H
 
-#include <glad/glad.h>
-
+#include <cstdint>
 #include <string>
 
 class EnvironmentTextureLibrary {
@@ -10,21 +9,21 @@ public:
     void loadLightmaps(const std::string& dayPath, const std::string& nightPath);
     void loadColormaps(const std::string& grassPath, const std::string& foliagePath);
 
-    [[nodiscard]] GLuint getLightmapDay() const;
-    [[nodiscard]] GLuint getLightmapNight() const;
-    [[nodiscard]] GLuint getGrassColormap() const;
-    [[nodiscard]] GLuint getFoliageColormap() const;
+    [[nodiscard]] uint32_t getLightmapDay() const;
+    [[nodiscard]] uint32_t getLightmapNight() const;
+    [[nodiscard]] uint32_t getGrassColormap() const;
+    [[nodiscard]] uint32_t getFoliageColormap() const;
 
     void shutdown();
 
 private:
-    static GLuint loadLinearTexture(const std::string& path, const char* label);
-    static void deleteTexture(GLuint& texture);
+    static uint32_t loadLinearTexture(const std::string& path, const char* label);
+    static void deleteTexture(uint32_t& texture);
 
-    GLuint m_lightmapDay = 0;
-    GLuint m_lightmapNight = 0;
-    GLuint m_grassColormap = 0;
-    GLuint m_foliageColormap = 0;
+    uint32_t m_lightmapDay = 0;
+    uint32_t m_lightmapNight = 0;
+    uint32_t m_grassColormap = 0;
+    uint32_t m_foliageColormap = 0;
 };
 
 #endif // MECRAFT_ENVIRONMENT_TEXTURE_LIBRARY_H
