@@ -24,7 +24,7 @@
 #include "../passes/DebugPass.h"
 #include "../gi/VoxelGiClipmap.h"
 
-#include <glad/glad.h>
+#include <cstdint>
 #include <memory>
 
 class ResourceMgr;
@@ -103,8 +103,8 @@ private:
     bool m_hasPreviousFrameData = false;
     bool m_waterRenderedBeforeTemporal = false;
     bool m_deferredHistoryUpdatedThisFrame = false;
-    GLint m_capturedFramebuffer = 0;
-    GLint m_capturedViewport[4] = {};
+    int32_t m_capturedFramebuffer = 0;
+    int32_t m_capturedViewport[4] = {};
     int m_heldBlockLightValue = 0;
 
     // Settings (cached from RenderSettings for current frame)

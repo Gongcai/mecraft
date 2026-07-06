@@ -27,6 +27,7 @@
 #include "RenderSettings.h"
 #include <glm/glm.hpp>
 #include <array>
+#include <cstdint>
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
@@ -140,12 +141,12 @@ public:
         float cascadeSplitFar[4]{};
         float cascadeTexelWorldSize[4]{};
         float cascadeDepthExtent[4]{};
-        GLuint shadowTexture = 0;
-        GLuint shadowDepthRaw = 0;
-        GLuint shadowDepthAll = 0;
-        GLuint shadowDepthAllRaw = 0;
-        GLuint shadowColor0 = 0;
-        GLuint shadowColor1 = 0;
+        uint32_t shadowTexture = 0;
+        uint32_t shadowDepthRaw = 0;
+        uint32_t shadowDepthAll = 0;
+        uint32_t shadowDepthAllRaw = 0;
+        uint32_t shadowColor0 = 0;
+        uint32_t shadowColor1 = 0;
         glm::vec3 cameraPos = glm::vec3(0.0f);
         glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
         float shadowDistance = 192.0f;

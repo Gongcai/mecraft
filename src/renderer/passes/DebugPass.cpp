@@ -4,6 +4,8 @@
 #include "../shadow/ShadowRenderer.h"
 #include "../../resource/ResourceMgr.h"
 
+#include <glad/glad.h>
+
 #include <glm/glm.hpp>
 #include <algorithm>
 
@@ -21,7 +23,7 @@ void DebugPass::shutdown() {
 
 void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                          DeferredRenderTargets& targets,
-                         const GLint framebuffer, const int width, const int height) {
+                         const int32_t framebuffer, const int width, const int height) {
     if (m_deferredDebugShader == nullptr) {
         return;
     }

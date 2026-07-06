@@ -394,8 +394,14 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 }
 
 void DeferredPipeline::captureCurrentFramebuffer() {
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &m_capturedFramebuffer);
-    glGetIntegerv(GL_VIEWPORT, m_capturedViewport);
+    GLint framebuffer = 0;
+    GLint viewport[4] = {};
+    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &framebuffer);
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    m_capturedFramebuffer = framebuffer;
+    for (int i = 0; i < 4; ++i) {
+        m_capturedViewport[i] = viewport[i];
+    }
 }
 
 void DeferredPipeline::restoreCapturedFramebufferViewport(int windowWidth, int windowHeight) {

@@ -30,7 +30,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
                                    DeferredRenderTargets& targets, const IWorldView& worldView,
                                    int windowWidth, int windowHeight,
                                    bool deferredFrameActive, bool preTemporalResolve,
-                                   GLint capturedFramebuffer, const GLint* capturedViewport,
+                                   int32_t capturedFramebuffer, const int32_t* capturedViewport,
                                    bool transparentCompositeEnabled,
                                    bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
                                    bool volumetricFogActive,

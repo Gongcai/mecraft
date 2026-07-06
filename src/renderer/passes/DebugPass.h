@@ -4,7 +4,8 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
-#include <glad/glad.h>
+
+#include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -31,11 +32,11 @@ public:
     /// @param width Destination viewport width
     /// @param height Destination viewport height
     void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets, GLint framebuffer, int width, int height);
+                 DeferredRenderTargets& targets, int32_t framebuffer, int width, int height);
 
 private:
     Shader* m_deferredDebugShader = nullptr;
-    GLuint m_noiseTexture = 0;
+    uint32_t m_noiseTexture = 0;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
 };
 

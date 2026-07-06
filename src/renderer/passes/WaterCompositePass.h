@@ -3,6 +3,7 @@
 
 #include "RenderPass.h"
 #include "../mesh/WorldDrawBatch.h"
+#include <cstdint>
 #include <glm/glm.hpp>
 #include <vector>
 
@@ -52,7 +53,7 @@ public:
                  DeferredRenderTargets& targets, const IWorldView& worldView,
                  int windowWidth, int windowHeight,
                  bool deferredFrameActive, bool preTemporalResolve,
-                 GLint capturedFramebuffer, const GLint* capturedViewport,
+                 int32_t capturedFramebuffer, const int32_t* capturedViewport,
                  bool transparentCompositeEnabled,
                  bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
                  bool volumetricFogActive,
