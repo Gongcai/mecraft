@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include <glm/vec2.hpp>
 
+#include "renderer/rhi/RhiHandles.h"
 #include "UITheme.h"
 #include "UIScaleConfig.h"
 #include "../layout/UILayout.h"
@@ -48,7 +50,8 @@ struct UIRenderContext {
     int draggedItemId = 0;
     const UITheme* theme = nullptr;
     const LocaleManager* localeManager = nullptr;
-    unsigned int backdropBlurTexture = 0;
+    RhiTextureHandle backdropBlur;
+    uint32_t backdropBlurTexture = 0;
     int backdropSourceWidth = 0;
     int backdropSourceHeight = 0;
     int backdropBlurWidth = 0;
