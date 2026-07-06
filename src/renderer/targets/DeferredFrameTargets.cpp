@@ -1,5 +1,8 @@
 #include "DeferredFrameTargets.h"
 #include "../../Diagnostics.h"
+
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -125,15 +128,15 @@ void DeferredFrameTargets::clearWeatherMask() {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::copyFramebufferColorToSceneLighting(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::copyFramebufferColorToSceneLighting(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::copyFramebufferColorToSceneResolved(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::copyFramebufferColorToSceneResolved(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::copyFramebufferColorToTransparentComposite(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::copyFramebufferColorToTransparentComposite(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
@@ -197,60 +200,29 @@ void DeferredFrameTargets::copyVolumetricToHistory() const {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::blitSceneLightingTo(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::blitSceneLightingTo(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::blitSceneCompositeTo(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::blitSceneCompositeTo(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::blitSceneResolvedTo(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::blitSceneResolvedTo(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::blitTransparentCompositeTo(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::blitTransparentCompositeTo(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
-void DeferredFrameTargets::blitDepthTo(GLint framebuffer, int width, int height) const {
+void DeferredFrameTargets::blitDepthTo(int32_t framebuffer, int width, int height) const {
     // TODO: Phase 2 - Implement
 }
 
 bool DeferredFrameTargets::loadAtmosphereLut(const char* path) {
     // TODO: Phase 2 - Implement
     return false;
-}
-
-GLuint DeferredFrameTargets::createTexture2D(GLenum internalFormat, int width, int height,
-                                             GLenum format, GLenum type, GLenum minFilter,
-                                             GLenum magFilter, GLenum wrap, int levels) {
-    GLuint tex = 0;
-    glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    if (levels > 1) {
-        glTexStorage2D(GL_TEXTURE_2D, levels, internalFormat, width, height);
-    } else {
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, type, nullptr);
-    }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, minFilter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, magFilter);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap);
-    return tex;
-}
-
-void DeferredFrameTargets::generateMipmaps(GLuint texture) {
-    glGenerateTextureMipmap(texture);
-}
-
-bool DeferredFrameTargets::checkFramebufferComplete(GLuint framebuffer, const char* label) {
-    GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        MECRAFT_LOG_FPRINTF(stderr, "DeferredFrameTargets: %s FBO incomplete (status 0x%X)\n", label, status);
-        return false;
-    }
-    return true;
 }
 
 void DeferredFrameTargets::destroyFramebuffers() {
