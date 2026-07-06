@@ -1,6 +1,7 @@
 #include "renderer/rhi/RhiHandleAllocator.h"
 #include "renderer/rhi/RhiHash.h"
 #include "renderer/rhi/gl/GlRhiDevice.h"
+#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
 
 #include <cstdint>
 #include <iostream>
@@ -62,6 +63,48 @@ bool testDescHashStability() {
                        "texture desc hash must change when semantic fields change");
 }
 
+bool testGlTextureRegistry() {
+    renderer::rhi::gl::GlRhiTextureRegistration registration;
+    registration.textureId = 42;
+    registration.dimension = RhiTextureDimension::Texture2D;
+    registration.format = RhiTextureFormat::Rgba8Unorm;
+    registration.width = 16;
+    registration.height = 16;
+    registration.depthOrLayers = 1;
+    registration.mipLevels = 1;
+    registration.sampleCount = 1;
+    registration.usage = rhiFlag(RhiTextureUsage::Sampled);
+
+    const RhiTextureHandle handle = renderer::rhi::gl::registerTexture(registration);
+    if (!requireTrue(handle.isValid(), "registered GL texture must return a valid RHI handle")) {
+        return false;
+    }
+    if (!requireTrue(renderer::rhi::gl::isTextureRegistered(handle),
+                     "registered GL texture handle must be alive")) {
+        return false;
+    }
+    if (!requireTrue(renderer::rhi::gl::textureId(handle) == registration.textureId,
+                     "registered GL texture handle must resolve to the native texture id")) {
+        return false;
+    }
+
+    renderer::rhi::gl::GlRhiTextureRegistration resolved;
+    if (!requireTrue(renderer::rhi::gl::textureRegistration(handle, resolved),
+                     "registered GL texture handle must expose its copied metadata")) {
+        return false;
+    }
+    if (!requireTrue(resolved.width == registration.width &&
+                         resolved.height == registration.height &&
+                         resolved.format == registration.format,
+                     "registered GL texture metadata must round-trip")) {
+        return false;
+    }
+
+    renderer::rhi::gl::unregisterTexture(handle);
+    return requireTrue(!renderer::rhi::gl::isTextureRegistered(handle),
+                       "unregistered GL texture handle must not stay alive");
+}
+
 bool testGlRhiDeviceHandles() {
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc;
@@ -109,6 +152,9 @@ int main() {
         return 1;
     }
     if (!testDescHashStability()) {
+        return 1;
+    }
+    if (!testGlTextureRegistry()) {
         return 1;
     }
     if (!testGlRhiDeviceHandles()) {

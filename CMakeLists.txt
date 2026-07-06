@@ -263,6 +263,7 @@ set(SRC_RENDERER
 
         # RHI
         src/renderer/rhi/RhiHash.cpp
+        src/renderer/rhi/gl/GlRhiTextureRegistry.cpp
 
         # Core framework
         src/renderer/core/Shader.cpp

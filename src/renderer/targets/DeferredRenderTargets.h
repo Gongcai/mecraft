@@ -1,6 +1,8 @@
 #ifndef MECRAFT_DEFERRED_RENDER_TARGETS_H
 #define MECRAFT_DEFERRED_RENDER_TARGETS_H
 
+#include "renderer/rhi/RhiHandles.h"
+
 #include <cstdint>
 
 class DeferredRenderTargets {
@@ -76,15 +78,22 @@ public:
     [[nodiscard]] uint32_t materialTexture() const { return m_gMaterial; }
     [[nodiscard]] uint32_t materialAuxTexture() const { return m_gMaterialAux; }
     [[nodiscard]] uint32_t depthTexture() const { return m_gDepth; }
+    [[nodiscard]] RhiTextureHandle depthTextureHandle() const { return m_gDepthHandle; }
     [[nodiscard]] uint32_t shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] uint32_t shadowDepthComparisonTexture() const { return m_shadowDepthComparison; }
     [[nodiscard]] uint32_t csmShadowDepthTexture() const { return m_csmShadowDepth; }
     [[nodiscard]] uint32_t csmShadowDepthComparisonTexture() const { return m_csmShadowDepthComparison; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
     // CSM transparent shadow contract (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
     [[nodiscard]] uint32_t csmShadowDepthAllTexture() const { return m_csmShadowDepthAll; }
     [[nodiscard]] uint32_t csmShadowDepthAllComparisonTexture() const { return m_csmShadowDepthAllComparison; }
     [[nodiscard]] uint32_t csmShadowColor0Texture() const { return m_csmShadowColor0; }
     [[nodiscard]] uint32_t csmShadowColor1Texture() const { return m_csmShadowColor1; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthAllTextureHandle() const { return m_csmShadowDepthAllHandle; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const { return m_csmShadowDepthAllComparisonHandle; }
+    [[nodiscard]] RhiTextureHandle csmShadowColor0TextureHandle() const { return m_csmShadowColor0Handle; }
+    [[nodiscard]] RhiTextureHandle csmShadowColor1TextureHandle() const { return m_csmShadowColor1Handle; }
     [[nodiscard]] uint32_t shadowColorTexture() const { return m_shadowColor; }
     [[nodiscard]] uint32_t shadowNormalTexture() const { return m_shadowNormal; }
     [[nodiscard]] uint32_t ssaoTexture() const { return m_ssaoTex; }
@@ -114,6 +123,7 @@ public:
     [[nodiscard]] uint32_t sceneLightingTexture() const { return m_sceneLightingTex; }
     [[nodiscard]] uint32_t sceneCompositeTexture() const { return m_sceneCompositeTex; }
     [[nodiscard]] uint32_t sceneResolvedTexture() const { return m_sceneResolvedTex; }
+    [[nodiscard]] RhiTextureHandle sceneResolvedTextureHandle() const { return m_sceneResolvedHandle; }
     [[nodiscard]] uint32_t transparentCompositeTexture() const { return m_transparentCompositeTex; }
     [[nodiscard]] uint32_t transparentCompositeDepthTexture() const { return m_transparentCompositeDepth; }
     [[nodiscard]] uint32_t halfResTexture() const { return m_halfResTex; }
@@ -139,6 +149,7 @@ public:
     [[nodiscard]] uint32_t velocityTexture() const { return m_velocityTex; }
     [[nodiscard]] uint32_t perObjectVelocityTexture() const { return m_perObjectVelocityTex; }
     [[nodiscard]] uint32_t weatherMaskTexture() const { return m_weatherMaskTex; }
+    [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
     [[nodiscard]] uint32_t atmosphereLutTexture() const { return m_atmosphereLut3d; }
     bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
@@ -182,6 +193,8 @@ private:
 
     static void generateMipmaps(uint32_t texture);
     static bool checkFramebufferComplete(uint32_t framebuffer, const char* label);
+    bool registerRhiTextures();
+    void unregisterRhiTextures();
     void destroyFramebuffers();
     void destroyFullscreenTriangle();
 
@@ -198,6 +211,7 @@ private:
     uint32_t m_gMaterial = 0;
     uint32_t m_gMaterialAux = 0;
     uint32_t m_gDepth = 0;
+    RhiTextureHandle m_gDepthHandle;
 
     uint32_t m_shadowFbo = 0;
     uint32_t m_shadowDepth = 0;
@@ -207,12 +221,18 @@ private:
     uint32_t m_csmShadowFbo = 0;
     uint32_t m_csmShadowDepth = 0; // Raw depth texture array, one layer per cascade
     uint32_t m_csmShadowDepthComparison = 0; // Comparison texture array for sampler2DArrayShadow
+    RhiTextureHandle m_csmShadowDepthHandle;
+    RhiTextureHandle m_csmShadowDepthComparisonHandle;
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
     uint32_t m_csmShadowTransparentFbo = 0;
     uint32_t m_csmShadowDepthAll = 0; // depth including water/transparent surfaces
     uint32_t m_csmShadowDepthAllComparison = 0;
     uint32_t m_csmShadowColor0 = 0; // RGBA8: RGB caustics/tint, A transparent flag
     uint32_t m_csmShadowColor1 = 0; // RGBA16F: RG normal, B skylight, A water height
+    RhiTextureHandle m_csmShadowDepthAllHandle;
+    RhiTextureHandle m_csmShadowDepthAllComparisonHandle;
+    RhiTextureHandle m_csmShadowColor0Handle;
+    RhiTextureHandle m_csmShadowColor1Handle;
 
     uint32_t m_ssaoFbo = 0;
     uint32_t m_ssaoTex = 0;
@@ -255,6 +275,7 @@ private:
     // SceneResolved is the current full-world HDR color. It becomes the post input and temporal scene history source.
     uint32_t m_sceneResolvedFbo = 0;
     uint32_t m_sceneResolvedTex = 0;
+    RhiTextureHandle m_sceneResolvedHandle;
 
     // TransparentComposite is a scratch scene copy used while forward water/generic transparent geometry is blended.
     uint32_t m_transparentCompositeFbo = 0;
@@ -308,6 +329,7 @@ private:
     // Written with additive blending by weather geometry, read by postprocess.
     uint32_t m_weatherMaskFbo = 0;
     uint32_t m_weatherMaskTex = 0;
+    RhiTextureHandle m_weatherMaskHandle;
 
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
     uint32_t m_atmosphereLut3d = 0;

@@ -849,6 +849,11 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
     FrameOutput output;
 
     if (m_shared && m_shared->deferredTargets) {
+        output.sceneColor = m_shared->deferredTargets->sceneResolvedTextureHandle();
+        output.sceneDepth = m_shared->deferredTargets->depthTextureHandle();
+        output.gbufferDepth = m_shared->deferredTargets->depthTextureHandle();
+        output.weatherMask = m_shared->deferredTargets->weatherMaskTextureHandle();
+        output.sceneColorTex = m_shared->deferredTargets->sceneResolvedTexture();
         output.sceneDepthTex = m_shared->deferredTargets->depthTexture();
         output.gbufferDepthTex = m_shared->deferredTargets->depthTexture();
         output.weatherMaskTex = m_shared->deferredTargets->weatherMaskTexture();
@@ -863,6 +868,12 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
             shadowData.cascadeTexelWorldSize[i] = cascades[i].texelWorldSize;
             shadowData.cascadeDepthExtent[i] = cascades[i].depthExtent;
         }
+        shadowData.shadowTextureHandle = m_shared->deferredTargets->csmShadowDepthComparisonTextureHandle();
+        shadowData.shadowDepthRawHandle = m_shared->deferredTargets->csmShadowDepthTextureHandle();
+        shadowData.shadowDepthAllHandle = m_shared->deferredTargets->csmShadowDepthAllComparisonTextureHandle();
+        shadowData.shadowDepthAllRawHandle = m_shared->deferredTargets->csmShadowDepthAllTextureHandle();
+        shadowData.shadowColor0Handle = m_shared->deferredTargets->csmShadowColor0TextureHandle();
+        shadowData.shadowColor1Handle = m_shared->deferredTargets->csmShadowColor1TextureHandle();
         shadowData.shadowTexture = m_shared->deferredTargets->csmShadowDepthComparisonTexture();
         shadowData.shadowDepthRaw = m_shared->deferredTargets->csmShadowDepthTexture();
         shadowData.shadowDepthAll = m_shared->deferredTargets->csmShadowDepthAllComparisonTexture();

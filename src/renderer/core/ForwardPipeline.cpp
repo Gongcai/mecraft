@@ -265,6 +265,8 @@ void ForwardPipeline::renderTransparent(const FrameContext& ctx, const RenderSet
 FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext& ctx) {
     FrameOutput output{};
     if (m_commonTargets) {
+        output.sceneColor = m_commonTargets->sceneColorTextureHandle();
+        output.sceneDepth = m_commonTargets->sceneDepthTextureHandle();
         output.sceneColorTex = m_commonTargets->sceneColorTexture();
         output.sceneDepthTex = m_commonTargets->sceneDepthTexture();
     }

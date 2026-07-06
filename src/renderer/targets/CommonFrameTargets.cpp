@@ -1,6 +1,7 @@
 #include "CommonFrameTargets.h"
 #include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <glad/glad.h>
 
@@ -67,6 +68,36 @@ bool CommonFrameTargets::ensureSize(int width, int height) {
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    m_sceneColor = renderer::rhi::gl::registerTexture({
+        m_sceneColorTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_sceneDepth = renderer::rhi::gl::registerTexture({
+        m_sceneDepthTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Depth32Float,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+        false
+    });
+    if (!m_sceneColor.isValid() || !m_sceneDepth.isValid()) {
+        MECRAFT_LOG_FPRINTF(stderr, "CommonFrameTargets: failed to register RHI texture handles\n");
+        destroyFramebuffers();
+        return false;
+    }
+
     // Label GL objects for RenderDoc / KHR_debug inspection
     renderer::debug::labelFramebuffer(m_sceneColorFbo, "CommonTargets.SceneColor");
     renderer::debug::labelTexture(m_sceneColorTex, "CommonTargets.SceneColorTex");
@@ -89,6 +120,8 @@ void CommonFrameTargets::bindSceneDepth() {
 }
 
 void CommonFrameTargets::destroyFramebuffers() {
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneColor);
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneDepth);
     if (m_sceneColorFbo) { glDeleteFramebuffers(1, &m_sceneColorFbo); m_sceneColorFbo = 0; }
     if (m_sceneColorTex) { glDeleteTextures(1, &m_sceneColorTex); m_sceneColorTex = 0; }
     if (m_sceneDepthTex) { glDeleteTextures(1, &m_sceneDepthTex); m_sceneDepthTex = 0; }

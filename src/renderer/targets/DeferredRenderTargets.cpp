@@ -1,6 +1,7 @@
 #include "DeferredRenderTargets.h"
 #include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <glad/glad.h>
 
@@ -535,6 +536,11 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    if (!registerRhiTextures()) {
+        shutdown();
+        return false;
+    }
 
     // Label GL objects for RenderDoc / KHR_debug inspection
     renderer::debug::labelFramebuffer(m_gBufferFbo, "DeferredTargets.GBuffer");
@@ -1338,7 +1344,148 @@ bool DeferredRenderTargets::checkFramebufferComplete(const uint32_t framebuffer,
     return false;
 }
 
+bool DeferredRenderTargets::registerRhiTextures() {
+    m_gDepthHandle = renderer::rhi::gl::registerTexture({
+        m_gDepth,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Depth32Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+        false
+    });
+    m_sceneResolvedHandle = renderer::rhi::gl::registerTexture({
+        m_sceneResolvedTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_weatherMaskHandle = renderer::rhi::gl::registerTexture({
+        m_weatherMaskTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::R8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_csmShadowDepthHandle = renderer::rhi::gl::registerTexture({
+        m_csmShadowDepth,
+        RhiTextureDimension::Texture2DArray,
+        RhiTextureFormat::Depth24,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(kShadowCascadeCount),
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+        false
+    });
+    m_csmShadowDepthComparisonHandle = renderer::rhi::gl::registerTexture({
+        m_csmShadowDepthComparison,
+        RhiTextureDimension::Texture2DArray,
+        RhiTextureFormat::Depth24,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(kShadowCascadeCount),
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled),
+        true
+    });
+    m_csmShadowDepthAllHandle = renderer::rhi::gl::registerTexture({
+        m_csmShadowDepthAll,
+        RhiTextureDimension::Texture2DArray,
+        RhiTextureFormat::Depth24,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(kShadowCascadeCount),
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+        false
+    });
+    m_csmShadowDepthAllComparisonHandle = renderer::rhi::gl::registerTexture({
+        m_csmShadowDepthAllComparison,
+        RhiTextureDimension::Texture2DArray,
+        RhiTextureFormat::Depth24,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(kShadowCascadeCount),
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled),
+        true
+    });
+    m_csmShadowColor0Handle = renderer::rhi::gl::registerTexture({
+        m_csmShadowColor0,
+        RhiTextureDimension::Texture2DArray,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(kShadowCascadeCount),
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_csmShadowColor1Handle = renderer::rhi::gl::registerTexture({
+        m_csmShadowColor1,
+        RhiTextureDimension::Texture2DArray,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(kShadowCascadeCount),
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+
+    const bool registered = m_gDepthHandle.isValid() &&
+                            m_sceneResolvedHandle.isValid() &&
+                            m_weatherMaskHandle.isValid() &&
+                            m_csmShadowDepthHandle.isValid() &&
+                            m_csmShadowDepthComparisonHandle.isValid() &&
+                            m_csmShadowDepthAllHandle.isValid() &&
+                            m_csmShadowDepthAllComparisonHandle.isValid() &&
+                            m_csmShadowColor0Handle.isValid() &&
+                            m_csmShadowColor1Handle.isValid();
+    if (!registered) {
+        MECRAFT_LOG_STREAM(std::cerr << "DeferredRenderTargets: failed to register RHI texture handles\n");
+        unregisterRhiTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::unregisterRhiTextures() {
+    renderer::rhi::gl::unregisterTextureAndReset(m_gDepthHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneResolvedHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthComparisonHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthAllHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthAllComparisonHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowColor0Handle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowColor1Handle);
+}
+
 void DeferredRenderTargets::destroyFramebuffers() {
+    unregisterRhiTextures();
+
     const GLuint textures[] = {
         m_gAlbedo,
         m_gNormalAo,
