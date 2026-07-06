@@ -5,7 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 
-#include <glad/glad.h>
+#include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -26,8 +26,8 @@ private:
                         DeferredRenderTargets& targets);
     void renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets& targets);
     void renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
-                           DeferredRenderTargets& targets, GLuint inputTexture,
-                           GLuint momentsTexture);
+                           DeferredRenderTargets& targets, uint32_t inputTexture,
+                           uint32_t momentsTexture);
     void renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& ssgi,
                             DeferredRenderTargets& targets);
 
@@ -35,7 +35,7 @@ private:
     Shader* m_ssgiUpsampleShader = nullptr;
     Shader* m_ssgiDenoiseShader = nullptr;
     Shader* m_ssgiTemporalShader = nullptr;
-    GLuint m_noiseTexture = 0;
+    uint32_t m_noiseTexture = 0;
 };
 
 #endif // MECRAFT_SSGI_PASS_H

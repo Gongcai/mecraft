@@ -1,7 +1,7 @@
 #ifndef MECRAFT_RENDER_PASS_H
 #define MECRAFT_RENDER_PASS_H
 
-#include <glad/glad.h>
+#include <cstdint>
 
 class Shader;
 class ResourceMgr;
@@ -29,7 +29,7 @@ protected:
     /// Caller must have already bound uniforms/textures before calling.
     /// @param vao The fullscreen triangle VAO (typically from DeferredRenderTargets)
     /// @param shader The active shader program
-    static void renderFullscreen(GLuint vao, Shader& shader);
+    static void renderFullscreen(uint32_t vao, Shader& shader);
 };
 
 #endif // MECRAFT_RENDER_PASS_H

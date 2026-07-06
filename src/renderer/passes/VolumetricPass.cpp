@@ -4,6 +4,8 @@
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 
+#include <glad/glad.h>
+
 #include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>

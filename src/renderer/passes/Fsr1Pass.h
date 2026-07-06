@@ -3,7 +3,7 @@
 
 #include "RenderPass.h"
 
-#include <glad/glad.h>
+#include <cstdint>
 #include <glm/vec4.hpp>
 
 class ResourceMgr;
@@ -17,7 +17,7 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "FSR1"; }
 
-    bool execute(GLuint inputTex,
+    bool execute(uint32_t inputTex,
                  int inputWidth,
                  int inputHeight,
                  int outputWidth,
@@ -44,9 +44,9 @@ private:
 
     Shader* m_easuShader = nullptr;
     Shader* m_rcasShader = nullptr;
-    GLuint m_easuFbo = 0;
-    GLuint m_easuTex = 0;
-    GLuint m_fullscreenVao = 0;
+    uint32_t m_easuFbo = 0;
+    uint32_t m_easuTex = 0;
+    uint32_t m_fullscreenVao = 0;
     int m_width = 0;
     int m_height = 0;
 };

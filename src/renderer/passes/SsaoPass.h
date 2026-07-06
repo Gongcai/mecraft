@@ -5,7 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 
-#include <glad/glad.h>
+#include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -46,7 +46,7 @@ private:
     Shader* m_ssaoTemporalShader = nullptr;
 
     // Cached noise texture handle
-    GLuint m_noiseTexture = 0;
+    uint32_t m_noiseTexture = 0;
 };
 
 #endif // MECRAFT_SSAO_PASS_H

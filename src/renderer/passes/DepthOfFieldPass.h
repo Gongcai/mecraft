@@ -4,7 +4,8 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
-#include <glad/glad.h>
+
+#include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -22,7 +23,7 @@ public:
 
 private:
     Shader* m_dofShader = nullptr;
-    GLuint m_noiseTexture = 0;
+    uint32_t m_noiseTexture = 0;
 };
 
 #endif // MECRAFT_DEPTH_OF_FIELD_PASS_H

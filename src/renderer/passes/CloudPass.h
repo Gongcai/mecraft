@@ -4,7 +4,8 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
-#include <glad/glad.h>
+
+#include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -25,7 +26,7 @@ private:
     [[nodiscard]] bool shouldRenderClouds(const FrameContext& ctx, const RenderSettings& settings);
 
     Shader* m_cloudShader = nullptr;
-    GLuint m_noiseTexture = 0;
+    uint32_t m_noiseTexture = 0;
     bool m_hasRenderedClouds = false;
     glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
     float m_lastWeatherSignal = 0.0f;

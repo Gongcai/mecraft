@@ -3,6 +3,8 @@
 #include "../core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cmath>
 
@@ -23,7 +25,7 @@ void Fsr1Pass::shutdown() {
     m_rcasShader = nullptr;
 }
 
-bool Fsr1Pass::execute(GLuint inputTex,
+bool Fsr1Pass::execute(uint32_t inputTex,
                        const int inputWidth,
                        const int inputHeight,
                        const int outputWidth,

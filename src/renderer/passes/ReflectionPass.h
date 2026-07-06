@@ -4,7 +4,8 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
-#include <glad/glad.h>
+
+#include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -33,8 +34,8 @@ private:
     Shader* m_reflectionTemporalShader = nullptr;
 
     // Cached resource textures
-    GLuint m_noiseTexture = 0;
-    GLuint m_rippleNormalTexture = 0;
+    uint32_t m_noiseTexture = 0;
+    uint32_t m_rippleNormalTexture = 0;
     ResourceMgr* m_resourceMgr = nullptr;
 };
 

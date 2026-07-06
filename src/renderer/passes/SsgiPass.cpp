@@ -3,6 +3,8 @@
 #include "../core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <glm/glm.hpp>
 
@@ -146,8 +148,8 @@ void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets
 }
 
 void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
-                                 DeferredRenderTargets& targets, const GLuint initialInputTexture,
-                                 const GLuint momentsTexture) {
+                                 DeferredRenderTargets& targets, const uint32_t initialInputTexture,
+                                 const uint32_t momentsTexture) {
     if (m_ssgiDenoiseShader == nullptr) {
         return;
     }
