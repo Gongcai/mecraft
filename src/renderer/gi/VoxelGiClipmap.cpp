@@ -6,6 +6,8 @@
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../resource/BlockTextureColorProvider.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>

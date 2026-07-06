@@ -5,7 +5,6 @@
 #include "../core/RenderSettings.h"
 #include "../../world/block/Block.h"
 
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 
 #include <cstdint>
@@ -50,7 +49,7 @@ public:
                 const VoxelGiSettings& settings,
                 const IBlockTextureColorProvider& textureColors);
 
-    [[nodiscard]] GLuint texture() const { return m_texture; }
+    [[nodiscard]] uint32_t texture() const { return m_texture; }
     [[nodiscard]] bool valid() const { return m_valid && m_texture != 0; }
     [[nodiscard]] glm::vec3 origin() const { return m_origin; }
     [[nodiscard]] float voxelSize() const { return m_voxelSize; }
@@ -107,8 +106,8 @@ private:
                                                 const LightingSampleParams& lighting,
                                                 const glm::ivec3& blockPos);
 
-    GLuint m_texture = 0;
-    GLuint m_shiftScratchTexture = 0;
+    uint32_t m_texture = 0;
+    uint32_t m_shiftScratchTexture = 0;
     bool m_valid = false;
     int m_resolution = 0;
     int m_mipLevels = 1;
