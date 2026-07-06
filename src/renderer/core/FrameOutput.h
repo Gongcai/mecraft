@@ -1,7 +1,9 @@
 #ifndef MECRAFT_FRAME_OUTPUT_H
 #define MECRAFT_FRAME_OUTPUT_H
 
-#include <glad/glad.h>
+#include "renderer/rhi/RhiHandles.h"
+
+#include <cstdint>
 #include <glm/glm.hpp>
 
 /// Shadow data for first-person held item rendering
@@ -10,12 +12,18 @@ struct FirstPersonShadowData {
     float cascadeSplitFar[4]{};
     float cascadeTexelWorldSize[4]{};
     float cascadeDepthExtent[4]{};
-    GLuint shadowTexture = 0;
-    GLuint shadowDepthRaw = 0;
-    GLuint shadowDepthAll = 0;
-    GLuint shadowDepthAllRaw = 0;
-    GLuint shadowColor0 = 0;
-    GLuint shadowColor1 = 0;
+    RhiTextureHandle shadowTextureHandle;
+    RhiTextureHandle shadowDepthRawHandle;
+    RhiTextureHandle shadowDepthAllHandle;
+    RhiTextureHandle shadowDepthAllRawHandle;
+    RhiTextureHandle shadowColor0Handle;
+    RhiTextureHandle shadowColor1Handle;
+    uint32_t shadowTexture = 0;
+    uint32_t shadowDepthRaw = 0;
+    uint32_t shadowDepthAll = 0;
+    uint32_t shadowDepthAllRaw = 0;
+    uint32_t shadowColor0 = 0;
+    uint32_t shadowColor1 = 0;
     glm::vec3 cameraPos = glm::vec3(0.0f);
     glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
     float shadowDistance = 192.0f;
@@ -35,14 +43,18 @@ struct FirstPersonShadowData {
 /// Replaces implicit state queries like isDeferredFrameActive()
 struct FrameOutput {
     // Scene render targets (post-tonemap or HDR depending on pipeline)
-    GLuint sceneColorTex = 0;
-    GLuint sceneDepthTex = 0;
+    RhiTextureHandle sceneColor;
+    RhiTextureHandle sceneDepth;
+    uint32_t sceneColorTex = 0;
+    uint32_t sceneDepthTex = 0;
 
     // GBuffer depth (for effects that need scene depth in deferred)
-    GLuint gbufferDepthTex = 0;
+    RhiTextureHandle gbufferDepth;
+    uint32_t gbufferDepthTex = 0;
 
     // Weather mask (for rain/snow particles in post-process)
-    GLuint weatherMaskTex = 0;
+    RhiTextureHandle weatherMask;
+    uint32_t weatherMaskTex = 0;
 
     // Deferred pipeline capabilities
     bool hasDeferredInputs = false;
