@@ -1,7 +1,8 @@
 #ifndef MECRAFT_BLOCK_INTERACTION_OVERLAY_RENDERER_H
 #define MECRAFT_BLOCK_INTERACTION_OVERLAY_RENDERER_H
 
-#include <glad/glad.h>
+#include <cstdint>
+
 #include <glm/glm.hpp>
 
 class ResourceMgr;
@@ -48,14 +49,14 @@ private:
     Shader* m_outlineShader = nullptr;
     Shader* m_breakOverlayShader = nullptr;
 
-    GLuint m_outlineVao = 0;
-    GLuint m_outlineVbo = 0;
-    GLuint m_breakOverlayVao = 0;
-    GLuint m_breakOverlayVbo = 0;
-    GLsizei m_breakOverlayVertexCount = 0;
-    GLuint m_breakOverlayCrossVao = 0;
-    GLuint m_breakOverlayCrossVbo = 0;
-    GLsizei m_breakOverlayCrossVertexCount = 0;
+    uint32_t m_outlineVao = 0;
+    uint32_t m_outlineVbo = 0;
+    uint32_t m_breakOverlayVao = 0;
+    uint32_t m_breakOverlayVbo = 0;
+    int32_t m_breakOverlayVertexCount = 0;
+    uint32_t m_breakOverlayCrossVao = 0;
+    uint32_t m_breakOverlayCrossVbo = 0;
+    int32_t m_breakOverlayCrossVertexCount = 0;
 };
 
 #endif // MECRAFT_BLOCK_INTERACTION_OVERLAY_RENDERER_H

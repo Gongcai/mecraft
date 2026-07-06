@@ -9,6 +9,8 @@
 
 #include <array>
 
+#include <glad/glad.h>
+
 namespace {
 
 bool isAxisNormal(const glm::ivec3& normal) {

@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cstdio>
 
+#include <glad/glad.h>
+
 void RenderDebugService::init() {
     if (m_gpuTimersInitialized) {
         return;

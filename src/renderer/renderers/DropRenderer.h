@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <unordered_map>
 
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 
 #include "../core/Shader.h"
@@ -41,8 +40,8 @@ public:
 
 private:
 	struct Mesh {
-		GLuint vao = 0;
-		GLuint vbo = 0;
+		uint32_t vao = 0;
+		uint32_t vbo = 0;
 		uint32_t vertexCount = 0;
 	};
 
@@ -71,4 +70,3 @@ private:
 };
 
 #endif // MECRAFT_DROPRENDERER_H
-

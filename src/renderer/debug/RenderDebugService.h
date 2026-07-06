@@ -1,7 +1,6 @@
 #ifndef MECRAFT_RENDER_DEBUG_SERVICE_H
 #define MECRAFT_RENDER_DEBUG_SERVICE_H
 
-#include <glad/glad.h>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -209,7 +208,7 @@ private:
     static constexpr size_t SHADOW_TIMER_POINT_COUNT = static_cast<size_t>(ShadowTimestampPoint::Count);
 
     // GPU timer state
-    std::array<std::array<GLuint, static_cast<size_t>(GpuTimerPass::Count)>, GPU_TIMER_RING_SIZE> m_gpuTimerQueries{};
+    std::array<std::array<uint32_t, static_cast<size_t>(GpuTimerPass::Count)>, GPU_TIMER_RING_SIZE> m_gpuTimerQueries{};
     std::array<std::array<bool, static_cast<size_t>(GpuTimerPass::Count)>, GPU_TIMER_RING_SIZE> m_gpuTimerIssued{};
     GpuFrameStats m_gpuFrameStats{};
     size_t m_gpuTimerWriteIndex = 0;
@@ -221,7 +220,7 @@ private:
 
     // Shadow timestamp state. Uses glQueryCounter(GL_TIMESTAMP) so it can run
     // inside the outer Shadow GL_TIME_ELAPSED pass timer.
-    std::array<std::array<std::array<GLuint, SHADOW_TIMER_POINT_COUNT>, SHADOW_TIMER_CASCADE_COUNT>, GPU_TIMER_RING_SIZE> m_shadowTimestampQueries{};
+    std::array<std::array<std::array<uint32_t, SHADOW_TIMER_POINT_COUNT>, SHADOW_TIMER_CASCADE_COUNT>, GPU_TIMER_RING_SIZE> m_shadowTimestampQueries{};
     std::array<std::array<std::array<bool, SHADOW_TIMER_POINT_COUNT>, SHADOW_TIMER_CASCADE_COUNT>, GPU_TIMER_RING_SIZE> m_shadowTimestampIssued{};
     std::array<ShadowFrameStats, GPU_TIMER_RING_SIZE> m_shadowFrameSlots{};
     std::array<bool, GPU_TIMER_RING_SIZE> m_shadowFrameIssued{};
