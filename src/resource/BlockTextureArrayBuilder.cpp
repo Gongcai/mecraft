@@ -3,6 +3,7 @@
 
 #include "../third_party/stb/stb_image.h"
 
+#include <glad/glad.h>
 #include <glm/vec3.hpp>
 
 #include <algorithm>

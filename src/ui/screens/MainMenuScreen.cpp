@@ -6,6 +6,7 @@
 #include "../widgets/UITextInput.h"
 #include "../../Paths.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/core/Shader.h"
 #include "../../locale/LocaleManager.h"
 
 void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {

@@ -10,6 +10,7 @@
 #include "engine/platform/Window.h"
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/core/Shader.h"
 #include "UIRenderUtils.h"
 #include "UIScene.h"
 #include "UIThemePresets.h"

@@ -7,6 +7,7 @@
 #include "../widgets/UIImage.h"
 #include "../layout/UIStackLayout.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/core/Shader.h"
 #include "../../locale/LocaleManager.h"
 #include "../../save/SaveManager.h"
 

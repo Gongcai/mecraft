@@ -8,6 +8,7 @@
 #include "../core/UIRenderUtils.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/core/Shader.h"
 
 // Simple transparent panel used as a content container for each tab.
 class TabContentPanel : public UIWidget {

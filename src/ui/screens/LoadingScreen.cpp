@@ -3,6 +3,7 @@
 #include "../widgets/UIPanel.h"
 #include "../widgets/UIProgressBar.h"
 #include "../widgets/UIText.h"
+#include "../../renderer/core/Shader.h"
 
 #include <algorithm>
 

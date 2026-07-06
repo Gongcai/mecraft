@@ -12,6 +12,7 @@
 #include "../core/UIRenderUtils.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/core/Shader.h"
 
 UINumericSpinner::UINumericSpinner() {
     interactive = true;

@@ -6,6 +6,7 @@
 
 #include "../core/UIRenderUtils.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/core/Shader.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>

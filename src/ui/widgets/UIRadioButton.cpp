@@ -10,6 +10,7 @@
 #include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/core/Shader.h"
 
 namespace {
 constexpr int kCircleSegments = 12;

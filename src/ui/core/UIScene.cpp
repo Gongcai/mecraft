@@ -1,5 +1,7 @@
 #include "UIScene.h"
 
+#include "../../renderer/core/Shader.h"
+
 #include <algorithm>
 
 void UIScene::init(ResourceMgr& resourceMgr) {

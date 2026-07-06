@@ -4,15 +4,16 @@
 
 #ifndef MECRAFT_RESOURCEMGR_H
 #define MECRAFT_RESOURCEMGR_H
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
-#include <glad/glad.h>
 #include "BlockTextureCatalog.h"
 #include "BlockTextureColorProvider.h"
 #include "TextureAtlas.h"
-#include "../renderer/core/Shader.h"
+
+class Shader;
 
 class ResourceMgr : public IBlockTextureColorProvider {
 public:
@@ -33,18 +34,18 @@ public:
 
     Shader *getShader(const std::string &name);
 
-    GLuint loadTexture2D(const std::string& name,
-                         const std::string& path,
-                         bool srgb = false,
-                         bool repeat = false,
-                         bool linear = true,
-                         bool flipVertically = false);
-    [[nodiscard]] GLuint getTexture2D(const std::string& name) const;
+    uint32_t loadTexture2D(const std::string& name,
+                           const std::string& path,
+                           bool srgb = false,
+                           bool repeat = false,
+                           bool linear = true,
+                           bool flipVertically = false);
+    [[nodiscard]] uint32_t getTexture2D(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
-    GLuint loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
-    GLuint loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
-    [[nodiscard]] GLuint getGuiTexture(const std::string& name) const;
+    uint32_t loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
+    uint32_t loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
+    [[nodiscard]] uint32_t getGuiTexture(const std::string& name) const;
 
     // Texture atlas used by block-facing UI rendering.
     void buildBlockTextureResources(const std::string& directory, int tileSize = 16);
@@ -77,19 +78,19 @@ public:
 
     // Lightmap textures (16x16, maps blockLight x skyLight -> RGB brightness)
     void loadLightmapTextures(const std::string& dayPath, const std::string& nightPath);
-    [[nodiscard]] GLuint getLightmapDay() const;
-    [[nodiscard]] GLuint getLightmapNight() const;
+    [[nodiscard]] uint32_t getLightmapDay() const;
+    [[nodiscard]] uint32_t getLightmapNight() const;
 
     void loadColormapTextures(const std::string& grassPath, const std::string& foliagePath);
-    [[nodiscard]] GLuint getGrassColormap() const;
-    [[nodiscard]] GLuint getFoliageColormap() const;
+    [[nodiscard]] uint32_t getGrassColormap() const;
+    [[nodiscard]] uint32_t getFoliageColormap() const;
 
     // Cubemap texture (6 face textures for skybox rendering)
-    GLuint loadCubemap(const std::string& name,
-                       const std::string& rightPath, const std::string& leftPath,
-                       const std::string& topPath, const std::string& bottomPath,
-                       const std::string& frontPath, const std::string& backPath);
-    [[nodiscard]] GLuint getCubemap(const std::string& name) const;
+    uint32_t loadCubemap(const std::string& name,
+                         const std::string& rightPath, const std::string& leftPath,
+                         const std::string& topPath, const std::string& bottomPath,
+                         const std::string& frontPath, const std::string& backPath);
+    [[nodiscard]] uint32_t getCubemap(const std::string& name) const;
 
     // Prebaked block item icons (isometric-like) packed in a single atlas texture.
     void buildBlockIconAtlas(int iconSize = 64);

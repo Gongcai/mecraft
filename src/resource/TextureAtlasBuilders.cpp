@@ -3,6 +3,8 @@
 
 #include "../third_party/stb/stb_image.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>

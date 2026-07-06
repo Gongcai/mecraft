@@ -1,13 +1,16 @@
 #ifndef MECRAFT_TEXTURE_ATLAS_H
 #define MECRAFT_TEXTURE_ATLAS_H
 
-#include <glad/glad.h>
+#include "renderer/rhi/RhiHandles.h"
+
+#include <cstdint>
 #include <glm/vec2.hpp>
 
 #include <utility>
 
 struct TextureAtlas {
-    GLuint textureID = 0;
+    RhiTextureHandle texture;
+    uint32_t textureID = 0;
     int atlasWidth  = 0;     // Atlas width in pixels.
     int atlasHeight = 0;     // Atlas height in pixels.
     int tileSize    = 16;    // Tile size in pixels, excluding padding.
@@ -20,7 +23,8 @@ struct TextureAtlas {
 };
 
 struct TextureArray {
-    GLuint textureID = 0;
+    RhiTextureHandle texture;
+    uint32_t textureID = 0;
     int tileSize = 16;
     int layerCount = 0;
 };
