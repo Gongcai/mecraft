@@ -81,6 +81,10 @@ uint32_t ResourceMgr::getTexture2D(const std::string& name) const {
     return m_impl->texture2D.get(name);
 }
 
+RhiTextureHandle ResourceMgr::getTexture2DHandle(const std::string& name) const {
+    return m_impl->texture2D.getHandle(name);
+}
+
 uint32_t ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
     return m_impl->texture2D.loadGui(name, path, flipVertically);
 }
@@ -91,6 +95,10 @@ uint32_t ResourceMgr::loadGuiTexture(const std::string& name, const std::string&
 
 uint32_t ResourceMgr::getGuiTexture(const std::string& name) const {
     return m_impl->texture2D.getGui(name);
+}
+
+RhiTextureHandle ResourceMgr::getGuiTextureHandle(const std::string& name) const {
+    return m_impl->texture2D.getGuiHandle(name);
 }
 
 void ResourceMgr::buildBlockTextureResources(const std::string& directory, int tileSize) {

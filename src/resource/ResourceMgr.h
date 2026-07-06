@@ -11,6 +11,7 @@
 #include <vector>
 #include "BlockTextureCatalog.h"
 #include "BlockTextureColorProvider.h"
+#include "renderer/rhi/RhiHandles.h"
 #include "TextureAtlas.h"
 
 class Shader;
@@ -41,11 +42,13 @@ public:
                            bool linear = true,
                            bool flipVertically = false);
     [[nodiscard]] uint32_t getTexture2D(const std::string& name) const;
+    [[nodiscard]] RhiTextureHandle getTexture2DHandle(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
     uint32_t loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
     uint32_t loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
     [[nodiscard]] uint32_t getGuiTexture(const std::string& name) const;
+    [[nodiscard]] RhiTextureHandle getGuiTextureHandle(const std::string& name) const;
 
     // Texture atlas used by block-facing UI rendering.
     void buildBlockTextureResources(const std::string& directory, int tileSize = 16);

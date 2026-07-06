@@ -1,11 +1,34 @@
 #include "Texture2DLibrary.h"
 
 #include "../Diagnostics.h"
+#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../third_party/stb/stb_image.h"
 
 #include <glad/glad.h>
 
 #include <cstdio>
+
+namespace {
+
+[[nodiscard]] RhiTextureHandle registerTexture2D(const uint32_t textureID,
+                                                 const RhiTextureFormat format,
+                                                 const int width,
+                                                 const int height) {
+    return renderer::rhi::gl::registerTexture({
+        textureID,
+        RhiTextureDimension::Texture2D,
+        format,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled),
+        false
+    });
+}
+
+} // namespace
 
 uint32_t Texture2DLibrary::load(const std::string& name,
                                 const std::string& path,
@@ -15,7 +38,7 @@ uint32_t Texture2DLibrary::load(const std::string& name,
                                 const bool flipVertically) {
     const auto existing = m_textures.find(name);
     if (existing != m_textures.end()) {
-        return existing->second;
+        return existing->second.textureID;
     }
 
     int width = 0;
@@ -53,16 +76,37 @@ uint32_t Texture2DLibrary::load(const std::string& name,
     glBindTexture(GL_TEXTURE_2D, 0);
     stbi_image_free(data);
 
-    m_textures[name] = textureID;
+    Texture2DInfo info;
+    info.textureID = textureID;
+    info.texture = registerTexture2D(textureID,
+                                     srgb ? RhiTextureFormat::Rgba8Srgb : RhiTextureFormat::Rgba8Unorm,
+                                     width,
+                                     height);
+    if (!info.texture.isValid()) {
+        glDeleteTextures(1, &textureID);
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to register texture2D RHI handle '%s': %s\n",
+                            name.c_str(), path.c_str());
+        return 0;
+    }
+
+    m_textures[name] = info;
     return textureID;
 }
 
 uint32_t Texture2DLibrary::get(const std::string& name) const {
     const auto it = m_textures.find(name);
     if (it != m_textures.end()) {
-        return it->second;
+        return it->second.textureID;
     }
     return 0;
+}
+
+RhiTextureHandle Texture2DLibrary::getHandle(const std::string& name) const {
+    const auto it = m_textures.find(name);
+    if (it != m_textures.end()) {
+        return it->second.texture;
+    }
+    return {};
 }
 
 uint32_t Texture2DLibrary::loadGui(const std::string& name,
@@ -120,6 +164,15 @@ uint32_t Texture2DLibrary::loadGui(const std::string& name,
 
     GuiTextureInfo info;
     info.textureID = textureID;
+    info.texture = registerTexture2D(textureID, RhiTextureFormat::Rgba8Unorm, width, height);
+    if (!info.texture.isValid()) {
+        glDeleteTextures(1, &textureID);
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to register GUI texture RHI handle '%s': %s\n",
+                            name.c_str(), path.c_str());
+        outWidth = 0;
+        outHeight = 0;
+        return 0;
+    }
     info.width = width;
     info.height = height;
     m_guiTextures[name] = info;
@@ -134,17 +187,27 @@ uint32_t Texture2DLibrary::getGui(const std::string& name) const {
     return 0;
 }
 
+RhiTextureHandle Texture2DLibrary::getGuiHandle(const std::string& name) const {
+    const auto it = m_guiTextures.find(name);
+    if (it != m_guiTextures.end()) {
+        return it->second.texture;
+    }
+    return {};
+}
+
 void Texture2DLibrary::shutdown() {
     for (auto& [_, texInfo] : m_guiTextures) {
+        renderer::rhi::gl::unregisterTextureAndReset(texInfo.texture);
         if (texInfo.textureID != 0) {
             glDeleteTextures(1, &texInfo.textureID);
         }
     }
     m_guiTextures.clear();
 
-    for (auto& [_, texId] : m_textures) {
-        if (texId != 0) {
-            glDeleteTextures(1, &texId);
+    for (auto& [_, texInfo] : m_textures) {
+        renderer::rhi::gl::unregisterTextureAndReset(texInfo.texture);
+        if (texInfo.textureID != 0) {
+            glDeleteTextures(1, &texInfo.textureID);
         }
     }
     m_textures.clear();
