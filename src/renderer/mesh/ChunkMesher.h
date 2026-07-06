@@ -111,6 +111,7 @@ public:
 
     // --- Per-sub-chunk mesh building ---
     static ChunkMeshData buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot);
+    static void buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData);
 
     // Direct mesh generation (for synchronous path)
     static void generateSubChunkMesh(Chunk& chunk, int scy);
@@ -187,5 +188,4 @@ void buildUnitFaces(ChunkMeshData& meshData,
 
 
 #endif // MECRAFT_CHUNKMESHER_H
-
 

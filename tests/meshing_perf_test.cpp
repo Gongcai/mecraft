@@ -440,6 +440,7 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
         while (completedCount < totalChunks && std::chrono::steady_clock::now() < deadline) {
             SubChunkMeshingResult result;
             while (service.tryPopCompleted(result)) {
+                service.recycleMeshData(std::move(result.meshData));
                 ++completedCount;
             }
             if (completedCount < totalChunks) {
@@ -472,6 +473,7 @@ ThroughputStats runServiceThroughput(const std::vector<std::shared_ptr<Chunk>>& 
             SubChunkMeshingResult result;
             while (service.tryPopCompleted(result)) {
                 checksum ^= checksumMeshData(result.meshData) + static_cast<uint64_t>(completedCount + 1);
+                service.recycleMeshData(std::move(result.meshData));
                 ++completedCount;
             }
             if (completedCount < totalChunks) {
@@ -534,7 +536,7 @@ struct CaseResult {
     double chunksPerSec = 0.0;
 };
 
-std::string getCurrentDate() {
+std::tm currentLocalTime() {
     std::time_t now = std::time(nullptr);
     std::tm tm;
 #ifdef _WIN32
@@ -542,8 +544,20 @@ std::string getCurrentDate() {
 #else
     localtime_r(&now, &tm);
 #endif
+    return tm;
+}
+
+std::string getCurrentDate() {
+    std::tm tm = currentLocalTime();
     char buf[16];
     std::strftime(buf, sizeof(buf), "%Y-%m-%d", &tm);
+    return buf;
+}
+
+std::string getCurrentTimestampSuffix() {
+    std::tm tm = currentLocalTime();
+    char buf[32];
+    std::strftime(buf, sizeof(buf), "%Y%m%d_%H%M%S", &tm);
     return buf;
 }
 
@@ -558,7 +572,7 @@ std::string resolveProjectRoot() {
         file.substr(file.size() - suffix.size()) == suffix) {
         return file.substr(0, file.size() - suffix.size());
     }
-    // Fallback: strip filename and one directory level
+    // Resolve paths produced by unusual compiler configurations.
     auto lastSep = file.find_last_of("/\\");
     if (lastSep != std::string::npos) {
         file = file.substr(0, lastSep);
@@ -723,7 +737,8 @@ int main() {
 
     // ── Write results to JSON ─────────────────────────────────────────
     const std::string projectRoot = resolveProjectRoot();
-    const std::string outputPath = projectRoot + "tests/perf_baselines/meshing_perf_baseline.json";
+    const std::string outputPath =
+        projectRoot + "tests/perf_baselines/meshing_perf_baseline_" + getCurrentTimestampSuffix() + ".json";
     if (writeResultsJson(outputPath, buildConfig, warmupRounds, measureRounds,
                          numThreads, singleThreadResults, throughputResults)) {
         std::cout << "[meshing_perf_test] Results written to " << outputPath << "\n";

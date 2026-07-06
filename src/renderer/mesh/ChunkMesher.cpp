@@ -201,6 +201,30 @@ constexpr std::array<std::array<glm::vec3, 4>, 6> kFaceCorners = {{
 constexpr std::array<glm::vec3, 4> kCrossQuadA = {{{0.1464f, 0.0f, 0.1464f}, {0.8536f, 0.0f, 0.8536f}, {0.8536f, 1.0f, 0.8536f}, {0.1464f, 1.0f, 0.1464f}}};
 constexpr std::array<glm::vec3, 4> kCrossQuadB = {{{0.8536f, 0.0f, 0.1464f}, {0.1464f, 0.0f, 0.8536f}, {0.1464f, 1.0f, 0.8536f}, {0.8536f, 1.0f, 0.1464f}}};
 
+void resetMeshData(ChunkMeshData& meshData) {
+    meshData.opaqueVertices.clear();
+    meshData.cutoutVertices.clear();
+    meshData.cutoutDistanceVertices.clear();
+    meshData.transparentVertices.clear();
+    meshData.waterVertices.clear();
+    meshData.opaqueFaceCountBeforeGreedy = 0;
+    meshData.opaqueFaceCountAfterGreedy = 0;
+    meshData.transparentFaceCountBeforeGreedy = 0;
+    meshData.transparentFaceCountAfterGreedy = 0;
+    meshData.opaqueVertexCount = 0;
+    meshData.buildTimeMs = 0.0;
+    meshData.hasBounds = false;
+    meshData.boundsMin = glm::vec3(0.0f);
+    meshData.boundsMax = glm::vec3(0.0f);
+}
+
+void reserveDefaultMeshDataCapacity(ChunkMeshData& meshData) {
+    meshData.opaqueVertices.reserve(2048);
+    meshData.cutoutVertices.reserve(512);
+    meshData.cutoutDistanceVertices.reserve(512);
+    meshData.transparentVertices.reserve(1024);
+}
+
 // Sub-chunk local index (16x16x16)
 MECRAFT_FORCEINLINE std::size_t scToIndex(const int x, const int y, const int z) {
     return static_cast<std::size_t>(x) +
@@ -4175,15 +4199,17 @@ SubChunkMeshingSnapshotPtr ChunkMesher::captureSubChunkSnapshot(
 }
 
 ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot) {
+    ChunkMeshData meshData;
+    buildSubChunkMeshData(snapshot, meshData);
+    return meshData;
+}
+
+void ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData) {
     ensureMeshBlockInfoCache();
 
+    resetMeshData(meshData);
+    reserveDefaultMeshDataCapacity(meshData);
     const auto startTime = std::chrono::steady_clock::now();
-
-    ChunkMeshData meshData;
-    meshData.opaqueVertices.reserve(2048);
-    meshData.cutoutVertices.reserve(512);
-    meshData.cutoutDistanceVertices.reserve(512);
-    meshData.transparentVertices.reserve(1024);
 
     const SubChunkMeshClassPresence presence = scanMeshClassPresence(snapshot);
 
@@ -4255,7 +4281,6 @@ ChunkMeshData ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& 
 
     meshData.opaqueVertexCount = static_cast<uint32_t>(meshData.opaqueVertices.size());
     meshData.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
-    return meshData;
 }
 
 void ChunkMesher::generateSubChunkMesh(Chunk& chunk, const int scy) {

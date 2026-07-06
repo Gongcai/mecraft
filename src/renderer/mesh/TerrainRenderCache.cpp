@@ -494,6 +494,11 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
         }
 
         SubChunkMeshingResult& result = m_deferredMeshResults[processIdx];
+        auto recycleResultMeshData = [&]() {
+            if (m_meshingService != nullptr) {
+                m_meshingService->recycleMeshData(std::move(result.meshData));
+            }
+        };
 
         // Compute vertex count for budget check BEFORE uploading
         const int currentVertices =
@@ -524,6 +529,7 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
         const auto& activeChunks = worldView.getActiveChunks();
         const auto it = activeChunks.find(result.chunkKey);
         if (it == activeChunks.end() || !it->second) {
+            recycleResultMeshData();
             continue;
         }
 
@@ -532,6 +538,7 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
 #ifdef MECRAFT_DEBUG
             ++m_meshingStaleDroppedThisFrame;
 #endif
+            recycleResultMeshData();
             continue;
         }
 
@@ -568,28 +575,28 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
                 !result.meshData.opaqueVertices.empty() ||
                 !result.meshData.cutoutVertices.empty() ||
                 !result.meshData.cutoutDistanceVertices.empty();
-            std::vector<BlockVertex> opaqueVerts = std::move(result.meshData.opaqueVertices);
-            std::vector<BlockVertex> cutoutVerts = std::move(result.meshData.cutoutVertices);
-            std::vector<BlockVertex> cutoutDistanceVerts = std::move(result.meshData.cutoutDistanceVertices);
-            std::vector<BlockVertex> transparentVerts = std::move(result.meshData.transparentVertices);
-            std::vector<BlockVertex> waterVerts = std::move(result.meshData.waterVertices);
-            bakeWorldOffset(opaqueVerts);
-            bakeWorldOffset(cutoutVerts);
-            bakeWorldOffset(cutoutDistanceVerts);
-            bakeWorldOffset(transparentVerts);
-            bakeWorldOffset(waterVerts);
+            bakeWorldOffset(result.meshData.opaqueVertices);
+            bakeWorldOffset(result.meshData.cutoutVertices);
+            bakeWorldOffset(result.meshData.cutoutDistanceVertices);
+            bakeWorldOffset(result.meshData.transparentVertices);
+            bakeWorldOffset(result.meshData.waterVertices);
 
             const glm::vec3 boundsWorldOffset(txOff, tyOff, tzOff);
             WorldGpuMesh gpu = m_worldRenderBuffer->uploadSubChunk(
-                opaqueVerts, cutoutVerts, cutoutDistanceVerts, transparentVerts, waterVerts,
+                result.meshData.opaqueVertices,
+                result.meshData.cutoutVertices,
+                result.meshData.cutoutDistanceVertices,
+                result.meshData.transparentVertices,
+                result.meshData.waterVertices,
                 result.meshData.hasBounds,
                 result.meshData.hasBounds ? result.meshData.boundsMin + boundsWorldOffset : glm::vec3(0.0f),
                 result.meshData.hasBounds ? result.meshData.boundsMax + boundsWorldOffset : glm::vec3(0.0f));
-            if ((!opaqueVerts.empty() && gpu.opaque.vertexCount == 0) ||
-                (!cutoutVerts.empty() && gpu.cutout.vertexCount == 0) ||
-                (!cutoutDistanceVerts.empty() && gpu.cutoutDistance.vertexCount == 0) ||
-                (!transparentVerts.empty() && gpu.transparent.vertexCount == 0) ||
-                (!waterVerts.empty() && gpu.water.vertexCount == 0)) {
+            if ((!result.meshData.opaqueVertices.empty() && gpu.opaque.vertexCount == 0) ||
+                (!result.meshData.cutoutVertices.empty() && gpu.cutout.vertexCount == 0) ||
+                (!result.meshData.cutoutDistanceVertices.empty() && gpu.cutoutDistance.vertexCount == 0) ||
+                (!result.meshData.transparentVertices.empty() && gpu.transparent.vertexCount == 0) ||
+                (!result.meshData.waterVertices.empty() && gpu.water.vertexCount == 0)) {
+                recycleResultMeshData();
                 continue;
             }
 
@@ -620,6 +627,7 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
 
             // MDI mode only needs column bounds for hierarchical frustum culling.
             chunk.updateColumnAggregateBoundsOnly(result.scy, result.meshData, hasOpaqueOrCutout);
+            recycleResultMeshData();
         } else {
             // Old path: per-mesh VAOs.
             mesh.upload(result.meshData.opaqueVertices);
@@ -640,6 +648,7 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
             mesh.boundsMax = result.meshData.boundsMax;
             chunk.setSubChunkMesh(result.scy, mesh);
             chunk.updateColumnAggregateData(result.scy, result.meshData);
+            recycleResultMeshData();
         }
 
         m_meshUploadVerticesThisFrame += currentVertices;

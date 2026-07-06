@@ -36,19 +36,23 @@ public:
     // Per-sub-chunk submission
     void submit(SubChunkMeshingJob job, int priority);
     bool tryPopCompleted(SubChunkMeshingResult& out);
+    void recycleMeshData(ChunkMeshData&& meshData);
 
 
     [[nodiscard]] int inFlightCount() const;
 
 private:
+    ChunkMeshData acquireMeshData();
+
     mutable std::mutex m_stateMutex;
     SpinLock m_completedLock;
+    SpinLock m_recycledMeshDataLock;
     ThreadPool* m_pool = nullptr;
     std::queue<SubChunkMeshingResult> m_completed;
+    std::vector<ChunkMeshData> m_recycledMeshData;
     std::atomic<int> m_inFlight{0};
     std::atomic<uint64_t> m_epoch{0};
     std::atomic<bool> m_running{false};
 };
 
 #endif // MECRAFT_CHUNKMESHINGSERVICE_H
-
