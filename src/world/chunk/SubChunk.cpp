@@ -442,7 +442,7 @@ void setupSubChunkVertexLayout() {
     glEnableVertexAttribArray(10);
     glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
 
-    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
+    for (uint32_t attrib = 11; attrib <= 14; ++attrib) {
         glDisableVertexAttribArray(attrib);
     }
 }
@@ -458,19 +458,19 @@ void SubChunkMesh::upload(const std::vector<BlockVertex>& vertices) {
         glGenBuffers(1, &vbo);
     }
 
-    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockVertex));
+    const std::size_t dataSize = vertices.size() * sizeof(BlockVertex);
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
     if (dataSize <= vboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
                         vertices.empty() ? nullptr : vertices.data());
     } else {
         vboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, vboCapacity, nullptr, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vboCapacity), nullptr, GL_STATIC_DRAW);
         if (!vertices.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, vertices.data());
+            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), vertices.data());
         }
     }
     setupSubChunkVertexLayout();
@@ -489,19 +489,19 @@ void SubChunkMesh::uploadCutout(const std::vector<BlockVertex>& cutoutVerts) {
         glGenBuffers(1, &cutoutVbo);
     }
 
-    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(cutoutVerts.size() * sizeof(BlockVertex));
+    const std::size_t dataSize = cutoutVerts.size() * sizeof(BlockVertex);
 
     glBindVertexArray(cutoutVao);
     glBindBuffer(GL_ARRAY_BUFFER, cutoutVbo);
 
     if (dataSize <= cutoutVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
                         cutoutVerts.empty() ? nullptr : cutoutVerts.data());
     } else {
         cutoutVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, cutoutVboCapacity, nullptr, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cutoutVboCapacity), nullptr, GL_STATIC_DRAW);
         if (!cutoutVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, cutoutVerts.data());
+            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), cutoutVerts.data());
         }
     }
     setupSubChunkVertexLayout();
@@ -520,19 +520,19 @@ void SubChunkMesh::uploadCutoutDistance(const std::vector<BlockVertex>& cutoutDi
         glGenBuffers(1, &cutoutDistanceVbo);
     }
 
-    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(cutoutDistanceVerts.size() * sizeof(BlockVertex));
+    const std::size_t dataSize = cutoutDistanceVerts.size() * sizeof(BlockVertex);
 
     glBindVertexArray(cutoutDistanceVao);
     glBindBuffer(GL_ARRAY_BUFFER, cutoutDistanceVbo);
 
     if (dataSize <= cutoutDistanceVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
                         cutoutDistanceVerts.empty() ? nullptr : cutoutDistanceVerts.data());
     } else {
         cutoutDistanceVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, cutoutDistanceVboCapacity, nullptr, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cutoutDistanceVboCapacity), nullptr, GL_STATIC_DRAW);
         if (!cutoutDistanceVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, cutoutDistanceVerts.data());
+            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), cutoutDistanceVerts.data());
         }
     }
     setupSubChunkVertexLayout();
@@ -551,19 +551,19 @@ void SubChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparent
         glGenBuffers(1, &transparentVbo);
     }
 
-    const GLsizeiptr dataSize = static_cast<GLsizeiptr>(transparentVerts.size() * sizeof(BlockVertex));
+    const std::size_t dataSize = transparentVerts.size() * sizeof(BlockVertex);
 
     glBindVertexArray(transparentVao);
     glBindBuffer(GL_ARRAY_BUFFER, transparentVbo);
 
     if (dataSize <= transparentVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize,
+        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
                         transparentVerts.empty() ? nullptr : transparentVerts.data());
     } else {
         transparentVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, transparentVboCapacity, nullptr, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(transparentVboCapacity), nullptr, GL_STATIC_DRAW);
         if (!transparentVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, transparentVerts.data());
+            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), transparentVerts.data());
         }
     }
     setupSubChunkVertexLayout();

@@ -7,7 +7,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <glad/glad.h>
 #include <glm/vec3.hpp>
 
 #include "../block/BlockStateRegistry.h"
@@ -143,25 +142,25 @@ static_assert(sizeof(PackedBlockVertex) == 16,
               "PackedBlockVertex must stay 16 bytes");
 
 struct SubChunkMesh {
-  GLuint vao = 0;
-  GLuint vbo = 0;
+  uint32_t vao = 0;
+  uint32_t vbo = 0;
   uint32_t vertexCount = 0;
-  GLsizeiptr vboCapacity = 0;
+  std::size_t vboCapacity = 0;
 
-  GLuint transparentVao = 0;
-  GLuint transparentVbo = 0;
+  uint32_t transparentVao = 0;
+  uint32_t transparentVbo = 0;
   uint32_t transparentVertexCount = 0;
-  GLsizeiptr transparentVboCapacity = 0;
+  std::size_t transparentVboCapacity = 0;
 
-  GLuint cutoutVao = 0;
-  GLuint cutoutVbo = 0;
+  uint32_t cutoutVao = 0;
+  uint32_t cutoutVbo = 0;
   uint32_t cutoutVertexCount = 0;
-  GLsizeiptr cutoutVboCapacity = 0;
+  std::size_t cutoutVboCapacity = 0;
 
-  GLuint cutoutDistanceVao = 0;
-  GLuint cutoutDistanceVbo = 0;
+  uint32_t cutoutDistanceVao = 0;
+  uint32_t cutoutDistanceVbo = 0;
   uint32_t cutoutDistanceVertexCount = 0;
-  GLsizeiptr cutoutDistanceVboCapacity = 0;
+  std::size_t cutoutDistanceVboCapacity = 0;
 
   bool hasBounds = false;
   glm::vec3 boundsMin = glm::vec3(0.0f);
