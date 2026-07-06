@@ -125,8 +125,7 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
         return;
     }
 
-    std::vector<float> vertices;
-    if (buildVertices(view, vertices) == 0) {
+    if (buildVertices(view, m_vertexBuffer) == 0) {
         return;
     }
 
@@ -140,13 +139,16 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
+    glBufferSubData(GL_ARRAY_BUFFER,
+                    0,
+                    static_cast<GLsizeiptr>(m_vertexBuffer.size() * sizeof(float)),
+                    m_vertexBuffer.data());
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 8));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_vertexBuffer.size() / 8));
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -162,8 +164,7 @@ void ParticleSystem::renderToSceneResolved(Shader& shader, GLuint voxelLightTex,
         return;
     }
 
-    std::vector<float> vertices;
-    if (buildVertices(view, vertices) == 0) {
+    if (buildVertices(view, m_vertexBuffer) == 0) {
         return;
     }
 
@@ -184,9 +185,12 @@ void ParticleSystem::renderToSceneResolved(Shader& shader, GLuint voxelLightTex,
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
+    glBufferSubData(GL_ARRAY_BUFFER,
+                    0,
+                    static_cast<GLsizeiptr>(m_vertexBuffer.size() * sizeof(float)),
+                    m_vertexBuffer.data());
 
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size() / 8));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_vertexBuffer.size() / 8));
 
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE2);

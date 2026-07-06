@@ -43,6 +43,7 @@ private:
 
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
+    std::vector<float> m_vertexBuffer;
 
     static constexpr int MAX_PARTICLES = 1000;
 };

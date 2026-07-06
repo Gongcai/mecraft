@@ -167,6 +167,56 @@ struct RedstoneWorkSet {
     PositionSet sourceSet;
 };
 
+void clearRedstoneWorkSet(RedstoneWorkSet& workSet) {
+    workSet.wires.clear();
+    workSet.redstoneControlledBlocks.clear();
+    workSet.torches.clear();
+    workSet.repeaters.clear();
+    workSet.observers.clear();
+    workSet.comparators.clear();
+    workSet.pistons.clear();
+    workSet.edgeTriggeredDevices.clear();
+    workSet.sourcePositions.clear();
+    workSet.wireSet.clear();
+    workSet.redstoneControlledSet.clear();
+    workSet.torchSet.clear();
+    workSet.repeaterSet.clear();
+    workSet.observerSet.clear();
+    workSet.comparatorSet.clear();
+    workSet.pistonSet.clear();
+    workSet.edgeTriggeredDeviceSet.clear();
+    workSet.sourceSet.clear();
+}
+
+template <typename Set>
+void reserveSetCapacity(Set& set, const size_t count) {
+    if (static_cast<float>(count) > static_cast<float>(set.bucket_count()) * set.max_load_factor()) {
+        set.reserve(count);
+    }
+}
+
+void reserveRedstoneWorkSet(RedstoneWorkSet& workSet, const size_t dirtyCount) {
+    const size_t expectedPositions = dirtyCount;
+    workSet.wires.reserve(expectedPositions);
+    workSet.redstoneControlledBlocks.reserve(expectedPositions);
+    workSet.torches.reserve(expectedPositions);
+    workSet.repeaters.reserve(expectedPositions);
+    workSet.observers.reserve(expectedPositions);
+    workSet.comparators.reserve(expectedPositions);
+    workSet.pistons.reserve(expectedPositions);
+    workSet.edgeTriggeredDevices.reserve(expectedPositions);
+    workSet.sourcePositions.reserve(expectedPositions);
+    reserveSetCapacity(workSet.wireSet, expectedPositions);
+    reserveSetCapacity(workSet.redstoneControlledSet, expectedPositions);
+    reserveSetCapacity(workSet.torchSet, expectedPositions);
+    reserveSetCapacity(workSet.repeaterSet, expectedPositions);
+    reserveSetCapacity(workSet.observerSet, expectedPositions);
+    reserveSetCapacity(workSet.comparatorSet, expectedPositions);
+    reserveSetCapacity(workSet.pistonSet, expectedPositions);
+    reserveSetCapacity(workSet.edgeTriggeredDeviceSet, expectedPositions);
+    reserveSetCapacity(workSet.sourceSet, expectedPositions);
+}
+
 struct PowerNode {
     WireNode wire;
     uint8_t power = 0;
@@ -185,6 +235,17 @@ struct ComparatorEvaluation {
     glm::ivec3 position;
     uint8_t outputPower = 0;
 };
+
+struct RedstoneProcessBuffers {
+    std::vector<RedstoneScheduledUpdate> scheduledUpdates;
+    std::vector<glm::ivec3> changedPositions;
+    std::vector<glm::ivec3> dirtyPositions;
+    std::vector<RedstoneSource> outputSources;
+    std::vector<ComparatorEvaluation> comparatorEvaluations;
+    RedstoneWorkSet workSet;
+};
+
+thread_local RedstoneProcessBuffers t_redstoneBuffers;
 
 struct PistonMovedBlock {
     glm::ivec3 position;
@@ -1923,22 +1984,24 @@ void collectPosition(const World& world, const glm::ivec3& position, RedstoneWor
     collectEndpointsAroundNeighborConductors(world, position, workSet);
 }
 
-RedstoneWorkSet collectRedstoneWorkSet(const World& world, const std::vector<glm::ivec3>& dirtyPositions) {
-    RedstoneWorkSet workSet;
+void collectRedstoneWorkSet(const World& world,
+                            const std::vector<glm::ivec3>& dirtyPositions,
+                            RedstoneWorkSet& workSet) {
+    clearRedstoneWorkSet(workSet);
+    reserveRedstoneWorkSet(workSet, dirtyPositions.size());
     for (const glm::ivec3& dirtyPosition : dirtyPositions) {
         collectPosition(world, dirtyPosition, workSet);
         for (const glm::ivec3& direction : kDirections) {
             collectPosition(world, dirtyPosition + direction, workSet);
         }
     }
-    return workSet;
 }
 
-std::vector<RedstoneSource> collectActiveSources(const World& world,
-                                                 const std::vector<glm::ivec3>& sourcePositions,
-                                                 const PositionSet* excludedPositions) {
-    std::vector<RedstoneSource> sources;
-    sources.reserve(sourcePositions.size());
+void appendActiveSources(const World& world,
+                         const std::vector<glm::ivec3>& sourcePositions,
+                         const PositionSet* excludedPositions,
+                         std::vector<RedstoneSource>& sources) {
+    sources.reserve(sources.size() + sourcePositions.size());
     for (const glm::ivec3& position : sourcePositions) {
         if (excludedPositions != nullptr && excludedPositions->find(position) != excludedPositions->end()) {
             continue;
@@ -1954,13 +2017,12 @@ std::vector<RedstoneSource> collectActiveSources(const World& world,
             sources.push_back({position, power, {}, false});
         }
     }
-    return sources;
 }
 
-std::vector<RedstoneSource> collectPoweredRepeaterSources(const World& world,
-                                                          const std::vector<glm::ivec3>& repeaterPositions) {
-    std::vector<RedstoneSource> sources;
-    sources.reserve(repeaterPositions.size());
+void appendPoweredRepeaterSources(const World& world,
+                                  const std::vector<glm::ivec3>& repeaterPositions,
+                                  std::vector<RedstoneSource>& sources) {
+    sources.reserve(sources.size() + repeaterPositions.size());
     for (const glm::ivec3& position : repeaterPositions) {
         const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
         if (!isRepeaterState(stateId) || !isPoweredPropertyTrue(stateId)) {
@@ -1974,13 +2036,12 @@ std::vector<RedstoneSource> collectPoweredRepeaterSources(const World& world,
             logicUnitWireFacing(stateId, "Repeater")
         });
     }
-    return sources;
 }
 
-std::vector<RedstoneSource> collectPoweredObserverSources(const World& world,
-                                                          const std::vector<glm::ivec3>& observerPositions) {
-    std::vector<RedstoneSource> sources;
-    sources.reserve(observerPositions.size());
+void appendPoweredObserverSources(const World& world,
+                                  const std::vector<glm::ivec3>& observerPositions,
+                                  std::vector<RedstoneSource>& sources) {
+    sources.reserve(sources.size() + observerPositions.size());
     for (const glm::ivec3& position : observerPositions) {
         const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
         if (!isObserverState(stateId) || !isPoweredPropertyTrue(stateId)) {
@@ -1988,14 +2049,13 @@ std::vector<RedstoneSource> collectPoweredObserverSources(const World& world,
         }
         sources.push_back({position, kMaxRedstonePower, observerOutputDirection(stateId), true});
     }
-    return sources;
 }
 
-std::vector<RedstoneSource> collectPoweredComparatorStateSources(
+void appendPoweredComparatorStateSources(
     const World& world,
-    const std::vector<glm::ivec3>& comparatorPositions) {
-    std::vector<RedstoneSource> sources;
-    sources.reserve(comparatorPositions.size());
+    const std::vector<glm::ivec3>& comparatorPositions,
+    std::vector<RedstoneSource>& sources) {
+    sources.reserve(sources.size() + comparatorPositions.size());
     for (const glm::ivec3& position : comparatorPositions) {
         const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
         if (!isComparatorState(stateId) || !isPoweredPropertyTrue(stateId)) {
@@ -2009,13 +2069,12 @@ std::vector<RedstoneSource> collectPoweredComparatorStateSources(
             logicUnitWireFacing(stateId, "Comparator")
         });
     }
-    return sources;
 }
 
-std::vector<RedstoneSource> collectComparatorSources(const World& world,
-                                                     const std::vector<ComparatorEvaluation>& evaluations) {
-    std::vector<RedstoneSource> sources;
-    sources.reserve(evaluations.size());
+void appendComparatorSources(const World& world,
+                             const std::vector<ComparatorEvaluation>& evaluations,
+                             std::vector<RedstoneSource>& sources) {
+    sources.reserve(sources.size() + evaluations.size());
     for (const ComparatorEvaluation& evaluation : evaluations) {
         if (evaluation.outputPower == 0) {
             continue;
@@ -2034,14 +2093,6 @@ std::vector<RedstoneSource> collectComparatorSources(const World& world,
             true,
             logicUnitWireFacing(stateId, "Comparator")
         });
-    }
-    return sources;
-}
-
-void appendSources(std::vector<RedstoneSource>& target, std::vector<RedstoneSource> sources) {
-    target.reserve(target.size() + sources.size());
-    for (const RedstoneSource& source : sources) {
-        target.push_back(source);
     }
 }
 
@@ -2468,19 +2519,26 @@ size_t applyTorchStates(World& world,
     });
 
     size_t changed = 0;
+    PositionSet excludedSources;
+    excludedSources.reserve(1);
+    std::vector<RedstoneSource> inputSources;
+    inputSources.reserve(sourcePositions.size() +
+                         repeaterPositions.size() +
+                         observerPositions.size() +
+                         comparatorPositions.size());
     for (const glm::ivec3& position : orderedTorches) {
         const BlockStateId currentState = world.getBlockState(position.x, position.y, position.z);
         if (!isTorchState(currentState)) {
             continue;
         }
 
-        PositionSet excludedSources;
+        excludedSources.clear();
         excludedSources.insert(position);
-        std::vector<RedstoneSource> inputSources =
-            collectActiveSources(world, sourcePositions, &excludedSources);
-        appendSources(inputSources, collectPoweredRepeaterSources(world, repeaterPositions));
-        appendSources(inputSources, collectPoweredObserverSources(world, observerPositions));
-        appendSources(inputSources, collectPoweredComparatorStateSources(world, comparatorPositions));
+        inputSources.clear();
+        appendActiveSources(world, sourcePositions, &excludedSources, inputSources);
+        appendPoweredRepeaterSources(world, repeaterPositions, inputSources);
+        appendPoweredObserverSources(world, observerPositions, inputSources);
+        appendPoweredComparatorStateSources(world, comparatorPositions, inputSources);
         const WirePowerMap inputWirePowers = propagateWirePower(world, wires, inputSources);
 
         bool shouldBeLit = shouldTorchBeLit(world, inputWirePowers, position, currentState);
@@ -2624,12 +2682,12 @@ uint8_t comparatorOutputPower(const World& world,
     return rearPower >= sidePower ? rearPower : 0;
 }
 
-std::vector<ComparatorEvaluation> evaluateComparators(const World& world,
-                                                      const GameplayRegistry* registry,
-                                                      const std::vector<glm::ivec3>& comparatorPositions,
-                                                      const WirePowerMap& inputWirePowers) {
-    std::vector<ComparatorEvaluation> evaluations;
-    evaluations.reserve(comparatorPositions.size());
+void evaluateComparators(const World& world,
+                         const GameplayRegistry* registry,
+                         const std::vector<glm::ivec3>& comparatorPositions,
+                         const WirePowerMap& inputWirePowers,
+                         std::vector<ComparatorEvaluation>& evaluations) {
+    evaluations.reserve(evaluations.size() + comparatorPositions.size());
     for (const glm::ivec3& position : comparatorPositions) {
         const BlockStateId stateId = world.getBlockState(position.x, position.y, position.z);
         if (!isComparatorState(stateId)) {
@@ -2637,7 +2695,6 @@ std::vector<ComparatorEvaluation> evaluateComparators(const World& world,
         }
         evaluations.push_back({position, comparatorOutputPower(world, registry, inputWirePowers, position, stateId)});
     }
-    return evaluations;
 }
 
 size_t applyComparatorStates(World& world, const std::vector<ComparatorEvaluation>& evaluations) {
@@ -3076,13 +3133,16 @@ size_t processWorldWithContext(World& world,
 
     world.setLastProcessedRedstoneTick(redstoneTick);
 
+    RedstoneProcessBuffers& buffers = t_redstoneBuffers;
     size_t changed = 0;
-    std::vector<RedstoneScheduledUpdate> scheduledUpdates;
+    std::vector<RedstoneScheduledUpdate>& scheduledUpdates = buffers.scheduledUpdates;
+    scheduledUpdates.clear();
     scheduledUpdates.reserve(std::min(budget, world.redstoneScheduledUpdateQueue().size()));
     world.redstoneScheduledUpdateQueue().drainDue(redstoneTick, scheduledUpdates, budget);
     changed += applyScheduledUpdates(world, scheduledUpdates);
 
-    std::vector<glm::ivec3> changedPositions;
+    std::vector<glm::ivec3>& changedPositions = buffers.changedPositions;
+    changedPositions.clear();
     changedPositions.reserve(budget);
     world.redstoneChangedBlockQueue().drain(changedPositions, budget);
     scheduleObserverPulseUpdates(world, redstoneTick, changedPositions);
@@ -3091,11 +3151,13 @@ size_t processWorldWithContext(World& world,
         return changed;
     }
 
-    std::vector<glm::ivec3> dirtyPositions;
+    std::vector<glm::ivec3>& dirtyPositions = buffers.dirtyPositions;
+    dirtyPositions.clear();
     dirtyPositions.reserve(budget);
     world.redstoneUpdateQueue().drain(dirtyPositions, budget);
 
-    const RedstoneWorkSet workSet = collectRedstoneWorkSet(world, dirtyPositions);
+    RedstoneWorkSet& workSet = buffers.workSet;
+    collectRedstoneWorkSet(world, dirtyPositions, workSet);
 
     changed += applyTorchStates(
         world,
@@ -3108,15 +3170,17 @@ size_t processWorldWithContext(World& world,
         redstoneTick);
     scheduleButtonReleaseUpdates(world, redstoneTick, workSet.sourcePositions);
 
-    std::vector<RedstoneSource> outputSources =
-        collectActiveSources(world, workSet.sourcePositions, nullptr);
-    appendSources(outputSources, collectPoweredRepeaterSources(world, workSet.repeaters));
-    appendSources(outputSources, collectPoweredObserverSources(world, workSet.observers));
-    std::vector<ComparatorEvaluation> comparatorEvaluations;
+    std::vector<RedstoneSource>& outputSources = buffers.outputSources;
+    outputSources.clear();
+    appendActiveSources(world, workSet.sourcePositions, nullptr, outputSources);
+    appendPoweredRepeaterSources(world, workSet.repeaters, outputSources);
+    appendPoweredObserverSources(world, workSet.observers, outputSources);
+    std::vector<ComparatorEvaluation>& comparatorEvaluations = buffers.comparatorEvaluations;
+    comparatorEvaluations.clear();
     if (!workSet.comparators.empty()) {
         const WirePowerMap inputWirePowers = propagateWirePower(world, workSet.wireSet, outputSources);
-        comparatorEvaluations = evaluateComparators(world, readRegistry, workSet.comparators, inputWirePowers);
-        appendSources(outputSources, collectComparatorSources(world, comparatorEvaluations));
+        evaluateComparators(world, readRegistry, workSet.comparators, inputWirePowers, comparatorEvaluations);
+        appendComparatorSources(world, comparatorEvaluations, outputSources);
     }
     const WirePowerMap wirePowers = propagateWirePower(world, workSet.wireSet, outputSources);
     changed += applyWirePowers(world, workSet.wires, wirePowers);
