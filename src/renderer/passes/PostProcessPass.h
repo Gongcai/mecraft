@@ -2,7 +2,7 @@
 #define MECRAFT_POST_PROCESS_PASS_H
 
 #include "RenderPass.h"
-#include <glad/glad.h>
+#include <cstdint>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
@@ -78,19 +78,19 @@ public:
 
     /// Composite captured scene to back buffer with active effects.
     void compositeToBackbuffer(const Window& window, float frameTime,
-                               GLuint gbufDepthTex = 0,
-                               GLuint weatherMaskTex = 0);
+                               uint32_t gbufDepthTex = 0,
+                               uint32_t weatherMaskTex = 0);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
-    [[nodiscard]] GLuint compositeToTexture(const Window& window, float frameTime,
-                                            GLuint gbufDepthTex = 0,
-                                            GLuint weatherMaskTex = 0);
+    [[nodiscard]] uint32_t compositeToTexture(const Window& window, float frameTime,
+                                              uint32_t gbufDepthTex = 0,
+                                              uint32_t weatherMaskTex = 0);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
     void blitSceneCaptureToBackbuffer(const Window& window);
 
     /// Blit an already composited LDR texture to the back buffer.
-    void blitTextureToBackbuffer(GLuint texture, const Window& window);
+    void blitTextureToBackbuffer(uint32_t texture, const Window& window);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -110,7 +110,7 @@ private:
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
     static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
-    static constexpr GLuint kCompositeParamsBinding = 0;
+    static constexpr uint32_t kCompositeParamsBinding = 0;
 
     bool ensureRenderTargets(int width, int height);
     void destroyRenderTargets();
@@ -124,7 +124,7 @@ private:
     bool renderBloom(int maxMipCount);
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
-    void renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex, bool bloomReady);
+    void renderComposite(uint32_t gbufDepthTex, uint32_t weatherMaskTex, bool bloomReady);
     void updateCompositeParams(bool useAutoExposureTexture, bool hasBloom);
     bool ensureCompositeTarget(int width, int height);
     void bindCompositeOutput(int width, int height);
@@ -152,34 +152,34 @@ private:
     Shader* m_exposureDownsampleShader = nullptr;
     Shader* m_exposureResolveShader = nullptr;
     Shader* m_blitShader = nullptr;
-    GLuint m_noiseTexture = 0;
+    uint32_t m_noiseTexture = 0;
 
     // Scene capture FBO
-    GLuint m_sceneFbo = 0;
-    GLuint m_sceneColorTex = 0;
-    GLuint m_sceneDepthTex = 0;
+    uint32_t m_sceneFbo = 0;
+    uint32_t m_sceneColorTex = 0;
+    uint32_t m_sceneDepthTex = 0;
 
-    GLuint m_compositeFbo = 0;
-    GLuint m_compositeTex = 0;
+    uint32_t m_compositeFbo = 0;
+    uint32_t m_compositeTex = 0;
     bool m_renderCompositeToTexture = false;
 
     // Bloom chain
-    GLuint m_bloomFbos[kBloomMipCount][2] = {};
-    GLuint m_bloomTex[kBloomMipCount][2] = {};
+    uint32_t m_bloomFbos[kBloomMipCount][2] = {};
+    uint32_t m_bloomTex[kBloomMipCount][2] = {};
     glm::ivec2 m_bloomMipSize[kBloomMipCount] = {};
 
     // Auto-exposure downsample chain
-    GLuint m_exposureFbos[kExposureMipCount] = {};
-    GLuint m_exposureTex[kExposureMipCount] = {};
+    uint32_t m_exposureFbos[kExposureMipCount] = {};
+    uint32_t m_exposureTex[kExposureMipCount] = {};
     glm::ivec2 m_exposureMipSize[kExposureMipCount] = {};
     int m_exposureMipCount = 0;
-    GLuint m_exposureStateFbos[2] = {};
-    GLuint m_exposureStateTex[2] = {};
+    uint32_t m_exposureStateFbos[2] = {};
+    uint32_t m_exposureStateTex[2] = {};
     int m_exposureStateReadIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
 
-    GLuint m_fullscreenVao = 0;
-    GLuint m_compositeParamsBuffer = 0;
+    uint32_t m_fullscreenVao = 0;
+    uint32_t m_compositeParamsBuffer = 0;
 
     int m_targetWidth = 0;
     int m_targetHeight = 0;

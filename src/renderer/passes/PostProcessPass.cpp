@@ -136,8 +136,8 @@ void PostProcessPass::beginSceneCapture(const int requestedWidth, const int requ
 }
 
 void PostProcessPass::compositeToBackbuffer(const Window& window, const float frameTime,
-                                            GLuint gbufDepthTex,
-                                            GLuint weatherMaskTex) {
+                                            uint32_t gbufDepthTex,
+                                            uint32_t weatherMaskTex) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
@@ -166,9 +166,9 @@ void PostProcessPass::compositeToBackbuffer(const Window& window, const float fr
     glEnable(GL_DEPTH_TEST);
 }
 
-GLuint PostProcessPass::compositeToTexture(const Window& window, const float frameTime,
-                                           GLuint gbufDepthTex,
-                                           GLuint weatherMaskTex) {
+uint32_t PostProcessPass::compositeToTexture(const Window& window, const float frameTime,
+                                             uint32_t gbufDepthTex,
+                                             uint32_t weatherMaskTex) {
     static_cast<void>(window);
     const int width = std::max(1, m_targetWidth);
     const int height = std::max(1, m_targetHeight);
@@ -228,7 +228,7 @@ void PostProcessPass::blitSceneCaptureToBackbuffer(const Window& window) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void PostProcessPass::blitTextureToBackbuffer(const GLuint texture, const Window& window) {
+void PostProcessPass::blitTextureToBackbuffer(const uint32_t texture, const Window& window) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
@@ -430,7 +430,7 @@ bool PostProcessPass::renderBloom(const int maxMipCount) {
     return hasBloom;
 }
 
-void PostProcessPass::renderComposite(GLuint gbufDepthTex, GLuint weatherMaskTex, const bool bloomReady) {
+void PostProcessPass::renderComposite(uint32_t gbufDepthTex, uint32_t weatherMaskTex, const bool bloomReady) {
     m_postProcessShader->use();
     const bool useAutoExposureTexture =
         m_effects.autoExposureEnabled &&
