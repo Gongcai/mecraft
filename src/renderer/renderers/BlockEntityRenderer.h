@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 
 #include "../../world/block/BlockStateRegistry.h"
@@ -47,8 +46,8 @@ public:
 
 private:
     struct Mesh {
-        GLuint vao = 0;
-        GLuint vbo = 0;
+        uint32_t vao = 0;
+        uint32_t vbo = 0;
         uint32_t vertexCount = 0;
     };
 
@@ -62,7 +61,7 @@ private:
 
     struct ModelEntry {
         Mesh mesh;
-        GLuint texture = 0;
+        uint32_t texture = 0;
         bool usesHorizontalFacing = false;
     };
 
@@ -116,7 +115,7 @@ private:
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
     std::vector<BlockEntityInstance*> m_flatInstances;
-    GLuint m_instanceVbo = 0;
+    uint32_t m_instanceVbo = 0;
     std::size_t m_instanceCapacity = 0;
     std::vector<InstancedDrawData> m_instanceData;
     uint64_t m_cacheSyncSerial = 0;

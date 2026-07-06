@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include "../../ecs/components/Components.h"
@@ -66,8 +65,8 @@ public:
 
 private:
     struct PartMesh {
-        GLuint vao = 0;
-        GLuint vbo = 0;
+        uint32_t vao = 0;
+        uint32_t vbo = 0;
         uint32_t vertexCount = 0;
     };
 
@@ -89,8 +88,8 @@ private:
     Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
     Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;
-    GLuint m_fallbackShadowDepth = 0;
-    GLuint m_fallbackShadowDepthCompare = 0;
+    uint32_t m_fallbackShadowDepth = 0;
+    uint32_t m_fallbackShadowDepthCompare = 0;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;
     float m_inventoryPreviewBodyLookX = 0.0f;
