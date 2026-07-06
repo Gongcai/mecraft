@@ -1,5 +1,7 @@
 #include "ParticleSystem.h"
 
+#include <glad/glad.h>
+
 #include <vector>
 
 #include <glm/common.hpp>
@@ -157,7 +159,7 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 }
 
-void ParticleSystem::renderToSceneResolved(Shader& shader, GLuint voxelLightTex, GLuint depthTex,
+void ParticleSystem::renderToSceneResolved(Shader& shader, uint32_t voxelLightTex, uint32_t depthTex,
                                             const glm::mat4& view, const glm::mat4& viewProj,
                                             const glm::vec2& screenSize) {
     if (m_registry == nullptr || m_texArray == nullptr) {

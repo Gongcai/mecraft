@@ -1,5 +1,7 @@
 #include "RainRenderer.h"
 
+#include <glad/glad.h>
+
 #include <random>
 #include <glm/gtc/random.hpp>
 
@@ -95,7 +97,7 @@ void RainRenderer::wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& ca
 void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         const glm::mat4& view,
                                         const glm::vec3& cameraPos,
-                                        GLuint texture,
+                                        uint32_t texture,
                                         std::vector<PrecipDrop>& drops,
                                         float strength,
                                         float skyLightAtCamera,
@@ -105,7 +107,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         float alphaScale,
                                         const glm::vec3& color,
                                         bool proceduralLines,
-                                        GLuint sceneDepthTex,
+                                        uint32_t sceneDepthTex,
                                         const glm::vec2& screenSize,
                                         float dt,
                                         bool hardwareDepthTest) {
@@ -222,7 +224,7 @@ void RainRenderer::render(const glm::mat4& projection,
                            float rainStrength,
                            float skyLightAtCamera,
                            float alphaScale,
-                           GLuint sceneDepthTex,
+                           uint32_t sceneDepthTex,
                            const glm::vec2& screenSize,
                            float dt,
                            bool hardwareDepthTest) {
@@ -247,7 +249,7 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                float snowStrength,
                                float skyLightAtCamera,
                                float alphaScale,
-                               GLuint sceneDepthTex,
+                               uint32_t sceneDepthTex,
                                const glm::vec2& screenSize,
                                float dt,
                                bool hardwareDepthTest) {

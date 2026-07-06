@@ -1,9 +1,9 @@
 #ifndef MECRAFT_RAINRENDERER_H
 #define MECRAFT_RAINRENDERER_H
 
+#include <cstdint>
 #include <vector>
 #include <glm/glm.hpp>
-#include <glad/glad.h>
 
 class Shader;
 class ResourceMgr;
@@ -24,7 +24,7 @@ public:
                 float rainStrength,
                 float skyLightAtCamera,
                 float alphaScale,
-                GLuint sceneDepthTex,
+                uint32_t sceneDepthTex,
                 const glm::vec2& screenSize,
                 float dt,
                 bool hardwareDepthTest = true);
@@ -36,7 +36,7 @@ public:
                     float snowStrength,
                     float skyLightAtCamera,
                     float alphaScale,
-                    GLuint sceneDepthTex,
+                    uint32_t sceneDepthTex,
                     const glm::vec2& screenSize,
                     float dt,
                     bool hardwareDepthTest = true);
@@ -67,7 +67,7 @@ private:
     void renderPrecipitation(const glm::mat4& projection,
                              const glm::mat4& view,
                              const glm::vec3& cameraPos,
-                             GLuint texture,
+                             uint32_t texture,
                              std::vector<PrecipDrop>& drops,
                              float strength,
                              float skyLightAtCamera,
@@ -77,16 +77,16 @@ private:
                              float alphaScale,
                              const glm::vec3& color,
                              bool proceduralLines,
-                             GLuint sceneDepthTex,
+                             uint32_t sceneDepthTex,
                              const glm::vec2& screenSize,
                              float dt,
                              bool hardwareDepthTest);
 
     Shader* m_shader = nullptr;
-    GLuint m_rainTex = 0;
-    GLuint m_snowTex = 0;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_rainTex = 0;
+    uint32_t m_snowTex = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
     float m_time = 0.0f;  // accumulated time for wind animation
 
     std::vector<PrecipDrop> m_rainDrops;
