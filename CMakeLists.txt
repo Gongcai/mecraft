@@ -350,6 +350,7 @@ set(SRC_UI
         src/ui/Dashboard.cpp
         src/ui/core/UIInputAdapter.cpp
         src/ui/core/UIRenderer.cpp
+        src/ui/core/UIRenderUtils.cpp
         src/ui/core/UIScene.cpp
         src/ui/core/ScreenTransition.cpp
         src/ui/core/UIStyle.cpp

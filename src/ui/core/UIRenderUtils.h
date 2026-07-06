@@ -3,8 +3,8 @@
 #include <array>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <vector>
-#include <glad/glad.h>
 
 class Shader;
 
@@ -132,61 +132,20 @@ namespace UIRenderUtils
     class GLStateGuard
     {
     public:
-        GLStateGuard()
-        {
-            if (isInsideUIScope()) {
-                m_depthTest = GL_FALSE;
-                m_depthWrite = GL_FALSE;
-                m_blendSrc = GL_SRC_ALPHA;
-                m_blendDst = GL_ONE_MINUS_SRC_ALPHA;
-            } else {
-                glGetBooleanv(GL_DEPTH_TEST, &m_depthTest);
-                glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthWrite);
-                glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrc);
-                glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDst);
-            }
-
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_FALSE);
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        }
+        GLStateGuard();
 
         // Construct with custom blend function.
-        GLStateGuard(GLenum srcFactor, GLenum dstFactor)
-        {
-            if (isInsideUIScope()) {
-                m_depthTest = GL_FALSE;
-                m_depthWrite = GL_FALSE;
-                m_blendSrc = GL_SRC_ALPHA;
-                m_blendDst = GL_ONE_MINUS_SRC_ALPHA;
-            } else {
-                glGetBooleanv(GL_DEPTH_TEST, &m_depthTest);
-                glGetBooleanv(GL_DEPTH_WRITEMASK, &m_depthWrite);
-                glGetIntegerv(GL_BLEND_SRC_RGB, &m_blendSrc);
-                glGetIntegerv(GL_BLEND_DST_RGB, &m_blendDst);
-            }
+        GLStateGuard(uint32_t srcFactor, uint32_t dstFactor);
 
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_FALSE);
-            glEnable(GL_BLEND);
-            glBlendFunc(srcFactor, dstFactor);
-        }
-
-        ~GLStateGuard()
-        {
-            if (m_depthTest) glEnable(GL_DEPTH_TEST);
-            glDepthMask(m_depthWrite);
-            glBlendFunc(m_blendSrc, m_blendDst);
-        }
+        ~GLStateGuard();
 
         GLStateGuard(const GLStateGuard&) = delete;
         GLStateGuard& operator=(const GLStateGuard&) = delete;
 
     private:
-        GLboolean m_depthTest = GL_FALSE;
-        GLboolean m_depthWrite = GL_TRUE;
-        GLint m_blendSrc = GL_SRC_ALPHA;
-        GLint m_blendDst = GL_ONE_MINUS_SRC_ALPHA;
+        uint8_t m_depthTest = 0;
+        uint8_t m_depthWrite = 1;
+        int32_t m_blendSrc = 0;
+        int32_t m_blendDst = 0;
     };
 }
