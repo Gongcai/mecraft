@@ -1,6 +1,8 @@
 #include "WorldRenderBuffer.h"
 #include "../debug/RenderDebugLabels.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -715,7 +717,7 @@ void WorldRenderBuffer::bindTransparentVao() {
     glBindVertexArray(m_transparentVao);
 }
 
-void WorldRenderBuffer::ensureVaoVertexBuffer(const GLuint vao, const GLuint vbo, GLuint& cachedVbo) {
+void WorldRenderBuffer::ensureVaoVertexBuffer(const uint32_t vao, const uint32_t vbo, uint32_t& cachedVbo) {
     if (cachedVbo == vbo) {
         return;
     }
@@ -728,7 +730,7 @@ void WorldRenderBuffer::ensureVaoVertexBuffer(const GLuint vao, const GLuint vbo
 }
 
 void WorldRenderBuffer::ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
-                                                GLuint& buf, size_t& capacity, const size_t needed) {
+                                                uint32_t& buf, size_t& capacity, const size_t needed) {
     if (needed <= capacity) return;
     capacity = std::max(needed, capacity * 2);
     if (buf != 0) {
@@ -742,7 +744,7 @@ void WorldRenderBuffer::ensureIndirectCapacity(std::vector<DrawArraysIndirectCom
 }
 
 void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                                   GLuint& indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo) {
+                                   uint32_t& indirectBuf, uint32_t vao, uint32_t vbo, uint32_t& cachedVbo) {
     if (commands.empty()) return;
 
     ensureIndirectCapacity(commands, indirectBuf,

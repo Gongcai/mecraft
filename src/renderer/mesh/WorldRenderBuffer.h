@@ -1,7 +1,6 @@
 #ifndef MECRAFT_WORLDRENDERBUFFER_H
 #define MECRAFT_WORLDRENDERBUFFER_H
 
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <unordered_set>
@@ -28,7 +27,7 @@ public:
     void free(const GpuMeshRange& range);
     void upload(const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices);
 
-    GLuint vbo() const { return m_vbo; }
+    uint32_t vbo() const { return m_vbo; }
     uint64_t generation() const { return m_generationCounter; }
     size_t capacityVertices() const { return m_capacityVertices; }
     size_t usedVertices() const { return m_usedVertices; }
@@ -53,7 +52,7 @@ private:
     int m_freeHead = -1;
     std::vector<int> m_freeBlockFreeList;
 
-    GLuint m_vbo = 0;
+    uint32_t m_vbo = 0;
     size_t m_capacityVertices = 0;
     size_t m_usedVertices = 0;
     uint64_t m_generationCounter = 1;
@@ -93,7 +92,7 @@ public:
     static constexpr size_t kInitialCutoutPoolVertices = kInitialPoolVertices / 4;
     static constexpr size_t kInitialTransparentPoolVertices = kInitialPoolVertices / 16;
     static constexpr size_t kInitialIndirectCapacity = 4096;
-    static constexpr GLuint kTerrainMetadataBinding = 0;
+    static constexpr uint32_t kTerrainMetadataBinding = 0;
 
     WorldRenderBuffer();
     ~WorldRenderBuffer();
@@ -128,7 +127,7 @@ public:
 
     void clearWaterCommands();
 
-    GLuint transparentVao() const { return m_transparentVao; }
+    uint32_t transparentVao() const { return m_transparentVao; }
     const FrameStatsSnapshot& sceneFrameStats() const { return m_sceneFrameStats; }
     int glSubmitCount() const { return m_glSubmitCount; }
     size_t opaqueCommandCount() const { return m_opaqueCommands.size(); }
@@ -172,18 +171,18 @@ private:
     VertexPoolAllocator m_cutoutPool;
     VertexPoolAllocator m_transparentPool;
 
-    GLuint m_opaqueVao = 0;
-    GLuint m_cutoutVao = 0;
-    GLuint m_transparentVao = 0;
-    GLuint m_opaqueVaoBoundVbo = 0;
-    GLuint m_cutoutVaoBoundVbo = 0;
-    GLuint m_transparentVaoBoundVbo = 0;
+    uint32_t m_opaqueVao = 0;
+    uint32_t m_cutoutVao = 0;
+    uint32_t m_transparentVao = 0;
+    uint32_t m_opaqueVaoBoundVbo = 0;
+    uint32_t m_cutoutVaoBoundVbo = 0;
+    uint32_t m_transparentVaoBoundVbo = 0;
 
-    GLuint m_opaqueIndirectBuf = 0;
-    GLuint m_cutoutIndirectBuf = 0;
-    GLuint m_transparentIndirectBuf = 0;
-    GLuint m_waterIndirectBuf = 0;
-    GLuint m_subChunkMetadataBuffer = 0;
+    uint32_t m_opaqueIndirectBuf = 0;
+    uint32_t m_cutoutIndirectBuf = 0;
+    uint32_t m_transparentIndirectBuf = 0;
+    uint32_t m_waterIndirectBuf = 0;
+    uint32_t m_subChunkMetadataBuffer = 0;
 
     size_t m_opaqueIndirectCapacity = 0;
     size_t m_cutoutIndirectCapacity = 0;
@@ -207,12 +206,12 @@ private:
     uint64_t m_waterVertexCount = 0;
     FrameStatsSnapshot m_sceneFrameStats{};
 
-    void ensureVaoVertexBuffer(GLuint vao, GLuint vbo, GLuint& cachedVbo);
+    void ensureVaoVertexBuffer(uint32_t vao, uint32_t vbo, uint32_t& cachedVbo);
     FrameStatsSnapshot makeCurrentFrameStats() const;
     void ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
-                                GLuint& buf, size_t& capacity, size_t needed);
+                                uint32_t& buf, size_t& capacity, size_t needed);
     void flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                   GLuint& indirectBuf, GLuint vao, GLuint vbo, GLuint& cachedVbo);
+                   uint32_t& indirectBuf, uint32_t vao, uint32_t vbo, uint32_t& cachedVbo);
 };
 
 #endif // MECRAFT_WORLDRENDERBUFFER_H

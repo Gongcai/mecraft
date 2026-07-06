@@ -15,8 +15,8 @@ namespace renderer {
 /// Simple owning GL mesh built from a flat BlockVertex list.
 /// Vertex layout matches DropRenderer / GBufferPass expectations.
 struct BlockCubeMesh {
-    GLuint vao = 0;
-    GLuint vbo = 0;
+    uint32_t vao = 0;
+    uint32_t vbo = 0;
     uint32_t vertexCount = 0;
 
     [[nodiscard]] bool valid() const { return vao != 0 && vertexCount > 0; }
