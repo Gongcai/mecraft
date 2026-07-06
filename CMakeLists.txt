@@ -281,7 +281,6 @@ set(SRC_RENDERER
 
         # Render targets
         src/renderer/targets/CommonFrameTargets.cpp
-        src/renderer/targets/DeferredFrameTargets.cpp
         src/renderer/targets/DeferredRenderTargets.cpp
         src/renderer/targets/ShadowTargets.cpp
 

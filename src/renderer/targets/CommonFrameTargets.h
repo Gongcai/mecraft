@@ -7,7 +7,7 @@
 
 /// Common frame targets shared by both Forward and Deferred pipelines.
 /// These are resources that post-process, bloom, exposure, and basic scene rendering need.
-/// Forward pipeline uses these; Deferred pipeline also uses these in addition to DeferredFrameTargets.
+/// Forward pipeline uses these; Deferred pipeline owns additional targets in DeferredRenderTargets.
 class CommonFrameTargets {
 public:
     ~CommonFrameTargets();
