@@ -1,7 +1,8 @@
 #ifndef MECRAFT_GAMEPLAY_SKY_RENDERER_H
 #define MECRAFT_GAMEPLAY_SKY_RENDERER_H
 
-#include <glad/glad.h>
+#include <cstdint>
+
 #include <glm/glm.hpp>
 
 #include <utility>
@@ -56,13 +57,13 @@ public:
     /// Switch to forward vanilla shader (no atmosphere LUT / sky capture / DerivativeMain contract).
     /// Must be called after init(). Reverts to deferred shader if false.
     void setForwardMode(bool forward);
-    void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, GLuint skyCaptureTexture);
-    void renderSkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int width, int height,
-                          float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux,
+    void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, uint32_t skyCaptureTexture);
+    void renderSkyCapture(const DayNightSystem& dayNight, uint32_t framebuffer, int width, int height,
+                          float cameraAltitude, uint32_t atmosphereLutTexture, float moonPhaseFlux,
                           float weatherWetness = 0.0f, float weatherStorm = 0.0f);
-    void renderCloudySkyCapture(const DayNightSystem& dayNight, GLuint framebuffer, int skyCaptureWidth,
-                                int skyCaptureHeight, float cameraAltitude, GLuint atmosphereLutTexture,
-                                float moonPhaseFlux, GLuint noiseTexture, float shaderTime,
+    void renderCloudySkyCapture(const DayNightSystem& dayNight, uint32_t framebuffer, int skyCaptureWidth,
+                                int skyCaptureHeight, float cameraAltitude, uint32_t atmosphereLutTexture,
+                                float moonPhaseFlux, uint32_t noiseTexture, float shaderTime,
                                 const SkyIlluminanceData& illuminance,
                                 float cloudCoverage, float cloudDensity,
                                 float cloudHeight, float cloudThickness,
@@ -70,8 +71,8 @@ public:
                                 float planarCloudAltitude,
                                 float cloudTimeScale, const glm::vec3& cameraPos,
                                 float weatherWetness = 0.0f, float weatherStorm = 0.0f);
-    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, GLuint framebuffer, int skyCaptureWidth,
-                               float cameraAltitude, GLuint atmosphereLutTexture, float moonPhaseFlux,
+    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, uint32_t framebuffer, int skyCaptureWidth,
+                               float cameraAltitude, uint32_t atmosphereLutTexture, float moonPhaseFlux,
                                float weatherWetness = 0.0f, float weatherStorm = 0.0f);
 
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
@@ -92,8 +93,8 @@ private:
     void destroyMeshes();
     void initCloudMesh();
     void ensureDummySkyCaptureTexture();
-    void bindDummySkyCaptureTexture(GLint unit);
-    void renderSkyGradient(const Camera& camera, float aspect, const SkyColors& colors, GLuint skyCaptureTexture);
+    void bindDummySkyCaptureTexture(int32_t unit);
+    void renderSkyGradient(const Camera& camera, float aspect, const SkyColors& colors, uint32_t skyCaptureTexture);
     void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
     void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
     [[nodiscard]] glm::mat4 buildSkyView(const Camera& camera) const;
@@ -102,16 +103,16 @@ private:
     Shader* m_shader = nullptr;
     Shader* m_deferredShader = nullptr;  // Original deferred shader (gameplay_sky)
     ResourceMgr* m_resourceMgr = nullptr;
-    GLuint m_dummySkyCaptureTexture = 0;
+    uint32_t m_dummySkyCaptureTexture = 0;
 
-    GLuint m_skyVao = 0;
-    GLuint m_skyVbo = 0;
-    GLuint m_haloVao = 0;
-    GLuint m_haloVbo = 0;
-    GLuint m_cloudVao = 0;
-    GLuint m_cloudVbo = 0;
-    GLsizei m_haloVertexCount = 0;
-    GLsizei m_cloudVertexCount = 0;
+    uint32_t m_skyVao = 0;
+    uint32_t m_skyVbo = 0;
+    uint32_t m_haloVao = 0;
+    uint32_t m_haloVbo = 0;
+    uint32_t m_cloudVao = 0;
+    uint32_t m_cloudVbo = 0;
+    int32_t m_haloVertexCount = 0;
+    int32_t m_cloudVertexCount = 0;
     CloudMeshInfo m_cloudMeshInfo{};
 
     SkyColors m_lastColors{};

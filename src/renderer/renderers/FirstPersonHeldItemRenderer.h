@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <unordered_map>
 
-#include <glad/glad.h>
 #include <glm/mat4x4.hpp>
 
 #include "../../item/Item.h"
@@ -110,12 +109,12 @@ public:
         float cascadeSplitFar[4]{};
         float cascadeTexelWorldSize[4]{};
         float cascadeDepthExtent[4]{};
-        GLuint shadowTexture = 0;        // sampler2DArrayShadow (shadowtex1)
-        GLuint shadowDepthRaw = 0;       // sampler2DArray
-        GLuint shadowDepthAll = 0;       // sampler2DArrayShadow (shadowtex0)
-        GLuint shadowDepthAllRaw = 0;    // sampler2DArray
-        GLuint shadowColor0 = 0;         // sampler2DArray
-        GLuint shadowColor1 = 0;         // sampler2DArray
+        uint32_t shadowTexture = 0;        // sampler2DArrayShadow (shadowtex1)
+        uint32_t shadowDepthRaw = 0;       // sampler2DArray
+        uint32_t shadowDepthAll = 0;       // sampler2DArrayShadow (shadowtex0)
+        uint32_t shadowDepthAllRaw = 0;    // sampler2DArray
+        uint32_t shadowColor0 = 0;         // sampler2DArray
+        uint32_t shadowColor1 = 0;         // sampler2DArray
         glm::vec3 cameraPos = glm::vec3(0.0f);
         glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
         float shadowDistance = 192.0f;
@@ -148,8 +147,8 @@ public:
 
 private:
     struct Mesh {
-        GLuint vao = 0;
-        GLuint vbo = 0;
+        uint32_t vao = 0;
+        uint32_t vbo = 0;
         uint32_t vertexCount = 0;
     };
 

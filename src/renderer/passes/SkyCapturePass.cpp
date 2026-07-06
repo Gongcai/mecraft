@@ -6,6 +6,7 @@
 #include "../../world/WeatherSystem.h"
 
 #include <algorithm>
+#include <cstdint>
 
 void SkyCapturePass::init(ResourceMgr& /*resourceMgr*/) {
     // No shaders to load — GameplaySkyRenderer manages its own.
@@ -21,7 +22,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                               float cameraY, float shaderTime, const glm::vec3& cameraPos,
                               float cloudTimeScale) {
     const float cameraAltitude = cameraY;
-    const GLuint atmosphereLut = targets.atmosphereLutTexture();
+    const uint32_t atmosphereLut = targets.atmosphereLutTexture();
     const int moonPhase = dayNightSystem.getMoonPhaseIndex();
 
     // DerivativeMain MoonFlux: phase factor ranges 0.2 (full moon) to 1.2 (new moon).
@@ -47,7 +48,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     const float cloudThickness = 1400.0f + cloudWetness * (3000.0f - 1400.0f);
     const float cloudCoverage = std::clamp(1.0f + cloudWetness * 0.2f, 0.0f, 1.5f);
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
-    const GLuint noiseTexture = resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_noise2d") : 0;
+    const uint32_t noiseTexture = resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_noise2d") : 0;
 
     // Raw sky radiance (rows 0..257)
     skyRenderer.renderSkyCapture(dayNightSystem,

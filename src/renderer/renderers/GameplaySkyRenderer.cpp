@@ -7,6 +7,8 @@
 #include <deque>
 #include <vector>
 
+#include <glad/glad.h>
+
 #include "../core/Shader.h"
 #include "engine/camera/Camera.h"
 #include "../../Paths.h"
@@ -222,7 +224,7 @@ void GameplaySkyRenderer::setForwardMode(bool forward) {
     }
 }
 
-void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, GLuint skyCaptureTexture) {
+void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, const uint32_t skyCaptureTexture) {
     m_lastColors = computeSkyColors(dayNight);
     if (m_shader == nullptr || m_skyVao == 0) {
         return;
@@ -240,11 +242,11 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
 }
 
 void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
-                                           const GLuint framebuffer,
+                                           const uint32_t framebuffer,
                                            const int width,
                                            const int height,
                                            const float cameraAltitude,
-                                           const GLuint atmosphereLutTexture,
+                                           const uint32_t atmosphereLutTexture,
                                            const float moonPhaseFlux,
                                            const float weatherWetness,
                                            const float weatherStorm) {
@@ -315,13 +317,13 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
 }
 
 void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
-                                                  const GLuint framebuffer,
+                                                  const uint32_t framebuffer,
                                                   const int skyCaptureWidth,
                                                   const int skyCaptureHeight,
                                                   const float cameraAltitude,
-                                                  const GLuint atmosphereLutTexture,
+                                                  const uint32_t atmosphereLutTexture,
                                                   const float moonPhaseFlux,
-                                                  const GLuint noiseTexture,
+                                                  const uint32_t noiseTexture,
                                                   const float shaderTime,
                                                   const SkyIlluminanceData& illuminance,
                                                   const float cloudCoverage,
@@ -425,10 +427,10 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
 }
 
 void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illuminance,
-                                                 GLuint framebuffer,
+                                                 uint32_t framebuffer,
                                                  int skyCaptureWidth,
                                                  float cameraAltitude,
-                                                 GLuint atmosphereLutTexture,
+                                                 uint32_t atmosphereLutTexture,
                                                  float moonPhaseFlux,
                                                  float weatherWetness,
                                                  float weatherStorm) {
@@ -715,13 +717,13 @@ void GameplaySkyRenderer::initMeshes() {
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(HaloVertex), reinterpret_cast<void*>(sizeof(glm::vec3) + sizeof(glm::vec2)));
         glBindVertexArray(0);
-        m_haloVertexCount = static_cast<GLsizei>(haloVertices.size());
+        m_haloVertexCount = static_cast<int32_t>(haloVertices.size());
     }
 
 }
 
 void GameplaySkyRenderer::destroyMeshes() {
-    auto deleteBuffer = [](GLuint& vao, GLuint& vbo) {
+    auto deleteBuffer = [](uint32_t& vao, uint32_t& vbo) {
         if (vbo != 0) {
             glDeleteBuffers(1, &vbo);
             vbo = 0;
@@ -756,7 +758,7 @@ void GameplaySkyRenderer::ensureDummySkyCaptureTexture() {
     glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
-void GameplaySkyRenderer::bindDummySkyCaptureTexture(const GLint unit) {
+void GameplaySkyRenderer::bindDummySkyCaptureTexture(const int32_t unit) {
     ensureDummySkyCaptureTexture();
     m_shader->setInt("uSkyCaptureTex", unit);
     glActiveTexture(GL_TEXTURE0 + unit);
@@ -900,12 +902,12 @@ void GameplaySkyRenderer::initCloudMesh() {
     glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(CloudVertex), reinterpret_cast<void*>(sizeof(glm::vec3)));
     glBindVertexArray(0);
 
-    m_cloudVertexCount = static_cast<GLsizei>(vertices.size());
+    m_cloudVertexCount = static_cast<int32_t>(vertices.size());
     m_cloudMeshInfo.tileWorldSize = tileWidth;
     m_cloudMeshInfo.valid = true;
 }
 
-void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float aspect, const SkyColors& colors, GLuint skyCaptureTexture) {
+void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float aspect, const SkyColors& colors, const uint32_t skyCaptureTexture) {
     m_shader->use();
     m_shader->setInt("uMode", 0);
     m_shader->setMat4("uView", buildSkyView(camera));
