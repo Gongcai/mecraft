@@ -4,6 +4,8 @@
 
 #include "Shader.h"
 
+#include <glad/glad.h>
+
 #include <filesystem>
 
 using namespace std;
@@ -361,13 +363,19 @@ Shader* Shader::createCompute(const char* computePath) {
     return shader;
 }
 
-void Shader::dispatch(const GLuint numGroupsX, const GLuint numGroupsY, const GLuint numGroupsZ) const {
+void Shader::dispatch(const uint32_t numGroupsX, const uint32_t numGroupsY, const uint32_t numGroupsZ) const {
     glDispatchCompute(numGroupsX, numGroupsY, numGroupsZ);
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
 }
 
-void Shader::bindImage(const GLuint unit, const GLuint texture, const GLint level,
-                       const GLboolean layered, const GLint layer,
-                       const GLenum access, const GLenum internalFormat) {
-    glBindImageTexture(unit, texture, level, layered, layer, access, internalFormat);
+void Shader::bindImage(const uint32_t unit, const uint32_t texture, const int32_t level,
+                       const bool layered, const int32_t layer,
+                       const uint32_t access, const uint32_t internalFormat) {
+    glBindImageTexture(unit,
+                       texture,
+                       level,
+                       layered ? GL_TRUE : GL_FALSE,
+                       layer,
+                       access,
+                       internalFormat);
 }

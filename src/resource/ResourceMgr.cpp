@@ -68,28 +68,28 @@ Shader *ResourceMgr::getShader(const std::string &name) {
     return m_impl->shaders.get(name);
 }
 
-GLuint ResourceMgr::loadTexture2D(const std::string& name,
-                                  const std::string& path,
-                                  const bool srgb,
-                                  const bool repeat,
-                                  const bool linear,
-                                  const bool flipVertically) {
+uint32_t ResourceMgr::loadTexture2D(const std::string& name,
+                                    const std::string& path,
+                                    const bool srgb,
+                                    const bool repeat,
+                                    const bool linear,
+                                    const bool flipVertically) {
     return m_impl->texture2D.load(name, path, srgb, repeat, linear, flipVertically);
 }
 
-GLuint ResourceMgr::getTexture2D(const std::string& name) const {
+uint32_t ResourceMgr::getTexture2D(const std::string& name) const {
     return m_impl->texture2D.get(name);
 }
 
-GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
+uint32_t ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
     return m_impl->texture2D.loadGui(name, path, flipVertically);
 }
 
-GLuint ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
+uint32_t ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
     return m_impl->texture2D.loadGui(name, path, outWidth, outHeight, flipVertically);
 }
 
-GLuint ResourceMgr::getGuiTexture(const std::string& name) const {
+uint32_t ResourceMgr::getGuiTexture(const std::string& name) const {
     return m_impl->texture2D.getGui(name);
 }
 
@@ -176,11 +176,11 @@ void ResourceMgr::loadLightmapTextures(const std::string& dayPath, const std::st
     m_impl->environmentTextures.loadLightmaps(dayPath, nightPath);
 }
 
-GLuint ResourceMgr::getLightmapDay() const {
+uint32_t ResourceMgr::getLightmapDay() const {
     return m_impl->environmentTextures.getLightmapDay();
 }
 
-GLuint ResourceMgr::getLightmapNight() const {
+uint32_t ResourceMgr::getLightmapNight() const {
     return m_impl->environmentTextures.getLightmapNight();
 }
 
@@ -188,22 +188,22 @@ void ResourceMgr::loadColormapTextures(const std::string& grassPath, const std::
     m_impl->environmentTextures.loadColormaps(grassPath, foliagePath);
 }
 
-GLuint ResourceMgr::getGrassColormap() const {
+uint32_t ResourceMgr::getGrassColormap() const {
     return m_impl->environmentTextures.getGrassColormap();
 }
 
-GLuint ResourceMgr::getFoliageColormap() const {
+uint32_t ResourceMgr::getFoliageColormap() const {
     return m_impl->environmentTextures.getFoliageColormap();
 }
 
-GLuint ResourceMgr::loadCubemap(const std::string& name,
-                                 const std::string& rightPath, const std::string& leftPath,
-                                 const std::string& topPath, const std::string& bottomPath,
-                                 const std::string& frontPath, const std::string& backPath) {
+uint32_t ResourceMgr::loadCubemap(const std::string& name,
+                                  const std::string& rightPath, const std::string& leftPath,
+                                  const std::string& topPath, const std::string& bottomPath,
+                                  const std::string& frontPath, const std::string& backPath) {
     return m_impl->cubemaps.load(name, rightPath, leftPath, topPath, bottomPath, frontPath, backPath);
 }
 
-GLuint ResourceMgr::getCubemap(const std::string& name) const {
+uint32_t ResourceMgr::getCubemap(const std::string& name) const {
     return m_impl->cubemaps.get(name);
 }
 

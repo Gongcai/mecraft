@@ -3,6 +3,8 @@
 #include "../../resource/ResourceMgr.h"
 #include "engine/platform/Window.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cassert>

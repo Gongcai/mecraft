@@ -10,6 +10,8 @@
 #include "../../ecs/GameplayRegistry.h"
 #include "../../world/IWorldView.h"
 
+#include <glad/glad.h>
+
 void GBufferPass::init(ResourceMgr& resourceMgr) {
     m_entityGBufferShader = resourceMgr.getShader("entity_gbuffer");
 }

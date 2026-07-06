@@ -6,7 +6,7 @@
 #define MECRAFT_SHADER_H
 
 
-#include<glad/glad.h>
+#include <cstdint>
 #include<string>
 #include<fstream>
 #include <optional>
@@ -33,11 +33,11 @@ public:
     void use();
 
     // Dispatch a compute shader. numGroups can be 0 to skip that dimension.
-    void dispatch(GLuint numGroupsX, GLuint numGroupsY = 1, GLuint numGroupsZ = 1) const;
+    void dispatch(uint32_t numGroupsX, uint32_t numGroupsY = 1, uint32_t numGroupsZ = 1) const;
 
     // Bind a texture as an image for imageLoad/imageStore in compute shaders.
-    static void bindImage(GLuint unit, GLuint texture, GLint level, GLboolean layered,
-                          GLint layer, GLenum access, GLenum internalFormat);
+    static void bindImage(uint32_t unit, uint32_t texture, int32_t level, bool layered,
+                          int32_t layer, uint32_t access, uint32_t internalFormat);
 
     // Uniform setters.
     void setBool(const string& name, bool value) const;

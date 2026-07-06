@@ -14,6 +14,8 @@
 
 // ChunkRenderEntry is defined in TerrainRenderer.h (already included above)
 
+#include <glad/glad.h>
+
 #include <algorithm>
 
 void WaterCompositePass::init(ResourceMgr& resourceMgr) {

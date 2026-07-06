@@ -4,6 +4,8 @@
 #include "../gi/VoxelGiClipmap.h"
 #include "../../resource/ResourceMgr.h"
 
+#include <glad/glad.h>
+
 #include <glm/glm.hpp>
 #include <algorithm>
 

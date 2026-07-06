@@ -14,6 +14,8 @@
 #include "../../world/IWorldView.h"
 #include "../../world/World.h"
 #include "../../world/chunk/Chunk.h"
+
+#include <glad/glad.h>
 #include "../../world/chunk/SubChunk.h"
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
