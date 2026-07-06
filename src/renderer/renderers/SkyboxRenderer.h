@@ -1,7 +1,7 @@
 #ifndef MECRAFT_SKYBOXRENDERER_H
 #define MECRAFT_SKYBOXRENDERER_H
 
-#include <glad/glad.h>
+#include <cstdint>
 
 class ResourceMgr;
 class Shader;
@@ -20,18 +20,18 @@ private:
 
     Shader* m_shader = nullptr;
     Shader* m_blurShader = nullptr;
-    GLuint m_cubemapTexture = 0;
-    GLuint m_cubeVao = 0;
-    GLuint m_cubeVbo = 0;
-    GLuint m_fullscreenVao = 0;
+    uint32_t m_cubemapTexture = 0;
+    uint32_t m_cubeVao = 0;
+    uint32_t m_cubeVbo = 0;
+    uint32_t m_fullscreenVao = 0;
 
     // Blur pipeline: scene FBO + two ping-pong FBOs at half resolution
-    GLuint m_sceneFbo = 0;
-    GLuint m_sceneColorTex = 0;
-    GLuint m_pingFbo = 0;
-    GLuint m_pingColorTex = 0;
-    GLuint m_pongFbo = 0;
-    GLuint m_pongColorTex = 0;
+    uint32_t m_sceneFbo = 0;
+    uint32_t m_sceneColorTex = 0;
+    uint32_t m_pingFbo = 0;
+    uint32_t m_pingColorTex = 0;
+    uint32_t m_pongFbo = 0;
+    uint32_t m_pongColorTex = 0;
     int m_blurWidth = 0;
     int m_blurHeight = 0;
 };

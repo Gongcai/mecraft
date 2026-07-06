@@ -1,7 +1,6 @@
 #ifndef MECRAFT_TERRAIN_RENDERER_H
 #define MECRAFT_TERRAIN_RENDERER_H
 
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <array>
 #include <vector>

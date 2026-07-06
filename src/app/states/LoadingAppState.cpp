@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <iostream>
 
+#include <glad/glad.h>
+
 LoadingAppState::LoadingAppState(AppStateDependencies deps, GameSessionConfig config)
     : m_deps(deps), m_config(std::move(config)) {
 }
