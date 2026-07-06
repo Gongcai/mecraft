@@ -3,7 +3,7 @@
 #include <array>
 #include <functional>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
@@ -55,8 +55,8 @@ private:
     [[nodiscard]] int currentStyleState() const;
 
     Shader* m_shader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
 
     float m_min = 0.0f;
     float m_max = 1.0f;

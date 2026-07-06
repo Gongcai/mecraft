@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
@@ -51,8 +51,8 @@ private:
     [[nodiscard]] UIResolvedToastStyle resolveStyle(const UIRenderContext& ctx, Type type) const;
 
     Shader* m_shader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
 
     std::vector<ToastEntry> m_toasts;
     int m_maxVisible = 5;

@@ -3,7 +3,7 @@
 #include <array>
 #include <string>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
@@ -52,8 +52,8 @@ private:
     [[nodiscard]] UIResolvedProgressBarStyle resolveStyle(const UIRenderContext& ctx) const;
 
     Shader* m_shader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
 
     float m_progress = 0.0f;
     Tween<float> m_progressTween;

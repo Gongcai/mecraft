@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 struct GlyphInfo {
     float uvMinX = 0.0f;
@@ -26,7 +26,7 @@ public:
 
     const GlyphInfo& getGlyph(uint32_t codepoint) const;
     void uploadPending() const;
-    GLuint getTexture() const { return m_texture; }
+    uint32_t getTexture() const { return m_texture; }
     int getLineHeight() const { return m_lineHeight; }
     int getDescent() const { return m_descent; }
     int getPixelHeight() const { return m_pixelHeight; }
@@ -37,7 +37,7 @@ private:
 
     void* m_library = nullptr;
     void* m_face = nullptr;
-    mutable GLuint m_texture = 0;
+    mutable uint32_t m_texture = 0;
     int m_pixelHeight = 32;
     int m_lineHeight = 0;
     int m_descent = 0;

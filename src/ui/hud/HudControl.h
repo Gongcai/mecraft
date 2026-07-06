@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-#include <glad/glad.h>
+#include <cstdint>
 #include "../core/UIWidget.h"
 
 class ResourceMgr;
@@ -28,8 +28,8 @@ private:
                        float iconSize) const;
 
     Shader* m_inventoryShader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
     ResourceMgr* m_resourceMgr = nullptr;
 
     // Cached atlas icon indices (resolved once in init).

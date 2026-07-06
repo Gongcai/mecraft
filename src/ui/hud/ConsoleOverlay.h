@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <string>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../widgets/ConsoleDisplayBox.h"
 #include "../core/UIWidget.h"
@@ -43,8 +43,8 @@ private:
                          const std::array<float, 4>& rectColor) const;
 
     Shader* m_crosshairShader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
 
     mutable ConsoleDisplayBox m_display;
     const TextRenderer* m_textRenderer = nullptr;

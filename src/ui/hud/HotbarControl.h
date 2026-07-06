@@ -2,7 +2,7 @@
 
 #include <array>
 #include <string>
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIWidget.h"
 #include "../../world/block/Block.h"
@@ -50,8 +50,8 @@ private:
     void checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager = nullptr) const;
 
     Shader* m_inventoryShader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
     ResourceMgr* m_resourceMgr = nullptr;
     const Inventory* m_inventory = nullptr;
 
@@ -83,9 +83,9 @@ private:
     // Cached draw state for replaying without vertex rebuild.
     mutable int m_cachedBgVertCount = 0;
     mutable int m_cachedSelectedVertCount = 0;
-    mutable GLuint m_cachedBgTexture = 0;
+    mutable uint32_t m_cachedBgTexture = 0;
     mutable int m_cachedIconVertCounts[3] = {};
-    mutable GLuint m_cachedIconTextures[3] = {};
+    mutable uint32_t m_cachedIconTextures[3] = {};
 
     // Cached layout position for text rendering in cache-hit path.
     mutable float m_cachedStartX = 0.0f;

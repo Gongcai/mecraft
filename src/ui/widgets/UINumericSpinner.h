@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
@@ -54,8 +54,8 @@ private:
     // Returns: -1 = minus button, 0 = value area, 1 = plus button, -2 = outside.
 
     Shader* m_shader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
 
     float m_value = 0.0f;
     float m_min = 0.0f;

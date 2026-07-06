@@ -1,5 +1,7 @@
 #include "GlyphAtlas.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cstring>
 #include <cstddef>

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../hud/CommandInputOverlay.h"
 #include "../widgets/ConsoleDisplayBox.h"
@@ -193,10 +193,10 @@ private:
 
     std::size_t m_consoleMaxLines = 64;
 
-    mutable GLuint m_backdropSourceTex = 0;
-    mutable GLuint m_backdropBlurTex[2] = {0, 0};
-    mutable GLuint m_backdropBlurFbo[2] = {0, 0};
-    mutable GLuint m_backdropFullscreenVao = 0;
+    mutable uint32_t m_backdropSourceTex = 0;
+    mutable uint32_t m_backdropBlurTex[2] = {0, 0};
+    mutable uint32_t m_backdropBlurFbo[2] = {0, 0};
+    mutable uint32_t m_backdropFullscreenVao = 0;
     mutable int m_backdropSourceWidth = 0;
     mutable int m_backdropSourceHeight = 0;
     mutable int m_backdropBlurWidth = 0;

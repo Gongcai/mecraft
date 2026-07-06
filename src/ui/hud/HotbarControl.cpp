@@ -1,5 +1,7 @@
 #include "HotbarControl.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <vector>
 
@@ -227,7 +229,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     const TextureAtlas& atlas = m_resourceMgr->getAtlas();
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
     const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
-    const GLuint widgetsTexture = m_resourceMgr->getGuiTexture("widgets");
+    const uint32_t widgetsTexture = m_resourceMgr->getGuiTexture("widgets");
     if (widgetsTexture == 0) {
         return;
     }
@@ -543,4 +545,3 @@ float HotbarControl::getItemNameDisplayDuration() const
 {
     return m_itemNameDisplayDuration;
 }
-

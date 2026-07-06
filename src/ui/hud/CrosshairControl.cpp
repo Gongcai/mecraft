@@ -1,5 +1,7 @@
 #include "CrosshairControl.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cmath>
 #include <vector>

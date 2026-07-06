@@ -1,5 +1,7 @@
 #include "CommandInputOverlay.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cmath>
 #include <utility>

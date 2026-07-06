@@ -1,7 +1,7 @@
 #pragma once
 
 #include <array>
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
@@ -40,8 +40,8 @@ private:
 
     Shader* m_shader = nullptr;
     Shader* m_glassShader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
 
     std::array<float, 4> m_bgColor{0.2f, 0.2f, 0.2f, 0.8f};
     std::array<float, 4> m_borderColor{1.0f, 1.0f, 1.0f, 0.5f};

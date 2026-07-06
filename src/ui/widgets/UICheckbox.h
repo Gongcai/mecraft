@@ -4,7 +4,7 @@
 #include <functional>
 #include <string>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
@@ -42,8 +42,8 @@ private:
     [[nodiscard]] int currentStyleState() const;
 
     Shader* m_shader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
     UIText m_label;
 
     bool m_checked = false;

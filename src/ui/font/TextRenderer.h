@@ -3,7 +3,7 @@
 #include <array>
 #include <string>
 #include <vector>
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "GlyphAtlas.h"
 
@@ -63,8 +63,8 @@ private:
     Shader* m_textShader = nullptr;
     GlyphAtlas m_atlas;
 
-    GLuint m_textVao = 0;
-    GLuint m_textVbo = 0;
+    uint32_t m_textVao = 0;
+    uint32_t m_textVbo = 0;
 
     // Batch state (mutable for const batch methods).
     mutable bool m_batchActive = false;

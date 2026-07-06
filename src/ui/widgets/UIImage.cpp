@@ -1,5 +1,7 @@
 #include "UIImage.h"
 
+#include <glad/glad.h>
+
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
@@ -21,7 +23,7 @@ void UIImage::shutdown() {
 
 void UIImage::loadTexture(ResourceMgr& resourceMgr, const std::string& name, const std::string& path) {
     int imgW = 0, imgH = 0;
-    GLuint tex = resourceMgr.loadGuiTexture(name, path, imgW, imgH);
+    uint32_t tex = resourceMgr.loadGuiTexture(name, path, imgW, imgH);
     setTexture(tex, 0.0f, 0.0f, 1.0f, 1.0f);
     if (imgW > 0 && imgH > 0) {
         width = static_cast<float>(imgW);
@@ -44,7 +46,7 @@ void UIImage::setAtlasTile(const TextureAtlas& atlas, int tileIndex) {
     m_useTexture = true;
 }
 
-void UIImage::setTexture(GLuint textureID, float u0, float v0, float u1, float v1) {
+void UIImage::setTexture(uint32_t textureID, float u0, float v0, float u1, float v1) {
     m_textureID = textureID;
     m_u0 = u0;
     m_v0 = v0;

@@ -1,5 +1,7 @@
 #include "HudControl.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <vector>
 

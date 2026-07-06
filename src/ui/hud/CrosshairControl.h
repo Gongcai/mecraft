@@ -2,7 +2,7 @@
 
 #include <array>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIWidget.h"
 
@@ -30,8 +30,8 @@ private:
     void cleanupMesh();
 
     Shader* m_shader = nullptr;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
     int m_vertexCount = 0;
     float m_size = 1.0f;
     std::array<float, 4> m_color {1.0f, 1.0f, 1.0f, 1.0f};

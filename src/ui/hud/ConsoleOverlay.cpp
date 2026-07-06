@@ -1,5 +1,7 @@
 #include "ConsoleOverlay.h"
 
+#include <glad/glad.h>
+
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 

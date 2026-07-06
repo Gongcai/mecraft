@@ -2,7 +2,7 @@
 
 #include <array>
 
-#include <glad/glad.h>
+#include <cstdint>
 
 #include "../core/UIWidget.h"
 
@@ -24,7 +24,7 @@ public:
     void setAtlasTile(const TextureAtlas& atlas, int tileIndex);
 
     // Set texture directly with explicit UV coordinates
-    void setTexture(GLuint textureID, float u0, float v0, float u1, float v1);
+    void setTexture(uint32_t textureID, float u0, float v0, float u1, float v1);
 
     // Set a solid color texture (no texture, just tint)
     void setSolidColor(const std::array<float, 4>& c);
@@ -43,9 +43,9 @@ private:
 
     Shader* m_inventoryShader = nullptr;
     Shader* m_colorShader = nullptr;
-    GLuint m_textureID = 0;
-    GLuint m_vao = 0;
-    GLuint m_vbo = 0;
+    uint32_t m_textureID = 0;
+    uint32_t m_vao = 0;
+    uint32_t m_vbo = 0;
     float m_u0 = 0.0f, m_v0 = 0.0f, m_u1 = 1.0f, m_v1 = 1.0f;
     std::array<float, 4> m_tintColor{1.0f, 1.0f, 1.0f, 1.0f};
     bool m_useTexture = true;
