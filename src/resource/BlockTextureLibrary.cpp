@@ -1,6 +1,7 @@
 #include "BlockTextureLibrary.h"
 
 #include "BlockTextureArrayBuilder.h"
+#include "RhiTextureResourceUtils.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
 
@@ -29,6 +30,7 @@ int validateBlockTextureTileSize(const int configuredTileSize) {
 } // namespace
 
 void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
+    resource::unregisterTextureArray(textureArray);
     if (textureArray.textureID != 0) {
         glDeleteTextures(1, &textureArray.textureID);
         textureArray.textureID = 0;
@@ -50,6 +52,7 @@ void BlockTextureLibrary::applySamplerToTextureArrays() {
 }
 
 void BlockTextureLibrary::shutdown() {
+    resource::unregisterTextureAtlas(m_atlas);
     if (m_atlas.textureID != 0) {
         glDeleteTextures(1, &m_atlas.textureID);
         m_atlas.textureID = 0;
@@ -88,6 +91,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory, const int 
 void BlockTextureLibrary::buildTextures(const std::string& directory,
                                         const int tileSize,
                                         const std::unordered_set<std::string>& registeredTextureNames) {
+    resource::unregisterTextureAtlas(m_atlas);
     if (m_atlas.textureID != 0) {
         glDeleteTextures(1, &m_atlas.textureID);
         m_atlas.textureID = 0;
@@ -122,6 +126,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
 }
 
 void BlockTextureLibrary::buildAtlas(const std::string& directory, const int tileSize) {
+    resource::unregisterTextureAtlas(m_atlas);
     if (m_atlas.textureID != 0) {
         glDeleteTextures(1, &m_atlas.textureID);
         m_atlas.textureID = 0;

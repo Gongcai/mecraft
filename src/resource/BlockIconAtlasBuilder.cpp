@@ -1,5 +1,7 @@
 #include "BlockIconAtlasBuilder.h"
 
+#include "RhiTextureResourceUtils.h"
+
 #include "BlockTextureLibrary.h"
 #include "TextureAtlas.h"
 #include "../world/block/Block.h"
@@ -679,6 +681,10 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
     atlas.tileStride = iconSize;
     atlas.tilePadding = 0;
     atlas.tilesPerRow = tilesPerRow;
+    if (!registerTextureAtlas(atlas)) {
+        glDeleteTextures(1, &textureID);
+        failBlockIconAtlasBuilder("Failed to register block icon atlas RHI handle");
+    }
     return atlas;
 }
 

@@ -2,6 +2,7 @@
 #include "renderer/rhi/RhiHash.h"
 #include "renderer/rhi/gl/GlRhiDevice.h"
 #include "renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "resource/RhiTextureResourceUtils.h"
 
 #include <cstdint>
 #include <iostream>
@@ -105,6 +106,42 @@ bool testGlTextureRegistry() {
                        "unregistered GL texture handle must not stay alive");
 }
 
+bool testResourceTextureRegistration() {
+    TextureAtlas atlas;
+    atlas.textureID = 77;
+    atlas.atlasWidth = 32;
+    atlas.atlasHeight = 16;
+    if (!requireTrue(resource::registerTextureAtlas(atlas),
+                     "texture atlas registration must create an RHI texture handle")) {
+        return false;
+    }
+    if (!requireTrue(renderer::rhi::gl::textureId(atlas.texture) == atlas.textureID,
+                     "texture atlas handle must resolve to its native texture id")) {
+        return false;
+    }
+    resource::unregisterTextureAtlas(atlas);
+    if (!requireTrue(!atlas.texture.isValid(),
+                     "texture atlas unregister must clear the RHI texture handle")) {
+        return false;
+    }
+
+    TextureArray textureArray;
+    textureArray.textureID = 88;
+    textureArray.tileSize = 16;
+    textureArray.layerCount = 4;
+    if (!requireTrue(resource::registerTextureArray(textureArray),
+                     "texture array registration must create an RHI texture handle")) {
+        return false;
+    }
+    if (!requireTrue(renderer::rhi::gl::textureId(textureArray.texture) == textureArray.textureID,
+                     "texture array handle must resolve to its native texture id")) {
+        return false;
+    }
+    resource::unregisterTextureArray(textureArray);
+    return requireTrue(!textureArray.texture.isValid(),
+                       "texture array unregister must clear the RHI texture handle");
+}
+
 bool testGlRhiDeviceHandles() {
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc;
@@ -155,6 +192,9 @@ int main() {
         return 1;
     }
     if (!testGlTextureRegistry()) {
+        return 1;
+    }
+    if (!testResourceTextureRegistration()) {
         return 1;
     }
     if (!testGlRhiDeviceHandles()) {

@@ -1,6 +1,7 @@
 #include "UiTextureAtlasLibrary.h"
 
 #include "BlockIconAtlasBuilder.h"
+#include "RhiTextureResourceUtils.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
 
@@ -10,16 +11,19 @@
 #include <utility>
 
 void UiTextureAtlasLibrary::shutdown() {
+    resource::unregisterTextureAtlas(m_blockIconAtlas);
     if (m_blockIconAtlas.textureID != 0) {
         glDeleteTextures(1, &m_blockIconAtlas.textureID);
         m_blockIconAtlas.textureID = 0;
     }
 
+    resource::unregisterTextureAtlas(m_itemTextureAtlas);
     if (m_itemTextureAtlas.textureID != 0) {
         glDeleteTextures(1, &m_itemTextureAtlas.textureID);
         m_itemTextureAtlas.textureID = 0;
     }
 
+    resource::unregisterTextureAtlas(m_hudIconAtlas);
     if (m_hudIconAtlas.textureID != 0) {
         glDeleteTextures(1, &m_hudIconAtlas.textureID);
         m_hudIconAtlas.textureID = 0;
@@ -38,6 +42,7 @@ void UiTextureAtlasLibrary::buildBlockIconAtlas(const int iconSize, const BlockT
         return;
     }
 
+    resource::unregisterTextureAtlas(m_blockIconAtlas);
     if (m_blockIconAtlas.textureID != 0) {
         glDeleteTextures(1, &m_blockIconAtlas.textureID);
         m_blockIconAtlas.textureID = 0;
@@ -53,6 +58,7 @@ const TextureAtlas& UiTextureAtlasLibrary::blockIconAtlas() const {
 void UiTextureAtlasLibrary::buildItemTextureAtlas(const std::string& directory,
                                                  const int tileSize,
                                                  const BlockTextureCatalog& catalog) {
+    resource::unregisterTextureAtlas(m_itemTextureAtlas);
     if (m_itemTextureAtlas.textureID != 0) {
         glDeleteTextures(1, &m_itemTextureAtlas.textureID);
         m_itemTextureAtlas.textureID = 0;
@@ -81,6 +87,7 @@ const std::vector<unsigned char>& UiTextureAtlasLibrary::itemTexturePixels() con
 }
 
 void UiTextureAtlasLibrary::buildHudIconAtlas(const std::string& directory, const int iconSize) {
+    resource::unregisterTextureAtlas(m_hudIconAtlas);
     if (m_hudIconAtlas.textureID != 0) {
         glDeleteTextures(1, &m_hudIconAtlas.textureID);
         m_hudIconAtlas.textureID = 0;

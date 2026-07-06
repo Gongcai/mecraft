@@ -206,6 +206,7 @@ set(SRC_CORE
         src/resource/EnvironmentTextureLibrary.cpp
         src/resource/EntityTexturePreloader.cpp
         src/resource/ResourceMgr.cpp
+        src/resource/RhiTextureResourceUtils.cpp
         src/resource/ShaderLibrary.cpp
         src/resource/TextureAtlas.cpp
         src/resource/TextureAtlasBuilders.cpp

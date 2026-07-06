@@ -1,4 +1,5 @@
 #include "BlockTextureArrayBuilder.h"
+#include "RhiTextureResourceUtils.h"
 #include "TextureResampler.h"
 
 #include "../third_party/stb/stb_image.h"
@@ -57,6 +58,9 @@ public:
 
         m_texture.tileSize = tileSize;
         m_texture.layerCount = layerCount;
+        if (!resource::registerTextureArray(m_texture)) {
+            failBlockTextureArrayBuilder("Failed to register block texture array RHI handle");
+        }
     }
 
     PendingTextureArray(const PendingTextureArray&) = delete;
@@ -92,6 +96,7 @@ public:
 
 private:
     void reset() {
+        resource::unregisterTextureArray(m_texture);
         if (m_texture.textureID != 0) {
             glDeleteTextures(1, &m_texture.textureID);
             m_texture.textureID = 0;

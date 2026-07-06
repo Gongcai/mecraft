@@ -1,4 +1,5 @@
 #include "TextureAtlasBuilders.h"
+#include "RhiTextureResourceUtils.h"
 #include "TextureResampler.h"
 
 #include "../third_party/stb/stb_image.h"
@@ -163,6 +164,17 @@ void uploadNearestAtlasTexture(const TextureAtlas& atlas,
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
+void registerBuiltAtlas(resource::IndexedTextureAtlas& atlas, const char* label) {
+    if (!resource::registerTextureAtlas(atlas.atlas)) {
+        GLuint textureID = atlas.atlas.textureID;
+        if (textureID != 0) {
+            glDeleteTextures(1, &textureID);
+            atlas.atlas.textureID = 0;
+        }
+        failTextureAtlasBuilders(std::string("Failed to register ") + label + " RHI handle");
+    }
+}
+
 } // namespace
 
 namespace resource {
@@ -240,6 +252,7 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;
     uploadNearestAtlasTexture(result.atlas, result.pixels, true, 0);
+    registerBuiltAtlas(result, "item texture atlas");
     return result;
 }
 
@@ -345,6 +358,7 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
     const int paddingSafeMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(kTilePadding))));
     const int clampedMaxLevel = std::max(0, std::min(fullChainMaxLevel, paddingSafeMaxLevel));
     uploadNearestAtlasTexture(result.atlas, result.pixels, true, clampedMaxLevel);
+    registerBuiltAtlas(result, "block texture atlas");
     return result;
 }
 
@@ -407,6 +421,7 @@ IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int ic
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;
     uploadNearestAtlasTexture(result.atlas, result.pixels, false, 0);
+    registerBuiltAtlas(result, "HUD icon atlas");
     return result;
 }
 
