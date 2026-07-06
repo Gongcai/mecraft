@@ -1,7 +1,39 @@
 #include "ShadowTargets.h"
 #include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
+
+#include <glad/glad.h>
+
 #include <cstdio>
+
+namespace {
+uint32_t createShadowTexture2DArray(GLenum internalFormat,
+                                    int width,
+                                    int height,
+                                    int layers,
+                                    GLenum minFilter,
+                                    GLenum magFilter,
+                                    GLenum wrap) {
+    uint32_t tex = 0;
+    glGenTextures(1, &tex);
+    glTextureStorage3D(tex, 1, internalFormat, width, height, layers);
+    glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, minFilter);
+    glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, magFilter);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_S, wrap);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_T, wrap);
+    glTextureParameteri(tex, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    return tex;
+}
+
+bool checkShadowFramebufferComplete(uint32_t framebuffer, const char* label) {
+    GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
+    if (status != GL_FRAMEBUFFER_COMPLETE) {
+        MECRAFT_LOG_FPRINTF(stderr, "ShadowTargets: %s FBO incomplete (status 0x%X)\n", label, status);
+        return false;
+    }
+    return true;
+}
+} // namespace
 
 ShadowTargets::~ShadowTargets() {
     shutdown();
@@ -29,9 +61,9 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
 
     // CSM shadow depth array
     glGenFramebuffers(1, &m_csmShadowFbo);
-    m_csmShadowDepth = createTexture2DArray(GL_DEPTH_COMPONENT24,
-                                            m_shadowResolution, m_shadowResolution,
-                                            CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    m_csmShadowDepth = createShadowTexture2DArray(GL_DEPTH_COMPONENT24,
+                                                  m_shadowResolution, m_shadowResolution,
+                                                  CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowDepth, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 
     // Comparison view for sampler2DArrayShadow
@@ -52,16 +84,16 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     glNamedFramebufferDrawBuffer(m_csmShadowFbo, GL_NONE);
     glNamedFramebufferReadBuffer(m_csmShadowFbo, GL_NONE);
 
-    if (!checkFramebufferComplete(m_csmShadowFbo, "CsmShadowMap")) {
+    if (!checkShadowFramebufferComplete(m_csmShadowFbo, "CsmShadowMap")) {
         destroyFramebuffers();
         return false;
     }
 
     // CSM transparent shadow
     glGenFramebuffers(1, &m_csmShadowTransparentFbo);
-    m_csmShadowDepthAll = createTexture2DArray(GL_DEPTH_COMPONENT24,
-                                               m_shadowResolution, m_shadowResolution,
-                                               CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    m_csmShadowDepthAll = createShadowTexture2DArray(GL_DEPTH_COMPONENT24,
+                                                     m_shadowResolution, m_shadowResolution,
+                                                     CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowDepthAll, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 
     glGenTextures(1, &m_csmShadowDepthAllComparison);
@@ -77,14 +109,14 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     glTextureParameterfv(m_csmShadowDepthAllComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 
     // Shadow color textures
-    m_csmShadowColor0 = createTexture2DArray(GL_RGBA8,
-                                             m_shadowResolution, m_shadowResolution,
-                                             CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    m_csmShadowColor0 = createShadowTexture2DArray(GL_RGBA8,
+                                                   m_shadowResolution, m_shadowResolution,
+                                                   CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowColor0, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 
-    m_csmShadowColor1 = createTexture2DArray(GL_RGBA16F,
-                                             m_shadowResolution, m_shadowResolution,
-                                             CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
+    m_csmShadowColor1 = createShadowTexture2DArray(GL_RGBA16F,
+                                                   m_shadowResolution, m_shadowResolution,
+                                                   CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowColor1, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 
     // Bind first layer to transparent FBO
@@ -94,7 +126,7 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
     glNamedFramebufferDrawBuffers(m_csmShadowTransparentFbo, 2, drawBuffers);
 
-    if (!checkFramebufferComplete(m_csmShadowTransparentFbo, "CsmShadowTransparent")) {
+    if (!checkShadowFramebufferComplete(m_csmShadowTransparentFbo, "CsmShadowTransparent")) {
         destroyFramebuffers();
         return false;
     }
@@ -127,28 +159,6 @@ void ShadowTargets::bindCsmShadowTransparentLayer(int cascadeIndex) {
     glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, m_csmShadowColor1, 0, cascadeIndex);
     int res = (cascadeIndex >= 2) ? m_shadowResolution / 2 : m_shadowResolution;
     glViewport(0, 0, res, res);
-}
-
-GLuint ShadowTargets::createTexture2DArray(GLenum internalFormat, int width, int height,
-                                           int layers, GLenum minFilter, GLenum magFilter, GLenum wrap) {
-    GLuint tex = 0;
-    glGenTextures(1, &tex);
-    glTextureStorage3D(tex, 1, internalFormat, width, height, layers);
-    glTextureParameteri(tex, GL_TEXTURE_MIN_FILTER, minFilter);
-    glTextureParameteri(tex, GL_TEXTURE_MAG_FILTER, magFilter);
-    glTextureParameteri(tex, GL_TEXTURE_WRAP_S, wrap);
-    glTextureParameteri(tex, GL_TEXTURE_WRAP_T, wrap);
-    glTextureParameteri(tex, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    return tex;
-}
-
-bool ShadowTargets::checkFramebufferComplete(GLuint framebuffer, const char* label) {
-    GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        MECRAFT_LOG_FPRINTF(stderr, "ShadowTargets: %s FBO incomplete (status 0x%X)\n", label, status);
-        return false;
-    }
-    return true;
 }
 
 void ShadowTargets::destroyFramebuffers() {

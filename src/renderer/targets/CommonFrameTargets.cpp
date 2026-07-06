@@ -1,6 +1,9 @@
 #include "CommonFrameTargets.h"
 #include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
+
+#include <glad/glad.h>
+
 #include <cstdio>
 
 CommonFrameTargets::~CommonFrameTargets() {

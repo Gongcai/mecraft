@@ -1,7 +1,9 @@
 #ifndef MECRAFT_SHADOW_TARGETS_H
 #define MECRAFT_SHADOW_TARGETS_H
 
-#include <glad/glad.h>
+#include "renderer/rhi/RhiHandles.h"
+
+#include <cstdint>
 
 /// Shadow map targets.
 /// Manages CSM shadow depth array and transparent shadow color/depth.
@@ -23,14 +25,20 @@ public:
     void bindCsmShadowTransparentLayer(int cascadeIndex);
 
     // CSM shadow texture accessors
-    [[nodiscard]] GLuint csmShadowDepthTexture() const { return m_csmShadowDepth; }
-    [[nodiscard]] GLuint csmShadowDepthComparisonTexture() const { return m_csmShadowDepthComparison; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
+    [[nodiscard]] uint32_t csmShadowDepthTexture() const { return m_csmShadowDepth; }
+    [[nodiscard]] uint32_t csmShadowDepthComparisonTexture() const { return m_csmShadowDepthComparison; }
 
     // CSM transparent shadow accessors
-    [[nodiscard]] GLuint csmShadowDepthAllTexture() const { return m_csmShadowDepthAll; }
-    [[nodiscard]] GLuint csmShadowDepthAllComparisonTexture() const { return m_csmShadowDepthAllComparison; }
-    [[nodiscard]] GLuint csmShadowColor0Texture() const { return m_csmShadowColor0; }
-    [[nodiscard]] GLuint csmShadowColor1Texture() const { return m_csmShadowColor1; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthAllTextureHandle() const { return m_csmShadowDepthAllHandle; }
+    [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const { return m_csmShadowDepthAllComparisonHandle; }
+    [[nodiscard]] RhiTextureHandle csmShadowColor0TextureHandle() const { return m_csmShadowColor0Handle; }
+    [[nodiscard]] RhiTextureHandle csmShadowColor1TextureHandle() const { return m_csmShadowColor1Handle; }
+    [[nodiscard]] uint32_t csmShadowDepthAllTexture() const { return m_csmShadowDepthAll; }
+    [[nodiscard]] uint32_t csmShadowDepthAllComparisonTexture() const { return m_csmShadowDepthAllComparison; }
+    [[nodiscard]] uint32_t csmShadowColor0Texture() const { return m_csmShadowColor0; }
+    [[nodiscard]] uint32_t csmShadowColor1Texture() const { return m_csmShadowColor1; }
 
     // Dimensions
     [[nodiscard]] int shadowResolution() const { return m_shadowResolution; }
@@ -38,22 +46,25 @@ public:
     [[nodiscard]] bool isReady() const { return m_ready; }
 
 private:
-    static GLuint createTexture2DArray(GLenum internalFormat, int width, int height,
-                                       int layers, GLenum minFilter, GLenum magFilter, GLenum wrap);
-    static bool checkFramebufferComplete(GLuint framebuffer, const char* label);
     void destroyFramebuffers();
 
     // CSM shadow: 4-cascade depth texture array
-    GLuint m_csmShadowFbo = 0;
-    GLuint m_csmShadowDepth = 0;
-    GLuint m_csmShadowDepthComparison = 0;
+    uint32_t m_csmShadowFbo = 0;
+    RhiTextureHandle m_csmShadowDepthHandle;
+    RhiTextureHandle m_csmShadowDepthComparisonHandle;
+    uint32_t m_csmShadowDepth = 0;
+    uint32_t m_csmShadowDepthComparison = 0;
 
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
-    GLuint m_csmShadowTransparentFbo = 0;
-    GLuint m_csmShadowDepthAll = 0;
-    GLuint m_csmShadowDepthAllComparison = 0;
-    GLuint m_csmShadowColor0 = 0;
-    GLuint m_csmShadowColor1 = 0;
+    uint32_t m_csmShadowTransparentFbo = 0;
+    RhiTextureHandle m_csmShadowDepthAllHandle;
+    RhiTextureHandle m_csmShadowDepthAllComparisonHandle;
+    RhiTextureHandle m_csmShadowColor0Handle;
+    RhiTextureHandle m_csmShadowColor1Handle;
+    uint32_t m_csmShadowDepthAll = 0;
+    uint32_t m_csmShadowDepthAllComparison = 0;
+    uint32_t m_csmShadowColor0 = 0;
+    uint32_t m_csmShadowColor1 = 0;
 
     int m_shadowResolution = 0;
     bool m_ready = false;
