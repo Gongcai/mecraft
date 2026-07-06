@@ -1,0 +1,118 @@
+#include "renderer/rhi/RhiHandleAllocator.h"
+#include "renderer/rhi/RhiHash.h"
+#include "renderer/rhi/gl/GlRhiDevice.h"
+
+#include <cstdint>
+#include <iostream>
+
+namespace {
+bool requireTrue(const bool condition, const char* message) {
+    if (!condition) {
+        std::cerr << message << '\n';
+        return false;
+    }
+    return true;
+}
+
+bool testHandleGeneration() {
+    RhiHandleAllocator<RhiTextureHandle> allocator;
+
+    const RhiTextureHandle first = allocator.allocate();
+    if (!requireTrue(first.isValid(), "allocated texture handle must be valid")) {
+        return false;
+    }
+    if (!requireTrue(allocator.isAlive(first), "allocated texture handle must be alive")) {
+        return false;
+    }
+    if (!requireTrue(allocator.release(first), "release must accept a live texture handle")) {
+        return false;
+    }
+    if (!requireTrue(!allocator.isAlive(first), "released texture handle must not stay alive")) {
+        return false;
+    }
+
+    const RhiTextureHandle second = allocator.allocate();
+    if (!requireTrue(second.index == first.index, "allocator must reuse released handle slots")) {
+        return false;
+    }
+    if (!requireTrue(second.generation != first.generation, "reused handle generation must change")) {
+        return false;
+    }
+    return requireTrue(!allocator.release(first), "release must reject stale texture handles");
+}
+
+bool testDescHashStability() {
+    RhiTextureDesc desc;
+    desc.dimension = RhiTextureDimension::Texture2DArray;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.width = 16;
+    desc.height = 16;
+    desc.depthOrLayers = 128;
+    desc.mipLevels = 5;
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+
+    const uint64_t firstHash = rhiHashTextureDesc(desc);
+    const uint64_t secondHash = rhiHashTextureDesc(desc);
+    if (!requireTrue(firstHash == secondHash, "texture desc hash must be stable")) {
+        return false;
+    }
+
+    desc.mipLevels = 1;
+    return requireTrue(firstHash != rhiHashTextureDesc(desc),
+                       "texture desc hash must change when semantic fields change");
+}
+
+bool testGlRhiDeviceHandles() {
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_core_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize")) {
+        return false;
+    }
+
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "test-buffer";
+    bufferDesc.size = 256;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
+    const RhiBufferHandle buffer = device.createBuffer(bufferDesc, nullptr, 0);
+    if (!requireTrue(buffer.isValid(), "OpenGL RHI device must create buffer handles")) {
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "test-texture";
+    textureDesc.width = 4;
+    textureDesc.height = 4;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+    if (!requireTrue(texture.isValid(), "OpenGL RHI device must create texture handles")) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+    if (!requireTrue(view.isValid(), "OpenGL RHI device must create texture view handles")) {
+        return false;
+    }
+
+    device.destroyTextureView(view);
+    device.destroyTexture(texture);
+    device.destroyBuffer(buffer);
+    device.shutdown();
+    return true;
+}
+} // namespace
+
+int main() {
+    if (!testHandleGeneration()) {
+        return 1;
+    }
+    if (!testDescHashStability()) {
+        return 1;
+    }
+    if (!testGlRhiDeviceHandles()) {
+        return 1;
+    }
+    return 0;
+}

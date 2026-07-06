@@ -36,6 +36,9 @@ option(MECRAFT_ENABLE_IPO "Enable IPO/LTO for optimized configurations" ON)
 option(MECRAFT_ENABLE_PCH "Enable precompiled headers" ON)
 option(MECRAFT_BUILD_TESTS "Build Mecraft tests" ON)
 option(MECRAFT_USE_SOURCE_ASSETS "Use the source-tree assets directory directly instead of packaged assets" OFF)
+option(MECRAFT_RHI_BACKEND_OPENGL "Build OpenGL RHI backend" ON)
+option(MECRAFT_RHI_BACKEND_VULKAN "Build Vulkan RHI backend" OFF)
+set(MECRAFT_DEFAULT_RHI_BACKEND "OpenGL" CACHE STRING "Default RHI backend")
 if(MSVC)
     message(STATUS "Using MSVC")
 
@@ -255,6 +258,9 @@ set(SRC_RENDERER
         src/renderer/debug/RenderDebugLabels.cpp
         src/renderer/debug/RenderDebugService.cpp
 
+        # RHI
+        src/renderer/rhi/RhiHash.cpp
+
         # Core framework
         src/renderer/core/Shader.cpp
         src/renderer/core/RenderResourceHub.cpp
@@ -325,6 +331,16 @@ set(SRC_RENDERER
         src/renderer/stb_image.cpp
         src/renderer/stb_image_write.cpp
 )
+
+if(MECRAFT_RHI_BACKEND_OPENGL)
+    list(APPEND SRC_RENDERER
+            src/renderer/rhi/gl/GlRhiDevice.cpp
+    )
+endif()
+
+if(MECRAFT_RHI_BACKEND_VULKAN)
+    find_package(Vulkan REQUIRED)
+endif()
 
 set(SRC_UI
         # Core UI Framework
@@ -608,10 +624,17 @@ target_link_libraries(mecraft_core PUBLIC
 # 统一宏定义
 target_compile_definitions(mecraft_core PUBLIC
         GLFW_INCLUDE_NONE
+        "MECRAFT_DEFAULT_RHI_BACKEND=\"${MECRAFT_DEFAULT_RHI_BACKEND}\""
+        $<$<BOOL:${MECRAFT_RHI_BACKEND_OPENGL}>:MECRAFT_RHI_BACKEND_OPENGL>
+        $<$<BOOL:${MECRAFT_RHI_BACKEND_VULKAN}>:MECRAFT_RHI_BACKEND_VULKAN>
         "MECRAFT_ASSETS_DIR=\"${MECRAFT_ASSETS_DIR_COMPILE}\""
         $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
         $<$<CONFIG:RelWithDebInfo>:MECRAFT_ENABLE_CONSOLE_OUTPUT>
 )
+
+if(MECRAFT_RHI_BACKEND_VULKAN)
+    target_link_libraries(mecraft_core PUBLIC Vulkan::Vulkan)
+endif()
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）
 mecraft_apply_project_warnings(mecraft_core)
@@ -715,6 +738,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
     add_mecraft_test(sleeping_state_test tests/sleeping_state_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
+    add_mecraft_test(rhi_core_test tests/rhi_core_test.cpp)
 
     add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
     add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
