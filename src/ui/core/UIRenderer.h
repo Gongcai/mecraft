@@ -164,7 +164,7 @@ private:
     void renderDeathOverlay(const UIRenderContext& context);
     void prepareBackdropBlur(UIRenderContext& context) const;
     void ensureBackdropBlurTargets(int sourceWidth, int sourceHeight) const;
-    void destroyBackdropBlurTargets();
+    void destroyBackdropBlurTargets() const;
 
     CrosshairControl m_crosshair;
     HotbarControl m_hotbar;
@@ -193,6 +193,8 @@ private:
 
     std::size_t m_consoleMaxLines = 64;
 
+    mutable RhiTextureHandle m_backdropSource;
+    mutable RhiTextureHandle m_backdropBlur[2];
     mutable uint32_t m_backdropSourceTex = 0;
     mutable uint32_t m_backdropBlurTex[2] = {0, 0};
     mutable uint32_t m_backdropBlurFbo[2] = {0, 0};

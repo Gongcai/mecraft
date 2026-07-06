@@ -11,6 +11,7 @@
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "UIRenderUtils.h"
 #include "UIScene.h"
 #include "UIThemePresets.h"
@@ -26,6 +27,24 @@ void configureLinearClampTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+}
+
+[[nodiscard]] RhiTextureHandle registerBackdropTexture(const uint32_t textureID,
+                                                       const int width,
+                                                       const int height,
+                                                       const RhiTextureUsageFlags usage) {
+    return renderer::rhi::gl::registerTexture({
+        textureID,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        1,
+        1,
+        1,
+        usage,
+        false
+    });
 }
 }
 
@@ -800,8 +819,14 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
     glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
     configureLinearClampTexture();
     if (sizeChanged) {
+        renderer::rhi::gl::unregisterTextureAndReset(m_backdropSource);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sourceWidth, sourceHeight, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        m_backdropSource = registerBackdropTexture(
+            m_backdropSourceTex,
+            sourceWidth,
+            sourceHeight,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst));
     }
 
     for (int i = 0; i < 2; ++i) {
@@ -811,8 +836,14 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
         glBindTexture(GL_TEXTURE_2D, m_backdropBlurTex[i]);
         configureLinearClampTexture();
         if (sizeChanged) {
+            renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[i]);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, blurWidth, blurHeight, 0,
                          GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            m_backdropBlur[i] = registerBackdropTexture(
+                m_backdropBlurTex[i],
+                blurWidth,
+                blurHeight,
+                rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment));
         }
 
         if (m_backdropBlurFbo[i] == 0) {
@@ -827,6 +858,13 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    if (!m_backdropSource.isValid() ||
+        !m_backdropBlur[0].isValid() ||
+        !m_backdropBlur[1].isValid()) {
+        destroyBackdropBlurTargets();
+        return;
+    }
+
     m_backdropSourceWidth = sourceWidth;
     m_backdropSourceHeight = sourceHeight;
     m_backdropBlurWidth = blurWidth;
@@ -835,6 +873,7 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
 
 void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
 {
+    context.backdropBlur = {};
     context.backdropBlurTexture = 0;
     context.backdropSourceWidth = 0;
     context.backdropSourceHeight = 0;
@@ -937,6 +976,7 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
 
     restoreState();
 
+    context.backdropBlur = m_backdropBlur[1];
     context.backdropBlurTexture = m_backdropBlurTex[1];
     context.backdropSourceWidth = sourceWidth;
     context.backdropSourceHeight = sourceHeight;
@@ -944,8 +984,11 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
     context.backdropBlurHeight = m_backdropBlurHeight;
 }
 
-void UIRenderer::destroyBackdropBlurTargets()
+void UIRenderer::destroyBackdropBlurTargets() const
 {
+    renderer::rhi::gl::unregisterTextureAndReset(m_backdropSource);
+    renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[0]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[1]);
     if (m_backdropSourceTex != 0) {
         glDeleteTextures(1, &m_backdropSourceTex);
         m_backdropSourceTex = 0;
