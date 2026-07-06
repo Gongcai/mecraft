@@ -3,7 +3,6 @@
 
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
-#include <glad/glad.h>
 
 class DeferredRenderTargets;
 class ResourceMgr;

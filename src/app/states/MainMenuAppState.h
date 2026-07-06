@@ -12,7 +12,6 @@
 #include "../../ui/core/ScreenTransition.h"
 #include "../../ui/core/UIInputAdapter.h"
 #include "../../renderer/renderers/SkyboxRenderer.h"
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <filesystem>
 
