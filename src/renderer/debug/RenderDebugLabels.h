@@ -1,7 +1,7 @@
 #ifndef MECRAFT_RENDER_DEBUG_LABELS_H
 #define MECRAFT_RENDER_DEBUG_LABELS_H
 
-#include <glad/glad.h>
+#include <cstdint>
 
 namespace renderer::debug {
 
@@ -17,12 +17,12 @@ void popGroup();
 // Insert a one-shot event marker into the debug timeline.
 void insertEvent(const char* name);
 
-// Label GL objects with human-readable names (visible in RenderDoc Resource Inspector).
-void labelTexture(GLuint id, const char* name);
-void labelBuffer(GLuint id, const char* name);
-void labelFramebuffer(GLuint id, const char* name);
-void labelVertexArray(GLuint id, const char* name);
-void labelProgram(GLuint id, const char* name);
+// Label native graphics objects with human-readable names (visible in RenderDoc Resource Inspector).
+void labelTexture(uint32_t id, const char* name);
+void labelBuffer(uint32_t id, const char* name);
+void labelFramebuffer(uint32_t id, const char* name);
+void labelVertexArray(uint32_t id, const char* name);
+void labelProgram(uint32_t id, const char* name);
 
 // RAII scoped debug group — automatically pops on destruction.
 class ScopedDebugGroup {

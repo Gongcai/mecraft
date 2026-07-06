@@ -1,5 +1,7 @@
 #include "RenderDebugLabels.h"
 
+#include <glad/glad.h>
+
 #ifdef MECRAFT_DEBUG
 #include <cstdlib>
 #include <cstring>
@@ -53,7 +55,7 @@ void insertEvent(const char* name) {
 #endif
 }
 
-void labelTexture(GLuint id, const char* name) {
+void labelTexture(uint32_t id, const char* name) {
 #ifdef MECRAFT_DEBUG
     if (labelsEnabled() && glObjectLabel && id != 0) {
         glObjectLabel(GL_TEXTURE, id, -1, name);
@@ -64,7 +66,7 @@ void labelTexture(GLuint id, const char* name) {
 #endif
 }
 
-void labelBuffer(GLuint id, const char* name) {
+void labelBuffer(uint32_t id, const char* name) {
 #ifdef MECRAFT_DEBUG
     if (labelsEnabled() && glObjectLabel && id != 0) {
         glObjectLabel(GL_BUFFER, id, -1, name);
@@ -75,7 +77,7 @@ void labelBuffer(GLuint id, const char* name) {
 #endif
 }
 
-void labelFramebuffer(GLuint id, const char* name) {
+void labelFramebuffer(uint32_t id, const char* name) {
 #ifdef MECRAFT_DEBUG
     if (labelsEnabled() && glObjectLabel && id != 0) {
         glObjectLabel(GL_FRAMEBUFFER, id, -1, name);
@@ -86,7 +88,7 @@ void labelFramebuffer(GLuint id, const char* name) {
 #endif
 }
 
-void labelVertexArray(GLuint id, const char* name) {
+void labelVertexArray(uint32_t id, const char* name) {
 #ifdef MECRAFT_DEBUG
     if (labelsEnabled() && glObjectLabel && id != 0) {
         glObjectLabel(GL_VERTEX_ARRAY, id, -1, name);
@@ -97,7 +99,7 @@ void labelVertexArray(GLuint id, const char* name) {
 #endif
 }
 
-void labelProgram(GLuint id, const char* name) {
+void labelProgram(uint32_t id, const char* name) {
 #ifdef MECRAFT_DEBUG
     if (labelsEnabled() && glObjectLabel && id != 0) {
         glObjectLabel(GL_PROGRAM, id, -1, name);
