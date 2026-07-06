@@ -274,6 +274,9 @@ set(SRC_RENDERER
         # Global illumination
         src/renderer/gi/VoxelGiClipmap.cpp
 
+        # OpenGL helpers
+        src/renderer/gl/GlStateGuard.cpp
+
         # Render targets
         src/renderer/targets/CommonFrameTargets.cpp
         src/renderer/targets/DeferredFrameTargets.cpp
