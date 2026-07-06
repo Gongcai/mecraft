@@ -258,6 +258,9 @@ set(SRC_RENDERER
         src/renderer/debug/RenderDebugLabels.cpp
         src/renderer/debug/RenderDebugService.cpp
 
+        # Contracts
+        src/renderer/contracts/MecraftTextureContract.cpp
+
         # RHI
         src/renderer/rhi/RhiHash.cpp
 

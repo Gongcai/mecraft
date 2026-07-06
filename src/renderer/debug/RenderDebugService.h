@@ -218,8 +218,8 @@ private:
     bool m_gpuTimerCanIssueThisFrame = true;
     GpuTimerPass m_activeGpuTimerPass = GpuTimerPass::GBuffer;
 
-    // Shadow timestamp state. Uses glQueryCounter(GL_TIMESTAMP) so it can run
-    // inside the outer Shadow GL_TIME_ELAPSED pass timer.
+    // Shadow timestamp state. Uses GPU timestamp queries so it can run
+    // inside the outer shadow elapsed-time pass timer.
     std::array<std::array<std::array<uint32_t, SHADOW_TIMER_POINT_COUNT>, SHADOW_TIMER_CASCADE_COUNT>, GPU_TIMER_RING_SIZE> m_shadowTimestampQueries{};
     std::array<std::array<std::array<bool, SHADOW_TIMER_POINT_COUNT>, SHADOW_TIMER_CASCADE_COUNT>, GPU_TIMER_RING_SIZE> m_shadowTimestampIssued{};
     std::array<ShadowFrameStats, GPU_TIMER_RING_SIZE> m_shadowFrameSlots{};
