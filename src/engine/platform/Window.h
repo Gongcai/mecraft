@@ -7,8 +7,9 @@
 
 
 #include <string>
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
+
+struct GLFWwindow;
+
 class Window {
 public:
     bool init(int width, int height, const char* title, bool enableGlDebugOutput);
@@ -30,13 +31,6 @@ private:
     int m_width{}, m_height{};
 
     static void framebufferSizeCallback(GLFWwindow* w, int width, int height);
-    static void APIENTRY debugMessageCallback(GLenum source,
-                                              GLenum type,
-                                              GLuint id,
-                                              GLenum severity,
-                                              GLsizei length,
-                                              const GLchar* message,
-                                              const void* userParam);
 };
 
 
