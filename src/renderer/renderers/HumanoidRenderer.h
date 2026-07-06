@@ -88,8 +88,8 @@ private:
     Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
     Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;
-    uint32_t m_fallbackShadowDepth = 0;
-    uint32_t m_fallbackShadowDepthCompare = 0;
+    uint32_t m_neutralShadowDepth = 0;
+    uint32_t m_neutralShadowDepthCompare = 0;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;
     float m_inventoryPreviewBodyLookX = 0.0f;
@@ -110,8 +110,8 @@ private:
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
-    void ensureShadowFallbackTextures();
-    void bindDisabledShadowFallback(Shader& shader);
+    void ensureNeutralShadowTextures();
+    void bindDisabledShadowNeutralTextures(Shader& shader);
 
     // Per-object velocity: stores previous-frame model matrix per entity part.
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;

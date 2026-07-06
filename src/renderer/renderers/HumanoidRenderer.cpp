@@ -322,57 +322,57 @@ void HumanoidRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_entityModelPartMeshes.clear();
-    if (m_fallbackShadowDepth != 0) {
-        glDeleteTextures(1, &m_fallbackShadowDepth);
-        m_fallbackShadowDepth = 0;
+    if (m_neutralShadowDepth != 0) {
+        glDeleteTextures(1, &m_neutralShadowDepth);
+        m_neutralShadowDepth = 0;
     }
-    if (m_fallbackShadowDepthCompare != 0) {
-        glDeleteTextures(1, &m_fallbackShadowDepthCompare);
-        m_fallbackShadowDepthCompare = 0;
+    if (m_neutralShadowDepthCompare != 0) {
+        glDeleteTextures(1, &m_neutralShadowDepthCompare);
+        m_neutralShadowDepthCompare = 0;
     }
     m_shader = nullptr;
     m_forwardShader = nullptr;
     m_resourceMgr = nullptr;
 }
 
-void HumanoidRenderer::ensureShadowFallbackTextures() {
-    if (m_fallbackShadowDepth != 0 && m_fallbackShadowDepthCompare != 0) {
+void HumanoidRenderer::ensureNeutralShadowTextures() {
+    if (m_neutralShadowDepth != 0 && m_neutralShadowDepthCompare != 0) {
         return;
     }
 
-    if (m_fallbackShadowDepth == 0) {
-        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_fallbackShadowDepth);
-        glTextureStorage3D(m_fallbackShadowDepth, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+    if (m_neutralShadowDepth == 0) {
+        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_neutralShadowDepth);
+        glTextureStorage3D(m_neutralShadowDepth, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
+        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
         constexpr float depth = 1.0f;
-        glClearTexImage(m_fallbackShadowDepth, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+        glClearTexImage(m_neutralShadowDepth, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
     }
 
-    if (m_fallbackShadowDepthCompare == 0) {
-        glGenTextures(1, &m_fallbackShadowDepthCompare);
-        glTextureView(m_fallbackShadowDepthCompare,
+    if (m_neutralShadowDepthCompare == 0) {
+        glGenTextures(1, &m_neutralShadowDepthCompare);
+        glTextureView(m_neutralShadowDepthCompare,
                       GL_TEXTURE_2D_ARRAY,
-                      m_fallbackShadowDepth,
+                      m_neutralShadowDepth,
                       GL_DEPTH_COMPONENT32F,
                       0,
                       1,
                       0,
                       1);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-        glTextureParameteri(m_fallbackShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     }
 }
 
-void HumanoidRenderer::bindDisabledShadowFallback(Shader& shader) {
-    ensureShadowFallbackTextures();
+void HumanoidRenderer::bindDisabledShadowNeutralTextures(Shader& shader) {
+    ensureNeutralShadowTextures();
 
     shader.setInt("uShadowsEnabled", 0);
     shader.setInt("uSoftShadowsEnabled", 0);
@@ -391,9 +391,9 @@ void HumanoidRenderer::bindDisabledShadowFallback(Shader& shader) {
     shader.setInt("uCsmShadowDepthRaw", 6);
 
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_fallbackShadowDepthCompare);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_neutralShadowDepthCompare);
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_fallbackShadowDepth);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, m_neutralShadowDepth);
 }
 
 void HumanoidRenderer::renderInventoryPreview(const float x,
@@ -472,7 +472,7 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     m_shader->setMat4(viewProjLoc, projection * view);
     m_shader->setInt("uTexture", 0);
     setHurtFlash(*m_shader, 0.0f);
-    bindDisabledShadowFallback(*m_shader);
+    bindDisabledShadowNeutralTextures(*m_shader);
 
     // Set lighting uniforms for UI preview (full bright, no world light sampling)
     m_shader->setFloat("uHeldSunlight", 1.0f);
