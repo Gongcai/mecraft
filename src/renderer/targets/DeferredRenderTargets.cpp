@@ -2,12 +2,23 @@
 #include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
 
+#include <glad/glad.h>
+
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <iostream>
 #include <fstream>
 #include <vector>
+
+namespace {
+constexpr GLenum kGAlbedoAttachment = GL_COLOR_ATTACHMENT0;
+constexpr GLenum kGNormalAoAttachment = GL_COLOR_ATTACHMENT1;
+constexpr GLenum kGVoxelLightAttachment = GL_COLOR_ATTACHMENT2;
+constexpr GLenum kGMaterialAttachment = GL_COLOR_ATTACHMENT3;
+constexpr GLenum kGMaterialAuxAttachment = GL_COLOR_ATTACHMENT4;
+constexpr GLsizei kGBufferAttachmentCount = 5;
+} // namespace
 
 DeferredRenderTargets::~DeferredRenderTargets() {
     shutdown();
@@ -883,12 +894,12 @@ void DeferredRenderTargets::clearPerObjectVelocity() {
     glClearTexImage(m_perObjectVelocityTex, 0, GL_RG, GL_FLOAT, zero);
 }
 
-void DeferredRenderTargets::bindDefaultLike(const GLint framebuffer, const int width, const int height) {
+void DeferredRenderTargets::bindDefaultLike(const int32_t framebuffer, const int width, const int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
     glViewport(0, 0, std::max(1, width), std::max(1, height));
 }
 
-void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -900,7 +911,7 @@ void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const GLint fram
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneLightingFbo);
 }
 
-void DeferredRenderTargets::copyFramebufferColorToSceneResolved(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::copyFramebufferColorToSceneResolved(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -912,7 +923,7 @@ void DeferredRenderTargets::copyFramebufferColorToSceneResolved(const GLint fram
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
 }
 
-void DeferredRenderTargets::copyFramebufferColorToTransparentComposite(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::copyFramebufferColorToTransparentComposite(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -1173,7 +1184,7 @@ void DeferredRenderTargets::copySsgiTemporalToHistory() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiHistoryFbo[m_ssgiHistoryIndex]);
 }
 
-GLuint DeferredRenderTargets::ssgiDenoiseTexture(const int slot) const {
+uint32_t DeferredRenderTargets::ssgiDenoiseTexture(const int slot) const {
     assert(slot >= 0 && slot < 2);
     return m_ssgiDenoiseTex[slot];
 }
@@ -1207,7 +1218,7 @@ void DeferredRenderTargets::copySsgiTemporalToSsgi() {
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiFbo);
 }
 
-void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::blitSceneLightingTo(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -1219,7 +1230,7 @@ void DeferredRenderTargets::blitSceneLightingTo(const GLint framebuffer, const i
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
-void DeferredRenderTargets::blitSceneCompositeTo(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::blitSceneCompositeTo(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -1231,7 +1242,7 @@ void DeferredRenderTargets::blitSceneCompositeTo(const GLint framebuffer, const 
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
-void DeferredRenderTargets::blitSceneResolvedTo(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::blitSceneResolvedTo(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -1243,7 +1254,7 @@ void DeferredRenderTargets::blitSceneResolvedTo(const GLint framebuffer, const i
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
-void DeferredRenderTargets::blitTransparentCompositeTo(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::blitTransparentCompositeTo(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -1255,7 +1266,7 @@ void DeferredRenderTargets::blitTransparentCompositeTo(const GLint framebuffer, 
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
-void DeferredRenderTargets::blitDepthTo(const GLint framebuffer, const int width, const int height) const {
+void DeferredRenderTargets::blitDepthTo(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
     }
@@ -1267,16 +1278,16 @@ void DeferredRenderTargets::blitDepthTo(const GLint framebuffer, const int width
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
-GLuint DeferredRenderTargets::createTexture2D(const GLenum internalFormat,
-                                              const int width,
-                                              const int height,
-                                              const GLenum format,
-                                              const GLenum type,
-                                              const GLenum minFilter,
-                                              const GLenum magFilter,
-                                              const GLenum wrap,
-                                              const int levels) {
-    GLuint texture = 0;
+uint32_t DeferredRenderTargets::createTexture2D(const uint32_t internalFormat,
+                                                const int width,
+                                                const int height,
+                                                const uint32_t format,
+                                                const uint32_t type,
+                                                const uint32_t minFilter,
+                                                const uint32_t magFilter,
+                                                const uint32_t wrap,
+                                                const int levels) {
+    uint32_t texture = 0;
     (void)format;
     (void)type;
     glCreateTextures(GL_TEXTURE_2D, 1, &texture);
@@ -1291,14 +1302,14 @@ GLuint DeferredRenderTargets::createTexture2D(const GLenum internalFormat,
     return texture;
 }
 
-GLuint DeferredRenderTargets::createTexture2DArray(const GLenum internalFormat,
-                                                   const int width,
-                                                   const int height,
-                                                   const int layers,
-                                                   const GLenum minFilter,
-                                                   const GLenum magFilter,
-                                                   const GLenum wrap) {
-    GLuint texture = 0;
+uint32_t DeferredRenderTargets::createTexture2DArray(const uint32_t internalFormat,
+                                                     const int width,
+                                                     const int height,
+                                                     const int layers,
+                                                     const uint32_t minFilter,
+                                                     const uint32_t magFilter,
+                                                     const uint32_t wrap) {
+    uint32_t texture = 0;
     glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &texture);
     glTextureStorage3D(texture, 1, internalFormat, width, height, layers);
     glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(minFilter));
@@ -1311,13 +1322,13 @@ GLuint DeferredRenderTargets::createTexture2DArray(const GLenum internalFormat,
     return texture;
 }
 
-void DeferredRenderTargets::generateMipmaps(const GLuint texture) {
+void DeferredRenderTargets::generateMipmaps(const uint32_t texture) {
     if (texture != 0) {
         glGenerateTextureMipmap(texture);
     }
 }
 
-bool DeferredRenderTargets::checkFramebufferComplete(const GLuint framebuffer, const char* label) {
+bool DeferredRenderTargets::checkFramebufferComplete(const uint32_t framebuffer, const char* label) {
     const GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
     if (status == GL_FRAMEBUFFER_COMPLETE) {
         return true;
