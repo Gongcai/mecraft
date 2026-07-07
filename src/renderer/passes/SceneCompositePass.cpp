@@ -2,6 +2,7 @@
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
 #include "../gi/VoxelGiClipmap.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -115,7 +116,7 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.cloudTexture());
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     glActiveTexture(GL_TEXTURE5);

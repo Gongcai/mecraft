@@ -92,7 +92,7 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targets.sceneLightingTexture());
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     glActiveTexture(GL_TEXTURE3);
@@ -157,7 +157,7 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targets.reflectionTemporalScratchTexture());
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     glActiveTexture(GL_TEXTURE3);
@@ -207,7 +207,7 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     glActiveTexture(GL_TEXTURE5);

@@ -69,7 +69,7 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
     m_ssaoShader->setInt("uSamples", std::clamp(ssao.samples, 1, 64));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     glActiveTexture(GL_TEXTURE2);
@@ -103,7 +103,7 @@ void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targets.ssaoHalfResTexture());
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoFilterShader);
@@ -141,7 +141,7 @@ void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& s
     glBindTexture(GL_TEXTURE_2D, ssao.filterEnabled && m_ssaoFilterShader != nullptr
         ? targets.ssaoHalfResFilteredTexture() : targets.ssaoHalfResTexture());
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoUpsampleShader);
 
     for (int i = 1; i >= 0; --i) {
@@ -183,7 +183,7 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     // GBuffer depth
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoTemporalShader);
 

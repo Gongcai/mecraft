@@ -213,7 +213,7 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
 
     // Texture bindings
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE2);
@@ -287,7 +287,7 @@ void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSetting
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
 
@@ -336,7 +336,7 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
         glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
     }
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_volumetricCompositeShader);
 

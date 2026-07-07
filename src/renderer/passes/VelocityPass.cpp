@@ -1,6 +1,7 @@
 #include "VelocityPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -41,7 +42,7 @@ void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settin
     m_velocityShader->setInt("uForceZeroVelocity", settings.taa.forceZeroVelocity ? 1 : 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.perObjectVelocityTexture());
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_velocityShader);

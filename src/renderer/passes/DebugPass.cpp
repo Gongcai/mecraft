@@ -130,7 +130,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, targets.materialTexture());
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, targets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE6);

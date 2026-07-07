@@ -1,6 +1,7 @@
 #include "MotionBlurPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -43,7 +44,7 @@ void MotionBlurPass::execute(const FrameContext& ctx, const RenderSettings& sett
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_motionBlurShader);
 
     for (int i = 2; i >= 0; --i) {

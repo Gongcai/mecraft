@@ -6,6 +6,7 @@
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
@@ -708,7 +709,7 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     shader->setInt("uForceBaseLod", 1);
 
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, targets.sceneCompositeTexture());
 
@@ -802,7 +803,7 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
     m_shared->particleSystem->renderToSceneResolved(
         *particleShader,
         targets.voxelLightTexture(),
-        targets.depthTexture(),
+        renderer::rhi::gl::textureId(targets.depthTextureHandle()),
         ctx.camera.view, viewProj,
         screenSize);
 

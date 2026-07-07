@@ -77,7 +77,6 @@ public:
     [[nodiscard]] uint32_t voxelLightTexture() const { return m_gVoxelLight; }
     [[nodiscard]] uint32_t materialTexture() const { return m_gMaterial; }
     [[nodiscard]] uint32_t materialAuxTexture() const { return m_gMaterialAux; }
-    [[nodiscard]] uint32_t depthTexture() const { return m_gDepth; }
     [[nodiscard]] RhiTextureHandle depthTextureHandle() const { return m_gDepthHandle; }
     [[nodiscard]] uint32_t shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] uint32_t shadowDepthComparisonTexture() const { return m_shadowDepthComparison; }
