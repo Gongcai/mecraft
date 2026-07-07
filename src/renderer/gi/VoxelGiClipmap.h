@@ -3,6 +3,7 @@
 
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiHandles.h"
 #include "../../world/block/Block.h"
 
 #include <glm/glm.hpp>
@@ -49,8 +50,8 @@ public:
                 const VoxelGiSettings& settings,
                 const IBlockTextureColorProvider& textureColors);
 
-    [[nodiscard]] uint32_t texture() const { return m_texture; }
-    [[nodiscard]] bool valid() const { return m_valid && m_texture != 0; }
+    [[nodiscard]] RhiTextureHandle textureHandle() const { return m_textureHandle; }
+    [[nodiscard]] bool valid() const { return m_valid && m_textureHandle.isValid(); }
     [[nodiscard]] glm::vec3 origin() const { return m_origin; }
     [[nodiscard]] float voxelSize() const { return m_voxelSize; }
     [[nodiscard]] int resolution() const { return m_resolution; }
@@ -107,6 +108,7 @@ private:
                                                 const glm::ivec3& blockPos);
 
     uint32_t m_texture = 0;
+    RhiTextureHandle m_textureHandle;
     uint32_t m_shiftScratchTexture = 0;
     bool m_valid = false;
     int m_resolution = 0;

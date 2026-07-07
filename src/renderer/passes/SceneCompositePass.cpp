@@ -142,7 +142,10 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE15);
     glBindTexture(GL_TEXTURE_2D, targets.ssgiTexture());
     glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_3D, voxelGiEnabled ? voxelGiClipmap->texture() : 0);
+    glBindTexture(GL_TEXTURE_3D,
+                  voxelGiEnabled
+                      ? renderer::rhi::gl::textureId(voxelGiClipmap->textureHandle())
+                      : 0);
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_sceneCompositeShader);
 

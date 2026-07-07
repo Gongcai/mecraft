@@ -1,6 +1,8 @@
 #include "VoxelGiClipmap.h"
 
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/RhiTypes.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockStateRegistry.h"
@@ -60,6 +62,25 @@ const std::array<glm::vec3, 6> kFaceNormals = {
         ++levels;
     }
     return levels;
+}
+
+[[nodiscard]] RhiTextureHandle registerClipmapTexture(const uint32_t texture,
+                                                      const int resolution,
+                                                      const int mipLevels) {
+    return renderer::rhi::gl::registerTexture({
+        texture,
+        RhiTextureDimension::Texture3D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(resolution),
+        static_cast<uint32_t>(resolution),
+        static_cast<uint32_t>(resolution),
+        static_cast<uint32_t>(mipLevels),
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) |
+            rhiFlag(RhiTextureUsage::TransferSrc) |
+            rhiFlag(RhiTextureUsage::TransferDst),
+        false
+    });
 }
 
 [[nodiscard]] bool containsToken(const std::string_view text, const std::string_view token) {
@@ -160,6 +181,7 @@ VoxelGiClipmap::~VoxelGiClipmap() {
 }
 
 void VoxelGiClipmap::shutdown() {
+    renderer::rhi::gl::unregisterTextureAndReset(m_textureHandle);
     if (m_texture != 0) {
         glDeleteTextures(1, &m_texture);
         m_texture = 0;
@@ -288,10 +310,11 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
 }
 
 void VoxelGiClipmap::allocateTexture(const int resolution) {
-    if (m_texture != 0 && m_resolution == resolution) {
+    if (m_texture != 0 && m_textureHandle.isValid() && m_resolution == resolution) {
         return;
     }
 
+    renderer::rhi::gl::unregisterTextureAndReset(m_textureHandle);
     if (m_texture != 0) {
         glDeleteTextures(1, &m_texture);
         m_texture = 0;
@@ -312,6 +335,7 @@ void VoxelGiClipmap::allocateTexture(const int resolution) {
     glTextureParameteri(m_texture, GL_TEXTURE_BASE_LEVEL, 0);
     glTextureParameteri(m_texture, GL_TEXTURE_MAX_LEVEL, levels - 1);
     renderer::debug::labelTexture(m_texture, "VoxelGI.ClipmapRadiance");
+    m_textureHandle = registerClipmapTexture(m_texture, resolution, levels);
 
     glCreateTextures(GL_TEXTURE_3D, 1, &m_shiftScratchTexture);
     glTextureStorage3D(m_shiftScratchTexture, 1, GL_RGBA16F, resolution, resolution, resolution);
