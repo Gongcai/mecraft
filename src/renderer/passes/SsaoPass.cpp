@@ -71,7 +71,7 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoShader);
@@ -105,7 +105,7 @@ void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoFilterShader);
 
     for (int i = 2; i >= 0; --i) {

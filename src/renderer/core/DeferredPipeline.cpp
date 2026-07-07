@@ -802,7 +802,7 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
 
     m_shared->particleSystem->renderToSceneResolved(
         *particleShader,
-        targets.voxelLightTexture(),
+        renderer::rhi::gl::textureId(targets.voxelLightTextureHandle()),
         renderer::rhi::gl::textureId(targets.depthTextureHandle()),
         ctx.camera.view, viewProj,
         screenSize);

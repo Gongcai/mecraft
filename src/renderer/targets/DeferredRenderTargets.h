@@ -72,11 +72,11 @@ public:
     void blitTransparentCompositeTo(int32_t framebuffer, int width, int height) const;
     void blitDepthTo(int32_t framebuffer, int width, int height) const;
 
-    [[nodiscard]] uint32_t albedoTexture() const { return m_gAlbedo; }
-    [[nodiscard]] uint32_t normalAoTexture() const { return m_gNormalAo; }
-    [[nodiscard]] uint32_t voxelLightTexture() const { return m_gVoxelLight; }
-    [[nodiscard]] uint32_t materialTexture() const { return m_gMaterial; }
-    [[nodiscard]] uint32_t materialAuxTexture() const { return m_gMaterialAux; }
+    [[nodiscard]] RhiTextureHandle albedoTextureHandle() const { return m_gAlbedoHandle; }
+    [[nodiscard]] RhiTextureHandle normalAoTextureHandle() const { return m_gNormalAoHandle; }
+    [[nodiscard]] RhiTextureHandle voxelLightTextureHandle() const { return m_gVoxelLightHandle; }
+    [[nodiscard]] RhiTextureHandle materialTextureHandle() const { return m_gMaterialHandle; }
+    [[nodiscard]] RhiTextureHandle materialAuxTextureHandle() const { return m_gMaterialAuxHandle; }
     [[nodiscard]] RhiTextureHandle depthTextureHandle() const { return m_gDepthHandle; }
     [[nodiscard]] RhiTextureHandle shadowDepthTextureHandle() const { return m_shadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle shadowDepthComparisonTextureHandle() const { return m_shadowDepthComparisonHandle; }
@@ -206,6 +206,11 @@ private:
     uint32_t m_gMaterial = 0;
     uint32_t m_gMaterialAux = 0;
     uint32_t m_gDepth = 0;
+    RhiTextureHandle m_gAlbedoHandle;
+    RhiTextureHandle m_gNormalAoHandle;
+    RhiTextureHandle m_gVoxelLightHandle;
+    RhiTextureHandle m_gMaterialHandle;
+    RhiTextureHandle m_gMaterialAuxHandle;
     RhiTextureHandle m_gDepthHandle;
 
     uint32_t m_shadowFbo = 0;

@@ -118,11 +118,11 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, targets.materialTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialTextureHandle()));
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, targets.materialAuxTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE8);
@@ -136,7 +136,7 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE13);
-    glBindTexture(GL_TEXTURE_2D, targets.albedoTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.albedoTextureHandle()));
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     glActiveTexture(GL_TEXTURE15);

@@ -51,7 +51,7 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.materialAuxTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_temporalResolveShader);
 

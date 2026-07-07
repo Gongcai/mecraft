@@ -1345,6 +1345,66 @@ bool DeferredRenderTargets::checkFramebufferComplete(const uint32_t framebuffer,
 }
 
 bool DeferredRenderTargets::registerRhiTextures() {
+    m_gAlbedoHandle = renderer::rhi::gl::registerTexture({
+        m_gAlbedo,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_gNormalAoHandle = renderer::rhi::gl::registerTexture({
+        m_gNormalAo,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_gVoxelLightHandle = renderer::rhi::gl::registerTexture({
+        m_gVoxelLight,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rg8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_gMaterialHandle = renderer::rhi::gl::registerTexture({
+        m_gMaterial,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_gMaterialAuxHandle = renderer::rhi::gl::registerTexture({
+        m_gMaterialAux,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
     m_gDepthHandle = renderer::rhi::gl::registerTexture({
         m_gDepth,
         RhiTextureDimension::Texture2D,
@@ -1520,7 +1580,12 @@ bool DeferredRenderTargets::registerRhiTextures() {
         return false;
     }
 
-    const bool registered = m_gDepthHandle.isValid() &&
+    const bool registered = m_gAlbedoHandle.isValid() &&
+                            m_gNormalAoHandle.isValid() &&
+                            m_gVoxelLightHandle.isValid() &&
+                            m_gMaterialHandle.isValid() &&
+                            m_gMaterialAuxHandle.isValid() &&
+                            m_gDepthHandle.isValid() &&
                             m_sceneResolvedHandle.isValid() &&
                             m_weatherMaskHandle.isValid() &&
                             m_skyCaptureHandle.isValid() &&
@@ -1563,6 +1628,11 @@ bool DeferredRenderTargets::registerAtmosphereLutTexture() {
 }
 
 void DeferredRenderTargets::unregisterRhiTextures() {
+    renderer::rhi::gl::unregisterTextureAndReset(m_gAlbedoHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_gNormalAoHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_gVoxelLightHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_gMaterialHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_gMaterialAuxHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_gDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneResolvedHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);

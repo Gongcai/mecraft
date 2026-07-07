@@ -94,17 +94,17 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, targets.materialTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.materialAuxTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, targets.voxelLightTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.voxelLightTextureHandle()));
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE9);
@@ -159,11 +159,11 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, targets.materialTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.materialAuxTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_reflectionFilterShader);
 
     for (int i = 4; i >= 0; --i) {
@@ -209,11 +209,11 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, targets.materialTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialTextureHandle()));
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, targets.materialAuxTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_reflectionTemporalShader);
 
