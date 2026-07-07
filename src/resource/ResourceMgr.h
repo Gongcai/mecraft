@@ -35,17 +35,17 @@ public:
 
     Shader *getShader(const std::string &name);
 
-    uint32_t loadTexture2D(const std::string& name,
-                           const std::string& path,
-                           bool srgb = false,
-                           bool repeat = false,
-                           bool linear = true,
-                           bool flipVertically = false);
+    RhiTextureHandle loadTexture2D(const std::string& name,
+                                   const std::string& path,
+                                   bool srgb = false,
+                                   bool repeat = false,
+                                   bool linear = true,
+                                   bool flipVertically = false);
     [[nodiscard]] RhiTextureHandle getTexture2DHandle(const std::string& name) const;
 
     // Standalone named textures (non-atlas), e.g. GUI sheets.
-    uint32_t loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
-    uint32_t loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
+    RhiTextureHandle loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically = true);
+    RhiTextureHandle loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically = true);
     [[nodiscard]] RhiTextureHandle getGuiTextureHandle(const std::string& name) const;
 
     // Texture atlas used by block-facing UI rendering.

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 
+#include "../../renderer/rhi/RhiHandles.h"
 #include "../core/UIWidget.h"
 
 class Shader;
@@ -24,7 +25,7 @@ public:
     void setAtlasTile(const TextureAtlas& atlas, int tileIndex);
 
     // Set texture directly with explicit UV coordinates
-    void setTexture(uint32_t textureID, float u0, float v0, float u1, float v1);
+    void setTexture(RhiTextureHandle texture, float u0, float v0, float u1, float v1);
 
     // Set a solid color texture (no texture, just tint)
     void setSolidColor(const std::array<float, 4>& c);
@@ -43,7 +44,7 @@ private:
 
     Shader* m_inventoryShader = nullptr;
     Shader* m_colorShader = nullptr;
-    uint32_t m_textureID = 0;
+    RhiTextureHandle m_texture;
     uint32_t m_vao = 0;
     uint32_t m_vbo = 0;
     float m_u0 = 0.0f, m_v0 = 0.0f, m_u1 = 1.0f, m_v1 = 1.0f;

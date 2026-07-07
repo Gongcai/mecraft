@@ -24,8 +24,8 @@ void UIImage::shutdown() {
 
 void UIImage::loadTexture(ResourceMgr& resourceMgr, const std::string& name, const std::string& path) {
     int imgW = 0, imgH = 0;
-    uint32_t tex = resourceMgr.loadGuiTexture(name, path, imgW, imgH);
-    setTexture(tex, 0.0f, 0.0f, 1.0f, 1.0f);
+    const RhiTextureHandle texture = resourceMgr.loadGuiTexture(name, path, imgW, imgH);
+    setTexture(texture, 0.0f, 0.0f, 1.0f, 1.0f);
     if (imgW > 0 && imgH > 0) {
         width = static_cast<float>(imgW);
         height = static_cast<float>(imgH);
@@ -33,13 +33,12 @@ void UIImage::loadTexture(ResourceMgr& resourceMgr, const std::string& name, con
 }
 
 void UIImage::setAtlasTile(const TextureAtlas& atlas, int tileIndex) {
-    const uint32_t textureId = renderer::rhi::gl::textureId(atlas.texture);
-    if (textureId == 0 || tileIndex < 0) {
-        m_textureID = 0;
+    if (!atlas.texture.isValid() || tileIndex < 0) {
+        m_texture = {};
         m_useTexture = false;
         return;
     }
-    m_textureID = textureId;
+    m_texture = atlas.texture;
     const auto uv = atlas.getUV(tileIndex);
     m_u0 = uv.first.x;
     m_v0 = uv.first.y;
@@ -48,13 +47,13 @@ void UIImage::setAtlasTile(const TextureAtlas& atlas, int tileIndex) {
     m_useTexture = true;
 }
 
-void UIImage::setTexture(uint32_t textureID, float u0, float v0, float u1, float v1) {
-    m_textureID = textureID;
+void UIImage::setTexture(RhiTextureHandle texture, float u0, float v0, float u1, float v1) {
+    m_texture = texture;
     m_u0 = u0;
     m_v0 = v0;
     m_u1 = u1;
     m_v1 = v1;
-    m_useTexture = (textureID != 0);
+    m_useTexture = texture.isValid();
 }
 
 void UIImage::setSolidColor(const std::array<float, 4>& c) {
@@ -114,7 +113,12 @@ void UIImage::renderSelf(const UIRenderContext& ctx) const {
 
     const UIRenderUtils::GLStateGuard glState;
 
-    if (m_useTexture && m_textureID != 0 && m_inventoryShader) {
+    if (m_useTexture && m_texture.isValid() && m_inventoryShader) {
+        const uint32_t textureId = renderer::rhi::gl::textureId(m_texture);
+        if (textureId == 0) {
+            return;
+        }
+
         m_inventoryShader->use();
         m_inventoryShader->setVec2("uScreenSize",
                                    glm::vec2(static_cast<float>(ctx.screenWidth),
@@ -126,7 +130,7 @@ void UIImage::renderSelf(const UIRenderContext& ctx) const {
         m_inventoryShader->setInt("uAtlas", 0);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, m_textureID);
+        glBindTexture(GL_TEXTURE_2D, textureId);
 
         rebuildMesh(ax, ay, ax + aw, ay + ah, m_u0, m_v0, m_u1, m_v1);
         glBindVertexArray(m_vao);

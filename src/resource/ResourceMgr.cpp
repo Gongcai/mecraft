@@ -68,12 +68,12 @@ Shader *ResourceMgr::getShader(const std::string &name) {
     return m_impl->shaders.get(name);
 }
 
-uint32_t ResourceMgr::loadTexture2D(const std::string& name,
-                                    const std::string& path,
-                                    const bool srgb,
-                                    const bool repeat,
-                                    const bool linear,
-                                    const bool flipVertically) {
+RhiTextureHandle ResourceMgr::loadTexture2D(const std::string& name,
+                                            const std::string& path,
+                                            const bool srgb,
+                                            const bool repeat,
+                                            const bool linear,
+                                            const bool flipVertically) {
     return m_impl->texture2D.load(name, path, srgb, repeat, linear, flipVertically);
 }
 
@@ -81,11 +81,11 @@ RhiTextureHandle ResourceMgr::getTexture2DHandle(const std::string& name) const 
     return m_impl->texture2D.getHandle(name);
 }
 
-uint32_t ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
+RhiTextureHandle ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, bool flipVertically) {
     return m_impl->texture2D.loadGui(name, path, flipVertically);
 }
 
-uint32_t ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
+RhiTextureHandle ResourceMgr::loadGuiTexture(const std::string& name, const std::string& path, int& outWidth, int& outHeight, bool flipVertically) {
     return m_impl->texture2D.loadGui(name, path, outWidth, outHeight, flipVertically);
 }
 

@@ -242,7 +242,7 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr) {
     }
     for (const auto& [id, def] : ui::ContainerUiRegistry::all()) {
         const std::string texturePath = std::string(ASSETS_DIR) + "/" + def.backgroundTexturePath;
-        if (resourceMgr.loadGuiTexture(def.backgroundTexture, texturePath, true) == 0) {
+        if (!resourceMgr.loadGuiTexture(def.backgroundTexture, texturePath, true).isValid()) {
             std::cerr << "Failed to load container UI texture for " << id << ": " << texturePath << '\n';
             return false;
         }

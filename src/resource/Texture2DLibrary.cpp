@@ -28,17 +28,25 @@ namespace {
     });
 }
 
+void deleteRegisteredTexture(RhiTextureHandle& texture) {
+    const GLuint textureId = static_cast<GLuint>(renderer::rhi::gl::textureId(texture));
+    renderer::rhi::gl::unregisterTextureAndReset(texture);
+    if (textureId != 0) {
+        glDeleteTextures(1, &textureId);
+    }
+}
+
 } // namespace
 
-uint32_t Texture2DLibrary::load(const std::string& name,
-                                const std::string& path,
-                                const bool srgb,
-                                const bool repeat,
-                                const bool linear,
-                                const bool flipVertically) {
+RhiTextureHandle Texture2DLibrary::load(const std::string& name,
+                                        const std::string& path,
+                                        const bool srgb,
+                                        const bool repeat,
+                                        const bool linear,
+                                        const bool flipVertically) {
     const auto existing = m_textures.find(name);
     if (existing != m_textures.end()) {
-        return existing->second.textureID;
+        return existing->second.texture;
     }
 
     int width = 0;
@@ -52,7 +60,7 @@ uint32_t Texture2DLibrary::load(const std::string& name,
         }
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load texture2D '%s': %s\n",
                             name.c_str(), path.c_str());
-        return 0;
+        return {};
     }
 
     GLuint textureID = 0;
@@ -77,7 +85,6 @@ uint32_t Texture2DLibrary::load(const std::string& name,
     stbi_image_free(data);
 
     Texture2DInfo info;
-    info.textureID = textureID;
     info.texture = registerTexture2D(textureID,
                                      srgb ? RhiTextureFormat::Rgba8Srgb : RhiTextureFormat::Rgba8Unorm,
                                      width,
@@ -86,11 +93,11 @@ uint32_t Texture2DLibrary::load(const std::string& name,
         glDeleteTextures(1, &textureID);
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to register texture2D RHI handle '%s': %s\n",
                             name.c_str(), path.c_str());
-        return 0;
+        return {};
     }
 
     m_textures[name] = info;
-    return textureID;
+    return info.texture;
 }
 
 RhiTextureHandle Texture2DLibrary::getHandle(const std::string& name) const {
@@ -101,24 +108,24 @@ RhiTextureHandle Texture2DLibrary::getHandle(const std::string& name) const {
     return {};
 }
 
-uint32_t Texture2DLibrary::loadGui(const std::string& name,
-                                   const std::string& path,
-                                   const bool flipVertically) {
+RhiTextureHandle Texture2DLibrary::loadGui(const std::string& name,
+                                           const std::string& path,
+                                           const bool flipVertically) {
     int dummyW = 0;
     int dummyH = 0;
     return loadGui(name, path, dummyW, dummyH, flipVertically);
 }
 
-uint32_t Texture2DLibrary::loadGui(const std::string& name,
-                                   const std::string& path,
-                                   int& outWidth,
-                                   int& outHeight,
-                                   const bool flipVertically) {
+RhiTextureHandle Texture2DLibrary::loadGui(const std::string& name,
+                                           const std::string& path,
+                                           int& outWidth,
+                                           int& outHeight,
+                                           const bool flipVertically) {
     const auto existing = m_guiTextures.find(name);
     if (existing != m_guiTextures.end()) {
         outWidth = existing->second.width;
         outHeight = existing->second.height;
-        return existing->second.textureID;
+        return existing->second.texture;
     }
 
     int width = 0;
@@ -134,7 +141,7 @@ uint32_t Texture2DLibrary::loadGui(const std::string& name,
                             name.c_str(), path.c_str());
         outWidth = 0;
         outHeight = 0;
-        return 0;
+        return {};
     }
 
     outWidth = width;
@@ -155,7 +162,6 @@ uint32_t Texture2DLibrary::loadGui(const std::string& name,
     stbi_image_free(data);
 
     GuiTextureInfo info;
-    info.textureID = textureID;
     info.texture = registerTexture2D(textureID, RhiTextureFormat::Rgba8Unorm, width, height);
     if (!info.texture.isValid()) {
         glDeleteTextures(1, &textureID);
@@ -163,12 +169,12 @@ uint32_t Texture2DLibrary::loadGui(const std::string& name,
                             name.c_str(), path.c_str());
         outWidth = 0;
         outHeight = 0;
-        return 0;
+        return {};
     }
     info.width = width;
     info.height = height;
     m_guiTextures[name] = info;
-    return textureID;
+    return info.texture;
 }
 
 RhiTextureHandle Texture2DLibrary::getGuiHandle(const std::string& name) const {
@@ -181,18 +187,12 @@ RhiTextureHandle Texture2DLibrary::getGuiHandle(const std::string& name) const {
 
 void Texture2DLibrary::shutdown() {
     for (auto& [_, texInfo] : m_guiTextures) {
-        renderer::rhi::gl::unregisterTextureAndReset(texInfo.texture);
-        if (texInfo.textureID != 0) {
-            glDeleteTextures(1, &texInfo.textureID);
-        }
+        deleteRegisteredTexture(texInfo.texture);
     }
     m_guiTextures.clear();
 
     for (auto& [_, texInfo] : m_textures) {
-        renderer::rhi::gl::unregisterTextureAndReset(texInfo.texture);
-        if (texInfo.textureID != 0) {
-            glDeleteTextures(1, &texInfo.textureID);
-        }
+        deleteRegisteredTexture(texInfo.texture);
     }
     m_textures.clear();
 }
