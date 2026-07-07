@@ -7,6 +7,7 @@
 #include "../contracts/MecraftTextureContract.h"
 #include "../core/Shader.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <algorithm>
 #include <array>
@@ -661,7 +662,8 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
         return;
     }
 
-    const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
+    const GLuint steveTex =
+        static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle("steve")));
     if (steveTex == 0) {
         return;
     }

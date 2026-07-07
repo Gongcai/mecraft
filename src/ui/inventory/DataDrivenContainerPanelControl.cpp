@@ -13,6 +13,7 @@
 #include "../../locale/LocaleManager.h"
 #include "../../player/Inventory.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../ItemIconPolicy.h"
 #include "../core/UIRenderUtils.h"
@@ -401,8 +402,9 @@ void DataDrivenContainerPanelControl::drawTextureQuad(const UIRenderContext& con
     }
 
     const ui::ContainerUiDef& def = requireDefinition();
-    const unsigned int texture = m_resourceMgr->getGuiTexture(def.backgroundTexture);
-    if (texture == 0) {
+    const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(def.backgroundTexture);
+    const uint32_t textureId = renderer::rhi::gl::textureId(texture);
+    if (textureId == 0) {
         std::cerr << "Container UI texture is not loaded: " << def.backgroundTexture << '\n';
         return;
     }
@@ -425,7 +427,7 @@ void DataDrivenContainerPanelControl::drawTextureQuad(const UIRenderContext& con
     m_inventoryShader->setInt("uAtlas", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, textureId);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());

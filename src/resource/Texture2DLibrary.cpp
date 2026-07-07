@@ -93,14 +93,6 @@ uint32_t Texture2DLibrary::load(const std::string& name,
     return textureID;
 }
 
-uint32_t Texture2DLibrary::get(const std::string& name) const {
-    const auto it = m_textures.find(name);
-    if (it != m_textures.end()) {
-        return it->second.textureID;
-    }
-    return 0;
-}
-
 RhiTextureHandle Texture2DLibrary::getHandle(const std::string& name) const {
     const auto it = m_textures.find(name);
     if (it != m_textures.end()) {
@@ -177,14 +169,6 @@ uint32_t Texture2DLibrary::loadGui(const std::string& name,
     info.height = height;
     m_guiTextures[name] = info;
     return textureID;
-}
-
-uint32_t Texture2DLibrary::getGui(const std::string& name) const {
-    const auto it = m_guiTextures.find(name);
-    if (it != m_guiTextures.end()) {
-        return it->second.textureID;
-    }
-    return 0;
 }
 
 RhiTextureHandle Texture2DLibrary::getGuiHandle(const std::string& name) const {

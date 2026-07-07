@@ -4,6 +4,7 @@
 #include <string>
 #include <cstdint>
 
+#include "renderer/rhi/RhiHandles.h"
 #include "../core/UIWidget.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
@@ -83,7 +84,7 @@ private:
     // Cached draw state for replaying without vertex rebuild.
     mutable int m_cachedBgVertCount = 0;
     mutable int m_cachedSelectedVertCount = 0;
-    mutable uint32_t m_cachedBgTexture = 0;
+    mutable RhiTextureHandle m_cachedBgTexture;
     mutable int m_cachedIconVertCounts[3] = {};
     mutable uint32_t m_cachedIconTextures[3] = {};
 
@@ -91,4 +92,3 @@ private:
     mutable float m_cachedStartX = 0.0f;
     mutable float m_cachedStartY = 0.0f;
 };
-

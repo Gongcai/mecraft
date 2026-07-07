@@ -16,6 +16,7 @@
 #include "../../player/Inventory.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../locale/LocaleManager.h"
 #include "../ItemIconPolicy.h"
@@ -282,8 +283,9 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
         return;
     }
 
-    const unsigned int texture = m_resourceMgr->getGuiTexture(m_layout.backgroundTextureName);
-    if (texture == 0) {
+    const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(m_layout.backgroundTextureName);
+    const uint32_t textureId = renderer::rhi::gl::textureId(texture);
+    if (textureId == 0) {
         return;
     }
 
@@ -322,7 +324,7 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
     m_inventoryShader->setInt("uAtlas", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, textureId);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);

@@ -15,6 +15,7 @@
 #include "../../player/Inventory.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../ItemIconPolicy.h"
 
@@ -511,9 +512,9 @@ void CreativeInventoryPanelControl::renderBackground(const UIRenderContext& cont
         return;
     }
 
-    const unsigned int texture = m_resourceMgr->getGuiTexture(
+    const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(
         m_tab == CreativeInventoryTab::AllItems ? "creative_tab_items" : "creative_tab_inventory");
-    if (texture == 0) {
+    if (!texture.isValid()) {
         return;
     }
 
@@ -565,8 +566,8 @@ void CreativeInventoryPanelControl::renderTabs(const UIRenderContext& context,
     for (int i = 1; i <= kTabCount; ++i) {
         const bool top = true;
         const bool selected = (m_tab == CreativeInventoryTab::AllItems && i == 1);
-        const unsigned int texture = m_resourceMgr->getGuiTexture(tabTextureName(top, selected, i));
-        if (texture == 0) {
+        const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(tabTextureName(top, selected, i));
+        if (!texture.isValid()) {
             continue;
         }
         renderGuiTextureQuad(context,
@@ -584,8 +585,8 @@ void CreativeInventoryPanelControl::renderTabs(const UIRenderContext& context,
     for (int i = 1; i <= kTabCount; ++i) {
         const bool top = false;
         const bool selected = (m_tab == CreativeInventoryTab::PlayerInventory && i == kTabCount);
-        const unsigned int texture = m_resourceMgr->getGuiTexture(tabTextureName(top, selected, i));
-        if (texture == 0) {
+        const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(tabTextureName(top, selected, i));
+        if (!texture.isValid()) {
             continue;
         }
         renderGuiTextureQuad(context,
@@ -609,8 +610,9 @@ void CreativeInventoryPanelControl::renderScroller(const UIRenderContext& contex
     }
 
     const bool enabled = scrollerEnabled();
-    const unsigned int texture = m_resourceMgr->getGuiTexture(enabled ? "creative_scroller" : "creative_scroller_disabled");
-    if (texture == 0) {
+    const RhiTextureHandle texture =
+        m_resourceMgr->getGuiTextureHandle(enabled ? "creative_scroller" : "creative_scroller_disabled");
+    if (!texture.isValid()) {
         return;
     }
 
@@ -694,7 +696,7 @@ void CreativeInventoryPanelControl::renderDraggedItem(const UIRenderContext& con
 }
 
 void CreativeInventoryPanelControl::renderGuiTextureQuad(const UIRenderContext& context,
-                                                         const unsigned int texture,
+                                                         const RhiTextureHandle texture,
                                                          const float x,
                                                          const float y,
                                                          const float width,
@@ -704,7 +706,8 @@ void CreativeInventoryPanelControl::renderGuiTextureQuad(const UIRenderContext& 
                                                          const float u1,
                                                          const float v1) const
 {
-    if (!m_inventoryShader || texture == 0 || m_vao == 0 || m_vbo == 0 ||
+    const uint32_t textureId = renderer::rhi::gl::textureId(texture);
+    if (!m_inventoryShader || textureId == 0 || m_vao == 0 || m_vbo == 0 ||
         context.screenWidth <= 0 || context.screenHeight <= 0) {
         return;
     }
@@ -736,7 +739,7 @@ void CreativeInventoryPanelControl::renderGuiTextureQuad(const UIRenderContext& 
     m_inventoryShader->setInt("uAtlas", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, textureId);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);

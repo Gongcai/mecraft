@@ -10,6 +10,7 @@
 
 #include <glm/glm.hpp>
 
+#include "../rhi/RhiHandles.h"
 #include "../../world/block/BlockStateRegistry.h"
 
 class IWorldView;
@@ -61,7 +62,7 @@ private:
 
     struct ModelEntry {
         Mesh mesh;
-        uint32_t texture = 0;
+        RhiTextureHandle texture;
         bool usesHorizontalFacing = false;
     };
 

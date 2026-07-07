@@ -2,6 +2,7 @@
 #include "../gl/GlStateGuard.h"
 #include "../core/Shader.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <algorithm>
 #include <array>
@@ -408,7 +409,8 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
         return;
     }
 
-    const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
+    const GLuint steveTex =
+        static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle("steve")));
     if (steveTex == 0) {
         return;
     }
@@ -588,7 +590,8 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     glCullFace(GL_BACK);
 
     // ── Render Steve (player) entities ──
-    const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
+    const GLuint steveTex =
+        static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle("steve")));
     if (steveTex != 0) {
         glBindTexture(GL_TEXTURE_2D, steveTex);
 
@@ -657,7 +660,8 @@ void HumanoidRenderer::drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& 
     for (auto mobRoot : mobView) {
         const auto& visual = mobView.get<ecs::MobVisualComponent>(mobRoot);
         const auto& rootTransform = mobView.get<ecs::TransformComponent>(mobRoot);
-        const GLuint mobTex = m_resourceMgr->getGuiTexture(visual.textureKey);
+        const GLuint mobTex =
+            static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle(visual.textureKey)));
         if (mobTex == 0) {
             continue;
         }
@@ -754,7 +758,8 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
     glCullFace(GL_BACK);
 
     // ── Render Steve (player) entities ──
-    const GLuint steveTex = m_resourceMgr->getGuiTexture("steve");
+    const GLuint steveTex =
+        static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle("steve")));
     if (steveTex != 0) {
         glBindTexture(GL_TEXTURE_2D, steveTex);
 
@@ -847,7 +852,8 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
     for (auto mobRoot : mobView) {
         const auto& visual = mobView.get<ecs::MobVisualComponent>(mobRoot);
         const auto& rootTransform = mobView.get<ecs::TransformComponent>(mobRoot);
-        const GLuint mobTex = m_resourceMgr->getGuiTexture(visual.textureKey);
+        const GLuint mobTex =
+            static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle(visual.textureKey)));
         if (mobTex == 0) {
             continue;
         }

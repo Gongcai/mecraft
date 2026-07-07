@@ -29,7 +29,6 @@ public:
                   bool linear = true,
                   bool flipVertically = false);
 
-    [[nodiscard]] uint32_t get(const std::string& name) const;
     [[nodiscard]] RhiTextureHandle getHandle(const std::string& name) const;
 
     uint32_t loadGui(const std::string& name,
@@ -42,7 +41,6 @@ public:
                      int& outHeight,
                      bool flipVertically = true);
 
-    [[nodiscard]] uint32_t getGui(const std::string& name) const;
     [[nodiscard]] RhiTextureHandle getGuiHandle(const std::string& name) const;
 
     void shutdown();

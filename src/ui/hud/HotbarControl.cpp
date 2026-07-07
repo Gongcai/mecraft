@@ -11,6 +11,7 @@
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
 #include "../font/TextRenderer.h"
@@ -186,7 +187,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
 
         int offset = 0;
         // Background
-        glBindTexture(GL_TEXTURE_2D, m_cachedBgTexture);
+        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_cachedBgTexture));
         m_inventoryShader->setVec4("uTintColor", glm::vec4(m_bgColor[0], m_bgColor[1], m_bgColor[2], m_bgColor[3]));
         glDrawArrays(GL_TRIANGLES, offset, m_cachedBgVertCount);
         offset += m_cachedBgVertCount;
@@ -229,8 +230,9 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
     const TextureAtlas& atlas = m_resourceMgr->getAtlas();
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
     const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
-    const uint32_t widgetsTexture = m_resourceMgr->getGuiTexture("widgets");
-    if (widgetsTexture == 0) {
+    const RhiTextureHandle widgetsTexture = m_resourceMgr->getGuiTextureHandle("widgets");
+    const uint32_t widgetsTextureId = renderer::rhi::gl::textureId(widgetsTexture);
+    if (widgetsTextureId == 0) {
         return;
     }
 
@@ -388,7 +390,7 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
 
         int offset = 0;
 
-        glBindTexture(GL_TEXTURE_2D, widgetsTexture);
+        glBindTexture(GL_TEXTURE_2D, widgetsTextureId);
         m_inventoryShader->setVec4("uTintColor", glm::vec4(m_bgColor[0], m_bgColor[1], m_bgColor[2], m_bgColor[3]));
         glDrawArrays(GL_TRIANGLES, offset, bgVertCount);
         offset += bgVertCount;

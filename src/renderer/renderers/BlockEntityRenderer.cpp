@@ -12,6 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
@@ -162,8 +163,8 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
 
     ModelDefinition chest = makeChestDefinition();
-    const GLuint chestTexture = resourceMgr.getGuiTexture(chest.textureKey);
-    if (chestTexture == 0) {
+    const RhiTextureHandle chestTexture = resourceMgr.getGuiTextureHandle(chest.textureKey);
+    if (renderer::rhi::gl::textureId(chestTexture) == 0) {
         failBlockEntityRenderer("Chest block entity texture is not loaded");
     }
 
@@ -512,9 +513,10 @@ void BlockEntityRenderer::drawBlockEntitiesInstanced(const IWorldView& worldView
                              static_cast<GLsizeiptr>(m_instanceData.size() * sizeof(InstancedDrawData)),
                              m_instanceData.data());
 
-        if (boundTexture != entry.texture) {
-            glBindTexture(GL_TEXTURE_2D, entry.texture);
-            boundTexture = entry.texture;
+        const GLuint texture = static_cast<GLuint>(renderer::rhi::gl::textureId(entry.texture));
+        if (boundTexture != texture) {
+            glBindTexture(GL_TEXTURE_2D, texture);
+            boundTexture = texture;
         }
 
         glBindVertexArray(mesh.vao);
@@ -571,9 +573,10 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
             glUniform1f(blockLightLoc, instance->light.y);
         }
 
-        if (boundTexture != entry->texture) {
-            glBindTexture(GL_TEXTURE_2D, entry->texture);
-            boundTexture = entry->texture;
+        const GLuint texture = static_cast<GLuint>(renderer::rhi::gl::textureId(entry->texture));
+        if (boundTexture != texture) {
+            glBindTexture(GL_TEXTURE_2D, texture);
+            boundTexture = texture;
         }
 
         shader.setMat4(modelLoc, instance->modelMatrix);

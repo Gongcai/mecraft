@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include "renderer/rhi/RhiHandles.h"
 #include "ItemGridControl.h"
 #include "../widgets/UITooltip.h"
 #include "../core/UIWidget.h"
@@ -94,7 +95,7 @@ private:
     void renderScroller(const UIRenderContext& context, const ResolvedPanelRect& panelRect) const;
     void renderDraggedItem(const UIRenderContext& context) const;
     void renderGuiTextureQuad(const UIRenderContext& context,
-                              unsigned int texture,
+                              RhiTextureHandle texture,
                               float x,
                               float y,
                               float width,
