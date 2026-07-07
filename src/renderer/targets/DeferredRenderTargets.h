@@ -113,15 +113,15 @@ public:
     void copySsgiDenoiseToSsgi(int slot);
     void copySsgiTemporalToSsgi();
     void copySsgiTemporalToHistory();
-    [[nodiscard]] uint32_t sceneLightingTexture() const { return m_sceneLightingTex; }
-    [[nodiscard]] uint32_t sceneCompositeTexture() const { return m_sceneCompositeTex; }
+    [[nodiscard]] RhiTextureHandle sceneLightingTextureHandle() const { return m_sceneLightingHandle; }
+    [[nodiscard]] RhiTextureHandle sceneCompositeTextureHandle() const { return m_sceneCompositeHandle; }
     [[nodiscard]] RhiTextureHandle sceneResolvedTextureHandle() const { return m_sceneResolvedHandle; }
-    [[nodiscard]] uint32_t transparentCompositeTexture() const { return m_transparentCompositeTex; }
-    [[nodiscard]] uint32_t transparentCompositeDepthTexture() const { return m_transparentCompositeDepth; }
-    [[nodiscard]] uint32_t halfResTexture() const { return m_halfResTex; }
-    [[nodiscard]] uint32_t reflectionTexture() const { return m_reflectionTex; }
-    [[nodiscard]] uint32_t reflectionTemporalScratchTexture() const { return m_reflectionTemporalScratchTex; }
-    [[nodiscard]] uint32_t cloudTexture() const { return m_cloudTex; }
+    [[nodiscard]] RhiTextureHandle transparentCompositeTextureHandle() const { return m_transparentCompositeHandle; }
+    [[nodiscard]] RhiTextureHandle transparentCompositeDepthTextureHandle() const { return m_transparentCompositeDepthHandle; }
+    [[nodiscard]] RhiTextureHandle halfResTextureHandle() const { return m_halfResHandle; }
+    [[nodiscard]] RhiTextureHandle reflectionTextureHandle() const { return m_reflectionHandle; }
+    [[nodiscard]] RhiTextureHandle reflectionTemporalScratchTextureHandle() const { return m_reflectionTemporalScratchHandle; }
+    [[nodiscard]] RhiTextureHandle cloudTextureHandle() const { return m_cloudHandle; }
     [[nodiscard]] uint32_t skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
     [[nodiscard]] RhiTextureHandle skyCaptureTextureHandle() const { return m_skyCaptureHandle; }
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
@@ -271,10 +271,12 @@ private:
 
     uint32_t m_sceneLightingFbo = 0;
     uint32_t m_sceneLightingTex = 0;
+    RhiTextureHandle m_sceneLightingHandle;
 
     // SceneComposite is the opaque HDR scene after screen-space base effects such as clouds/reflections.
     uint32_t m_sceneCompositeFbo = 0;
     uint32_t m_sceneCompositeTex = 0;
+    RhiTextureHandle m_sceneCompositeHandle;
 
     // SceneResolved is the current full-world HDR color. It becomes the post input and temporal scene history source.
     uint32_t m_sceneResolvedFbo = 0;
@@ -285,20 +287,26 @@ private:
     uint32_t m_transparentCompositeFbo = 0;
     uint32_t m_transparentCompositeTex = 0;
     uint32_t m_transparentCompositeDepth = 0;
+    RhiTextureHandle m_transparentCompositeHandle;
+    RhiTextureHandle m_transparentCompositeDepthHandle;
 
     uint32_t m_halfResFbo = 0;
     uint32_t m_halfResTex = 0;
+    RhiTextureHandle m_halfResHandle;
 
     uint32_t m_reflectionFbo = 0;
     uint32_t m_reflectionTex = 0;
+    RhiTextureHandle m_reflectionHandle;
 
     // Reflection temporal scratch: holds filtered reflection copy while
     // temporal pass reads it and writes blended result to m_reflectionFbo.
     uint32_t m_reflectionTemporalScratchFbo = 0;
     uint32_t m_reflectionTemporalScratchTex = 0;
+    RhiTextureHandle m_reflectionTemporalScratchHandle;
 
     uint32_t m_cloudFbo = 0;
     uint32_t m_cloudTex = 0;
+    RhiTextureHandle m_cloudHandle;
 
     uint32_t m_skyCaptureFbo = 0;
     uint32_t m_skyCaptureTex = 0;

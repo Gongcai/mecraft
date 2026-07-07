@@ -92,7 +92,7 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
     m_ssgiShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.sceneLightingTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneLightingTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.albedoTextureHandle()));
     glActiveTexture(GL_TEXTURE2);

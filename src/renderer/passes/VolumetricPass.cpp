@@ -281,7 +281,7 @@ void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSetting
     m_volumetricTemporalShader->setFloat("uFarPlane", ctx.camera.farPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.halfResTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.historyVolumetricTexturePrev());
     glActiveTexture(GL_TEXTURE2);
@@ -328,12 +328,12 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
     m_volumetricCompositeShader->setInt("uVolumetricFogActive", volFogCompositeActive ? 1 : 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.sceneCompositeTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     if (settings.volumetric.temporalEnabled && hasPreviousFrame && m_volumetricTemporalShader != nullptr) {
         glBindTexture(GL_TEXTURE_2D, targets.historyVolumetricTexture());
     } else {
-        glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
+        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.halfResTextureHandle()));
     }
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));

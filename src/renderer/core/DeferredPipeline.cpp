@@ -711,7 +711,7 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, targets.sceneCompositeTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle()));
 
     std::vector<const DrawBatchEntry*> genericEntries;
     genericEntries.reserve(m_transparentBatch.size());

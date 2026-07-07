@@ -90,7 +90,7 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     m_reflectionShader->setFloat("uFarPlane", ctx.camera.farPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.sceneLightingTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneLightingTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
@@ -155,7 +155,7 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
     m_reflectionFilterShader->setFloat("uFarPlane", ctx.camera.farPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.reflectionTemporalScratchTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.reflectionTemporalScratchTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
@@ -201,7 +201,7 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     m_reflectionTemporalShader->setFloat("uNear", ctx.camera.nearPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.reflectionTemporalScratchTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.reflectionTemporalScratchTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.historyReflectionTexturePrev());
     glActiveTexture(GL_TEXTURE2);

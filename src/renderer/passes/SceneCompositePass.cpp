@@ -110,11 +110,11 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
 
     // Texture bindings
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.sceneLightingTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneLightingTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.reflectionTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.reflectionTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, targets.cloudTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.cloudTextureHandle()));
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);

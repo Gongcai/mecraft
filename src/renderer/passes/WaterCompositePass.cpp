@@ -158,11 +158,11 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glBindTexture(GL_TEXTURE_2D,
                   renderer::rhi::gl::textureId(m_resourceMgr->getTexture2DHandle("shader_noise2d")));
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, targets.reflectionTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.reflectionTextureHandle()));
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.halfResTextureHandle()));
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D,
                   renderer::rhi::gl::textureId(m_resourceMgr != nullptr

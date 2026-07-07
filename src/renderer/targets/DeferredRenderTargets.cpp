@@ -1417,12 +1417,110 @@ bool DeferredRenderTargets::registerRhiTextures() {
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
         false
     });
+    const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
+    const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
+    m_sceneLightingHandle = renderer::rhi::gl::registerTexture({
+        m_sceneLightingTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_sceneCompositeHandle = renderer::rhi::gl::registerTexture({
+        m_sceneCompositeTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
     m_sceneResolvedHandle = renderer::rhi::gl::registerTexture({
         m_sceneResolvedTex,
         RhiTextureDimension::Texture2D,
         RhiTextureFormat::Rgba16Float,
         static_cast<uint32_t>(m_width),
         static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_transparentCompositeHandle = renderer::rhi::gl::registerTexture({
+        m_transparentCompositeTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_transparentCompositeDepthHandle = renderer::rhi::gl::registerTexture({
+        m_transparentCompositeDepth,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Depth32Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+        false
+    });
+    m_halfResHandle = renderer::rhi::gl::registerTexture({
+        m_halfResTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        halfWidth,
+        halfHeight,
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_reflectionHandle = renderer::rhi::gl::registerTexture({
+        m_reflectionTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_reflectionTemporalScratchHandle = renderer::rhi::gl::registerTexture({
+        m_reflectionTemporalScratchTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_cloudHandle = renderer::rhi::gl::registerTexture({
+        m_cloudTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        halfWidth,
+        halfHeight,
         1,
         1,
         1,
@@ -1586,7 +1684,15 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_gMaterialHandle.isValid() &&
                             m_gMaterialAuxHandle.isValid() &&
                             m_gDepthHandle.isValid() &&
+                            m_sceneLightingHandle.isValid() &&
+                            m_sceneCompositeHandle.isValid() &&
                             m_sceneResolvedHandle.isValid() &&
+                            m_transparentCompositeHandle.isValid() &&
+                            m_transparentCompositeDepthHandle.isValid() &&
+                            m_halfResHandle.isValid() &&
+                            m_reflectionHandle.isValid() &&
+                            m_reflectionTemporalScratchHandle.isValid() &&
+                            m_cloudHandle.isValid() &&
                             m_weatherMaskHandle.isValid() &&
                             m_skyCaptureHandle.isValid() &&
                             m_shadowDepthHandle.isValid() &&
@@ -1634,7 +1740,15 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     renderer::rhi::gl::unregisterTextureAndReset(m_gMaterialHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_gMaterialAuxHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_gDepthHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneLightingHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneCompositeHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneResolvedHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_transparentCompositeHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_transparentCompositeDepthHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_halfResHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_reflectionHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_reflectionTemporalScratchHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_cloudHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_skyCaptureHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);
