@@ -1,5 +1,6 @@
 #include "PostProcessPass.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "engine/platform/Window.h"
 
@@ -35,10 +36,7 @@ void PostProcessPass::init(ResourceMgr& resourceMgr) {
     m_exposureDownsampleShader = resourceMgr.getShader("exposure_downsample");
     m_exposureResolveShader = resourceMgr.getShader("exposure_resolve");
     m_blitShader = resourceMgr.getShader("blit_texture");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_bayer256");
-    if (m_noiseTexture == 0) {
-        m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
-    }
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_bayer256");
     glCreateBuffers(1, &m_compositeParamsBuffer);
     glNamedBufferStorage(m_compositeParamsBuffer,
                          static_cast<GLsizeiptr>(sizeof(PostProcessCompositeParams)),
@@ -60,7 +58,7 @@ void PostProcessPass::shutdown() {
     m_exposureDownsampleShader = nullptr;
     m_exposureResolveShader = nullptr;
     m_blitShader = nullptr;
-    m_noiseTexture = 0;
+    m_noiseTexture = {};
     m_sceneCaptured = false;
     m_renderCompositeToTexture = false;
     m_targetWidth = 0;
@@ -448,7 +446,7 @@ void PostProcessPass::renderComposite(uint32_t gbufDepthTex, uint32_t weatherMas
         glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][0]);
     }
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, gbufDepthTex);
     glActiveTexture(GL_TEXTURE10);
@@ -480,7 +478,7 @@ void PostProcessPass::renderComposite(uint32_t gbufDepthTex, uint32_t weatherMas
 void PostProcessPass::updateCompositeParams(const bool useAutoExposureTexture, const bool hasBloom) {
     assert(m_compositeParamsBuffer != 0);
     const bool sunRaysEnabled = m_effects.sunRaysEnabled && hasBloom;
-    const float noiseDitherStrength = (m_effects.shaderpackGradingEnabled && m_noiseTexture != 0)
+    const float noiseDitherStrength = (m_effects.shaderpackGradingEnabled && m_noiseTexture.isValid())
         ? m_effects.noiseDitherStrength
         : 0.0f;
 

@@ -1,6 +1,7 @@
 #include "SkyCapturePass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/DayNightSystem.h"
 #include "../../world/WeatherSystem.h"
@@ -48,7 +49,9 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     const float cloudThickness = 1400.0f + cloudWetness * (3000.0f - 1400.0f);
     const float cloudCoverage = std::clamp(1.0f + cloudWetness * 0.2f, 0.0f, 1.5f);
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
-    const uint32_t noiseTexture = resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_noise2d") : 0;
+    const RhiTextureHandle noiseTexture =
+        resourceMgr != nullptr ? resourceMgr->getTexture2DHandle("shader_noise2d") : RhiTextureHandle{};
+    const uint32_t noiseTextureId = renderer::rhi::gl::textureId(noiseTexture);
 
     // Raw sky radiance (rows 0..257)
     skyRenderer.renderSkyCapture(dayNightSystem,
@@ -64,7 +67,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                                         targets.skyCaptureWidth(),
                                         targets.skyCaptureHeight(),
                                         cameraAltitude, atmosphereLut, moonPhaseFlux,
-                                        noiseTexture, shaderTime,
+                                        noiseTextureId, shaderTime,
                                         illum,
                                         cloudCoverage, cloudDensity,
                                         cloudHeight, cloudThickness,

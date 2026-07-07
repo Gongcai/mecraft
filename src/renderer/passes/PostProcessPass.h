@@ -2,6 +2,7 @@
 #define MECRAFT_POST_PROCESS_PASS_H
 
 #include "RenderPass.h"
+#include "../rhi/RhiHandles.h"
 #include <cstdint>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
@@ -152,7 +153,7 @@ private:
     Shader* m_exposureDownsampleShader = nullptr;
     Shader* m_exposureResolveShader = nullptr;
     Shader* m_blitShader = nullptr;
-    uint32_t m_noiseTexture = 0;
+    RhiTextureHandle m_noiseTexture;
 
     // Scene capture FBO
     uint32_t m_sceneFbo = 0;

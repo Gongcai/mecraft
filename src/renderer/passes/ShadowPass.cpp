@@ -6,6 +6,7 @@
 #include "../shadow/ShadowRenderer.h"
 #include "../shadow/ShadowMatrices.h"
 #include "../shadow/ShadowCasterCuller.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../core/Shader.h"
@@ -207,7 +208,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     m_shadowDepthShader->setInt("uNoiseTex", 1);
     m_shadowDepthShader->setInt("uGrassColormap", 2);
     m_shadowDepthShader->setInt("uFoliageColormap", 3);
-    const GLuint noiseTex = m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_noise2d") : 0;
+    const RhiTextureHandle noiseTexture =
+        m_resourceMgr != nullptr ? m_resourceMgr->getTexture2DHandle("shader_noise2d") : RhiTextureHandle{};
+    const GLuint noiseTex = static_cast<GLuint>(renderer::rhi::gl::textureId(noiseTexture));
     // Entity/drop shadow sub-passes bind their own textures, so restore terrain inputs before terrain draws.
     auto bindTerrainShadowInputs = [&]() {
         m_shadowDepthShader->use();

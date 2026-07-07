@@ -2,6 +2,7 @@
 #include "../debug/RenderDebugLabels.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../gl/GlStateGuard.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/TerrainRenderCache.h"
@@ -153,7 +154,8 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, targets.sceneResolvedTexture());
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getTexture2D("shader_noise2d"));
+    glBindTexture(GL_TEXTURE_2D,
+                  renderer::rhi::gl::textureId(m_resourceMgr->getTexture2DHandle("shader_noise2d")));
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, targets.reflectionTexture());
     glActiveTexture(GL_TEXTURE10);
@@ -161,7 +163,10 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
     glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr != nullptr ? m_resourceMgr->getTexture2D("shader_ripple_normal") : 0);
+    glBindTexture(GL_TEXTURE_2D,
+                  renderer::rhi::gl::textureId(m_resourceMgr != nullptr
+                      ? m_resourceMgr->getTexture2DHandle("shader_ripple_normal")
+                      : RhiTextureHandle{}));
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
