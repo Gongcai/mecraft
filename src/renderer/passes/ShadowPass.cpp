@@ -554,9 +554,11 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     if (settings.debug.deferredLightDebugMode > 0 || settings.debug.lightDebugMode > 0) {
         const uint32_t csmShadowDepthId =
             renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle());
+        const uint32_t shadowDepthId =
+            renderer::rhi::gl::textureId(targets.shadowDepthTextureHandle());
         glCopyImageSubData(csmShadowDepthId, GL_TEXTURE_2D_ARRAY,
                            0, 0, 0, 0,
-                           targets.shadowDepthTexture(), GL_TEXTURE_2D,
+                           shadowDepthId, GL_TEXTURE_2D,
                            0, 0, 0, 0,
                            targets.shadowResolution(),
                            targets.shadowResolution(),

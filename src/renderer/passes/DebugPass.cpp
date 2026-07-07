@@ -132,7 +132,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, targets.shadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.shadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, targets.ssaoFilteredTexture());
     glActiveTexture(GL_TEXTURE7);
@@ -171,8 +171,9 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE14);
     const bool shadowCasterDebug = settings.debug.viewMode == 35;
     const bool reflectionHistoryDebug = settings.debug.viewMode == 28;
+    const uint32_t shadowColorTexture = renderer::rhi::gl::textureId(targets.shadowColorTextureHandle());
     glBindTexture(GL_TEXTURE_2D,
-                  shadowCasterDebug ? targets.shadowColorTexture()
+                  shadowCasterDebug ? shadowColorTexture
                                     : (reflectionHistoryDebug ? targets.historyReflectionTexturePrev()
                                                               : targets.reflectionTexture()));
 
@@ -185,8 +186,9 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     const bool sceneResolvedDebug =
         settings.debug.viewMode == 31 ||
         settings.debug.viewMode == 79;
+    const uint32_t shadowNormalTexture = renderer::rhi::gl::textureId(targets.shadowNormalTextureHandle());
     glBindTexture(GL_TEXTURE_2D,
-                  shadowCasterDebug ? targets.shadowNormalTexture()
+                  shadowCasterDebug ? shadowNormalTexture
                                     : (sceneResolvedDebug
                                            ? renderer::rhi::gl::textureId(targets.sceneResolvedTextureHandle())
                                           : (sceneCompositeDebug ? targets.sceneCompositeTexture()

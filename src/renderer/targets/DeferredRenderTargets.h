@@ -78,8 +78,8 @@ public:
     [[nodiscard]] uint32_t materialTexture() const { return m_gMaterial; }
     [[nodiscard]] uint32_t materialAuxTexture() const { return m_gMaterialAux; }
     [[nodiscard]] RhiTextureHandle depthTextureHandle() const { return m_gDepthHandle; }
-    [[nodiscard]] uint32_t shadowDepthTexture() const { return m_shadowDepth; }
-    [[nodiscard]] uint32_t shadowDepthComparisonTexture() const { return m_shadowDepthComparison; }
+    [[nodiscard]] RhiTextureHandle shadowDepthTextureHandle() const { return m_shadowDepthHandle; }
+    [[nodiscard]] RhiTextureHandle shadowDepthComparisonTextureHandle() const { return m_shadowDepthComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
     // CSM transparent shadow contract (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
@@ -87,8 +87,8 @@ public:
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const { return m_csmShadowDepthAllComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor0TextureHandle() const { return m_csmShadowColor0Handle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor1TextureHandle() const { return m_csmShadowColor1Handle; }
-    [[nodiscard]] uint32_t shadowColorTexture() const { return m_shadowColor; }
-    [[nodiscard]] uint32_t shadowNormalTexture() const { return m_shadowNormal; }
+    [[nodiscard]] RhiTextureHandle shadowColorTextureHandle() const { return m_shadowColorHandle; }
+    [[nodiscard]] RhiTextureHandle shadowNormalTextureHandle() const { return m_shadowNormalHandle; }
     [[nodiscard]] uint32_t ssaoTexture() const { return m_ssaoTex; }
     [[nodiscard]] uint32_t ssaoFilteredTexture() const { return m_ssaoFilteredTex; }
     [[nodiscard]] uint32_t ssaoHalfResTexture() const { return m_ssaoHalfResTex; }
@@ -213,6 +213,10 @@ private:
     uint32_t m_shadowDepthComparison = 0; // Zero-copy comparison view for sampler2DShadow
     uint32_t m_shadowColor = 0;   // RGBA8: albedo color for colored shadows / caustics
     uint32_t m_shadowNormal = 0;  // RGBA16F: encoded normal.rg, skylight.b, aux/height.a
+    RhiTextureHandle m_shadowDepthHandle;
+    RhiTextureHandle m_shadowDepthComparisonHandle;
+    RhiTextureHandle m_shadowColorHandle;
+    RhiTextureHandle m_shadowNormalHandle;
     uint32_t m_csmShadowFbo = 0;
     uint32_t m_csmShadowDepth = 0; // Raw depth texture array, one layer per cascade
     uint32_t m_csmShadowDepthComparison = 0; // Comparison texture array for sampler2DArrayShadow

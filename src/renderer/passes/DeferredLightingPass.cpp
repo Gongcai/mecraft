@@ -219,7 +219,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, lightmapNightId);
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, targets.shadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.shadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, settings.ssao.temporalEnabled
         ? targets.ssaoTemporalTexture()
@@ -229,9 +229,9 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, targets.shadowColorTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.shadowColorTextureHandle()));
     glActiveTexture(GL_TEXTURE13);
-    glBindTexture(GL_TEXTURE_2D, targets.shadowNormalTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.shadowNormalTextureHandle()));
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     // Units 15-20: CSM shadow arrays (15 already bound before shader->use())

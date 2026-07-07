@@ -712,7 +712,7 @@ void DeferredRenderTargets::bindCsmShadowTransparentLayer(const int cascadeIndex
 
 void DeferredRenderTargets::bindShadowColor() {
     // Read-only binding for sampling shadow color/normal in lighting pass
-    // No-op: textures are accessed via shadowColorTexture()/shadowNormalTexture()
+    // No-op: textures are accessed via shadow color/normal RHI handles.
 }
 
 void DeferredRenderTargets::bindSsao() {
@@ -1393,6 +1393,54 @@ bool DeferredRenderTargets::registerRhiTextures() {
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
         false
     });
+    m_shadowDepthHandle = renderer::rhi::gl::registerTexture({
+        m_shadowDepth,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Depth32Float,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+        false
+    });
+    m_shadowDepthComparisonHandle = renderer::rhi::gl::registerTexture({
+        m_shadowDepthComparison,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Depth32Float,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled),
+        true
+    });
+    m_shadowColorHandle = renderer::rhi::gl::registerTexture({
+        m_shadowColor,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_shadowNormalHandle = renderer::rhi::gl::registerTexture({
+        m_shadowNormal,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_shadowResolution),
+        static_cast<uint32_t>(m_shadowResolution),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
     m_csmShadowDepthHandle = renderer::rhi::gl::registerTexture({
         m_csmShadowDepth,
         RhiTextureDimension::Texture2DArray,
@@ -1476,6 +1524,10 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_sceneResolvedHandle.isValid() &&
                             m_weatherMaskHandle.isValid() &&
                             m_skyCaptureHandle.isValid() &&
+                            m_shadowDepthHandle.isValid() &&
+                            m_shadowDepthComparisonHandle.isValid() &&
+                            m_shadowColorHandle.isValid() &&
+                            m_shadowNormalHandle.isValid() &&
                             m_csmShadowDepthHandle.isValid() &&
                             m_csmShadowDepthComparisonHandle.isValid() &&
                             m_csmShadowDepthAllHandle.isValid() &&
@@ -1516,6 +1568,10 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_skyCaptureHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthComparisonHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_shadowColorHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_shadowNormalHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthComparisonHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthAllHandle);
