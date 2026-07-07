@@ -331,15 +331,20 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(texArray.texture));
 
+    const uint32_t lightmapDayId = renderer::rhi::gl::textureId(resourceMgr->getLightmapDay());
+    const uint32_t lightmapNightId = renderer::rhi::gl::textureId(resourceMgr->getLightmapNight());
+    const uint32_t grassColormapId = renderer::rhi::gl::textureId(resourceMgr->getGrassColormap());
+    const uint32_t foliageColormapId = renderer::rhi::gl::textureId(resourceMgr->getFoliageColormap());
+
     // Bind lightmap textures
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr->getLightmapDay());
+    glBindTexture(GL_TEXTURE_2D, lightmapDayId);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr->getLightmapNight());
+    glBindTexture(GL_TEXTURE_2D, lightmapNightId);
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr->getGrassColormap());
+    glBindTexture(GL_TEXTURE_2D, grassColormapId);
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr->getFoliageColormap());
+    glBindTexture(GL_TEXTURE_2D, foliageColormapId);
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE6);
@@ -399,14 +404,23 @@ void TerrainRenderer::bindBasicForwardState(const TerrainFrameData& frame, const
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(texArray.texture));
 
+    const uint32_t lightmapDayId = renderer::rhi::gl::textureId(
+        resourceMgr != nullptr ? resourceMgr->getLightmapDay() : RhiTextureHandle{});
+    const uint32_t lightmapNightId = renderer::rhi::gl::textureId(
+        resourceMgr != nullptr ? resourceMgr->getLightmapNight() : RhiTextureHandle{});
+    const uint32_t grassColormapId = renderer::rhi::gl::textureId(
+        resourceMgr != nullptr ? resourceMgr->getGrassColormap() : RhiTextureHandle{});
+    const uint32_t foliageColormapId = renderer::rhi::gl::textureId(
+        resourceMgr != nullptr ? resourceMgr->getFoliageColormap() : RhiTextureHandle{});
+
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getLightmapDay() : 0);
+    glBindTexture(GL_TEXTURE_2D, lightmapDayId);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getLightmapNight() : 0);
+    glBindTexture(GL_TEXTURE_2D, lightmapNightId);
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getGrassColormap() : 0);
+    glBindTexture(GL_TEXTURE_2D, grassColormapId);
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getFoliageColormap() : 0);
+    glBindTexture(GL_TEXTURE_2D, foliageColormapId);
 }
 
 // ============================================================================

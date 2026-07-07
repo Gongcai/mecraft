@@ -209,10 +209,14 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glBindTexture(GL_TEXTURE_2D, targets.materialAuxTexture());
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
+    const uint32_t lightmapDayId = renderer::rhi::gl::textureId(
+        m_resourceMgr ? m_resourceMgr->getLightmapDay() : RhiTextureHandle{});
+    const uint32_t lightmapNightId = renderer::rhi::gl::textureId(
+        m_resourceMgr ? m_resourceMgr->getLightmapNight() : RhiTextureHandle{});
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr ? m_resourceMgr->getLightmapDay() : 0);
+    glBindTexture(GL_TEXTURE_2D, lightmapDayId);
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr ? m_resourceMgr->getLightmapNight() : 0);
+    glBindTexture(GL_TEXTURE_2D, lightmapNightId);
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, targets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE9);

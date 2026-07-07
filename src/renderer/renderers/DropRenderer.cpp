@@ -129,6 +129,11 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         m_itemShader->setInt("uAtlas", 0);
     }
 
+    const GLuint lightmapDayId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapDay()));
+    const GLuint lightmapNightId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapNight()));
+    const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
+    const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
+
     for (const DropEntity& drop : drops) {
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
@@ -169,13 +174,13 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         // Bind lightmap textures for drop block rendering
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+        glBindTexture(GL_TEXTURE_2D, lightmapDayId);
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+        glBindTexture(GL_TEXTURE_2D, lightmapNightId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }
@@ -326,6 +331,9 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
         m_itemGBufferShader->setInt("uAtlas", 0);
     }
 
+    const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
+    const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
+
     for (const DropEntity& drop : drops) {
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
@@ -377,9 +385,9 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
         m_previousModelMatrices[drop.id] = model;
@@ -450,6 +458,9 @@ void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSyst
         m_itemShadowShader->setInt("uAtlas", 0);
     }
 
+    const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
+    const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
+
     for (const DropEntity& drop : drops) {
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
         const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
@@ -489,9 +500,9 @@ void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSyst
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }

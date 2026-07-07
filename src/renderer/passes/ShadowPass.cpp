@@ -226,10 +226,12 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                       renderer::rhi::gl::textureId(m_resourceMgr->getTextureArray().texture));
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, noiseTex);
+        const uint32_t grassColormapId = renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap());
+        const uint32_t foliageColormapId = renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap());
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glActiveTexture(GL_TEXTURE0);
     };
     bindTerrainShadowInputs();

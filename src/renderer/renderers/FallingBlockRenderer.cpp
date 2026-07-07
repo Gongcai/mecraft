@@ -83,6 +83,8 @@ void FallingBlockRenderer::renderToGBuffer(const IWorldView& worldView,
     if (texArrayId == 0) {
         return;
     }
+    const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
+    const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
 
     auto& reg = registry.registry();
     auto view = reg.view<ecs::FallingBlockTag,
@@ -130,9 +132,9 @@ void FallingBlockRenderer::renderToGBuffer(const IWorldView& worldView,
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
 
@@ -168,9 +170,9 @@ void FallingBlockRenderer::renderToGBuffer(const IWorldView& worldView,
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
 
@@ -201,6 +203,8 @@ void FallingBlockRenderer::renderToShadowMap(const ecs::GameplayRegistry& regist
     if (texArrayId == 0) {
         return;
     }
+    const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
+    const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
 
     auto& reg = registry.registry();
     auto view = reg.view<ecs::FallingBlockTag,
@@ -241,9 +245,9 @@ void FallingBlockRenderer::renderToShadowMap(const ecs::GameplayRegistry& regist
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }
@@ -268,9 +272,9 @@ void FallingBlockRenderer::renderToShadowMap(const ecs::GameplayRegistry& regist
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
     }

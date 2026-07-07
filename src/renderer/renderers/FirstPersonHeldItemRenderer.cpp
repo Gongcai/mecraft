@@ -690,6 +690,8 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     if (steveTex == 0) {
         return;
     }
+    const GLuint lightmapDayId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapDay()));
+    const GLuint lightmapNightId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapNight()));
 
     m_steveShader->use();
     m_steveShader->setMat4("viewProj", viewProj);
@@ -705,9 +707,9 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, steveTex);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glBindTexture(GL_TEXTURE_2D, lightmapDayId);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+    glBindTexture(GL_TEXTURE_2D, lightmapNightId);
     // Shadow textures (units 5-10)
     const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
     MecraftTextureContract::bindShadowSamplers(m_steveShader->ID, 5, shadowBundle);
@@ -735,6 +737,10 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
     const GLuint itemAtlasTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
     const GLuint texArrayTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    const GLuint lightmapDayId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapDay()));
+    const GLuint lightmapNightId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapNight()));
+    const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
+    const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
     const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlasTexture != 0 && m_itemShader != nullptr);
     const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArrayTexture != 0 && m_blockShader != nullptr);
 
@@ -771,13 +777,13 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayTexture);
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+        glBindTexture(GL_TEXTURE_2D, lightmapDayId);
         glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+        glBindTexture(GL_TEXTURE_2D, lightmapNightId);
         glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
+        glBindTexture(GL_TEXTURE_2D, grassColormapId);
         glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
+        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         // Shadow textures (units 5-10)
         const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
         MecraftTextureContract::bindShadowSamplers(m_blockShader->ID, 5, shadowBundle);
@@ -814,9 +820,9 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, itemAtlasTexture);
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
+    glBindTexture(GL_TEXTURE_2D, lightmapDayId);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
+    glBindTexture(GL_TEXTURE_2D, lightmapNightId);
     // Shadow textures (units 5-10)
     const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
     MecraftTextureContract::bindShadowSamplers(m_itemShader->ID, 5, shadowBundle);

@@ -176,11 +176,11 @@ void ResourceMgr::loadLightmapTextures(const std::string& dayPath, const std::st
     m_impl->environmentTextures.loadLightmaps(dayPath, nightPath);
 }
 
-uint32_t ResourceMgr::getLightmapDay() const {
+RhiTextureHandle ResourceMgr::getLightmapDay() const {
     return m_impl->environmentTextures.getLightmapDay();
 }
 
-uint32_t ResourceMgr::getLightmapNight() const {
+RhiTextureHandle ResourceMgr::getLightmapNight() const {
     return m_impl->environmentTextures.getLightmapNight();
 }
 
@@ -188,11 +188,11 @@ void ResourceMgr::loadColormapTextures(const std::string& grassPath, const std::
     m_impl->environmentTextures.loadColormaps(grassPath, foliagePath);
 }
 
-uint32_t ResourceMgr::getGrassColormap() const {
+RhiTextureHandle ResourceMgr::getGrassColormap() const {
     return m_impl->environmentTextures.getGrassColormap();
 }
 
-uint32_t ResourceMgr::getFoliageColormap() const {
+RhiTextureHandle ResourceMgr::getFoliageColormap() const {
     return m_impl->environmentTextures.getFoliageColormap();
 }
 

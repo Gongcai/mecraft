@@ -79,12 +79,12 @@ public:
 
     // Lightmap textures (16x16, maps blockLight x skyLight -> RGB brightness)
     void loadLightmapTextures(const std::string& dayPath, const std::string& nightPath);
-    [[nodiscard]] uint32_t getLightmapDay() const;
-    [[nodiscard]] uint32_t getLightmapNight() const;
+    [[nodiscard]] RhiTextureHandle getLightmapDay() const;
+    [[nodiscard]] RhiTextureHandle getLightmapNight() const;
 
     void loadColormapTextures(const std::string& grassPath, const std::string& foliagePath);
-    [[nodiscard]] uint32_t getGrassColormap() const;
-    [[nodiscard]] uint32_t getFoliageColormap() const;
+    [[nodiscard]] RhiTextureHandle getGrassColormap() const;
+    [[nodiscard]] RhiTextureHandle getFoliageColormap() const;
 
     // Cubemap texture (6 face textures for skybox rendering)
     uint32_t loadCubemap(const std::string& name,
