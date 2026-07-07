@@ -222,8 +222,8 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.shadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, settings.ssao.temporalEnabled
-        ? targets.ssaoTemporalTexture()
-        : targets.ssaoFilteredTexture());
+        ? renderer::rhi::gl::textureId(targets.ssaoTemporalTextureHandle())
+        : renderer::rhi::gl::textureId(targets.ssaoFilteredTextureHandle()));
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE11);

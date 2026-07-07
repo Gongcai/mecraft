@@ -134,7 +134,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.shadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, targets.ssaoFilteredTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoFilteredTextureHandle()));
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneLightingTextureHandle()));
     glActiveTexture(GL_TEXTURE8);

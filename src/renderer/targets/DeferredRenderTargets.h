@@ -89,15 +89,15 @@ public:
     [[nodiscard]] RhiTextureHandle csmShadowColor1TextureHandle() const { return m_csmShadowColor1Handle; }
     [[nodiscard]] RhiTextureHandle shadowColorTextureHandle() const { return m_shadowColorHandle; }
     [[nodiscard]] RhiTextureHandle shadowNormalTextureHandle() const { return m_shadowNormalHandle; }
-    [[nodiscard]] uint32_t ssaoTexture() const { return m_ssaoTex; }
-    [[nodiscard]] uint32_t ssaoFilteredTexture() const { return m_ssaoFilteredTex; }
-    [[nodiscard]] uint32_t ssaoHalfResTexture() const { return m_ssaoHalfResTex; }
-    [[nodiscard]] uint32_t ssaoHalfResFilteredTexture() const { return m_ssaoHalfResFilteredTex; }
+    [[nodiscard]] RhiTextureHandle ssaoTextureHandle() const { return m_ssaoHandle; }
+    [[nodiscard]] RhiTextureHandle ssaoFilteredTextureHandle() const { return m_ssaoFilteredHandle; }
+    [[nodiscard]] RhiTextureHandle ssaoHalfResTextureHandle() const { return m_ssaoHalfResHandle; }
+    [[nodiscard]] RhiTextureHandle ssaoHalfResFilteredTextureHandle() const { return m_ssaoHalfResFilteredHandle; }
     [[nodiscard]] int halfWidth() const { return m_width / 2; }
     [[nodiscard]] int halfHeight() const { return m_height / 2; }
-    [[nodiscard]] uint32_t ssaoHistoryTexture() const { return m_ssaoHistoryTex[m_ssaoHistoryIndex]; }
-    [[nodiscard]] uint32_t ssaoHistoryTexturePrev() const { return m_ssaoHistoryTex[1 - m_ssaoHistoryIndex]; }
-    [[nodiscard]] uint32_t ssaoTemporalTexture() const { return m_ssaoTemporalTex; }
+    [[nodiscard]] RhiTextureHandle ssaoHistoryTextureHandle() const { return m_ssaoHistoryHandle[m_ssaoHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssaoHistoryTexturePrevHandle() const { return m_ssaoHistoryHandle[1 - m_ssaoHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssaoTemporalTextureHandle() const { return m_ssaoTemporalHandle; }
     void swapSsaoHistory() { m_ssaoHistoryIndex = 1 - m_ssaoHistoryIndex; }
     void copySsaoTemporalToHistory();
     [[nodiscard]] uint32_t ssgiTexture() const { return m_ssgiTex; }
@@ -240,20 +240,26 @@ private:
 
     uint32_t m_ssaoFbo = 0;
     uint32_t m_ssaoTex = 0;
+    RhiTextureHandle m_ssaoHandle;
     uint32_t m_ssaoFilteredFbo = 0;
     uint32_t m_ssaoFilteredTex = 0;
+    RhiTextureHandle m_ssaoFilteredHandle;
     // Half-res SSAO: raw and filtered at width/2 x height/2
     uint32_t m_ssaoHalfResFbo = 0;
     uint32_t m_ssaoHalfResTex = 0;
+    RhiTextureHandle m_ssaoHalfResHandle;
     uint32_t m_ssaoHalfResFilteredFbo = 0;
     uint32_t m_ssaoHalfResFilteredTex = 0;
+    RhiTextureHandle m_ssaoHalfResFilteredHandle;
     // SSAO temporal history ping-pong (R8)
     uint32_t m_ssaoHistoryFbo[2] = {0, 0};
     uint32_t m_ssaoHistoryTex[2] = {0, 0};
+    RhiTextureHandle m_ssaoHistoryHandle[2];
     int m_ssaoHistoryIndex = 0;
     // SSAO temporal resolve output (R8) — deferred lighting reads from this
     uint32_t m_ssaoTemporalFbo = 0;
     uint32_t m_ssaoTemporalTex = 0;
+    RhiTextureHandle m_ssaoTemporalHandle;
 
     uint32_t m_ssgiFbo = 0;
     uint32_t m_ssgiTex = 0;

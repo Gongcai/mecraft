@@ -1599,6 +1599,80 @@ bool DeferredRenderTargets::registerRhiTextures() {
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
         false
     });
+    m_ssaoHandle = renderer::rhi::gl::registerTexture({
+        m_ssaoTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::R8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_ssaoFilteredHandle = renderer::rhi::gl::registerTexture({
+        m_ssaoFilteredTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::R8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_ssaoHalfResHandle = renderer::rhi::gl::registerTexture({
+        m_ssaoHalfResTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::R8Unorm,
+        halfWidth,
+        halfHeight,
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_ssaoHalfResFilteredHandle = renderer::rhi::gl::registerTexture({
+        m_ssaoHalfResFilteredTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::R8Unorm,
+        halfWidth,
+        halfHeight,
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    for (int i = 0; i < 2; ++i) {
+        m_ssaoHistoryHandle[i] = renderer::rhi::gl::registerTexture({
+            m_ssaoHistoryTex[i],
+            RhiTextureDimension::Texture2D,
+            RhiTextureFormat::R8Unorm,
+            static_cast<uint32_t>(m_width),
+            static_cast<uint32_t>(m_height),
+            1,
+            1,
+            1,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+            false
+        });
+    }
+    m_ssaoTemporalHandle = renderer::rhi::gl::registerTexture({
+        m_ssaoTemporalTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::R8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
     m_csmShadowDepthHandle = renderer::rhi::gl::registerTexture({
         m_csmShadowDepth,
         RhiTextureDimension::Texture2DArray,
@@ -1699,6 +1773,13 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_shadowDepthComparisonHandle.isValid() &&
                             m_shadowColorHandle.isValid() &&
                             m_shadowNormalHandle.isValid() &&
+                            m_ssaoHandle.isValid() &&
+                            m_ssaoFilteredHandle.isValid() &&
+                            m_ssaoHalfResHandle.isValid() &&
+                            m_ssaoHalfResFilteredHandle.isValid() &&
+                            m_ssaoHistoryHandle[0].isValid() &&
+                            m_ssaoHistoryHandle[1].isValid() &&
+                            m_ssaoTemporalHandle.isValid() &&
                             m_csmShadowDepthHandle.isValid() &&
                             m_csmShadowDepthComparisonHandle.isValid() &&
                             m_csmShadowDepthAllHandle.isValid() &&
@@ -1756,6 +1837,13 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthComparisonHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowColorHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowNormalHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoFilteredHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHalfResHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHalfResFilteredHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHistoryHandle[0]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHistoryHandle[1]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoTemporalHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthComparisonHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthAllHandle);

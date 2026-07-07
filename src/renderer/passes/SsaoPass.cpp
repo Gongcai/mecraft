@@ -101,7 +101,7 @@ void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& 
     m_ssaoFilterShader->setFloat("uNear", ctx.camera.nearPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.ssaoHalfResTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoHalfResTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
@@ -139,7 +139,8 @@ void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& s
     // Read from filtered half-res if filter is enabled, otherwise raw half-res
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, ssao.filterEnabled && m_ssaoFilterShader != nullptr
-        ? targets.ssaoHalfResFilteredTexture() : targets.ssaoHalfResTexture());
+        ? renderer::rhi::gl::textureId(targets.ssaoHalfResFilteredTextureHandle())
+        : renderer::rhi::gl::textureId(targets.ssaoHalfResTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoUpsampleShader);
@@ -174,10 +175,10 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
 
     // Current SSAO: upsampled full-res result
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.ssaoFilteredTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoFilteredTextureHandle()));
     // History SSAO (previous frame)
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.ssaoHistoryTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoHistoryTexturePrevHandle()));
     // Velocity buffer
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
