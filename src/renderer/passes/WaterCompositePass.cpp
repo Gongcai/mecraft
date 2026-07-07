@@ -152,7 +152,8 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, targets.sceneResolvedTexture());
+    glBindTexture(GL_TEXTURE_2D,
+                  renderer::rhi::gl::textureId(targets.sceneResolvedTextureHandle()));
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D,
                   renderer::rhi::gl::textureId(m_resourceMgr->getTexture2DHandle("shader_noise2d")));

@@ -187,10 +187,11 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         settings.debug.viewMode == 79;
     glBindTexture(GL_TEXTURE_2D,
                   shadowCasterDebug ? targets.shadowNormalTexture()
-                                    : (sceneResolvedDebug ? targets.sceneResolvedTexture()
-                                                          : (sceneCompositeDebug ? targets.sceneCompositeTexture()
-                                                                                 : (cloudHistoryDebug ? targets.historyCloudTexturePrev()
-                                                                                                      : targets.cloudTexture()))));
+                                    : (sceneResolvedDebug
+                                           ? renderer::rhi::gl::textureId(targets.sceneResolvedTextureHandle())
+                                          : (sceneCompositeDebug ? targets.sceneCompositeTexture()
+                                                                 : (cloudHistoryDebug ? targets.historyCloudTexturePrev()
+                                                                                      : targets.cloudTexture()))));
 
     glActiveTexture(GL_TEXTURE16);
     glBindTexture(GL_TEXTURE_2D_ARRAY,

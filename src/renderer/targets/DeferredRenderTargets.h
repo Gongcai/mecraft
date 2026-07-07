@@ -116,7 +116,6 @@ public:
     void copySsgiTemporalToHistory();
     [[nodiscard]] uint32_t sceneLightingTexture() const { return m_sceneLightingTex; }
     [[nodiscard]] uint32_t sceneCompositeTexture() const { return m_sceneCompositeTex; }
-    [[nodiscard]] uint32_t sceneResolvedTexture() const { return m_sceneResolvedTex; }
     [[nodiscard]] RhiTextureHandle sceneResolvedTextureHandle() const { return m_sceneResolvedHandle; }
     [[nodiscard]] uint32_t transparentCompositeTexture() const { return m_transparentCompositeTex; }
     [[nodiscard]] uint32_t transparentCompositeDepthTexture() const { return m_transparentCompositeDepth; }
@@ -142,7 +141,6 @@ public:
     [[nodiscard]] uint32_t temporalCurrentTexture() const { return m_temporalCurrentTex; }
     [[nodiscard]] uint32_t velocityTexture() const { return m_velocityTex; }
     [[nodiscard]] uint32_t perObjectVelocityTexture() const { return m_perObjectVelocityTex; }
-    [[nodiscard]] uint32_t weatherMaskTexture() const { return m_weatherMaskTex; }
     [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
     [[nodiscard]] uint32_t atmosphereLutTexture() const { return m_atmosphereLut3d; }
     bool loadAtmosphereLut(const char* path);
