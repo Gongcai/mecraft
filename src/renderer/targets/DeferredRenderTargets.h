@@ -123,7 +123,7 @@ public:
     [[nodiscard]] uint32_t reflectionTemporalScratchTexture() const { return m_reflectionTemporalScratchTex; }
     [[nodiscard]] uint32_t cloudTexture() const { return m_cloudTex; }
     [[nodiscard]] uint32_t skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
-    [[nodiscard]] uint32_t skyCaptureTexture() const { return m_skyCaptureTex; }
+    [[nodiscard]] RhiTextureHandle skyCaptureTextureHandle() const { return m_skyCaptureHandle; }
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
     [[nodiscard]] int skyCaptureHeight() const { return kSkyCaptureHeight; }
     // History ping-pong for temporal accumulation
@@ -141,7 +141,7 @@ public:
     [[nodiscard]] uint32_t velocityTexture() const { return m_velocityTex; }
     [[nodiscard]] uint32_t perObjectVelocityTexture() const { return m_perObjectVelocityTex; }
     [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
-    [[nodiscard]] uint32_t atmosphereLutTexture() const { return m_atmosphereLut3d; }
+    [[nodiscard]] RhiTextureHandle atmosphereLutTextureHandle() const { return m_atmosphereLutHandle; }
     bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
     void swapHistory() { m_currentHistoryIndex = 1 - m_currentHistoryIndex; }
@@ -165,6 +165,9 @@ private:
     //   (directIlluminance, skyIlluminance, sunIlluminance, moonIlluminance, unused, cloudDynamicWeather).
     static constexpr int kSkyCaptureWidth = 256;
     static constexpr int kSkyCaptureHeight = 514;
+    static constexpr int kAtmosphereLutWidth = 256;
+    static constexpr int kAtmosphereLutHeight = 128;
+    static constexpr int kAtmosphereLutDepth = 33;
     static uint32_t createTexture2D(uint32_t internalFormat,
                                     int width,
                                     int height,
@@ -185,6 +188,7 @@ private:
     static void generateMipmaps(uint32_t texture);
     static bool checkFramebufferComplete(uint32_t framebuffer, const char* label);
     bool registerRhiTextures();
+    bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
     void destroyFramebuffers();
     void destroyFullscreenTriangle();
@@ -289,6 +293,7 @@ private:
 
     uint32_t m_skyCaptureFbo = 0;
     uint32_t m_skyCaptureTex = 0;
+    RhiTextureHandle m_skyCaptureHandle;
 
     // History ping-pong for temporal accumulation
     uint32_t m_historySceneFbo[2] = {0, 0};
@@ -324,6 +329,7 @@ private:
 
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
     uint32_t m_atmosphereLut3d = 0;
+    RhiTextureHandle m_atmosphereLutHandle;
 
     uint32_t m_fullscreenVao = 0;
 

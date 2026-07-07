@@ -144,7 +144,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, targets.halfResTexture());
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
 

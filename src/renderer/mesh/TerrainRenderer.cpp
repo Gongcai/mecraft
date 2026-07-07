@@ -348,7 +348,10 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, deferredFrameActive ? targets.skyCaptureTexture() : 0);
+    glBindTexture(GL_TEXTURE_2D,
+                  deferredFrameActive
+                      ? renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle())
+                      : 0);
     glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D,
                   renderer::rhi::gl::textureId(resourceMgr != nullptr
@@ -370,7 +373,7 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
                       ? renderer::rhi::gl::textureId(resourceMgr->getBlockSpecularTextureArray().texture)
                       : 0);
     glActiveTexture(GL_TEXTURE14);
-    glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
+    glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
 }
 
 void TerrainRenderer::bindBasicForwardState(const TerrainFrameData& frame, const TextureArray& texArray,

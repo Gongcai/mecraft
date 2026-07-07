@@ -1381,6 +1381,18 @@ bool DeferredRenderTargets::registerRhiTextures() {
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
         false
     });
+    m_skyCaptureHandle = renderer::rhi::gl::registerTexture({
+        m_skyCaptureTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(kSkyCaptureWidth),
+        static_cast<uint32_t>(kSkyCaptureHeight),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
     m_csmShadowDepthHandle = renderer::rhi::gl::registerTexture({
         m_csmShadowDepth,
         RhiTextureDimension::Texture2DArray,
@@ -1454,9 +1466,16 @@ bool DeferredRenderTargets::registerRhiTextures() {
         false
     });
 
+    if (!registerAtmosphereLutTexture()) {
+        MECRAFT_LOG_STREAM(std::cerr << "DeferredRenderTargets: failed to register atmosphere LUT texture handle\n");
+        unregisterRhiTextures();
+        return false;
+    }
+
     const bool registered = m_gDepthHandle.isValid() &&
                             m_sceneResolvedHandle.isValid() &&
                             m_weatherMaskHandle.isValid() &&
+                            m_skyCaptureHandle.isValid() &&
                             m_csmShadowDepthHandle.isValid() &&
                             m_csmShadowDepthComparisonHandle.isValid() &&
                             m_csmShadowDepthAllHandle.isValid() &&
@@ -1471,10 +1490,32 @@ bool DeferredRenderTargets::registerRhiTextures() {
     return true;
 }
 
+bool DeferredRenderTargets::registerAtmosphereLutTexture() {
+    if (m_atmosphereLutHandle.isValid()) {
+        return true;
+    }
+
+    m_atmosphereLutHandle = renderer::rhi::gl::registerTexture({
+        m_atmosphereLut3d,
+        RhiTextureDimension::Texture3D,
+        RhiTextureFormat::Rgba32Float,
+        static_cast<uint32_t>(kAtmosphereLutWidth),
+        static_cast<uint32_t>(kAtmosphereLutHeight),
+        static_cast<uint32_t>(kAtmosphereLutDepth),
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled),
+        false
+    });
+    return m_atmosphereLutHandle.isValid();
+}
+
 void DeferredRenderTargets::unregisterRhiTextures() {
     renderer::rhi::gl::unregisterTextureAndReset(m_gDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneResolvedHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_skyCaptureHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthComparisonHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthAllHandle);
@@ -1643,15 +1684,14 @@ void DeferredRenderTargets::destroyFullscreenTriangle() {
 
 bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
     if (m_atmosphereLut3d != 0) {
+        renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);
         glDeleteTextures(1, &m_atmosphereLut3d);
         m_atmosphereLut3d = 0;
     }
 
     // Final.lut layout: 256 x 128 x 33, RGBA32F
-    constexpr int kLutWidth = 256;
-    constexpr int kLutHeight = 128;
-    constexpr int kLutDepth = 33;
-    constexpr size_t kExpectedSize = size_t(kLutWidth) * kLutHeight * kLutDepth * 4 * sizeof(float);
+    constexpr size_t kExpectedSize =
+        size_t(kAtmosphereLutWidth) * kAtmosphereLutHeight * kAtmosphereLutDepth * 4 * sizeof(float);
 
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
@@ -1667,16 +1707,17 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
     }
 
     file.seekg(0, std::ios::beg);
-    std::vector<float> data(kLutWidth * kLutHeight * kLutDepth * 4);
+    std::vector<float> data(kAtmosphereLutWidth * kAtmosphereLutHeight * kAtmosphereLutDepth * 4);
     if (!file.read(reinterpret_cast<char*>(data.data()), kExpectedSize)) {
         MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: failed to read data\n");
         return false;
     }
 
     glCreateTextures(GL_TEXTURE_3D, 1, &m_atmosphereLut3d);
-    glTextureStorage3D(m_atmosphereLut3d, 1, GL_RGBA32F, kLutWidth, kLutHeight, kLutDepth);
+    glTextureStorage3D(m_atmosphereLut3d, 1, GL_RGBA32F,
+                       kAtmosphereLutWidth, kAtmosphereLutHeight, kAtmosphereLutDepth);
     glTextureSubImage3D(m_atmosphereLut3d, 0, 0, 0, 0,
-                        kLutWidth, kLutHeight, kLutDepth,
+                        kAtmosphereLutWidth, kAtmosphereLutHeight, kAtmosphereLutDepth,
                         GL_RGBA, GL_FLOAT, data.data());
     glTextureParameteri(m_atmosphereLut3d, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(m_atmosphereLut3d, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1686,6 +1727,13 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
 
     // z=32 layer is the sky output (rendered at runtime); make sure it's writable
     // by NOT marking the texture as immutable after upload. Storage is already allocated.
+
+    if (!registerAtmosphereLutTexture()) {
+        MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: failed to register RHI texture handle\n");
+        glDeleteTextures(1, &m_atmosphereLut3d);
+        m_atmosphereLut3d = 0;
+        return false;
+    }
 
     MECRAFT_LOG_STREAM(std::cout << "AtmosphereLUT: loaded " << path << " (256x128x33 RGBA32F)\n");
     return true;

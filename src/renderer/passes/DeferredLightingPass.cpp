@@ -225,7 +225,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
         ? targets.ssaoTemporalTexture()
         : targets.ssaoFilteredTexture());
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE12);
@@ -233,7 +233,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glActiveTexture(GL_TEXTURE13);
     glBindTexture(GL_TEXTURE_2D, targets.shadowNormalTexture());
     glActiveTexture(GL_TEXTURE14);
-    glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
+    glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     // Units 15-20: CSM shadow arrays (15 already bound before shader->use())
     glActiveTexture(GL_TEXTURE16);
     glBindTexture(GL_TEXTURE_2D_ARRAY,

@@ -100,9 +100,9 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, targets.materialAuxTexture());
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
+    glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, targets.voxelLightTexture());
     glActiveTexture(GL_TEXTURE8);

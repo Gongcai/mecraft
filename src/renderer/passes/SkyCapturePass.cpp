@@ -23,7 +23,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                               float cameraY, float shaderTime, const glm::vec3& cameraPos,
                               float cloudTimeScale) {
     const float cameraAltitude = cameraY;
-    const uint32_t atmosphereLut = targets.atmosphereLutTexture();
+    const uint32_t atmosphereLut = renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle());
     const int moonPhase = dayNightSystem.getMoonPhaseIndex();
 
     // DerivativeMain MoonFlux: phase factor ranges 0.2 (full moon) to 1.2 (new moon).

@@ -215,7 +215,7 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE3);
@@ -223,7 +223,7 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, targets.shadowColorTexture());
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
+    glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     // Units 6-11: CSM shadow arrays (6 already bound)
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D_ARRAY,
