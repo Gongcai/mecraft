@@ -2,12 +2,36 @@
 
 #include <glad/glad.h>
 
+#include "../../renderer/rhi/RhiTypes.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
+
 #include <algorithm>
 #include <cstring>
 #include <cstddef>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
+
+namespace {
+
+[[nodiscard]] RhiTextureHandle registerGlyphAtlasTexture(const GLuint textureID,
+                                                         const int width,
+                                                         const int height) {
+    return renderer::rhi::gl::registerTexture({
+        textureID,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::R8Unorm,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled),
+        false
+    });
+}
+
+} // namespace
 
 bool GlyphAtlas::init(const char* ttfPath, int pixelHeight)
 {
@@ -48,9 +72,10 @@ bool GlyphAtlas::init(const char* ttfPath, int pixelHeight)
 
 void GlyphAtlas::shutdown()
 {
-    if (m_texture != 0) {
-        glDeleteTextures(1, &m_texture);
-        m_texture = 0;
+    GLuint textureID = static_cast<GLuint>(renderer::rhi::gl::textureId(m_texture));
+    renderer::rhi::gl::unregisterTextureAndReset(m_texture);
+    if (textureID != 0) {
+        glDeleteTextures(1, &textureID);
     }
     if (m_face) {
         FT_Done_Face(static_cast<FT_Face>(m_face));
@@ -178,8 +203,9 @@ void GlyphAtlas::uploadAtlas() const
         return;
     }
 
-    if (m_texture == 0) {
-        glGenTextures(1, &m_texture);
+    GLuint textureID = static_cast<GLuint>(renderer::rhi::gl::textureId(m_texture));
+    if (textureID == 0) {
+        glGenTextures(1, &textureID);
     }
 
     GLint previousTexture = 0;
@@ -188,7 +214,7 @@ void GlyphAtlas::uploadAtlas() const
     glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glBindTexture(GL_TEXTURE_2D, m_texture);
+    glBindTexture(GL_TEXTURE_2D, textureID);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_atlasWidth, m_atlasHeight, 0,
                  GL_RED, GL_UNSIGNED_BYTE, m_pixelData.data());
 
@@ -202,5 +228,14 @@ void GlyphAtlas::uploadAtlas() const
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
     glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
+
+    renderer::rhi::gl::unregisterTextureAndReset(m_texture);
+    RhiTextureHandle textureHandle = registerGlyphAtlasTexture(textureID, m_atlasWidth, m_atlasHeight);
+    if (!textureHandle.isValid()) {
+        glDeleteTextures(1, &textureID);
+        m_dirty = true;
+        return;
+    }
+    m_texture = textureHandle;
     m_dirty = false;
 }

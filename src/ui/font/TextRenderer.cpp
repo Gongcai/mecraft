@@ -11,6 +11,7 @@
 
 #include "../../Paths.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 namespace {
@@ -282,7 +283,8 @@ void TextRenderer::render(const std::string& text,
                           float screenWidth,
                           float screenHeight) const
 {
-    if (!m_textShader || m_atlas.getTexture() == 0 || m_textVao == 0 || m_textVbo == 0 || text.empty()) {
+    if (!m_textShader || !m_atlas.getTextureHandle().isValid() ||
+        m_textVao == 0 || m_textVbo == 0 || text.empty()) {
         return;
     }
 
@@ -295,6 +297,10 @@ void TextRenderer::render(const std::string& text,
     }
 
     m_atlas.uploadPending();
+    const uint32_t atlasTextureId = renderer::rhi::gl::textureId(m_atlas.getTextureHandle());
+    if (atlasTextureId == 0) {
+        return;
+    }
 
     const TextRenderStateGuard stateGuard;
 
@@ -303,7 +309,7 @@ void TextRenderer::render(const std::string& text,
     m_textShader->setInt("uFont", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_atlas.getTexture());
+    glBindTexture(GL_TEXTURE_2D, atlasTextureId);
 
     glBindVertexArray(m_textVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
@@ -343,13 +349,18 @@ void TextRenderer::endBatch() const
     }
     m_batchActive = false;
 
-    if (m_batchVertices.empty() || !m_textShader || m_atlas.getTexture() == 0 ||
+    if (m_batchVertices.empty() || !m_textShader || !m_atlas.getTextureHandle().isValid() ||
         m_textVao == 0 || m_textVbo == 0) {
         m_batchVertices.clear();
         return;
     }
 
     m_atlas.uploadPending();
+    const uint32_t atlasTextureId = renderer::rhi::gl::textureId(m_atlas.getTextureHandle());
+    if (atlasTextureId == 0) {
+        m_batchVertices.clear();
+        return;
+    }
 
     const TextRenderStateGuard stateGuard;
 
@@ -358,7 +369,7 @@ void TextRenderer::endBatch() const
     m_textShader->setInt("uFont", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_atlas.getTexture());
+    glBindTexture(GL_TEXTURE_2D, atlasTextureId);
 
     glBindVertexArray(m_textVao);
     glBindBuffer(GL_ARRAY_BUFFER, m_textVbo);
