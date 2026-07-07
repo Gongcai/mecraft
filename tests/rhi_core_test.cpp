@@ -4,6 +4,10 @@
 #include "renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "resource/RhiTextureResourceUtils.h"
 
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
+#include <array>
 #include <cstdint>
 #include <iostream>
 
@@ -15,6 +19,60 @@ bool requireTrue(const bool condition, const char* message) {
     }
     return true;
 }
+
+class GlTestContext {
+public:
+    ~GlTestContext() {
+        shutdown();
+    }
+
+    [[nodiscard]] bool init() {
+        if (!glfwInit()) {
+            std::cerr << "GLFW must initialize for OpenGL RHI backend tests\n";
+            return false;
+        }
+        m_glfwInitialized = true;
+
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        m_window = glfwCreateWindow(32, 32, "rhi_core_test", nullptr, nullptr);
+        if (m_window == nullptr) {
+            std::cerr << "hidden GLFW OpenGL test window must be created\n";
+            shutdown();
+            return false;
+        }
+
+        glfwMakeContextCurrent(m_window);
+        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
+            std::cerr << "GLAD must load OpenGL symbols for RHI backend tests\n";
+            shutdown();
+            return false;
+        }
+        if (!GLAD_GL_VERSION_4_5) {
+            std::cerr << "OpenGL 4.5 must be available for RHI backend tests\n";
+            shutdown();
+            return false;
+        }
+        return true;
+    }
+
+private:
+    void shutdown() {
+        if (m_window != nullptr) {
+            glfwDestroyWindow(m_window);
+            m_window = nullptr;
+        }
+        if (m_glfwInitialized) {
+            glfwTerminate();
+            m_glfwInitialized = false;
+        }
+    }
+
+    GLFWwindow* m_window = nullptr;
+    bool m_glfwInitialized = false;
+};
 
 bool testHandleGeneration() {
     RhiHandleAllocator<RhiTextureHandle> allocator;
@@ -143,6 +201,11 @@ bool testResourceTextureRegistration() {
 }
 
 bool testGlRhiDeviceHandles() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize")) {
+        return false;
+    }
+
     GlRhiDevice device;
     RhiDeviceDesc deviceDesc;
     deviceDesc.debugName = "rhi_core_test";
@@ -182,6 +245,153 @@ bool testGlRhiDeviceHandles() {
     device.shutdown();
     return true;
 }
+
+bool testGlRhiFullscreenTriangle() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for fullscreen draw")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_fullscreen_triangle_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for fullscreen draw")) {
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "fullscreen-target";
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 4;
+    textureDesc.height = 4;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureHandle target = device.createTexture(textureDesc, nullptr);
+    if (!requireTrue(target.isValid(), "fullscreen draw target texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = target;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    const RhiTextureViewHandle targetView = device.createTextureView(viewDesc);
+    if (!requireTrue(targetView.isValid(), "fullscreen draw target view must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr char kFullscreenVertexShader[] = R"glsl(
+#version 450 core
+const vec2 kPositions[3] = vec2[3](
+    vec2(-1.0, -1.0),
+    vec2(3.0, -1.0),
+    vec2(-1.0, 3.0)
+);
+
+void main() {
+    gl_Position = vec4(kPositions[gl_VertexID], 0.0, 1.0);
+}
+)glsl";
+    constexpr char kSolidFragmentShader[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = vec4(1.0, 0.0, 0.0, 1.0);
+}
+)glsl";
+
+    RhiShaderDesc vertexShaderDesc;
+    vertexShaderDesc.debugName = "fullscreen-test-vertex";
+    vertexShaderDesc.stage = RhiShaderStage::Vertex;
+    vertexShaderDesc.source = kFullscreenVertexShader;
+    vertexShaderDesc.sourceSize = sizeof(kFullscreenVertexShader) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(vertexShaderDesc);
+    if (!requireTrue(vertexShader.isValid(), "fullscreen vertex shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiShaderDesc fragmentShaderDesc;
+    fragmentShaderDesc.debugName = "fullscreen-test-fragment";
+    fragmentShaderDesc.stage = RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = kSolidFragmentShader;
+    fragmentShaderDesc.sourceSize = sizeof(kSolidFragmentShader) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
+    if (!requireTrue(fragmentShader.isValid(), "fullscreen fragment shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "fullscreen-test-layout";
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(pipelineLayout.isValid(), "fullscreen pipeline layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "fullscreen-test-pipeline";
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "fullscreen graphics pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 1.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "fullscreen-test-rendering";
+    renderingInfo.renderArea = {0, 0, 4, 4};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.beginRendering(renderingInfo);
+    cmd.setViewport({0.0f, 0.0f, 4.0f, 4.0f, 0.0f, 1.0f});
+    cmd.setGraphicsPipeline(pipeline);
+    cmd.draw(3, 1, 0, 0);
+
+    std::array<uint8_t, 4> pixel{};
+    glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+    cmd.endRendering();
+    device.submitFrame(cmd);
+
+    const bool redPixel = pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
+    if (!requireTrue(redPixel, "fullscreen triangle must render a red center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.destroyTextureView(targetView);
+    device.destroyTexture(target);
+    device.shutdown();
+    return true;
+}
 } // namespace
 
 int main() {
@@ -198,6 +408,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiDeviceHandles()) {
+        return 1;
+    }
+    if (!testGlRhiFullscreenTriangle()) {
         return 1;
     }
     return 0;

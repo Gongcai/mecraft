@@ -1,120 +1,1106 @@
 #include "renderer/rhi/gl/GlRhiDevice.h"
 
-void GlRhiCommandList::beginDebugLabel(const char* name, const glm::vec4& color) {
-    (void) name;
-    (void) color;
+#include "renderer/rhi/RhiHandleAllocator.h"
+
+#include <glad/glad.h>
+
+#include <algorithm>
+#include <array>
+#include <iostream>
+#include <string>
+#include <vector>
+
+namespace {
+
+struct GlFormatInfo {
+    GLenum internalFormat = GL_RGBA8;
+    GLenum externalFormat = GL_RGBA;
+    GLenum type = GL_UNSIGNED_BYTE;
+    bool depth = false;
+    bool stencil = false;
+};
+
+[[nodiscard]] const char* rhiDebugName(const char* name) {
+    return name != nullptr ? name : "";
 }
 
-void GlRhiCommandList::endDebugLabel() {}
+void logRhiError(const char* message) {
+    std::cerr << "GlRhiDevice: " << message << '\n';
+}
+
+void labelGlObject(const GLenum identifier, const GLuint name, const char* label) {
+    if (name == 0u || label == nullptr || label[0] == '\0' || !GLAD_GL_VERSION_4_3) {
+        return;
+    }
+    glObjectLabel(identifier, name, -1, label);
+}
+
+[[nodiscard]] GLenum toGlShaderStage(const RhiShaderStage stage) {
+    switch (stage) {
+        case RhiShaderStage::Vertex: return GL_VERTEX_SHADER;
+        case RhiShaderStage::Fragment: return GL_FRAGMENT_SHADER;
+        case RhiShaderStage::Compute: return GL_COMPUTE_SHADER;
+    }
+    return 0u;
+}
+
+[[nodiscard]] GLenum toGlTextureTarget(const RhiTextureDimension dimension) {
+    switch (dimension) {
+        case RhiTextureDimension::Texture2D: return GL_TEXTURE_2D;
+        case RhiTextureDimension::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
+        case RhiTextureDimension::Texture3D: return GL_TEXTURE_3D;
+        case RhiTextureDimension::Cube: return GL_TEXTURE_CUBE_MAP;
+    }
+    return 0u;
+}
+
+[[nodiscard]] GLenum toGlTextureViewTarget(const RhiTextureViewType viewType) {
+    switch (viewType) {
+        case RhiTextureViewType::Texture2D: return GL_TEXTURE_2D;
+        case RhiTextureViewType::Texture2DArray: return GL_TEXTURE_2D_ARRAY;
+        case RhiTextureViewType::Texture3D: return GL_TEXTURE_3D;
+        case RhiTextureViewType::Cube: return GL_TEXTURE_CUBE_MAP;
+    }
+    return 0u;
+}
+
+[[nodiscard]] bool toGlFormatInfo(const RhiTextureFormat format, GlFormatInfo& out) {
+    switch (format) {
+        case RhiTextureFormat::R8Unorm:
+            out = {GL_R8, GL_RED, GL_UNSIGNED_BYTE, false, false};
+            return true;
+        case RhiTextureFormat::Rg8Unorm:
+            out = {GL_RG8, GL_RG, GL_UNSIGNED_BYTE, false, false};
+            return true;
+        case RhiTextureFormat::Rgba8Unorm:
+            out = {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false};
+            return true;
+        case RhiTextureFormat::Rgba8Srgb:
+            out = {GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false};
+            return true;
+        case RhiTextureFormat::Rg16Float:
+            out = {GL_RG16F, GL_RG, GL_HALF_FLOAT, false, false};
+            return true;
+        case RhiTextureFormat::Rgba16Float:
+            out = {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT, false, false};
+            return true;
+        case RhiTextureFormat::Rgba32Float:
+            out = {GL_RGBA32F, GL_RGBA, GL_FLOAT, false, false};
+            return true;
+        case RhiTextureFormat::R16Float:
+            out = {GL_R16F, GL_RED, GL_HALF_FLOAT, false, false};
+            return true;
+        case RhiTextureFormat::R32Float:
+            out = {GL_R32F, GL_RED, GL_FLOAT, false, false};
+            return true;
+        case RhiTextureFormat::Depth16:
+            out = {GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, true, false};
+            return true;
+        case RhiTextureFormat::Depth24:
+            out = {GL_DEPTH_COMPONENT24, GL_DEPTH_COMPONENT, GL_UNSIGNED_INT, true, false};
+            return true;
+        case RhiTextureFormat::Depth24Stencil8:
+            out = {GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, true, true};
+            return true;
+        case RhiTextureFormat::Depth32Float:
+            out = {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT, true, false};
+            return true;
+        case RhiTextureFormat::Undefined:
+            return false;
+    }
+    return false;
+}
+
+[[nodiscard]] GLenum toGlMinFilter(const RhiFilter filter, const RhiMipmapMode mipmapMode) {
+    if (filter == RhiFilter::Nearest) {
+        return mipmapMode == RhiMipmapMode::Nearest ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST_MIPMAP_LINEAR;
+    }
+    return mipmapMode == RhiMipmapMode::Nearest ? GL_LINEAR_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR;
+}
+
+[[nodiscard]] GLenum toGlMagFilter(const RhiFilter filter) {
+    return filter == RhiFilter::Nearest ? GL_NEAREST : GL_LINEAR;
+}
+
+[[nodiscard]] GLenum toGlAddressMode(const RhiAddressMode mode) {
+    switch (mode) {
+        case RhiAddressMode::Repeat: return GL_REPEAT;
+        case RhiAddressMode::MirroredRepeat: return GL_MIRRORED_REPEAT;
+        case RhiAddressMode::ClampToEdge: return GL_CLAMP_TO_EDGE;
+        case RhiAddressMode::ClampToBorder: return GL_CLAMP_TO_BORDER;
+    }
+    return GL_CLAMP_TO_EDGE;
+}
+
+[[nodiscard]] GLenum toGlCompareOp(const RhiCompareOp op) {
+    switch (op) {
+        case RhiCompareOp::Never: return GL_NEVER;
+        case RhiCompareOp::Less: return GL_LESS;
+        case RhiCompareOp::Equal: return GL_EQUAL;
+        case RhiCompareOp::LessOrEqual: return GL_LEQUAL;
+        case RhiCompareOp::Greater: return GL_GREATER;
+        case RhiCompareOp::NotEqual: return GL_NOTEQUAL;
+        case RhiCompareOp::GreaterOrEqual: return GL_GEQUAL;
+        case RhiCompareOp::Always: return GL_ALWAYS;
+    }
+    return GL_ALWAYS;
+}
+
+[[nodiscard]] GLenum toGlTopology(const RhiPrimitiveTopology topology) {
+    switch (topology) {
+        case RhiPrimitiveTopology::TriangleList: return GL_TRIANGLES;
+        case RhiPrimitiveTopology::TriangleStrip: return GL_TRIANGLE_STRIP;
+        case RhiPrimitiveTopology::LineList: return GL_LINES;
+        case RhiPrimitiveTopology::LineStrip: return GL_LINE_STRIP;
+    }
+    return GL_TRIANGLES;
+}
+
+[[nodiscard]] GLenum toGlBlendFactor(const RhiBlendFactor factor) {
+    switch (factor) {
+        case RhiBlendFactor::Zero: return GL_ZERO;
+        case RhiBlendFactor::One: return GL_ONE;
+        case RhiBlendFactor::SrcAlpha: return GL_SRC_ALPHA;
+        case RhiBlendFactor::OneMinusSrcAlpha: return GL_ONE_MINUS_SRC_ALPHA;
+        case RhiBlendFactor::SrcColor: return GL_SRC_COLOR;
+        case RhiBlendFactor::OneMinusSrcColor: return GL_ONE_MINUS_SRC_COLOR;
+        case RhiBlendFactor::DstAlpha: return GL_DST_ALPHA;
+        case RhiBlendFactor::OneMinusDstAlpha: return GL_ONE_MINUS_DST_ALPHA;
+        case RhiBlendFactor::DstColor: return GL_DST_COLOR;
+        case RhiBlendFactor::OneMinusDstColor: return GL_ONE_MINUS_DST_COLOR;
+    }
+    return GL_ONE;
+}
+
+[[nodiscard]] GLenum toGlBlendOp(const RhiBlendOp op) {
+    switch (op) {
+        case RhiBlendOp::Add: return GL_FUNC_ADD;
+        case RhiBlendOp::Subtract: return GL_FUNC_SUBTRACT;
+        case RhiBlendOp::ReverseSubtract: return GL_FUNC_REVERSE_SUBTRACT;
+        case RhiBlendOp::Min: return GL_MIN;
+        case RhiBlendOp::Max: return GL_MAX;
+    }
+    return GL_FUNC_ADD;
+}
+
+struct GlVertexFormatInfo {
+    GLint componentCount = 3;
+    GLenum type = GL_FLOAT;
+    bool integer = false;
+};
+
+[[nodiscard]] GlVertexFormatInfo toGlVertexFormat(const RhiVertexFormat format) {
+    switch (format) {
+        case RhiVertexFormat::Float: return {1, GL_FLOAT, false};
+        case RhiVertexFormat::Float2: return {2, GL_FLOAT, false};
+        case RhiVertexFormat::Float3: return {3, GL_FLOAT, false};
+        case RhiVertexFormat::Float4: return {4, GL_FLOAT, false};
+        case RhiVertexFormat::Uint: return {1, GL_UNSIGNED_INT, true};
+        case RhiVertexFormat::Uint2: return {2, GL_UNSIGNED_INT, true};
+        case RhiVertexFormat::Uint3: return {3, GL_UNSIGNED_INT, true};
+        case RhiVertexFormat::Uint4: return {4, GL_UNSIGNED_INT, true};
+    }
+    return {3, GL_FLOAT, false};
+}
+
+[[nodiscard]] uint64_t indexElementSize(const RhiIndexFormat format) {
+    return format == RhiIndexFormat::Uint16 ? 2u : 4u;
+}
+
+[[nodiscard]] GLbitfield barrierBitsForState(const RhiResourceState state) {
+    switch (state) {
+        case RhiResourceState::RenderTarget: return GL_FRAMEBUFFER_BARRIER_BIT;
+        case RhiResourceState::DepthWrite: return GL_FRAMEBUFFER_BARRIER_BIT;
+        case RhiResourceState::DepthRead: return GL_TEXTURE_FETCH_BARRIER_BIT;
+        case RhiResourceState::ShaderRead: return GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT;
+        case RhiResourceState::ShaderWrite: return GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT;
+        case RhiResourceState::TransferSrc: return GL_TEXTURE_UPDATE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT;
+        case RhiResourceState::TransferDst: return GL_TEXTURE_UPDATE_BARRIER_BIT | GL_BUFFER_UPDATE_BARRIER_BIT;
+        case RhiResourceState::VertexBuffer: return GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT;
+        case RhiResourceState::IndexBuffer: return GL_ELEMENT_ARRAY_BARRIER_BIT;
+        case RhiResourceState::IndirectArgument: return GL_COMMAND_BARRIER_BIT;
+        case RhiResourceState::UniformBuffer: return GL_UNIFORM_BARRIER_BIT;
+        case RhiResourceState::StorageBuffer: return GL_SHADER_STORAGE_BARRIER_BIT;
+        case RhiResourceState::Undefined:
+        case RhiResourceState::Present:
+            return 0u;
+    }
+    return 0u;
+}
+
+[[nodiscard]] GLuint compileShaderObject(const RhiShaderDesc& desc) {
+    const GLenum stage = toGlShaderStage(desc.stage);
+    if (stage == 0u || desc.source == nullptr || desc.sourceSize == 0u) {
+        logRhiError("shader creation requires a valid GLSL source stage");
+        return 0u;
+    }
+
+    const GLuint shader = glCreateShader(stage);
+    const auto sourceSize = static_cast<GLint>(desc.sourceSize);
+    const char* source = desc.source;
+    glShaderSource(shader, 1, &source, &sourceSize);
+    glCompileShader(shader);
+
+    GLint compiled = GL_FALSE;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+    if (compiled == GL_TRUE) {
+        labelGlObject(GL_SHADER, shader, desc.debugName);
+        return shader;
+    }
+
+    std::array<char, 2048> infoLog{};
+    glGetShaderInfoLog(shader, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
+    std::cerr << "GlRhiDevice: shader compilation failed [" << rhiDebugName(desc.debugName)
+              << "]\n" << infoLog.data() << '\n';
+    glDeleteShader(shader);
+    return 0u;
+}
+
+struct GlBufferRecord {
+    GLuint buffer = 0u;
+    RhiBufferDesc desc;
+    bool active = false;
+};
+
+struct GlTextureRecord {
+    GLuint texture = 0u;
+    GLenum target = 0u;
+    RhiTextureDesc desc;
+    GlFormatInfo format;
+    bool active = false;
+};
+
+struct GlTextureViewRecord {
+    GLuint texture = 0u;
+    GLenum target = 0u;
+    RhiTextureViewDesc desc;
+    RhiTextureFormat resolvedFormat = RhiTextureFormat::Undefined;
+    GlFormatInfo format;
+    bool active = false;
+};
+
+struct GlSamplerRecord {
+    GLuint sampler = 0u;
+    RhiSamplerDesc desc;
+    bool active = false;
+};
+
+struct GlShaderRecord {
+    GLuint shader = 0u;
+    RhiShaderStage stage = RhiShaderStage::Vertex;
+    bool active = false;
+};
+
+struct GlBindGroupLayoutRecord {
+    RhiBindGroupLayoutDesc desc;
+    bool active = false;
+};
+
+struct GlPipelineLayoutRecord {
+    RhiPipelineLayoutDesc desc;
+    bool active = false;
+};
+
+struct GlPipelineRecord {
+    GLuint program = 0u;
+    GLuint vertexArray = 0u;
+    bool compute = false;
+    RhiGraphicsPipelineDesc graphicsDesc;
+    RhiComputePipelineDesc computeDesc;
+    bool active = false;
+};
+
+struct GlBindGroupRecord {
+    RhiBindGroupDesc desc;
+    bool active = false;
+};
+
+struct GlFramebufferRecord {
+    GLuint framebuffer = 0u;
+    std::vector<RhiTextureViewHandle> colorViews;
+    RhiTextureViewHandle depthView;
+    bool active = false;
+};
+
+template <typename Handle, typename Record>
+[[nodiscard]] Record* recordForHandle(RhiHandleAllocator<Handle>& allocator,
+                                      std::vector<Record>& records,
+                                      const Handle handle) {
+    if (!allocator.isAlive(handle)) {
+        return nullptr;
+    }
+
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= records.size() || !records[slot].active) {
+        return nullptr;
+    }
+    return &records[slot];
+}
+
+template <typename Handle, typename Record>
+[[nodiscard]] const Record* recordForHandle(const RhiHandleAllocator<Handle>& allocator,
+                                            const std::vector<Record>& records,
+                                            const Handle handle) {
+    if (!allocator.isAlive(handle)) {
+        return nullptr;
+    }
+
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= records.size() || !records[slot].active) {
+        return nullptr;
+    }
+    return &records[slot];
+}
+
+} // namespace
+
+struct GlRhiDeviceData {
+    RhiHandleAllocator<RhiBufferHandle> buffers;
+    RhiHandleAllocator<RhiTextureHandle> textures;
+    RhiHandleAllocator<RhiTextureViewHandle> textureViews;
+    RhiHandleAllocator<RhiSamplerHandle> samplers;
+    RhiHandleAllocator<RhiShaderHandle> shaders;
+    RhiHandleAllocator<RhiBindGroupLayoutHandle> bindGroupLayouts;
+    RhiHandleAllocator<RhiPipelineLayoutHandle> pipelineLayouts;
+    RhiHandleAllocator<RhiPipelineHandle> pipelines;
+    RhiHandleAllocator<RhiBindGroupHandle> bindGroups;
+
+    std::vector<GlBufferRecord> bufferRecords;
+    std::vector<GlTextureRecord> textureRecords;
+    std::vector<GlTextureViewRecord> textureViewRecords;
+    std::vector<GlSamplerRecord> samplerRecords;
+    std::vector<GlShaderRecord> shaderRecords;
+    std::vector<GlBindGroupLayoutRecord> bindGroupLayoutRecords;
+    std::vector<GlPipelineLayoutRecord> pipelineLayoutRecords;
+    std::vector<GlPipelineRecord> pipelineRecords;
+    std::vector<GlBindGroupRecord> bindGroupRecords;
+    std::vector<GlFramebufferRecord> framebufferCache;
+
+    GLuint currentFramebuffer = 0u;
+    std::vector<GLenum> currentStoreDiscardAttachments;
+    RhiIndexFormat indexFormat = RhiIndexFormat::Uint32;
+    uint64_t indexOffset = 0u;
+};
+
+GlRhiCommandList::GlRhiCommandList() = default;
+
+void GlRhiCommandList::attachDevice(GlRhiDevice* device) {
+    m_device = device;
+}
+
+void GlRhiCommandList::resetFrameState() {
+    m_graphicsPipeline = {};
+    m_computePipeline = {};
+    m_rendering = false;
+    if (m_device != nullptr && m_device->m_data) {
+        m_device->m_data->currentFramebuffer = 0u;
+        m_device->m_data->currentStoreDiscardAttachments.clear();
+        m_device->m_data->indexFormat = RhiIndexFormat::Uint32;
+        m_device->m_data->indexOffset = 0u;
+    }
+}
+
+void GlRhiCommandList::beginDebugLabel(const char* name, const glm::vec4& color) {
+    (void) color;
+    if (name != nullptr && name[0] != '\0' && GLAD_GL_VERSION_4_3) {
+        glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0u, -1, name);
+    }
+}
+
+void GlRhiCommandList::endDebugLabel() {
+    if (GLAD_GL_VERSION_4_3) {
+        glPopDebugGroup();
+    }
+}
 
 void GlRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
-    (void) barrier;
+    if (m_device == nullptr || !m_device->m_data ||
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, barrier.texture) == nullptr) {
+        logRhiError("textureBarrier received an invalid texture handle");
+        return;
+    }
+
+    const GLbitfield bits = barrierBitsForState(barrier.newState);
+    if (bits != 0u) {
+        glMemoryBarrier(bits);
+    }
 }
 
 void GlRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
-    (void) barrier;
+    if (m_device == nullptr || !m_device->m_data ||
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, barrier.buffer) == nullptr) {
+        logRhiError("bufferBarrier received an invalid buffer handle");
+        return;
+    }
+
+    const GLbitfield bits = barrierBitsForState(barrier.newState);
+    if (bits != 0u) {
+        glMemoryBarrier(bits);
+    }
 }
 
 void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
-    (void) info;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("beginRendering requires an initialized device");
+        return;
+    }
+
+    auto& data = *m_device->m_data;
+    std::vector<RhiTextureViewHandle> colorViews;
+    colorViews.reserve(info.colorAttachmentCount);
+    for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
+        const RhiTextureViewHandle view = info.colorAttachments[i].view;
+        if (recordForHandle(data.textureViews, data.textureViewRecords, view) == nullptr) {
+            logRhiError("beginRendering received an invalid color attachment view");
+            return;
+        }
+        colorViews.push_back(view);
+    }
+
+    RhiTextureViewHandle depthView;
+    if (info.depthStencilAttachment != nullptr && info.depthStencilAttachment->view.isValid()) {
+        depthView = info.depthStencilAttachment->view;
+        if (recordForHandle(data.textureViews, data.textureViewRecords, depthView) == nullptr) {
+            logRhiError("beginRendering received an invalid depth attachment view");
+            return;
+        }
+    }
+
+    GLuint framebuffer = 0u;
+    if (!colorViews.empty() || depthView.isValid()) {
+        GlFramebufferRecord* cached = nullptr;
+        for (GlFramebufferRecord& record : data.framebufferCache) {
+            if (record.active && record.depthView.index == depthView.index &&
+                record.depthView.generation == depthView.generation &&
+                record.colorViews.size() == colorViews.size()) {
+                bool sameColors = true;
+                for (size_t i = 0u; i < colorViews.size(); ++i) {
+                    if (record.colorViews[i].index != colorViews[i].index ||
+                        record.colorViews[i].generation != colorViews[i].generation) {
+                        sameColors = false;
+                        break;
+                    }
+                }
+                if (sameColors) {
+                    cached = &record;
+                    break;
+                }
+            }
+        }
+
+        if (cached == nullptr) {
+            GlFramebufferRecord record;
+            record.colorViews = colorViews;
+            record.depthView = depthView;
+            record.active = true;
+            glCreateFramebuffers(1, &record.framebuffer);
+            for (uint32_t i = 0u; i < colorViews.size(); ++i) {
+                const GlTextureViewRecord* viewRecord =
+                    recordForHandle(data.textureViews, data.textureViewRecords, colorViews[i]);
+                glNamedFramebufferTexture(record.framebuffer, GL_COLOR_ATTACHMENT0 + i, viewRecord->texture, 0);
+            }
+            if (depthView.isValid()) {
+                const GlTextureViewRecord* viewRecord =
+                    recordForHandle(data.textureViews, data.textureViewRecords, depthView);
+                const GLenum attachment = viewRecord->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
+                glNamedFramebufferTexture(record.framebuffer, attachment, viewRecord->texture, 0);
+            }
+
+            std::vector<GLenum> drawBuffers;
+            drawBuffers.reserve(colorViews.size());
+            for (uint32_t i = 0u; i < colorViews.size(); ++i) {
+                drawBuffers.push_back(GL_COLOR_ATTACHMENT0 + i);
+            }
+            if (!drawBuffers.empty()) {
+                glNamedFramebufferDrawBuffers(record.framebuffer,
+                                              static_cast<GLsizei>(drawBuffers.size()),
+                                              drawBuffers.data());
+            } else {
+                glNamedFramebufferDrawBuffer(record.framebuffer, GL_NONE);
+                glNamedFramebufferReadBuffer(record.framebuffer, GL_NONE);
+            }
+
+            if (glCheckNamedFramebufferStatus(record.framebuffer, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                glDeleteFramebuffers(1, &record.framebuffer);
+                logRhiError("beginRendering created an incomplete framebuffer");
+                return;
+            }
+
+            data.framebufferCache.push_back(record);
+            cached = &data.framebufferCache.back();
+        }
+        framebuffer = cached->framebuffer;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    data.currentFramebuffer = framebuffer;
+    data.currentStoreDiscardAttachments.clear();
+    glViewport(info.renderArea.x,
+               info.renderArea.y,
+               static_cast<GLsizei>(info.renderArea.width),
+               static_cast<GLsizei>(info.renderArea.height));
+
+    for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
+        if (info.colorAttachments[i].loadOp == RhiLoadOp::Clear) {
+            glClearNamedFramebufferfv(framebuffer, GL_COLOR, static_cast<GLint>(i), info.colorAttachments[i].clearColor);
+        }
+        if (info.colorAttachments[i].storeOp == RhiStoreOp::DontCare) {
+            data.currentStoreDiscardAttachments.push_back(GL_COLOR_ATTACHMENT0 + i);
+        }
+    }
+
+    if (info.depthStencilAttachment != nullptr && depthView.isValid()) {
+        const auto* attachment = info.depthStencilAttachment;
+        const GlTextureViewRecord* viewRecord =
+            recordForHandle(data.textureViews, data.textureViewRecords, depthView);
+        if (attachment->depthLoadOp == RhiLoadOp::Clear) {
+            if (viewRecord->format.stencil) {
+                glClearNamedFramebufferfi(framebuffer,
+                                          GL_DEPTH_STENCIL,
+                                          0,
+                                          attachment->clearDepth,
+                                          static_cast<GLint>(attachment->clearStencil));
+            } else {
+                glClearNamedFramebufferfv(framebuffer, GL_DEPTH, 0, &attachment->clearDepth);
+            }
+        }
+        if (attachment->depthStoreOp == RhiStoreOp::DontCare) {
+            data.currentStoreDiscardAttachments.push_back(
+                viewRecord->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT);
+        }
+    }
+
+    m_rendering = true;
 }
 
-void GlRhiCommandList::endRendering() {}
+void GlRhiCommandList::endRendering() {
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("endRendering requires an initialized device");
+        return;
+    }
+
+    auto& data = *m_device->m_data;
+    if (!data.currentStoreDiscardAttachments.empty()) {
+        glInvalidateNamedFramebufferData(data.currentFramebuffer,
+                                         static_cast<GLsizei>(data.currentStoreDiscardAttachments.size()),
+                                         data.currentStoreDiscardAttachments.data());
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0u);
+    data.currentFramebuffer = 0u;
+    data.currentStoreDiscardAttachments.clear();
+    m_rendering = false;
+}
 
 void GlRhiCommandList::setViewport(const RhiViewport& viewport) {
-    (void) viewport;
+    glViewport(static_cast<GLint>(viewport.x),
+               static_cast<GLint>(viewport.y),
+               static_cast<GLsizei>(viewport.width),
+               static_cast<GLsizei>(viewport.height));
+    glDepthRange(viewport.minDepth, viewport.maxDepth);
 }
 
 void GlRhiCommandList::setScissor(const RhiRect2D& rect) {
-    (void) rect;
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(rect.x, rect.y, static_cast<GLsizei>(rect.width), static_cast<GLsizei>(rect.height));
 }
 
 void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
-    (void) pipeline;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("setGraphicsPipeline requires an initialized device");
+        return;
+    }
+
+    const GlPipelineRecord* record =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, pipeline);
+    if (record == nullptr || record->compute) {
+        logRhiError("setGraphicsPipeline received an invalid graphics pipeline");
+        return;
+    }
+
+    const RhiGraphicsPipelineDesc& desc = record->graphicsDesc;
+    glUseProgram(record->program);
+    glBindVertexArray(record->vertexArray);
+
+    if (desc.depthStencil.depthTestEnabled) {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(toGlCompareOp(desc.depthStencil.depthCompare));
+    } else {
+        glDisable(GL_DEPTH_TEST);
+    }
+    glDepthMask(desc.depthStencil.depthWriteEnabled ? GL_TRUE : GL_FALSE);
+
+    if (desc.raster.cullMode == RhiCullMode::None) {
+        glDisable(GL_CULL_FACE);
+    } else {
+        glEnable(GL_CULL_FACE);
+        glCullFace(desc.raster.cullMode == RhiCullMode::Front ? GL_FRONT : GL_BACK);
+    }
+    glFrontFace(desc.raster.frontFace == RhiFrontFace::CounterClockwise ? GL_CCW : GL_CW);
+    if (!desc.raster.scissorEnabled) {
+        glDisable(GL_SCISSOR_TEST);
+    }
+
+    const size_t attachmentCount = std::max(desc.colorFormats.size(), desc.blend.attachments.size());
+    for (size_t i = 0u; i < attachmentCount; ++i) {
+        const bool hasBlend = i < desc.blend.attachments.size() && desc.blend.attachments[i].blendEnabled;
+        if (hasBlend) {
+            const RhiBlendAttachmentState& blend = desc.blend.attachments[i];
+            glEnablei(GL_BLEND, static_cast<GLuint>(i));
+            glBlendFuncSeparatei(static_cast<GLuint>(i),
+                                 toGlBlendFactor(blend.srcColor),
+                                 toGlBlendFactor(blend.dstColor),
+                                 toGlBlendFactor(blend.srcAlpha),
+                                 toGlBlendFactor(blend.dstAlpha));
+            glBlendEquationSeparatei(static_cast<GLuint>(i),
+                                     toGlBlendOp(blend.colorOp),
+                                     toGlBlendOp(blend.alphaOp));
+        } else {
+            glDisablei(GL_BLEND, static_cast<GLuint>(i));
+        }
+    }
+
+    m_graphicsPipeline = pipeline;
+    m_computePipeline = {};
 }
 
 void GlRhiCommandList::setComputePipeline(RhiPipelineHandle pipeline) {
-    (void) pipeline;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("setComputePipeline requires an initialized device");
+        return;
+    }
+
+    const GlPipelineRecord* record =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, pipeline);
+    if (record == nullptr || !record->compute) {
+        logRhiError("setComputePipeline received an invalid compute pipeline");
+        return;
+    }
+
+    glUseProgram(record->program);
+    m_computePipeline = pipeline;
+    m_graphicsPipeline = {};
 }
 
 void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGroup) {
     (void) setIndex;
-    (void) bindGroup;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("setBindGroup requires an initialized device");
+        return;
+    }
+
+    auto& data = *m_device->m_data;
+    const GlBindGroupRecord* record = recordForHandle(data.bindGroups, data.bindGroupRecords, bindGroup);
+    if (record == nullptr) {
+        logRhiError("setBindGroup received an invalid bind group");
+        return;
+    }
+
+    const GlBindGroupLayoutRecord* layoutRecord =
+        recordForHandle(data.bindGroupLayouts, data.bindGroupLayoutRecords, record->desc.layout);
+    if (layoutRecord == nullptr) {
+        logRhiError("setBindGroup references an invalid layout");
+        return;
+    }
+
+    for (const RhiBindGroupEntry& entry : record->desc.entries) {
+        const auto layoutIt = std::find_if(layoutRecord->desc.entries.begin(),
+                                           layoutRecord->desc.entries.end(),
+                                           [&](const RhiBindGroupLayoutEntry& layoutEntry) {
+                                               return layoutEntry.binding == entry.binding;
+                                           });
+        if (layoutIt == layoutRecord->desc.entries.end()) {
+            logRhiError("setBindGroup entry is not declared by its layout");
+            return;
+        }
+
+        switch (layoutIt->type) {
+            case RhiBindingType::UniformBuffer: {
+                const GlBufferRecord* buffer =
+                    recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
+                if (buffer == nullptr) {
+                    logRhiError("setBindGroup received an invalid uniform buffer");
+                    return;
+                }
+                const uint64_t range = entry.resource.buffer.range != 0u ? entry.resource.buffer.range : buffer->desc.size;
+                glBindBufferRange(GL_UNIFORM_BUFFER,
+                                  entry.binding,
+                                  buffer->buffer,
+                                  static_cast<GLintptr>(entry.resource.buffer.offset),
+                                  static_cast<GLsizeiptr>(range));
+                break;
+            }
+            case RhiBindingType::StorageBuffer: {
+                const GlBufferRecord* buffer =
+                    recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
+                if (buffer == nullptr) {
+                    logRhiError("setBindGroup received an invalid storage buffer");
+                    return;
+                }
+                const uint64_t range = entry.resource.buffer.range != 0u ? entry.resource.buffer.range : buffer->desc.size;
+                glBindBufferRange(GL_SHADER_STORAGE_BUFFER,
+                                  entry.binding,
+                                  buffer->buffer,
+                                  static_cast<GLintptr>(entry.resource.buffer.offset),
+                                  static_cast<GLsizeiptr>(range));
+                break;
+            }
+            case RhiBindingType::SampledTexture: {
+                const GlTextureViewRecord* view =
+                    recordForHandle(data.textureViews, data.textureViewRecords, entry.resource.textureView);
+                if (view == nullptr) {
+                    logRhiError("setBindGroup received an invalid sampled texture view");
+                    return;
+                }
+                glBindTextureUnit(entry.binding, view->texture);
+                break;
+            }
+            case RhiBindingType::StorageTexture: {
+                const GlTextureViewRecord* view =
+                    recordForHandle(data.textureViews, data.textureViewRecords, entry.resource.textureView);
+                if (view == nullptr) {
+                    logRhiError("setBindGroup received an invalid storage texture view");
+                    return;
+                }
+                glBindImageTexture(entry.binding, view->texture, 0, GL_FALSE, 0, GL_READ_WRITE, view->format.internalFormat);
+                break;
+            }
+            case RhiBindingType::Sampler: {
+                const GlSamplerRecord* sampler =
+                    recordForHandle(data.samplers, data.samplerRecords, entry.resource.sampler);
+                if (sampler == nullptr) {
+                    logRhiError("setBindGroup received an invalid sampler");
+                    return;
+                }
+                glBindSampler(entry.binding, sampler->sampler);
+                break;
+            }
+            case RhiBindingType::CombinedTextureSampler: {
+                const GlTextureViewRecord* view =
+                    recordForHandle(data.textureViews,
+                                    data.textureViewRecords,
+                                    entry.resource.combinedTextureSampler.textureView);
+                const GlSamplerRecord* sampler =
+                    recordForHandle(data.samplers,
+                                    data.samplerRecords,
+                                    entry.resource.combinedTextureSampler.sampler);
+                if (view == nullptr || sampler == nullptr) {
+                    logRhiError("setBindGroup received an invalid combined texture sampler");
+                    return;
+                }
+                glBindTextureUnit(entry.binding, view->texture);
+                glBindSampler(entry.binding, sampler->sampler);
+                break;
+            }
+        }
+    }
 }
 
 void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, uint64_t offset) {
-    (void) slot;
-    (void) buffer;
-    (void) offset;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("setVertexBuffer requires an initialized device");
+        return;
+    }
+
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
+    const GlBufferRecord* bufferRecord =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
+    if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr) {
+        logRhiError("setVertexBuffer requires a graphics pipeline and a valid buffer");
+        return;
+    }
+
+    uint32_t stride = 0u;
+    for (const RhiVertexBinding& binding : pipeline->graphicsDesc.vertexInput.bindings) {
+        if (binding.binding == slot) {
+            stride = binding.stride;
+            break;
+        }
+    }
+    if (stride == 0u) {
+        logRhiError("setVertexBuffer slot is not declared by the graphics pipeline");
+        return;
+    }
+
+    glVertexArrayVertexBuffer(pipeline->vertexArray,
+                              slot,
+                              bufferRecord->buffer,
+                              static_cast<GLintptr>(offset),
+                              static_cast<GLsizei>(stride));
 }
 
 void GlRhiCommandList::setIndexBuffer(RhiBufferHandle buffer, RhiIndexFormat format, uint64_t offset) {
-    (void) buffer;
-    (void) format;
-    (void) offset;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("setIndexBuffer requires an initialized device");
+        return;
+    }
+
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
+    const GlBufferRecord* bufferRecord =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
+    if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr) {
+        logRhiError("setIndexBuffer requires a graphics pipeline and a valid buffer");
+        return;
+    }
+
+    glVertexArrayElementBuffer(pipeline->vertexArray, bufferRecord->buffer);
+    m_device->m_data->indexFormat = format;
+    m_device->m_data->indexOffset = offset;
 }
 
 void GlRhiCommandList::pushConstants(const void* data, size_t size, RhiShaderStageFlags stages) {
     (void) data;
     (void) size;
     (void) stages;
+    if (size != 0u) {
+        logRhiError("pushConstants is not implemented for the OpenGL backend yet");
+    }
 }
 
 void GlRhiCommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
                             uint32_t firstVertex, uint32_t firstInstance) {
-    (void) vertexCount;
-    (void) instanceCount;
-    (void) firstVertex;
-    (void) firstInstance;
+    if (!m_rendering || m_device == nullptr || !m_device->m_data) {
+        logRhiError("draw requires an active rendering scope");
+        return;
+    }
+
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
+    if (pipeline == nullptr || pipeline->compute) {
+        logRhiError("draw requires a bound graphics pipeline");
+        return;
+    }
+
+    glDrawArraysInstancedBaseInstance(toGlTopology(pipeline->graphicsDesc.topology),
+                                      static_cast<GLint>(firstVertex),
+                                      static_cast<GLsizei>(vertexCount),
+                                      static_cast<GLsizei>(instanceCount),
+                                      firstInstance);
 }
 
 void GlRhiCommandList::drawIndexed(uint32_t indexCount, uint32_t instanceCount,
                                    uint32_t firstIndex, int32_t vertexOffset,
                                    uint32_t firstInstance) {
-    (void) indexCount;
-    (void) instanceCount;
-    (void) firstIndex;
-    (void) vertexOffset;
-    (void) firstInstance;
+    if (!m_rendering || m_device == nullptr || !m_device->m_data) {
+        logRhiError("drawIndexed requires an active rendering scope");
+        return;
+    }
+
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
+    if (pipeline == nullptr || pipeline->compute) {
+        logRhiError("drawIndexed requires a bound graphics pipeline");
+        return;
+    }
+
+    const uint64_t byteOffset = m_device->m_data->indexOffset + firstIndex * indexElementSize(m_device->m_data->indexFormat);
+    glDrawElementsInstancedBaseVertexBaseInstance(toGlTopology(pipeline->graphicsDesc.topology),
+                                                 static_cast<GLsizei>(indexCount),
+                                                 m_device->m_data->indexFormat == RhiIndexFormat::Uint16
+                                                     ? GL_UNSIGNED_SHORT
+                                                     : GL_UNSIGNED_INT,
+                                                 reinterpret_cast<const void*>(byteOffset),
+                                                 static_cast<GLsizei>(instanceCount),
+                                                 vertexOffset,
+                                                 firstInstance);
 }
 
 void GlRhiCommandList::drawIndirect(RhiBufferHandle indirectBuffer, uint64_t offset,
                                     uint32_t drawCount, uint32_t stride) {
-    (void) indirectBuffer;
-    (void) offset;
-    (void) drawCount;
-    (void) stride;
+    if (!m_rendering || m_device == nullptr || !m_device->m_data) {
+        logRhiError("drawIndirect requires an active rendering scope");
+        return;
+    }
+
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
+    const GlBufferRecord* buffer =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, indirectBuffer);
+    if (pipeline == nullptr || pipeline->compute || buffer == nullptr) {
+        logRhiError("drawIndirect requires a graphics pipeline and a valid indirect buffer");
+        return;
+    }
+
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, buffer->buffer);
+    glMultiDrawArraysIndirect(toGlTopology(pipeline->graphicsDesc.topology),
+                              reinterpret_cast<const void*>(offset),
+                              static_cast<GLsizei>(drawCount),
+                              static_cast<GLsizei>(stride));
 }
 
 void GlRhiCommandList::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
-    (void) groupCountX;
-    (void) groupCountY;
-    (void) groupCountZ;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("dispatch requires an initialized device");
+        return;
+    }
+
+    const GlPipelineRecord* pipeline =
+        recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_computePipeline);
+    if (pipeline == nullptr || !pipeline->compute) {
+        logRhiError("dispatch requires a bound compute pipeline");
+        return;
+    }
+
+    glDispatchCompute(groupCountX, groupCountY, groupCountZ);
 }
 
 void GlRhiCommandList::copyBuffer(const RhiBufferCopy& copy) {
-    (void) copy;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("copyBuffer requires an initialized device");
+        return;
+    }
+
+    const GlBufferRecord* src = recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.src);
+    const GlBufferRecord* dst = recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.dst);
+    if (src == nullptr || dst == nullptr || copy.size == 0u ||
+        copy.srcOffset + copy.size > src->desc.size || copy.dstOffset + copy.size > dst->desc.size) {
+        logRhiError("copyBuffer received invalid buffers or ranges");
+        return;
+    }
+
+    glCopyNamedBufferSubData(src->buffer,
+                             dst->buffer,
+                             static_cast<GLintptr>(copy.srcOffset),
+                             static_cast<GLintptr>(copy.dstOffset),
+                             static_cast<GLsizeiptr>(copy.size));
 }
 
 void GlRhiCommandList::copyBufferToTexture(const RhiBufferTextureCopy& copy) {
-    (void) copy;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("copyBufferToTexture requires an initialized device");
+        return;
+    }
+
+    const GlBufferRecord* src =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.srcBuffer);
+    GlTextureRecord* dst =
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, copy.dstTexture);
+    if (src == nullptr || dst == nullptr || dst->desc.dimension != RhiTextureDimension::Texture2D) {
+        logRhiError("copyBufferToTexture requires a valid source buffer and 2D destination texture");
+        return;
+    }
+
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, src->buffer);
+    glTextureSubImage2D(dst->texture,
+                        static_cast<GLint>(copy.mipLevel),
+                        0,
+                        0,
+                        static_cast<GLsizei>(copy.width),
+                        static_cast<GLsizei>(copy.height),
+                        dst->format.externalFormat,
+                        dst->format.type,
+                        reinterpret_cast<const void*>(copy.bufferOffset));
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0u);
 }
 
 void GlRhiCommandList::copyTexture(const RhiTextureCopy& copy) {
-    (void) copy;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("copyTexture requires an initialized device");
+        return;
+    }
+
+    const GlTextureRecord* src =
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, copy.src);
+    const GlTextureRecord* dst =
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, copy.dst);
+    if (src == nullptr || dst == nullptr) {
+        logRhiError("copyTexture received invalid texture handles");
+        return;
+    }
+
+    glCopyImageSubData(src->texture,
+                       src->target,
+                       static_cast<GLint>(copy.srcMipLevel),
+                       0,
+                       0,
+                       0,
+                       dst->texture,
+                       dst->target,
+                       static_cast<GLint>(copy.dstMipLevel),
+                       0,
+                       0,
+                       0,
+                       static_cast<GLsizei>(copy.width),
+                       static_cast<GLsizei>(copy.height),
+                       static_cast<GLsizei>(copy.depth));
 }
 
 void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
-    (void) blit;
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("blitTexture requires an initialized device");
+        return;
+    }
+
+    const GlTextureRecord* src =
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, blit.src);
+    const GlTextureRecord* dst =
+        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, blit.dst);
+    if (src == nullptr || dst == nullptr ||
+        src->desc.dimension != RhiTextureDimension::Texture2D ||
+        dst->desc.dimension != RhiTextureDimension::Texture2D ||
+        src->format.depth != dst->format.depth ||
+        src->format.stencil != dst->format.stencil) {
+        logRhiError("blitTexture requires valid 2D texture handles");
+        return;
+    }
+
+    GLuint readFramebuffer = 0u;
+    GLuint drawFramebuffer = 0u;
+    glCreateFramebuffers(1, &readFramebuffer);
+    glCreateFramebuffers(1, &drawFramebuffer);
+    GLbitfield mask = GL_COLOR_BUFFER_BIT;
+    GLenum filter = GL_LINEAR;
+    if (src->format.depth) {
+        const GLenum attachment = src->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
+        glNamedFramebufferTexture(readFramebuffer, attachment, src->texture, static_cast<GLint>(blit.srcMipLevel));
+        glNamedFramebufferTexture(drawFramebuffer, attachment, dst->texture, static_cast<GLint>(blit.dstMipLevel));
+        mask = src->format.stencil ? (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT) : GL_DEPTH_BUFFER_BIT;
+        filter = GL_NEAREST;
+    } else {
+        glNamedFramebufferTexture(readFramebuffer, GL_COLOR_ATTACHMENT0, src->texture, static_cast<GLint>(blit.srcMipLevel));
+        glNamedFramebufferTexture(drawFramebuffer, GL_COLOR_ATTACHMENT0, dst->texture, static_cast<GLint>(blit.dstMipLevel));
+    }
+    glBlitNamedFramebuffer(readFramebuffer,
+                           drawFramebuffer,
+                           0,
+                           0,
+                           static_cast<GLint>(src->desc.width),
+                           static_cast<GLint>(src->desc.height),
+                           0,
+                           0,
+                           static_cast<GLint>(dst->desc.width),
+                           static_cast<GLint>(dst->desc.height),
+                           mask,
+                           filter);
+    glDeleteFramebuffers(1, &readFramebuffer);
+    glDeleteFramebuffers(1, &drawFramebuffer);
 }
 
 void GlRhiCommandList::writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) {
     (void) pool;
     (void) queryIndex;
+    logRhiError("writeTimestamp requires query pool support, which is not implemented yet");
+}
+
+GlRhiDevice::GlRhiDevice()
+    : m_data(std::make_unique<GlRhiDeviceData>()) {
+    m_commandList.attachDevice(this);
+}
+
+GlRhiDevice::~GlRhiDevice() {
+    if (m_initialized) {
+        shutdown();
+    }
 }
 
 bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     (void) desc;
+    if (!GLAD_GL_VERSION_4_5) {
+        logRhiError("OpenGL 4.5 is required");
+        return false;
+    }
+
     m_initialized = true;
     m_capabilities.multiDrawIndirect = true;
     m_capabilities.timestampQuery = true;
@@ -127,15 +1113,81 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
 }
 
 void GlRhiDevice::shutdown() {
-    m_bindGroups.clear();
-    m_pipelines.clear();
-    m_pipelineLayouts.clear();
-    m_bindGroupLayouts.clear();
-    m_shaders.clear();
-    m_samplers.clear();
-    m_textureViews.clear();
-    m_textures.clear();
-    m_buffers.clear();
+    if (!m_data) {
+        m_initialized = false;
+        return;
+    }
+
+    for (GlFramebufferRecord& record : m_data->framebufferCache) {
+        if (record.active && record.framebuffer != 0u) {
+            glDeleteFramebuffers(1, &record.framebuffer);
+        }
+    }
+    for (GlBindGroupRecord& record : m_data->bindGroupRecords) {
+        record = {};
+    }
+    for (GlPipelineRecord& record : m_data->pipelineRecords) {
+        if (record.active) {
+            if (record.vertexArray != 0u) {
+                glDeleteVertexArrays(1, &record.vertexArray);
+            }
+            if (record.program != 0u) {
+                glDeleteProgram(record.program);
+            }
+        }
+        record = {};
+    }
+    for (GlShaderRecord& record : m_data->shaderRecords) {
+        if (record.active && record.shader != 0u) {
+            glDeleteShader(record.shader);
+        }
+        record = {};
+    }
+    for (GlSamplerRecord& record : m_data->samplerRecords) {
+        if (record.active && record.sampler != 0u) {
+            glDeleteSamplers(1, &record.sampler);
+        }
+        record = {};
+    }
+    for (GlTextureViewRecord& record : m_data->textureViewRecords) {
+        if (record.active && record.texture != 0u) {
+            glDeleteTextures(1, &record.texture);
+        }
+        record = {};
+    }
+    for (GlTextureRecord& record : m_data->textureRecords) {
+        if (record.active && record.texture != 0u) {
+            glDeleteTextures(1, &record.texture);
+        }
+        record = {};
+    }
+    for (GlBufferRecord& record : m_data->bufferRecords) {
+        if (record.active && record.buffer != 0u) {
+            glDeleteBuffers(1, &record.buffer);
+        }
+        record = {};
+    }
+
+    m_data->framebufferCache.clear();
+    m_data->bindGroups.clear();
+    m_data->pipelines.clear();
+    m_data->pipelineLayouts.clear();
+    m_data->bindGroupLayouts.clear();
+    m_data->shaders.clear();
+    m_data->samplers.clear();
+    m_data->textureViews.clear();
+    m_data->textures.clear();
+    m_data->buffers.clear();
+    m_data->bufferRecords.clear();
+    m_data->textureRecords.clear();
+    m_data->textureViewRecords.clear();
+    m_data->samplerRecords.clear();
+    m_data->shaderRecords.clear();
+    m_data->bindGroupLayoutRecords.clear();
+    m_data->pipelineLayoutRecords.clear();
+    m_data->pipelineRecords.clear();
+    m_data->bindGroupRecords.clear();
+    m_commandList.resetFrameState();
     m_initialized = false;
 }
 
@@ -150,122 +1202,457 @@ const RhiCapabilities& GlRhiDevice::capabilities() const {
 RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc,
                                           const void* initialData,
                                           size_t initialDataSize) {
-    (void) initialData;
-    (void) initialDataSize;
-    if (!m_initialized || desc.size == 0 || desc.usage == 0) {
+    if (!m_initialized || desc.size == 0u || desc.usage == 0u ||
+        (initialData == nullptr && initialDataSize != 0u) ||
+        initialDataSize > desc.size) {
+        logRhiError("createBuffer received an invalid descriptor");
         return {};
     }
-    return m_buffers.allocate();
+
+    GLuint buffer = 0u;
+    glCreateBuffers(1, &buffer);
+    const GLenum usage = desc.memoryUsage == RhiMemoryUsage::GpuOnly ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW;
+    glNamedBufferData(buffer, static_cast<GLsizeiptr>(desc.size), nullptr, usage);
+    if (initialData != nullptr && initialDataSize != 0u) {
+        glNamedBufferSubData(buffer, 0, static_cast<GLsizeiptr>(initialDataSize), initialData);
+    }
+    labelGlObject(GL_BUFFER, buffer, desc.debugName);
+
+    const RhiBufferHandle handle = m_data->buffers.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->bufferRecords.size()) {
+        m_data->bufferRecords.resize(slot + 1u);
+    }
+    m_data->bufferRecords[slot] = {buffer, desc, true};
+    return handle;
 }
 
 RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
                                             const RhiTextureInitialData* initialData) {
-    (void) initialData;
-    if (!m_initialized || desc.width == 0 || desc.height == 0 ||
-        desc.depthOrLayers == 0 || desc.mipLevels == 0 || desc.usage == 0) {
+    GlFormatInfo format;
+    const GLenum target = toGlTextureTarget(desc.dimension);
+    if (!m_initialized || target == 0u || !toGlFormatInfo(desc.format, format) ||
+        desc.width == 0u || desc.height == 0u || desc.depthOrLayers == 0u ||
+        desc.mipLevels == 0u || desc.sampleCount != 1u || desc.usage == 0u) {
+        logRhiError("createTexture received an invalid descriptor");
         return {};
     }
-    return m_textures.allocate();
+
+    GLuint texture = 0u;
+    glCreateTextures(target, 1, &texture);
+    if (desc.dimension == RhiTextureDimension::Texture2D || desc.dimension == RhiTextureDimension::Cube) {
+        glTextureStorage2D(texture,
+                           static_cast<GLsizei>(desc.mipLevels),
+                           format.internalFormat,
+                           static_cast<GLsizei>(desc.width),
+                           static_cast<GLsizei>(desc.height));
+    } else {
+        glTextureStorage3D(texture,
+                           static_cast<GLsizei>(desc.mipLevels),
+                           format.internalFormat,
+                           static_cast<GLsizei>(desc.width),
+                           static_cast<GLsizei>(desc.height),
+                           static_cast<GLsizei>(desc.depthOrLayers));
+    }
+    labelGlObject(GL_TEXTURE, texture, desc.debugName);
+
+    if (initialData != nullptr) {
+        if (initialData->pixels == nullptr || initialData->sizeBytes == 0u ||
+            initialData->mipLevel >= desc.mipLevels || initialData->arrayLayer != 0u ||
+            desc.dimension != RhiTextureDimension::Texture2D) {
+            glDeleteTextures(1, &texture);
+            logRhiError("createTexture received invalid initial texture data");
+            return {};
+        }
+        glTextureSubImage2D(texture,
+                            static_cast<GLint>(initialData->mipLevel),
+                            0,
+                            0,
+                            static_cast<GLsizei>(desc.width),
+                            static_cast<GLsizei>(desc.height),
+                            format.externalFormat,
+                            format.type,
+                            initialData->pixels);
+    }
+
+    const RhiTextureHandle handle = m_data->textures.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->textureRecords.size()) {
+        m_data->textureRecords.resize(slot + 1u);
+    }
+    m_data->textureRecords[slot] = {texture, target, desc, format, true};
+    return handle;
 }
 
 RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
-    if (!m_initialized || !desc.texture.isValid() || desc.mipCount == 0 || desc.layerCount == 0) {
+    const GlTextureRecord* textureRecord =
+        recordForHandle(m_data->textures, m_data->textureRecords, desc.texture);
+    const RhiTextureFormat resolvedFormat =
+        desc.format == RhiTextureFormat::Undefined && textureRecord != nullptr ? textureRecord->desc.format : desc.format;
+    GlFormatInfo format;
+    const GLenum viewTarget = toGlTextureViewTarget(desc.viewType);
+    if (!m_initialized || textureRecord == nullptr || viewTarget == 0u ||
+        !toGlFormatInfo(resolvedFormat, format) || desc.mipCount == 0u ||
+        desc.layerCount == 0u || desc.baseMip + desc.mipCount > textureRecord->desc.mipLevels ||
+        desc.baseLayer + desc.layerCount > textureRecord->desc.depthOrLayers) {
+        logRhiError("createTextureView received an invalid descriptor");
         return {};
     }
-    return m_textureViews.allocate();
+
+    GLuint textureView = 0u;
+    glGenTextures(1, &textureView);
+    glTextureView(textureView,
+                  viewTarget,
+                  textureRecord->texture,
+                  format.internalFormat,
+                  desc.baseMip,
+                  desc.mipCount,
+                  desc.baseLayer,
+                  desc.layerCount);
+    if (desc.depthCompare) {
+        glTextureParameteri(textureView, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glTextureParameteri(textureView, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    }
+    labelGlObject(GL_TEXTURE, textureView, rhiDebugName(textureRecord->desc.debugName));
+
+    const RhiTextureViewHandle handle = m_data->textureViews.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->textureViewRecords.size()) {
+        m_data->textureViewRecords.resize(slot + 1u);
+    }
+    m_data->textureViewRecords[slot] = {textureView, viewTarget, desc, resolvedFormat, format, true};
+    return handle;
 }
 
 RhiSamplerHandle GlRhiDevice::createSampler(const RhiSamplerDesc& desc) {
-    (void) desc;
-    if (!m_initialized) {
+    if (!m_initialized || desc.maxAnisotropy < 1.0f) {
+        logRhiError("createSampler received an invalid descriptor");
         return {};
     }
-    return m_samplers.allocate();
+
+    GLuint sampler = 0u;
+    glCreateSamplers(1, &sampler);
+    glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, toGlMinFilter(desc.minFilter, desc.mipmapMode));
+    glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, toGlMagFilter(desc.magFilter));
+    glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, toGlAddressMode(desc.addressU));
+    glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, toGlAddressMode(desc.addressV));
+    glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, toGlAddressMode(desc.addressW));
+    if (desc.compareEnabled) {
+        glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+        glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_FUNC, toGlCompareOp(desc.compareOp));
+    }
+    if (m_capabilities.samplerAnisotropy && desc.maxAnisotropy > 1.0f) {
+        glSamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, desc.maxAnisotropy);
+    }
+
+    const RhiSamplerHandle handle = m_data->samplers.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->samplerRecords.size()) {
+        m_data->samplerRecords.resize(slot + 1u);
+    }
+    m_data->samplerRecords[slot] = {sampler, desc, true};
+    return handle;
 }
 
 RhiShaderHandle GlRhiDevice::createShader(const RhiShaderDesc& desc) {
-    if (!m_initialized || ((desc.source == nullptr || desc.sourceSize == 0) &&
-                           (desc.bytecode == nullptr || desc.bytecodeSize == 0))) {
+    if (!m_initialized || desc.bytecode != nullptr || desc.bytecodeSize != 0u) {
+        logRhiError("createShader requires GLSL source for the OpenGL backend");
         return {};
     }
-    return m_shaders.allocate();
+
+    const GLuint shader = compileShaderObject(desc);
+    if (shader == 0u) {
+        return {};
+    }
+
+    const RhiShaderHandle handle = m_data->shaders.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->shaderRecords.size()) {
+        m_data->shaderRecords.resize(slot + 1u);
+    }
+    m_data->shaderRecords[slot] = {shader, desc.stage, true};
+    return handle;
 }
 
 RhiBindGroupLayoutHandle GlRhiDevice::createBindGroupLayout(const RhiBindGroupLayoutDesc& desc) {
-    (void) desc;
     if (!m_initialized) {
+        logRhiError("createBindGroupLayout requires an initialized device");
         return {};
     }
-    return m_bindGroupLayouts.allocate();
+
+    const RhiBindGroupLayoutHandle handle = m_data->bindGroupLayouts.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->bindGroupLayoutRecords.size()) {
+        m_data->bindGroupLayoutRecords.resize(slot + 1u);
+    }
+    m_data->bindGroupLayoutRecords[slot] = {desc, true};
+    return handle;
 }
 
 RhiPipelineLayoutHandle GlRhiDevice::createPipelineLayout(const RhiPipelineLayoutDesc& desc) {
-    (void) desc;
     if (!m_initialized) {
+        logRhiError("createPipelineLayout requires an initialized device");
         return {};
     }
-    return m_pipelineLayouts.allocate();
+    for (const RhiBindGroupLayoutHandle layout : desc.bindGroupLayouts) {
+        if (recordForHandle(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, layout) == nullptr) {
+            logRhiError("createPipelineLayout received an invalid bind group layout");
+            return {};
+        }
+    }
+
+    const RhiPipelineLayoutHandle handle = m_data->pipelineLayouts.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->pipelineLayoutRecords.size()) {
+        m_data->pipelineLayoutRecords.resize(slot + 1u);
+    }
+    m_data->pipelineLayoutRecords[slot] = {desc, true};
+    return handle;
 }
 
 RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) {
-    if (!m_initialized || !desc.vertexShader.isValid() || !desc.fragmentShader.isValid() ||
-        !desc.layout.isValid()) {
+    const GlShaderRecord* vertexShader =
+        recordForHandle(m_data->shaders, m_data->shaderRecords, desc.vertexShader);
+    const GlShaderRecord* fragmentShader =
+        recordForHandle(m_data->shaders, m_data->shaderRecords, desc.fragmentShader);
+    if (!m_initialized || vertexShader == nullptr || fragmentShader == nullptr ||
+        vertexShader->stage != RhiShaderStage::Vertex ||
+        fragmentShader->stage != RhiShaderStage::Fragment ||
+        recordForHandle(m_data->pipelineLayouts, m_data->pipelineLayoutRecords, desc.layout) == nullptr) {
+        logRhiError("createGraphicsPipeline received an invalid descriptor");
         return {};
     }
-    return m_pipelines.allocate();
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vertexShader->shader);
+    glAttachShader(program, fragmentShader->shader);
+    glLinkProgram(program);
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        std::array<char, 2048> infoLog{};
+        glGetProgramInfoLog(program, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
+        std::cerr << "GlRhiDevice: graphics pipeline link failed [" << rhiDebugName(desc.debugName)
+                  << "]\n" << infoLog.data() << '\n';
+        glDeleteProgram(program);
+        return {};
+    }
+
+    GLuint vertexArray = 0u;
+    glCreateVertexArrays(1, &vertexArray);
+    for (const RhiVertexBinding& binding : desc.vertexInput.bindings) {
+        glVertexArrayBindingDivisor(vertexArray,
+                                    binding.binding,
+                                    binding.inputRate == RhiVertexInputRate::Instance ? 1u : 0u);
+    }
+    for (const RhiVertexAttribute& attribute : desc.vertexInput.attributes) {
+        const GlVertexFormatInfo format = toGlVertexFormat(attribute.format);
+        glEnableVertexArrayAttrib(vertexArray, attribute.location);
+        glVertexArrayAttribBinding(vertexArray, attribute.location, attribute.binding);
+        if (format.integer) {
+            glVertexArrayAttribIFormat(vertexArray,
+                                       attribute.location,
+                                       format.componentCount,
+                                       format.type,
+                                       attribute.offset);
+        } else {
+            glVertexArrayAttribFormat(vertexArray,
+                                      attribute.location,
+                                      format.componentCount,
+                                      format.type,
+                                      GL_FALSE,
+                                      attribute.offset);
+        }
+    }
+    labelGlObject(GL_PROGRAM, program, desc.debugName);
+    labelGlObject(GL_VERTEX_ARRAY, vertexArray, desc.debugName);
+
+    const RhiPipelineHandle handle = m_data->pipelines.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->pipelineRecords.size()) {
+        m_data->pipelineRecords.resize(slot + 1u);
+    }
+    GlPipelineRecord record;
+    record.program = program;
+    record.vertexArray = vertexArray;
+    record.compute = false;
+    record.graphicsDesc = desc;
+    record.active = true;
+    m_data->pipelineRecords[slot] = std::move(record);
+    return handle;
 }
 
 RhiPipelineHandle GlRhiDevice::createComputePipeline(const RhiComputePipelineDesc& desc) {
-    if (!m_initialized || !desc.computeShader.isValid() || !desc.layout.isValid()) {
+    const GlShaderRecord* computeShader =
+        recordForHandle(m_data->shaders, m_data->shaderRecords, desc.computeShader);
+    if (!m_initialized || computeShader == nullptr || computeShader->stage != RhiShaderStage::Compute ||
+        recordForHandle(m_data->pipelineLayouts, m_data->pipelineLayoutRecords, desc.layout) == nullptr) {
+        logRhiError("createComputePipeline received an invalid descriptor");
         return {};
     }
-    return m_pipelines.allocate();
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, computeShader->shader);
+    glLinkProgram(program);
+    GLint linked = GL_FALSE;
+    glGetProgramiv(program, GL_LINK_STATUS, &linked);
+    if (linked != GL_TRUE) {
+        std::array<char, 2048> infoLog{};
+        glGetProgramInfoLog(program, static_cast<GLsizei>(infoLog.size()), nullptr, infoLog.data());
+        std::cerr << "GlRhiDevice: compute pipeline link failed [" << rhiDebugName(desc.debugName)
+                  << "]\n" << infoLog.data() << '\n';
+        glDeleteProgram(program);
+        return {};
+    }
+    labelGlObject(GL_PROGRAM, program, desc.debugName);
+
+    const RhiPipelineHandle handle = m_data->pipelines.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->pipelineRecords.size()) {
+        m_data->pipelineRecords.resize(slot + 1u);
+    }
+    GlPipelineRecord record;
+    record.program = program;
+    record.compute = true;
+    record.computeDesc = desc;
+    record.active = true;
+    m_data->pipelineRecords[slot] = std::move(record);
+    return handle;
 }
 
 RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
-    if (!m_initialized || !desc.layout.isValid()) {
+    const GlBindGroupLayoutRecord* layout =
+        recordForHandle(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, desc.layout);
+    if (!m_initialized || layout == nullptr) {
+        logRhiError("createBindGroup received an invalid layout");
         return {};
     }
-    return m_bindGroups.allocate();
+
+    for (const RhiBindGroupEntry& entry : desc.entries) {
+        const auto layoutIt = std::find_if(layout->desc.entries.begin(),
+                                           layout->desc.entries.end(),
+                                           [&](const RhiBindGroupLayoutEntry& layoutEntry) {
+                                               return layoutEntry.binding == entry.binding;
+                                           });
+        if (layoutIt == layout->desc.entries.end()) {
+            logRhiError("createBindGroup entry is not declared by its layout");
+            return {};
+        }
+    }
+
+    const RhiBindGroupHandle handle = m_data->bindGroups.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->bindGroupRecords.size()) {
+        m_data->bindGroupRecords.resize(slot + 1u);
+    }
+    m_data->bindGroupRecords[slot] = {desc, true};
+    return handle;
 }
 
 void GlRhiDevice::destroyBuffer(RhiBufferHandle handle) {
-    (void) m_buffers.release(handle);
+    GlBufferRecord* record = recordForHandle(m_data->buffers, m_data->bufferRecords, handle);
+    if (record != nullptr) {
+        glDeleteBuffers(1, &record->buffer);
+        *record = {};
+    }
+    (void) m_data->buffers.release(handle);
 }
 
 void GlRhiDevice::destroyTexture(RhiTextureHandle handle) {
-    (void) m_textures.release(handle);
+    GlTextureRecord* record = recordForHandle(m_data->textures, m_data->textureRecords, handle);
+    if (record != nullptr) {
+        glDeleteTextures(1, &record->texture);
+        *record = {};
+    }
+    (void) m_data->textures.release(handle);
 }
 
 void GlRhiDevice::destroyTextureView(RhiTextureViewHandle handle) {
-    (void) m_textureViews.release(handle);
+    GlTextureViewRecord* record = recordForHandle(m_data->textureViews, m_data->textureViewRecords, handle);
+    if (record != nullptr) {
+        glDeleteTextures(1, &record->texture);
+        *record = {};
+    }
+    for (GlFramebufferRecord& framebuffer : m_data->framebufferCache) {
+        if (!framebuffer.active) {
+            continue;
+        }
+        const bool usesDepth = framebuffer.depthView.index == handle.index &&
+                               framebuffer.depthView.generation == handle.generation;
+        const bool usesColor = std::any_of(framebuffer.colorViews.begin(),
+                                           framebuffer.colorViews.end(),
+                                           [&](const RhiTextureViewHandle view) {
+                                               return view.index == handle.index &&
+                                                      view.generation == handle.generation;
+                                           });
+        if (usesDepth || usesColor) {
+            glDeleteFramebuffers(1, &framebuffer.framebuffer);
+            framebuffer = {};
+        }
+    }
+    (void) m_data->textureViews.release(handle);
 }
 
 void GlRhiDevice::destroySampler(RhiSamplerHandle handle) {
-    (void) m_samplers.release(handle);
+    GlSamplerRecord* record = recordForHandle(m_data->samplers, m_data->samplerRecords, handle);
+    if (record != nullptr) {
+        glDeleteSamplers(1, &record->sampler);
+        *record = {};
+    }
+    (void) m_data->samplers.release(handle);
 }
 
 void GlRhiDevice::destroyShader(RhiShaderHandle handle) {
-    (void) m_shaders.release(handle);
+    GlShaderRecord* record = recordForHandle(m_data->shaders, m_data->shaderRecords, handle);
+    if (record != nullptr) {
+        glDeleteShader(record->shader);
+        *record = {};
+    }
+    (void) m_data->shaders.release(handle);
 }
 
 void GlRhiDevice::destroyBindGroupLayout(RhiBindGroupLayoutHandle handle) {
-    (void) m_bindGroupLayouts.release(handle);
+    GlBindGroupLayoutRecord* record =
+        recordForHandle(m_data->bindGroupLayouts, m_data->bindGroupLayoutRecords, handle);
+    if (record != nullptr) {
+        *record = {};
+    }
+    (void) m_data->bindGroupLayouts.release(handle);
 }
 
 void GlRhiDevice::destroyPipelineLayout(RhiPipelineLayoutHandle handle) {
-    (void) m_pipelineLayouts.release(handle);
+    GlPipelineLayoutRecord* record =
+        recordForHandle(m_data->pipelineLayouts, m_data->pipelineLayoutRecords, handle);
+    if (record != nullptr) {
+        *record = {};
+    }
+    (void) m_data->pipelineLayouts.release(handle);
 }
 
 void GlRhiDevice::destroyPipeline(RhiPipelineHandle handle) {
-    (void) m_pipelines.release(handle);
+    GlPipelineRecord* record = recordForHandle(m_data->pipelines, m_data->pipelineRecords, handle);
+    if (record != nullptr) {
+        if (record->vertexArray != 0u) {
+            glDeleteVertexArrays(1, &record->vertexArray);
+        }
+        if (record->program != 0u) {
+            glDeleteProgram(record->program);
+        }
+        *record = {};
+    }
+    (void) m_data->pipelines.release(handle);
 }
 
 void GlRhiDevice::destroyBindGroup(RhiBindGroupHandle handle) {
-    (void) m_bindGroups.release(handle);
+    GlBindGroupRecord* record = recordForHandle(m_data->bindGroups, m_data->bindGroupRecords, handle);
+    if (record != nullptr) {
+        *record = {};
+    }
+    (void) m_data->bindGroups.release(handle);
 }
 
 RhiCommandList& GlRhiDevice::beginFrame() {
+    m_commandList.resetFrameState();
     return m_commandList;
 }
 

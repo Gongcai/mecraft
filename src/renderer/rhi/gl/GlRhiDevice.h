@@ -2,10 +2,13 @@
 #define MECRAFT_GL_RHI_DEVICE_H
 
 #include "renderer/rhi/RhiDevice.h"
-#include "renderer/rhi/RhiHandleAllocator.h"
+
+#include <memory>
 
 class GlRhiCommandList final : public RhiCommandList {
 public:
+    GlRhiCommandList();
+
     void beginDebugLabel(const char* name, const glm::vec4& color) override;
     void endDebugLabel() override;
     void textureBarrier(const RhiTextureBarrier& barrier) override;
@@ -33,10 +36,26 @@ public:
     void copyTexture(const RhiTextureCopy& copy) override;
     void blitTexture(const RhiTextureBlit& blit) override;
     void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) override;
+
+private:
+    friend class GlRhiDevice;
+
+    void attachDevice(class GlRhiDevice* device);
+    void resetFrameState();
+
+    class GlRhiDevice* m_device = nullptr;
+    RhiPipelineHandle m_graphicsPipeline;
+    RhiPipelineHandle m_computePipeline;
+    bool m_rendering = false;
 };
+
+struct GlRhiDeviceData;
 
 class GlRhiDevice final : public RhiDevice {
 public:
+    GlRhiDevice();
+    ~GlRhiDevice() override;
+
     bool init(const RhiDeviceDesc& desc) override;
     void shutdown() override;
 
@@ -72,18 +91,12 @@ public:
     void present() override;
 
 private:
+    friend class GlRhiCommandList;
+
     bool m_initialized = false;
     RhiCapabilities m_capabilities{};
     GlRhiCommandList m_commandList;
-    RhiHandleAllocator<RhiBufferHandle> m_buffers;
-    RhiHandleAllocator<RhiTextureHandle> m_textures;
-    RhiHandleAllocator<RhiTextureViewHandle> m_textureViews;
-    RhiHandleAllocator<RhiSamplerHandle> m_samplers;
-    RhiHandleAllocator<RhiShaderHandle> m_shaders;
-    RhiHandleAllocator<RhiBindGroupLayoutHandle> m_bindGroupLayouts;
-    RhiHandleAllocator<RhiPipelineLayoutHandle> m_pipelineLayouts;
-    RhiHandleAllocator<RhiPipelineHandle> m_pipelines;
-    RhiHandleAllocator<RhiBindGroupHandle> m_bindGroups;
+    std::unique_ptr<GlRhiDeviceData> m_data;
 };
 
 #endif // MECRAFT_GL_RHI_DEVICE_H
