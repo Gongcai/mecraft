@@ -27,18 +27,12 @@ public:
     // CSM shadow texture accessors
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
-    [[nodiscard]] uint32_t csmShadowDepthTexture() const { return m_csmShadowDepth; }
-    [[nodiscard]] uint32_t csmShadowDepthComparisonTexture() const { return m_csmShadowDepthComparison; }
 
     // CSM transparent shadow accessors
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllTextureHandle() const { return m_csmShadowDepthAllHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const { return m_csmShadowDepthAllComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor0TextureHandle() const { return m_csmShadowColor0Handle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor1TextureHandle() const { return m_csmShadowColor1Handle; }
-    [[nodiscard]] uint32_t csmShadowDepthAllTexture() const { return m_csmShadowDepthAll; }
-    [[nodiscard]] uint32_t csmShadowDepthAllComparisonTexture() const { return m_csmShadowDepthAllComparison; }
-    [[nodiscard]] uint32_t csmShadowColor0Texture() const { return m_csmShadowColor0; }
-    [[nodiscard]] uint32_t csmShadowColor1Texture() const { return m_csmShadowColor1; }
 
     // Dimensions
     [[nodiscard]] int shadowResolution() const { return m_shadowResolution; }
@@ -52,8 +46,6 @@ private:
     uint32_t m_csmShadowFbo = 0;
     RhiTextureHandle m_csmShadowDepthHandle;
     RhiTextureHandle m_csmShadowDepthComparisonHandle;
-    uint32_t m_csmShadowDepth = 0;
-    uint32_t m_csmShadowDepthComparison = 0;
 
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
     uint32_t m_csmShadowTransparentFbo = 0;
@@ -61,10 +53,6 @@ private:
     RhiTextureHandle m_csmShadowDepthAllComparisonHandle;
     RhiTextureHandle m_csmShadowColor0Handle;
     RhiTextureHandle m_csmShadowColor1Handle;
-    uint32_t m_csmShadowDepthAll = 0;
-    uint32_t m_csmShadowDepthAllComparison = 0;
-    uint32_t m_csmShadowColor0 = 0;
-    uint32_t m_csmShadowColor1 = 0;
 
     int m_shadowResolution = 0;
     bool m_ready = false;
