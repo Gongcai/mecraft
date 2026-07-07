@@ -664,6 +664,224 @@ void main() {
     device.shutdown();
     return true;
 }
+
+bool testGlRhiCombinedTextureSampler() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for sampled texture draw")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_sampled_texture_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for sampled texture draw")) {
+        return false;
+    }
+
+    constexpr uint32_t kWidth = 4u;
+    constexpr uint32_t kHeight = 4u;
+    constexpr std::array<uint8_t, 4> kYellowPixel = {255u, 255u, 0u, 255u};
+
+    RhiTextureDesc sourceDesc;
+    sourceDesc.debugName = "sampled-source-texture";
+    sourceDesc.format = RhiTextureFormat::Rgba8Unorm;
+    sourceDesc.width = 1u;
+    sourceDesc.height = 1u;
+    sourceDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+
+    RhiTextureInitialData sourceInitialData;
+    sourceInitialData.pixels = kYellowPixel.data();
+    sourceInitialData.sizeBytes = kYellowPixel.size();
+    const RhiTextureHandle sourceTexture = device.createTexture(sourceDesc, &sourceInitialData);
+    if (!requireTrue(sourceTexture.isValid(), "sampled source texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc sourceViewDesc;
+    sourceViewDesc.texture = sourceTexture;
+    const RhiTextureViewHandle sourceView = device.createTextureView(sourceViewDesc);
+    if (!requireTrue(sourceView.isValid(), "sampled source texture view must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.magFilter = RhiFilter::Nearest;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    const RhiSamplerHandle sampler = device.createSampler(samplerDesc);
+    if (!requireTrue(sampler.isValid(), "sampler must be created for sampled texture draw")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureDesc targetDesc;
+    targetDesc.debugName = "sampled-draw-target";
+    targetDesc.format = RhiTextureFormat::Rgba8Unorm;
+    targetDesc.width = kWidth;
+    targetDesc.height = kHeight;
+    targetDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureHandle target = device.createTexture(targetDesc, nullptr);
+    if (!requireTrue(target.isValid(), "sampled draw target texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc targetViewDesc;
+    targetViewDesc.texture = target;
+    const RhiTextureViewHandle targetView = device.createTextureView(targetViewDesc);
+    if (!requireTrue(targetView.isValid(), "sampled draw target texture view must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "sampled-texture-layout";
+    RhiBindGroupLayoutEntry textureEntry;
+    textureEntry.binding = 0u;
+    textureEntry.type = RhiBindingType::CombinedTextureSampler;
+    textureEntry.stages = rhiFlag(RhiShaderStage::Fragment);
+    bindGroupLayoutDesc.entries.push_back(textureEntry);
+    const RhiBindGroupLayoutHandle bindGroupLayout =
+        device.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!requireTrue(bindGroupLayout.isValid(), "sampled bind group layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "sampled-pipeline-layout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(pipelineLayout.isValid(), "sampled pipeline layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr char kFullscreenVertexShader[] = R"glsl(
+#version 450 core
+const vec2 kPositions[3] = vec2[3](
+    vec2(-1.0, -1.0),
+    vec2(3.0, -1.0),
+    vec2(-1.0, 3.0)
+);
+
+void main() {
+    gl_Position = vec4(kPositions[gl_VertexID], 0.0, 1.0);
+}
+)glsl";
+    constexpr char kSampledFragmentShader[] = R"glsl(
+#version 450 core
+layout(binding = 0) uniform sampler2D uSource;
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = texture(uSource, vec2(0.5));
+}
+)glsl";
+
+    RhiShaderDesc vertexShaderDesc;
+    vertexShaderDesc.debugName = "sampled-fullscreen-vertex";
+    vertexShaderDesc.stage = RhiShaderStage::Vertex;
+    vertexShaderDesc.source = kFullscreenVertexShader;
+    vertexShaderDesc.sourceSize = sizeof(kFullscreenVertexShader) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(vertexShaderDesc);
+    if (!requireTrue(vertexShader.isValid(), "sampled vertex shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiShaderDesc fragmentShaderDesc;
+    fragmentShaderDesc.debugName = "sampled-fragment";
+    fragmentShaderDesc.stage = RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = kSampledFragmentShader;
+    fragmentShaderDesc.sourceSize = sizeof(kSampledFragmentShader) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
+    if (!requireTrue(fragmentShader.isValid(), "sampled fragment shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "sampled-texture-pipeline";
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "sampled graphics pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = bindGroupLayout;
+    RhiBindGroupEntry bindGroupEntry;
+    bindGroupEntry.binding = 0u;
+    bindGroupEntry.resource.combinedTextureSampler.textureView = sourceView;
+    bindGroupEntry.resource.combinedTextureSampler.sampler = sampler;
+    bindGroupDesc.entries.push_back(bindGroupEntry);
+    const RhiBindGroupHandle bindGroup = device.createBindGroup(bindGroupDesc);
+    if (!requireTrue(bindGroup.isValid(), "sampled bind group must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "sampled-texture-rendering";
+    renderingInfo.renderArea = {0, 0, kWidth, kHeight};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.beginRendering(renderingInfo);
+    cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
+    cmd.setGraphicsPipeline(pipeline);
+    cmd.setBindGroup(0u, bindGroup);
+    cmd.draw(3u, 1u, 0u, 0u);
+    std::array<uint8_t, 4> pixel{};
+    glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+    cmd.endRendering();
+    device.submitFrame(cmd);
+
+    const bool yellowPixel = pixel[0] >= 250u && pixel[1] >= 250u && pixel[2] <= 5u && pixel[3] >= 250u;
+    if (!requireTrue(yellowPixel, "sampled texture draw must produce a yellow center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyBindGroup(bindGroup);
+    device.destroyPipeline(pipeline);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyBindGroupLayout(bindGroupLayout);
+    device.destroyTextureView(targetView);
+    device.destroyTexture(target);
+    device.destroySampler(sampler);
+    device.destroyTextureView(sourceView);
+    device.destroyTexture(sourceTexture);
+    device.shutdown();
+    return true;
+}
 } // namespace
 
 int main() {
@@ -689,6 +907,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiComputeStorageTexture()) {
+        return 1;
+    }
+    if (!testGlRhiCombinedTextureSampler()) {
         return 1;
     }
     return 0;
