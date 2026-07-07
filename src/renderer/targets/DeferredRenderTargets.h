@@ -137,9 +137,9 @@ public:
     [[nodiscard]] RhiTextureHandle historyCloudTexturePrevHandle() const { return m_historyCloudHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const { return m_historyVolumetricHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const { return m_historyVolumetricHandle[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t temporalCurrentTexture() const { return m_temporalCurrentTex; }
-    [[nodiscard]] uint32_t velocityTexture() const { return m_velocityTex; }
-    [[nodiscard]] uint32_t perObjectVelocityTexture() const { return m_perObjectVelocityTex; }
+    [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
+    [[nodiscard]] RhiTextureHandle velocityTextureHandle() const { return m_velocityHandle; }
+    [[nodiscard]] RhiTextureHandle perObjectVelocityTextureHandle() const { return m_perObjectVelocityHandle; }
     [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
     [[nodiscard]] RhiTextureHandle atmosphereLutTextureHandle() const { return m_atmosphereLutHandle; }
     bool loadAtmosphereLut(const char* path);
@@ -346,14 +346,17 @@ private:
     // TAA current-frame scratch: avoids reading history[current] as TAA input.
     uint32_t m_temporalCurrentFbo = 0;
     uint32_t m_temporalCurrentTex = 0;
+    RhiTextureHandle m_temporalCurrentHandle;
 
     // Velocity buffer (RG16F encodes screen-space velocity xy)
     uint32_t m_velocityFbo = 0;
     uint32_t m_velocityTex = 0;
+    RhiTextureHandle m_velocityHandle;
 
     // Per-object velocity (RG16F): written by entity/drop GBuffer shaders via MRT
     // as the sixth color attachment on the GBuffer FBO. Consumed by velocity_resolve.fs.
     uint32_t m_perObjectVelocityTex = 0;
+    RhiTextureHandle m_perObjectVelocityHandle;
 
     // Weather mask: single-channel R8 storing accumulated weather particle alpha.
     // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
