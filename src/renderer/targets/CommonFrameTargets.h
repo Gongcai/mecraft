@@ -25,8 +25,6 @@ public:
     // Texture accessors
     [[nodiscard]] RhiTextureHandle sceneColorTextureHandle() const { return m_sceneColor; }
     [[nodiscard]] RhiTextureHandle sceneDepthTextureHandle() const { return m_sceneDepth; }
-    [[nodiscard]] uint32_t sceneColorTexture() const { return m_sceneColorTex; }
-    [[nodiscard]] uint32_t sceneDepthTexture() const { return m_sceneDepthTex; }
 
     // Dimensions
     [[nodiscard]] int width() const { return m_width; }
@@ -43,11 +41,9 @@ private:
     // Scene color (RGBA16F HDR) - main render target for both pipelines
     uint32_t m_sceneColorFbo = 0;
     RhiTextureHandle m_sceneColor;
-    uint32_t m_sceneColorTex = 0;
 
     // Scene depth (DEPTH32F) - shared depth buffer
     RhiTextureHandle m_sceneDepth;
-    uint32_t m_sceneDepthTex = 0;
 
     // Fullscreen triangle for post-process passes
     uint32_t m_fullscreenVao = 0;
