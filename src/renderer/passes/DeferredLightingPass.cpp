@@ -40,7 +40,8 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
 
     // Pre-bind CSM shadow array on unit 15 before shader->use()
     glActiveTexture(GL_TEXTURE15);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthComparisonTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthComparisonTextureHandle()));
 
     m_deferredLightingShader->use();
 
@@ -235,15 +236,20 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
     // Units 15-20: CSM shadow arrays (15 already bound before shader->use())
     glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthAllComparisonTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthAllComparisonTextureHandle()));
     glActiveTexture(GL_TEXTURE18);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthAllTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthAllTextureHandle()));
     glActiveTexture(GL_TEXTURE19);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowColor0Texture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowColor0TextureHandle()));
     glActiveTexture(GL_TEXTURE20);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowColor1Texture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowColor1TextureHandle()));
     glActiveTexture(GL_TEXTURE21);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_rippleNormalTexture));
 

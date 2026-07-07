@@ -96,7 +96,8 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
 
     // Pre-bind CSM shadow array on unit 6
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthComparisonTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthComparisonTextureHandle()));
 
     m_volumetricFogShader->use();
     m_volumetricFogShader->setInt("uDepthTex", 0);
@@ -225,15 +226,20 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
     // Units 6-11: CSM shadow arrays (6 already bound)
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthAllComparisonTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthAllComparisonTextureHandle()));
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthAllTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthAllTextureHandle()));
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowColor0Texture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowColor0TextureHandle()));
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowColor1Texture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowColor1TextureHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_volumetricFogShader);
 

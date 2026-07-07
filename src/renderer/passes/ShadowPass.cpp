@@ -442,10 +442,14 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         {
             renderer::debug::ScopedDebugGroup transparentGroup("Transparent");
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
+            const uint32_t csmShadowDepthId =
+                renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle());
+            const uint32_t csmShadowDepthAllId =
+                renderer::rhi::gl::textureId(targets.csmShadowDepthAllTextureHandle());
             glCopyImageSubData(
-                targets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
+                csmShadowDepthId, GL_TEXTURE_2D_ARRAY,
                 0, 0, 0, cascade,
-                targets.csmShadowDepthAllTexture(), GL_TEXTURE_2D_ARRAY,
+                csmShadowDepthAllId, GL_TEXTURE_2D_ARRAY,
                 0, 0, 0, cascade,
                 cascadeRes, cascadeRes, 1);
 
@@ -548,7 +552,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     // Transitional compatibility for historical debug modes that still inspect
     // the legacy single-map projection: expose cascade 0 there.
     if (settings.debug.deferredLightDebugMode > 0 || settings.debug.lightDebugMode > 0) {
-        glCopyImageSubData(targets.csmShadowDepthTexture(), GL_TEXTURE_2D_ARRAY,
+        const uint32_t csmShadowDepthId =
+            renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle());
+        glCopyImageSubData(csmShadowDepthId, GL_TEXTURE_2D_ARRAY,
                            0, 0, 0, 0,
                            targets.shadowDepthTexture(), GL_TEXTURE_2D,
                            0, 0, 0, 0,

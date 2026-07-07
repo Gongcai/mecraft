@@ -81,15 +81,9 @@ public:
     [[nodiscard]] RhiTextureHandle depthTextureHandle() const { return m_gDepthHandle; }
     [[nodiscard]] uint32_t shadowDepthTexture() const { return m_shadowDepth; }
     [[nodiscard]] uint32_t shadowDepthComparisonTexture() const { return m_shadowDepthComparison; }
-    [[nodiscard]] uint32_t csmShadowDepthTexture() const { return m_csmShadowDepth; }
-    [[nodiscard]] uint32_t csmShadowDepthComparisonTexture() const { return m_csmShadowDepthComparison; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
     // CSM transparent shadow contract (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
-    [[nodiscard]] uint32_t csmShadowDepthAllTexture() const { return m_csmShadowDepthAll; }
-    [[nodiscard]] uint32_t csmShadowDepthAllComparisonTexture() const { return m_csmShadowDepthAllComparison; }
-    [[nodiscard]] uint32_t csmShadowColor0Texture() const { return m_csmShadowColor0; }
-    [[nodiscard]] uint32_t csmShadowColor1Texture() const { return m_csmShadowColor1; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllTextureHandle() const { return m_csmShadowDepthAllHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const { return m_csmShadowDepthAllComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor0TextureHandle() const { return m_csmShadowColor0Handle; }

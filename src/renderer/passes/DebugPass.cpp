@@ -193,7 +193,8 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                                                                                                       : targets.cloudTexture()))));
 
     glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowDepthTexture());
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE17);
     glBindTexture(GL_TEXTURE_2D, targets.temporalCurrentTexture());
     glActiveTexture(GL_TEXTURE18);
