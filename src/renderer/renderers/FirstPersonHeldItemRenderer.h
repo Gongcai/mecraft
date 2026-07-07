@@ -109,12 +109,12 @@ public:
         float cascadeSplitFar[4]{};
         float cascadeTexelWorldSize[4]{};
         float cascadeDepthExtent[4]{};
-        uint32_t shadowTexture = 0;        // sampler2DArrayShadow (shadowtex1)
-        uint32_t shadowDepthRaw = 0;       // sampler2DArray
-        uint32_t shadowDepthAll = 0;       // sampler2DArrayShadow (shadowtex0)
-        uint32_t shadowDepthAllRaw = 0;    // sampler2DArray
-        uint32_t shadowColor0 = 0;         // sampler2DArray
-        uint32_t shadowColor1 = 0;         // sampler2DArray
+        RhiTextureHandle shadowTexture;        // sampler2DArrayShadow (shadowtex1)
+        RhiTextureHandle shadowDepthRaw;       // sampler2DArray
+        RhiTextureHandle shadowDepthAll;       // sampler2DArrayShadow (shadowtex0)
+        RhiTextureHandle shadowDepthAllRaw;    // sampler2DArray
+        RhiTextureHandle shadowColor0;         // sampler2DArray
+        RhiTextureHandle shadowColor1;         // sampler2DArray
         glm::vec3 cameraPos = glm::vec3(0.0f);
         glm::vec3 sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
         float shadowDistance = 192.0f;

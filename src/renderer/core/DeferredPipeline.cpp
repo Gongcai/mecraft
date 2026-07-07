@@ -874,12 +874,6 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
         shadowData.shadowDepthAllRawHandle = m_shared->deferredTargets->csmShadowDepthAllTextureHandle();
         shadowData.shadowColor0Handle = m_shared->deferredTargets->csmShadowColor0TextureHandle();
         shadowData.shadowColor1Handle = m_shared->deferredTargets->csmShadowColor1TextureHandle();
-        shadowData.shadowTexture = m_shared->deferredTargets->csmShadowDepthComparisonTexture();
-        shadowData.shadowDepthRaw = m_shared->deferredTargets->csmShadowDepthTexture();
-        shadowData.shadowDepthAll = m_shared->deferredTargets->csmShadowDepthAllComparisonTexture();
-        shadowData.shadowDepthAllRaw = m_shared->deferredTargets->csmShadowDepthAllTexture();
-        shadowData.shadowColor0 = m_shared->deferredTargets->csmShadowColor0Texture();
-        shadowData.shadowColor1 = m_shared->deferredTargets->csmShadowColor1Texture();
         shadowData.cameraPos = ctx.camera.position;
         shadowData.sunDirection = m_shared->shadowRenderer->lightDirection();
         shadowData.shadowDistance = m_currentSettings.shadow.distance;

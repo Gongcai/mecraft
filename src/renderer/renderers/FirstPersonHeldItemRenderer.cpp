@@ -55,6 +55,23 @@ bool prefersBlockMeshForItem(const BlockID renderBlock) {
     return isTorchShape(def) || def.renderShapeName == "model";
 }
 
+uint32_t resolveShadowTexture(const RhiTextureHandle handle, const uint32_t neutralTexture) {
+    const uint32_t texture = renderer::rhi::gl::textureId(handle);
+    return texture != 0 ? texture : neutralTexture;
+}
+
+MecraftTextureContract::ShadowTextureBundle buildShadowTextureBundle(
+    const FirstPersonHeldItemRenderer::ShadowData& shadowData) {
+    return {
+        resolveShadowTexture(shadowData.shadowTexture, MecraftTextureContract::neutralDepthCompare()),
+        resolveShadowTexture(shadowData.shadowDepthRaw, MecraftTextureContract::neutralDepthRaw()),
+        resolveShadowTexture(shadowData.shadowDepthAll, MecraftTextureContract::neutralDepthCompare()),
+        resolveShadowTexture(shadowData.shadowDepthAllRaw, MecraftTextureContract::neutralDepthRaw()),
+        resolveShadowTexture(shadowData.shadowColor0, MecraftTextureContract::neutralColor0()),
+        resolveShadowTexture(shadowData.shadowColor1, MecraftTextureContract::neutralColor1()),
+    };
+}
+
 FaceUvRect pixelRectToUv(const float x0,
                          const float y0,
                          const float x1,
@@ -415,12 +432,12 @@ FirstPersonHeldItemRenderer::ShadowData FirstPersonHeldItemRenderer::fromFirstPe
         shadow.cascadeTexelWorldSize[i] = sd.cascadeTexelWorldSize[i];
         shadow.cascadeDepthExtent[i] = sd.cascadeDepthExtent[i];
     }
-    shadow.shadowTexture = sd.shadowTexture;
-    shadow.shadowDepthRaw = sd.shadowDepthRaw;
-    shadow.shadowDepthAll = sd.shadowDepthAll;
-    shadow.shadowDepthAllRaw = sd.shadowDepthAllRaw;
-    shadow.shadowColor0 = sd.shadowColor0;
-    shadow.shadowColor1 = sd.shadowColor1;
+    shadow.shadowTexture = sd.shadowTextureHandle;
+    shadow.shadowDepthRaw = sd.shadowDepthRawHandle;
+    shadow.shadowDepthAll = sd.shadowDepthAllHandle;
+    shadow.shadowDepthAllRaw = sd.shadowDepthAllRawHandle;
+    shadow.shadowColor0 = sd.shadowColor0Handle;
+    shadow.shadowColor1 = sd.shadowColor1Handle;
     shadow.cameraPos = sd.cameraPos;
     shadow.sunDirection = sd.sunDirection;
     shadow.shadowDistance = sd.shadowDistance;
@@ -439,11 +456,15 @@ FirstPersonHeldItemRenderer::ShadowData FirstPersonHeldItemRenderer::fromFirstPe
 }
 
 void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
+    const uint32_t shadowTexture = renderer::rhi::gl::textureId(m_shadowData.shadowTexture);
+    const uint32_t shadowDepthRaw = renderer::rhi::gl::textureId(m_shadowData.shadowDepthRaw);
+    const uint32_t shadowDepthAll = renderer::rhi::gl::textureId(m_shadowData.shadowDepthAll);
+    const uint32_t shadowDepthAllRaw = renderer::rhi::gl::textureId(m_shadowData.shadowDepthAllRaw);
     const bool shadowInputsValid =
-        m_shadowData.shadowTexture != 0 &&
-        m_shadowData.shadowDepthRaw != 0 &&
-        m_shadowData.shadowDepthAll != 0 &&
-        m_shadowData.shadowDepthAllRaw != 0 &&
+        shadowTexture != 0 &&
+        shadowDepthRaw != 0 &&
+        shadowDepthAll != 0 &&
+        shadowDepthAllRaw != 0 &&
         m_shadowData.cascadeCount > 0;
 
     // Cascade data
@@ -686,14 +707,7 @@ void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
     // Shadow textures (units 5-10)
-    MecraftTextureContract::ShadowTextureBundle shadowBundle{
-        m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::neutralDepthCompare(),
-        m_shadowData.shadowDepthRaw != 0 ? m_shadowData.shadowDepthRaw : MecraftTextureContract::neutralDepthRaw(),
-        m_shadowData.shadowDepthAll != 0 ? m_shadowData.shadowDepthAll : MecraftTextureContract::neutralDepthCompare(),
-        m_shadowData.shadowDepthAllRaw != 0 ? m_shadowData.shadowDepthAllRaw : MecraftTextureContract::neutralDepthRaw(),
-        m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : MecraftTextureContract::neutralColor0(),
-        m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : MecraftTextureContract::neutralColor1(),
-    };
+    const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
     MecraftTextureContract::bindShadowSamplers(m_steveShader->ID, 5, shadowBundle);
     glBindVertexArray(m_rightArmMesh.vao);
     {
@@ -761,14 +775,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         glActiveTexture(GL_TEXTURE4);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getFoliageColormap());
         // Shadow textures (units 5-10)
-        MecraftTextureContract::ShadowTextureBundle shadowBundle{
-            m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::neutralDepthCompare(),
-            m_shadowData.shadowDepthRaw != 0 ? m_shadowData.shadowDepthRaw : MecraftTextureContract::neutralDepthRaw(),
-            m_shadowData.shadowDepthAll != 0 ? m_shadowData.shadowDepthAll : MecraftTextureContract::neutralDepthCompare(),
-            m_shadowData.shadowDepthAllRaw != 0 ? m_shadowData.shadowDepthAllRaw : MecraftTextureContract::neutralDepthRaw(),
-            m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : MecraftTextureContract::neutralColor0(),
-            m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : MecraftTextureContract::neutralColor1(),
-        };
+        const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
         MecraftTextureContract::bindShadowSamplers(m_blockShader->ID, 5, shadowBundle);
         glBindVertexArray(mesh->vao);
         {
@@ -807,14 +814,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapNight());
     // Shadow textures (units 5-10)
-    MecraftTextureContract::ShadowTextureBundle shadowBundle{
-        m_shadowData.shadowTexture != 0 ? m_shadowData.shadowTexture : MecraftTextureContract::neutralDepthCompare(),
-        m_shadowData.shadowDepthRaw != 0 ? m_shadowData.shadowDepthRaw : MecraftTextureContract::neutralDepthRaw(),
-        m_shadowData.shadowDepthAll != 0 ? m_shadowData.shadowDepthAll : MecraftTextureContract::neutralDepthCompare(),
-        m_shadowData.shadowDepthAllRaw != 0 ? m_shadowData.shadowDepthAllRaw : MecraftTextureContract::neutralDepthRaw(),
-        m_shadowData.shadowColor0 != 0 ? m_shadowData.shadowColor0 : MecraftTextureContract::neutralColor0(),
-        m_shadowData.shadowColor1 != 0 ? m_shadowData.shadowColor1 : MecraftTextureContract::neutralColor1(),
-    };
+    const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
     MecraftTextureContract::bindShadowSamplers(m_itemShader->ID, 5, shadowBundle);
     glBindVertexArray(mesh->vao);
     {
