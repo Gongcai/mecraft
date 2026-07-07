@@ -1073,6 +1073,174 @@ void main() {
     device.shutdown();
     return true;
 }
+
+bool testGlRhiDrawIndirect() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for indirect draw")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_draw_indirect_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for indirect draw")) {
+        return false;
+    }
+
+    struct DrawArraysIndirectCommand {
+        uint32_t count;
+        uint32_t instanceCount;
+        uint32_t first;
+        uint32_t baseInstance;
+    };
+    constexpr DrawArraysIndirectCommand kDrawCommand = {3u, 1u, 0u, 0u};
+    constexpr uint32_t kWidth = 4u;
+    constexpr uint32_t kHeight = 4u;
+
+    RhiBufferDesc indirectBufferDesc;
+    indirectBufferDesc.debugName = "fullscreen-indirect-command";
+    indirectBufferDesc.size = sizeof(DrawArraysIndirectCommand);
+    indirectBufferDesc.usage = rhiFlag(RhiBufferUsage::Indirect);
+    indirectBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    const RhiBufferHandle indirectBuffer =
+        device.createBuffer(indirectBufferDesc, &kDrawCommand, sizeof(kDrawCommand));
+    if (!requireTrue(indirectBuffer.isValid(), "indirect buffer must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureDesc targetDesc;
+    targetDesc.debugName = "indirect-draw-target";
+    targetDesc.format = RhiTextureFormat::Rgba8Unorm;
+    targetDesc.width = kWidth;
+    targetDesc.height = kHeight;
+    targetDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureHandle target = device.createTexture(targetDesc, nullptr);
+    if (!requireTrue(target.isValid(), "indirect draw target texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc targetViewDesc;
+    targetViewDesc.texture = target;
+    const RhiTextureViewHandle targetView = device.createTextureView(targetViewDesc);
+    if (!requireTrue(targetView.isValid(), "indirect draw target view must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr char kVertexShader[] = R"glsl(
+#version 450 core
+const vec2 kPositions[3] = vec2[3](
+    vec2(-1.0, -1.0),
+    vec2(3.0, -1.0),
+    vec2(-1.0, 3.0)
+);
+
+void main() {
+    gl_Position = vec4(kPositions[gl_VertexID], 0.0, 1.0);
+}
+)glsl";
+    constexpr char kFragmentShader[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = vec4(0.0, 1.0, 1.0, 1.0);
+}
+)glsl";
+
+    RhiShaderDesc vertexShaderDesc;
+    vertexShaderDesc.debugName = "indirect-fullscreen-vertex";
+    vertexShaderDesc.stage = RhiShaderStage::Vertex;
+    vertexShaderDesc.source = kVertexShader;
+    vertexShaderDesc.sourceSize = sizeof(kVertexShader) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(vertexShaderDesc);
+    if (!requireTrue(vertexShader.isValid(), "indirect vertex shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiShaderDesc fragmentShaderDesc;
+    fragmentShaderDesc.debugName = "indirect-fragment";
+    fragmentShaderDesc.stage = RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = kFragmentShader;
+    fragmentShaderDesc.sourceSize = sizeof(kFragmentShader) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
+    if (!requireTrue(fragmentShader.isValid(), "indirect fragment shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "indirect-layout";
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(pipelineLayout.isValid(), "indirect pipeline layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "indirect-pipeline";
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "indirect graphics pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "indirect-rendering";
+    renderingInfo.renderArea = {0, 0, kWidth, kHeight};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.beginRendering(renderingInfo);
+    cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
+    cmd.setGraphicsPipeline(pipeline);
+    cmd.drawIndirect(indirectBuffer, 0u, 1u, 0u);
+    std::array<uint8_t, 4> pixel{};
+    glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+    cmd.endRendering();
+    device.submitFrame(cmd);
+
+    const bool cyanPixel = pixel[0] <= 5u && pixel[1] >= 250u && pixel[2] >= 250u && pixel[3] >= 250u;
+    if (!requireTrue(cyanPixel, "indirect draw must produce a cyan center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.destroyTextureView(targetView);
+    device.destroyTexture(target);
+    device.destroyBuffer(indirectBuffer);
+    device.shutdown();
+    return true;
+}
 } // namespace
 
 int main() {
@@ -1104,6 +1272,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiIndexedTriangle()) {
+        return 1;
+    }
+    if (!testGlRhiDrawIndirect()) {
         return 1;
     }
     return 0;
