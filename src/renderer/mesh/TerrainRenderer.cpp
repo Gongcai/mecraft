@@ -3,6 +3,7 @@
 #include "WorldRenderBuffer.h"
 #include "../core/Shader.h"
 #include "../gl/GlStateGuard.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../shadow/ShadowCasterCuller.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../../world/IWorldView.h"
@@ -344,9 +345,15 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, deferredFrameActive ? targets.skyCaptureTexture() : 0);
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_noise2d") : 0);
+    glBindTexture(GL_TEXTURE_2D,
+                  renderer::rhi::gl::textureId(resourceMgr != nullptr
+                      ? resourceMgr->getTexture2DHandle("shader_noise2d")
+                      : RhiTextureHandle{}));
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getTexture2D("shader_ripple_normal") : 0);
+    glBindTexture(GL_TEXTURE_2D,
+                  renderer::rhi::gl::textureId(resourceMgr != nullptr
+                      ? resourceMgr->getTexture2DHandle("shader_ripple_normal")
+                      : RhiTextureHandle{}));
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D_ARRAY, useBlockNormalMaps ? resourceMgr->getBlockNormalTextureArray().textureID : 0);
     glActiveTexture(GL_TEXTURE12);

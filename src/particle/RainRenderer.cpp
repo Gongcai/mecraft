@@ -7,14 +7,15 @@
 
 #include "../resource/ResourceMgr.h"
 #include "../renderer/core/Shader.h"
+#include "../renderer/rhi/gl/GlRhiTextureRegistry.h"
 
 static std::mt19937 s_rng{42};
 static constexpr int PRECIP_ATLAS_COLUMNS = 64;
 
 void RainRenderer::init(ResourceMgr& resourceMgr) {
     m_shader = resourceMgr.getShader("rain");
-    m_rainTex = resourceMgr.getTexture2D("rain");
-    m_snowTex = resourceMgr.getTexture2D("snow");
+    m_rainTex = resourceMgr.getTexture2DHandle("rain");
+    m_snowTex = resourceMgr.getTexture2DHandle("snow");
     if (!m_shader) return;
 
     glGenVertexArrays(1, &m_vao);
@@ -39,6 +40,8 @@ void RainRenderer::init(ResourceMgr& resourceMgr) {
 void RainRenderer::shutdown() {
     if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
     if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
+    m_rainTex = {};
+    m_snowTex = {};
 }
 
 void RainRenderer::ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops, const glm::vec3& cameraPos) {
@@ -97,7 +100,7 @@ void RainRenderer::wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& ca
 void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         const glm::mat4& view,
                                         const glm::vec3& cameraPos,
-                                        uint32_t texture,
+                                        RhiTextureHandle texture,
                                         std::vector<PrecipDrop>& drops,
                                         float strength,
                                         float skyLightAtCamera,
@@ -111,7 +114,8 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         const glm::vec2& screenSize,
                                         float dt,
                                         bool hardwareDepthTest) {
-    if (!m_shader || texture == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
+    const uint32_t textureId = renderer::rhi::gl::textureId(texture);
+    if (!m_shader || textureId == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
 
     // Clamp dt to avoid physics explosion on frame hitches.
     dt = std::max(0.001f, std::min(dt, 0.1f));
@@ -181,7 +185,7 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     m_shader->setVec2("uScreenSize", screenSize);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    glBindTexture(GL_TEXTURE_2D, textureId);
     m_shader->setInt("uPrecipTex", 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, sceneDepthTex);
@@ -289,8 +293,9 @@ void RainRenderer::renderWeatherMask(const glm::mat4& projection,
 
     auto buildVertices = [&](std::vector<PrecipDrop>& drops, float strength,
                               float dropLength, float streakWidth,
-                              GLuint texture) -> std::vector<float> {
-        if (strength < 0.01f || skyLightAtCamera < 0.05f || texture == 0) return {};
+                              RhiTextureHandle texture) -> std::vector<float> {
+        const uint32_t textureId = renderer::rhi::gl::textureId(texture);
+        if (strength < 0.01f || skyLightAtCamera < 0.05f || textureId == 0) return {};
 
         wrapDrops(drops, cameraPos);
         const int visibleCount = static_cast<int>(drops.size() * strength);
@@ -337,7 +342,7 @@ void RainRenderer::renderWeatherMask(const glm::mat4& projection,
             m_shader->setFloat("uPrecipStrength", rainStrength * skyLightAtCamera);
             m_shader->setFloat("uPrecipAlphaScale", alphaScale);
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_rainTex);
+            glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_rainTex));
             m_shader->setInt("uPrecipTex", 0);
 
             glBindVertexArray(m_vao);
@@ -358,7 +363,7 @@ void RainRenderer::renderWeatherMask(const glm::mat4& projection,
             m_shader->setFloat("uPrecipStrength", snowStrength * skyLightAtCamera);
             m_shader->setFloat("uPrecipAlphaScale", alphaScale * 0.6f);
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, m_snowTex);
+            glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_snowTex));
             m_shader->setInt("uPrecipTex", 0);
 
             glBindVertexArray(m_vao);

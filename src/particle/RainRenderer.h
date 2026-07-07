@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 #include <glm/glm.hpp>
+#include "renderer/rhi/RhiHandles.h"
 
 class Shader;
 class ResourceMgr;
@@ -67,7 +68,7 @@ private:
     void renderPrecipitation(const glm::mat4& projection,
                              const glm::mat4& view,
                              const glm::vec3& cameraPos,
-                             uint32_t texture,
+                             RhiTextureHandle texture,
                              std::vector<PrecipDrop>& drops,
                              float strength,
                              float skyLightAtCamera,
@@ -83,8 +84,8 @@ private:
                              bool hardwareDepthTest);
 
     Shader* m_shader = nullptr;
-    uint32_t m_rainTex = 0;
-    uint32_t m_snowTex = 0;
+    RhiTextureHandle m_rainTex;
+    RhiTextureHandle m_snowTex;
     uint32_t m_vao = 0;
     uint32_t m_vbo = 0;
     float m_time = 0.0f;  // accumulated time for wind animation
