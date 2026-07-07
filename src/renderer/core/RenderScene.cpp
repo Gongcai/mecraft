@@ -4,6 +4,7 @@
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/FirstPersonHeldItemRenderer.h"
@@ -268,7 +269,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             const float alphaScale = m_settings.weather.rainAlphaScale;
             const bool forwardVanillaActive = isNewPipelineActive() &&
                                                getPipelineMode() == PipelineMode::Forward;
-            const GLuint depthTex = forwardVanillaActive ? 0 : m_lastFrameOutput.gbufferDepthTex;
+            const GLuint depthTex = forwardVanillaActive
+                ? 0
+                : static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.gbufferDepth));
             const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
             const glm::vec2 precipitationScreenSize(
                 static_cast<float>(frameRenderSize.x),
@@ -320,14 +323,18 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (lightDebugActive) {
             m_postProcessPass.blitSceneCaptureToBackbuffer(request.window);
         } else {
+            const GLuint gbufferDepthTex =
+                static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.gbufferDepth));
+            const GLuint weatherMaskTex =
+                static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.weatherMask));
             const bool fsrEnabled = m_settings.upscale.fsr1Enabled &&
                                     m_settings.upscale.renderScale < 0.999f;
             if (fsrEnabled) {
                 const GLuint postTex = m_postProcessPass.compositeToTexture(
                     request.window,
                     request.frameTime,
-                    m_lastFrameOutput.gbufferDepthTex,
-                    m_lastFrameOutput.weatherMaskTex);
+                    gbufferDepthTex,
+                    weatherMaskTex);
                 bool upscaled = false;
                 if (postTex != 0) {
                     const int inputWidth = m_postProcessPass.targetWidth();
@@ -346,15 +353,15 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     m_postProcessPass.compositeToBackbuffer(
                         request.window,
                         request.frameTime,
-                        m_lastFrameOutput.gbufferDepthTex,
-                        m_lastFrameOutput.weatherMaskTex);
+                        gbufferDepthTex,
+                        weatherMaskTex);
                 }
             } else {
                 m_postProcessPass.compositeToBackbuffer(
                     request.window,
                     request.frameTime,
-                    m_lastFrameOutput.gbufferDepthTex,
-                    m_lastFrameOutput.weatherMaskTex);
+                    gbufferDepthTex,
+                    weatherMaskTex);
             }
         }
         if (postTimerStarted) {

@@ -39,16 +39,12 @@ struct FrameOutput {
     // Scene render targets (post-tonemap or HDR depending on pipeline)
     RhiTextureHandle sceneColor;
     RhiTextureHandle sceneDepth;
-    uint32_t sceneColorTex = 0;
-    uint32_t sceneDepthTex = 0;
 
     // GBuffer depth (for effects that need scene depth in deferred)
     RhiTextureHandle gbufferDepth;
-    uint32_t gbufferDepthTex = 0;
 
     // Weather mask (for rain/snow particles in post-process)
     RhiTextureHandle weatherMask;
-    uint32_t weatherMaskTex = 0;
 
     // Deferred pipeline capabilities
     bool hasDeferredInputs = false;

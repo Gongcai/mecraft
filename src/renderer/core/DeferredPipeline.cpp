@@ -853,10 +853,6 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
         output.sceneDepth = m_shared->deferredTargets->depthTextureHandle();
         output.gbufferDepth = m_shared->deferredTargets->depthTextureHandle();
         output.weatherMask = m_shared->deferredTargets->weatherMaskTextureHandle();
-        output.sceneColorTex = m_shared->deferredTargets->sceneResolvedTexture();
-        output.sceneDepthTex = m_shared->deferredTargets->depthTexture();
-        output.gbufferDepthTex = m_shared->deferredTargets->depthTexture();
-        output.weatherMaskTex = m_shared->deferredTargets->weatherMaskTexture();
     }
 
     if (m_shared && m_shared->deferredTargets && m_shared->shadowRenderer) {

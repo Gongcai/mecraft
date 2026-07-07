@@ -267,8 +267,6 @@ FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext& ctx) {
     if (m_commonTargets) {
         output.sceneColor = m_commonTargets->sceneColorTextureHandle();
         output.sceneDepth = m_commonTargets->sceneDepthTextureHandle();
-        output.sceneColorTex = m_commonTargets->sceneColorTexture();
-        output.sceneDepthTex = m_commonTargets->sceneDepthTexture();
     }
     // Forward vanilla: no deferred inputs, skip post-process (bloom/exposure/grading)
     output.hasDeferredInputs = false;
