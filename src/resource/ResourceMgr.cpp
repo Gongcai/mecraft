@@ -196,14 +196,14 @@ RhiTextureHandle ResourceMgr::getFoliageColormap() const {
     return m_impl->environmentTextures.getFoliageColormap();
 }
 
-uint32_t ResourceMgr::loadCubemap(const std::string& name,
-                                  const std::string& rightPath, const std::string& leftPath,
-                                  const std::string& topPath, const std::string& bottomPath,
-                                  const std::string& frontPath, const std::string& backPath) {
+RhiTextureHandle ResourceMgr::loadCubemap(const std::string& name,
+                                          const std::string& rightPath, const std::string& leftPath,
+                                          const std::string& topPath, const std::string& bottomPath,
+                                          const std::string& frontPath, const std::string& backPath) {
     return m_impl->cubemaps.load(name, rightPath, leftPath, topPath, bottomPath, frontPath, backPath);
 }
 
-uint32_t ResourceMgr::getCubemap(const std::string& name) const {
+RhiTextureHandle ResourceMgr::getCubemap(const std::string& name) const {
     return m_impl->cubemaps.get(name);
 }
 

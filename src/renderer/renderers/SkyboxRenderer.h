@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+#include "../rhi/RhiHandles.h"
+
 class ResourceMgr;
 class Shader;
 
@@ -20,7 +22,7 @@ private:
 
     Shader* m_shader = nullptr;
     Shader* m_blurShader = nullptr;
-    uint32_t m_cubemapTexture = 0;
+    RhiTextureHandle m_cubemapTexture;
     uint32_t m_cubeVao = 0;
     uint32_t m_cubeVbo = 0;
     uint32_t m_fullscreenVao = 0;

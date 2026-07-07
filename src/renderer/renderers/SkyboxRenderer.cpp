@@ -6,6 +6,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 namespace {
@@ -77,11 +78,15 @@ void SkyboxRenderer::shutdown() {
 
     m_shader = nullptr;
     m_blurShader = nullptr;
-    m_cubemapTexture = 0;
+    m_cubemapTexture = {};
 }
 
 void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees) {
-    if (m_shader == nullptr || m_cubemapTexture == 0 || m_cubeVao == 0) {
+    if (m_shader == nullptr || !m_cubemapTexture.isValid() || m_cubeVao == 0) {
+        return;
+    }
+    const GLuint cubemapTextureId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_cubemapTexture));
+    if (cubemapTextureId == 0) {
         return;
     }
 
@@ -124,7 +129,7 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees) 
     m_shader->setInt("uSkybox", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, m_cubemapTexture);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTextureId);
 
     glBindVertexArray(m_cubeVao);
     glDrawArrays(GL_TRIANGLES, 0, 36);

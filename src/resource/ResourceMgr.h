@@ -87,11 +87,11 @@ public:
     [[nodiscard]] RhiTextureHandle getFoliageColormap() const;
 
     // Cubemap texture (6 face textures for skybox rendering)
-    uint32_t loadCubemap(const std::string& name,
-                         const std::string& rightPath, const std::string& leftPath,
-                         const std::string& topPath, const std::string& bottomPath,
-                         const std::string& frontPath, const std::string& backPath);
-    [[nodiscard]] uint32_t getCubemap(const std::string& name) const;
+    RhiTextureHandle loadCubemap(const std::string& name,
+                                 const std::string& rightPath, const std::string& leftPath,
+                                 const std::string& topPath, const std::string& bottomPath,
+                                 const std::string& frontPath, const std::string& backPath);
+    [[nodiscard]] RhiTextureHandle getCubemap(const std::string& name) const;
 
     // Prebaked block item icons (isometric-like) packed in a single atlas texture.
     void buildBlockIconAtlas(int iconSize = 64);
