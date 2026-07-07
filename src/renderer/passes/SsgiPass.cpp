@@ -44,8 +44,12 @@ void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         std::clamp(settings.ssgi.denoiseIterations, 0, 4) > 0;
     if (denoiseActive) {
         renderSsgiDenoise(ctx, settings.ssgi, targets,
-                          temporalActive ? targets.ssgiTemporalTexture() : targets.ssgiTexture(),
-                          temporalActive ? targets.ssgiTemporalMomentsTexture() : 0);
+                          temporalActive
+                              ? renderer::rhi::gl::textureId(targets.ssgiTemporalTextureHandle())
+                              : renderer::rhi::gl::textureId(targets.ssgiTextureHandle()),
+                          temporalActive
+                              ? renderer::rhi::gl::textureId(targets.ssgiTemporalMomentsTextureHandle())
+                              : 0);
     } else if (temporalActive) {
         targets.copySsgiTemporalToSsgi();
     }
@@ -136,7 +140,7 @@ void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets
     m_ssgiUpsampleShader->setFloat("uNear", ctx.camera.nearPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.ssgiHalfResTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiHalfResTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiUpsampleShader);
@@ -187,7 +191,7 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
 
         const GLuint passInputTexture = (i == 0)
             ? initialInputTexture
-            : targets.ssgiDenoiseTexture(1 - outputSlot);
+            : renderer::rhi::gl::textureId(targets.ssgiDenoiseTextureHandle(1 - outputSlot));
         m_ssgiDenoiseShader->setFloat("uStepWidth", static_cast<float>(1 << i));
 
         glActiveTexture(GL_TEXTURE0);
@@ -239,9 +243,9 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     m_ssgiTemporalShader->setFloat("uNear", ctx.camera.nearPlane);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.ssgiTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.ssgiHistoryTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiHistoryTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE3);
@@ -251,7 +255,7 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
     glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, targets.ssgiMomentsHistoryTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiMomentsHistoryTexturePrevHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiTemporalShader);
 

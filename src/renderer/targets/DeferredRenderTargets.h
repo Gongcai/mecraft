@@ -100,15 +100,15 @@ public:
     [[nodiscard]] RhiTextureHandle ssaoTemporalTextureHandle() const { return m_ssaoTemporalHandle; }
     void swapSsaoHistory() { m_ssaoHistoryIndex = 1 - m_ssaoHistoryIndex; }
     void copySsaoTemporalToHistory();
-    [[nodiscard]] uint32_t ssgiTexture() const { return m_ssgiTex; }
-    [[nodiscard]] uint32_t ssgiHalfResTexture() const { return m_ssgiHalfResTex; }
-    [[nodiscard]] uint32_t ssgiDenoiseTexture(int slot) const;
-    [[nodiscard]] uint32_t ssgiHistoryTexture() const { return m_ssgiHistoryTex[m_ssgiHistoryIndex]; }
-    [[nodiscard]] uint32_t ssgiHistoryTexturePrev() const { return m_ssgiHistoryTex[1 - m_ssgiHistoryIndex]; }
-    [[nodiscard]] uint32_t ssgiMomentsHistoryTexture() const { return m_ssgiMomentsHistoryTex[m_ssgiHistoryIndex]; }
-    [[nodiscard]] uint32_t ssgiMomentsHistoryTexturePrev() const { return m_ssgiMomentsHistoryTex[1 - m_ssgiHistoryIndex]; }
-    [[nodiscard]] uint32_t ssgiTemporalTexture() const { return m_ssgiTemporalTex; }
-    [[nodiscard]] uint32_t ssgiTemporalMomentsTexture() const { return m_ssgiTemporalMomentsTex; }
+    [[nodiscard]] RhiTextureHandle ssgiTextureHandle() const { return m_ssgiHandle; }
+    [[nodiscard]] RhiTextureHandle ssgiHalfResTextureHandle() const { return m_ssgiHalfResHandle; }
+    [[nodiscard]] RhiTextureHandle ssgiDenoiseTextureHandle(int slot) const;
+    [[nodiscard]] RhiTextureHandle ssgiHistoryTextureHandle() const { return m_ssgiHistoryHandle[m_ssgiHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssgiHistoryTexturePrevHandle() const { return m_ssgiHistoryHandle[1 - m_ssgiHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTextureHandle() const { return m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTexturePrevHandle() const { return m_ssgiMomentsHistoryHandle[1 - m_ssgiHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle ssgiTemporalTextureHandle() const { return m_ssgiTemporalHandle; }
+    [[nodiscard]] RhiTextureHandle ssgiTemporalMomentsTextureHandle() const { return m_ssgiTemporalMomentsHandle; }
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
     void copySsgiDenoiseToSsgi(int slot);
     void copySsgiTemporalToSsgi();
@@ -263,17 +263,24 @@ private:
 
     uint32_t m_ssgiFbo = 0;
     uint32_t m_ssgiTex = 0;
+    RhiTextureHandle m_ssgiHandle;
     uint32_t m_ssgiHalfResFbo = 0;
     uint32_t m_ssgiHalfResTex = 0;
+    RhiTextureHandle m_ssgiHalfResHandle;
     uint32_t m_ssgiDenoiseFbo[2] = {0, 0};
     uint32_t m_ssgiDenoiseTex[2] = {0, 0};
+    RhiTextureHandle m_ssgiDenoiseHandle[2];
     uint32_t m_ssgiHistoryFbo[2] = {0, 0};
     uint32_t m_ssgiHistoryTex[2] = {0, 0};
     uint32_t m_ssgiMomentsHistoryTex[2] = {0, 0};
+    RhiTextureHandle m_ssgiHistoryHandle[2];
+    RhiTextureHandle m_ssgiMomentsHistoryHandle[2];
     int m_ssgiHistoryIndex = 0;
     uint32_t m_ssgiTemporalFbo = 0;
     uint32_t m_ssgiTemporalTex = 0;
     uint32_t m_ssgiTemporalMomentsTex = 0;
+    RhiTextureHandle m_ssgiTemporalHandle;
+    RhiTextureHandle m_ssgiTemporalMomentsHandle;
 
     uint32_t m_sceneLightingFbo = 0;
     uint32_t m_sceneLightingTex = 0;

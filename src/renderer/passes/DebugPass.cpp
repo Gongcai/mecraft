@@ -205,7 +205,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE17);
     glBindTexture(GL_TEXTURE_2D, targets.temporalCurrentTexture());
     glActiveTexture(GL_TEXTURE18);
-    glBindTexture(GL_TEXTURE_2D, targets.ssgiTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiTextureHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_deferredDebugShader);
 
