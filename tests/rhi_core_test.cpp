@@ -882,6 +882,197 @@ void main() {
     device.shutdown();
     return true;
 }
+
+bool testGlRhiIndexedTriangle() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for indexed draw")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_indexed_triangle_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for indexed draw")) {
+        return false;
+    }
+
+    struct Vertex {
+        float position[2];
+    };
+    constexpr std::array<Vertex, 3> kVertices = {{
+        {{-1.0f, -1.0f}},
+        {{3.0f, -1.0f}},
+        {{-1.0f, 3.0f}}
+    }};
+    constexpr std::array<uint16_t, 3> kIndices = {0u, 1u, 2u};
+    constexpr uint32_t kWidth = 4u;
+    constexpr uint32_t kHeight = 4u;
+
+    RhiBufferDesc vertexBufferDesc;
+    vertexBufferDesc.debugName = "indexed-triangle-vertices";
+    vertexBufferDesc.size = sizeof(Vertex) * kVertices.size();
+    vertexBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    vertexBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    const RhiBufferHandle vertexBuffer =
+        device.createBuffer(vertexBufferDesc, kVertices.data(), vertexBufferDesc.size);
+    if (!requireTrue(vertexBuffer.isValid(), "vertex buffer must be created for indexed draw")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBufferDesc indexBufferDesc;
+    indexBufferDesc.debugName = "indexed-triangle-indices";
+    indexBufferDesc.size = sizeof(uint16_t) * kIndices.size();
+    indexBufferDesc.usage = rhiFlag(RhiBufferUsage::Index);
+    indexBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    const RhiBufferHandle indexBuffer =
+        device.createBuffer(indexBufferDesc, kIndices.data(), indexBufferDesc.size);
+    if (!requireTrue(indexBuffer.isValid(), "index buffer must be created for indexed draw")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureDesc targetDesc;
+    targetDesc.debugName = "indexed-triangle-target";
+    targetDesc.format = RhiTextureFormat::Rgba8Unorm;
+    targetDesc.width = kWidth;
+    targetDesc.height = kHeight;
+    targetDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureHandle target = device.createTexture(targetDesc, nullptr);
+    if (!requireTrue(target.isValid(), "indexed draw target texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc targetViewDesc;
+    targetViewDesc.texture = target;
+    const RhiTextureViewHandle targetView = device.createTextureView(targetViewDesc);
+    if (!requireTrue(targetView.isValid(), "indexed draw target view must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr char kVertexShader[] = R"glsl(
+#version 450 core
+layout(location = 0) in vec2 inPosition;
+
+void main() {
+    gl_Position = vec4(inPosition, 0.0, 1.0);
+}
+)glsl";
+    constexpr char kFragmentShader[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = vec4(1.0, 0.0, 1.0, 1.0);
+}
+)glsl";
+
+    RhiShaderDesc vertexShaderDesc;
+    vertexShaderDesc.debugName = "indexed-triangle-vertex";
+    vertexShaderDesc.stage = RhiShaderStage::Vertex;
+    vertexShaderDesc.source = kVertexShader;
+    vertexShaderDesc.sourceSize = sizeof(kVertexShader) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(vertexShaderDesc);
+    if (!requireTrue(vertexShader.isValid(), "indexed vertex shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiShaderDesc fragmentShaderDesc;
+    fragmentShaderDesc.debugName = "indexed-triangle-fragment";
+    fragmentShaderDesc.stage = RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = kFragmentShader;
+    fragmentShaderDesc.sourceSize = sizeof(kFragmentShader) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
+    if (!requireTrue(fragmentShader.isValid(), "indexed fragment shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "indexed-triangle-layout";
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(pipelineLayout.isValid(), "indexed pipeline layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "indexed-triangle-pipeline";
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    RhiVertexBinding vertexBinding;
+    vertexBinding.binding = 0u;
+    vertexBinding.stride = sizeof(Vertex);
+    pipelineDesc.vertexInput.bindings.push_back(vertexBinding);
+    RhiVertexAttribute positionAttribute;
+    positionAttribute.location = 0u;
+    positionAttribute.binding = 0u;
+    positionAttribute.format = RhiVertexFormat::Float2;
+    positionAttribute.offset = 0u;
+    pipelineDesc.vertexInput.attributes.push_back(positionAttribute);
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "indexed graphics pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "indexed-triangle-rendering";
+    renderingInfo.renderArea = {0, 0, kWidth, kHeight};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.beginRendering(renderingInfo);
+    cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
+    cmd.setGraphicsPipeline(pipeline);
+    cmd.setVertexBuffer(0u, vertexBuffer, 0u);
+    cmd.setIndexBuffer(indexBuffer, RhiIndexFormat::Uint16, 0u);
+    cmd.drawIndexed(3u, 1u, 0u, 0, 0u);
+    std::array<uint8_t, 4> pixel{};
+    glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+    cmd.endRendering();
+    device.submitFrame(cmd);
+
+    const bool magentaPixel = pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
+    if (!requireTrue(magentaPixel, "indexed draw must produce a magenta center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.destroyTextureView(targetView);
+    device.destroyTexture(target);
+    device.destroyBuffer(indexBuffer);
+    device.destroyBuffer(vertexBuffer);
+    device.shutdown();
+    return true;
+}
 } // namespace
 
 int main() {
@@ -910,6 +1101,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiCombinedTextureSampler()) {
+        return 1;
+    }
+    if (!testGlRhiIndexedTriangle()) {
         return 1;
     }
     return 0;
