@@ -7,6 +7,7 @@
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
@@ -163,8 +164,9 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
     const float menuTop_screen = m_menuY;
     const float menuTop_widget = static_cast<float>(ctx.screenHeight) - menuTop_screen;
     const float menuBottom_widget = menuTop_widget - menuH;
+    const uint32_t backdropBlurTextureId = renderer::rhi::gl::textureId(ctx.backdropBlur);
     const bool useGlass = m_glassShader &&
-                          ctx.backdropBlurTexture != 0 &&
+                          backdropBlurTextureId != 0 &&
                           ctx.backdropSourceWidth > 0 &&
                           ctx.backdropSourceHeight > 0 &&
                           ctx.backdropBlurWidth > 0 &&
@@ -224,7 +226,7 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
         m_glassShader->setFloat("uDarken", 0.70f);
         m_glassShader->setInt("uBackdrop", 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, ctx.backdropBlurTexture);
+        glBindTexture(GL_TEXTURE_2D, backdropBlurTextureId);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 

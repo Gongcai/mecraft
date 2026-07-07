@@ -874,7 +874,6 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
 void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
 {
     context.backdropBlur = {};
-    context.backdropBlurTexture = 0;
     context.backdropSourceWidth = 0;
     context.backdropSourceHeight = 0;
     context.backdropBlurWidth = 0;
@@ -977,7 +976,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
     restoreState();
 
     context.backdropBlur = m_backdropBlur[1];
-    context.backdropBlurTexture = m_backdropBlurTex[1];
     context.backdropSourceWidth = sourceWidth;
     context.backdropSourceHeight = sourceHeight;
     context.backdropBlurWidth = m_backdropBlurWidth;

@@ -7,6 +7,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../core/UIRenderUtils.h"
 
@@ -107,8 +108,9 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
     float ah = height * scaleY;
 
     const UIResolvedStyle resolved = UIStyleResolver::resolve(resolveBaseStyle(ctx), UIStyleState_Normal);
+    const uint32_t backdropBlurTextureId = renderer::rhi::gl::textureId(ctx.backdropBlur);
     const bool useGlass = m_glassShader &&
-                          ctx.backdropBlurTexture != 0 &&
+                          backdropBlurTextureId != 0 &&
                           ctx.backdropSourceWidth > 0 &&
                           ctx.backdropSourceHeight > 0 &&
                           ctx.backdropBlurWidth > 0 &&
@@ -137,7 +139,7 @@ void UIPanel::renderSelf(const UIRenderContext& ctx) const {
         m_glassShader->setFloat("uDarken", 0.74f);
         m_glassShader->setInt("uBackdrop", 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, ctx.backdropBlurTexture);
+        glBindTexture(GL_TEXTURE_2D, backdropBlurTextureId);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 

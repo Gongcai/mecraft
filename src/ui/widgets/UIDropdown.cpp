@@ -7,6 +7,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../font/TextRenderer.h"
 #include "../core/UIRenderUtils.h"
@@ -277,8 +278,9 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     const Color accentCol = accentFromSelection(selectedCol);
     const Color textCol = resolved.text;
     const float itemHeight = resolved.itemHeight;
+    const uint32_t backdropBlurTextureId = renderer::rhi::gl::textureId(ctx.backdropBlur);
     const bool useGlass = m_glassShader &&
-                          ctx.backdropBlurTexture != 0 &&
+                          backdropBlurTextureId != 0 &&
                           ctx.backdropSourceWidth > 0 &&
                           ctx.backdropSourceHeight > 0 &&
                           ctx.backdropBlurWidth > 0 &&
@@ -327,7 +329,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
         m_glassShader->setFloat("uDarken", 0.70f);
         m_glassShader->setInt("uBackdrop", 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, ctx.backdropBlurTexture);
+        glBindTexture(GL_TEXTURE_2D, backdropBlurTextureId);
         glDrawArrays(GL_TRIANGLES, 33, 6);
 
         m_shader->use();

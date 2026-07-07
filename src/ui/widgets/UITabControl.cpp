@@ -9,6 +9,7 @@
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 
 // Simple transparent panel used as a content container for each tab.
 class TabContentPanel : public UIWidget {
@@ -198,8 +199,9 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
     glBufferSubData(GL_ARRAY_BUFFER, 0,
                     static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
 
+    const uint32_t backdropBlurTextureId = renderer::rhi::gl::textureId(ctx.backdropBlur);
     const bool useGlass = m_glassShader &&
-                          ctx.backdropBlurTexture != 0 &&
+                          backdropBlurTextureId != 0 &&
                           ctx.backdropSourceWidth > 0 &&
                           ctx.backdropSourceHeight > 0;
 
@@ -218,7 +220,7 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
         m_glassShader->setFloat("uDarken", 0.74f);
         m_glassShader->setInt("uBackdrop", 0);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, ctx.backdropBlurTexture);
+        glBindTexture(GL_TEXTURE_2D, backdropBlurTextureId);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 
