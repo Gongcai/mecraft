@@ -45,7 +45,7 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, targets.temporalCurrentTexture());
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.historySceneTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historySceneTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE3);

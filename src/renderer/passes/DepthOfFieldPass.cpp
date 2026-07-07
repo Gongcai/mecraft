@@ -45,7 +45,7 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
                    static_cast<float>(std::max(1, targets.height()))));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, targets.historySceneTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historySceneTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE2);

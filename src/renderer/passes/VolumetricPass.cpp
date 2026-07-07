@@ -283,13 +283,13 @@ void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSetting
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.halfResTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.historyVolumetricTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyVolumetricTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyDepthTexturePrevHandle()));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_volumetricTemporalShader);
 
@@ -331,7 +331,7 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
     if (settings.volumetric.temporalEnabled && hasPreviousFrame && m_volumetricTemporalShader != nullptr) {
-        glBindTexture(GL_TEXTURE_2D, targets.historyVolumetricTexture());
+        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyVolumetricTextureHandle()));
     } else {
         glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.halfResTextureHandle()));
     }

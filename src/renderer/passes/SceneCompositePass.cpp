@@ -126,13 +126,13 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, targets.historySceneTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historySceneTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyDepthTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, targets.historyReflectionTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyReflectionTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, targets.historyCloudTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyCloudTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE13);

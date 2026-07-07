@@ -127,16 +127,16 @@ public:
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
     [[nodiscard]] int skyCaptureHeight() const { return kSkyCaptureHeight; }
     // History ping-pong for temporal accumulation
-    [[nodiscard]] uint32_t historySceneTexture() const { return m_historySceneTex[m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historySceneTexturePrev() const { return m_historySceneTex[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyDepthTexture() const { return m_historyDepthTex[m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyDepthTexturePrev() const { return m_historyDepthTex[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyReflectionTexture() const { return m_historyReflectionTex[m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyReflectionTexturePrev() const { return m_historyReflectionTex[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyCloudTexture() const { return m_historyCloudTex[m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyCloudTexturePrev() const { return m_historyCloudTex[1 - m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyVolumetricTexture() const { return m_historyVolumetricTex[m_currentHistoryIndex]; }
-    [[nodiscard]] uint32_t historyVolumetricTexturePrev() const { return m_historyVolumetricTex[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historySceneTextureHandle() const { return m_historySceneHandle[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historySceneTexturePrevHandle() const { return m_historySceneHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyDepthTextureHandle() const { return m_historyDepthHandle[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const { return m_historyDepthHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const { return m_historyReflectionHandle[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyReflectionTexturePrevHandle() const { return m_historyReflectionHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyCloudTextureHandle() const { return m_historyCloudHandle[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyCloudTexturePrevHandle() const { return m_historyCloudHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const { return m_historyVolumetricHandle[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const { return m_historyVolumetricHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] uint32_t temporalCurrentTexture() const { return m_temporalCurrentTex; }
     [[nodiscard]] uint32_t velocityTexture() const { return m_velocityTex; }
     [[nodiscard]] uint32_t perObjectVelocityTexture() const { return m_perObjectVelocityTex; }
@@ -329,12 +329,17 @@ private:
     uint32_t m_historySceneFbo[2] = {0, 0};
     uint32_t m_historySceneTex[2] = {0, 0};
     uint32_t m_historyDepthTex[2] = {0, 0};
+    RhiTextureHandle m_historySceneHandle[2];
+    RhiTextureHandle m_historyDepthHandle[2];
     uint32_t m_historyReflectionFbo[2] = {0, 0};
     uint32_t m_historyReflectionTex[2] = {0, 0};
+    RhiTextureHandle m_historyReflectionHandle[2];
     uint32_t m_historyCloudFbo[2] = {0, 0};
     uint32_t m_historyCloudTex[2] = {0, 0};
+    RhiTextureHandle m_historyCloudHandle[2];
     uint32_t m_historyVolumetricFbo[2] = {0, 0};
     uint32_t m_historyVolumetricTex[2] = {0, 0};
+    RhiTextureHandle m_historyVolumetricHandle[2];
     int m_currentHistoryIndex = 0;
     bool m_rebuiltSinceCheck = false;
 

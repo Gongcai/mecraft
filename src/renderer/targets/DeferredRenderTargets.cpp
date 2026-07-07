@@ -1527,6 +1527,68 @@ bool DeferredRenderTargets::registerRhiTextures() {
         rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
         false
     });
+    for (int i = 0; i < 2; ++i) {
+        m_historySceneHandle[i] = renderer::rhi::gl::registerTexture({
+            m_historySceneTex[i],
+            RhiTextureDimension::Texture2D,
+            RhiTextureFormat::Rgba16Float,
+            static_cast<uint32_t>(m_width),
+            static_cast<uint32_t>(m_height),
+            1,
+            1,
+            1,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+            false
+        });
+        m_historyDepthHandle[i] = renderer::rhi::gl::registerTexture({
+            m_historyDepthTex[i],
+            RhiTextureDimension::Texture2D,
+            RhiTextureFormat::Depth32Float,
+            static_cast<uint32_t>(m_width),
+            static_cast<uint32_t>(m_height),
+            1,
+            1,
+            1,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+            false
+        });
+        m_historyReflectionHandle[i] = renderer::rhi::gl::registerTexture({
+            m_historyReflectionTex[i],
+            RhiTextureDimension::Texture2D,
+            RhiTextureFormat::Rgba16Float,
+            static_cast<uint32_t>(m_width),
+            static_cast<uint32_t>(m_height),
+            1,
+            1,
+            1,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+            false
+        });
+        m_historyCloudHandle[i] = renderer::rhi::gl::registerTexture({
+            m_historyCloudTex[i],
+            RhiTextureDimension::Texture2D,
+            RhiTextureFormat::Rgba16Float,
+            halfWidth,
+            halfHeight,
+            1,
+            1,
+            1,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+            false
+        });
+        m_historyVolumetricHandle[i] = renderer::rhi::gl::registerTexture({
+            m_historyVolumetricTex[i],
+            RhiTextureDimension::Texture2D,
+            RhiTextureFormat::Rgba16Float,
+            halfWidth,
+            halfHeight,
+            1,
+            1,
+            1,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+            false
+        });
+    }
     m_weatherMaskHandle = renderer::rhi::gl::registerTexture({
         m_weatherMaskTex,
         RhiTextureDimension::Texture2D,
@@ -1853,6 +1915,16 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_reflectionHandle.isValid() &&
                             m_reflectionTemporalScratchHandle.isValid() &&
                             m_cloudHandle.isValid() &&
+                            m_historySceneHandle[0].isValid() &&
+                            m_historySceneHandle[1].isValid() &&
+                            m_historyDepthHandle[0].isValid() &&
+                            m_historyDepthHandle[1].isValid() &&
+                            m_historyReflectionHandle[0].isValid() &&
+                            m_historyReflectionHandle[1].isValid() &&
+                            m_historyCloudHandle[0].isValid() &&
+                            m_historyCloudHandle[1].isValid() &&
+                            m_historyVolumetricHandle[0].isValid() &&
+                            m_historyVolumetricHandle[1].isValid() &&
                             m_weatherMaskHandle.isValid() &&
                             m_skyCaptureHandle.isValid() &&
                             m_shadowDepthHandle.isValid() &&
@@ -1926,6 +1998,16 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     renderer::rhi::gl::unregisterTextureAndReset(m_reflectionHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_reflectionTemporalScratchHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_cloudHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[0]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[1]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyDepthHandle[0]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyDepthHandle[1]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyReflectionHandle[0]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyReflectionHandle[1]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyCloudHandle[0]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyCloudHandle[1]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyVolumetricHandle[0]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_historyVolumetricHandle[1]);
     renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_skyCaptureHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);

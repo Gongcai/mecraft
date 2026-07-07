@@ -253,7 +253,7 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, targets.historyDepthTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyDepthTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiMomentsHistoryTexturePrevHandle()));
 

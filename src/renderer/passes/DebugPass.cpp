@@ -162,11 +162,13 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         settings.debug.viewMode == 35;
     const uint32_t noiseTexture = renderer::rhi::gl::textureId(m_noiseTexture);
     const uint32_t materialAuxTexture = renderer::rhi::gl::textureId(targets.materialAuxTextureHandle());
+    const uint32_t historyDepthTexture = renderer::rhi::gl::textureId(targets.historyDepthTexturePrevHandle());
+    const uint32_t historySceneTexture = renderer::rhi::gl::textureId(targets.historySceneTexturePrevHandle());
     glBindTexture(GL_TEXTURE_2D,
                   shadowCompareDebug ? noiseTexture
                                      : (materialAuxDebug ? materialAuxTexture
-                                                         : (historyDepthDebug ? targets.historyDepthTexturePrev()
-                                                                              : targets.historySceneTexturePrev())));
+                                                         : (historyDepthDebug ? historyDepthTexture
+                                                                              : historySceneTexture)));
 
     // Texture unit 14: multiplexed based on debug view mode
     glActiveTexture(GL_TEXTURE14);
@@ -174,9 +176,11 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     const bool reflectionHistoryDebug = settings.debug.viewMode == 28;
     const uint32_t shadowColorTexture = renderer::rhi::gl::textureId(targets.shadowColorTextureHandle());
     const uint32_t reflectionTexture = renderer::rhi::gl::textureId(targets.reflectionTextureHandle());
+    const uint32_t historyReflectionTexture =
+        renderer::rhi::gl::textureId(targets.historyReflectionTexturePrevHandle());
     glBindTexture(GL_TEXTURE_2D,
                   shadowCasterDebug ? shadowColorTexture
-                                    : (reflectionHistoryDebug ? targets.historyReflectionTexturePrev()
+                                    : (reflectionHistoryDebug ? historyReflectionTexture
                                                               : reflectionTexture));
 
     // Texture unit 15: multiplexed based on debug view mode
@@ -191,12 +195,13 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     const uint32_t shadowNormalTexture = renderer::rhi::gl::textureId(targets.shadowNormalTextureHandle());
     const uint32_t sceneCompositeTexture = renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle());
     const uint32_t cloudTexture = renderer::rhi::gl::textureId(targets.cloudTextureHandle());
+    const uint32_t historyCloudTexture = renderer::rhi::gl::textureId(targets.historyCloudTexturePrevHandle());
     glBindTexture(GL_TEXTURE_2D,
                   shadowCasterDebug ? shadowNormalTexture
                                     : (sceneResolvedDebug
                                            ? renderer::rhi::gl::textureId(targets.sceneResolvedTextureHandle())
                                           : (sceneCompositeDebug ? sceneCompositeTexture
-                                                                 : (cloudHistoryDebug ? targets.historyCloudTexturePrev()
+                                                                 : (cloudHistoryDebug ? historyCloudTexture
                                                                                       : cloudTexture))));
 
     glActiveTexture(GL_TEXTURE16);

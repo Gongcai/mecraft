@@ -135,7 +135,7 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
     glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, targets.historyCloudTexturePrev());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyCloudTexturePrevHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_cloudShader);
 
     for (int i = 4; i >= 0; --i) {
