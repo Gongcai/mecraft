@@ -392,6 +392,278 @@ void main() {
     device.shutdown();
     return true;
 }
+
+bool readCenterPixel(GlRhiDevice& device,
+                     const RhiTextureViewHandle targetView,
+                     const uint32_t width,
+                     const uint32_t height,
+                     std::array<uint8_t, 4>& outPixel) {
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "readback-rendering";
+    renderingInfo.renderArea = {0, 0, width, height};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.beginRendering(renderingInfo);
+    glReadPixels(static_cast<GLint>(width / 2u),
+                 static_cast<GLint>(height / 2u),
+                 1,
+                 1,
+                 GL_RGBA,
+                 GL_UNSIGNED_BYTE,
+                 outPixel.data());
+    cmd.endRendering();
+    device.submitFrame(cmd);
+    return true;
+}
+
+bool testGlRhiBufferCopyToTexture() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for buffer copy")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_buffer_copy_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for buffer copy")) {
+        return false;
+    }
+
+    constexpr uint32_t kWidth = 4u;
+    constexpr uint32_t kHeight = 4u;
+    std::array<uint8_t, kWidth * kHeight * 4u> sourcePixels{};
+    for (uint32_t i = 0u; i < kWidth * kHeight; ++i) {
+        sourcePixels[i * 4u + 0u] = 0u;
+        sourcePixels[i * 4u + 1u] = 0u;
+        sourcePixels[i * 4u + 2u] = 255u;
+        sourcePixels[i * 4u + 3u] = 255u;
+    }
+
+    RhiBufferDesc srcBufferDesc;
+    srcBufferDesc.debugName = "copy-source-buffer";
+    srcBufferDesc.size = sourcePixels.size();
+    srcBufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc);
+    srcBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    const RhiBufferHandle srcBuffer =
+        device.createBuffer(srcBufferDesc, sourcePixels.data(), sourcePixels.size());
+    if (!requireTrue(srcBuffer.isValid(), "source buffer must be created for copy test")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBufferDesc dstBufferDesc;
+    dstBufferDesc.debugName = "copy-destination-buffer";
+    dstBufferDesc.size = sourcePixels.size();
+    dstBufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) | rhiFlag(RhiBufferUsage::TransferDst);
+    const RhiBufferHandle dstBuffer = device.createBuffer(dstBufferDesc, nullptr, 0);
+    if (!requireTrue(dstBuffer.isValid(), "destination buffer must be created for copy test")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "copy-target-texture";
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = kWidth;
+    textureDesc.height = kHeight;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) | rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureHandle target = device.createTexture(textureDesc, nullptr);
+    if (!requireTrue(target.isValid(), "copy target texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = target;
+    const RhiTextureViewHandle targetView = device.createTextureView(viewDesc);
+    if (!requireTrue(targetView.isValid(), "copy target texture view must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiCommandList& cmd = device.beginFrame();
+    RhiBufferCopy bufferCopy;
+    bufferCopy.src = srcBuffer;
+    bufferCopy.dst = dstBuffer;
+    bufferCopy.size = sourcePixels.size();
+    cmd.copyBuffer(bufferCopy);
+
+    RhiBufferTextureCopy textureCopy;
+    textureCopy.srcBuffer = dstBuffer;
+    textureCopy.dstTexture = target;
+    textureCopy.width = kWidth;
+    textureCopy.height = kHeight;
+    cmd.copyBufferToTexture(textureCopy);
+    cmd.textureBarrier({target, RhiResourceState::TransferDst, RhiResourceState::RenderTarget});
+    device.submitFrame(cmd);
+
+    std::array<uint8_t, 4> pixel{};
+    if (!readCenterPixel(device, targetView, kWidth, kHeight, pixel)) {
+        device.shutdown();
+        return false;
+    }
+
+    const bool bluePixel = pixel[0] <= 5u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
+    if (!requireTrue(bluePixel, "buffer copy path must produce a blue center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyTextureView(targetView);
+    device.destroyTexture(target);
+    device.destroyBuffer(dstBuffer);
+    device.destroyBuffer(srcBuffer);
+    device.shutdown();
+    return true;
+}
+
+bool testGlRhiComputeStorageTexture() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for compute dispatch")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_compute_storage_texture_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for compute dispatch")) {
+        return false;
+    }
+
+    constexpr uint32_t kWidth = 4u;
+    constexpr uint32_t kHeight = 4u;
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "compute-storage-target";
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = kWidth;
+    textureDesc.height = kHeight;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Storage) | rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureHandle target = device.createTexture(textureDesc, nullptr);
+    if (!requireTrue(target.isValid(), "compute storage texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = target;
+    const RhiTextureViewHandle targetView = device.createTextureView(viewDesc);
+    if (!requireTrue(targetView.isValid(), "compute storage texture view must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "compute-storage-layout";
+    RhiBindGroupLayoutEntry storageImageEntry;
+    storageImageEntry.binding = 0u;
+    storageImageEntry.type = RhiBindingType::StorageTexture;
+    storageImageEntry.stages = rhiFlag(RhiShaderStage::Compute);
+    bindGroupLayoutDesc.entries.push_back(storageImageEntry);
+    const RhiBindGroupLayoutHandle bindGroupLayout =
+        device.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!requireTrue(bindGroupLayout.isValid(), "compute bind group layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "compute-pipeline-layout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(pipelineLayout.isValid(), "compute pipeline layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr char kComputeShader[] = R"glsl(
+#version 450 core
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(rgba8, binding = 0) uniform writeonly image2D outImage;
+
+void main() {
+    imageStore(outImage, ivec2(gl_GlobalInvocationID.xy), vec4(0.0, 1.0, 0.0, 1.0));
+}
+)glsl";
+
+    RhiShaderDesc computeShaderDesc;
+    computeShaderDesc.debugName = "compute-storage-shader";
+    computeShaderDesc.stage = RhiShaderStage::Compute;
+    computeShaderDesc.source = kComputeShader;
+    computeShaderDesc.sourceSize = sizeof(kComputeShader) - 1u;
+    const RhiShaderHandle computeShader = device.createShader(computeShaderDesc);
+    if (!requireTrue(computeShader.isValid(), "compute shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiComputePipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "compute-storage-pipeline";
+    pipelineDesc.computeShader = computeShader;
+    pipelineDesc.layout = pipelineLayout;
+    const RhiPipelineHandle pipeline = device.createComputePipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "compute pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = bindGroupLayout;
+    RhiBindGroupEntry bindGroupEntry;
+    bindGroupEntry.binding = 0u;
+    bindGroupEntry.resource.textureView = targetView;
+    bindGroupDesc.entries.push_back(bindGroupEntry);
+    const RhiBindGroupHandle bindGroup = device.createBindGroup(bindGroupDesc);
+    if (!requireTrue(bindGroup.isValid(), "compute bind group must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.setComputePipeline(pipeline);
+    cmd.setBindGroup(0u, bindGroup);
+    cmd.dispatch(kWidth, kHeight, 1u);
+    cmd.textureBarrier({target, RhiResourceState::ShaderWrite, RhiResourceState::RenderTarget});
+    device.submitFrame(cmd);
+
+    std::array<uint8_t, 4> pixel{};
+    if (!readCenterPixel(device, targetView, kWidth, kHeight, pixel)) {
+        device.shutdown();
+        return false;
+    }
+
+    const bool greenPixel = pixel[0] <= 5u && pixel[1] >= 250u && pixel[2] <= 5u && pixel[3] >= 250u;
+    if (!requireTrue(greenPixel, "compute dispatch must write a green center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyBindGroup(bindGroup);
+    device.destroyPipeline(pipeline);
+    device.destroyShader(computeShader);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyBindGroupLayout(bindGroupLayout);
+    device.destroyTextureView(targetView);
+    device.destroyTexture(target);
+    device.shutdown();
+    return true;
+}
 } // namespace
 
 int main() {
@@ -411,6 +683,12 @@ int main() {
         return 1;
     }
     if (!testGlRhiFullscreenTriangle()) {
+        return 1;
+    }
+    if (!testGlRhiBufferCopyToTexture()) {
+        return 1;
+    }
+    if (!testGlRhiComputeStorageTexture()) {
         return 1;
     }
     return 0;
