@@ -42,7 +42,7 @@ void MotionBlurPass::execute(const FrameContext& ctx, const RenderSettings& sett
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historySceneTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.velocityTextureHandle()));
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_motionBlurShader);

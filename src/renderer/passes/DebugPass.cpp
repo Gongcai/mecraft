@@ -146,7 +146,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE11);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
     glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.velocityTextureHandle()));
 
     // Texture unit 13: multiplexed based on debug view mode
     glActiveTexture(GL_TEXTURE13);
@@ -208,7 +208,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glBindTexture(GL_TEXTURE_2D_ARRAY,
                   renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle()));
     glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D, targets.temporalCurrentTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.temporalCurrentTextureHandle()));
     glActiveTexture(GL_TEXTURE18);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiTextureHandle()));
 

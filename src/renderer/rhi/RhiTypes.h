@@ -55,6 +55,7 @@ enum class RhiTextureFormat {
     Rg8Unorm,
     Rgba8Unorm,
     Rgba8Srgb,
+    Rg16Float,
     Rgba16Float,
     Rgba32Float,
     R16Float,

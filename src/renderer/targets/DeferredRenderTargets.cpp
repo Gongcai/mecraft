@@ -1589,6 +1589,42 @@ bool DeferredRenderTargets::registerRhiTextures() {
             false
         });
     }
+    m_temporalCurrentHandle = renderer::rhi::gl::registerTexture({
+        m_temporalCurrentTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_velocityHandle = renderer::rhi::gl::registerTexture({
+        m_velocityTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rg16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    m_perObjectVelocityHandle = renderer::rhi::gl::registerTexture({
+        m_perObjectVelocityTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rg16Float,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1,
+        1,
+        1,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
     m_weatherMaskHandle = renderer::rhi::gl::registerTexture({
         m_weatherMaskTex,
         RhiTextureDimension::Texture2D,
@@ -1925,6 +1961,9 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_historyCloudHandle[1].isValid() &&
                             m_historyVolumetricHandle[0].isValid() &&
                             m_historyVolumetricHandle[1].isValid() &&
+                            m_temporalCurrentHandle.isValid() &&
+                            m_velocityHandle.isValid() &&
+                            m_perObjectVelocityHandle.isValid() &&
                             m_weatherMaskHandle.isValid() &&
                             m_skyCaptureHandle.isValid() &&
                             m_shadowDepthHandle.isValid() &&
@@ -2008,6 +2047,9 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     renderer::rhi::gl::unregisterTextureAndReset(m_historyCloudHandle[1]);
     renderer::rhi::gl::unregisterTextureAndReset(m_historyVolumetricHandle[0]);
     renderer::rhi::gl::unregisterTextureAndReset(m_historyVolumetricHandle[1]);
+    renderer::rhi::gl::unregisterTextureAndReset(m_temporalCurrentHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_velocityHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_perObjectVelocityHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_skyCaptureHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);

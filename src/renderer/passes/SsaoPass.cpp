@@ -181,7 +181,7 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoHistoryTexturePrevHandle()));
     // Velocity buffer
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.velocityTextureHandle()));
     // GBuffer depth
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));

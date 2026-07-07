@@ -44,7 +44,7 @@ void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settin
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, targets.perObjectVelocityTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.perObjectVelocityTextureHandle()));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_velocityShader);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);

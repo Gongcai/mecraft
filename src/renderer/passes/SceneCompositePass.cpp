@@ -124,7 +124,7 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
     glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, targets.velocityTexture());
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.velocityTextureHandle()));
     glActiveTexture(GL_TEXTURE8);
     glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historySceneTexturePrevHandle()));
     glActiveTexture(GL_TEXTURE9);
