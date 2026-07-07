@@ -108,14 +108,14 @@ bool testGlTextureRegistry() {
 
 bool testResourceTextureRegistration() {
     TextureAtlas atlas;
-    atlas.textureID = 77;
+    const uint32_t atlasTextureId = 77;
     atlas.atlasWidth = 32;
     atlas.atlasHeight = 16;
-    if (!requireTrue(resource::registerTextureAtlas(atlas),
+    if (!requireTrue(resource::registerTextureAtlas(atlas, atlasTextureId),
                      "texture atlas registration must create an RHI texture handle")) {
         return false;
     }
-    if (!requireTrue(renderer::rhi::gl::textureId(atlas.texture) == atlas.textureID,
+    if (!requireTrue(renderer::rhi::gl::textureId(atlas.texture) == atlasTextureId,
                      "texture atlas handle must resolve to its native texture id")) {
         return false;
     }
@@ -126,14 +126,14 @@ bool testResourceTextureRegistration() {
     }
 
     TextureArray textureArray;
-    textureArray.textureID = 88;
+    const uint32_t textureArrayId = 88;
     textureArray.tileSize = 16;
     textureArray.layerCount = 4;
-    if (!requireTrue(resource::registerTextureArray(textureArray),
+    if (!requireTrue(resource::registerTextureArray(textureArray, textureArrayId),
                      "texture array registration must create an RHI texture handle")) {
         return false;
     }
-    if (!requireTrue(renderer::rhi::gl::textureId(textureArray.texture) == textureArray.textureID,
+    if (!requireTrue(renderer::rhi::gl::textureId(textureArray.texture) == textureArrayId,
                      "texture array handle must resolve to its native texture id")) {
         return false;
     }

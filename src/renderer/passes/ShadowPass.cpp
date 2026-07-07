@@ -222,7 +222,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         m_shadowDepthShader->setInt("uGrassColormap", 2);
         m_shadowDepthShader->setInt("uFoliageColormap", 3);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_resourceMgr->getTextureArray().textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY,
+                      renderer::rhi::gl::textureId(m_resourceMgr->getTextureArray().texture));
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, noiseTex);
         glActiveTexture(GL_TEXTURE2);

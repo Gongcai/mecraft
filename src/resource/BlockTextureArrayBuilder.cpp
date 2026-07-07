@@ -46,8 +46,8 @@ ResourceTint textureTintColor(const ResourceTextureTint tint) {
 class PendingTextureArray {
 public:
     PendingTextureArray(const int tileSize, const int layerCount) {
-        glGenTextures(1, &m_texture.textureID);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_texture.textureID);
+        glGenTextures(1, &m_textureId);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, m_textureId);
         glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
                      tileSize, tileSize, layerCount,
                      0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -58,7 +58,7 @@ public:
 
         m_texture.tileSize = tileSize;
         m_texture.layerCount = layerCount;
-        if (!resource::registerTextureArray(m_texture)) {
+        if (!resource::registerTextureArray(m_texture, m_textureId)) {
             failBlockTextureArrayBuilder("Failed to register block texture array RHI handle");
         }
     }
@@ -67,15 +67,19 @@ public:
     PendingTextureArray& operator=(const PendingTextureArray&) = delete;
 
     PendingTextureArray(PendingTextureArray&& other) noexcept
-        : m_texture(other.m_texture) {
+        : m_texture(other.m_texture),
+          m_textureId(other.m_textureId) {
         other.m_texture = {};
+        other.m_textureId = 0;
     }
 
     PendingTextureArray& operator=(PendingTextureArray&& other) noexcept {
         if (this != &other) {
             reset();
             m_texture = other.m_texture;
+            m_textureId = other.m_textureId;
             other.m_texture = {};
+            other.m_textureId = 0;
         }
         return *this;
     }
@@ -85,25 +89,27 @@ public:
     }
 
     [[nodiscard]] GLuint id() const {
-        return m_texture.textureID;
+        return m_textureId;
     }
 
     [[nodiscard]] TextureArray release() {
         TextureArray released = m_texture;
         m_texture = {};
+        m_textureId = 0;
         return released;
     }
 
 private:
     void reset() {
         resource::unregisterTextureArray(m_texture);
-        if (m_texture.textureID != 0) {
-            glDeleteTextures(1, &m_texture.textureID);
-            m_texture.textureID = 0;
+        if (m_textureId != 0) {
+            glDeleteTextures(1, &m_textureId);
+            m_textureId = 0;
         }
     }
 
     TextureArray m_texture;
+    GLuint m_textureId = 0;
 };
 
 struct LoadedImage {

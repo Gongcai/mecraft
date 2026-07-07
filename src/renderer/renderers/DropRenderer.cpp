@@ -1,6 +1,7 @@
 #include "DropRenderer.h"
 #include "../mesh/BlockMeshBuilder.h"
 #include "../mesh/ItemModelMesh.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <cstddef>
 #include <utility>
@@ -89,8 +90,10 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
-    const bool canRenderBlocks = (m_shader != nullptr && texArray.textureID != 0);
-    const bool canRenderItems = (m_itemShader != nullptr && itemAtlas.textureID != 0);
+    const GLuint texArrayId = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    const GLuint itemAtlasId = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
+    const bool canRenderBlocks = (m_shader != nullptr && texArrayId != 0);
+    const bool canRenderItems = (m_itemShader != nullptr && itemAtlasId != 0);
     if (!canRenderBlocks && !canRenderItems) {
         return;
     }
@@ -144,7 +147,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
                 m_itemShader->use();
                 m_itemShader->setMat4(itemModelLoc, model);
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+                glBindTexture(GL_TEXTURE_2D, itemAtlasId);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
             }
@@ -163,7 +166,7 @@ void DropRenderer::render(const DropSystem& dropSystem, const Camera& camera, co
         m_shader->use();
         m_shader->setMat4(blockModelLoc, model);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         // Bind lightmap textures for drop block rendering
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
@@ -286,8 +289,10 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
-    const bool canRenderBlocks = (m_gbufferShader != nullptr && texArray.textureID != 0);
-    const bool canRenderItems = (m_itemGBufferShader != nullptr && itemAtlas.textureID != 0);
+    const GLuint texArrayId = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    const GLuint itemAtlasId = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
+    const bool canRenderBlocks = (m_gbufferShader != nullptr && texArrayId != 0);
+    const bool canRenderItems = (m_itemGBufferShader != nullptr && itemAtlasId != 0);
     if (!canRenderBlocks && !canRenderItems) {
         return;
     }
@@ -346,7 +351,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
                 m_itemGBufferShader->setFloat("uDropSunlight", light.x);
                 m_itemGBufferShader->setFloat("uDropBlockLight", light.y);
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+                glBindTexture(GL_TEXTURE_2D, itemAtlasId);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
                 m_previousModelMatrices[drop.id] = model;
@@ -370,7 +375,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
         m_gbufferShader->setFloat("uDropSunlight", light.x);
         m_gbufferShader->setFloat("uDropBlockLight", light.y);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
         glActiveTexture(GL_TEXTURE4);
@@ -408,8 +413,10 @@ void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSyst
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
-    const bool canRenderBlocks = (m_shadowShader != nullptr && texArray.textureID != 0);
-    const bool canRenderItems = (m_itemShadowShader != nullptr && itemAtlas.textureID != 0);
+    const GLuint texArrayId = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    const GLuint itemAtlasId = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
+    const bool canRenderBlocks = (m_shadowShader != nullptr && texArrayId != 0);
+    const bool canRenderItems = (m_itemShadowShader != nullptr && itemAtlasId != 0);
     if (!canRenderBlocks && !canRenderItems) {
         return;
     }
@@ -461,7 +468,7 @@ void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSyst
                 m_itemShadowShader->use();
                 m_itemShadowShader->setMat4(itemModelLoc, model);
                 glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+                glBindTexture(GL_TEXTURE_2D, itemAtlasId);
                 glBindVertexArray(mesh->vao);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
             }
@@ -480,7 +487,7 @@ void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSyst
         m_shadowShader->use();
         m_shadowShader->setMat4(blockModelLoc, model);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
         glActiveTexture(GL_TEXTURE3);

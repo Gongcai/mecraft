@@ -329,7 +329,7 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
     bindWaterEffectUniforms(shader, false, resourceMgr);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(texArray.texture));
 
     // Bind lightmap textures
     glActiveTexture(GL_TEXTURE1);
@@ -355,9 +355,15 @@ void TerrainRenderer::bindChunkRenderState(const TerrainFrameData& frame, const 
                       ? resourceMgr->getTexture2DHandle("shader_ripple_normal")
                       : RhiTextureHandle{}));
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, useBlockNormalMaps ? resourceMgr->getBlockNormalTextureArray().textureID : 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  useBlockNormalMaps
+                      ? renderer::rhi::gl::textureId(resourceMgr->getBlockNormalTextureArray().texture)
+                      : 0);
     glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, useBlockSpecularMaps ? resourceMgr->getBlockSpecularTextureArray().textureID : 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY,
+                  useBlockSpecularMaps
+                      ? renderer::rhi::gl::textureId(resourceMgr->getBlockSpecularTextureArray().texture)
+                      : 0);
     glActiveTexture(GL_TEXTURE14);
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
 }
@@ -391,7 +397,7 @@ void TerrainRenderer::bindBasicForwardState(const TerrainFrameData& frame, const
 
     // Bind textures: units 0-4 only
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(texArray.texture));
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, resourceMgr != nullptr ? resourceMgr->getLightmapDay() : 0);

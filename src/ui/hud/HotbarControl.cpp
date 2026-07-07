@@ -236,9 +236,12 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         return;
     }
 
-    const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
-    const bool hasBakedItemIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
-    const bool hasLegacyAtlas = (atlas.textureID != 0 && atlas.tilesPerRow > 0);
+    const uint32_t itemTextureAtlasId = renderer::rhi::gl::textureId(itemTextureAtlas.texture);
+    const uint32_t itemIconAtlasId = renderer::rhi::gl::textureId(itemIconAtlas.texture);
+    const uint32_t legacyAtlasId = renderer::rhi::gl::textureId(atlas.texture);
+    const bool hasItemTextures = (itemTextureAtlasId != 0 && itemTextureAtlas.tilesPerRow > 0);
+    const bool hasBakedItemIcons = (itemIconAtlasId != 0 && itemIconAtlas.tilesPerRow > 0);
+    const bool hasLegacyAtlas = (legacyAtlasId != 0 && atlas.tilesPerRow > 0);
     if (!hasItemTextures && !hasBakedItemIcons && !hasLegacyAtlas) {
         return;
     }
@@ -401,17 +404,17 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
 
         m_inventoryShader->setVec4("uTintColor", glm::vec4(m_iconTintColor[0], m_iconTintColor[1], m_iconTintColor[2], m_iconTintColor[3]));
         if (iconVertCount > 0) {
-            glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
+            glBindTexture(GL_TEXTURE_2D, itemTextureAtlasId);
             glDrawArrays(GL_TRIANGLES, offset, iconVertCount);
         }
         offset += iconVertCount;
         if (fallbackIconVertCount > 0) {
-            glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+            glBindTexture(GL_TEXTURE_2D, itemIconAtlasId);
             glDrawArrays(GL_TRIANGLES, offset, fallbackIconVertCount);
         }
         offset += fallbackIconVertCount;
         if (legacyIconVertCount > 0) {
-            glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+            glBindTexture(GL_TEXTURE_2D, legacyAtlasId);
             glDrawArrays(GL_TRIANGLES, offset, legacyIconVertCount);
         }
 
@@ -425,9 +428,9 @@ void HotbarControl::renderInternal(float screenW, float screenH, const Inventory
         m_cachedIconVertCounts[0] = iconVertCount;
         m_cachedIconVertCounts[1] = fallbackIconVertCount;
         m_cachedIconVertCounts[2] = legacyIconVertCount;
-        m_cachedIconTextures[0] = itemTextureAtlas.textureID;
-        m_cachedIconTextures[1] = itemIconAtlas.textureID;
-        m_cachedIconTextures[2] = atlas.textureID;
+        m_cachedIconTextures[0] = itemTextureAtlasId;
+        m_cachedIconTextures[1] = itemIconAtlasId;
+        m_cachedIconTextures[2] = legacyAtlasId;
         m_cachedVertCount = bgVertCount + selectedVertCount + iconVertCount + fallbackIconVertCount + legacyIconVertCount;
     }
 

@@ -641,8 +641,10 @@ void CreativeInventoryPanelControl::renderDraggedItem(const UIRenderContext& con
 
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
     const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
-    const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
-    const bool hasFallbackIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
+    const uint32_t itemIconAtlasId = renderer::rhi::gl::textureId(itemIconAtlas.texture);
+    const uint32_t itemTextureAtlasId = renderer::rhi::gl::textureId(itemTextureAtlas.texture);
+    const bool hasItemTextures = (itemTextureAtlasId != 0 && itemTextureAtlas.tilesPerRow > 0);
+    const bool hasFallbackIcons = (itemIconAtlasId != 0 && itemIconAtlas.tilesPerRow > 0);
 
     const auto draggedItem = static_cast<ItemID>(context.draggedItemId);
     const ItemDef& itemDef = ItemRegistry::get(draggedItem);
@@ -681,7 +683,7 @@ void CreativeInventoryPanelControl::renderDraggedItem(const UIRenderContext& con
     m_inventoryShader->setInt("uAtlas", 0);
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, useItemTexture ? itemTextureAtlas.textureID : itemIconAtlas.textureID);
+    glBindTexture(GL_TEXTURE_2D, useItemTexture ? itemTextureAtlasId : itemIconAtlasId);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());

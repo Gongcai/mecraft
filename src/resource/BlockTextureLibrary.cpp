@@ -4,6 +4,7 @@
 #include "RhiTextureResourceUtils.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
+#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
 
 #include <glad/glad.h>
 
@@ -27,36 +28,52 @@ int validateBlockTextureTileSize(const int configuredTileSize) {
     return configuredTileSize;
 }
 
+[[nodiscard]] GLuint textureId(const TextureAtlas& atlas) {
+    return static_cast<GLuint>(renderer::rhi::gl::textureId(atlas.texture));
+}
+
+[[nodiscard]] GLuint textureId(const TextureArray& textureArray) {
+    return static_cast<GLuint>(renderer::rhi::gl::textureId(textureArray.texture));
+}
+
+void deleteTextureAtlas(TextureAtlas& atlas) {
+    const GLuint nativeTexture = textureId(atlas);
+    resource::unregisterTextureAtlas(atlas);
+    if (nativeTexture != 0) {
+        glDeleteTextures(1, &nativeTexture);
+    }
+    atlas = {};
+}
+
 } // namespace
 
 void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
+    const GLuint nativeTexture = textureId(textureArray);
     resource::unregisterTextureArray(textureArray);
-    if (textureArray.textureID != 0) {
-        glDeleteTextures(1, &textureArray.textureID);
-        textureArray.textureID = 0;
+    if (nativeTexture != 0) {
+        glDeleteTextures(1, &nativeTexture);
     }
     textureArray.tileSize = 16;
     textureArray.layerCount = 0;
 }
 
 void BlockTextureLibrary::applySamplerToTextureArrays() {
-    if (m_textureArray.textureID != 0) {
-        m_sampler.applyToTexture2DArray(m_textureArray.textureID);
+    const GLuint albedoTexture = textureId(m_textureArray);
+    if (albedoTexture != 0) {
+        m_sampler.applyToTexture2DArray(albedoTexture);
     }
-    if (m_normalTextureArray.textureID != 0) {
-        m_sampler.applyToTexture2DArray(m_normalTextureArray.textureID);
+    const GLuint normalTexture = textureId(m_normalTextureArray);
+    if (normalTexture != 0) {
+        m_sampler.applyToTexture2DArray(normalTexture);
     }
-    if (m_specularTextureArray.textureID != 0) {
-        m_sampler.applyToTexture2DArray(m_specularTextureArray.textureID);
+    const GLuint specularTexture = textureId(m_specularTextureArray);
+    if (specularTexture != 0) {
+        m_sampler.applyToTexture2DArray(specularTexture);
     }
 }
 
 void BlockTextureLibrary::shutdown() {
-    resource::unregisterTextureAtlas(m_atlas);
-    if (m_atlas.textureID != 0) {
-        glDeleteTextures(1, &m_atlas.textureID);
-        m_atlas.textureID = 0;
-    }
+    deleteTextureAtlas(m_atlas);
 
     deleteTextureArray(m_textureArray);
     deleteTextureArray(m_normalTextureArray);
@@ -91,11 +108,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory, const int 
 void BlockTextureLibrary::buildTextures(const std::string& directory,
                                         const int tileSize,
                                         const std::unordered_set<std::string>& registeredTextureNames) {
-    resource::unregisterTextureAtlas(m_atlas);
-    if (m_atlas.textureID != 0) {
-        glDeleteTextures(1, &m_atlas.textureID);
-        m_atlas.textureID = 0;
-    }
+    deleteTextureAtlas(m_atlas);
     deleteTextureArray(m_textureArray);
     deleteTextureArray(m_normalTextureArray);
     deleteTextureArray(m_specularTextureArray);
@@ -121,16 +134,12 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
     m_sampler.refreshAnisotropySupport();
-    m_sampler.applyToTexture2D(m_atlas.textureID);
+    m_sampler.applyToTexture2D(textureId(m_atlas));
     applySamplerToTextureArrays();
 }
 
 void BlockTextureLibrary::buildAtlas(const std::string& directory, const int tileSize) {
-    resource::unregisterTextureAtlas(m_atlas);
-    if (m_atlas.textureID != 0) {
-        glDeleteTextures(1, &m_atlas.textureID);
-        m_atlas.textureID = 0;
-    }
+    deleteTextureAtlas(m_atlas);
 
     m_manifest = resource::buildBlockTextureManifest(directory);
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
@@ -139,7 +148,7 @@ void BlockTextureLibrary::buildAtlas(const std::string& directory, const int til
     m_atlasPixels = std::move(atlasResult.pixels);
 
     m_sampler.refreshAnisotropySupport();
-    m_sampler.applyToTexture2D(m_atlas.textureID);
+    m_sampler.applyToTexture2D(textureId(m_atlas));
 }
 
 void BlockTextureLibrary::buildTextureArray(const std::string& directory, const int tileSize) {
@@ -250,8 +259,9 @@ int BlockTextureLibrary::arrayLayerToAtlasTile(const int arrayLayer) const {
 void BlockTextureLibrary::setAnisotropy(const float anisotropy) {
     m_sampler.setAnisotropy(anisotropy);
 
-    if (m_atlas.textureID != 0) {
-        m_sampler.applyToTexture2D(m_atlas.textureID);
+    const GLuint atlasTexture = textureId(m_atlas);
+    if (atlasTexture != 0) {
+        m_sampler.applyToTexture2D(atlasTexture);
     }
 
     applySamplerToTextureArrays();

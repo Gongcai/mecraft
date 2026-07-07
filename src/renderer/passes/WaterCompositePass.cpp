@@ -145,7 +145,7 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     }
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(texArray.texture));
     renderer::debug::ScopedDebugGroup bindGroup("WaterComposite.BindInputs");
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, targets.depthTexture());

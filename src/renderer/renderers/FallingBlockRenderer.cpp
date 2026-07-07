@@ -9,6 +9,7 @@
 #include "engine/camera/Camera.h"
 #include "../../ecs/GameplayRegistry.h"
 #include "../../ecs/components/Components.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 #include "../../world/chunk/Chunk.h"
@@ -78,7 +79,8 @@ void FallingBlockRenderer::renderToGBuffer(const IWorldView& worldView,
     }
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    if (texArray.textureID == 0) {
+    const GLuint texArrayId = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    if (texArrayId == 0) {
         return;
     }
 
@@ -126,7 +128,7 @@ void FallingBlockRenderer::renderToGBuffer(const IWorldView& worldView,
         m_gbufferShader->setFloat("uDropBlockLight", light.y);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
         glActiveTexture(GL_TEXTURE4);
@@ -164,7 +166,7 @@ void FallingBlockRenderer::renderToGBuffer(const IWorldView& worldView,
         m_gbufferShader->setFloat("uDropBlockLight", light.y);
 
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
         glActiveTexture(GL_TEXTURE4);
@@ -195,7 +197,8 @@ void FallingBlockRenderer::renderToShadowMap(const ecs::GameplayRegistry& regist
     }
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    if (texArray.textureID == 0) {
+    const GLuint texArrayId = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    if (texArrayId == 0) {
         return;
     }
 
@@ -236,7 +239,7 @@ void FallingBlockRenderer::renderToShadowMap(const ecs::GameplayRegistry& regist
 
         m_shadowShader->setMat4(modelLoc, model);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
         glActiveTexture(GL_TEXTURE3);
@@ -263,7 +266,7 @@ void FallingBlockRenderer::renderToShadowMap(const ecs::GameplayRegistry& regist
 
         m_shadowShader->setMat4(modelLoc, model);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayId);
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getGrassColormap());
         glActiveTexture(GL_TEXTURE3);

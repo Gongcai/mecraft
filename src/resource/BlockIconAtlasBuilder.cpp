@@ -674,14 +674,13 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
     glBindTexture(GL_TEXTURE_2D, 0);
 
     TextureAtlas atlas;
-    atlas.textureID = textureID;
     atlas.atlasWidth = atlasWidth;
     atlas.atlasHeight = atlasHeight;
     atlas.tileSize = iconSize;
     atlas.tileStride = iconSize;
     atlas.tilePadding = 0;
     atlas.tilesPerRow = tilesPerRow;
-    if (!registerTextureAtlas(atlas)) {
+    if (!registerTextureAtlas(atlas, textureID)) {
         glDeleteTextures(1, &textureID);
         failBlockIconAtlasBuilder("Failed to register block icon atlas RHI handle");
     }

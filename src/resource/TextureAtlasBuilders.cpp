@@ -146,11 +146,12 @@ void copyTilePixelsToAtlas(std::vector<unsigned char>& atlasPixels,
     }
 }
 
-void uploadNearestAtlasTexture(const TextureAtlas& atlas,
+void uploadNearestAtlasTexture(const GLuint textureID,
+                               const TextureAtlas& atlas,
                                const std::vector<unsigned char>& pixels,
                                const bool generateMipmaps,
                                const int maxMipmapLevel) {
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, generateMipmaps ? GL_NEAREST_MIPMAP_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -164,12 +165,10 @@ void uploadNearestAtlasTexture(const TextureAtlas& atlas,
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void registerBuiltAtlas(resource::IndexedTextureAtlas& atlas, const char* label) {
-    if (!resource::registerTextureAtlas(atlas.atlas)) {
-        GLuint textureID = atlas.atlas.textureID;
+void registerBuiltAtlas(resource::IndexedTextureAtlas& atlas, const GLuint textureID, const char* label) {
+    if (!resource::registerTextureAtlas(atlas.atlas, textureID)) {
         if (textureID != 0) {
             glDeleteTextures(1, &textureID);
-            atlas.atlas.textureID = 0;
         }
         failTextureAtlasBuilders(std::string("Failed to register ") + label + " RHI handle");
     }
@@ -244,15 +243,16 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
         result.indices[textureName] = i;
     }
 
-    glGenTextures(1, &result.atlas.textureID);
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
     result.atlas.atlasWidth = atlasWidth;
     result.atlas.atlasHeight = atlasHeight;
     result.atlas.tileSize = tileSize;
     result.atlas.tileStride = tileStride;
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;
-    uploadNearestAtlasTexture(result.atlas, result.pixels, true, 0);
-    registerBuiltAtlas(result, "item texture atlas");
+    uploadNearestAtlasTexture(textureID, result.atlas, result.pixels, true, 0);
+    registerBuiltAtlas(result, textureID, "item texture atlas");
     return result;
 }
 
@@ -346,7 +346,8 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
         result.indices[textureName] = i;
     }
 
-    glGenTextures(1, &result.atlas.textureID);
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
     result.atlas.atlasWidth = atlasWidth;
     result.atlas.atlasHeight = atlasHeight;
     result.atlas.tileSize = tileSize;
@@ -357,8 +358,8 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
     const int fullChainMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(atlasWidth, atlasHeight)))));
     const int paddingSafeMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(kTilePadding))));
     const int clampedMaxLevel = std::max(0, std::min(fullChainMaxLevel, paddingSafeMaxLevel));
-    uploadNearestAtlasTexture(result.atlas, result.pixels, true, clampedMaxLevel);
-    registerBuiltAtlas(result, "block texture atlas");
+    uploadNearestAtlasTexture(textureID, result.atlas, result.pixels, true, clampedMaxLevel);
+    registerBuiltAtlas(result, textureID, "block texture atlas");
     return result;
 }
 
@@ -413,15 +414,16 @@ IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int ic
         result.indices[imagePaths[i].stem().string()] = i;
     }
 
-    glGenTextures(1, &result.atlas.textureID);
+    GLuint textureID = 0;
+    glGenTextures(1, &textureID);
     result.atlas.atlasWidth = atlasWidth;
     result.atlas.atlasHeight = atlasHeight;
     result.atlas.tileSize = iconSize;
     result.atlas.tileStride = tileStride;
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;
-    uploadNearestAtlasTexture(result.atlas, result.pixels, false, 0);
-    registerBuiltAtlas(result, "HUD icon atlas");
+    uploadNearestAtlasTexture(textureID, result.atlas, result.pixels, false, 0);
+    registerBuiltAtlas(result, textureID, "HUD icon atlas");
     return result;
 }
 

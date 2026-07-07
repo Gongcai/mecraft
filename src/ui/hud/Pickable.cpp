@@ -4,6 +4,7 @@
 #include <glm/vec4.hpp>
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../item/Item.h"
 #include "../ItemIconPolicy.h"
 #include "../font/TextRenderer.h"
@@ -75,8 +76,10 @@ void Pickable::render(const SlotInfo* slots, int count,
     if (count <= 0 || mesh.vao == 0 || mesh.vbo == 0)
         return;
 
-    const bool hasBakedItemIcons = (itemIconAtlas.textureID != 0 && itemIconAtlas.tilesPerRow > 0);
-    const bool hasItemTextures = (itemTextureAtlas.textureID != 0 && itemTextureAtlas.tilesPerRow > 0);
+    const uint32_t itemIconAtlasId = renderer::rhi::gl::textureId(itemIconAtlas.texture);
+    const uint32_t itemTextureAtlasId = renderer::rhi::gl::textureId(itemTextureAtlas.texture);
+    const bool hasBakedItemIcons = (itemIconAtlasId != 0 && itemIconAtlas.tilesPerRow > 0);
+    const bool hasItemTextures = (itemTextureAtlasId != 0 && itemTextureAtlas.tilesPerRow > 0);
 
     // ── Collect icon vertices (pass 2) ──
     std::vector<float> iconVerts;
@@ -188,14 +191,14 @@ void Pickable::render(const SlotInfo* slots, int count,
             glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
 
             if (!iconVerts.empty()) {
-                glBindTexture(GL_TEXTURE_2D, itemTextureAtlas.textureID);
+                glBindTexture(GL_TEXTURE_2D, itemTextureAtlasId);
                 glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(iconVerts.size() * sizeof(float)),
                              iconVerts.data(), GL_DYNAMIC_DRAW);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(iconVerts.size() / 4));
             }
 
             if (!fallbackIconVerts.empty()) {
-                glBindTexture(GL_TEXTURE_2D, itemIconAtlas.textureID);
+                glBindTexture(GL_TEXTURE_2D, itemIconAtlasId);
                 glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(fallbackIconVerts.size() * sizeof(float)),
                              fallbackIconVerts.data(), GL_DYNAMIC_DRAW);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(fallbackIconVerts.size() / 4));

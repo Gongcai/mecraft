@@ -3,14 +3,12 @@
 
 #include "renderer/rhi/RhiHandles.h"
 
-#include <cstdint>
 #include <glm/vec2.hpp>
 
 #include <utility>
 
 struct TextureAtlas {
     RhiTextureHandle texture;
-    uint32_t textureID = 0;
     int atlasWidth  = 0;     // Atlas width in pixels.
     int atlasHeight = 0;     // Atlas height in pixels.
     int tileSize    = 16;    // Tile size in pixels, excluding padding.
@@ -24,7 +22,6 @@ struct TextureAtlas {
 
 struct TextureArray {
     RhiTextureHandle texture;
-    uint32_t textureID = 0;
     int tileSize = 16;
     int layerCount = 0;
 };

@@ -651,8 +651,10 @@ void FirstPersonHeldItemRenderer::render(const int width,
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const BlockID renderBlock = ItemRegistry::toRenderBlock(m_visibleItemId);
     const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
-    const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
-    const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArray.textureID != 0 && m_blockShader != nullptr);
+    const GLuint itemAtlasTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
+    const GLuint texArrayTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlasTexture != 0 && m_itemShader != nullptr);
+    const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArrayTexture != 0 && m_blockShader != nullptr);
 
     const float pitchDegrees = useBlockMesh ? m_config.blockPitchDegrees : m_config.itemPitchDegrees;
     const float yawDegrees = useBlockMesh ? m_config.blockYawDegrees : m_config.itemYawDegrees;
@@ -731,8 +733,10 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const BlockID renderBlock = ItemRegistry::toRenderBlock(itemId);
     const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
-    const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlas.textureID != 0 && m_itemShader != nullptr);
-    const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArray.textureID != 0 && m_blockShader != nullptr);
+    const GLuint itemAtlasTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
+    const GLuint texArrayTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
+    const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlasTexture != 0 && m_itemShader != nullptr);
+    const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArrayTexture != 0 && m_blockShader != nullptr);
 
     if (useBlockMesh) {
         Mesh* mesh = getOrCreateBlockMesh(renderBlock);
@@ -765,7 +769,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
         m_blockShader->setInt("uLightmapNight", 2);
         bindShadowUniforms(*m_blockShader);
         glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArray.textureID);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayTexture);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
         glActiveTexture(GL_TEXTURE2);
@@ -808,7 +812,7 @@ void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
     m_itemShader->setFloat("uHeldSceneHdrScale", m_sceneHdrScale);
     bindShadowUniforms(*m_itemShader);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, itemAtlas.textureID);
+    glBindTexture(GL_TEXTURE_2D, itemAtlasTexture);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_resourceMgr->getLightmapDay());
     glActiveTexture(GL_TEXTURE2);

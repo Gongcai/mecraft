@@ -32,7 +32,7 @@ bool buildExtrudedItemMesh(const TextureAtlas& atlas,
                            const int tileIndex,
                            std::vector<ItemModelVertex>& outVertices) {
     outVertices.clear();
-    if (tileIndex < 0 || atlas.textureID == 0 || atlas.tilesPerRow <= 0 || atlas.tileSize <= 0 || atlas.atlasWidth <= 0 || atlas.atlasHeight <= 0) {
+    if (tileIndex < 0 || !atlas.texture.isValid() || atlas.tilesPerRow <= 0 || atlas.tileSize <= 0 || atlas.atlasWidth <= 0 || atlas.atlasHeight <= 0) {
         return false;
     }
 
@@ -151,4 +151,3 @@ bool buildExtrudedItemMesh(const TextureAtlas& atlas,
 
     return !outVertices.empty();
 }
-

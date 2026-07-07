@@ -11,6 +11,7 @@
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../resource/ResourceMgr.h"
 #include "../renderer/core/Shader.h"
+#include "../renderer/rhi/gl/GlRhiTextureRegistry.h"
 
 void ParticleSystem::bindRegistry(ecs::GameplayRegistry& registry) {
     m_registry = &registry;
@@ -137,7 +138,7 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
     m_shader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_texArray->textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(m_texArray->texture));
 
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -179,7 +180,7 @@ void ParticleSystem::renderToSceneResolved(Shader& shader, uint32_t voxelLightTe
     shader.setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_texArray->textureID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(m_texArray->texture));
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, voxelLightTex);
     glActiveTexture(GL_TEXTURE2);

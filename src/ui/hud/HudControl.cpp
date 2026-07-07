@@ -9,6 +9,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../layout/UILayout.h"
 #include "../core/UIRenderUtils.h"
@@ -107,7 +108,8 @@ void HudControl::renderSelf(const UIRenderContext& context) const
     }
 
     const TextureAtlas& atlas = m_resourceMgr->getHudIconAtlas();
-    if (atlas.textureID == 0) {
+    const uint32_t atlasTextureId = renderer::rhi::gl::textureId(atlas.texture);
+    if (atlasTextureId == 0) {
         return;
     }
 
@@ -135,7 +137,7 @@ void HudControl::renderSelf(const UIRenderContext& context) const
             m_inventoryShader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
             glActiveTexture(GL_TEXTURE0);
             m_inventoryShader->setInt("uAtlas", 0);
-            glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+            glBindTexture(GL_TEXTURE_2D, atlasTextureId);
             glBindVertexArray(m_vao);
             glDrawArrays(GL_TRIANGLES, 0, m_cachedVertCount);
             glBindVertexArray(0);
@@ -215,7 +217,7 @@ void HudControl::renderSelf(const UIRenderContext& context) const
 
     glActiveTexture(GL_TEXTURE0);
     m_inventoryShader->setInt("uAtlas", 0);
-    glBindTexture(GL_TEXTURE_2D, atlas.textureID);
+    glBindTexture(GL_TEXTURE_2D, atlasTextureId);
 
     glBindVertexArray(m_vao);
     glDrawArrays(GL_TRIANGLES, 0, m_cachedVertCount);

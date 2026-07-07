@@ -6,6 +6,7 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../core/UIRenderUtils.h"
 
@@ -32,12 +33,13 @@ void UIImage::loadTexture(ResourceMgr& resourceMgr, const std::string& name, con
 }
 
 void UIImage::setAtlasTile(const TextureAtlas& atlas, int tileIndex) {
-    if (atlas.textureID == 0 || tileIndex < 0) {
+    const uint32_t textureId = renderer::rhi::gl::textureId(atlas.texture);
+    if (textureId == 0 || tileIndex < 0) {
         m_textureID = 0;
         m_useTexture = false;
         return;
     }
-    m_textureID = atlas.textureID;
+    m_textureID = textureId;
     const auto uv = atlas.getUV(tileIndex);
     m_u0 = uv.first.x;
     m_v0 = uv.first.y;
