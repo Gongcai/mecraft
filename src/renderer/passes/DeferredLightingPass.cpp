@@ -1,6 +1,7 @@
 #include "DeferredLightingPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 
@@ -12,16 +13,16 @@
 void DeferredLightingPass::init(ResourceMgr& resourceMgr) {
     m_deferredLightingShader = resourceMgr.getShader("deferred_lighting");
     m_resourceMgr = &resourceMgr;
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
-    m_rippleNormalTexture = resourceMgr.getTexture2D("shader_ripple_normal");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+    m_rippleNormalTexture = resourceMgr.getTexture2DHandle("shader_ripple_normal");
 }
 
 void DeferredLightingPass::shutdown() {
     m_deferredLightingShader = nullptr;
     m_resourceMgr = nullptr;
     m_shadowRenderer = nullptr;
-    m_noiseTexture = 0;
-    m_rippleNormalTexture = 0;
+    m_noiseTexture = {};
+    m_rippleNormalTexture = {};
 }
 
 void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings& settings,
@@ -68,7 +69,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     m_deferredLightingShader->setInt("uRippleNormalTex", 21);
 
     // Noise
-    m_deferredLightingShader->setBool("uNoiseEnabled", m_noiseTexture != 0);
+    m_deferredLightingShader->setBool("uNoiseEnabled", m_noiseTexture.isValid());
 
     // Camera / TAA
     m_deferredLightingShader->setMat4("uViewProj",
@@ -221,7 +222,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE12);
     glBindTexture(GL_TEXTURE_2D, targets.shadowColorTexture());
     glActiveTexture(GL_TEXTURE13);
@@ -240,7 +241,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glActiveTexture(GL_TEXTURE20);
     glBindTexture(GL_TEXTURE_2D_ARRAY, targets.csmShadowColor1Texture());
     glActiveTexture(GL_TEXTURE21);
-    glBindTexture(GL_TEXTURE_2D, m_rippleNormalTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_rippleNormalTexture));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_deferredLightingShader);
 

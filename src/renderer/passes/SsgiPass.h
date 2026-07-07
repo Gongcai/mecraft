@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiHandles.h"
 
 #include <cstdint>
 
@@ -35,7 +36,7 @@ private:
     Shader* m_ssgiUpsampleShader = nullptr;
     Shader* m_ssgiDenoiseShader = nullptr;
     Shader* m_ssgiTemporalShader = nullptr;
-    uint32_t m_noiseTexture = 0;
+    RhiTextureHandle m_noiseTexture;
 };
 
 #endif // MECRAFT_SSGI_PASS_H

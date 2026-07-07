@@ -1,6 +1,7 @@
 #include "SsaoPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -14,7 +15,7 @@ void SsaoPass::init(ResourceMgr& resourceMgr) {
     m_ssaoFilterShader = resourceMgr.getShader("ssao_filter");
     m_ssaoUpsampleShader = resourceMgr.getShader("ssao_upsample");
     m_ssaoTemporalShader = resourceMgr.getShader("ssao_temporal");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void SsaoPass::shutdown() {
@@ -22,7 +23,7 @@ void SsaoPass::shutdown() {
     m_ssaoFilterShader = nullptr;
     m_ssaoUpsampleShader = nullptr;
     m_ssaoTemporalShader = nullptr;
-    m_noiseTexture = 0;
+    m_noiseTexture = {};
 }
 
 void SsaoPass::execute(const FrameContext& ctx, const RenderSettings& settings,
@@ -72,7 +73,7 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.normalAoTexture());
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoShader);
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, 0);

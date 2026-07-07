@@ -1,6 +1,7 @@
 #include "DepthOfFieldPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -11,12 +12,12 @@
 
 void DepthOfFieldPass::init(ResourceMgr& resourceMgr) {
     m_dofShader = resourceMgr.getShader("dof");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void DepthOfFieldPass::shutdown() {
     m_dofShader = nullptr;
-    m_noiseTexture = 0;
+    m_noiseTexture = {};
 }
 
 void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& settings,
@@ -48,7 +49,7 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_dofShader);
 
     for (int i = 2; i >= 0; --i) {

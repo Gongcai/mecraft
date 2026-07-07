@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiHandles.h"
 
 #include <cstdint>
 
@@ -45,8 +46,7 @@ private:
     Shader* m_ssaoUpsampleShader = nullptr;
     Shader* m_ssaoTemporalShader = nullptr;
 
-    // Cached noise texture handle
-    uint32_t m_noiseTexture = 0;
+    RhiTextureHandle m_noiseTexture;
 };
 
 #endif // MECRAFT_SSAO_PASS_H

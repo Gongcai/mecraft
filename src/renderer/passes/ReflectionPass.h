@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiHandles.h"
 
 #include <cstdint>
 
@@ -33,9 +34,8 @@ private:
     Shader* m_reflectionFilterShader = nullptr;
     Shader* m_reflectionTemporalShader = nullptr;
 
-    // Cached resource textures
-    uint32_t m_noiseTexture = 0;
-    uint32_t m_rippleNormalTexture = 0;
+    RhiTextureHandle m_noiseTexture;
+    RhiTextureHandle m_rippleNormalTexture;
     ResourceMgr* m_resourceMgr = nullptr;
 };
 

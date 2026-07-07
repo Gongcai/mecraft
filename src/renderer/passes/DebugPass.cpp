@@ -1,6 +1,7 @@
 #include "DebugPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -13,12 +14,12 @@ static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowRenderer::CASCADE_COUN
 
 void DebugPass::init(ResourceMgr& resourceMgr) {
     m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void DebugPass::shutdown() {
     m_deferredDebugShader = nullptr;
-    m_noiseTexture = 0;
+    m_noiseTexture = {};
 }
 
 void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
@@ -159,8 +160,9 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         settings.debug.viewMode == 22 ||
         settings.debug.viewMode == 34 ||
         settings.debug.viewMode == 35;
+    const uint32_t noiseTexture = renderer::rhi::gl::textureId(m_noiseTexture);
     glBindTexture(GL_TEXTURE_2D,
-                  shadowCompareDebug ? m_noiseTexture
+                  shadowCompareDebug ? noiseTexture
                                      : (materialAuxDebug ? targets.materialAuxTexture()
                                                          : (historyDepthDebug ? targets.historyDepthTexturePrev()
                                                                               : targets.historySceneTexturePrev())));

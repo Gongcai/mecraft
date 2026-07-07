@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiHandles.h"
 
 #include <cstdint>
 
@@ -54,7 +55,7 @@ private:
     Shader* m_volumetricCompositeShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
-    uint32_t m_noiseTexture = 0;
+    RhiTextureHandle m_noiseTexture;
     bool m_hasRenderedFog = false;
     glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
     float m_lastWeatherSignal = 0.0f;

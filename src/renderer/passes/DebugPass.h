@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiHandles.h"
 
 #include <cstdint>
 
@@ -36,7 +37,7 @@ public:
 
 private:
     Shader* m_deferredDebugShader = nullptr;
-    uint32_t m_noiseTexture = 0;
+    RhiTextureHandle m_noiseTexture;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
 };
 

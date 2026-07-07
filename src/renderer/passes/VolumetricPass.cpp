@@ -1,6 +1,7 @@
 #include "VolumetricPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 
@@ -15,7 +16,7 @@ void VolumetricPass::init(ResourceMgr& resourceMgr) {
     m_volumetricTemporalShader = resourceMgr.getShader("volumetric_temporal");
     m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
     m_resourceMgr = &resourceMgr;
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void VolumetricPass::shutdown() {
@@ -24,7 +25,7 @@ void VolumetricPass::shutdown() {
     m_volumetricCompositeShader = nullptr;
     m_shadowRenderer = nullptr;
     m_resourceMgr = nullptr;
-    m_noiseTexture = 0;
+    m_noiseTexture = {};
     m_hasRenderedFog = false;
 }
 
@@ -187,7 +188,7 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     m_volumetricFogShader->setFloat("uCloudWetness", ctx.weather.cloudWetness);
     m_volumetricFogShader->setInt("uShadowsEnabled", settings.shadow.enabled ? 1 : 0);
     m_volumetricFogShader->setFloat("uTime", ctx.shaderTime);
-    m_volumetricFogShader->setBool("uNoiseEnabled", m_noiseTexture != 0);
+    m_volumetricFogShader->setBool("uNoiseEnabled", m_noiseTexture.isValid());
     m_volumetricFogShader->setInt("uVolumetricSkyRayEnabled", settings.volumetric.skyRayEnabled ? 1 : 0);
     m_volumetricFogShader->setInt("uVolumetricTimeFadeEnabled", settings.volumetric.timeFadeEnabled ? 1 : 0);
     m_volumetricFogShader->setInt("uVolumetricQualityTier", settings.volumetric.qualityTier);
@@ -215,7 +216,7 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_2D, targets.shadowDepthTexture());
     glActiveTexture(GL_TEXTURE4);

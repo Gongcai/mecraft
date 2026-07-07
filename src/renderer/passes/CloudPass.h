@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiHandles.h"
 
 #include <cstdint>
 
@@ -26,7 +27,7 @@ private:
     [[nodiscard]] bool shouldRenderClouds(const FrameContext& ctx, const RenderSettings& settings);
 
     Shader* m_cloudShader = nullptr;
-    uint32_t m_noiseTexture = 0;
+    RhiTextureHandle m_noiseTexture;
     bool m_hasRenderedClouds = false;
     glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
     float m_lastWeatherSignal = 0.0f;

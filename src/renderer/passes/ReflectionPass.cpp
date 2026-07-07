@@ -1,6 +1,7 @@
 #include "ReflectionPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -12,8 +13,8 @@ void ReflectionPass::init(ResourceMgr& resourceMgr) {
     m_reflectionShader = resourceMgr.getShader("reflection_probe");
     m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
     m_reflectionTemporalShader = resourceMgr.getShader("reflection_temporal");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
-    m_rippleNormalTexture = resourceMgr.getTexture2D("shader_ripple_normal");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+    m_rippleNormalTexture = resourceMgr.getTexture2DHandle("shader_ripple_normal");
     m_resourceMgr = &resourceMgr;
 }
 
@@ -21,8 +22,8 @@ void ReflectionPass::shutdown() {
     m_reflectionShader = nullptr;
     m_reflectionFilterShader = nullptr;
     m_reflectionTemporalShader = nullptr;
-    m_noiseTexture = 0;
-    m_rippleNormalTexture = 0;
+    m_noiseTexture = {};
+    m_rippleNormalTexture = {};
     m_resourceMgr = nullptr;
 }
 
@@ -105,9 +106,9 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, targets.voxelLightTexture());
     glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, m_rippleNormalTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_rippleNormalTexture));
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_reflectionShader);
 
     glActiveTexture(GL_TEXTURE8);

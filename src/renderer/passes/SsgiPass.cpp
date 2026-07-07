@@ -1,6 +1,7 @@
 #include "SsgiPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -13,7 +14,7 @@ void SsgiPass::init(ResourceMgr& resourceMgr) {
     m_ssgiUpsampleShader = resourceMgr.getShader("ssgi_upsample");
     m_ssgiDenoiseShader = resourceMgr.getShader("ssgi_denoise");
     m_ssgiTemporalShader = resourceMgr.getShader("ssgi_temporal");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void SsgiPass::shutdown() {
@@ -21,7 +22,7 @@ void SsgiPass::shutdown() {
     m_ssgiUpsampleShader = nullptr;
     m_ssgiDenoiseShader = nullptr;
     m_ssgiTemporalShader = nullptr;
-    m_noiseTexture = 0;
+    m_noiseTexture = {};
 }
 
 void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
@@ -101,7 +102,7 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
     glActiveTexture(GL_TEXTURE4);
     glBindTexture(GL_TEXTURE_2D, targets.depthTexture());
     glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
 
     RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiShader);
 

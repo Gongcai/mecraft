@@ -1,6 +1,7 @@
 #include "CloudPass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -11,12 +12,12 @@
 
 void CloudPass::init(ResourceMgr& resourceMgr) {
     m_cloudShader = resourceMgr.getShader("cloud_target");
-    m_noiseTexture = resourceMgr.getTexture2D("shader_noise2d");
+    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void CloudPass::shutdown() {
     m_cloudShader = nullptr;
-    m_noiseTexture = 0;
+    m_noiseTexture = {};
     m_hasRenderedClouds = false;
 }
 
@@ -118,7 +119,7 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     m_cloudShader->setFloat("uPlanarCloudAltitude", ctx.cloud.planarAltitude);
 
     m_cloudShader->setFloat("uTime", ctx.shaderTime);
-    m_cloudShader->setBool("uNoiseEnabled", m_noiseTexture != 0);
+    m_cloudShader->setBool("uNoiseEnabled", m_noiseTexture.isValid());
     // Temporal cloud reprojection
     m_cloudShader->setInt("uHistoryCloudTex", 4);
     m_cloudShader->setMat4("uPreviousViewProj", ctx.previousViewProj);
@@ -130,7 +131,7 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, targets.skyCaptureTexture());
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, m_noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
     glActiveTexture(GL_TEXTURE3);
     glBindTexture(GL_TEXTURE_3D, targets.atmosphereLutTexture());
     glActiveTexture(GL_TEXTURE4);
