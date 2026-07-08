@@ -19,6 +19,28 @@ constexpr GLenum kGVoxelLightAttachment = GL_COLOR_ATTACHMENT2;
 constexpr GLenum kGMaterialAttachment = GL_COLOR_ATTACHMENT3;
 constexpr GLenum kGMaterialAuxAttachment = GL_COLOR_ATTACHMENT4;
 constexpr GLsizei kGBufferAttachmentCount = 5;
+
+void blitFramebuffer(const GLuint readFramebuffer,
+                     const GLuint drawFramebuffer,
+                     const int srcWidth,
+                     const int srcHeight,
+                     const int dstWidth,
+                     const int dstHeight,
+                     const GLbitfield mask,
+                     const GLenum filter) {
+    glBlitNamedFramebuffer(readFramebuffer,
+                           drawFramebuffer,
+                           0,
+                           0,
+                           srcWidth,
+                           srcHeight,
+                           0,
+                           0,
+                           dstWidth,
+                           dstHeight,
+                           mask,
+                           filter);
+}
 } // namespace
 
 DeferredRenderTargets::~DeferredRenderTargets() {
@@ -907,11 +929,9 @@ void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const int32_t fr
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneLightingFbo);
-    glBlitFramebuffer(0, 0, std::max(1, width), std::max(1, height),
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(static_cast<GLuint>(framebuffer), m_sceneLightingFbo,
+                    std::max(1, width), std::max(1, height), m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneLightingFbo);
 }
 
@@ -919,11 +939,9 @@ void DeferredRenderTargets::copyFramebufferColorToSceneResolved(const int32_t fr
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneResolvedFbo);
-    glBlitFramebuffer(0, 0, std::max(1, width), std::max(1, height),
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(static_cast<GLuint>(framebuffer), m_sceneResolvedFbo,
+                    std::max(1, width), std::max(1, height), m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
 }
 
@@ -931,11 +949,9 @@ void DeferredRenderTargets::copyFramebufferColorToTransparentComposite(const int
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBlitFramebuffer(0, 0, std::max(1, width), std::max(1, height),
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(static_cast<GLuint>(framebuffer), m_transparentCompositeFbo,
+                    std::max(1, width), std::max(1, height), m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
@@ -943,11 +959,9 @@ void DeferredRenderTargets::copySceneLightingToTransparentComposite() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneLightingFbo, m_transparentCompositeFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
@@ -955,11 +969,9 @@ void DeferredRenderTargets::copySceneLightingToSceneComposite() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneCompositeFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneLightingFbo, m_sceneCompositeFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneCompositeFbo);
 }
 
@@ -967,11 +979,9 @@ void DeferredRenderTargets::copySceneCompositeToSceneResolved() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneCompositeFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneResolvedFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneCompositeFbo, m_sceneResolvedFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
 }
 
@@ -979,11 +989,9 @@ void DeferredRenderTargets::copySceneCompositeToTransparentComposite() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneCompositeFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneCompositeFbo, m_transparentCompositeFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
@@ -991,11 +999,9 @@ void DeferredRenderTargets::copySceneResolvedToTransparentComposite() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneResolvedFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneResolvedFbo, m_transparentCompositeFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
@@ -1003,11 +1009,9 @@ void DeferredRenderTargets::copyTransparentCompositeToSceneComposite() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneCompositeFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_transparentCompositeFbo, m_sceneCompositeFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneCompositeFbo);
 }
 
@@ -1015,11 +1019,9 @@ void DeferredRenderTargets::copyTransparentCompositeToSceneResolved() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_sceneResolvedFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_transparentCompositeFbo, m_sceneResolvedFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
 }
 
@@ -1027,11 +1029,9 @@ void DeferredRenderTargets::copyDepthToTransparentComposite() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_gBufferFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_gBufferFbo, m_transparentCompositeFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
@@ -1039,11 +1039,9 @@ void DeferredRenderTargets::copySceneResolvedToHistory() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneResolvedFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_sceneResolvedFbo, m_historySceneFbo[m_currentHistoryIndex],
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
 }
 
@@ -1051,11 +1049,9 @@ void DeferredRenderTargets::copySceneResolvedToTemporalCurrent() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneResolvedFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_temporalCurrentFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_sceneResolvedFbo, m_temporalCurrentFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_temporalCurrentFbo);
 }
 
@@ -1063,11 +1059,9 @@ void DeferredRenderTargets::copyDepthToHistory() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_gBufferFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_gBufferFbo, m_historySceneFbo[m_currentHistoryIndex],
+                    m_width, m_height, m_width, m_height,
+                    GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
 }
 
@@ -1075,11 +1069,9 @@ void DeferredRenderTargets::copyReflectionToHistory() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_reflectionFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_reflectionFbo, m_historyReflectionFbo[m_currentHistoryIndex],
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
 }
 
@@ -1087,11 +1079,9 @@ void DeferredRenderTargets::copyReflectionToTemporalScratch() const {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_reflectionFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_reflectionTemporalScratchFbo);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_reflectionFbo, m_reflectionTemporalScratchFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_reflectionTemporalScratchFbo);
 }
 
@@ -1101,11 +1091,9 @@ void DeferredRenderTargets::copyCloudToHistory() const {
     }
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_cloudFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyCloudFbo[m_currentHistoryIndex]);
-    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
-                      0, 0, halfWidth, halfHeight,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_cloudFbo, m_historyCloudFbo[m_currentHistoryIndex],
+                    halfWidth, halfHeight, halfWidth, halfHeight,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyCloudFbo[m_currentHistoryIndex]);
 }
 
@@ -1115,11 +1103,9 @@ void DeferredRenderTargets::copyHistoryCloudToCloud() const {
     }
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_historyCloudFbo[1 - m_currentHistoryIndex]);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_cloudFbo);
-    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
-                      0, 0, halfWidth, halfHeight,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_historyCloudFbo[1 - m_currentHistoryIndex], m_cloudFbo,
+                    halfWidth, halfHeight, halfWidth, halfHeight,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_cloudFbo);
 }
 
@@ -1129,11 +1115,9 @@ void DeferredRenderTargets::copyVolumetricToHistory() const {
     }
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_halfResFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyVolumetricFbo[m_currentHistoryIndex]);
-    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
-                      0, 0, halfWidth, halfHeight,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_halfResFbo, m_historyVolumetricFbo[m_currentHistoryIndex],
+                    halfWidth, halfHeight, halfWidth, halfHeight,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_historyVolumetricFbo[m_currentHistoryIndex]);
 }
 
@@ -1143,15 +1127,12 @@ void DeferredRenderTargets::copyHistoryVolumetricToHalfRes() const {
     }
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_historyVolumetricFbo[1 - m_currentHistoryIndex]);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_halfResFbo);
-    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
-                      0, 0, halfWidth, halfHeight,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_historyVolumetricFbo[m_currentHistoryIndex]);
-    glBlitFramebuffer(0, 0, halfWidth, halfHeight,
-                      0, 0, halfWidth, halfHeight,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_historyVolumetricFbo[1 - m_currentHistoryIndex], m_halfResFbo,
+                    halfWidth, halfHeight, halfWidth, halfHeight,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_historyVolumetricFbo[1 - m_currentHistoryIndex], m_historyVolumetricFbo[m_currentHistoryIndex],
+                    halfWidth, halfHeight, halfWidth, halfHeight,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_halfResFbo);
 }
 
@@ -1159,11 +1140,9 @@ void DeferredRenderTargets::copySsaoTemporalToHistory() {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssaoTemporalFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssaoHistoryFbo[m_ssaoHistoryIndex]);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_ssaoTemporalFbo, m_ssaoHistoryFbo[m_ssaoHistoryIndex],
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoHistoryFbo[m_ssaoHistoryIndex]);
 }
 
@@ -1171,20 +1150,18 @@ void DeferredRenderTargets::copySsgiTemporalToHistory() {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssgiTemporalFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssgiHistoryFbo[m_ssgiHistoryIndex]);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glReadBuffer(GL_COLOR_ATTACHMENT1);
-    glDrawBuffer(GL_COLOR_ATTACHMENT1);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0);
+    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0);
+    glNamedFramebufferDrawBuffer(m_ssgiHistoryFbo[m_ssgiHistoryIndex], GL_COLOR_ATTACHMENT0);
+    blitFramebuffer(m_ssgiTemporalFbo, m_ssgiHistoryFbo[m_ssgiHistoryIndex],
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT1);
+    glNamedFramebufferDrawBuffer(m_ssgiHistoryFbo[m_ssgiHistoryIndex], GL_COLOR_ATTACHMENT1);
+    blitFramebuffer(m_ssgiTemporalFbo, m_ssgiHistoryFbo[m_ssgiHistoryIndex],
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0);
+    glNamedFramebufferDrawBuffer(m_ssgiHistoryFbo[m_ssgiHistoryIndex], GL_COLOR_ATTACHMENT0);
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiHistoryFbo[m_ssgiHistoryIndex]);
 }
 
@@ -1198,13 +1175,11 @@ void DeferredRenderTargets::copySsgiDenoiseToSsgi(const int slot) {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssgiDenoiseFbo[slot]);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssgiFbo);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glNamedFramebufferReadBuffer(m_ssgiDenoiseFbo[slot], GL_COLOR_ATTACHMENT0);
+    glNamedFramebufferDrawBuffer(m_ssgiFbo, GL_COLOR_ATTACHMENT0);
+    blitFramebuffer(m_ssgiDenoiseFbo[slot], m_ssgiFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiFbo);
 }
 
@@ -1212,13 +1187,11 @@ void DeferredRenderTargets::copySsgiTemporalToSsgi() {
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_ssgiTemporalFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_ssgiFbo);
-    glReadBuffer(GL_COLOR_ATTACHMENT0);
-    glDrawBuffer(GL_COLOR_ATTACHMENT0);
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, m_width, m_height,
-                      GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0);
+    glNamedFramebufferDrawBuffer(m_ssgiFbo, GL_COLOR_ATTACHMENT0);
+    blitFramebuffer(m_ssgiTemporalFbo, m_ssgiFbo,
+                    m_width, m_height, m_width, m_height,
+                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiFbo);
 }
 
@@ -1226,11 +1199,9 @@ void DeferredRenderTargets::blitSceneLightingTo(const int32_t framebuffer, const
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneLightingFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, std::max(1, width), std::max(1, height),
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneLightingFbo, static_cast<GLuint>(framebuffer),
+                    m_width, m_height, std::max(1, width), std::max(1, height),
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
@@ -1238,11 +1209,9 @@ void DeferredRenderTargets::blitSceneCompositeTo(const int32_t framebuffer, cons
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneCompositeFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, std::max(1, width), std::max(1, height),
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneCompositeFbo, static_cast<GLuint>(framebuffer),
+                    m_width, m_height, std::max(1, width), std::max(1, height),
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
@@ -1250,11 +1219,9 @@ void DeferredRenderTargets::blitSceneResolvedTo(const int32_t framebuffer, const
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneResolvedFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, std::max(1, width), std::max(1, height),
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_sceneResolvedFbo, static_cast<GLuint>(framebuffer),
+                    m_width, m_height, std::max(1, width), std::max(1, height),
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
@@ -1262,11 +1229,9 @@ void DeferredRenderTargets::blitTransparentCompositeTo(const int32_t framebuffer
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_transparentCompositeFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, std::max(1, width), std::max(1, height),
-                      GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    blitFramebuffer(m_transparentCompositeFbo, static_cast<GLuint>(framebuffer),
+                    m_width, m_height, std::max(1, width), std::max(1, height),
+                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
@@ -1274,11 +1239,9 @@ void DeferredRenderTargets::blitDepthTo(const int32_t framebuffer, const int wid
     if (!m_ready) {
         return;
     }
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_gBufferFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glBlitFramebuffer(0, 0, m_width, m_height,
-                      0, 0, std::max(1, width), std::max(1, height),
-                      GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+    blitFramebuffer(m_gBufferFbo, static_cast<GLuint>(framebuffer),
+                    m_width, m_height, std::max(1, width), std::max(1, height),
+                    GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
