@@ -131,6 +131,7 @@ public:
     ~RenderResourceHub();
     [[nodiscard]] bool init(ResourceMgr& resourceMgr, ThreadPool& threadPool, const Window& window);
     void shutdown();
+    [[nodiscard]] bool resizeRhiSwapchain(const Window& window);
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
     void setAtlasAnisotropy(float anisotropy);

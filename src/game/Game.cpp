@@ -205,11 +205,12 @@ bool Game::renderFrame(const float frameTime) {
     const float renderInterpolationAlpha = m_session.stateMachine().pausesSimulation()
         ? 1.0f
         : m_fixedInterpolationAlpha;
-    m_frameOrchestrator->renderFrame(m_session, *m_renderRuntime,
-                                     m_hudPresenter.get(),
-                                     m_deps.window, frameTime,
-                                     renderInterpolationAlpha);
-    return true;
+    return m_frameOrchestrator->renderFrame(m_session,
+                                            *m_renderRuntime,
+                                            m_hudPresenter.get(),
+                                            m_deps.window,
+                                            frameTime,
+                                            renderInterpolationAlpha);
 }
 
 void Game::shutdown() {

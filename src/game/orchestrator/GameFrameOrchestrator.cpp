@@ -225,7 +225,7 @@ void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync
     audioSync.update(deltaTime, session.gameplayScene().registry());
 }
 
-void GameFrameOrchestrator::renderFrame(GameSession& session,
+bool GameFrameOrchestrator::renderFrame(GameSession& session,
                                          GameplayRenderRuntime& renderRuntime,
                                          GameplayHudPresenter* hudPresenter,
                                          Window& window,
@@ -234,15 +234,18 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
         session.client().receiveMessages();
         window.swapBuffers();
-        return;
+        return true;
     }
 
     // Obtain renderer references from the aggregate
+    auto& renderer = renderRuntime.resourceHub();
+    if (!renderer.resizeRhiSwapchain(window)) {
+        return false;
+    }
     auto& renderScene = renderRuntime.renderScene();
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
 #ifdef MECRAFT_DEBUG
     auto& postProcess = renderScene.postProcessPass();
-    auto& renderer = renderRuntime.resourceHub();
 #endif
 
 #ifdef MECRAFT_DEBUG
@@ -364,4 +367,5 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
         profiler->recordRender(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
     }
 #endif
+    return true;
 }
