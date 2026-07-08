@@ -11,6 +11,9 @@
 #include "../presentation/GameplayPresentationSnapshot.h"
 #include "../../renderer/core/RenderResourceHub.h"
 #include "../../renderer/core/RenderScene.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiResources.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/passes/PostProcessPass.h"
 #include "../render/GameplayRenderRuntime.h"
@@ -30,6 +33,47 @@
 #include <algorithm>
 
 namespace {
+
+bool beginUiOverlayPass(RenderResourceHub& renderer,
+                        Window& window,
+                        RhiCommandList*& commandList) {
+    RhiDevice& rhiDevice = renderer.rhiDevice();
+    const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
+    if (!colorView.isValid()) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = colorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "UiOverlay";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, window.getWidth())),
+        static_cast<uint32_t>(std::max(1, window.getHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    commandList = &rhiDevice.beginFrame();
+    commandList->beginRendering(renderingInfo);
+    return true;
+}
+
+void endUiOverlayPass(RenderResourceHub& renderer,
+                      RhiCommandList*& commandList) {
+    if (commandList == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    renderer.rhiDevice().submitFrame(*commandList);
+    commandList = nullptr;
+}
 
 void sendClientInput(GameSession& session, const float fixedStep) {
     if (!session.client().areSpawnChunksReady()) {
@@ -327,6 +371,11 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
+        RhiCommandList* uiCommandList = nullptr;
+        if (!beginUiOverlayPass(renderer, window, uiCommandList)) {
+            return false;
+        }
+
         hudPresenter->render(snap, session.stateMachine());
 #ifdef MECRAFT_DEBUG
         uiEnd = std::chrono::steady_clock::now();
@@ -350,6 +399,7 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         }
         dashboardEnd = std::chrono::steady_clock::now();
 #endif
+        endUiOverlayPass(renderer, uiCommandList);
     }
 #ifdef MECRAFT_DEBUG
     const auto preSwapEnd = std::chrono::steady_clock::now();
