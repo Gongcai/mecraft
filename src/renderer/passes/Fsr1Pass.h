@@ -2,11 +2,13 @@
 #define MECRAFT_FSR1_PASS_H
 
 #include "RenderPass.h"
+#include "../rhi/RhiHandles.h"
 
 #include <cstdint>
 #include <glm/vec4.hpp>
 
 class ResourceMgr;
+class RhiDevice;
 class Shader;
 
 class Fsr1Pass : public RenderPass {
@@ -17,7 +19,9 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "FSR1"; }
 
-    bool execute(uint32_t inputTex,
+    bool execute(RhiDevice& rhiDevice,
+                 RhiTextureViewHandle swapchainColorView,
+                 uint32_t inputTex,
                  int inputWidth,
                  int inputHeight,
                  int outputWidth,

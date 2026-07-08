@@ -322,7 +322,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             request.dayNightSystem, request.weatherSystem);
         m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
-            m_postProcessPass.blitSceneCaptureToBackbuffer(request.window);
+            m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
+                                                           m_currentContext.swapchainColorView,
+                                                           request.window);
         } else {
             const GLuint gbufferDepthTex =
                 static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.gbufferDepth));
@@ -341,6 +343,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     const int inputWidth = m_postProcessPass.targetWidth();
                     const int inputHeight = m_postProcessPass.targetHeight();
                     upscaled = m_fsr1Pass.execute(
+                        *m_shared.rhiDevice,
+                        m_currentContext.swapchainColorView,
                         postTex,
                         inputWidth,
                         inputHeight,
@@ -349,9 +353,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                         m_settings.upscale.sharpness);
                 }
                 if (!upscaled && postTex != 0) {
-                    m_postProcessPass.blitTextureToBackbuffer(postTex, request.window);
+                    m_postProcessPass.blitTextureToBackbuffer(*m_shared.rhiDevice,
+                                                              m_currentContext.swapchainColorView,
+                                                              postTex,
+                                                              request.window);
                 } else if (!upscaled) {
                     m_postProcessPass.compositeToBackbuffer(
+                        *m_shared.rhiDevice,
+                        m_currentContext.swapchainColorView,
                         request.window,
                         request.frameTime,
                         gbufferDepthTex,
@@ -359,6 +368,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 }
             } else {
                 m_postProcessPass.compositeToBackbuffer(
+                    *m_shared.rhiDevice,
+                    m_currentContext.swapchainColorView,
                     request.window,
                     request.frameTime,
                     gbufferDepthTex,

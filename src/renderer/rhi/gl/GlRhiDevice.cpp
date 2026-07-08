@@ -589,6 +589,10 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    if (renderToSwapchain) {
+        glDrawBuffer(GL_BACK);
+        glReadBuffer(GL_BACK);
+    }
     data.currentFramebuffer = framebuffer;
     data.currentStoreDiscardAttachments.clear();
     glViewport(info.renderArea.x,

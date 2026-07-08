@@ -1,5 +1,8 @@
 #include "PostProcessPass.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "engine/platform/Window.h"
@@ -133,15 +136,20 @@ void PostProcessPass::beginSceneCapture(const int requestedWidth, const int requ
     m_sceneCaptured = true;
 }
 
-void PostProcessPass::compositeToBackbuffer(const Window& window, const float frameTime,
+void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
+                                            const RhiTextureViewHandle swapchainColorView,
+                                            const Window& window,
+                                            const float frameTime,
                                             uint32_t gbufDepthTex,
                                             uint32_t weatherMaskTex) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
     if (!m_sceneCaptured || m_postProcessShader == nullptr || m_fullscreenVao == 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, width, height);
+        RhiCommandList& commandList = rhiDevice.beginFrame();
+        bindBackbufferOutput(commandList, swapchainColorView, width, height, false);
+        commandList.endRendering();
+        rhiDevice.submitFrame(commandList);
         return;
     }
 
@@ -156,9 +164,13 @@ void PostProcessPass::compositeToBackbuffer(const Window& window, const float fr
 
     static_cast<void>(weatherMaskTex);
 
-    bindBackbufferOutput(width, height);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    bindBackbufferOutput(commandList, swapchainColorView, width, height, false);
 
     renderComposite(gbufDepthTex, weatherMaskTex, hasBloom);
+
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
@@ -193,22 +205,25 @@ uint32_t PostProcessPass::compositeToTexture(const Window& window, const float f
     return m_compositeTex;
 }
 
-void PostProcessPass::blitSceneCaptureToBackbuffer(const Window& window) {
+void PostProcessPass::blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice,
+                                                   const RhiTextureViewHandle swapchainColorView,
+                                                   const Window& window) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
     if (!m_sceneCaptured || m_blitShader == nullptr || m_fullscreenVao == 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, width, height);
+        RhiCommandList& commandList = rhiDevice.beginFrame();
+        bindBackbufferOutput(commandList, swapchainColorView, width, height, false);
+        commandList.endRendering();
+        rhiDevice.submitFrame(commandList);
         return;
     }
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    bindBackbufferOutput(commandList, swapchainColorView, width, height, true);
 
     m_blitShader->use();
 
@@ -219,6 +234,9 @@ void PostProcessPass::blitSceneCaptureToBackbuffer(const Window& window) {
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
 
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -226,21 +244,27 @@ void PostProcessPass::blitSceneCaptureToBackbuffer(const Window& window) {
     glEnable(GL_DEPTH_TEST);
 }
 
-void PostProcessPass::blitTextureToBackbuffer(const uint32_t texture, const Window& window) {
+void PostProcessPass::blitTextureToBackbuffer(RhiDevice& rhiDevice,
+                                              const RhiTextureViewHandle swapchainColorView,
+                                              const uint32_t texture,
+                                              const Window& window) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
-
     if (texture == 0 || m_blitShader == nullptr || m_fullscreenVao == 0) {
+        RhiCommandList& commandList = rhiDevice.beginFrame();
+        bindBackbufferOutput(commandList, swapchainColorView, width, height, false);
+        commandList.endRendering();
+        rhiDevice.submitFrame(commandList);
         return;
     }
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glClear(GL_COLOR_BUFFER_BIT);
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    bindBackbufferOutput(commandList, swapchainColorView, width, height, true);
 
     m_blitShader->use();
 
@@ -250,6 +274,9 @@ void PostProcessPass::blitTextureToBackbuffer(const uint32_t texture, const Wind
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -694,10 +721,28 @@ void PostProcessPass::bindCompositeOutput(const int width, const int height) {
     glViewport(0, 0, std::max(1, width), std::max(1, height));
 }
 
-void PostProcessPass::bindBackbufferOutput(const int width, const int height) {
+void PostProcessPass::bindBackbufferOutput(RhiCommandList& commandList,
+                                           const RhiTextureViewHandle swapchainColorView,
+                                           const int width,
+                                           const int height,
+                                           const bool clearColor) {
     m_renderCompositeToTexture = false;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, std::max(1, width), std::max(1, height));
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = swapchainColorView;
+    colorAttachment.loadOp = clearColor ? RhiLoadOp::Clear : RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "PostProcessBackbuffer";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1;
+    commandList.beginRendering(renderingInfo);
 }
 
 void PostProcessPass::destroyRenderTargets() {

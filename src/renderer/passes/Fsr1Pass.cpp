@@ -1,6 +1,9 @@
 #include "Fsr1Pass.h"
 
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -25,7 +28,9 @@ void Fsr1Pass::shutdown() {
     m_rcasShader = nullptr;
 }
 
-bool Fsr1Pass::execute(uint32_t inputTex,
+bool Fsr1Pass::execute(RhiDevice& rhiDevice,
+                       const RhiTextureViewHandle swapchainColorView,
+                       uint32_t inputTex,
                        const int inputWidth,
                        const int inputHeight,
                        const int outputWidth,
@@ -68,14 +73,33 @@ bool Fsr1Pass::execute(uint32_t inputTex,
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, outputWidth, outputHeight);
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = swapchainColorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "FSR1Backbuffer";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, outputWidth)),
+        static_cast<uint32_t>(std::max(1, outputHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     m_rcasShader->use();
     m_rcasShader->setInt("uInputTex", 0);
     m_rcasShader->setVec4("uCon", populateRcasConstants(sharpness));
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_easuTex);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);

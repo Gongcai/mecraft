@@ -9,6 +9,8 @@
 #include <glm/vec4.hpp>
 
 class ResourceMgr;
+class RhiCommandList;
+class RhiDevice;
 class Shader;
 class Window;
 
@@ -78,7 +80,10 @@ public:
     void beginSceneCapture(int width, int height);
 
     /// Composite captured scene to back buffer with active effects.
-    void compositeToBackbuffer(const Window& window, float frameTime,
+    void compositeToBackbuffer(RhiDevice& rhiDevice,
+                               RhiTextureViewHandle swapchainColorView,
+                               const Window& window,
+                               float frameTime,
                                uint32_t gbufDepthTex = 0,
                                uint32_t weatherMaskTex = 0);
 
@@ -88,10 +93,15 @@ public:
                                               uint32_t weatherMaskTex = 0);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
-    void blitSceneCaptureToBackbuffer(const Window& window);
+    void blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice,
+                                      RhiTextureViewHandle swapchainColorView,
+                                      const Window& window);
 
     /// Blit an already composited LDR texture to the back buffer.
-    void blitTextureToBackbuffer(uint32_t texture, const Window& window);
+    void blitTextureToBackbuffer(RhiDevice& rhiDevice,
+                                 RhiTextureViewHandle swapchainColorView,
+                                 uint32_t texture,
+                                 const Window& window);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -129,7 +139,11 @@ private:
     void updateCompositeParams(bool useAutoExposureTexture, bool hasBloom);
     bool ensureCompositeTarget(int width, int height);
     void bindCompositeOutput(int width, int height);
-    void bindBackbufferOutput(int width, int height);
+    void bindBackbufferOutput(RhiCommandList& commandList,
+                              RhiTextureViewHandle swapchainColorView,
+                              int width,
+                              int height,
+                              bool clearColor);
 
     struct alignas(16) PostProcessCompositeParams {
         glm::ivec4 flags0;
