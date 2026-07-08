@@ -246,9 +246,6 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         : internalRenderSize(request.window);
     if (!skipPostProcess) {
         m_postProcessPass.beginSceneCapture(frameRenderSize.x, frameRenderSize.y);
-    } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, frameRenderSize.x, frameRenderSize.y);
     }
 
     const bool lightDebugActive = isLightDebugActive();
