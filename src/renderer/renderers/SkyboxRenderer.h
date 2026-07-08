@@ -6,13 +6,14 @@
 #include "../rhi/RhiHandles.h"
 
 class ResourceMgr;
+class RhiDevice;
 class Shader;
 
 class SkyboxRenderer {
 public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
-    void render(float aspect, float yawDegrees, float pitchDegrees);
+    void render(float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice);
 
 private:
     void initCubeMesh();
@@ -30,10 +31,13 @@ private:
     // Blur pipeline: scene FBO + two ping-pong FBOs at half resolution
     uint32_t m_sceneFbo = 0;
     uint32_t m_sceneColorTex = 0;
+    RhiTextureHandle m_sceneColorHandle;
     uint32_t m_pingFbo = 0;
     uint32_t m_pingColorTex = 0;
+    RhiTextureHandle m_pingColorHandle;
     uint32_t m_pongFbo = 0;
     uint32_t m_pongColorTex = 0;
+    RhiTextureHandle m_pongColorHandle;
     int m_blurWidth = 0;
     int m_blurHeight = 0;
 };

@@ -123,6 +123,8 @@ struct RhiTextureCopy {
 struct RhiTextureBlit {
     RhiTextureHandle src;
     RhiTextureHandle dst;
+    RhiTextureViewHandle srcView;
+    RhiTextureViewHandle dstView;
     uint32_t srcMipLevel = 0;
     uint32_t dstMipLevel = 0;
 };

@@ -1,11 +1,16 @@
 #include "SkyboxRenderer.h"
 
+#include "../../Diagnostics.h"
 #include <algorithm>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -33,20 +38,19 @@ constexpr float kCubeVertices[] = {
 
 GLuint createFboWithColor(GLuint& colorTex, int width, int height) {
     GLuint fbo = 0;
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glCreateFramebuffers(1, &fbo);
 
-    glGenTextures(1, &colorTex);
-    glBindTexture(GL_TEXTURE_2D, colorTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTex, 0);
+    glCreateTextures(GL_TEXTURE_2D, 1, &colorTex);
+    glTextureStorage2D(colorTex, 1, GL_RGBA8, width, height);
+    glTextureParameteri(colorTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(colorTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(colorTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(colorTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT0, colorTex, 0);
+    glNamedFramebufferDrawBuffer(fbo, GL_COLOR_ATTACHMENT0);
+    glNamedFramebufferReadBuffer(fbo, GL_COLOR_ATTACHMENT0);
 
-    const bool complete = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    const bool complete = glCheckNamedFramebufferStatus(fbo, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
 
     if (!complete) {
         glDeleteTextures(1, &colorTex);
@@ -55,6 +59,50 @@ GLuint createFboWithColor(GLuint& colorTex, int width, int height) {
         return 0;
     }
     return fbo;
+}
+
+RhiTextureHandle registerBlurTargetTexture(const GLuint texture,
+                                           const int width,
+                                           const int height) {
+    return renderer::rhi::gl::registerTexture({
+        texture,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height),
+        1u,
+        1u,
+        1u,
+        rhiFlag(RhiTextureUsage::Sampled) |
+            rhiFlag(RhiTextureUsage::ColorAttachment) |
+            rhiFlag(RhiTextureUsage::TransferSrc),
+        false
+    });
+}
+
+bool blitBlurTargetToSwapchain(RhiDevice& rhiDevice,
+                               const RhiTextureHandle source,
+                               const int width,
+                               const int height) {
+    if (!source.isValid() || !renderer::rhi::gl::isTextureRegistered(source) ||
+        !rhiDevice.resizeSwapchain(static_cast<uint32_t>(std::max(1, width)),
+                                   static_cast<uint32_t>(std::max(1, height)))) {
+        return false;
+    }
+
+    const RhiTextureViewHandle swapchainColorView = rhiDevice.currentSwapchainColorView();
+    if (!swapchainColorView.isValid()) {
+        return false;
+    }
+
+    RhiTextureBlit blit;
+    blit.src = source;
+    blit.dstView = swapchainColorView;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.blitTexture(blit);
+    rhiDevice.submitFrame(commandList);
+    return true;
 }
 }
 
@@ -81,8 +129,9 @@ void SkyboxRenderer::shutdown() {
     m_cubemapTexture = {};
 }
 
-void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees) {
-    if (m_shader == nullptr || !m_cubemapTexture.isValid() || m_cubeVao == 0) {
+void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice) {
+    if (m_shader == nullptr || m_blurShader == nullptr ||
+        !m_cubemapTexture.isValid() || m_cubeVao == 0 || m_fullscreenVao == 0) {
         return;
     }
     const GLuint cubemapTextureId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_cubemapTexture));
@@ -135,18 +184,6 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees) 
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
 
-    if (m_blurShader == nullptr || m_fullscreenVao == 0) {
-        // No blur shader — just blit scene to screen
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, m_sceneFbo);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-        glBlitFramebuffer(0, 0, blurW, blurH, 0, 0, vpWidth, vpHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, vpWidth, vpHeight);
-        glEnable(GL_CULL_FACE);
-        glDepthFunc(GL_LESS);
-        return;
-    }
-
     // --- Pass 2: Horizontal blur (scene -> ping) ---
     glBindFramebuffer(GL_FRAMEBUFFER, m_pingFbo);
     glViewport(0, 0, blurW, blurH);
@@ -174,16 +211,15 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees) 
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
 
-    // --- Pass 4: Blit blurred result to screen ---
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, m_pongFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-    glBlitFramebuffer(0, 0, blurW, blurH, 0, 0, vpWidth, vpHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+    const bool blitted = blitBlurTargetToSwapchain(rhiDevice, m_pongColorHandle, vpWidth, vpHeight);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, vpWidth, vpHeight);
 
     glEnable(GL_CULL_FACE);
     glDepthFunc(GL_LESS);
+    if (!blitted) {
+        MECRAFT_LOG_STREAM(std::cerr << "[SkyboxRenderer] Failed to blit menu skybox through RHI\n");
+    }
 }
 
 bool SkyboxRenderer::ensureBlurTargets(int width, int height) {
@@ -196,8 +232,13 @@ bool SkyboxRenderer::ensureBlurTargets(int width, int height) {
     m_sceneFbo = createFboWithColor(m_sceneColorTex, width, height);
     m_pingFbo = createFboWithColor(m_pingColorTex, width, height);
     m_pongFbo = createFboWithColor(m_pongColorTex, width, height);
+    m_sceneColorHandle = registerBlurTargetTexture(m_sceneColorTex, width, height);
+    m_pingColorHandle = registerBlurTargetTexture(m_pingColorTex, width, height);
+    m_pongColorHandle = registerBlurTargetTexture(m_pongColorTex, width, height);
 
-    if (m_sceneFbo == 0 || m_pingFbo == 0 || m_pongFbo == 0) {
+    if (m_sceneFbo == 0 || m_pingFbo == 0 || m_pongFbo == 0 ||
+        !m_sceneColorHandle.isValid() || !m_pingColorHandle.isValid() ||
+        !m_pongColorHandle.isValid()) {
         destroyBlurTargets();
         return false;
     }
@@ -208,6 +249,10 @@ bool SkyboxRenderer::ensureBlurTargets(int width, int height) {
 }
 
 void SkyboxRenderer::destroyBlurTargets() {
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneColorHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_pingColorHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_pongColorHandle);
+
     auto deleteFbo = [](GLuint& fbo, GLuint& tex) {
         if (tex != 0) { glDeleteTextures(1, &tex); tex = 0; }
         if (fbo != 0) { glDeleteFramebuffers(1, &fbo); fbo = 0; }

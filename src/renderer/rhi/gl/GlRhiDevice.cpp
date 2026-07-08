@@ -1,6 +1,7 @@
 #include "renderer/rhi/gl/GlRhiDevice.h"
 
 #include "renderer/rhi/RhiHandleAllocator.h"
+#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
 
 #include <glad/glad.h>
 
@@ -429,6 +430,156 @@ struct GlRhiDeviceData {
     RhiIndexFormat indexFormat = RhiIndexFormat::Uint32;
     uint64_t indexOffset = 0u;
 };
+
+namespace {
+
+struct GlBlitEndpoint {
+    GLuint texture = 0u;
+    GLenum target = 0u;
+    RhiTextureDesc desc;
+    GlFormatInfo format;
+    uint32_t attachmentMip = 0u;
+    bool swapchain = false;
+    bool valid = false;
+};
+
+[[nodiscard]] uint32_t mipExtent(const uint32_t extent, const uint32_t mipLevel) {
+    if (mipLevel >= 31u) {
+        return 1u;
+    }
+    return std::max(1u, extent >> mipLevel);
+}
+
+[[nodiscard]] bool resolveTextureHandleForBlit(GlRhiDeviceData& data,
+                                               const RhiTextureHandle handle,
+                                               const uint32_t mipLevel,
+                                               GlBlitEndpoint& endpoint) {
+    if (!handle.isValid()) {
+        return false;
+    }
+
+    const GlTextureRecord* deviceRecord = recordForHandle(data.textures, data.textureRecords, handle);
+    renderer::rhi::gl::GlRhiTextureRegistration registration;
+    const bool registered = renderer::rhi::gl::textureRegistration(handle, registration);
+    if (deviceRecord != nullptr && registered) {
+        logRhiError("blitTexture received an ambiguous texture handle");
+        return false;
+    }
+
+    if (deviceRecord != nullptr) {
+        if (mipLevel >= deviceRecord->desc.mipLevels) {
+            return false;
+        }
+        endpoint.texture = deviceRecord->texture;
+        endpoint.target = deviceRecord->target;
+        endpoint.desc = deviceRecord->desc;
+        endpoint.desc.width = mipExtent(deviceRecord->desc.width, mipLevel);
+        endpoint.desc.height = mipExtent(deviceRecord->desc.height, mipLevel);
+        endpoint.desc.mipLevels = 1u;
+        endpoint.format = deviceRecord->format;
+        endpoint.attachmentMip = mipLevel;
+        endpoint.valid = true;
+        return true;
+    }
+
+    if (registered) {
+        const GLenum target = toGlTextureTarget(registration.dimension);
+        GlFormatInfo format;
+        if (target == 0u || !toGlFormatInfo(registration.format, format) ||
+            mipLevel >= registration.mipLevels) {
+            return false;
+        }
+
+        endpoint.texture = registration.textureId;
+        endpoint.target = target;
+        endpoint.desc.debugName = nullptr;
+        endpoint.desc.dimension = registration.dimension;
+        endpoint.desc.format = registration.format;
+        endpoint.desc.width = mipExtent(registration.width, mipLevel);
+        endpoint.desc.height = mipExtent(registration.height, mipLevel);
+        endpoint.desc.depthOrLayers = registration.depthOrLayers;
+        endpoint.desc.mipLevels = 1u;
+        endpoint.desc.sampleCount = registration.sampleCount;
+        endpoint.desc.usage = registration.usage;
+        endpoint.format = format;
+        endpoint.attachmentMip = mipLevel;
+        endpoint.valid = true;
+        return true;
+    }
+
+    return false;
+}
+
+[[nodiscard]] bool resolveTextureViewForBlit(GlRhiDeviceData& data,
+                                             const RhiTextureViewHandle view,
+                                             GlBlitEndpoint& endpoint) {
+    if (!view.isValid()) {
+        return false;
+    }
+
+    const GlTextureViewRecord* viewRecord =
+        recordForHandle(data.textureViews, data.textureViewRecords, view);
+    if (viewRecord == nullptr) {
+        return false;
+    }
+
+    if (viewRecord->swapchainBackbuffer || viewRecord->swapchainDepthStencil) {
+        endpoint.texture = 0u;
+        endpoint.target = GL_TEXTURE_2D;
+        endpoint.desc.dimension = RhiTextureDimension::Texture2D;
+        endpoint.desc.format = viewRecord->resolvedFormat;
+        endpoint.desc.width = data.swapchainWidth;
+        endpoint.desc.height = data.swapchainHeight;
+        endpoint.desc.depthOrLayers = 1u;
+        endpoint.desc.mipLevels = 1u;
+        endpoint.desc.sampleCount = 1u;
+        endpoint.desc.usage = viewRecord->swapchainBackbuffer
+            ? rhiFlag(RhiTextureUsage::Present) | rhiFlag(RhiTextureUsage::ColorAttachment)
+            : rhiFlag(RhiTextureUsage::DepthStencilAttachment);
+        endpoint.format = viewRecord->format;
+        endpoint.attachmentMip = 0u;
+        endpoint.swapchain = true;
+        endpoint.valid = true;
+        return true;
+    }
+
+    const GlTextureRecord* textureRecord =
+        recordForHandle(data.textures, data.textureRecords, viewRecord->desc.texture);
+    if (textureRecord == nullptr) {
+        return false;
+    }
+
+    endpoint.texture = viewRecord->texture;
+    endpoint.target = viewRecord->target;
+    endpoint.desc = textureRecord->desc;
+    endpoint.desc.format = viewRecord->resolvedFormat;
+    endpoint.desc.width = mipExtent(textureRecord->desc.width, viewRecord->desc.baseMip);
+    endpoint.desc.height = mipExtent(textureRecord->desc.height, viewRecord->desc.baseMip);
+    endpoint.desc.depthOrLayers = viewRecord->desc.layerCount;
+    endpoint.desc.mipLevels = viewRecord->desc.mipCount;
+    endpoint.format = viewRecord->format;
+    endpoint.attachmentMip = 0u;
+    endpoint.valid = true;
+    return true;
+}
+
+[[nodiscard]] bool resolveBlitEndpoint(GlRhiDeviceData& data,
+                                       const RhiTextureHandle texture,
+                                       const RhiTextureViewHandle view,
+                                       const uint32_t mipLevel,
+                                       GlBlitEndpoint& endpoint) {
+    const bool hasTexture = texture.isValid();
+    const bool hasView = view.isValid();
+    if (hasTexture == hasView) {
+        return false;
+    }
+
+    return hasTexture
+        ? resolveTextureHandleForBlit(data, texture, mipLevel, endpoint)
+        : resolveTextureViewForBlit(data, view, endpoint);
+}
+
+} // namespace
 
 GlRhiCommandList::GlRhiCommandList() = default;
 
@@ -1098,49 +1249,96 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
         return;
     }
 
-    const GlTextureRecord* src =
-        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, blit.src);
-    const GlTextureRecord* dst =
-        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, blit.dst);
-    if (src == nullptr || dst == nullptr ||
-        src->desc.dimension != RhiTextureDimension::Texture2D ||
-        dst->desc.dimension != RhiTextureDimension::Texture2D ||
-        src->format.depth != dst->format.depth ||
-        src->format.stencil != dst->format.stencil) {
-        logRhiError("blitTexture requires valid 2D texture handles");
+    GlBlitEndpoint src;
+    GlBlitEndpoint dst;
+    if (!resolveBlitEndpoint(*m_device->m_data, blit.src, blit.srcView, blit.srcMipLevel, src) ||
+        !resolveBlitEndpoint(*m_device->m_data, blit.dst, blit.dstView, blit.dstMipLevel, dst) ||
+        !src.valid || !dst.valid ||
+        src.desc.dimension != RhiTextureDimension::Texture2D ||
+        dst.desc.dimension != RhiTextureDimension::Texture2D ||
+        src.format.depth != dst.format.depth ||
+        src.format.stencil != dst.format.stencil) {
+        logRhiError("blitTexture requires valid 2D source and destination endpoints");
         return;
     }
 
     GLuint readFramebuffer = 0u;
     GLuint drawFramebuffer = 0u;
-    glCreateFramebuffers(1, &readFramebuffer);
-    glCreateFramebuffers(1, &drawFramebuffer);
+    if (!src.swapchain) {
+        glCreateFramebuffers(1, &readFramebuffer);
+    }
+    if (!dst.swapchain) {
+        glCreateFramebuffers(1, &drawFramebuffer);
+    }
+
+    auto destroyFramebuffers = [&]() {
+        if (readFramebuffer != 0u) {
+            glDeleteFramebuffers(1, &readFramebuffer);
+            readFramebuffer = 0u;
+        }
+        if (drawFramebuffer != 0u) {
+            glDeleteFramebuffers(1, &drawFramebuffer);
+            drawFramebuffer = 0u;
+        }
+    };
+
     GLbitfield mask = GL_COLOR_BUFFER_BIT;
     GLenum filter = GL_LINEAR;
-    if (src->format.depth) {
-        const GLenum attachment = src->format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
-        glNamedFramebufferTexture(readFramebuffer, attachment, src->texture, static_cast<GLint>(blit.srcMipLevel));
-        glNamedFramebufferTexture(drawFramebuffer, attachment, dst->texture, static_cast<GLint>(blit.dstMipLevel));
-        mask = src->format.stencil ? (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT) : GL_DEPTH_BUFFER_BIT;
+    if (src.format.depth) {
+        const GLenum attachment = src.format.stencil ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
+        if (!src.swapchain) {
+            glNamedFramebufferTexture(readFramebuffer, attachment, src.texture, static_cast<GLint>(src.attachmentMip));
+        }
+        if (!dst.swapchain) {
+            glNamedFramebufferTexture(drawFramebuffer, attachment, dst.texture, static_cast<GLint>(dst.attachmentMip));
+        }
+        mask = src.format.stencil ? (GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT) : GL_DEPTH_BUFFER_BIT;
         filter = GL_NEAREST;
     } else {
-        glNamedFramebufferTexture(readFramebuffer, GL_COLOR_ATTACHMENT0, src->texture, static_cast<GLint>(blit.srcMipLevel));
-        glNamedFramebufferTexture(drawFramebuffer, GL_COLOR_ATTACHMENT0, dst->texture, static_cast<GLint>(blit.dstMipLevel));
+        if (!src.swapchain) {
+            glNamedFramebufferTexture(readFramebuffer,
+                                      GL_COLOR_ATTACHMENT0,
+                                      src.texture,
+                                      static_cast<GLint>(src.attachmentMip));
+            glNamedFramebufferReadBuffer(readFramebuffer, GL_COLOR_ATTACHMENT0);
+        } else {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0u);
+            glReadBuffer(GL_BACK);
+        }
+        if (!dst.swapchain) {
+            glNamedFramebufferTexture(drawFramebuffer,
+                                      GL_COLOR_ATTACHMENT0,
+                                      dst.texture,
+                                      static_cast<GLint>(dst.attachmentMip));
+            glNamedFramebufferDrawBuffer(drawFramebuffer, GL_COLOR_ATTACHMENT0);
+        } else {
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0u);
+            glDrawBuffer(GL_BACK);
+        }
     }
+
+    if ((!src.swapchain &&
+         glCheckNamedFramebufferStatus(readFramebuffer, GL_READ_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) ||
+        (!dst.swapchain &&
+         glCheckNamedFramebufferStatus(drawFramebuffer, GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)) {
+        destroyFramebuffers();
+        logRhiError("blitTexture created an incomplete framebuffer");
+        return;
+    }
+
     glBlitNamedFramebuffer(readFramebuffer,
                            drawFramebuffer,
                            0,
                            0,
-                           static_cast<GLint>(src->desc.width),
-                           static_cast<GLint>(src->desc.height),
+                           static_cast<GLint>(src.desc.width),
+                           static_cast<GLint>(src.desc.height),
                            0,
                            0,
-                           static_cast<GLint>(dst->desc.width),
-                           static_cast<GLint>(dst->desc.height),
+                           static_cast<GLint>(dst.desc.width),
+                           static_cast<GLint>(dst.desc.height),
                            mask,
                            filter);
-    glDeleteFramebuffers(1, &readFramebuffer);
-    glDeleteFramebuffers(1, &drawFramebuffer);
+    destroyFramebuffers();
 }
 
 void GlRhiCommandList::writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) {

@@ -413,6 +413,77 @@ void main() {
     return true;
 }
 
+bool testGlRhiBlitToSwapchainBackbuffer() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for swapchain blit")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_swapchain_blit_test";
+    deviceDesc.width = 32;
+    deviceDesc.height = 32;
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for swapchain blit")) {
+        return false;
+    }
+    if (!requireTrue(device.resizeSwapchain(32u, 32u), "swapchain resize must accept blit dimensions")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr std::array<uint8_t, 4> kMagentaPixel = {255u, 0u, 255u, 255u};
+    RhiTextureDesc sourceDesc;
+    sourceDesc.debugName = "swapchain-blit-source";
+    sourceDesc.format = RhiTextureFormat::Rgba8Unorm;
+    sourceDesc.width = 1u;
+    sourceDesc.height = 1u;
+    sourceDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc);
+
+    RhiTextureInitialData initialData;
+    initialData.pixels = kMagentaPixel.data();
+    initialData.sizeBytes = kMagentaPixel.size();
+    const RhiTextureHandle source = device.createTexture(sourceDesc, &initialData);
+    if (!requireTrue(source.isValid(), "swapchain blit source texture must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    const RhiTextureViewHandle swapchainView = device.currentSwapchainColorView();
+    if (!requireTrue(swapchainView.isValid(), "swapchain blit target view must be valid")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureBlit blit;
+    blit.src = source;
+    blit.dstView = swapchainView;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.blitTexture(blit);
+    device.submitFrame(cmd);
+
+    std::array<uint8_t, 4> pixel{};
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, 0u);
+    glReadBuffer(GL_BACK);
+    glReadPixels(16, 16, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+
+    const bool magentaPixel = pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
+    if (!requireTrue(magentaPixel, "swapchain blit must produce a magenta center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyTexture(source);
+    device.shutdown();
+    return true;
+}
+
 bool testGlRhiFullscreenTriangle() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for fullscreen draw")) {
@@ -1427,6 +1498,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiSwapchainBackbuffer()) {
+        return 1;
+    }
+    if (!testGlRhiBlitToSwapchainBackbuffer()) {
         return 1;
     }
     if (!testGlRhiFullscreenTriangle()) {

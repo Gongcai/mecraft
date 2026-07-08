@@ -352,7 +352,7 @@ void MainMenuAppState::render(double frameTime) {
     }
     endMenuPass(m_deps.rhiDevice, commandList);
 
-    m_skyboxRenderer.render(m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f);
+    m_skyboxRenderer.render(m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f, m_deps.rhiDevice);
 
     if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.window, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
