@@ -117,6 +117,8 @@ public:
     void copySsgiTemporalToHistory();
     [[nodiscard]] RhiTextureHandle sceneLightingTextureHandle() const { return m_sceneLightingHandle; }
     [[nodiscard]] RhiTextureHandle sceneCompositeTextureHandle() const { return m_sceneCompositeHandle; }
+    [[nodiscard]] RhiTextureViewHandle sceneCompositeTextureViewHandle() const { return m_sceneCompositeView; }
+    bool ensureSceneCompositeTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle sceneResolvedTextureHandle() const { return m_sceneResolvedHandle; }
     [[nodiscard]] RhiTextureHandle transparentCompositeTextureHandle() const { return m_transparentCompositeHandle; }
     [[nodiscard]] RhiTextureHandle transparentCompositeDepthTextureHandle() const { return m_transparentCompositeDepthHandle; }
@@ -299,6 +301,7 @@ private:
     uint32_t m_sceneCompositeFbo = 0;
     uint32_t m_sceneCompositeTex = 0;
     RhiTextureHandle m_sceneCompositeHandle;
+    RhiTextureViewHandle m_sceneCompositeView;
 
     // SceneResolved is the current full-world HDR color. It becomes the post input and temporal scene history source.
     uint32_t m_sceneResolvedFbo = 0;
