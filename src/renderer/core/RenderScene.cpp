@@ -517,6 +517,7 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
 
 void RenderScene::setupResources(
     ThreadPool* threadPool,
+    RhiDevice* rhiDevice,
     TerrainRenderer* terrain,
     WorldRenderBuffer* worldRenderBuffer,
     DeferredRenderTargets* deferredTargets,
@@ -532,6 +533,7 @@ void RenderScene::setupResources(
     m_terrainStreamingService.init(threadPool, worldRenderBuffer);
     m_shared.overlayRenderer = &m_overlayRenderer;
 
+    m_shared.rhiDevice = rhiDevice;
     m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
     m_shared.terrainStreaming = &m_terrainStreamingService;
     m_shared.terrain = terrain;
@@ -564,7 +566,7 @@ bool RenderScene::isLightDebugActive() const {
 }
 
 bool RenderScene::isNewPipelineReady() const {
-    if (!m_activePipeline || !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
+    if (!m_activePipeline || !m_shared.rhiDevice || !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
         return false;
     }
     // Deferred pipeline requires deferredTargets; forward pipeline does not.
@@ -588,6 +590,7 @@ void RenderScene::setNewPipelineActive(bool active) {
 
 const char* RenderScene::getPipelineStatus() const {
     if (!m_activePipeline) return "No active pipeline";
+    if (!m_shared.rhiDevice) return "Missing: rhiDevice";
     if (!m_shared.terrain) return "Missing: terrain";
     if (!m_shared.sky) return "Missing: sky";
     if (!m_shared.resources) return "Missing: resources";

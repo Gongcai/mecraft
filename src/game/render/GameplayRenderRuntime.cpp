@@ -77,6 +77,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     const RenderSettings initialSettings = app::loadRenderSettings(renderer.getSettings());
     renderScene.setupResources(
         &threadPool,
+        &renderer.rhiDevice(),
         &renderer.getTerrainRenderer(),
         &renderer.getWorldRenderBuffer(),
         &renderer.getDeferredRenderTargets(),
