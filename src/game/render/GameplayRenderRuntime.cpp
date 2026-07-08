@@ -54,10 +54,11 @@ GameplayRenderRuntime::GameplayRenderRuntime()
 
 GameplayRenderRuntime::~GameplayRenderRuntime() = default;
 
-void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
+bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   GameSession& session,
                                   UIRenderer& uiRenderer,
-                                  ThreadPool& threadPool) {
+                                  ThreadPool& threadPool,
+                                  Window& window) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& blockEntityRenderer = m_impl->blockEntityRenderer;
@@ -67,7 +68,9 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& humanoidRenderer = m_impl->humanoidRenderer;
 
     // Core GPU infrastructure
-    renderer.init(resourceMgr, threadPool);
+    if (!renderer.init(resourceMgr, threadPool, window)) {
+        return false;
+    }
 
     // Initialize RenderScene and connect to RenderResourceHub
     renderScene.init(resourceMgr);
@@ -114,6 +117,7 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     session.rainRenderer().init(resourceMgr);
 
     glEnable(GL_DEPTH_TEST);
+    return true;
 }
 
 void GameplayRenderRuntime::shutdown() {

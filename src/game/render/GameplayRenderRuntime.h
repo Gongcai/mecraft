@@ -10,11 +10,11 @@ class RenderResourceHub;
 class RenderScene;
 class FirstPersonHeldItemRenderer;
 class ThreadPool;
+class Window;
 
 #ifdef MECRAFT_DEBUG
 #include "../../ui/Dashboard.h"
 class DebugFrameProfiler;
-class Window;
 #endif
 
 /// Owns all render-time objects for a gameplay session.
@@ -33,7 +33,11 @@ public:
     GameplayRenderRuntime& operator=(const GameplayRenderRuntime&) = delete;
 
     /// Initialize all renderers and connect to session systems.
-    void init(ResourceMgr& resourceMgr, GameSession& session, UIRenderer& uiRenderer, ThreadPool& threadPool);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
+                            GameSession& session,
+                            UIRenderer& uiRenderer,
+                            ThreadPool& threadPool,
+                            Window& window);
 
     /// Shutdown all renderers in reverse order of initialization.
     void shutdown();

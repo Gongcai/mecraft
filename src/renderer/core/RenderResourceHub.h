@@ -9,6 +9,7 @@
 #include "../../thread/ThreadPool.h"
 #include "engine/platform/Window.h"
 #include "../mesh/ChunkMeshingService.h"
+#include "../rhi/RhiDevice.h"
 #include "../targets/DeferredRenderTargets.h"
 
 #include "../passes/GBufferPass.h"
@@ -128,7 +129,7 @@ public:
 #endif
 
     ~RenderResourceHub();
-    void init(ResourceMgr& resourceMgr, ThreadPool& threadPool);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr, ThreadPool& threadPool, const Window& window);
     void shutdown();
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
@@ -141,6 +142,8 @@ public:
     [[nodiscard]] DeferredRenderTargets& getDeferredRenderTargets() { return m_deferredTargets; }
     [[nodiscard]] shadow::ShadowRenderer& getShadowRenderer() { return m_shadowRenderer; }
     [[nodiscard]] WorldRenderBuffer& getWorldRenderBuffer() { return m_worldRenderBuffer; }
+    [[nodiscard]] RhiDevice& rhiDevice();
+    [[nodiscard]] const RhiDevice& rhiDevice() const;
     void setTerrainStreamingService(TerrainStreamingService* svc);
     void setOverlayRenderer(BlockInteractionOverlayRenderer* renderer) { m_overlayRenderer = renderer; }
     void setDebugService(RenderDebugService* svc) { m_debugService = svc; }
@@ -198,6 +201,7 @@ private:
     Shader* m_entityShadowShader = nullptr;
 
     ResourceMgr* m_resourceMgr = nullptr;
+    std::unique_ptr<RhiDevice> m_rhiDevice;
 
     // Services owned by RenderScene and mirrored here for compatibility/debug controls.
     BlockInteractionOverlayRenderer* m_overlayRenderer = nullptr;

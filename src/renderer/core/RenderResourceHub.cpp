@@ -4,8 +4,11 @@
 
 #include "RenderResourceHub.h"
 
+#include "../../Diagnostics.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiDeviceFactory.h"
 #include "../../particle/ParticleSystem.h"
 #include "../mesh/ChunkMesher.h"
 #include "../../ecs/GameplayRegistry.h"
@@ -18,9 +21,11 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <array>
@@ -86,8 +91,25 @@ RenderResourceHub::~RenderResourceHub() {
     shutdown();
 }
 
-void RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool) {
+bool RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool, const Window& window) {
     m_resourceMgr = &resourceMgr;
+    m_rhiDevice = renderer::rhi::createDefaultRhiDevice();
+    if (!m_rhiDevice) {
+        MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: failed to create RHI device\n");
+        return false;
+    }
+
+    RhiDeviceDesc rhiDesc;
+    rhiDesc.debugName = "GameplayRenderer";
+    rhiDesc.nativeWindow = window.getHandle();
+    rhiDesc.width = window.getWidth();
+    rhiDesc.height = window.getHeight();
+    if (!m_rhiDevice->init(rhiDesc)) {
+        MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: failed to initialize RHI device\n");
+        m_rhiDevice.reset();
+        return false;
+    }
+
     m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
     m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
     if (m_transparentCompositeShader == nullptr) {
@@ -140,6 +162,7 @@ void RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool) {
                                      static_cast<float>(m_meshingDrainTimeBudgetMs),
                                      m_meshingDrainVertexBudget);
     m_meshingService.start(&threadPool);
+    return true;
 }
 
 void RenderResourceHub::shutdown() {
@@ -160,6 +183,20 @@ void RenderResourceHub::shutdown() {
     m_entityShadowShader = nullptr;
     m_entityGBufferShader = nullptr;
     m_particleGBufferShader = nullptr;
+    if (m_rhiDevice) {
+        m_rhiDevice->shutdown();
+        m_rhiDevice.reset();
+    }
+}
+
+RhiDevice& RenderResourceHub::rhiDevice() {
+    assert(m_rhiDevice != nullptr);
+    return *m_rhiDevice;
+}
+
+const RhiDevice& RenderResourceHub::rhiDevice() const {
+    assert(m_rhiDevice != nullptr);
+    return *m_rhiDevice;
 }
 
 void RenderResourceHub::setMeshingSubmitBudget(const int budget) {
