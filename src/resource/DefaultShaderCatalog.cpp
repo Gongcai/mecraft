@@ -59,7 +59,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"particle_gbuffer", SHADERS_DIR "/particle_gbuffer.vert", SHADERS_DIR "/particle_gbuffer.frag"},
     {"rain", SHADERS_DIR "/rain.vert", SHADERS_DIR "/rain.frag"},
     {"postprocess", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/postprocess.frag"},
-    {"blit_texture", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/blit_texture.frag"},
     {"item_model", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model.frag"},
     {"item_model_forward", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model_forward.frag"},
     {"steve", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve.frag"},
