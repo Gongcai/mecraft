@@ -97,11 +97,10 @@ public:
                                       RhiTextureViewHandle swapchainColorView,
                                       const Window& window);
 
-    /// Blit an already composited LDR texture to the back buffer.
-    void blitTextureToBackbuffer(RhiDevice& rhiDevice,
-                                 RhiTextureViewHandle swapchainColorView,
-                                 uint32_t texture,
-                                 const Window& window);
+    /// Blit the internal composited LDR texture to the back buffer.
+    void blitCompositeToBackbuffer(RhiDevice& rhiDevice,
+                                   RhiTextureViewHandle swapchainColorView,
+                                   const Window& window);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -166,16 +165,17 @@ private:
     Shader* m_bloomBlurShader = nullptr;
     Shader* m_exposureDownsampleShader = nullptr;
     Shader* m_exposureResolveShader = nullptr;
-    Shader* m_blitShader = nullptr;
     RhiTextureHandle m_noiseTexture;
 
     // Scene capture FBO
     uint32_t m_sceneFbo = 0;
     uint32_t m_sceneColorTex = 0;
+    RhiTextureHandle m_sceneColorHandle;
     uint32_t m_sceneDepthTex = 0;
 
     uint32_t m_compositeFbo = 0;
     uint32_t m_compositeTex = 0;
+    RhiTextureHandle m_compositeHandle;
     bool m_renderCompositeToTexture = false;
 
     // Bloom chain

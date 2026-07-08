@@ -1,4 +1,5 @@
 #include "PostProcessPass.h"
+#include "../../Diagnostics.h"
 #include "../core/Shader.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cassert>
+#include <iostream>
 
 namespace {
 constexpr GLint kExposureDownsampleSourceIsSceneLocation = 0;
@@ -26,6 +28,47 @@ constexpr GLint kExposureResolveReusePreviousTargetLocation = 5;
 constexpr GLint kBloomExtractSourceLodLocation = 0;
 constexpr GLint kBloomBlurDirectionLocation = 0;
 constexpr GLint kBloomBlurWeightLocation = 1;
+
+RhiTextureHandle registerPostProcessTexture(const uint32_t texture,
+                                            const RhiTextureFormat format,
+                                            const int width,
+                                            const int height,
+                                            const RhiTextureUsageFlags usage) {
+    return renderer::rhi::gl::registerTexture({
+        texture,
+        RhiTextureDimension::Texture2D,
+        format,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height)),
+        1u,
+        1u,
+        1u,
+        usage,
+        false
+    });
+}
+
+bool blitPostProcessTextureToSwapchain(RhiDevice& rhiDevice,
+                                       const RhiTextureViewHandle swapchainColorView,
+                                       const RhiTextureHandle source,
+                                       const int width,
+                                       const int height) {
+    if (!source.isValid() || !renderer::rhi::gl::isTextureRegistered(source) ||
+        !swapchainColorView.isValid() ||
+        !rhiDevice.resizeSwapchain(static_cast<uint32_t>(std::max(1, width)),
+                                   static_cast<uint32_t>(std::max(1, height)))) {
+        return false;
+    }
+
+    RhiTextureBlit blit;
+    blit.src = source;
+    blit.dstView = swapchainColorView;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.blitTexture(blit);
+    rhiDevice.submitFrame(commandList);
+    return true;
+}
 }
 
 PostProcessPass::~PostProcessPass() {
@@ -38,7 +81,6 @@ void PostProcessPass::init(ResourceMgr& resourceMgr) {
     m_bloomBlurShader = resourceMgr.getShader("bloom_blur");
     m_exposureDownsampleShader = resourceMgr.getShader("exposure_downsample");
     m_exposureResolveShader = resourceMgr.getShader("exposure_resolve");
-    m_blitShader = resourceMgr.getShader("blit_texture");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_bayer256");
     glCreateBuffers(1, &m_compositeParamsBuffer);
     glNamedBufferStorage(m_compositeParamsBuffer,
@@ -60,7 +102,6 @@ void PostProcessPass::shutdown() {
     m_bloomBlurShader = nullptr;
     m_exposureDownsampleShader = nullptr;
     m_exposureResolveShader = nullptr;
-    m_blitShader = nullptr;
     m_noiseTexture = {};
     m_sceneCaptured = false;
     m_renderCompositeToTexture = false;
@@ -211,77 +252,33 @@ void PostProcessPass::blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice,
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
-    if (!m_sceneCaptured || m_blitShader == nullptr || m_fullscreenVao == 0) {
-        RhiCommandList& commandList = rhiDevice.beginFrame();
-        bindBackbufferOutput(commandList, swapchainColorView, width, height, false);
-        commandList.endRendering();
-        rhiDevice.submitFrame(commandList);
+    if (!m_sceneCaptured) {
+        return;
+    }
+    if (!m_sceneColorHandle.isValid()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Missing scene capture RHI texture\n");
         return;
     }
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-
-    RhiCommandList& commandList = rhiDevice.beginFrame();
-    bindBackbufferOutput(commandList, swapchainColorView, width, height, true);
-
-    m_blitShader->use();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
-
-    glBindVertexArray(m_fullscreenVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glBindVertexArray(0);
-
-    commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    if (!blitPostProcessTextureToSwapchain(rhiDevice, swapchainColorView, m_sceneColorHandle, width, height)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Failed to blit scene capture through RHI\n");
+    }
 }
 
-void PostProcessPass::blitTextureToBackbuffer(RhiDevice& rhiDevice,
-                                              const RhiTextureViewHandle swapchainColorView,
-                                              const uint32_t texture,
-                                              const Window& window) {
+void PostProcessPass::blitCompositeToBackbuffer(RhiDevice& rhiDevice,
+                                                const RhiTextureViewHandle swapchainColorView,
+                                                const Window& window) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
 
-    if (texture == 0 || m_blitShader == nullptr || m_fullscreenVao == 0) {
-        RhiCommandList& commandList = rhiDevice.beginFrame();
-        bindBackbufferOutput(commandList, swapchainColorView, width, height, false);
-        commandList.endRendering();
-        rhiDevice.submitFrame(commandList);
+    if (!m_compositeHandle.isValid()) {
+        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Missing composite RHI texture\n");
         return;
     }
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    RhiCommandList& commandList = rhiDevice.beginFrame();
-    bindBackbufferOutput(commandList, swapchainColorView, width, height, true);
-
-    m_blitShader->use();
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    glBindVertexArray(m_fullscreenVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glBindVertexArray(0);
-
-    commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    if (!blitPostProcessTextureToSwapchain(rhiDevice, swapchainColorView, m_compositeHandle, width, height)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Failed to blit composite target through RHI\n");
+    }
 }
 
 // --- Internal ---
@@ -598,6 +595,19 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
         return false;
     }
 
+    m_sceneColorHandle = registerPostProcessTexture(
+        m_sceneColorTex,
+        RhiTextureFormat::Rgba16Float,
+        width,
+        height,
+        rhiFlag(RhiTextureUsage::Sampled) |
+            rhiFlag(RhiTextureUsage::ColorAttachment) |
+            rhiFlag(RhiTextureUsage::TransferSrc));
+    if (!m_sceneColorHandle.isValid()) {
+        destroyRenderTargets();
+        return false;
+    }
+
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         const int divisor = 1 << (mip + 1);
         m_bloomMipSize[mip] = glm::ivec2(std::max(1, width / divisor), std::max(1, height / divisor));
@@ -681,6 +691,7 @@ bool PostProcessPass::ensureCompositeTarget(const int width, const int height) {
         m_targetWidth == targetWidth && m_targetHeight == targetHeight) {
         return true;
     }
+    renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
     if (m_compositeTex != 0) {
         glDeleteTextures(1, &m_compositeTex);
         m_compositeTex = 0;
@@ -701,6 +712,25 @@ bool PostProcessPass::ensureCompositeTarget(const int width, const int height) {
     const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
     glNamedFramebufferDrawBuffers(m_compositeFbo, 1, &drawBuffer);
     if (glCheckNamedFramebufferStatus(m_compositeFbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        if (m_compositeTex != 0) {
+            glDeleteTextures(1, &m_compositeTex);
+            m_compositeTex = 0;
+        }
+        if (m_compositeFbo != 0) {
+            glDeleteFramebuffers(1, &m_compositeFbo);
+            m_compositeFbo = 0;
+        }
+        return false;
+    }
+    m_compositeHandle = registerPostProcessTexture(
+        m_compositeTex,
+        RhiTextureFormat::Rgba8Unorm,
+        targetWidth,
+        targetHeight,
+        rhiFlag(RhiTextureUsage::Sampled) |
+            rhiFlag(RhiTextureUsage::ColorAttachment) |
+            rhiFlag(RhiTextureUsage::TransferSrc));
+    if (!m_compositeHandle.isValid()) {
         if (m_compositeTex != 0) {
             glDeleteTextures(1, &m_compositeTex);
             m_compositeTex = 0;
@@ -745,6 +775,8 @@ void PostProcessPass::bindBackbufferOutput(RhiCommandList& commandList,
 }
 
 void PostProcessPass::destroyRenderTargets() {
+    renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneColorHandle);
     if (m_compositeTex != 0) {
         glDeleteTextures(1, &m_compositeTex);
         m_compositeTex = 0;

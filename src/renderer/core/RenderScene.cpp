@@ -350,10 +350,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                         m_settings.upscale.sharpness);
                 }
                 if (!upscaled && postTex != 0) {
-                    m_postProcessPass.blitTextureToBackbuffer(*m_shared.rhiDevice,
-                                                              m_currentContext.swapchainColorView,
-                                                              postTex,
-                                                              request.window);
+                    m_postProcessPass.blitCompositeToBackbuffer(*m_shared.rhiDevice,
+                                                                m_currentContext.swapchainColorView,
+                                                                request.window);
                 } else if (!upscaled) {
                     m_postProcessPass.compositeToBackbuffer(
                         *m_shared.rhiDevice,
