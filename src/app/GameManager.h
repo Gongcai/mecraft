@@ -21,6 +21,8 @@
 #include "../locale/LocaleManager.h"
 #include "../thread/ThreadPool.h"
 
+class RhiDevice;
+
 class GameManager {
 public:
     GameManager();
@@ -32,6 +34,7 @@ public:
 
 private:
     bool initWindow(int width, int height, const char* title);
+    bool initRhiDevice();
     
     [[nodiscard]] AppStateDependencies makeAppStateDependencies();
 
@@ -63,6 +66,7 @@ private:
     UIRenderer m_uiRenderer;
     LocaleManager m_localeManager;
     ThreadPool m_threadPool;
+    std::unique_ptr<RhiDevice> m_rhiDevice;
 
     AppStateMachine m_appStateMachine;
     AppLaunchOptions m_launchOptions{};
