@@ -535,8 +535,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
     if (!registerRhiTextures()) {
         shutdown();
         return false;

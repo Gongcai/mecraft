@@ -38,41 +38,38 @@ bool CommonFrameTargets::ensureSize(int width, int height) {
 
     // Scene color (RGBA16F HDR)
     GLuint sceneColorTex = 0;
-    glGenTextures(1, &sceneColorTex);
-    glBindTexture(GL_TEXTURE_2D, sceneColorTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, width, height, 0, GL_RGBA, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glCreateTextures(GL_TEXTURE_2D, 1, &sceneColorTex);
+    glTextureStorage2D(sceneColorTex, 1, GL_RGBA16F, width, height);
+    glTextureParameteri(sceneColorTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTextureParameteri(sceneColorTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTextureParameteri(sceneColorTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(sceneColorTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Scene depth (DEPTH32F)
     GLuint sceneDepthTex = 0;
-    glGenTextures(1, &sceneDepthTex);
-    glBindTexture(GL_TEXTURE_2D, sceneDepthTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glCreateTextures(GL_TEXTURE_2D, 1, &sceneDepthTex);
+    glTextureStorage2D(sceneDepthTex, 1, GL_DEPTH_COMPONENT32F, width, height);
+    glTextureParameteri(sceneDepthTex, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTextureParameteri(sceneDepthTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(sceneDepthTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(sceneDepthTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Scene color FBO
     GLuint sceneColorFbo = 0;
-    glGenFramebuffers(1, &sceneColorFbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, sceneColorFbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, sceneColorTex, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, sceneDepthTex, 0);
+    glCreateFramebuffers(1, &sceneColorFbo);
+    glNamedFramebufferTexture(sceneColorFbo, GL_COLOR_ATTACHMENT0, sceneColorTex, 0);
+    glNamedFramebufferTexture(sceneColorFbo, GL_DEPTH_ATTACHMENT, sceneDepthTex, 0);
+    const GLenum sceneDrawBuffer = GL_COLOR_ATTACHMENT0;
+    glNamedFramebufferDrawBuffer(sceneColorFbo, sceneDrawBuffer);
+    glNamedFramebufferReadBuffer(sceneColorFbo, sceneDrawBuffer);
 
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    if (glCheckNamedFramebufferStatus(sceneColorFbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
         MECRAFT_LOG_FPRINTF(stderr, "CommonFrameTargets: scene color FBO incomplete\n");
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         if (sceneColorFbo != 0) { glDeleteFramebuffers(1, &sceneColorFbo); }
         if (sceneColorTex != 0) { glDeleteTextures(1, &sceneColorTex); }
         if (sceneDepthTex != 0) { glDeleteTextures(1, &sceneDepthTex); }
         return false;
     }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     RhiTextureHandle sceneColor = renderer::rhi::gl::registerTexture({
         sceneColorTex,

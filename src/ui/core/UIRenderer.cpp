@@ -847,16 +847,14 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
         }
 
         if (m_backdropBlurFbo[i] == 0) {
-            glGenFramebuffers(1, &m_backdropBlurFbo[i]);
+            glCreateFramebuffers(1, &m_backdropBlurFbo[i]);
         }
-        glBindFramebuffer(GL_FRAMEBUFFER, m_backdropBlurFbo[i]);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_backdropBlurTex[i], 0);
+        glNamedFramebufferTexture(m_backdropBlurFbo[i], GL_COLOR_ATTACHMENT0, m_backdropBlurTex[i], 0);
         const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-        glDrawBuffers(1, &drawBuffer);
+        glNamedFramebufferDrawBuffers(m_backdropBlurFbo[i], 1, &drawBuffer);
     }
 
     glBindTexture(GL_TEXTURE_2D, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     if (!m_backdropSource.isValid() ||
         !m_backdropBlur[0].isValid() ||
