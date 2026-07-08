@@ -317,6 +317,7 @@ struct GlTextureViewRecord {
     RhiTextureFormat resolvedFormat = RhiTextureFormat::Undefined;
     GlFormatInfo format;
     bool swapchainBackbuffer = false;
+    bool swapchainDepthStencil = false;
     bool active = false;
 };
 
@@ -418,7 +419,9 @@ struct GlRhiDeviceData {
     std::vector<GlFramebufferRecord> framebufferCache;
 
     RhiTextureViewHandle swapchainColorView;
+    RhiTextureViewHandle swapchainDepthStencilView;
     RhiTextureFormat swapchainFormat = RhiTextureFormat::Rgba8Unorm;
+    RhiTextureFormat swapchainDepthStencilFormat = RhiTextureFormat::Depth24;
     uint32_t swapchainWidth = 1u;
     uint32_t swapchainHeight = 1u;
     GLuint currentFramebuffer = 0u;
@@ -503,9 +506,11 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     }
 
     RhiTextureViewHandle depthView;
+    const GlTextureViewRecord* depthViewRecord = nullptr;
     if (info.depthStencilAttachment != nullptr && info.depthStencilAttachment->view.isValid()) {
         depthView = info.depthStencilAttachment->view;
-        if (recordForHandle(data.textureViews, data.textureViewRecords, depthView) == nullptr) {
+        depthViewRecord = recordForHandle(data.textureViews, data.textureViewRecords, depthView);
+        if (depthViewRecord == nullptr) {
             logRhiError("beginRendering received an invalid depth attachment view");
             return;
         }
@@ -519,8 +524,17 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
             break;
         }
     }
-    if (renderToSwapchain && (colorViews.size() != 1u || depthView.isValid())) {
-        logRhiError("beginRendering requires the swapchain color view to be the only attachment");
+    if (renderToSwapchain && colorViews.size() != 1u) {
+        logRhiError("beginRendering requires exactly one swapchain color attachment");
+        return;
+    }
+    if (renderToSwapchain && depthView.isValid() &&
+        (depthViewRecord == nullptr || !depthViewRecord->swapchainDepthStencil)) {
+        logRhiError("beginRendering requires the swapchain depth-stencil view for swapchain depth output");
+        return;
+    }
+    if (!renderToSwapchain && depthViewRecord != nullptr && depthViewRecord->swapchainDepthStencil) {
+        logRhiError("beginRendering requires swapchain depth-stencil with swapchain color output");
         return;
     }
 
@@ -1168,28 +1182,55 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_data->swapchainWidth = static_cast<uint32_t>(desc.width);
     m_data->swapchainHeight = static_cast<uint32_t>(desc.height);
     m_data->swapchainFormat = RhiTextureFormat::Rgba8Unorm;
+    m_data->swapchainDepthStencilFormat = RhiTextureFormat::Depth24;
 
     RhiTextureViewDesc swapchainViewDesc;
     swapchainViewDesc.viewType = RhiTextureViewType::Texture2D;
     swapchainViewDesc.format = m_data->swapchainFormat;
+    RhiTextureViewDesc swapchainDepthViewDesc;
+    swapchainDepthViewDesc.viewType = RhiTextureViewType::Texture2D;
+    swapchainDepthViewDesc.format = m_data->swapchainDepthStencilFormat;
     GlFormatInfo swapchainFormat;
     if (!toGlFormatInfo(m_data->swapchainFormat, swapchainFormat)) {
         logRhiError("init received an unsupported swapchain format");
         m_initialized = false;
         return false;
     }
+    GlFormatInfo swapchainDepthFormat;
+    if (!toGlFormatInfo(m_data->swapchainDepthStencilFormat, swapchainDepthFormat)) {
+        logRhiError("init received an unsupported swapchain depth-stencil format");
+        m_initialized = false;
+        return false;
+    }
 
     m_data->swapchainColorView = m_data->textureViews.allocate();
-    const uint32_t slot = m_data->swapchainColorView.index - 1u;
-    if (slot >= m_data->textureViewRecords.size()) {
-        m_data->textureViewRecords.resize(slot + 1u);
+    const uint32_t colorSlot = m_data->swapchainColorView.index - 1u;
+    if (colorSlot >= m_data->textureViewRecords.size()) {
+        m_data->textureViewRecords.resize(colorSlot + 1u);
     }
-    m_data->textureViewRecords[slot] = {
+    m_data->textureViewRecords[colorSlot] = {
         0u,
         GL_TEXTURE_2D,
         swapchainViewDesc,
         m_data->swapchainFormat,
         swapchainFormat,
+        true,
+        false,
+        true
+    };
+
+    m_data->swapchainDepthStencilView = m_data->textureViews.allocate();
+    const uint32_t depthSlot = m_data->swapchainDepthStencilView.index - 1u;
+    if (depthSlot >= m_data->textureViewRecords.size()) {
+        m_data->textureViewRecords.resize(depthSlot + 1u);
+    }
+    m_data->textureViewRecords[depthSlot] = {
+        0u,
+        GL_TEXTURE_2D,
+        swapchainDepthViewDesc,
+        m_data->swapchainDepthStencilFormat,
+        swapchainDepthFormat,
+        false,
         true,
         true
     };
@@ -1254,6 +1295,7 @@ void GlRhiDevice::shutdown() {
 
     m_data->framebufferCache.clear();
     m_data->swapchainColorView = {};
+    m_data->swapchainDepthStencilView = {};
     m_data->swapchainWidth = 1u;
     m_data->swapchainHeight = 1u;
     m_data->bindGroups.clear();
@@ -1407,7 +1449,7 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     if (slot >= m_data->textureViewRecords.size()) {
         m_data->textureViewRecords.resize(slot + 1u);
     }
-    m_data->textureViewRecords[slot] = {textureView, viewTarget, desc, resolvedFormat, format, false, true};
+    m_data->textureViewRecords[slot] = {textureView, viewTarget, desc, resolvedFormat, format, false, false, true};
     return handle;
 }
 
@@ -1640,8 +1682,16 @@ RhiTextureViewHandle GlRhiDevice::currentSwapchainColorView() const {
     return m_initialized && m_data ? m_data->swapchainColorView : RhiTextureViewHandle{};
 }
 
+RhiTextureViewHandle GlRhiDevice::currentSwapchainDepthStencilView() const {
+    return m_initialized && m_data ? m_data->swapchainDepthStencilView : RhiTextureViewHandle{};
+}
+
 RhiTextureFormat GlRhiDevice::swapchainColorFormat() const {
     return m_data ? m_data->swapchainFormat : RhiTextureFormat::Undefined;
+}
+
+RhiTextureFormat GlRhiDevice::swapchainDepthStencilFormat() const {
+    return m_data ? m_data->swapchainDepthStencilFormat : RhiTextureFormat::Undefined;
 }
 
 bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
@@ -1654,6 +1704,12 @@ bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
         recordForHandle(m_data->textureViews, m_data->textureViewRecords, m_data->swapchainColorView);
     if (swapchainView == nullptr || !swapchainView->swapchainBackbuffer) {
         logRhiError("resizeSwapchain requires a live swapchain color view");
+        return false;
+    }
+    GlTextureViewRecord* swapchainDepthView =
+        recordForHandle(m_data->textureViews, m_data->textureViewRecords, m_data->swapchainDepthStencilView);
+    if (swapchainDepthView == nullptr || !swapchainDepthView->swapchainDepthStencil) {
+        logRhiError("resizeSwapchain requires a live swapchain depth-stencil view");
         return false;
     }
 

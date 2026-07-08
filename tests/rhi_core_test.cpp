@@ -270,8 +270,18 @@ bool testGlRhiSwapchainBackbuffer() {
         device.shutdown();
         return false;
     }
+    const RhiTextureViewHandle swapchainDepthView = device.currentSwapchainDepthStencilView();
+    if (!requireTrue(swapchainDepthView.isValid(), "swapchain depth-stencil view must be valid")) {
+        device.shutdown();
+        return false;
+    }
     if (!requireTrue(device.swapchainColorFormat() == RhiTextureFormat::Rgba8Unorm,
                      "OpenGL swapchain format must be RGBA8 unorm")) {
+        device.shutdown();
+        return false;
+    }
+    if (!requireTrue(device.swapchainDepthStencilFormat() == RhiTextureFormat::Depth24,
+                     "OpenGL swapchain depth-stencil format must be depth24")) {
         device.shutdown();
         return false;
     }
@@ -333,9 +343,10 @@ void main() {
     pipelineDesc.fragmentShader = fragmentShader;
     pipelineDesc.layout = pipelineLayout;
     pipelineDesc.raster.cullMode = RhiCullMode::None;
-    pipelineDesc.depthStencil.depthTestEnabled = false;
-    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.colorFormats.push_back(device.swapchainColorFormat());
+    pipelineDesc.depthFormat = device.swapchainDepthStencilFormat();
     const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
     if (!requireTrue(pipeline.isValid(), "swapchain graphics pipeline must be created")) {
         device.shutdown();
@@ -351,11 +362,18 @@ void main() {
     colorAttachment.clearColor[2] = 0.0f;
     colorAttachment.clearColor[3] = 1.0f;
 
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = swapchainDepthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "swapchain-test-rendering";
     renderingInfo.renderArea = {0, 0, 32u, 32u};
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
 
     RhiCommandList& cmd = device.beginFrame();
     cmd.beginRendering(renderingInfo);
@@ -365,6 +383,8 @@ void main() {
 
     std::array<uint8_t, 4> pixel{};
     glReadPixels(16, 16, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+    float centerDepth = 1.0f;
+    glReadPixels(16, 16, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &centerDepth);
     cmd.endRendering();
     device.submitFrame(cmd);
 
@@ -375,6 +395,12 @@ void main() {
                   << static_cast<int>(pixel[1]) << ", "
                   << static_cast<int>(pixel[2]) << ", "
                   << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+    if (!requireTrue(centerDepth > 0.49f && centerDepth < 0.51f,
+                     "swapchain depth attachment must receive fullscreen triangle depth")) {
+        std::cerr << "center depth=" << centerDepth << '\n';
         device.shutdown();
         return false;
     }

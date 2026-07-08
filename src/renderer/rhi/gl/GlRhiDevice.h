@@ -77,7 +77,9 @@ public:
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
 
     [[nodiscard]] RhiTextureViewHandle currentSwapchainColorView() const override;
+    [[nodiscard]] RhiTextureViewHandle currentSwapchainDepthStencilView() const override;
     [[nodiscard]] RhiTextureFormat swapchainColorFormat() const override;
+    [[nodiscard]] RhiTextureFormat swapchainDepthStencilFormat() const override;
     bool resizeSwapchain(uint32_t width, uint32_t height) override;
 
     void destroyBuffer(RhiBufferHandle handle) override;
