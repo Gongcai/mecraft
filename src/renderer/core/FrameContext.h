@@ -157,7 +157,9 @@ struct FrameContext {
 
     // Current swapchain output target.
     RhiTextureViewHandle swapchainColorView;
+    RhiTextureViewHandle swapchainDepthStencilView;
     RhiTextureFormat swapchainColorFormat = RhiTextureFormat::Undefined;
+    RhiTextureFormat swapchainDepthStencilFormat = RhiTextureFormat::Undefined;
 
     // TAA jitter
     glm::vec2 jitter = glm::vec2(0.0f);

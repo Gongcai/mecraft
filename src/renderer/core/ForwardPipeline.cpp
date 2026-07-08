@@ -2,6 +2,9 @@
 #include "RenderScene.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../mesh/WorldRenderBuffer.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../targets/CommonFrameTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../renderers/BlockEntityRenderer.h"
@@ -50,6 +53,7 @@ void ForwardPipeline::shutdown() {
     m_commonTargets = nullptr;
     m_skyRenderer = nullptr;
     m_resourceMgr = nullptr;
+    m_backbufferCommandList = nullptr;
     m_transparentBatch.clear();
     m_transparentPassPlan = {};
     m_transparentEntries.clear();
@@ -61,7 +65,9 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
         return {};
     }
 
-    beginBackbufferFrame(ctx);
+    if (!beginBackbufferFrame(ctx)) {
+        return {};
+    }
 
     // 1. Sky background (sun, moon, clouds, gradient)
     renderSky(ctx);
@@ -75,15 +81,49 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     // 4. Transparent terrain (water, glass, etc.)
     renderTransparent(ctx, settings);
 
+    endBackbufferFrame();
+
     // 5. Build and return frame output
     return buildFrameOutput(ctx);
 }
 
-void ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDrawBuffer(GL_BACK);
-    glReadBuffer(GL_BACK);
-    glViewport(0, 0, std::max(1, ctx.frameWidth), std::max(1, ctx.frameHeight));
+bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
+    m_backbufferCommandList = nullptr;
+    if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
+        !ctx.swapchainColorView.isValid() || !ctx.swapchainDepthStencilView.isValid()) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = ctx.swapchainColorView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = ctx.swapchainDepthStencilView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "ForwardBackbuffer";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
+        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    RhiCommandList& commandList = m_shared->rhiDevice->beginFrame();
+    commandList.beginRendering(renderingInfo);
+    m_backbufferCommandList = &commandList;
 
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
@@ -91,8 +131,17 @@ void ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
-    glClearDepth(1.0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    return true;
+}
+
+void ForwardPipeline::endBackbufferFrame() {
+    if (m_backbufferCommandList == nullptr || m_shared == nullptr || m_shared->rhiDevice == nullptr) {
+        return;
+    }
+
+    m_backbufferCommandList->endRendering();
+    m_shared->rhiDevice->submitFrame(*m_backbufferCommandList);
+    m_backbufferCommandList = nullptr;
 }
 
 // ============================================================================

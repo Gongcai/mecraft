@@ -577,6 +577,7 @@ bool RenderScene::isLightDebugActive() const {
 bool RenderScene::isNewPipelineReady() const {
     if (!m_activePipeline || !m_shared.rhiDevice ||
         !m_shared.rhiDevice->currentSwapchainColorView().isValid() ||
+        !m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid() ||
         !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
         return false;
     }
@@ -603,6 +604,7 @@ const char* RenderScene::getPipelineStatus() const {
     if (!m_activePipeline) return "No active pipeline";
     if (!m_shared.rhiDevice) return "Missing: rhiDevice";
     if (!m_shared.rhiDevice->currentSwapchainColorView().isValid()) return "Missing: swapchainColorView";
+    if (!m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid()) return "Missing: swapchainDepthStencilView";
     if (!m_shared.terrain) return "Missing: terrain";
     if (!m_shared.sky) return "Missing: sky";
     if (!m_shared.resources) return "Missing: resources";
@@ -748,7 +750,9 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.frameWidth = internalSize.x;
     ctx.frameHeight = internalSize.y;
     ctx.swapchainColorView = m_shared.rhiDevice->currentSwapchainColorView();
+    ctx.swapchainDepthStencilView = m_shared.rhiDevice->currentSwapchainDepthStencilView();
     ctx.swapchainColorFormat = m_shared.rhiDevice->swapchainColorFormat();
+    ctx.swapchainDepthStencilFormat = m_shared.rhiDevice->swapchainDepthStencilFormat();
 
     // Frame timing
     ctx.frameIndex = m_frameCounter++;

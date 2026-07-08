@@ -9,6 +9,7 @@
 #include <vector>
 
 class ResourceMgr;
+class RhiCommandList;
 class TerrainRenderer;
 class TerrainRenderCache;
 class WorldRenderBuffer;
@@ -32,7 +33,8 @@ public:
     bool supportsDebugView() const override { return false; }
 
 private:
-    void beginBackbufferFrame(const FrameContext& ctx);
+    bool beginBackbufferFrame(const FrameContext& ctx);
+    void endBackbufferFrame();
     void renderSky(const FrameContext& ctx);
     void renderTerrain(const FrameContext& ctx, const RenderSettings& settings);
     void renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings);
@@ -50,6 +52,7 @@ private:
     GameplaySkyRenderer* m_skyRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     SharedRenderResources* m_shared = nullptr;
+    RhiCommandList* m_backbufferCommandList = nullptr;
 
     // Transparent batch state (populated by renderTerrain, consumed by renderTransparent)
     std::vector<DrawBatchEntry> m_transparentBatch;
