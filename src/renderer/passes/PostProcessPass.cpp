@@ -149,25 +149,21 @@ void PostProcessPass::setFrameEffects(const PostProcessEffects& effects) {
     m_effects.cloudWetness = std::clamp(m_effects.cloudWetness, 0.0f, 1.0f);
 }
 
-void PostProcessPass::beginSceneCapture(const Window& window) {
-    beginSceneCapture(window.getWidth(), window.getHeight());
+bool PostProcessPass::beginSceneCapture(const Window& window) {
+    return beginSceneCapture(window.getWidth(), window.getHeight());
 }
 
-void PostProcessPass::beginSceneCapture(const int requestedWidth, const int requestedHeight) {
+bool PostProcessPass::beginSceneCapture(const int requestedWidth, const int requestedHeight) {
     m_sceneCaptured = false;
 
     const int width = requestedWidth;
     const int height = requestedHeight;
     if (m_postProcessShader == nullptr || width <= 0 || height <= 0) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, std::max(1, width), std::max(1, height));
-        return;
+        return false;
     }
 
     if (!ensureRenderTargets(width, height)) {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, width, height);
-        return;
+        return false;
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, m_sceneFbo);
@@ -175,6 +171,7 @@ void PostProcessPass::beginSceneCapture(const int requestedWidth, const int requ
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
     m_sceneCaptured = true;
+    return true;
 }
 
 void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,

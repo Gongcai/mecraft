@@ -76,8 +76,9 @@ public:
     [[nodiscard]] const char* name() const override { return "PostProcess"; }
 
     /// Start capturing world-space rendering into an off-screen scene target.
-    void beginSceneCapture(const Window& window);
-    void beginSceneCapture(int width, int height);
+    /// @return true when the scene capture framebuffer is bound for rendering.
+    [[nodiscard]] bool beginSceneCapture(const Window& window);
+    [[nodiscard]] bool beginSceneCapture(int width, int height);
 
     /// Composite captured scene to back buffer with active effects.
     void compositeToBackbuffer(RhiDevice& rhiDevice,

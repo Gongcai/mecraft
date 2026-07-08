@@ -1,4 +1,5 @@
 #include "RenderScene.h"
+#include "../../Diagnostics.h"
 #include "RenderResourceHub.h"
 #include "SettingsMapper.h"
 #include "ForwardPipeline.h"
@@ -16,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <iostream>
 #include <utility>
 #include "engine/platform/Window.h"
 #include "../../particle/RainRenderer.h"
@@ -244,8 +246,10 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const glm::ivec2 frameRenderSize = skipPostProcess
         ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
         : internalRenderSize(request.window);
-    if (!skipPostProcess) {
-        m_postProcessPass.beginSceneCapture(frameRenderSize.x, frameRenderSize.y);
+    if (!skipPostProcess && !m_postProcessPass.beginSceneCapture(frameRenderSize.x, frameRenderSize.y)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to begin post-process scene capture\n");
+        m_terrainStreamingService.endFrame();
+        return;
     }
 
     const bool lightDebugActive = isLightDebugActive();
