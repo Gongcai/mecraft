@@ -4,11 +4,75 @@
 #include "MainMenuAppState.h"
 #include "../../Diagnostics.h"
 #include "../../game/Game.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiResources.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <iostream>
 
-#include <glad/glad.h>
+namespace {
+
+bool beginLoadingPass(RhiDevice& rhiDevice,
+                      const Window& window,
+                      RhiCommandList*& commandList) {
+    const int width = std::max(1, window.getWidth());
+    const int height = std::max(1, window.getHeight());
+    if (!rhiDevice.resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
+        return false;
+    }
+
+    const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
+    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
+    if (!colorView.isValid() || !depthView.isValid()) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = colorView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.03f;
+    colorAttachment.clearColor[1] = 0.04f;
+    colorAttachment.clearColor[2] = 0.05f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "LoadingScreen";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height)
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    commandList = &rhiDevice.beginFrame();
+    commandList->beginRendering(renderingInfo);
+    return true;
+}
+
+void endLoadingPass(RhiDevice& rhiDevice,
+                    RhiCommandList*& commandList) {
+    if (commandList == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    rhiDevice.submitFrame(*commandList);
+    commandList = nullptr;
+}
+
+} // namespace
 
 LoadingAppState::LoadingAppState(AppStateDependencies deps, GameSessionConfig config)
     : m_deps(deps), m_config(std::move(config)) {
@@ -78,10 +142,15 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
 
 void LoadingAppState::render(const double frameTime) {
     (void)frameTime;
-    glClearColor(0.03f, 0.04f, 0.05f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    RhiCommandList* commandList = nullptr;
+    if (!beginLoadingPass(m_deps.rhiDevice, m_deps.window, commandList)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
+        return;
+    }
 
     m_deps.uiRenderer.renderSceneOnly(m_deps.window, m_deps.input.snapshot());
+    endLoadingPass(m_deps.rhiDevice, commandList);
+    m_deps.rhiDevice.present();
     m_deps.window.swapBuffers();
     m_firstFrameRendered = true;
 }
