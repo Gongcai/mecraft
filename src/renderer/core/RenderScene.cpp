@@ -4,6 +4,7 @@
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/RhiDevice.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/BlockEntityRenderer.h"
@@ -566,7 +567,9 @@ bool RenderScene::isLightDebugActive() const {
 }
 
 bool RenderScene::isNewPipelineReady() const {
-    if (!m_activePipeline || !m_shared.rhiDevice || !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
+    if (!m_activePipeline || !m_shared.rhiDevice ||
+        !m_shared.rhiDevice->currentSwapchainColorView().isValid() ||
+        !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
         return false;
     }
     // Deferred pipeline requires deferredTargets; forward pipeline does not.
@@ -591,6 +594,7 @@ void RenderScene::setNewPipelineActive(bool active) {
 const char* RenderScene::getPipelineStatus() const {
     if (!m_activePipeline) return "No active pipeline";
     if (!m_shared.rhiDevice) return "Missing: rhiDevice";
+    if (!m_shared.rhiDevice->currentSwapchainColorView().isValid()) return "Missing: swapchainColorView";
     if (!m_shared.terrain) return "Missing: terrain";
     if (!m_shared.sky) return "Missing: sky";
     if (!m_shared.resources) return "Missing: resources";
@@ -735,6 +739,8 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     const glm::ivec2 internalSize = internalRenderSize(window);
     ctx.frameWidth = internalSize.x;
     ctx.frameHeight = internalSize.y;
+    ctx.swapchainColorView = m_shared.rhiDevice->currentSwapchainColorView();
+    ctx.swapchainColorFormat = m_shared.rhiDevice->swapchainColorFormat();
 
     // Frame timing
     ctx.frameIndex = m_frameCounter++;

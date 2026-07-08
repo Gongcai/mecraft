@@ -1,6 +1,9 @@
 #ifndef MECRAFT_FRAME_CONTEXT_H
 #define MECRAFT_FRAME_CONTEXT_H
 
+#include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiTypes.h"
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstdint>
@@ -151,6 +154,10 @@ struct FrameContext {
     // Screen dimensions (populated from Window at frame start)
     int frameWidth = 0;
     int frameHeight = 0;
+
+    // Current swapchain output target.
+    RhiTextureViewHandle swapchainColorView;
+    RhiTextureFormat swapchainColorFormat = RhiTextureFormat::Undefined;
 
     // TAA jitter
     glm::vec2 jitter = glm::vec2(0.0f);
