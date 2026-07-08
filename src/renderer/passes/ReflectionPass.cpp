@@ -1,6 +1,10 @@
 #include "ReflectionPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -49,13 +53,38 @@ void ReflectionPass::execute(const FrameContext& ctx, const RenderSettings& sett
 void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSettings& settings,
                                        DeferredRenderTargets& targets) {
     if (m_reflectionShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindReflection();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.reflectionTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Reflection";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
     m_reflectionShader->use();
     m_reflectionShader->setInt("uSceneLightingTex", 0);
@@ -125,6 +154,8 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     glBindTexture(GL_TEXTURE_3D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSettings& reflection,

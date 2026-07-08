@@ -2044,14 +2044,48 @@ bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool DeferredRenderTargets::ensureReflectionTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_reflectionView.isValid()) {
+        return true;
+    }
+
+    if (!m_reflectionHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_reflectionHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_reflectionView = rhiDevice.createTextureView(desc);
+    if (!m_reflectionView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_velocityView);
+    }
+    if (m_rhiViewDevice != nullptr && m_reflectionView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_reflectionView);
     }
     if (m_rhiViewDevice != nullptr && m_cloudView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_cloudView);
     }
     m_velocityView = {};
+    m_reflectionView = {};
     m_cloudView = {};
     m_rhiViewDevice = nullptr;
 }

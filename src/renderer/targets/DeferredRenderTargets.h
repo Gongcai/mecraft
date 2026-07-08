@@ -122,6 +122,8 @@ public:
     [[nodiscard]] RhiTextureHandle transparentCompositeDepthTextureHandle() const { return m_transparentCompositeDepthHandle; }
     [[nodiscard]] RhiTextureHandle halfResTextureHandle() const { return m_halfResHandle; }
     [[nodiscard]] RhiTextureHandle reflectionTextureHandle() const { return m_reflectionHandle; }
+    [[nodiscard]] RhiTextureViewHandle reflectionTextureViewHandle() const { return m_reflectionView; }
+    bool ensureReflectionTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle reflectionTemporalScratchTextureHandle() const { return m_reflectionTemporalScratchHandle; }
     [[nodiscard]] RhiTextureHandle cloudTextureHandle() const { return m_cloudHandle; }
     [[nodiscard]] RhiTextureViewHandle cloudTextureViewHandle() const { return m_cloudView; }
@@ -317,6 +319,7 @@ private:
     uint32_t m_reflectionFbo = 0;
     uint32_t m_reflectionTex = 0;
     RhiTextureHandle m_reflectionHandle;
+    RhiTextureViewHandle m_reflectionView;
 
     // Reflection temporal scratch: holds filtered reflection copy while
     // temporal pass reads it and writes blended result to m_reflectionFbo.
