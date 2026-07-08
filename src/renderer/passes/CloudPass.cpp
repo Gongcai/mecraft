@@ -1,6 +1,10 @@
 #include "CloudPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -51,16 +55,42 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         return;
     }
 
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureCloudTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
+
     m_lastCameraPos = ctx.camera.position;
     m_lastWeatherSignal = ctx.weather.wetness + ctx.weather.storm + ctx.weather.lightningFlash * 4.0f;
     m_hasRenderedClouds = true;
 
-    targets.bindCloud();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.cloudTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Cloud";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
     m_cloudShader->use();
     m_cloudShader->setInt("uDepthTex", 0);
@@ -146,4 +176,6 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     glBindTexture(GL_TEXTURE_3D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }

@@ -1985,11 +1985,13 @@ bool DeferredRenderTargets::registerAtmosphereLutTexture() {
 }
 
 bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
-    if (m_velocityView.isValid() && m_rhiViewDevice == &rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_velocityView.isValid()) {
         return true;
     }
 
-    destroyRhiTextureViews();
     if (!m_velocityHandle.isValid()) {
         return false;
     }
@@ -2012,11 +2014,45 @@ bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_cloudView.isValid()) {
+        return true;
+    }
+
+    if (!m_cloudHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_cloudHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_cloudView = rhiDevice.createTextureView(desc);
+    if (!m_cloudView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_velocityView);
     }
+    if (m_rhiViewDevice != nullptr && m_cloudView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_cloudView);
+    }
     m_velocityView = {};
+    m_cloudView = {};
     m_rhiViewDevice = nullptr;
 }
 

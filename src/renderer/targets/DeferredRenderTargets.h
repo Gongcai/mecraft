@@ -124,6 +124,8 @@ public:
     [[nodiscard]] RhiTextureHandle reflectionTextureHandle() const { return m_reflectionHandle; }
     [[nodiscard]] RhiTextureHandle reflectionTemporalScratchTextureHandle() const { return m_reflectionTemporalScratchHandle; }
     [[nodiscard]] RhiTextureHandle cloudTextureHandle() const { return m_cloudHandle; }
+    [[nodiscard]] RhiTextureViewHandle cloudTextureViewHandle() const { return m_cloudView; }
+    bool ensureCloudTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] uint32_t skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
     [[nodiscard]] RhiTextureHandle skyCaptureTextureHandle() const { return m_skyCaptureHandle; }
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
@@ -325,6 +327,7 @@ private:
     uint32_t m_cloudFbo = 0;
     uint32_t m_cloudTex = 0;
     RhiTextureHandle m_cloudHandle;
+    RhiTextureViewHandle m_cloudView;
 
     uint32_t m_skyCaptureFbo = 0;
     uint32_t m_skyCaptureTex = 0;
