@@ -376,7 +376,6 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
         m_autoExposureSampleAccumulator = 0.0;
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
