@@ -1,9 +1,111 @@
 #include "MainMenuAppState.h"
 
 #include "../AppSettings.h"
+#include "../../Diagnostics.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiResources.h"
 #include "../../save/SaveManager.h"
 
-#include <glad/glad.h>
+#include <algorithm>
+#include <iostream>
+
+namespace {
+
+bool beginMenuClearPass(RhiDevice& rhiDevice,
+                        const Window& window,
+                        RhiCommandList*& commandList) {
+    const int width = std::max(1, window.getWidth());
+    const int height = std::max(1, window.getHeight());
+    if (!rhiDevice.resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
+        return false;
+    }
+
+    const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
+    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
+    if (!colorView.isValid() || !depthView.isValid()) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = colorView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "MainMenuClear";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height)
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    commandList = &rhiDevice.beginFrame();
+    commandList->beginRendering(renderingInfo);
+    return true;
+}
+
+bool beginMenuOverlayPass(RhiDevice& rhiDevice,
+                          const Window& window,
+                          RhiCommandList*& commandList) {
+    const int width = std::max(1, window.getWidth());
+    const int height = std::max(1, window.getHeight());
+    if (!rhiDevice.resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
+        return false;
+    }
+
+    const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
+    if (!colorView.isValid()) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = colorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "MainMenuOverlay";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height)
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    commandList = &rhiDevice.beginFrame();
+    commandList->beginRendering(renderingInfo);
+    return true;
+}
+
+void endMenuPass(RhiDevice& rhiDevice,
+                 RhiCommandList*& commandList) {
+    if (commandList == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    rhiDevice.submitFrame(*commandList);
+    commandList = nullptr;
+}
+
+} // namespace
 
 // ---------------------------------------------------------------------------
 // Construction
@@ -243,16 +345,26 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
 
 void MainMenuAppState::render(double frameTime) {
     (void)frameTime;
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    RhiCommandList* commandList = nullptr;
+    if (!beginMenuClearPass(m_deps.rhiDevice, m_deps.window, commandList)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu clear pass\n");
+        return;
+    }
+    endMenuPass(m_deps.rhiDevice, commandList);
 
     m_skyboxRenderer.render(m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f);
 
+    if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.window, commandList)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
+        return;
+    }
     m_deps.uiRenderer.renderSceneOnly(m_deps.window, m_deps.input.snapshot());
 
     if (m_transitioningToGame) {
         m_transition.render(m_deps.window.getWidth(), m_deps.window.getHeight());
     }
 
+    endMenuPass(m_deps.rhiDevice, commandList);
+    m_deps.rhiDevice.present();
     m_deps.window.swapBuffers();
 }
