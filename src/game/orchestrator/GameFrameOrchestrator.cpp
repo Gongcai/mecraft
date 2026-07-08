@@ -404,6 +404,7 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 #ifdef MECRAFT_DEBUG
     const auto preSwapEnd = std::chrono::steady_clock::now();
 #endif
+    renderer.rhiDevice().present();
     window.swapBuffers();
 
 #ifdef MECRAFT_DEBUG
