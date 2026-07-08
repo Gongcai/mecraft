@@ -311,6 +311,14 @@ struct GlTextureRecord {
     bool active = false;
 };
 
+struct GlResolvedTextureRecord {
+    GLuint texture = 0u;
+    GLenum target = 0u;
+    RhiTextureDesc desc;
+    GlFormatInfo format;
+    bool valid = false;
+};
+
 struct GlTextureViewRecord {
     GLuint texture = 0u;
     GLenum target = 0u;
@@ -450,10 +458,10 @@ struct GlBlitEndpoint {
     return std::max(1u, extent >> mipLevel);
 }
 
-[[nodiscard]] bool resolveTextureHandleForBlit(GlRhiDeviceData& data,
-                                               const RhiTextureHandle handle,
-                                               const uint32_t mipLevel,
-                                               GlBlitEndpoint& endpoint) {
+[[nodiscard]] bool resolveTextureRecord(GlRhiDeviceData& data,
+                                        const RhiTextureHandle handle,
+                                        GlResolvedTextureRecord& resolved) {
+    resolved = {};
     if (!handle.isValid()) {
         return false;
     }
@@ -462,52 +470,68 @@ struct GlBlitEndpoint {
     renderer::rhi::gl::GlRhiTextureRegistration registration;
     const bool registered = renderer::rhi::gl::textureRegistration(handle, registration);
     if (deviceRecord != nullptr && registered) {
-        logRhiError("blitTexture received an ambiguous texture handle");
         return false;
     }
 
     if (deviceRecord != nullptr) {
-        if (mipLevel >= deviceRecord->desc.mipLevels) {
-            return false;
-        }
-        endpoint.texture = deviceRecord->texture;
-        endpoint.target = deviceRecord->target;
-        endpoint.desc = deviceRecord->desc;
-        endpoint.desc.width = mipExtent(deviceRecord->desc.width, mipLevel);
-        endpoint.desc.height = mipExtent(deviceRecord->desc.height, mipLevel);
-        endpoint.desc.mipLevels = 1u;
-        endpoint.format = deviceRecord->format;
-        endpoint.attachmentMip = mipLevel;
-        endpoint.valid = true;
+        resolved.texture = deviceRecord->texture;
+        resolved.target = deviceRecord->target;
+        resolved.desc = deviceRecord->desc;
+        resolved.format = deviceRecord->format;
+        resolved.valid = true;
         return true;
     }
 
     if (registered) {
         const GLenum target = toGlTextureTarget(registration.dimension);
         GlFormatInfo format;
-        if (target == 0u || !toGlFormatInfo(registration.format, format) ||
-            mipLevel >= registration.mipLevels) {
+        if (target == 0u || !toGlFormatInfo(registration.format, format)) {
             return false;
         }
 
-        endpoint.texture = registration.textureId;
-        endpoint.target = target;
-        endpoint.desc.debugName = nullptr;
-        endpoint.desc.dimension = registration.dimension;
-        endpoint.desc.format = registration.format;
-        endpoint.desc.width = mipExtent(registration.width, mipLevel);
-        endpoint.desc.height = mipExtent(registration.height, mipLevel);
-        endpoint.desc.depthOrLayers = registration.depthOrLayers;
-        endpoint.desc.mipLevels = 1u;
-        endpoint.desc.sampleCount = registration.sampleCount;
-        endpoint.desc.usage = registration.usage;
-        endpoint.format = format;
-        endpoint.attachmentMip = mipLevel;
-        endpoint.valid = true;
+        resolved.texture = registration.textureId;
+        resolved.target = target;
+        resolved.desc.debugName = nullptr;
+        resolved.desc.dimension = registration.dimension;
+        resolved.desc.format = registration.format;
+        resolved.desc.width = registration.width;
+        resolved.desc.height = registration.height;
+        resolved.desc.depthOrLayers = registration.depthOrLayers;
+        resolved.desc.mipLevels = registration.mipLevels;
+        resolved.desc.sampleCount = registration.sampleCount;
+        resolved.desc.usage = registration.usage;
+        resolved.format = format;
+        resolved.valid = true;
         return true;
     }
 
     return false;
+}
+
+[[nodiscard]] bool resolveTextureHandleForBlit(GlRhiDeviceData& data,
+                                               const RhiTextureHandle handle,
+                                               const uint32_t mipLevel,
+                                               GlBlitEndpoint& endpoint) {
+    GlResolvedTextureRecord resolved;
+    if (!resolveTextureRecord(data, handle, resolved)) {
+        logRhiError("blitTexture received an invalid texture handle");
+        return false;
+    }
+
+    if (mipLevel >= resolved.desc.mipLevels) {
+        return false;
+    }
+
+    endpoint.texture = resolved.texture;
+    endpoint.target = resolved.target;
+    endpoint.desc = resolved.desc;
+    endpoint.desc.width = mipExtent(resolved.desc.width, mipLevel);
+    endpoint.desc.height = mipExtent(resolved.desc.height, mipLevel);
+    endpoint.desc.mipLevels = 1u;
+    endpoint.format = resolved.format;
+    endpoint.attachmentMip = mipLevel;
+    endpoint.valid = true;
+    return true;
 }
 
 [[nodiscard]] bool resolveTextureViewForBlit(GlRhiDeviceData& data,
@@ -543,18 +567,17 @@ struct GlBlitEndpoint {
         return true;
     }
 
-    const GlTextureRecord* textureRecord =
-        recordForHandle(data.textures, data.textureRecords, viewRecord->desc.texture);
-    if (textureRecord == nullptr) {
+    GlResolvedTextureRecord textureRecord;
+    if (!resolveTextureRecord(data, viewRecord->desc.texture, textureRecord)) {
         return false;
     }
 
     endpoint.texture = viewRecord->texture;
     endpoint.target = viewRecord->target;
-    endpoint.desc = textureRecord->desc;
+    endpoint.desc = textureRecord.desc;
     endpoint.desc.format = viewRecord->resolvedFormat;
-    endpoint.desc.width = mipExtent(textureRecord->desc.width, viewRecord->desc.baseMip);
-    endpoint.desc.height = mipExtent(textureRecord->desc.height, viewRecord->desc.baseMip);
+    endpoint.desc.width = mipExtent(textureRecord.desc.width, viewRecord->desc.baseMip);
+    endpoint.desc.height = mipExtent(textureRecord.desc.height, viewRecord->desc.baseMip);
     endpoint.desc.depthOrLayers = viewRecord->desc.layerCount;
     endpoint.desc.mipLevels = viewRecord->desc.mipCount;
     endpoint.format = viewRecord->format;
@@ -1612,16 +1635,16 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
 }
 
 RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
-    const GlTextureRecord* textureRecord =
-        recordForHandle(m_data->textures, m_data->textureRecords, desc.texture);
+    GlResolvedTextureRecord textureRecord;
+    const bool textureResolved = resolveTextureRecord(*m_data, desc.texture, textureRecord);
     const RhiTextureFormat resolvedFormat =
-        desc.format == RhiTextureFormat::Undefined && textureRecord != nullptr ? textureRecord->desc.format : desc.format;
+        desc.format == RhiTextureFormat::Undefined && textureResolved ? textureRecord.desc.format : desc.format;
     GlFormatInfo format;
     const GLenum viewTarget = toGlTextureViewTarget(desc.viewType);
-    if (!m_initialized || textureRecord == nullptr || viewTarget == 0u ||
+    if (!m_initialized || !textureResolved || viewTarget == 0u ||
         !toGlFormatInfo(resolvedFormat, format) || desc.mipCount == 0u ||
-        desc.layerCount == 0u || desc.baseMip + desc.mipCount > textureRecord->desc.mipLevels ||
-        desc.baseLayer + desc.layerCount > textureRecord->desc.depthOrLayers) {
+        desc.layerCount == 0u || desc.baseMip + desc.mipCount > textureRecord.desc.mipLevels ||
+        desc.baseLayer + desc.layerCount > textureRecord.desc.depthOrLayers) {
         logRhiError("createTextureView received an invalid descriptor");
         return {};
     }
@@ -1630,7 +1653,7 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     glGenTextures(1, &textureView);
     glTextureView(textureView,
                   viewTarget,
-                  textureRecord->texture,
+                  textureRecord.texture,
                   format.internalFormat,
                   desc.baseMip,
                   desc.mipCount,
@@ -1640,7 +1663,7 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
         glTextureParameteri(textureView, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
         glTextureParameteri(textureView, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     }
-    labelGlObject(GL_TEXTURE, textureView, rhiDebugName(textureRecord->desc.debugName));
+    labelGlObject(GL_TEXTURE, textureView, rhiDebugName(textureRecord.desc.debugName));
 
     const RhiTextureViewHandle handle = m_data->textureViews.allocate();
     const uint32_t slot = handle.index - 1u;

@@ -5,6 +5,8 @@
 
 #include <cstdint>
 
+class RhiDevice;
+
 class DeferredRenderTargets {
 public:
     ~DeferredRenderTargets();
@@ -139,6 +141,8 @@ public:
     [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const { return m_historyVolumetricHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
     [[nodiscard]] RhiTextureHandle velocityTextureHandle() const { return m_velocityHandle; }
+    [[nodiscard]] RhiTextureViewHandle velocityTextureViewHandle() const { return m_velocityView; }
+    bool ensureVelocityTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle perObjectVelocityTextureHandle() const { return m_perObjectVelocityHandle; }
     [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
     [[nodiscard]] RhiTextureHandle atmosphereLutTextureHandle() const { return m_atmosphereLutHandle; }
@@ -190,6 +194,7 @@ private:
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
+    void destroyRhiTextureViews();
     void destroyFramebuffers();
     void destroyFullscreenTriangle();
 
@@ -352,6 +357,8 @@ private:
     uint32_t m_velocityFbo = 0;
     uint32_t m_velocityTex = 0;
     RhiTextureHandle m_velocityHandle;
+    RhiTextureViewHandle m_velocityView;
+    RhiDevice* m_rhiViewDevice = nullptr;
 
     // Per-object velocity (RG16F): written by entity/drop GBuffer shaders via MRT
     // as the sixth color attachment on the GBuffer FBO. Consumed by velocity_resolve.fs.

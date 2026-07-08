@@ -1,6 +1,8 @@
 #include "DeferredRenderTargets.h"
 #include "../../Diagnostics.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <glad/glad.h>
@@ -1982,7 +1984,44 @@ bool DeferredRenderTargets::registerAtmosphereLutTexture() {
     return m_atmosphereLutHandle.isValid();
 }
 
+bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
+    if (m_velocityView.isValid() && m_rhiViewDevice == &rhiDevice) {
+        return true;
+    }
+
+    destroyRhiTextureViews();
+    if (!m_velocityHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_velocityHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rg16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_velocityView = rhiDevice.createTextureView(desc);
+    if (!m_velocityView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+void DeferredRenderTargets::destroyRhiTextureViews() {
+    if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_velocityView);
+    }
+    m_velocityView = {};
+    m_rhiViewDevice = nullptr;
+}
+
 void DeferredRenderTargets::unregisterRhiTextures() {
+    destroyRhiTextureViews();
     renderer::rhi::gl::unregisterTextureAndReset(m_gAlbedoHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_gNormalAoHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_gVoxelLightHandle);

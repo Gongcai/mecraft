@@ -484,6 +484,113 @@ bool testGlRhiBlitToSwapchainBackbuffer() {
     return true;
 }
 
+bool testGlRhiRegisteredTextureViewRendering() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for registered texture view rendering")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_registered_texture_view_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for registered texture view rendering")) {
+        return false;
+    }
+
+    constexpr uint32_t kWidth = 4u;
+    constexpr uint32_t kHeight = 4u;
+    GLuint nativeTexture = 0u;
+    glCreateTextures(GL_TEXTURE_2D, 1, &nativeTexture);
+    glTextureStorage2D(nativeTexture, 1, GL_RGBA8, static_cast<GLsizei>(kWidth), static_cast<GLsizei>(kHeight));
+
+    renderer::rhi::gl::GlRhiTextureRegistration registration;
+    registration.textureId = nativeTexture;
+    registration.dimension = RhiTextureDimension::Texture2D;
+    registration.format = RhiTextureFormat::Rgba8Unorm;
+    registration.width = kWidth;
+    registration.height = kHeight;
+    registration.depthOrLayers = 1u;
+    registration.mipLevels = 1u;
+    registration.sampleCount = 1u;
+    registration.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureHandle texture = renderer::rhi::gl::registerTexture(registration);
+    if (!requireTrue(texture.isValid(), "registered GL texture must produce an RHI texture handle")) {
+        glDeleteTextures(1, &nativeTexture);
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+    if (!requireTrue(view.isValid(), "registered GL texture must produce an RHI texture view")) {
+        renderer::rhi::gl::unregisterTexture(texture);
+        glDeleteTextures(1, &nativeTexture);
+        device.shutdown();
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = view;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 1.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "registered-texture-view-rendering";
+    renderingInfo.renderArea = {0, 0, kWidth, kHeight};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.beginRendering(renderingInfo);
+    cmd.endRendering();
+    device.submitFrame(cmd);
+
+    RhiColorAttachment readAttachment;
+    readAttachment.view = view;
+    readAttachment.loadOp = RhiLoadOp::Load;
+    readAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo readInfo;
+    readInfo.debugName = "registered-texture-view-readback";
+    readInfo.renderArea = {0, 0, kWidth, kHeight};
+    readInfo.colorAttachments = &readAttachment;
+    readInfo.colorAttachmentCount = 1u;
+
+    std::array<uint8_t, 4> pixel{};
+    RhiCommandList& readCmd = device.beginFrame();
+    readCmd.beginRendering(readInfo);
+    glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+    readCmd.endRendering();
+    device.submitFrame(readCmd);
+
+    const bool greenPixel = pixel[0] <= 5u && pixel[1] >= 250u && pixel[2] <= 5u && pixel[3] >= 250u;
+    if (!requireTrue(greenPixel, "registered texture view rendering must clear the native texture")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.destroyTextureView(view);
+        renderer::rhi::gl::unregisterTexture(texture);
+        glDeleteTextures(1, &nativeTexture);
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyTextureView(view);
+    renderer::rhi::gl::unregisterTexture(texture);
+    glDeleteTextures(1, &nativeTexture);
+    device.shutdown();
+    return true;
+}
+
 bool testGlRhiFullscreenTriangle() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for fullscreen draw")) {
@@ -1501,6 +1608,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiBlitToSwapchainBackbuffer()) {
+        return 1;
+    }
+    if (!testGlRhiRegisteredTextureViewRendering()) {
         return 1;
     }
     if (!testGlRhiFullscreenTriangle()) {
