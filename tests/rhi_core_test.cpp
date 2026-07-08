@@ -246,6 +246,147 @@ bool testGlRhiDeviceHandles() {
     return true;
 }
 
+bool testGlRhiSwapchainBackbuffer() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for swapchain draw")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_swapchain_backbuffer_test";
+    deviceDesc.width = 32;
+    deviceDesc.height = 32;
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for swapchain draw")) {
+        return false;
+    }
+    if (!requireTrue(device.resizeSwapchain(32u, 32u), "swapchain resize must accept live framebuffer dimensions")) {
+        device.shutdown();
+        return false;
+    }
+
+    const RhiTextureViewHandle swapchainView = device.currentSwapchainColorView();
+    if (!requireTrue(swapchainView.isValid(), "swapchain color view must be valid")) {
+        device.shutdown();
+        return false;
+    }
+    if (!requireTrue(device.swapchainColorFormat() == RhiTextureFormat::Rgba8Unorm,
+                     "OpenGL swapchain format must be RGBA8 unorm")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr char kFullscreenVertexShader[] = R"glsl(
+#version 450 core
+const vec2 kPositions[3] = vec2[3](
+    vec2(-1.0, -1.0),
+    vec2(3.0, -1.0),
+    vec2(-1.0, 3.0)
+);
+
+void main() {
+    gl_Position = vec4(kPositions[gl_VertexID], 0.0, 1.0);
+}
+)glsl";
+    constexpr char kWhiteFragmentShader[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec4 outColor;
+
+void main() {
+    outColor = vec4(1.0);
+}
+)glsl";
+
+    RhiShaderDesc vertexShaderDesc;
+    vertexShaderDesc.debugName = "swapchain-test-vertex";
+    vertexShaderDesc.stage = RhiShaderStage::Vertex;
+    vertexShaderDesc.source = kFullscreenVertexShader;
+    vertexShaderDesc.sourceSize = sizeof(kFullscreenVertexShader) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(vertexShaderDesc);
+    if (!requireTrue(vertexShader.isValid(), "swapchain vertex shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiShaderDesc fragmentShaderDesc;
+    fragmentShaderDesc.debugName = "swapchain-test-fragment";
+    fragmentShaderDesc.stage = RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = kWhiteFragmentShader;
+    fragmentShaderDesc.sourceSize = sizeof(kWhiteFragmentShader) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
+    if (!requireTrue(fragmentShader.isValid(), "swapchain fragment shader must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "swapchain-test-layout";
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(pipelineLayout.isValid(), "swapchain pipeline layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "swapchain-test-pipeline";
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(device.swapchainColorFormat());
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "swapchain graphics pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = swapchainView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "swapchain-test-rendering";
+    renderingInfo.renderArea = {0, 0, 32u, 32u};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& cmd = device.beginFrame();
+    cmd.beginRendering(renderingInfo);
+    cmd.setViewport({0.0f, 0.0f, 32.0f, 32.0f, 0.0f, 1.0f});
+    cmd.setGraphicsPipeline(pipeline);
+    cmd.draw(3u, 1u, 0u, 0u);
+
+    std::array<uint8_t, 4> pixel{};
+    glReadPixels(16, 16, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
+    cmd.endRendering();
+    device.submitFrame(cmd);
+
+    const bool whitePixel = pixel[0] >= 250u && pixel[1] >= 250u && pixel[2] >= 250u && pixel[3] >= 250u;
+    if (!requireTrue(whitePixel, "swapchain fullscreen draw must produce a white center pixel")) {
+        std::cerr << "center pixel rgba=("
+                  << static_cast<int>(pixel[0]) << ", "
+                  << static_cast<int>(pixel[1]) << ", "
+                  << static_cast<int>(pixel[2]) << ", "
+                  << static_cast<int>(pixel[3]) << ")\n";
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.shutdown();
+    return true;
+}
+
 bool testGlRhiFullscreenTriangle() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for fullscreen draw")) {
@@ -1257,6 +1398,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiDeviceHandles()) {
+        return 1;
+    }
+    if (!testGlRhiSwapchainBackbuffer()) {
         return 1;
     }
     if (!testGlRhiFullscreenTriangle()) {

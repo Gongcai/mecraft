@@ -76,6 +76,10 @@ public:
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
 
+    [[nodiscard]] RhiTextureViewHandle currentSwapchainColorView() const override;
+    [[nodiscard]] RhiTextureFormat swapchainColorFormat() const override;
+    bool resizeSwapchain(uint32_t width, uint32_t height) override;
+
     void destroyBuffer(RhiBufferHandle handle) override;
     void destroyTexture(RhiTextureHandle handle) override;
     void destroyTextureView(RhiTextureViewHandle handle) override;

@@ -35,6 +35,46 @@ void labelGlObject(const GLenum identifier, const GLuint name, const char* label
     glObjectLabel(identifier, name, -1, label);
 }
 
+void clearFramebufferColor(const GLuint framebuffer, const GLint drawBuffer, const float* color) {
+    if (framebuffer == 0u) {
+        glClearBufferfv(GL_COLOR, drawBuffer, color);
+        return;
+    }
+    glClearNamedFramebufferfv(framebuffer, GL_COLOR, drawBuffer, color);
+}
+
+void clearFramebufferDepth(const GLuint framebuffer, const float depth) {
+    if (framebuffer == 0u) {
+        glClearBufferfv(GL_DEPTH, 0, &depth);
+        return;
+    }
+    glClearNamedFramebufferfv(framebuffer, GL_DEPTH, 0, &depth);
+}
+
+void clearFramebufferDepthStencil(const GLuint framebuffer, const float depth, const uint32_t stencil) {
+    if (framebuffer == 0u) {
+        glClearBufferfi(GL_DEPTH_STENCIL, 0, depth, static_cast<GLint>(stencil));
+        return;
+    }
+    glClearNamedFramebufferfi(framebuffer, GL_DEPTH_STENCIL, 0, depth, static_cast<GLint>(stencil));
+}
+
+void invalidateFramebufferData(const GLuint framebuffer, const std::vector<GLenum>& attachments) {
+    if (attachments.empty()) {
+        return;
+    }
+    if (framebuffer == 0u) {
+        glInvalidateFramebuffer(GL_FRAMEBUFFER, static_cast<GLsizei>(attachments.size()), attachments.data());
+        return;
+    }
+    glInvalidateNamedFramebufferData(framebuffer, static_cast<GLsizei>(attachments.size()), attachments.data());
+}
+
+template <typename Handle>
+[[nodiscard]] bool sameHandle(const Handle a, const Handle b) {
+    return a.index == b.index && a.generation == b.generation;
+}
+
 [[nodiscard]] GLenum toGlShaderStage(const RhiShaderStage stage) {
     switch (stage) {
         case RhiShaderStage::Vertex: return GL_VERTEX_SHADER;
@@ -276,6 +316,7 @@ struct GlTextureViewRecord {
     RhiTextureViewDesc desc;
     RhiTextureFormat resolvedFormat = RhiTextureFormat::Undefined;
     GlFormatInfo format;
+    bool swapchainBackbuffer = false;
     bool active = false;
 };
 
@@ -376,6 +417,10 @@ struct GlRhiDeviceData {
     std::vector<GlBindGroupRecord> bindGroupRecords;
     std::vector<GlFramebufferRecord> framebufferCache;
 
+    RhiTextureViewHandle swapchainColorView;
+    RhiTextureFormat swapchainFormat = RhiTextureFormat::Rgba8Unorm;
+    uint32_t swapchainWidth = 1u;
+    uint32_t swapchainHeight = 1u;
     GLuint currentFramebuffer = 0u;
     std::vector<GLenum> currentStoreDiscardAttachments;
     RhiIndexFormat indexFormat = RhiIndexFormat::Uint32;
@@ -466,17 +511,28 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         }
     }
 
+    bool renderToSwapchain = false;
+    for (const RhiTextureViewHandle view : colorViews) {
+        const GlTextureViewRecord* viewRecord = recordForHandle(data.textureViews, data.textureViewRecords, view);
+        if (viewRecord != nullptr && viewRecord->swapchainBackbuffer) {
+            renderToSwapchain = true;
+            break;
+        }
+    }
+    if (renderToSwapchain && (colorViews.size() != 1u || depthView.isValid())) {
+        logRhiError("beginRendering requires the swapchain color view to be the only attachment");
+        return;
+    }
+
     GLuint framebuffer = 0u;
-    if (!colorViews.empty() || depthView.isValid()) {
+    if ((!colorViews.empty() || depthView.isValid()) && !renderToSwapchain) {
         GlFramebufferRecord* cached = nullptr;
         for (GlFramebufferRecord& record : data.framebufferCache) {
-            if (record.active && record.depthView.index == depthView.index &&
-                record.depthView.generation == depthView.generation &&
+            if (record.active && sameHandle(record.depthView, depthView) &&
                 record.colorViews.size() == colorViews.size()) {
                 bool sameColors = true;
                 for (size_t i = 0u; i < colorViews.size(); ++i) {
-                    if (record.colorViews[i].index != colorViews[i].index ||
-                        record.colorViews[i].generation != colorViews[i].generation) {
+                    if (!sameHandle(record.colorViews[i], colorViews[i])) {
                         sameColors = false;
                         break;
                     }
@@ -542,7 +598,7 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
 
     for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
         if (info.colorAttachments[i].loadOp == RhiLoadOp::Clear) {
-            glClearNamedFramebufferfv(framebuffer, GL_COLOR, static_cast<GLint>(i), info.colorAttachments[i].clearColor);
+            clearFramebufferColor(framebuffer, static_cast<GLint>(i), info.colorAttachments[i].clearColor);
         }
         if (info.colorAttachments[i].storeOp == RhiStoreOp::DontCare) {
             data.currentStoreDiscardAttachments.push_back(GL_COLOR_ATTACHMENT0 + i);
@@ -555,13 +611,9 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
             recordForHandle(data.textureViews, data.textureViewRecords, depthView);
         if (attachment->depthLoadOp == RhiLoadOp::Clear) {
             if (viewRecord->format.stencil) {
-                glClearNamedFramebufferfi(framebuffer,
-                                          GL_DEPTH_STENCIL,
-                                          0,
-                                          attachment->clearDepth,
-                                          static_cast<GLint>(attachment->clearStencil));
+                clearFramebufferDepthStencil(framebuffer, attachment->clearDepth, attachment->clearStencil);
             } else {
-                glClearNamedFramebufferfv(framebuffer, GL_DEPTH, 0, &attachment->clearDepth);
+                clearFramebufferDepth(framebuffer, attachment->clearDepth);
             }
         }
         if (attachment->depthStoreOp == RhiStoreOp::DontCare) {
@@ -580,11 +632,7 @@ void GlRhiCommandList::endRendering() {
     }
 
     auto& data = *m_device->m_data;
-    if (!data.currentStoreDiscardAttachments.empty()) {
-        glInvalidateNamedFramebufferData(data.currentFramebuffer,
-                                         static_cast<GLsizei>(data.currentStoreDiscardAttachments.size()),
-                                         data.currentStoreDiscardAttachments.data());
-    }
+    invalidateFramebufferData(data.currentFramebuffer, data.currentStoreDiscardAttachments);
     glBindFramebuffer(GL_FRAMEBUFFER, 0u);
     data.currentFramebuffer = 0u;
     data.currentStoreDiscardAttachments.clear();
@@ -1095,9 +1143,12 @@ GlRhiDevice::~GlRhiDevice() {
 }
 
 bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
-    (void) desc;
     if (!GLAD_GL_VERSION_4_5) {
         logRhiError("OpenGL 4.5 is required");
+        return false;
+    }
+    if (desc.width <= 0 || desc.height <= 0) {
+        logRhiError("init received invalid swapchain dimensions");
         return false;
     }
 
@@ -1109,6 +1160,35 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.storageImage = true;
     m_capabilities.maxColorAttachments = 8;
     m_capabilities.maxSampledTexturesPerStage = 32;
+
+    m_data->swapchainWidth = static_cast<uint32_t>(desc.width);
+    m_data->swapchainHeight = static_cast<uint32_t>(desc.height);
+    m_data->swapchainFormat = RhiTextureFormat::Rgba8Unorm;
+
+    RhiTextureViewDesc swapchainViewDesc;
+    swapchainViewDesc.viewType = RhiTextureViewType::Texture2D;
+    swapchainViewDesc.format = m_data->swapchainFormat;
+    GlFormatInfo swapchainFormat;
+    if (!toGlFormatInfo(m_data->swapchainFormat, swapchainFormat)) {
+        logRhiError("init received an unsupported swapchain format");
+        m_initialized = false;
+        return false;
+    }
+
+    m_data->swapchainColorView = m_data->textureViews.allocate();
+    const uint32_t slot = m_data->swapchainColorView.index - 1u;
+    if (slot >= m_data->textureViewRecords.size()) {
+        m_data->textureViewRecords.resize(slot + 1u);
+    }
+    m_data->textureViewRecords[slot] = {
+        0u,
+        GL_TEXTURE_2D,
+        swapchainViewDesc,
+        m_data->swapchainFormat,
+        swapchainFormat,
+        true,
+        true
+    };
     return true;
 }
 
@@ -1169,6 +1249,9 @@ void GlRhiDevice::shutdown() {
     }
 
     m_data->framebufferCache.clear();
+    m_data->swapchainColorView = {};
+    m_data->swapchainWidth = 1u;
+    m_data->swapchainHeight = 1u;
     m_data->bindGroups.clear();
     m_data->pipelines.clear();
     m_data->pipelineLayouts.clear();
@@ -1320,7 +1403,7 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     if (slot >= m_data->textureViewRecords.size()) {
         m_data->textureViewRecords.resize(slot + 1u);
     }
-    m_data->textureViewRecords[slot] = {textureView, viewTarget, desc, resolvedFormat, format, true};
+    m_data->textureViewRecords[slot] = {textureView, viewTarget, desc, resolvedFormat, format, false, true};
     return handle;
 }
 
@@ -1549,6 +1632,32 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
     return handle;
 }
 
+RhiTextureViewHandle GlRhiDevice::currentSwapchainColorView() const {
+    return m_initialized && m_data ? m_data->swapchainColorView : RhiTextureViewHandle{};
+}
+
+RhiTextureFormat GlRhiDevice::swapchainColorFormat() const {
+    return m_data ? m_data->swapchainFormat : RhiTextureFormat::Undefined;
+}
+
+bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
+    if (!m_initialized || !m_data || width == 0u || height == 0u) {
+        logRhiError("resizeSwapchain received invalid dimensions");
+        return false;
+    }
+
+    GlTextureViewRecord* swapchainView =
+        recordForHandle(m_data->textureViews, m_data->textureViewRecords, m_data->swapchainColorView);
+    if (swapchainView == nullptr || !swapchainView->swapchainBackbuffer) {
+        logRhiError("resizeSwapchain requires a live swapchain color view");
+        return false;
+    }
+
+    m_data->swapchainWidth = width;
+    m_data->swapchainHeight = height;
+    return true;
+}
+
 void GlRhiDevice::destroyBuffer(RhiBufferHandle handle) {
     GlBufferRecord* record = recordForHandle(m_data->buffers, m_data->bufferRecords, handle);
     if (record != nullptr) {
@@ -1577,13 +1686,11 @@ void GlRhiDevice::destroyTextureView(RhiTextureViewHandle handle) {
         if (!framebuffer.active) {
             continue;
         }
-        const bool usesDepth = framebuffer.depthView.index == handle.index &&
-                               framebuffer.depthView.generation == handle.generation;
+        const bool usesDepth = sameHandle(framebuffer.depthView, handle);
         const bool usesColor = std::any_of(framebuffer.colorViews.begin(),
                                            framebuffer.colorViews.end(),
                                            [&](const RhiTextureViewHandle view) {
-                                               return view.index == handle.index &&
-                                                      view.generation == handle.generation;
+                                               return sameHandle(view, handle);
                                            });
         if (usesDepth || usesColor) {
             glDeleteFramebuffers(1, &framebuffer.framebuffer);

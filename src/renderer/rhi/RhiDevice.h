@@ -34,6 +34,10 @@ public:
     virtual RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) = 0;
     virtual RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) = 0;
 
+    [[nodiscard]] virtual RhiTextureViewHandle currentSwapchainColorView() const = 0;
+    [[nodiscard]] virtual RhiTextureFormat swapchainColorFormat() const = 0;
+    virtual bool resizeSwapchain(uint32_t width, uint32_t height) = 0;
+
     virtual void destroyBuffer(RhiBufferHandle handle) = 0;
     virtual void destroyTexture(RhiTextureHandle handle) = 0;
     virtual void destroyTextureView(RhiTextureViewHandle handle) = 0;
