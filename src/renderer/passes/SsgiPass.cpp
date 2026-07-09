@@ -306,13 +306,45 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     if (m_ssgiTemporalShader == nullptr) {
         return;
     }
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsgiTemporalTextureViews(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindSsgiTemporal();
+    RhiColorAttachment colorAttachments[2];
+    colorAttachments[0].view = targets.ssgiTemporalTextureViewHandle();
+    colorAttachments[0].loadOp = RhiLoadOp::Clear;
+    colorAttachments[0].storeOp = RhiStoreOp::Store;
+    colorAttachments[0].clearColor[0] = 0.0f;
+    colorAttachments[0].clearColor[1] = 0.0f;
+    colorAttachments[0].clearColor[2] = 0.0f;
+    colorAttachments[0].clearColor[3] = 0.0f;
+    colorAttachments[1].view = targets.ssgiTemporalMomentsTextureViewHandle();
+    colorAttachments[1].loadOp = RhiLoadOp::Clear;
+    colorAttachments[1].storeOp = RhiStoreOp::Store;
+    colorAttachments[1].clearColor[0] = 0.0f;
+    colorAttachments[1].clearColor[1] = 0.0f;
+    colorAttachments[1].clearColor[2] = 0.0f;
+    colorAttachments[1].clearColor[3] = 0.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SsgiTemporal";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = colorAttachments;
+    renderingInfo.colorAttachmentCount = 2u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
     m_ssgiTemporalShader->use();
     m_ssgiTemporalShader->setInt("uCurrentTex", 0);
@@ -351,6 +383,8 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     }
     glActiveTexture(GL_TEXTURE0);
 
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
     targets.copySsgiTemporalToHistory();
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);

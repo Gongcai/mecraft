@@ -114,7 +114,10 @@ public:
     [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTextureHandle() const { return m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTexturePrevHandle() const { return m_ssgiMomentsHistoryHandle[1 - m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiTemporalTextureHandle() const { return m_ssgiTemporalHandle; }
+    [[nodiscard]] RhiTextureViewHandle ssgiTemporalTextureViewHandle() const { return m_ssgiTemporalView; }
     [[nodiscard]] RhiTextureHandle ssgiTemporalMomentsTextureHandle() const { return m_ssgiTemporalMomentsHandle; }
+    [[nodiscard]] RhiTextureViewHandle ssgiTemporalMomentsTextureViewHandle() const { return m_ssgiTemporalMomentsView; }
+    bool ensureSsgiTemporalTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureViewHandle ssgiDenoiseTextureViewHandle(int slot) const;
     bool ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, int slot);
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
@@ -305,6 +308,8 @@ private:
     uint32_t m_ssgiTemporalMomentsTex = 0;
     RhiTextureHandle m_ssgiTemporalHandle;
     RhiTextureHandle m_ssgiTemporalMomentsHandle;
+    RhiTextureViewHandle m_ssgiTemporalView;
+    RhiTextureViewHandle m_ssgiTemporalMomentsView;
 
     uint32_t m_sceneLightingFbo = 0;
     uint32_t m_sceneLightingTex = 0;

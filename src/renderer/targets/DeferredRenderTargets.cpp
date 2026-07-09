@@ -2140,6 +2140,48 @@ bool DeferredRenderTargets::ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, c
     return true;
 }
 
+bool DeferredRenderTargets::ensureSsgiTemporalTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssgiTemporalView.isValid() && m_ssgiTemporalMomentsView.isValid()) {
+        return true;
+    }
+
+    if (!m_ssgiTemporalHandle.isValid() || !m_ssgiTemporalMomentsHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc temporalDesc;
+    temporalDesc.texture = m_ssgiTemporalHandle;
+    temporalDesc.viewType = RhiTextureViewType::Texture2D;
+    temporalDesc.format = RhiTextureFormat::Rgba16Float;
+    temporalDesc.baseMip = 0;
+    temporalDesc.mipCount = 1;
+    temporalDesc.baseLayer = 0;
+    temporalDesc.layerCount = 1;
+
+    RhiTextureViewDesc momentsDesc = temporalDesc;
+    momentsDesc.texture = m_ssgiTemporalMomentsHandle;
+
+    m_ssgiTemporalView = rhiDevice.createTextureView(temporalDesc);
+    m_ssgiTemporalMomentsView = rhiDevice.createTextureView(momentsDesc);
+    if (!m_ssgiTemporalView.isValid() || !m_ssgiTemporalMomentsView.isValid()) {
+        if (m_ssgiTemporalView.isValid()) {
+            rhiDevice.destroyTextureView(m_ssgiTemporalView);
+        }
+        if (m_ssgiTemporalMomentsView.isValid()) {
+            rhiDevice.destroyTextureView(m_ssgiTemporalMomentsView);
+        }
+        m_ssgiTemporalView = {};
+        m_ssgiTemporalMomentsView = {};
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2279,6 +2321,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
+    if (m_rhiViewDevice != nullptr && m_ssgiTemporalView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_ssgiTemporalView);
+    }
+    if (m_rhiViewDevice != nullptr && m_ssgiTemporalMomentsView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_ssgiTemporalMomentsView);
+    }
     if (m_rhiViewDevice != nullptr && m_sceneCompositeView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneCompositeView);
     }
@@ -2295,6 +2343,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_sceneLightingView = {};
     m_ssgiView = {};
     m_ssgiHalfResView = {};
+    m_ssgiTemporalView = {};
+    m_ssgiTemporalMomentsView = {};
     m_sceneCompositeView = {};
     m_halfResView = {};
     m_reflectionView = {};
