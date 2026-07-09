@@ -1989,6 +1989,132 @@ bool DeferredRenderTargets::registerAtmosphereLutTexture() {
     return m_atmosphereLutHandle.isValid();
 }
 
+RhiTextureViewHandle DeferredRenderTargets::csmShadowDepthTextureViewHandle(const int cascadeIndex) const {
+    assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
+    return m_csmShadowDepthView[cascadeIndex];
+}
+
+RhiTextureViewHandle DeferredRenderTargets::csmShadowDepthAllTextureViewHandle(const int cascadeIndex) const {
+    assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
+    return m_csmShadowDepthAllView[cascadeIndex];
+}
+
+RhiTextureViewHandle DeferredRenderTargets::csmShadowColor0TextureViewHandle(const int cascadeIndex) const {
+    assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
+    return m_csmShadowColor0View[cascadeIndex];
+}
+
+RhiTextureViewHandle DeferredRenderTargets::csmShadowColor1TextureViewHandle(const int cascadeIndex) const {
+    assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
+    return m_csmShadowColor1View[cascadeIndex];
+}
+
+bool DeferredRenderTargets::ensureCsmShadowDepthTextureView(RhiDevice& rhiDevice, const int cascadeIndex) {
+    assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+
+    RhiTextureViewHandle& view = m_csmShadowDepthView[cascadeIndex];
+    if (view.isValid()) {
+        return true;
+    }
+
+    if (!m_csmShadowDepthHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_csmShadowDepthHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Depth32Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = static_cast<uint32_t>(cascadeIndex);
+    desc.layerCount = 1;
+
+    view = rhiDevice.createTextureView(desc);
+    if (!view.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rhiDevice,
+                                                                   const int cascadeIndex) {
+    assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+
+    if (m_csmShadowDepthAllView[cascadeIndex].isValid() &&
+        m_csmShadowColor0View[cascadeIndex].isValid() &&
+        m_csmShadowColor1View[cascadeIndex].isValid()) {
+        return true;
+    }
+
+    if (!m_csmShadowDepthAllHandle.isValid() ||
+        !m_csmShadowColor0Handle.isValid() ||
+        !m_csmShadowColor1Handle.isValid()) {
+        return false;
+    }
+
+    const auto destroyCascadeViews = [&rhiDevice, this, cascadeIndex]() {
+        RhiTextureViewHandle& depthView = m_csmShadowDepthAllView[cascadeIndex];
+        RhiTextureViewHandle& color0View = m_csmShadowColor0View[cascadeIndex];
+        RhiTextureViewHandle& color1View = m_csmShadowColor1View[cascadeIndex];
+        if (depthView.isValid()) {
+            rhiDevice.destroyTextureView(depthView);
+        }
+        if (color0View.isValid()) {
+            rhiDevice.destroyTextureView(color0View);
+        }
+        if (color1View.isValid()) {
+            rhiDevice.destroyTextureView(color1View);
+        }
+        depthView = {};
+        color0View = {};
+        color1View = {};
+    };
+
+    if (m_csmShadowDepthAllView[cascadeIndex].isValid() ||
+        m_csmShadowColor0View[cascadeIndex].isValid() ||
+        m_csmShadowColor1View[cascadeIndex].isValid()) {
+        destroyCascadeViews();
+    }
+
+    RhiTextureViewDesc desc;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = static_cast<uint32_t>(cascadeIndex);
+    desc.layerCount = 1;
+
+    desc.texture = m_csmShadowDepthAllHandle;
+    desc.format = RhiTextureFormat::Depth32Float;
+    m_csmShadowDepthAllView[cascadeIndex] = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_csmShadowColor0Handle;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    m_csmShadowColor0View[cascadeIndex] = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_csmShadowColor1Handle;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    m_csmShadowColor1View[cascadeIndex] = rhiDevice.createTextureView(desc);
+
+    if (!m_csmShadowDepthAllView[cascadeIndex].isValid() ||
+        !m_csmShadowColor0View[cascadeIndex].isValid() ||
+        !m_csmShadowColor1View[cascadeIndex].isValid()) {
+        destroyCascadeViews();
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2639,6 +2765,30 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     }
     if (m_rhiViewDevice != nullptr && m_gDepthView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_gDepthView);
+    }
+    for (RhiTextureViewHandle& view : m_csmShadowDepthView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
+    for (RhiTextureViewHandle& view : m_csmShadowDepthAllView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
+    for (RhiTextureViewHandle& view : m_csmShadowColor0View) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
+    for (RhiTextureViewHandle& view : m_csmShadowColor1View) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
     }
     if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_velocityView);

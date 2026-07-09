@@ -6,6 +6,10 @@
 #include "../shadow/ShadowRenderer.h"
 #include "../shadow/ShadowMatrices.h"
 #include "../shadow/ShadowCasterCuller.h"
+#include "../core/RenderScene.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
@@ -169,9 +173,13 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         m_shadowRenderer == nullptr ||
         m_terrainRenderer == nullptr ||
         m_worldRenderBuffer == nullptr ||
-        m_resourceMgr == nullptr) {
+        m_resourceMgr == nullptr ||
+        ctx.shared == nullptr ||
+        ctx.shared->rhiDevice == nullptr) {
         return output;
     }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
 
     // Update shadow cascades via ShadowRenderer.
     m_shadowRenderer->computeLightDirection(toLegacySkyColors(ctx.skyColors));
@@ -249,6 +257,13 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     // Cutout casters remain important in far cascades at low sun angles because
     // tree and vegetation silhouettes project across long receiver spans.
     constexpr int kCutoutShadowCasterCascadeCount = SHADOW_CASCADE_COUNT;
+    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        if (!targets.ensureCsmShadowDepthTextureView(rhiDevice, cascade) ||
+            !targets.ensureCsmShadowTransparentTextureViews(rhiDevice, cascade)) {
+            return output;
+        }
+    }
+
     RenderDebugService* debugService = ctx.debugService;
     const bool shadowStatsActive = debugService != nullptr &&
         debugService->beginShadowFrame(SHADOW_CASCADE_COUNT, targets.shadowResolution());
@@ -387,8 +402,26 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             if (shadowStatsActive) {
                 debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::Start);
             }
-            targets.bindCsmShadowLayer(cascade, cascadeRes);
-            glClear(GL_DEPTH_BUFFER_BIT);
+
+            RhiDepthStencilAttachment depthAttachment;
+            depthAttachment.view = targets.csmShadowDepthTextureViewHandle(cascade);
+            depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+            depthAttachment.depthStoreOp = RhiStoreOp::Store;
+            depthAttachment.clearDepth = 1.0f;
+
+            RhiRenderingInfo renderingInfo;
+            renderingInfo.debugName = "CsmShadowOpaque";
+            renderingInfo.renderArea = {
+                0,
+                0,
+                static_cast<uint32_t>(std::max(1, cascadeRes)),
+                static_cast<uint32_t>(std::max(1, cascadeRes))
+            };
+            renderingInfo.depthStencilAttachment = &depthAttachment;
+
+            RhiCommandList& commandList = rhiDevice.beginFrame();
+            commandList.beginRendering(renderingInfo);
+
             bindTerrainShadowInputs();
             m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
             m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
@@ -435,6 +468,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             if (shadowStatsActive) {
                 debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::OpaqueEnd);
             }
+            commandList.endRendering();
+            rhiDevice.submitFrame(commandList);
         }
 
         // Pass 2: Transparent/all.
@@ -453,12 +488,42 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 0, 0, 0, cascade,
                 cascadeRes, cascadeRes, 1);
 
-            targets.bindCsmShadowTransparentLayer(cascade, cascadeRes);
-            // Depth already contains opaque from the copy; clear color explicitly
-            const float clearColor0[] = {0.0f, 0.0f, 0.0f, 1.0f}; // no transparent marker
-            const float clearColor1[] = {0.0f, 0.0f, 0.0f, 0.0f};
-            glClearBufferfv(GL_COLOR, 0, clearColor0);
-            glClearBufferfv(GL_COLOR, 1, clearColor1);
+            RhiColorAttachment colorAttachments[2];
+            colorAttachments[0].view = targets.csmShadowColor0TextureViewHandle(cascade);
+            colorAttachments[0].loadOp = RhiLoadOp::Clear;
+            colorAttachments[0].storeOp = RhiStoreOp::Store;
+            colorAttachments[0].clearColor[0] = 0.0f;
+            colorAttachments[0].clearColor[1] = 0.0f;
+            colorAttachments[0].clearColor[2] = 0.0f;
+            colorAttachments[0].clearColor[3] = 1.0f;
+            colorAttachments[1].view = targets.csmShadowColor1TextureViewHandle(cascade);
+            colorAttachments[1].loadOp = RhiLoadOp::Clear;
+            colorAttachments[1].storeOp = RhiStoreOp::Store;
+            colorAttachments[1].clearColor[0] = 0.0f;
+            colorAttachments[1].clearColor[1] = 0.0f;
+            colorAttachments[1].clearColor[2] = 0.0f;
+            colorAttachments[1].clearColor[3] = 0.0f;
+
+            RhiDepthStencilAttachment depthAttachment;
+            depthAttachment.view = targets.csmShadowDepthAllTextureViewHandle(cascade);
+            depthAttachment.depthLoadOp = RhiLoadOp::Load;
+            depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+            RhiRenderingInfo renderingInfo;
+            renderingInfo.debugName = "CsmShadowTransparent";
+            renderingInfo.renderArea = {
+                0,
+                0,
+                static_cast<uint32_t>(std::max(1, cascadeRes)),
+                static_cast<uint32_t>(std::max(1, cascadeRes))
+            };
+            renderingInfo.colorAttachments = colorAttachments;
+            renderingInfo.colorAttachmentCount = 2u;
+            renderingInfo.depthStencilAttachment = &depthAttachment;
+
+            RhiCommandList& commandList = rhiDevice.beginFrame();
+            commandList.beginRendering(renderingInfo);
+
             if (renderTransparentCasters) {
                 bindTerrainShadowInputs();
                 m_shadowDepthShader->setInt("uShadowPassMode", 1);
@@ -504,6 +569,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 m_shadowDepthShader->setInt("uForceBaseLod", 0);
                 stats.transparentRendered = true;
             }
+            commandList.endRendering();
+            rhiDevice.submitFrame(commandList);
         }
         if (shadowStatsActive) {
             debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::End);

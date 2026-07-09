@@ -91,11 +91,17 @@ public:
     [[nodiscard]] RhiTextureHandle shadowDepthComparisonTextureHandle() const { return m_shadowDepthComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthTextureViewHandle(int cascadeIndex) const;
+    bool ensureCsmShadowDepthTextureView(RhiDevice& rhiDevice, int cascadeIndex);
     // CSM transparent shadow contract (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllTextureHandle() const { return m_csmShadowDepthAllHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthAllComparisonTextureHandle() const { return m_csmShadowDepthAllComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor0TextureHandle() const { return m_csmShadowColor0Handle; }
     [[nodiscard]] RhiTextureHandle csmShadowColor1TextureHandle() const { return m_csmShadowColor1Handle; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllTextureViewHandle(int cascadeIndex) const;
+    [[nodiscard]] RhiTextureViewHandle csmShadowColor0TextureViewHandle(int cascadeIndex) const;
+    [[nodiscard]] RhiTextureViewHandle csmShadowColor1TextureViewHandle(int cascadeIndex) const;
+    bool ensureCsmShadowTransparentTextureViews(RhiDevice& rhiDevice, int cascadeIndex);
     [[nodiscard]] RhiTextureHandle shadowColorTextureHandle() const { return m_shadowColorHandle; }
     [[nodiscard]] RhiTextureHandle shadowNormalTextureHandle() const { return m_shadowNormalHandle; }
     [[nodiscard]] RhiTextureHandle ssaoTextureHandle() const { return m_ssaoHandle; }
@@ -278,6 +284,7 @@ private:
     uint32_t m_csmShadowDepthComparison = 0; // Comparison texture array for sampler2DArrayShadow
     RhiTextureHandle m_csmShadowDepthHandle;
     RhiTextureHandle m_csmShadowDepthComparisonHandle;
+    RhiTextureViewHandle m_csmShadowDepthView[kShadowCascadeCount];
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
     uint32_t m_csmShadowTransparentFbo = 0;
     uint32_t m_csmShadowDepthAll = 0; // depth including water/transparent surfaces
@@ -288,6 +295,9 @@ private:
     RhiTextureHandle m_csmShadowDepthAllComparisonHandle;
     RhiTextureHandle m_csmShadowColor0Handle;
     RhiTextureHandle m_csmShadowColor1Handle;
+    RhiTextureViewHandle m_csmShadowDepthAllView[kShadowCascadeCount];
+    RhiTextureViewHandle m_csmShadowColor0View[kShadowCascadeCount];
+    RhiTextureViewHandle m_csmShadowColor1View[kShadowCascadeCount];
 
     uint32_t m_ssaoFbo = 0;
     uint32_t m_ssaoTex = 0;
