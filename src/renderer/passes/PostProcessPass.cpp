@@ -223,7 +223,7 @@ void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
 
-    const float resolvedExposure = updateAutoExposure(frameTime);
+    const float resolvedExposure = updateAutoExposure(rhiDevice, frameTime);
     static_cast<void>(resolvedExposure);
 
     const bool hasBloom = renderBloom(rhiDevice, m_effects.bloomMipCount);
@@ -260,7 +260,7 @@ uint32_t PostProcessPass::compositeToTexture(RhiDevice& rhiDevice,
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
 
-    const float resolvedExposure = updateAutoExposure(frameTime);
+    const float resolvedExposure = updateAutoExposure(rhiDevice, frameTime);
     static_cast<void>(resolvedExposure);
 
     const bool hasBloom = renderBloom(rhiDevice, m_effects.bloomMipCount);
@@ -313,12 +313,13 @@ void PostProcessPass::blitCompositeToBackbuffer(RhiDevice& rhiDevice,
 
 // --- Internal ---
 
-float PostProcessPass::updateAutoExposure(const float frameTime) {
+float PostProcessPass::updateAutoExposure(RhiDevice& rhiDevice, const float frameTime) {
     const float manualExposure = 0.8f / std::max(m_effects.exposure, 0.0001f);
     if (!m_effects.autoExposureEnabled || m_exposureDownsampleShader == nullptr ||
         m_exposureResolveShader == nullptr || m_exposureMipCount <= 0 ||
         m_sceneColorTex == 0 || m_fullscreenVao == 0 ||
-        m_exposureStateTex[0] == 0 || m_exposureStateTex[1] == 0) {
+        m_exposureStateTex[0] == 0 || m_exposureStateTex[1] == 0 ||
+        !ensureExposureTargetViews(rhiDevice)) {
         m_autoExposureInitialized = false;
         m_adaptedExposure = manualExposure;
         m_autoExposureSampleAccumulator = 0.0;
@@ -337,10 +338,11 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
         m_autoExposureSampleAccumulator >= kAutoExposureSampleIntervalSeconds;
 
     if (!m_autoExposureInitialized) {
-        initializeExposureState(manualExposure);
+        initializeExposureState(rhiDevice, manualExposure);
     }
 
     glBindVertexArray(m_fullscreenVao);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
 
     int finalMip = 0;
     if (shouldSampleExposure) {
@@ -358,9 +360,8 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
                 break;
             }
             finalMip = mip;
-            glBindFramebuffer(GL_FRAMEBUFFER, m_exposureFbos[mip]);
-            glViewport(0, 0, m_exposureMipSize[mip].x, m_exposureMipSize[mip].y);
-            glClear(GL_COLOR_BUFFER_BIT);
+            beginPostProcessColorOutput(commandList, "ExposureDownsample", m_exposureView[mip],
+                                        m_exposureMipSize[mip].x, m_exposureMipSize[mip].y, true);
             glUniform1i(kExposureDownsampleSourceIsSceneLocation, sourceIsScene ? 1 : 0);
             glUniform2f(kExposureDownsampleSourceSizeLocation,
                         static_cast<float>(sourceSize.x),
@@ -369,6 +370,7 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, sourceTex);
             glDrawArrays(GL_TRIANGLES, 0, 3);
+            commandList.endRendering();
 
             sourceTex = m_exposureTex[mip];
             sourceSize = m_exposureMipSize[mip];
@@ -389,13 +391,14 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
     glUniform1i(kExposureResolveInitializedLocation, m_autoExposureInitialized ? 1 : 0);
     glUniform1i(kExposureResolveReusePreviousTargetLocation, shouldSampleExposure ? 0 : 1);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, m_exposureStateFbos[writeIndex]);
-    glViewport(0, 0, 1, 1);
+    beginPostProcessColorOutput(commandList, "ExposureResolve", m_exposureStateView[writeIndex], 1, 1, false);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_exposureTex[finalMip]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, m_exposureStateTex[m_exposureStateReadIndex]);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     m_exposureStateReadIndex = writeIndex;
     m_autoExposureInitialized = true;
@@ -412,16 +415,37 @@ float PostProcessPass::updateAutoExposure(const float frameTime) {
     return m_adaptedExposure;
 }
 
-void PostProcessPass::initializeExposureState(const float manualExposure) {
+void PostProcessPass::initializeExposureState(RhiDevice& rhiDevice, const float manualExposure) {
     const float initialState[4] = {
         std::max(manualExposure, 0.001f),
         m_lastAverageLum,
         m_lastTargetExposure,
         1.0f
     };
-    for (GLuint texture : m_exposureStateTex) {
-        glClearTexImage(texture, 0, GL_RGBA, GL_FLOAT, initialState);
+    if (!ensureExposureTargetViews(rhiDevice)) {
+        return;
     }
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    for (const RhiTextureViewHandle view : m_exposureStateView) {
+        RhiColorAttachment colorAttachment;
+        colorAttachment.view = view;
+        colorAttachment.loadOp = RhiLoadOp::Clear;
+        colorAttachment.storeOp = RhiStoreOp::Store;
+        colorAttachment.clearColor[0] = initialState[0];
+        colorAttachment.clearColor[1] = initialState[1];
+        colorAttachment.clearColor[2] = initialState[2];
+        colorAttachment.clearColor[3] = initialState[3];
+
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "ExposureStateInit";
+        renderingInfo.renderArea = {0, 0, 1u, 1u};
+        renderingInfo.colorAttachments = &colorAttachment;
+        renderingInfo.colorAttachmentCount = 1u;
+        commandList.beginRendering(renderingInfo);
+        commandList.endRendering();
+    }
+    rhiDevice.submitFrame(commandList);
     m_exposureStateReadIndex = 0;
 }
 
@@ -697,6 +721,17 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
             destroyRenderTargets();
             return false;
         }
+        m_exposureHandle[mip] = registerPostProcessTexture(
+            m_exposureTex[mip],
+            RhiTextureFormat::Rg16Float,
+            exposureSize.x,
+            exposureSize.y,
+            rhiFlag(RhiTextureUsage::Sampled) |
+                rhiFlag(RhiTextureUsage::ColorAttachment));
+        if (!m_exposureHandle[mip].isValid()) {
+            destroyRenderTargets();
+            return false;
+        }
         ++m_exposureMipCount;
         if (exposureSize.x == 1 && exposureSize.y == 1) {
             break;
@@ -716,6 +751,17 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
         const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
         glNamedFramebufferDrawBuffers(m_exposureStateFbos[i], 1, &drawBuffer);
         if (glCheckNamedFramebufferStatus(m_exposureStateFbos[i], GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            destroyRenderTargets();
+            return false;
+        }
+        m_exposureStateHandle[i] = registerPostProcessTexture(
+            m_exposureStateTex[i],
+            RhiTextureFormat::Rgba16Float,
+            1,
+            1,
+            rhiFlag(RhiTextureUsage::Sampled) |
+                rhiFlag(RhiTextureUsage::ColorAttachment));
+        if (!m_exposureStateHandle[i].isValid()) {
             destroyRenderTargets();
             return false;
         }
@@ -834,6 +880,71 @@ bool PostProcessPass::ensureBloomTargetViews(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool PostProcessPass::ensureExposureTargetViews(RhiDevice& rhiDevice) {
+    if (m_exposureViewDevice != nullptr && m_exposureViewDevice != &rhiDevice) {
+        for (int mip = 0; mip < kExposureMipCount; ++mip) {
+            if (m_exposureView[mip].isValid()) {
+                m_exposureViewDevice->destroyTextureView(m_exposureView[mip]);
+                m_exposureView[mip] = {};
+            }
+        }
+        for (RhiTextureViewHandle& view : m_exposureStateView) {
+            if (view.isValid()) {
+                m_exposureViewDevice->destroyTextureView(view);
+                view = {};
+            }
+        }
+        m_exposureViewDevice = nullptr;
+    }
+
+    m_exposureViewDevice = &rhiDevice;
+    for (int mip = 0; mip < m_exposureMipCount; ++mip) {
+        if (!m_exposureHandle[mip].isValid()) {
+            return false;
+        }
+        if (m_exposureView[mip].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = m_exposureHandle[mip];
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        viewDesc.format = RhiTextureFormat::Rg16Float;
+        viewDesc.baseMip = 0;
+        viewDesc.mipCount = 1;
+        viewDesc.baseLayer = 0;
+        viewDesc.layerCount = 1;
+        m_exposureView[mip] = rhiDevice.createTextureView(viewDesc);
+        if (!m_exposureView[mip].isValid()) {
+            return false;
+        }
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        if (!m_exposureStateHandle[i].isValid()) {
+            return false;
+        }
+        if (m_exposureStateView[i].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = m_exposureStateHandle[i];
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        viewDesc.format = RhiTextureFormat::Rgba16Float;
+        viewDesc.baseMip = 0;
+        viewDesc.mipCount = 1;
+        viewDesc.baseLayer = 0;
+        viewDesc.layerCount = 1;
+        m_exposureStateView[i] = rhiDevice.createTextureView(viewDesc);
+        if (!m_exposureStateView[i].isValid()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void PostProcessPass::bindCompositeOutput(RhiCommandList& commandList, const int width, const int height) {
     m_renderCompositeToTexture = true;
     RhiColorAttachment colorAttachment;
@@ -895,6 +1006,21 @@ void PostProcessPass::destroyRenderTargets() {
         }
     }
     m_bloomViewDevice = nullptr;
+    if (m_exposureViewDevice != nullptr) {
+        for (int mip = 0; mip < kExposureMipCount; ++mip) {
+            if (m_exposureView[mip].isValid()) {
+                m_exposureViewDevice->destroyTextureView(m_exposureView[mip]);
+            }
+            m_exposureView[mip] = {};
+        }
+        for (RhiTextureViewHandle& view : m_exposureStateView) {
+            if (view.isValid()) {
+                m_exposureViewDevice->destroyTextureView(view);
+            }
+            view = {};
+        }
+    }
+    m_exposureViewDevice = nullptr;
     renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneColorHandle);
     if (m_compositeTex != 0) {
@@ -929,6 +1055,7 @@ void PostProcessPass::destroyRenderTargets() {
     }
     for (int mip = 0; mip < kExposureMipCount; ++mip) {
         m_exposureMipSize[mip] = glm::ivec2(0);
+        renderer::rhi::gl::unregisterTextureAndReset(m_exposureHandle[mip]);
         if (m_exposureTex[mip] != 0) {
             glDeleteTextures(1, &m_exposureTex[mip]);
             m_exposureTex[mip] = 0;
@@ -939,6 +1066,7 @@ void PostProcessPass::destroyRenderTargets() {
         }
     }
     for (int i = 0; i < 2; ++i) {
+        renderer::rhi::gl::unregisterTextureAndReset(m_exposureStateHandle[i]);
         if (m_exposureStateTex[i] != 0) {
             glDeleteTextures(1, &m_exposureStateTex[i]);
             m_exposureStateTex[i] = 0;

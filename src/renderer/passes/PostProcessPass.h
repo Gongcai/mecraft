@@ -129,8 +129,8 @@ private:
     void destroyRenderTargets();
     void initFullscreenTriangle();
     void destroyFullscreenTriangle();
-    float updateAutoExposure(float frameTime);
-    void initializeExposureState(float manualExposure);
+    float updateAutoExposure(RhiDevice& rhiDevice, float frameTime);
+    void initializeExposureState(RhiDevice& rhiDevice, float manualExposure);
 
     /// Apply bloom extraction and blur passes.
     /// @return true if bloom was applied
@@ -141,6 +141,7 @@ private:
     void updateCompositeParams(bool useAutoExposureTexture, bool hasBloom);
     bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
     bool ensureBloomTargetViews(RhiDevice& rhiDevice);
+    bool ensureExposureTargetViews(RhiDevice& rhiDevice);
     void bindCompositeOutput(RhiCommandList& commandList, int width, int height);
     void bindBackbufferOutput(RhiCommandList& commandList,
                               RhiTextureViewHandle swapchainColorView,
@@ -194,10 +195,15 @@ private:
     // Auto-exposure downsample chain
     uint32_t m_exposureFbos[kExposureMipCount] = {};
     uint32_t m_exposureTex[kExposureMipCount] = {};
+    RhiTextureHandle m_exposureHandle[kExposureMipCount] = {};
+    RhiTextureViewHandle m_exposureView[kExposureMipCount] = {};
     glm::ivec2 m_exposureMipSize[kExposureMipCount] = {};
     int m_exposureMipCount = 0;
     uint32_t m_exposureStateFbos[2] = {};
     uint32_t m_exposureStateTex[2] = {};
+    RhiTextureHandle m_exposureStateHandle[2] = {};
+    RhiTextureViewHandle m_exposureStateView[2] = {};
+    RhiDevice* m_exposureViewDevice = nullptr;
     int m_exposureStateReadIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
 
