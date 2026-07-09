@@ -2022,6 +2022,47 @@ bool DeferredRenderTargets::ensureHistorySceneTextureView(RhiDevice& rhiDevice) 
     return true;
 }
 
+bool DeferredRenderTargets::ensureHistorySceneTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_historySceneView[0].isValid() && m_historySceneView[1].isValid()) {
+        return true;
+    }
+    if (!m_historySceneHandle[0].isValid() || !m_historySceneHandle[1].isValid()) {
+        return false;
+    }
+
+    for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
+        if (m_historySceneView[historyIndex].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc desc;
+        desc.texture = m_historySceneHandle[historyIndex];
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.baseMip = 0;
+        desc.mipCount = 1;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+
+        m_historySceneView[historyIndex] = rhiDevice.createTextureView(desc);
+        if (!m_historySceneView[historyIndex].isValid()) {
+            for (RhiTextureViewHandle& view : m_historySceneView) {
+                if (view.isValid()) {
+                    rhiDevice.destroyTextureView(view);
+                }
+                view = {};
+            }
+            return false;
+        }
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2102,6 +2143,36 @@ bool DeferredRenderTargets::ensureHalfResTextureView(RhiDevice& rhiDevice) {
 
     m_halfResView = rhiDevice.createTextureView(desc);
     if (!m_halfResView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool DeferredRenderTargets::ensureTemporalCurrentTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_temporalCurrentView.isValid()) {
+        return true;
+    }
+
+    if (!m_temporalCurrentHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_temporalCurrentHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_temporalCurrentView = rhiDevice.createTextureView(desc);
+    if (!m_temporalCurrentView.isValid()) {
         return false;
     }
 
@@ -2290,6 +2361,9 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
+    if (m_rhiViewDevice != nullptr && m_temporalCurrentView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_temporalCurrentView);
+    }
     if (m_rhiViewDevice != nullptr && m_weatherMaskView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_weatherMaskView);
     }
@@ -2320,6 +2394,7 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_skyCaptureView = {};
     m_historySceneView[0] = {};
     m_historySceneView[1] = {};
+    m_temporalCurrentView = {};
     m_weatherMaskView = {};
     m_rhiViewDevice = nullptr;
 }

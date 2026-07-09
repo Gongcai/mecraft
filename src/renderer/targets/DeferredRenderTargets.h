@@ -142,7 +142,9 @@ public:
     [[nodiscard]] RhiTextureHandle historySceneTextureHandle() const { return m_historySceneHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historySceneTexturePrevHandle() const { return m_historySceneHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureViewHandle historySceneTextureViewHandle() const { return m_historySceneView[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle historySceneTexturePrevViewHandle() const { return m_historySceneView[1 - m_currentHistoryIndex]; }
     bool ensureHistorySceneTextureView(RhiDevice& rhiDevice);
+    bool ensureHistorySceneTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyDepthTextureHandle() const { return m_historyDepthHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const { return m_historyDepthHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const { return m_historyReflectionHandle[m_currentHistoryIndex]; }
@@ -154,6 +156,8 @@ public:
     [[nodiscard]] RhiTextureViewHandle historyVolumetricTextureViewHandle() const { return m_historyVolumetricView[m_currentHistoryIndex]; }
     bool ensureHistoryVolumetricTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
+    [[nodiscard]] RhiTextureViewHandle temporalCurrentTextureViewHandle() const { return m_temporalCurrentView; }
+    bool ensureTemporalCurrentTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle velocityTextureHandle() const { return m_velocityHandle; }
     [[nodiscard]] RhiTextureViewHandle velocityTextureViewHandle() const { return m_velocityView; }
     bool ensureVelocityTextureView(RhiDevice& rhiDevice);
@@ -370,6 +374,7 @@ private:
     // TAA current-frame scratch: avoids reading history[current] as TAA input.
     uint32_t m_temporalCurrentTex = 0;
     RhiTextureHandle m_temporalCurrentHandle;
+    RhiTextureViewHandle m_temporalCurrentView;
 
     // Velocity buffer (RG16F encodes screen-space velocity xy)
     uint32_t m_velocityTex = 0;

@@ -7,19 +7,19 @@
 
 #include "gbuffer_contract.glsl"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uCurrentTex;
-uniform sampler2D uHistoryTex;
-uniform sampler2D uVelocityTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uMaterialAuxTex;
+layout(binding = 0) uniform sampler2D uCurrentTex;
+layout(binding = 1) uniform sampler2D uHistoryTex;
+layout(binding = 2) uniform sampler2D uVelocityTex;
+layout(binding = 3) uniform sampler2D uDepthTex;
+layout(binding = 4) uniform sampler2D uMaterialAuxTex;
 
-uniform vec2 uScreenSize;
-uniform vec2 uJitter;
-uniform float uSurfaceWetness;
-uniform int uRainWetSurfacesEnabled;
+layout(std140, binding = 15) uniform RhiPushConstants {
+    vec4 uScreenSizeJitter;
+    vec4 uTemporalParams;
+};
 
 vec3 RGBtoYCoCgR(in vec3 rgbColor) {
     vec3 ycocg;
@@ -71,8 +71,8 @@ vec3 clipAABB(in vec3 boxMin, in vec3 boxMax, in vec3 previousSample) {
 // DerivativeMain Temporal.frag: SMAA CatmullRom approximation (5-tap).
 // Sharper than bilinear for history sampling, reduces variance clip rejection.
 vec4 catmullRomFast(sampler2D tex, vec2 coord) {
-    vec2 pxSize = 1.0 / max(uScreenSize, vec2(1.0));
-    vec2 position = uScreenSize * coord;
+    vec2 pxSize = 1.0 / max(uScreenSizeJitter.xy, vec2(1.0));
+    vec2 position = uScreenSizeJitter.xy * coord;
     vec2 centerPosition = floor(position - 0.5) + 0.5;
     vec2 f = position - centerPosition;
     vec2 f2 = f * f;
@@ -106,7 +106,7 @@ vec4 catmullRomFast(sampler2D tex, vec2 coord) {
 
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
-    vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
+    vec2 texelSize = 1.0 / max(uScreenSizeJitter.xy, vec2(1.0));
     vec2 screenCoord = gl_FragCoord.xy * texelSize;
 
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
@@ -129,8 +129,8 @@ void main() {
 
     // DerivativeMain: apply taaOffset * 0.5 to current sample coordinate.
     // Convert UV to pixel, apply jitter in pixel space, clamp.
-    vec2 samplePixel = screenCoord * uScreenSize + uJitter * uScreenSize * 0.5;
-    ivec2 sampleTexel = clamp(ivec2(samplePixel), ivec2(0), ivec2(uScreenSize) - 1);
+    vec2 samplePixel = screenCoord * uScreenSizeJitter.xy + uScreenSizeJitter.zw * uScreenSizeJitter.xy * 0.5;
+    ivec2 sampleTexel = clamp(ivec2(samplePixel), ivec2(0), ivec2(uScreenSizeJitter.xy) - 1);
 
     vec3 currentSample = texelFetch(uCurrentTex, sampleTexel, 0).rgb;
 
@@ -139,7 +139,7 @@ void main() {
     // Sky velocity comes from far-plane reprojection, not zero.
 
     // 3x3 neighborhood in YCoCgR for variance clip, all around sampleTexel.
-    ivec2 clampedSize = ivec2(uScreenSize) - 1;
+    ivec2 clampedSize = ivec2(uScreenSizeJitter.xy) - 1;
     vec3 col0 = RGBtoYCoCgR(currentSample);
     vec3 col1 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2(-1,  1), ivec2(0), clampedSize), 0).rgb);
     vec3 col2 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 0,  1), ivec2(0), clampedSize), 0).rgb);
@@ -168,7 +168,7 @@ void main() {
     // When the reprojected coordinate lands near a texel center (coverage ~1),
     // history gets full weight. Near texel edges, weight drops slightly.
     float blendWeight = 0.97;
-    vec2 pixelVelocity = 1.0 - abs(fract(previousCoord * uScreenSize) * 2.0 - 1.0);
+    vec2 pixelVelocity = 1.0 - abs(fract(previousCoord * uScreenSizeJitter.xy) * 2.0 - 1.0);
     blendWeight *= sqrt(pixelVelocity.x * pixelVelocity.y) * 0.25 + 0.75;
 
     // Mecraft adaptation: DerivativeMain writes rain ripple normals into the
@@ -177,14 +177,14 @@ void main() {
     // average can converge the moving RippleNormal contribution away. Keep the
     // base Temporal.frag path for ordinary pixels, but make puddle pixels
     // current-frame dominant so the DerivativeMain ripple source survives resolve.
-    if (uRainWetSurfacesEnabled != 0 && uSurfaceWetness > 1e-2) {
+    if (uTemporalParams.y != 0.0 && uTemporalParams.x > 1e-2) {
         float depth = texelFetch(uDepthTex, sampleTexel, 0).r;
         if (depth < 0.9999) {
             SurfaceMaterialAux aux = unpackGBufferMaterialAux(texelFetch(uMaterialAuxTex, sampleTexel, 0));
             TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
             if (!transMask.isTranslucent) {
                 float wetHistoryReject = smoothstep(0.02, 0.25, aux.wetnessMask) *
-                                         clamp(uSurfaceWetness, 0.0, 1.0);
+                                         clamp(uTemporalParams.x, 0.0, 1.0);
                 blendWeight = mix(blendWeight, 0.06, wetHistoryReject);
             }
         }
