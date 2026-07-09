@@ -46,6 +46,11 @@ private:
                                const std::array<RhiTextureViewHandle, 3>& views);
     void destroyFilterBindGroup();
     void destroyFilterRhiResources();
+    bool ensureUpsampleRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureUpsampleBindGroup(RhiDevice& rhiDevice,
+                                 const std::array<RhiTextureViewHandle, 2>& views);
+    void destroyUpsampleBindGroup();
+    void destroyUpsampleRhiResources();
     bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
     bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
                                  const std::array<RhiTextureViewHandle, 4>& views);
@@ -54,7 +59,6 @@ private:
 
     // Shaders (non-owning, loaded by ResourceMgr)
     Shader* m_ssaoShader = nullptr;
-    Shader* m_ssaoUpsampleShader = nullptr;
 
     RhiTextureHandle m_noiseTexture;
     RhiDevice* m_filterRhiDevice = nullptr;
@@ -66,6 +70,17 @@ private:
     RhiPipelineHandle m_filterPipeline;
     RhiBindGroupHandle m_filterBindGroup;
     std::array<RhiTextureViewHandle, 3> m_filterBoundViews = {};
+
+    RhiDevice* m_upsampleRhiDevice = nullptr;
+    RhiSamplerHandle m_upsampleNearestSampler;
+    RhiSamplerHandle m_upsampleLinearSampler;
+    RhiBindGroupLayoutHandle m_upsampleBindGroupLayout;
+    RhiPipelineLayoutHandle m_upsamplePipelineLayout;
+    RhiShaderHandle m_upsampleVertexShader;
+    RhiShaderHandle m_upsampleFragmentShader;
+    RhiPipelineHandle m_upsamplePipeline;
+    RhiBindGroupHandle m_upsampleBindGroup;
+    std::array<RhiTextureViewHandle, 2> m_upsampleBoundViews = {};
 
     RhiDevice* m_temporalRhiDevice = nullptr;
     RhiSamplerHandle m_temporalNearestSampler;

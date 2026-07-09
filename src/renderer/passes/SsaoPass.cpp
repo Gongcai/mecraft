@@ -36,15 +36,14 @@ template <size_t Count>
 
 void SsaoPass::init(ResourceMgr& resourceMgr) {
     m_ssaoShader = resourceMgr.getShader("ssao");
-    m_ssaoUpsampleShader = resourceMgr.getShader("ssao_upsample");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void SsaoPass::shutdown() {
+    destroyUpsampleRhiResources();
     destroyFilterRhiResources();
     destroyTemporalRhiResources();
     m_ssaoShader = nullptr;
-    m_ssaoUpsampleShader = nullptr;
     m_noiseTexture = {};
 }
 
@@ -56,9 +55,7 @@ void SsaoPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     if (settings.ssao.filterEnabled) {
         renderSsaoFilter(ctx, targets);
     }
-    if (m_ssaoUpsampleShader != nullptr) {
-        renderSsaoUpsample(ctx, settings.ssao, targets);
-    }
+    renderSsaoUpsample(ctx, settings.ssao, targets);
     if (settings.ssao.temporalEnabled) {
         renderSsaoTemporal(ctx, settings.ssao, targets);
     }
@@ -184,9 +181,12 @@ void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& 
 }
 
 void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& ssao, DeferredRenderTargets& targets) {
-    if (m_ssaoUpsampleShader == nullptr) return;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSsaoFilteredTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureSsaoFilteredTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        !(ssao.filterEnabled
+              ? targets.ensureSsaoHalfResFilteredTextureView(*ctx.shared->rhiDevice)
+              : targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice))) {
         return;
     }
 
@@ -207,39 +207,31 @@ void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& s
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    const std::array<RhiTextureViewHandle, 2> views = {
+        ssao.filterEnabled
+            ? targets.ssaoHalfResFilteredTextureViewHandle()
+            : targets.ssaoHalfResTextureViewHandle(),
+        targets.depthTextureViewHandle()
+    };
+    if (!ensureUpsampleRhiPipeline(rhiDevice) ||
+        !ensureUpsampleBindGroup(rhiDevice, views)) {
+        return;
+    }
+
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
-
-    m_ssaoUpsampleShader->use();
-    m_ssaoUpsampleShader->setInt("uSsaoHalfResTex", 0);
-    m_ssaoUpsampleShader->setInt("uDepthTex", 1);
-    m_ssaoUpsampleShader->setVec2("uHalfResSize",
-        glm::vec2(static_cast<float>(halfW), static_cast<float>(halfH)));
-    m_ssaoUpsampleShader->setFloat("uNear", ctx.camera.nearPlane);
-
-    // Read from filtered half-res if filter is enabled, otherwise raw half-res
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, ssao.filterEnabled
-        ? renderer::rhi::gl::textureId(targets.ssaoHalfResFilteredTextureHandle())
-        : renderer::rhi::gl::textureId(targets.ssaoHalfResTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoUpsampleShader);
-
-    for (int i = 1; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    const glm::vec4 pushConstants(
+        static_cast<float>(halfW),
+        static_cast<float>(halfH),
+        ctx.camera.nearPlane,
+        0.0f);
+    commandList.setGraphicsPipeline(m_upsamplePipeline);
+    commandList.setBindGroup(0u, m_upsampleBindGroup);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
 }
@@ -469,6 +461,191 @@ void SsaoPass::destroyFilterRhiResources() {
     m_filterBindGroupLayout = {};
     m_filterSampler = {};
     m_filterRhiDevice = nullptr;
+}
+
+bool SsaoPass::ensureUpsampleRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_upsampleRhiDevice != nullptr && m_upsampleRhiDevice != &rhiDevice) {
+        destroyUpsampleRhiResources();
+    }
+    if (m_upsamplePipeline.isValid()) {
+        return true;
+    }
+    m_upsampleRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ssao_upsample.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "SsaoUpsample.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_upsampleVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "SsaoUpsample.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_upsampleFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_upsampleVertexShader.isValid() || !m_upsampleFragmentShader.isValid()) {
+        destroyUpsampleRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc nearestSamplerDesc;
+    nearestSamplerDesc.minFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.magFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    nearestSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_upsampleNearestSampler = rhiDevice.createSampler(nearestSamplerDesc);
+
+    RhiSamplerDesc linearSamplerDesc;
+    linearSamplerDesc.minFilter = RhiFilter::Linear;
+    linearSamplerDesc.magFilter = RhiFilter::Linear;
+    linearSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    linearSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_upsampleLinearSampler = rhiDevice.createSampler(linearSamplerDesc);
+    if (!m_upsampleNearestSampler.isValid() || !m_upsampleLinearSampler.isValid()) {
+        destroyUpsampleRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "SsaoUpsample.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 2u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_upsampleBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_upsampleBindGroupLayout.isValid()) {
+        destroyUpsampleRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "SsaoUpsample.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_upsampleBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_upsamplePipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_upsamplePipelineLayout.isValid()) {
+        destroyUpsampleRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "SsaoUpsample.Pipeline";
+    pipelineDesc.vertexShader = m_upsampleVertexShader;
+    pipelineDesc.fragmentShader = m_upsampleFragmentShader;
+    pipelineDesc.layout = m_upsamplePipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::R8Unorm);
+    pipelineDesc.blend.attachments.push_back({});
+    m_upsamplePipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_upsamplePipeline.isValid()) {
+        destroyUpsampleRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool SsaoPass::ensureUpsampleBindGroup(RhiDevice& rhiDevice,
+                                       const std::array<RhiTextureViewHandle, 2>& views) {
+    if (!ensureUpsampleRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_upsampleBindGroup.isValid() && sameTextureViews(m_upsampleBoundViews, views)) {
+        return true;
+    }
+
+    destroyUpsampleBindGroup();
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_upsampleBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler =
+            binding == 0u ? m_upsampleNearestSampler : m_upsampleLinearSampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_upsampleBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_upsampleBindGroup.isValid()) {
+        m_upsampleBoundViews = {};
+        return false;
+    }
+
+    m_upsampleBoundViews = views;
+    return true;
+}
+
+void SsaoPass::destroyUpsampleBindGroup() {
+    if (m_upsampleRhiDevice != nullptr && m_upsampleBindGroup.isValid()) {
+        m_upsampleRhiDevice->destroyBindGroup(m_upsampleBindGroup);
+    }
+    m_upsampleBindGroup = {};
+    m_upsampleBoundViews = {};
+}
+
+void SsaoPass::destroyUpsampleRhiResources() {
+    destroyUpsampleBindGroup();
+    if (m_upsampleRhiDevice != nullptr) {
+        if (m_upsamplePipeline.isValid()) {
+            m_upsampleRhiDevice->destroyPipeline(m_upsamplePipeline);
+        }
+        if (m_upsampleVertexShader.isValid()) {
+            m_upsampleRhiDevice->destroyShader(m_upsampleVertexShader);
+        }
+        if (m_upsampleFragmentShader.isValid()) {
+            m_upsampleRhiDevice->destroyShader(m_upsampleFragmentShader);
+        }
+        if (m_upsamplePipelineLayout.isValid()) {
+            m_upsampleRhiDevice->destroyPipelineLayout(m_upsamplePipelineLayout);
+        }
+        if (m_upsampleBindGroupLayout.isValid()) {
+            m_upsampleRhiDevice->destroyBindGroupLayout(m_upsampleBindGroupLayout);
+        }
+        if (m_upsampleNearestSampler.isValid()) {
+            m_upsampleRhiDevice->destroySampler(m_upsampleNearestSampler);
+        }
+        if (m_upsampleLinearSampler.isValid()) {
+            m_upsampleRhiDevice->destroySampler(m_upsampleLinearSampler);
+        }
+    }
+
+    m_upsamplePipeline = {};
+    m_upsampleVertexShader = {};
+    m_upsampleFragmentShader = {};
+    m_upsamplePipelineLayout = {};
+    m_upsampleBindGroupLayout = {};
+    m_upsampleNearestSampler = {};
+    m_upsampleLinearSampler = {};
+    m_upsampleRhiDevice = nullptr;
 }
 
 bool SsaoPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
