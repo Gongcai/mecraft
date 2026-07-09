@@ -82,9 +82,11 @@ public:
     [[nodiscard]] int halfHeight() const { return m_height / 2; }
     [[nodiscard]] RhiTextureHandle ssaoHistoryTextureHandle() const { return m_ssaoHistoryHandle[m_ssaoHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssaoHistoryTexturePrevHandle() const { return m_ssaoHistoryHandle[1 - m_ssaoHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle ssaoHistoryTexturePrevViewHandle() const { return m_ssaoHistoryView[1 - m_ssaoHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssaoTemporalTextureHandle() const { return m_ssaoTemporalHandle; }
     [[nodiscard]] RhiTextureViewHandle ssaoTemporalTextureViewHandle() const { return m_ssaoTemporalView; }
     bool ensureSsaoTemporalTextureView(RhiDevice& rhiDevice);
+    bool ensureSsaoHistoryTextureViews(RhiDevice& rhiDevice);
     void swapSsaoHistory() { m_ssaoHistoryIndex = 1 - m_ssaoHistoryIndex; }
     void copySsaoTemporalToHistory(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle ssgiTextureHandle() const { return m_ssgiHandle; }
@@ -289,6 +291,7 @@ private:
     // SSAO temporal history ping-pong (R8)
     uint32_t m_ssaoHistoryTex[2] = {0, 0};
     RhiTextureHandle m_ssaoHistoryHandle[2];
+    RhiTextureViewHandle m_ssaoHistoryView[2];
     int m_ssaoHistoryIndex = 0;
     // SSAO temporal resolve output (R8) — deferred lighting reads from this
     uint32_t m_ssaoTemporalTex = 0;

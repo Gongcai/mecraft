@@ -1677,6 +1677,47 @@ bool DeferredRenderTargets::ensureSsaoTemporalTextureView(RhiDevice& rhiDevice) 
     return true;
 }
 
+bool DeferredRenderTargets::ensureSsaoHistoryTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssaoHistoryView[0].isValid() && m_ssaoHistoryView[1].isValid()) {
+        return true;
+    }
+    if (!m_ssaoHistoryHandle[0].isValid() || !m_ssaoHistoryHandle[1].isValid()) {
+        return false;
+    }
+
+    for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
+        if (m_ssaoHistoryView[historyIndex].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc desc;
+        desc.texture = m_ssaoHistoryHandle[historyIndex];
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::R8Unorm;
+        desc.baseMip = 0;
+        desc.mipCount = 1;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+
+        m_ssaoHistoryView[historyIndex] = rhiDevice.createTextureView(desc);
+        if (!m_ssaoHistoryView[historyIndex].isValid()) {
+            for (RhiTextureViewHandle& view : m_ssaoHistoryView) {
+                if (view.isValid()) {
+                    rhiDevice.destroyTextureView(view);
+                }
+                view = {};
+            }
+            return false;
+        }
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureSceneLightingTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2375,6 +2416,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_ssaoTemporalView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_ssaoTemporalView);
     }
+    for (RhiTextureViewHandle& view : m_ssaoHistoryView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
     if (m_rhiViewDevice != nullptr && m_sceneLightingView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneLightingView);
     }
@@ -2459,6 +2506,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_ssaoHalfResView = {};
     m_ssaoHalfResFilteredView = {};
     m_ssaoTemporalView = {};
+    m_ssaoHistoryView[0] = {};
+    m_ssaoHistoryView[1] = {};
     m_sceneLightingView = {};
     m_ssgiView = {};
     m_ssgiHalfResView = {};

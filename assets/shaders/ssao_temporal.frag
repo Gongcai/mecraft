@@ -3,16 +3,19 @@
 // applies 3x3 neighborhood clamp and depth-based disocclusion rejection to
 // prevent ghosting. Single-channel (R8) — no YCoCg needed.
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uCurrentTex;
-uniform sampler2D uHistoryTex;
-uniform sampler2D uVelocityTex;
-uniform sampler2D uDepthTex;
-uniform vec2 uScreenSize;
-uniform float uHistoryWeight;
-uniform float uNear;
+layout(binding = 0) uniform sampler2D uCurrentTex;
+layout(binding = 1) uniform sampler2D uHistoryTex;
+layout(binding = 2) uniform sampler2D uVelocityTex;
+layout(binding = 3) uniform sampler2D uDepthTex;
+
+layout(std140, binding = 15) uniform RhiPushConstants {
+    vec2 uScreenSize;
+    float uHistoryWeight;
+    float uNear;
+};
 
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);

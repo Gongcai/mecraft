@@ -5,6 +5,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -13,20 +14,38 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <cstddef>
+#include <optional>
+
+namespace {
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+template <size_t Count>
+[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, Count>& lhs,
+                                    const std::array<RhiTextureViewHandle, Count>& rhs) {
+    for (size_t i = 0u; i < lhs.size(); ++i) {
+        if (!sameTextureView(lhs[i], rhs[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
 
 void SsaoPass::init(ResourceMgr& resourceMgr) {
     m_ssaoShader = resourceMgr.getShader("ssao");
     m_ssaoFilterShader = resourceMgr.getShader("ssao_filter");
     m_ssaoUpsampleShader = resourceMgr.getShader("ssao_upsample");
-    m_ssaoTemporalShader = resourceMgr.getShader("ssao_temporal");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void SsaoPass::shutdown() {
+    destroyTemporalRhiResources();
     m_ssaoShader = nullptr;
     m_ssaoFilterShader = nullptr;
     m_ssaoUpsampleShader = nullptr;
-    m_ssaoTemporalShader = nullptr;
     m_noiseTexture = {};
 }
 
@@ -41,7 +60,7 @@ void SsaoPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     if (m_ssaoUpsampleShader != nullptr) {
         renderSsaoUpsample(ctx, settings.ssao, targets);
     }
-    if (settings.ssao.temporalEnabled && m_ssaoTemporalShader != nullptr) {
+    if (settings.ssao.temporalEnabled) {
         renderSsaoTemporal(ctx, settings.ssao, targets);
     }
 }
@@ -235,9 +254,12 @@ void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& s
 }
 
 void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao, DeferredRenderTargets& targets) {
-    if (m_ssaoTemporalShader == nullptr) return;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSsaoTemporalTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureSsaoTemporalTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureSsaoHistoryTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureSsaoFilteredTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureVelocityTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice)) {
         return;
     }
 
@@ -258,50 +280,216 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    RhiCommandList& commandList = rhiDevice.beginFrame();
-    commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_ssaoTemporalShader->use();
-    m_ssaoTemporalShader->setInt("uCurrentTex", 0);
-    m_ssaoTemporalShader->setInt("uHistoryTex", 1);
-    m_ssaoTemporalShader->setInt("uVelocityTex", 2);
-    m_ssaoTemporalShader->setInt("uDepthTex", 3);
-    m_ssaoTemporalShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, targets.width())),
-                   static_cast<float>(std::max(1, targets.height()))));
-    m_ssaoTemporalShader->setFloat("uHistoryWeight", ssao.historyWeight);
-    m_ssaoTemporalShader->setFloat("uNear", ctx.camera.nearPlane);
-
-    // Current SSAO: upsampled full-res result
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoFilteredTextureHandle()));
-    // History SSAO (previous frame)
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoHistoryTexturePrevHandle()));
-    // Velocity buffer
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.velocityTextureHandle()));
-    // GBuffer depth
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoTemporalShader);
-
-    for (int i = 3; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    const std::array<RhiTextureViewHandle, 4> views = {
+        targets.ssaoFilteredTextureViewHandle(),
+        targets.ssaoHistoryTexturePrevViewHandle(),
+        targets.velocityTextureViewHandle(),
+        targets.depthTextureViewHandle()
+    };
+    if (!ensureTemporalRhiPipeline(rhiDevice) ||
+        !ensureTemporalBindGroup(rhiDevice, views)) {
+        return;
     }
 
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+    commandList.setGraphicsPipeline(m_temporalPipeline);
+    commandList.setBindGroup(0u, m_temporalBindGroup);
+    const glm::vec4 pushConstants(
+        static_cast<float>(std::max(1, targets.width())),
+        static_cast<float>(std::max(1, targets.height())),
+        ssao.historyWeight,
+        ctx.camera.nearPlane);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
 
     // Copy temporal result to history[current] for next frame's reprojection
     targets.copySsaoTemporalToHistory(rhiDevice);
+}
 
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+bool SsaoPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_temporalRhiDevice != nullptr && m_temporalRhiDevice != &rhiDevice) {
+        destroyTemporalRhiResources();
+    }
+    if (m_temporalPipeline.isValid()) {
+        return true;
+    }
+    m_temporalRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ssao_temporal.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "SsaoTemporal.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_temporalVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "SsaoTemporal.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_temporalFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_temporalVertexShader.isValid() || !m_temporalFragmentShader.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc nearestSamplerDesc;
+    nearestSamplerDesc.minFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.magFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    nearestSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_temporalNearestSampler = rhiDevice.createSampler(nearestSamplerDesc);
+
+    RhiSamplerDesc linearSamplerDesc;
+    linearSamplerDesc.minFilter = RhiFilter::Linear;
+    linearSamplerDesc.magFilter = RhiFilter::Linear;
+    linearSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    linearSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_temporalLinearSampler = rhiDevice.createSampler(linearSamplerDesc);
+    if (!m_temporalNearestSampler.isValid() || !m_temporalLinearSampler.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "SsaoTemporal.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 4u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_temporalBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_temporalBindGroupLayout.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "SsaoTemporal.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_temporalBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_temporalPipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_temporalPipelineLayout.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "SsaoTemporal.Pipeline";
+    pipelineDesc.vertexShader = m_temporalVertexShader;
+    pipelineDesc.fragmentShader = m_temporalFragmentShader;
+    pipelineDesc.layout = m_temporalPipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::R8Unorm);
+    pipelineDesc.blend.attachments.push_back({});
+    m_temporalPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_temporalPipeline.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool SsaoPass::ensureTemporalBindGroup(RhiDevice& rhiDevice,
+                                       const std::array<RhiTextureViewHandle, 4>& views) {
+    if (!ensureTemporalRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_temporalBindGroup.isValid() && sameTextureViews(m_temporalBoundViews, views)) {
+        return true;
+    }
+
+    destroyTemporalBindGroup();
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_temporalBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler =
+            binding == 1u ? m_temporalLinearSampler : m_temporalNearestSampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_temporalBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_temporalBindGroup.isValid()) {
+        m_temporalBoundViews = {};
+        return false;
+    }
+
+    m_temporalBoundViews = views;
+    return true;
+}
+
+void SsaoPass::destroyTemporalBindGroup() {
+    if (m_temporalRhiDevice != nullptr && m_temporalBindGroup.isValid()) {
+        m_temporalRhiDevice->destroyBindGroup(m_temporalBindGroup);
+    }
+    m_temporalBindGroup = {};
+    m_temporalBoundViews = {};
+}
+
+void SsaoPass::destroyTemporalRhiResources() {
+    destroyTemporalBindGroup();
+    if (m_temporalRhiDevice != nullptr) {
+        if (m_temporalPipeline.isValid()) {
+            m_temporalRhiDevice->destroyPipeline(m_temporalPipeline);
+        }
+        if (m_temporalVertexShader.isValid()) {
+            m_temporalRhiDevice->destroyShader(m_temporalVertexShader);
+        }
+        if (m_temporalFragmentShader.isValid()) {
+            m_temporalRhiDevice->destroyShader(m_temporalFragmentShader);
+        }
+        if (m_temporalPipelineLayout.isValid()) {
+            m_temporalRhiDevice->destroyPipelineLayout(m_temporalPipelineLayout);
+        }
+        if (m_temporalBindGroupLayout.isValid()) {
+            m_temporalRhiDevice->destroyBindGroupLayout(m_temporalBindGroupLayout);
+        }
+        if (m_temporalNearestSampler.isValid()) {
+            m_temporalRhiDevice->destroySampler(m_temporalNearestSampler);
+        }
+        if (m_temporalLinearSampler.isValid()) {
+            m_temporalRhiDevice->destroySampler(m_temporalLinearSampler);
+        }
+    }
+
+    m_temporalPipeline = {};
+    m_temporalVertexShader = {};
+    m_temporalFragmentShader = {};
+    m_temporalPipelineLayout = {};
+    m_temporalBindGroupLayout = {};
+    m_temporalNearestSampler = {};
+    m_temporalLinearSampler = {};
+    m_temporalRhiDevice = nullptr;
 }

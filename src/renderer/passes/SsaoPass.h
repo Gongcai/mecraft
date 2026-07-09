@@ -6,10 +6,12 @@
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
 
+#include <array>
 #include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiDevice;
 class Shader;
 
 /// SSAO render pass: half-res raw, bilateral filter, depth-aware upsample, temporal reprojection.
@@ -39,14 +41,28 @@ private:
                             DeferredRenderTargets& targets);
     void renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao,
                             DeferredRenderTargets& targets);
+    bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
+                                 const std::array<RhiTextureViewHandle, 4>& views);
+    void destroyTemporalBindGroup();
+    void destroyTemporalRhiResources();
 
     // Shaders (non-owning, loaded by ResourceMgr)
     Shader* m_ssaoShader = nullptr;
     Shader* m_ssaoFilterShader = nullptr;
     Shader* m_ssaoUpsampleShader = nullptr;
-    Shader* m_ssaoTemporalShader = nullptr;
 
     RhiTextureHandle m_noiseTexture;
+    RhiDevice* m_temporalRhiDevice = nullptr;
+    RhiSamplerHandle m_temporalNearestSampler;
+    RhiSamplerHandle m_temporalLinearSampler;
+    RhiBindGroupLayoutHandle m_temporalBindGroupLayout;
+    RhiPipelineLayoutHandle m_temporalPipelineLayout;
+    RhiShaderHandle m_temporalVertexShader;
+    RhiShaderHandle m_temporalFragmentShader;
+    RhiPipelineHandle m_temporalPipeline;
+    RhiBindGroupHandle m_temporalBindGroup;
+    std::array<RhiTextureViewHandle, 4> m_temporalBoundViews = {};
 };
 
 #endif // MECRAFT_SSAO_PASS_H
