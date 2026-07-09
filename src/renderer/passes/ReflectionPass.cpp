@@ -162,7 +162,6 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
                                    DeferredRenderTargets& targets) {
     if (m_reflectionFilterShader == nullptr) return;
 
-    targets.copyReflectionToTemporalScratch();
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice)) {
         return;
@@ -185,6 +184,7 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    targets.copyReflectionToTemporalScratch(rhiDevice);
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 
@@ -235,7 +235,6 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
                                      DeferredRenderTargets& targets) {
     if (m_reflectionTemporalShader == nullptr) return;
 
-    targets.copyReflectionToTemporalScratch();
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice)) {
         return;
@@ -258,6 +257,7 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    targets.copyReflectionToTemporalScratch(rhiDevice);
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 

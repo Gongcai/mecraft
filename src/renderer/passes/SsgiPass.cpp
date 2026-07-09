@@ -55,7 +55,10 @@ void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                               ? renderer::rhi::gl::textureId(targets.ssgiTemporalMomentsTextureHandle())
                               : 0);
     } else if (temporalActive) {
-        targets.copySsgiTemporalToSsgi();
+        if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+            return;
+        }
+        targets.copySsgiTemporalToSsgi(*ctx.shared->rhiDevice);
     }
 }
 
@@ -292,7 +295,7 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
         rhiDevice.submitFrame(commandList);
     }
 
-    targets.copySsgiDenoiseToSsgi(outputSlot);
+    targets.copySsgiDenoiseToSsgi(rhiDevice, outputSlot);
 
     for (int i = 3; i >= 0; --i) {
         glActiveTexture(GL_TEXTURE0 + i);
@@ -385,7 +388,7 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
 
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
-    targets.copySsgiTemporalToHistory();
+    targets.copySsgiTemporalToHistory(rhiDevice);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }

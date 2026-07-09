@@ -20,23 +20,23 @@ public:
     void copyFramebufferColorToSceneLighting(int32_t framebuffer, int width, int height) const;
     void copyFramebufferColorToSceneResolved(int32_t framebuffer, int width, int height) const;
     void copyFramebufferColorToTransparentComposite(int32_t framebuffer, int width, int height) const;
-    void copySceneLightingToTransparentComposite() const;
-    void copySceneLightingToSceneComposite() const;
-    void copySceneCompositeToSceneResolved() const;
-    void copySceneCompositeToTransparentComposite() const;
-    void copySceneResolvedToTransparentComposite() const;
-    void copyTransparentCompositeToSceneComposite() const;
-    void copyTransparentCompositeToSceneResolved() const;
-    void copyDepthToTransparentComposite() const;
-    void copySceneResolvedToHistory() const;
-    void copySceneResolvedToTemporalCurrent() const;
-    void copyDepthToHistory() const;
-    void copyReflectionToHistory() const;
-    void copyReflectionToTemporalScratch() const;
-    void copyCloudToHistory() const;
-    void copyHistoryCloudToCloud() const;
-    void copyVolumetricToHistory() const;
-    void copyHistoryVolumetricToHalfRes() const;
+    void copySceneLightingToTransparentComposite(RhiDevice& rhiDevice) const;
+    void copySceneLightingToSceneComposite(RhiDevice& rhiDevice) const;
+    void copySceneCompositeToSceneResolved(RhiDevice& rhiDevice) const;
+    void copySceneCompositeToTransparentComposite(RhiDevice& rhiDevice) const;
+    void copySceneResolvedToTransparentComposite(RhiDevice& rhiDevice) const;
+    void copyTransparentCompositeToSceneComposite(RhiDevice& rhiDevice) const;
+    void copyTransparentCompositeToSceneResolved(RhiDevice& rhiDevice) const;
+    void copyDepthToTransparentComposite(RhiDevice& rhiDevice) const;
+    void copySceneResolvedToHistory(RhiDevice& rhiDevice) const;
+    void copySceneResolvedToTemporalCurrent(RhiDevice& rhiDevice) const;
+    void copyDepthToHistory(RhiDevice& rhiDevice) const;
+    void copyReflectionToHistory(RhiDevice& rhiDevice) const;
+    void copyReflectionToTemporalScratch(RhiDevice& rhiDevice) const;
+    void copyCloudToHistory(RhiDevice& rhiDevice) const;
+    void copyHistoryCloudToCloud(RhiDevice& rhiDevice) const;
+    void copyVolumetricToHistory(RhiDevice& rhiDevice) const;
+    void copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice) const;
     void blitSceneLightingTo(int32_t framebuffer, int width, int height) const;
     void blitSceneCompositeTo(int32_t framebuffer, int width, int height) const;
     void blitSceneResolvedTo(int32_t framebuffer, int width, int height) const;
@@ -91,7 +91,7 @@ public:
     [[nodiscard]] RhiTextureViewHandle ssaoTemporalTextureViewHandle() const { return m_ssaoTemporalView; }
     bool ensureSsaoTemporalTextureView(RhiDevice& rhiDevice);
     void swapSsaoHistory() { m_ssaoHistoryIndex = 1 - m_ssaoHistoryIndex; }
-    void copySsaoTemporalToHistory();
+    void copySsaoTemporalToHistory(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle ssgiTextureHandle() const { return m_ssgiHandle; }
     [[nodiscard]] RhiTextureViewHandle ssgiTextureViewHandle() const { return m_ssgiView; }
     bool ensureSsgiTextureView(RhiDevice& rhiDevice);
@@ -111,9 +111,9 @@ public:
     [[nodiscard]] RhiTextureViewHandle ssgiDenoiseTextureViewHandle(int slot) const;
     bool ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, int slot);
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
-    void copySsgiDenoiseToSsgi(int slot);
-    void copySsgiTemporalToSsgi();
-    void copySsgiTemporalToHistory();
+    void copySsgiDenoiseToSsgi(RhiDevice& rhiDevice, int slot);
+    void copySsgiTemporalToSsgi(RhiDevice& rhiDevice);
+    void copySsgiTemporalToHistory(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle sceneLightingTextureHandle() const { return m_sceneLightingHandle; }
     [[nodiscard]] RhiTextureViewHandle sceneLightingTextureViewHandle() const { return m_sceneLightingView; }
     bool ensureSceneLightingTextureView(RhiDevice& rhiDevice);

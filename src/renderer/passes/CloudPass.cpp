@@ -51,7 +51,10 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     if (m_cloudShader == nullptr) return;
 
     if (!shouldRenderClouds(ctx, settings)) {
-        targets.copyHistoryCloudToCloud();
+        if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+            return;
+        }
+        targets.copyHistoryCloudToCloud(*ctx.shared->rhiDevice);
         return;
     }
 

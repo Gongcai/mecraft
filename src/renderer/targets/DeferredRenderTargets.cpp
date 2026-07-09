@@ -43,6 +43,18 @@ void blitFramebuffer(const GLuint readFramebuffer,
                            mask,
                            filter);
 }
+
+void blitTexture(RhiDevice& rhiDevice,
+                 const RhiTextureHandle src,
+                 const RhiTextureHandle dst) {
+    RhiTextureBlit blit;
+    blit.src = src;
+    blit.dst = dst;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.blitTexture(blit);
+    rhiDevice.submitFrame(commandList);
+}
 } // namespace
 
 DeferredRenderTargets::~DeferredRenderTargets() {
@@ -723,214 +735,140 @@ void DeferredRenderTargets::copyFramebufferColorToTransparentComposite(const int
     glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
 }
 
-void DeferredRenderTargets::copySceneLightingToTransparentComposite() const {
+void DeferredRenderTargets::copySceneLightingToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_sceneLightingFbo, m_transparentCompositeFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+    blitTexture(rhiDevice, m_sceneLightingHandle, m_transparentCompositeHandle);
 }
 
-void DeferredRenderTargets::copySceneLightingToSceneComposite() const {
+void DeferredRenderTargets::copySceneLightingToSceneComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_sceneLightingFbo, m_sceneCompositeFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneCompositeFbo);
+    blitTexture(rhiDevice, m_sceneLightingHandle, m_sceneCompositeHandle);
 }
 
-void DeferredRenderTargets::copySceneCompositeToSceneResolved() const {
+void DeferredRenderTargets::copySceneCompositeToSceneResolved(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_sceneCompositeFbo, m_sceneResolvedFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
+    blitTexture(rhiDevice, m_sceneCompositeHandle, m_sceneResolvedHandle);
 }
 
-void DeferredRenderTargets::copySceneCompositeToTransparentComposite() const {
+void DeferredRenderTargets::copySceneCompositeToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_sceneCompositeFbo, m_transparentCompositeFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+    blitTexture(rhiDevice, m_sceneCompositeHandle, m_transparentCompositeHandle);
 }
 
-void DeferredRenderTargets::copySceneResolvedToTransparentComposite() const {
+void DeferredRenderTargets::copySceneResolvedToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_sceneResolvedFbo, m_transparentCompositeFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+    blitTexture(rhiDevice, m_sceneResolvedHandle, m_transparentCompositeHandle);
 }
 
-void DeferredRenderTargets::copyTransparentCompositeToSceneComposite() const {
+void DeferredRenderTargets::copyTransparentCompositeToSceneComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_transparentCompositeFbo, m_sceneCompositeFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneCompositeFbo);
+    blitTexture(rhiDevice, m_transparentCompositeHandle, m_sceneCompositeHandle);
 }
 
-void DeferredRenderTargets::copyTransparentCompositeToSceneResolved() const {
+void DeferredRenderTargets::copyTransparentCompositeToSceneResolved(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_transparentCompositeFbo, m_sceneResolvedFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
+    blitTexture(rhiDevice, m_transparentCompositeHandle, m_sceneResolvedHandle);
 }
 
-void DeferredRenderTargets::copyDepthToTransparentComposite() const {
+void DeferredRenderTargets::copyDepthToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_gBufferFbo, m_transparentCompositeFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+    blitTexture(rhiDevice, m_gDepthHandle, m_transparentCompositeDepthHandle);
 }
 
-void DeferredRenderTargets::copySceneResolvedToHistory() const {
+void DeferredRenderTargets::copySceneResolvedToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_sceneResolvedFbo, m_historySceneFbo[m_currentHistoryIndex],
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
+    blitTexture(rhiDevice, m_sceneResolvedHandle, m_historySceneHandle[m_currentHistoryIndex]);
 }
 
-void DeferredRenderTargets::copySceneResolvedToTemporalCurrent() const {
+void DeferredRenderTargets::copySceneResolvedToTemporalCurrent(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_sceneResolvedFbo, m_temporalCurrentFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_temporalCurrentFbo);
+    blitTexture(rhiDevice, m_sceneResolvedHandle, m_temporalCurrentHandle);
 }
 
-void DeferredRenderTargets::copyDepthToHistory() const {
+void DeferredRenderTargets::copyDepthToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_gBufferFbo, m_historySceneFbo[m_currentHistoryIndex],
-                    m_width, m_height, m_width, m_height,
-                    GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_historySceneFbo[m_currentHistoryIndex]);
+    blitTexture(rhiDevice, m_gDepthHandle, m_historyDepthHandle[m_currentHistoryIndex]);
 }
 
-void DeferredRenderTargets::copyReflectionToHistory() const {
+void DeferredRenderTargets::copyReflectionToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_reflectionFbo, m_historyReflectionFbo[m_currentHistoryIndex],
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_historyReflectionFbo[m_currentHistoryIndex]);
+    blitTexture(rhiDevice, m_reflectionHandle, m_historyReflectionHandle[m_currentHistoryIndex]);
 }
 
-void DeferredRenderTargets::copyReflectionToTemporalScratch() const {
+void DeferredRenderTargets::copyReflectionToTemporalScratch(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_reflectionFbo, m_reflectionTemporalScratchFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_reflectionTemporalScratchFbo);
+    blitTexture(rhiDevice, m_reflectionHandle, m_reflectionTemporalScratchHandle);
 }
 
-void DeferredRenderTargets::copyCloudToHistory() const {
+void DeferredRenderTargets::copyCloudToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    const int halfWidth = std::max(1, m_width / 2);
-    const int halfHeight = std::max(1, m_height / 2);
-    blitFramebuffer(m_cloudFbo, m_historyCloudFbo[m_currentHistoryIndex],
-                    halfWidth, halfHeight, halfWidth, halfHeight,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_historyCloudFbo[m_currentHistoryIndex]);
+    blitTexture(rhiDevice, m_cloudHandle, m_historyCloudHandle[m_currentHistoryIndex]);
 }
 
-void DeferredRenderTargets::copyHistoryCloudToCloud() const {
+void DeferredRenderTargets::copyHistoryCloudToCloud(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    const int halfWidth = std::max(1, m_width / 2);
-    const int halfHeight = std::max(1, m_height / 2);
-    blitFramebuffer(m_historyCloudFbo[1 - m_currentHistoryIndex], m_cloudFbo,
-                    halfWidth, halfHeight, halfWidth, halfHeight,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_cloudFbo);
+    blitTexture(rhiDevice, m_historyCloudHandle[1 - m_currentHistoryIndex], m_cloudHandle);
 }
 
-void DeferredRenderTargets::copyVolumetricToHistory() const {
+void DeferredRenderTargets::copyVolumetricToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    const int halfWidth = std::max(1, m_width / 2);
-    const int halfHeight = std::max(1, m_height / 2);
-    blitFramebuffer(m_halfResFbo, m_historyVolumetricFbo[m_currentHistoryIndex],
-                    halfWidth, halfHeight, halfWidth, halfHeight,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_historyVolumetricFbo[m_currentHistoryIndex]);
+    blitTexture(rhiDevice, m_halfResHandle, m_historyVolumetricHandle[m_currentHistoryIndex]);
 }
 
-void DeferredRenderTargets::copyHistoryVolumetricToHalfRes() const {
+void DeferredRenderTargets::copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    const int halfWidth = std::max(1, m_width / 2);
-    const int halfHeight = std::max(1, m_height / 2);
-    blitFramebuffer(m_historyVolumetricFbo[1 - m_currentHistoryIndex], m_halfResFbo,
-                    halfWidth, halfHeight, halfWidth, halfHeight,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    blitFramebuffer(m_historyVolumetricFbo[1 - m_currentHistoryIndex], m_historyVolumetricFbo[m_currentHistoryIndex],
-                    halfWidth, halfHeight, halfWidth, halfHeight,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_halfResFbo);
+    const RhiTextureHandle previous = m_historyVolumetricHandle[1 - m_currentHistoryIndex];
+    blitTexture(rhiDevice, previous, m_halfResHandle);
+    blitTexture(rhiDevice, previous, m_historyVolumetricHandle[m_currentHistoryIndex]);
 }
 
-void DeferredRenderTargets::copySsaoTemporalToHistory() {
+void DeferredRenderTargets::copySsaoTemporalToHistory(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
     }
-    blitFramebuffer(m_ssaoTemporalFbo, m_ssaoHistoryFbo[m_ssaoHistoryIndex],
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_ssaoHistoryFbo[m_ssaoHistoryIndex]);
+    blitTexture(rhiDevice, m_ssaoTemporalHandle, m_ssaoHistoryHandle[m_ssaoHistoryIndex]);
 }
 
-void DeferredRenderTargets::copySsgiTemporalToHistory() {
+void DeferredRenderTargets::copySsgiTemporalToHistory(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
     }
-    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0);
-    glNamedFramebufferDrawBuffer(m_ssgiHistoryFbo[m_ssgiHistoryIndex], GL_COLOR_ATTACHMENT0);
-    blitFramebuffer(m_ssgiTemporalFbo, m_ssgiHistoryFbo[m_ssgiHistoryIndex],
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT1);
-    glNamedFramebufferDrawBuffer(m_ssgiHistoryFbo[m_ssgiHistoryIndex], GL_COLOR_ATTACHMENT1);
-    blitFramebuffer(m_ssgiTemporalFbo, m_ssgiHistoryFbo[m_ssgiHistoryIndex],
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0);
-    glNamedFramebufferDrawBuffer(m_ssgiHistoryFbo[m_ssgiHistoryIndex], GL_COLOR_ATTACHMENT0);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiHistoryFbo[m_ssgiHistoryIndex]);
+    blitTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHistoryHandle[m_ssgiHistoryIndex]);
+    blitTexture(rhiDevice, m_ssgiTemporalMomentsHandle, m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]);
 }
 
 RhiTextureHandle DeferredRenderTargets::ssgiDenoiseTextureHandle(const int slot) const {
@@ -943,29 +881,19 @@ RhiTextureViewHandle DeferredRenderTargets::ssgiDenoiseTextureViewHandle(const i
     return m_ssgiDenoiseView[slot];
 }
 
-void DeferredRenderTargets::copySsgiDenoiseToSsgi(const int slot) {
+void DeferredRenderTargets::copySsgiDenoiseToSsgi(RhiDevice& rhiDevice, const int slot) {
     assert(slot >= 0 && slot < 2);
     if (!m_ready) {
         return;
     }
-    glNamedFramebufferReadBuffer(m_ssgiDenoiseFbo[slot], GL_COLOR_ATTACHMENT0);
-    glNamedFramebufferDrawBuffer(m_ssgiFbo, GL_COLOR_ATTACHMENT0);
-    blitFramebuffer(m_ssgiDenoiseFbo[slot], m_ssgiFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiFbo);
+    blitTexture(rhiDevice, m_ssgiDenoiseHandle[slot], m_ssgiHandle);
 }
 
-void DeferredRenderTargets::copySsgiTemporalToSsgi() {
+void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
     }
-    glNamedFramebufferReadBuffer(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0);
-    glNamedFramebufferDrawBuffer(m_ssgiFbo, GL_COLOR_ATTACHMENT0);
-    blitFramebuffer(m_ssgiTemporalFbo, m_ssgiFbo,
-                    m_width, m_height, m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_NEAREST);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_ssgiFbo);
+    blitTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHandle);
 }
 
 void DeferredRenderTargets::blitSceneLightingTo(const int32_t framebuffer, const int width, const int height) const {

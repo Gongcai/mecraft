@@ -25,9 +25,6 @@ void MotionBlurPass::execute(const FrameContext& ctx, const RenderSettings& sett
                               DeferredRenderTargets& targets) {
     if (m_motionBlurShader == nullptr) return;
 
-    // Save current SceneResolved to history so we can read it while writing SceneResolved
-    targets.copySceneResolvedToHistory();
-
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSceneResolvedTextureView(*ctx.shared->rhiDevice)) {
         return;
@@ -50,6 +47,8 @@ void MotionBlurPass::execute(const FrameContext& ctx, const RenderSettings& sett
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    // Save current SceneResolved to history so we can read it while writing SceneResolved.
+    targets.copySceneResolvedToHistory(rhiDevice);
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 

@@ -25,9 +25,6 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
                                    DeferredRenderTargets& targets) {
     if (m_temporalResolveShader == nullptr) return;
 
-    // Copy current scene to scratch so TAA reads from TempWralCurrent + HistoryPrev
-    targets.copySceneResolvedToTemporalCurrent();
-
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSceneResolvedTextureView(*ctx.shared->rhiDevice)) {
         return;
@@ -50,6 +47,8 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    // Copy current scene to scratch so TAA reads from TemporalCurrent + HistoryPrev.
+    targets.copySceneResolvedToTemporalCurrent(rhiDevice);
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 

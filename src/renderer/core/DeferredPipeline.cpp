@@ -197,6 +197,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     }
 
     auto& targets = *m_shared->deferredTargets;
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
     const int windowWidth = ctx.frameWidth;
     const int windowHeight = ctx.frameHeight;
 
@@ -310,9 +311,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Debug early-out for deferred light debug mode
     if (m_currentSettings.debug.deferredLightDebugMode > 0) {
-        targets.copySceneLightingToSceneComposite();
-        targets.copySceneCompositeToTransparentComposite();
-        targets.copySceneCompositeToSceneResolved();
+        targets.copySceneLightingToSceneComposite(rhiDevice);
+        targets.copySceneCompositeToTransparentComposite(rhiDevice);
+        targets.copySceneCompositeToSceneResolved(rhiDevice);
         updateDeferredHistoryTargets();
         targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
         targets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
@@ -352,8 +353,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         renderer::debug::ScopedDebugGroup passGroup("SceneComposite");
         m_sceneCompositePass->execute(ctx, m_currentSettings, targets, m_voxelGiClipmap.get());
     }
-    targets.copySceneCompositeToTransparentComposite();
-    targets.copySceneCompositeToSceneResolved();
+    targets.copySceneCompositeToTransparentComposite(rhiDevice);
+    targets.copySceneCompositeToSceneResolved(rhiDevice);
 
     // Reflection debug early-out
     if (m_currentSettings.debug.reflectionDebugMode > 0) {
@@ -382,7 +383,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Transparent);
         renderParticlesToSceneResolved(ctx);
     }
-    targets.copySceneCompositeToSceneResolved();
+    targets.copySceneCompositeToSceneResolved(rhiDevice);
 
     // Volumetric fog
     if (m_volumetricPass) {
@@ -411,7 +412,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Final history update and blit
     updateDeferredHistoryTargets();
-    targets.copySceneResolvedToTransparentComposite();
+    targets.copySceneResolvedToTransparentComposite(rhiDevice);
     if (m_currentSettings.debug.viewMode > 0 && m_debugPass) {
         m_debugPass->execute(ctx, m_currentSettings, targets, m_capturedFramebuffer, capturedWidth, capturedHeight);
     } else {
@@ -696,11 +697,11 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     auto& targets = *m_shared->deferredTargets;
     auto& terrain = *m_shared->terrain;
     auto& worldBuffer = *m_shared->worldRenderBuffer;
-
-    targets.copySceneCompositeToTransparentComposite();
-    targets.copyDepthToTransparentComposite();
-
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
+
+    targets.copySceneCompositeToTransparentComposite(rhiDevice);
+    targets.copyDepthToTransparentComposite(rhiDevice);
+
     if (!targets.ensureTransparentCompositeTextureViews(rhiDevice)) {
         return;
     }
@@ -843,8 +844,8 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
 
-    targets.copyTransparentCompositeToSceneComposite();
-    targets.copyTransparentCompositeToSceneResolved();
+    targets.copyTransparentCompositeToSceneComposite(rhiDevice);
+    targets.copyTransparentCompositeToSceneResolved(rhiDevice);
 
     glBindVertexArray(0);
     for (int i = 14; i >= 0; --i) {
@@ -855,18 +856,19 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
 }
 
 void DeferredPipeline::updateDeferredHistoryTargets() {
-    if (!m_shared || !m_shared->deferredTargets) return;
+    if (!m_shared || !m_shared->deferredTargets || !m_shared->rhiDevice) return;
     auto& targets = *m_shared->deferredTargets;
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
     if (!targets.isReady() || m_deferredHistoryUpdatedThisFrame) return;
 
-    targets.copySceneResolvedToHistory();
-    targets.copyDepthToHistory();
-    targets.copyReflectionToHistory();
-    targets.copyCloudToHistory();
+    targets.copySceneResolvedToHistory(rhiDevice);
+    targets.copyDepthToHistory(rhiDevice);
+    targets.copyReflectionToHistory(rhiDevice);
+    targets.copyCloudToHistory(rhiDevice);
     if (!m_currentSettings.volumetric.temporalEnabled || !m_hasPreviousFrameData ||
         !(m_volumetricPass && m_volumetricPass->hasTemporalShader())) {
-        targets.copyVolumetricToHistory();
+        targets.copyVolumetricToHistory(rhiDevice);
     }
     targets.swapHistory();
     targets.swapSsaoHistory();

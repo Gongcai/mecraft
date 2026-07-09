@@ -28,7 +28,6 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
                                 DeferredRenderTargets& targets) {
     if (m_dofShader == nullptr) return;
 
-    targets.copySceneResolvedToHistory();
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSceneResolvedTextureView(*ctx.shared->rhiDevice)) {
         return;
@@ -51,6 +50,7 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    targets.copySceneResolvedToHistory(rhiDevice);
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 

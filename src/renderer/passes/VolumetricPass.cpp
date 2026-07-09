@@ -72,7 +72,10 @@ void VolumetricPass::execute(const FrameContext& ctx, const RenderSettings& sett
                               ctx.weather.lightningFlash * 4.0f;
         m_hasRenderedFog = true;
     } else {
-        targets.copyHistoryVolumetricToHalfRes();
+        if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+            return;
+        }
+        targets.copyHistoryVolumetricToHalfRes(*ctx.shared->rhiDevice);
     }
 
     // Temporal resolve (optional)

@@ -77,9 +77,9 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     RhiDevice* rhiDevice = nullptr;
 
     if (compositeInputsEnabled) {
-        targets.copySceneResolvedToTransparentComposite();
-        targets.copyDepthToTransparentComposite();
         rhiDevice = ctx.shared->rhiDevice;
+        targets.copySceneResolvedToTransparentComposite(*rhiDevice);
+        targets.copyDepthToTransparentComposite(*rhiDevice);
         if (!targets.ensureTransparentCompositeTextureViews(*rhiDevice)) {
             return false;
         }
@@ -290,8 +290,8 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     }
 
     if (preTemporalResolve && compositeInputsEnabled) {
-        targets.copyTransparentCompositeToSceneComposite();
-        targets.copyTransparentCompositeToSceneResolved();
+        targets.copyTransparentCompositeToSceneComposite(*rhiDevice);
+        targets.copyTransparentCompositeToSceneResolved(*rhiDevice);
     } else if (compositeInputsEnabled) {
         targets.blitTransparentCompositeTo(capturedFramebuffer, capturedWidth, capturedHeight);
         targets.bindDefaultLike(capturedFramebuffer, capturedWidth, capturedHeight);

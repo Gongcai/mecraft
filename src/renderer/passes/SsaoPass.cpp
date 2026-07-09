@@ -300,7 +300,7 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
     rhiDevice.submitFrame(commandList);
 
     // Copy temporal result to history[current] for next frame's reprojection
-    targets.copySsaoTemporalToHistory();
+    targets.copySsaoTemporalToHistory(rhiDevice);
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
