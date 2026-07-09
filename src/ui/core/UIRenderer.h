@@ -176,6 +176,10 @@ private:
     void renderDeathOverlay(const UIRenderContext& context);
     void prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const;
     bool ensureBackdropBlurTargets(int sourceWidth, int sourceHeight, RhiDevice& rhiDevice) const;
+    bool ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const;
+    bool ensureBackdropBlurBindGroups(RhiDevice& rhiDevice) const;
+    void destroyBackdropBlurBindGroups() const;
+    void destroyBackdropBlurPipeline() const;
     void destroyBackdropBlurViews() const;
     void destroyBackdropBlurTargets() const;
 
@@ -210,10 +214,16 @@ private:
     mutable RhiTextureHandle m_backdropBlur[2];
     mutable RhiTextureViewHandle m_backdropSourceView;
     mutable RhiTextureViewHandle m_backdropBlurView[2];
+    mutable RhiSamplerHandle m_backdropBlurSampler;
+    mutable RhiBindGroupLayoutHandle m_backdropBlurBindGroupLayout;
+    mutable RhiPipelineLayoutHandle m_backdropBlurPipelineLayout;
+    mutable RhiShaderHandle m_backdropBlurVertexShader;
+    mutable RhiShaderHandle m_backdropBlurFragmentShader;
+    mutable RhiPipelineHandle m_backdropBlurPipeline;
+    mutable RhiBindGroupHandle m_backdropBlurBindGroup[3];
     mutable RhiDevice* m_backdropRhiViewDevice = nullptr;
     mutable uint32_t m_backdropSourceTex = 0;
     mutable uint32_t m_backdropBlurTex[2] = {0, 0};
-    mutable uint32_t m_backdropFullscreenVao = 0;
     mutable int m_backdropSourceWidth = 0;
     mutable int m_backdropSourceHeight = 0;
     mutable int m_backdropBlurWidth = 0;

@@ -1,9 +1,14 @@
 #include "UIRenderer.h"
 
 #include <algorithm>
+#include <fstream>
+#include <optional>
+#include <sstream>
+#include <string>
 
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
+#include <glm/vec4.hpp>
 
 #include "engine/platform/Time.h"
 #include "engine/input/InputManager.h"
@@ -48,6 +53,20 @@ void configureLinearClampTexture() {
         usage,
         false
     });
+}
+
+[[nodiscard]] std::optional<std::string> loadRhiShaderSource(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return std::nullopt;
+    }
+
+    std::stringstream stream;
+    stream << file.rdbuf();
+    if (file.bad()) {
+        return std::nullopt;
+    }
+    return stream.str();
 }
 }
 
@@ -854,10 +873,6 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
                              blurWidth != m_backdropBlurWidth ||
                              blurHeight != m_backdropBlurHeight;
 
-    if (m_backdropFullscreenVao == 0) {
-        glGenVertexArrays(1, &m_backdropFullscreenVao);
-    }
-
     if (m_backdropSourceTex == 0) {
         glGenTextures(1, &m_backdropSourceTex);
     }
@@ -952,6 +967,136 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
     return true;
 }
 
+bool UIRenderer::ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const
+{
+    if (m_backdropRhiViewDevice != nullptr && m_backdropRhiViewDevice != &rhiDevice) {
+        destroyBackdropBlurTargets();
+    }
+    if (m_backdropBlurPipeline.isValid()) {
+        return true;
+    }
+
+    const std::optional<std::string> vertexSource =
+        loadRhiShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        loadRhiShaderSource("assets/shaders/blur_rhi.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "UiBackdropBlur.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_backdropBlurVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "UiBackdropBlur.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_backdropBlurFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_backdropBlurVertexShader.isValid() || !m_backdropBlurFragmentShader.isValid()) {
+        destroyBackdropBlurPipeline();
+        return false;
+    }
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Linear;
+    samplerDesc.magFilter = RhiFilter::Linear;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_backdropBlurSampler = rhiDevice.createSampler(samplerDesc);
+    if (!m_backdropBlurSampler.isValid()) {
+        destroyBackdropBlurPipeline();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "UiBackdropBlur.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::CombinedTextureSampler,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_backdropBlurBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_backdropBlurBindGroupLayout.isValid()) {
+        destroyBackdropBlurPipeline();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "UiBackdropBlur.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_backdropBlurBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_backdropBlurPipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_backdropBlurPipelineLayout.isValid()) {
+        destroyBackdropBlurPipeline();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "UiBackdropBlur.Pipeline";
+    pipelineDesc.vertexShader = m_backdropBlurVertexShader;
+    pipelineDesc.fragmentShader = m_backdropBlurFragmentShader;
+    pipelineDesc.layout = m_backdropBlurPipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
+    pipelineDesc.blend.attachments.push_back({});
+    m_backdropBlurPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_backdropBlurPipeline.isValid()) {
+        destroyBackdropBlurPipeline();
+        return false;
+    }
+
+    m_backdropRhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool UIRenderer::ensureBackdropBlurBindGroups(RhiDevice& rhiDevice) const
+{
+    if (!ensureBackdropBlurPipeline(rhiDevice)) {
+        return false;
+    }
+
+    const RhiTextureViewHandle inputViews[3] = {
+        m_backdropSourceView,
+        m_backdropBlurView[0],
+        m_backdropBlurView[1]
+    };
+    for (int i = 0; i < 3; ++i) {
+        if (m_backdropBlurBindGroup[i].isValid()) {
+            continue;
+        }
+        if (!inputViews[i].isValid()) {
+            destroyBackdropBlurBindGroups();
+            return false;
+        }
+
+        RhiBindGroupDesc bindGroupDesc;
+        bindGroupDesc.layout = m_backdropBlurBindGroupLayout;
+        RhiBindGroupEntry textureEntry;
+        textureEntry.binding = 0u;
+        textureEntry.resource.combinedTextureSampler.textureView = inputViews[i];
+        textureEntry.resource.combinedTextureSampler.sampler = m_backdropBlurSampler;
+        bindGroupDesc.entries.push_back(textureEntry);
+        m_backdropBlurBindGroup[i] = rhiDevice.createBindGroup(bindGroupDesc);
+        if (!m_backdropBlurBindGroup[i].isValid()) {
+            destroyBackdropBlurBindGroups();
+            return false;
+        }
+    }
+    return true;
+}
+
 void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const
 {
     context.backdropBlur = {};
@@ -960,15 +1105,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     context.backdropSourceHeight = 0;
     context.backdropBlurWidth = 0;
     context.backdropBlurHeight = 0;
-
-    if (!m_resourceMgr) {
-        return;
-    }
-
-    Shader* blurShader = m_resourceMgr->getShader("blur");
-    if (!blurShader) {
-        return;
-    }
 
     GLint viewport[4] = {0, 0, 0, 0};
     glGetIntegerv(GL_VIEWPORT, viewport);
@@ -1018,9 +1154,13 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         restoreState();
         return;
     }
+    if (!ensureBackdropBlurBindGroups(rhiDevice)) {
+        restoreState();
+        return;
+    }
 
     if (m_backdropSourceTex == 0 || m_backdropBlurTex[0] == 0 || m_backdropBlurTex[1] == 0 ||
-        !m_backdropBlurView[0].isValid() || !m_backdropBlurView[1].isValid() || m_backdropFullscreenVao == 0) {
+        !m_backdropBlurView[0].isValid() || !m_backdropBlurView[1].isValid()) {
         restoreState();
         return;
     }
@@ -1035,12 +1175,10 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glBindVertexArray(m_backdropFullscreenVao);
 
-    blurShader->use();
-    blurShader->setInt("uTexture", 0);
-
-    auto blurPass = [&](const GLuint inputTexture, const RhiTextureViewHandle outputView, const glm::vec2 direction) {
+    auto blurPass = [&](const uint32_t bindGroupIndex,
+                        const RhiTextureViewHandle outputView,
+                        const glm::vec2 direction) {
         RhiColorAttachment colorAttachment;
         colorAttachment.view = outputView;
         colorAttachment.loadOp = RhiLoadOp::DontCare;
@@ -1058,17 +1196,18 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         renderingInfo.colorAttachmentCount = 1u;
 
         commandList.beginRendering(renderingInfo);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, inputTexture);
-        blurShader->setVec2("uDirection", direction);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        commandList.setGraphicsPipeline(m_backdropBlurPipeline);
+        commandList.setBindGroup(0u, m_backdropBlurBindGroup[bindGroupIndex]);
+        const glm::vec4 pushConstants(direction.x, direction.y, 0.0f, 0.0f);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(3u, 1u, 0u, 0u);
         commandList.endRendering();
     };
 
-    blurPass(m_backdropSourceTex, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(sourceWidth), 0.0f));
-    blurPass(m_backdropBlurTex[0], m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
-    blurPass(m_backdropBlurTex[1], m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
-    blurPass(m_backdropBlurTex[0], m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+    blurPass(0u, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(sourceWidth), 0.0f));
+    blurPass(1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+    blurPass(2u, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
+    blurPass(1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
 
     rhiDevice.submitFrame(commandList);
 
@@ -1083,6 +1222,7 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
 
 void UIRenderer::destroyBackdropBlurTargets() const
 {
+    destroyBackdropBlurPipeline();
     destroyBackdropBlurViews();
     renderer::rhi::gl::unregisterTextureAndReset(m_backdropSource);
     renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[0]);
@@ -1097,19 +1237,62 @@ void UIRenderer::destroyBackdropBlurTargets() const
             m_backdropBlurTex[i] = 0;
         }
     }
-    if (m_backdropFullscreenVao != 0) {
-        glDeleteVertexArrays(1, &m_backdropFullscreenVao);
-        m_backdropFullscreenVao = 0;
-    }
-
     m_backdropSourceWidth = 0;
     m_backdropSourceHeight = 0;
     m_backdropBlurWidth = 0;
     m_backdropBlurHeight = 0;
 }
 
+void UIRenderer::destroyBackdropBlurBindGroups() const
+{
+    if (m_backdropRhiViewDevice != nullptr) {
+        for (RhiBindGroupHandle& bindGroup : m_backdropBlurBindGroup) {
+            if (bindGroup.isValid()) {
+                m_backdropRhiViewDevice->destroyBindGroup(bindGroup);
+            }
+            bindGroup = {};
+        }
+    } else {
+        m_backdropBlurBindGroup[0] = {};
+        m_backdropBlurBindGroup[1] = {};
+        m_backdropBlurBindGroup[2] = {};
+    }
+}
+
+void UIRenderer::destroyBackdropBlurPipeline() const
+{
+    destroyBackdropBlurBindGroups();
+    if (m_backdropRhiViewDevice != nullptr) {
+        if (m_backdropBlurPipeline.isValid()) {
+            m_backdropRhiViewDevice->destroyPipeline(m_backdropBlurPipeline);
+        }
+        if (m_backdropBlurVertexShader.isValid()) {
+            m_backdropRhiViewDevice->destroyShader(m_backdropBlurVertexShader);
+        }
+        if (m_backdropBlurFragmentShader.isValid()) {
+            m_backdropRhiViewDevice->destroyShader(m_backdropBlurFragmentShader);
+        }
+        if (m_backdropBlurPipelineLayout.isValid()) {
+            m_backdropRhiViewDevice->destroyPipelineLayout(m_backdropBlurPipelineLayout);
+        }
+        if (m_backdropBlurBindGroupLayout.isValid()) {
+            m_backdropRhiViewDevice->destroyBindGroupLayout(m_backdropBlurBindGroupLayout);
+        }
+        if (m_backdropBlurSampler.isValid()) {
+            m_backdropRhiViewDevice->destroySampler(m_backdropBlurSampler);
+        }
+    }
+    m_backdropBlurPipeline = {};
+    m_backdropBlurVertexShader = {};
+    m_backdropBlurFragmentShader = {};
+    m_backdropBlurPipelineLayout = {};
+    m_backdropBlurBindGroupLayout = {};
+    m_backdropBlurSampler = {};
+}
+
 void UIRenderer::destroyBackdropBlurViews() const
 {
+    destroyBackdropBlurBindGroups();
     if (m_backdropRhiViewDevice != nullptr) {
         if (m_backdropSourceView.isValid()) {
             m_backdropRhiViewDevice->destroyTextureView(m_backdropSourceView);
