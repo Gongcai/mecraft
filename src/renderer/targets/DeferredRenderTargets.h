@@ -130,6 +130,8 @@ public:
     [[nodiscard]] RhiTextureViewHandle reflectionTextureViewHandle() const { return m_reflectionView; }
     bool ensureReflectionTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle reflectionTemporalScratchTextureHandle() const { return m_reflectionTemporalScratchHandle; }
+    [[nodiscard]] RhiTextureViewHandle reflectionTemporalScratchTextureViewHandle() const { return m_reflectionTemporalScratchView; }
+    bool ensureReflectionTemporalScratchTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle cloudTextureHandle() const { return m_cloudHandle; }
     [[nodiscard]] RhiTextureViewHandle cloudTextureViewHandle() const { return m_cloudView; }
     bool ensureCloudTextureView(RhiDevice& rhiDevice);
@@ -149,6 +151,8 @@ public:
     [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const { return m_historyDepthHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const { return m_historyReflectionHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyReflectionTexturePrevHandle() const { return m_historyReflectionHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle historyReflectionTexturePrevViewHandle() const { return m_historyReflectionView[1 - m_currentHistoryIndex]; }
+    bool ensureHistoryReflectionTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyCloudTextureHandle() const { return m_historyCloudHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyCloudTexturePrevHandle() const { return m_historyCloudHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const { return m_historyVolumetricHandle[m_currentHistoryIndex]; }
@@ -346,6 +350,7 @@ private:
     // temporal pass reads it and writes blended result.
     uint32_t m_reflectionTemporalScratchTex = 0;
     RhiTextureHandle m_reflectionTemporalScratchHandle;
+    RhiTextureViewHandle m_reflectionTemporalScratchView;
 
     uint32_t m_cloudTex = 0;
     RhiTextureHandle m_cloudHandle;
@@ -363,6 +368,7 @@ private:
     RhiTextureViewHandle m_historySceneView[2];
     uint32_t m_historyReflectionTex[2] = {0, 0};
     RhiTextureHandle m_historyReflectionHandle[2];
+    RhiTextureViewHandle m_historyReflectionView[2];
     uint32_t m_historyCloudTex[2] = {0, 0};
     RhiTextureHandle m_historyCloudHandle[2];
     uint32_t m_historyVolumetricTex[2] = {0, 0};
