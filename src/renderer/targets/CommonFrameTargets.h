@@ -18,10 +18,6 @@ public:
     /// Resize targets to match window dimensions
     bool ensureSize(int width, int height);
 
-    // Bind operations
-    void bindSceneColor();
-    void bindSceneDepth();
-
     // Texture accessors
     [[nodiscard]] RhiTextureHandle sceneColorTextureHandle() const { return m_sceneColor; }
     [[nodiscard]] RhiTextureHandle sceneDepthTextureHandle() const { return m_sceneDepth; }

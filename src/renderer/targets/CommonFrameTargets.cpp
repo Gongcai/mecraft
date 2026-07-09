@@ -119,17 +119,6 @@ bool CommonFrameTargets::ensureSize(int width, int height) {
     return true;
 }
 
-void CommonFrameTargets::bindSceneColor() {
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneColorFbo);
-    glViewport(0, 0, m_width, m_height);
-}
-
-void CommonFrameTargets::bindSceneDepth() {
-    // Depth is part of scene color FBO, so just bind that
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneColorFbo);
-    glViewport(0, 0, m_width, m_height);
-}
-
 void CommonFrameTargets::destroyFramebuffers() {
     GLuint sceneColorTex = static_cast<GLuint>(renderer::rhi::gl::textureId(m_sceneColor));
     GLuint sceneDepthTex = static_cast<GLuint>(renderer::rhi::gl::textureId(m_sceneDepth));
