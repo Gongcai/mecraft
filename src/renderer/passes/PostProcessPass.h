@@ -134,12 +134,13 @@ private:
 
     /// Apply bloom extraction and blur passes.
     /// @return true if bloom was applied
-    bool renderBloom(int maxMipCount);
+    bool renderBloom(RhiDevice& rhiDevice, int maxMipCount);
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
     void renderComposite(uint32_t gbufDepthTex, uint32_t weatherMaskTex, bool bloomReady);
     void updateCompositeParams(bool useAutoExposureTexture, bool hasBloom);
     bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
+    bool ensureBloomTargetViews(RhiDevice& rhiDevice);
     void bindCompositeOutput(RhiCommandList& commandList, int width, int height);
     void bindBackbufferOutput(RhiCommandList& commandList,
                               RhiTextureViewHandle swapchainColorView,
@@ -185,6 +186,9 @@ private:
     // Bloom chain
     uint32_t m_bloomFbos[kBloomMipCount][2] = {};
     uint32_t m_bloomTex[kBloomMipCount][2] = {};
+    RhiTextureHandle m_bloomHandle[kBloomMipCount][2] = {};
+    RhiTextureViewHandle m_bloomView[kBloomMipCount][2] = {};
+    RhiDevice* m_bloomViewDevice = nullptr;
     glm::ivec2 m_bloomMipSize[kBloomMipCount] = {};
 
     // Auto-exposure downsample chain

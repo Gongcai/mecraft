@@ -69,6 +69,34 @@ bool blitPostProcessTextureToSwapchain(RhiDevice& rhiDevice,
     rhiDevice.submitFrame(commandList);
     return true;
 }
+
+void beginPostProcessColorOutput(RhiCommandList& commandList,
+                                 const char* debugName,
+                                 const RhiTextureViewHandle view,
+                                 const int width,
+                                 const int height,
+                                 const bool clearColor) {
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = view;
+    colorAttachment.loadOp = clearColor ? RhiLoadOp::Clear : RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = debugName;
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    commandList.beginRendering(renderingInfo);
+}
 }
 
 PostProcessPass::~PostProcessPass() {
@@ -198,7 +226,7 @@ void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
     const float resolvedExposure = updateAutoExposure(frameTime);
     static_cast<void>(resolvedExposure);
 
-    const bool hasBloom = renderBloom(m_effects.bloomMipCount);
+    const bool hasBloom = renderBloom(rhiDevice, m_effects.bloomMipCount);
 
     static_cast<void>(weatherMaskTex);
 
@@ -235,7 +263,7 @@ uint32_t PostProcessPass::compositeToTexture(RhiDevice& rhiDevice,
     const float resolvedExposure = updateAutoExposure(frameTime);
     static_cast<void>(resolvedExposure);
 
-    const bool hasBloom = renderBloom(m_effects.bloomMipCount);
+    const bool hasBloom = renderBloom(rhiDevice, m_effects.bloomMipCount);
 
     RhiCommandList& commandList = rhiDevice.beginFrame();
     bindCompositeOutput(commandList, width, height);
@@ -397,26 +425,28 @@ void PostProcessPass::initializeExposureState(const float manualExposure) {
     m_exposureStateReadIndex = 0;
 }
 
-bool PostProcessPass::renderBloom(const int maxMipCount) {
+bool PostProcessPass::renderBloom(RhiDevice& rhiDevice, const int maxMipCount) {
     bool hasBloom = false;
     if (m_effects.bloomEnabled && m_bloomExtractShader != nullptr && m_bloomBlurShader != nullptr &&
         m_effects.bloomStrength > 0.001f &&
-        m_bloomFbos[0][0] != 0 && m_bloomFbos[0][1] != 0 && m_bloomTex[0][0] != 0 && m_bloomTex[0][1] != 0) {
+        m_bloomFbos[0][0] != 0 && m_bloomFbos[0][1] != 0 && m_bloomTex[0][0] != 0 && m_bloomTex[0][1] != 0 &&
+        ensureBloomTargetViews(rhiDevice)) {
         const int mipCount = std::clamp(maxMipCount, 1, kBloomMipCount);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, m_sceneColorTex);
 
+        RhiCommandList& commandList = rhiDevice.beginFrame();
         m_bloomExtractShader->use();
         glBindVertexArray(m_fullscreenVao);
         for (int mip = 0; mip < mipCount; ++mip) {
             if (m_bloomFbos[mip][0] == 0) {
                 break;
             }
-            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][0]);
-            glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
-            glClear(GL_COLOR_BUFFER_BIT);
+            beginPostProcessColorOutput(commandList, "BloomExtract", m_bloomView[mip][0],
+                                        m_bloomMipSize[mip].x, m_bloomMipSize[mip].y, true);
             glUniform1i(kBloomExtractSourceLodLocation, mip + 1);
             glDrawArrays(GL_TRIANGLES, 0, 3);
+            commandList.endRendering();
         }
 
         m_bloomBlurShader->use();
@@ -426,23 +456,24 @@ bool PostProcessPass::renderBloom(const int maxMipCount) {
                 break;
             }
 
-            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][1]);
-            glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
-            glClear(GL_COLOR_BUFFER_BIT);
+            beginPostProcessColorOutput(commandList, "BloomBlurHorizontal", m_bloomView[mip][1],
+                                        m_bloomMipSize[mip].x, m_bloomMipSize[mip].y, true);
             m_bloomBlurShader->use();
             glUniform2f(kBloomBlurDirectionLocation, 1.0f, 0.0f);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][0]);
             glDrawArrays(GL_TRIANGLES, 0, 3);
+            commandList.endRendering();
 
-            glBindFramebuffer(GL_FRAMEBUFFER, m_bloomFbos[mip][0]);
-            glViewport(0, 0, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
-            glClear(GL_COLOR_BUFFER_BIT);
+            beginPostProcessColorOutput(commandList, "BloomBlurVertical", m_bloomView[mip][0],
+                                        m_bloomMipSize[mip].x, m_bloomMipSize[mip].y, true);
             glUniform2f(kBloomBlurDirectionLocation, 0.0f, 1.0f);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, m_bloomTex[mip][1]);
             glDrawArrays(GL_TRIANGLES, 0, 3);
+            commandList.endRendering();
         }
+        rhiDevice.submitFrame(commandList);
 
         glUniform1f(kBloomBlurWeightLocation, 1.0f);
 
@@ -628,6 +659,17 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
                 destroyRenderTargets();
                 return false;
             }
+            m_bloomHandle[mip][ping] = registerPostProcessTexture(
+                m_bloomTex[mip][ping],
+                RhiTextureFormat::Rgba16Float,
+                m_bloomMipSize[mip].x,
+                m_bloomMipSize[mip].y,
+                rhiFlag(RhiTextureUsage::Sampled) |
+                    rhiFlag(RhiTextureUsage::ColorAttachment));
+            if (!m_bloomHandle[mip][ping].isValid()) {
+                destroyRenderTargets();
+                return false;
+            }
         }
     }
 
@@ -749,6 +791,49 @@ bool PostProcessPass::ensureCompositeTarget(RhiDevice& rhiDevice, const int widt
     return true;
 }
 
+bool PostProcessPass::ensureBloomTargetViews(RhiDevice& rhiDevice) {
+    if (m_bloomViewDevice != nullptr && m_bloomViewDevice != &rhiDevice) {
+        for (int mip = 0; mip < kBloomMipCount; ++mip) {
+            for (int ping = 0; ping < 2; ++ping) {
+                if (m_bloomView[mip][ping].isValid()) {
+                    m_bloomViewDevice->destroyTextureView(m_bloomView[mip][ping]);
+                    m_bloomView[mip][ping] = {};
+                }
+            }
+        }
+        m_bloomViewDevice = nullptr;
+    }
+
+    m_bloomViewDevice = &rhiDevice;
+    for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        for (int ping = 0; ping < 2; ++ping) {
+            if (!m_bloomHandle[mip][ping].isValid()) {
+                return false;
+            }
+            if (m_bloomView[mip][ping].isValid()) {
+                continue;
+            }
+
+            RhiTextureViewDesc viewDesc;
+            viewDesc.texture = m_bloomHandle[mip][ping];
+            viewDesc.viewType = RhiTextureViewType::Texture2D;
+            viewDesc.format = RhiTextureFormat::Rgba16Float;
+            viewDesc.baseMip = 0;
+            viewDesc.mipCount = 1;
+            viewDesc.baseLayer = 0;
+            viewDesc.layerCount = 1;
+
+            m_bloomView[mip][ping] = rhiDevice.createTextureView(viewDesc);
+            if (!m_bloomView[mip][ping].isValid()) {
+                return false;
+            }
+        }
+    }
+
+    m_bloomViewDevice = &rhiDevice;
+    return true;
+}
+
 void PostProcessPass::bindCompositeOutput(RhiCommandList& commandList, const int width, const int height) {
     m_renderCompositeToTexture = true;
     RhiColorAttachment colorAttachment;
@@ -799,6 +884,17 @@ void PostProcessPass::destroyRenderTargets() {
     }
     m_compositeView = {};
     m_compositeViewDevice = nullptr;
+    if (m_bloomViewDevice != nullptr) {
+        for (int mip = 0; mip < kBloomMipCount; ++mip) {
+            for (int ping = 0; ping < 2; ++ping) {
+                if (m_bloomView[mip][ping].isValid()) {
+                    m_bloomViewDevice->destroyTextureView(m_bloomView[mip][ping]);
+                }
+                m_bloomView[mip][ping] = {};
+            }
+        }
+    }
+    m_bloomViewDevice = nullptr;
     renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneColorHandle);
     if (m_compositeTex != 0) {
@@ -820,6 +916,7 @@ void PostProcessPass::destroyRenderTargets() {
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         m_bloomMipSize[mip] = glm::ivec2(0);
         for (int ping = 0; ping < 2; ++ping) {
+            renderer::rhi::gl::unregisterTextureAndReset(m_bloomHandle[mip][ping]);
             if (m_bloomTex[mip][ping] != 0) {
                 glDeleteTextures(1, &m_bloomTex[mip][ping]);
                 m_bloomTex[mip][ping] = 0;
