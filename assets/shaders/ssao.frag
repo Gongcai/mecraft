@@ -2,19 +2,19 @@
 
 #include "derivative_shadow.glsl"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uDepthTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uNoiseTex;
-uniform mat4 uProjection;
-uniform mat4 uInvProjection;
-uniform vec2 uInvResolution;
-uniform float uRadius;
-uniform float uStrength;
-uniform int uFrameIndex;
-uniform int uSamples;
+layout(binding = 0) uniform sampler2D uDepthTex;
+layout(binding = 1) uniform sampler2D uNormalAoTex;
+layout(binding = 2) uniform sampler2D uNoiseTex;
+
+layout(std140, binding = 15) uniform RhiPushConstants {
+    mat4 uProjection;
+    mat4 uInvProjection;
+    vec4 uSsaoParams0;
+    ivec4 uSsaoParams1;
+};
 
 vec3 screenToViewPos(vec2 uv, float depth) {
     vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
@@ -37,15 +37,16 @@ void main() {
     vec2 noiseUv = gl_FragCoord.xy / vec2(textureSize(uNoiseTex, 0));
     float dither = texture(uNoiseTex, noiseUv).r;
 
-    float rSteps = 1.0 / float(uSamples);
+    int sampleCount = uSsaoParams1.y;
+    float rSteps = 1.0 / float(sampleCount);
     float maxSqLen = sqr(viewPos.z) * 0.25;
 
     // Step size in screen space, scaled by projection and user radius.
     // Scale by sqrt(sampleCount/6) so total radius grows sub-linearly with more samples,
     // keeping occlusion spread consistent across different sample counts.
-    float stepScale = sqrt(float(uSamples) / 6.0);
-    float aspect = uInvResolution.y / uInvResolution.x;
-    vec2 rayStep = vec2(uRadius * aspect, uRadius) /
+    float stepScale = sqrt(float(sampleCount) / 6.0);
+    float aspect = uSsaoParams0.y / uSsaoParams0.x;
+    vec2 rayStep = vec2(uSsaoParams0.z * aspect, uSsaoParams0.z) /
                    max((-1.0 - viewPos.z) * 0.5, 5.0) * uProjection[1][1]
                    / stepScale;
 
@@ -60,7 +61,7 @@ void main() {
     vec2 radius = vec2(0.0);
     float total = 0.0;
 
-    for (int i = 0; i < uSamples; ++i, rot *= goldenRotate) {
+    for (int i = 0; i < sampleCount; ++i, rot *= goldenRotate) {
         radius += rayStep;
 
         // Sample at +rot
@@ -86,7 +87,7 @@ void main() {
         }
     }
 
-    float ao = max0(1.0 - total * rSteps * uStrength);
+    float ao = max0(1.0 - total * rSteps * uSsaoParams0.w);
     ao *= sqrt(ao);  // Perceptual curve matching DerivativeMain
     FragColor = vec4(vec3(ao), 1.0);
 }

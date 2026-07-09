@@ -12,7 +12,6 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class RhiDevice;
-class Shader;
 
 /// SSAO render pass: half-res raw, bilateral filter, depth-aware upsample, temporal reprojection.
 /// Reads from DeferredRenderTargets (GBuffer depth, normals, velocity) and writes SSAO results.
@@ -41,6 +40,13 @@ private:
                             DeferredRenderTargets& targets);
     void renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao,
                             DeferredRenderTargets& targets);
+    bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureBaseBindGroup(RhiDevice& rhiDevice,
+                             const std::array<RhiTextureViewHandle, 3>& views);
+    bool ensureNoiseTextureView(RhiDevice& rhiDevice);
+    void destroyBaseBindGroup();
+    void destroyBaseRhiResources();
+    void destroyNoiseTextureView();
     bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
     bool ensureFilterBindGroup(RhiDevice& rhiDevice,
                                const std::array<RhiTextureViewHandle, 3>& views);
@@ -57,10 +63,21 @@ private:
     void destroyTemporalBindGroup();
     void destroyTemporalRhiResources();
 
-    // Shaders (non-owning, loaded by ResourceMgr)
-    Shader* m_ssaoShader = nullptr;
-
     RhiTextureHandle m_noiseTexture;
+    RhiTextureViewHandle m_noiseTextureView;
+    RhiDevice* m_noiseViewDevice = nullptr;
+
+    RhiDevice* m_baseRhiDevice = nullptr;
+    RhiSamplerHandle m_baseNearestSampler;
+    RhiSamplerHandle m_baseNoiseSampler;
+    RhiBindGroupLayoutHandle m_baseBindGroupLayout;
+    RhiPipelineLayoutHandle m_basePipelineLayout;
+    RhiShaderHandle m_baseVertexShader;
+    RhiShaderHandle m_baseFragmentShader;
+    RhiPipelineHandle m_basePipeline;
+    RhiBindGroupHandle m_baseBindGroup;
+    std::array<RhiTextureViewHandle, 3> m_baseBoundViews = {};
+
     RhiDevice* m_filterRhiDevice = nullptr;
     RhiSamplerHandle m_filterSampler;
     RhiBindGroupLayoutHandle m_filterBindGroupLayout;

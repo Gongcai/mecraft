@@ -6,10 +6,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
-
-#include <glad/glad.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -35,15 +32,15 @@ template <size_t Count>
 } // namespace
 
 void SsaoPass::init(ResourceMgr& resourceMgr) {
-    m_ssaoShader = resourceMgr.getShader("ssao");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void SsaoPass::shutdown() {
+    destroyBaseRhiResources();
     destroyUpsampleRhiResources();
     destroyFilterRhiResources();
     destroyTemporalRhiResources();
-    m_ssaoShader = nullptr;
+    destroyNoiseTextureView();
     m_noiseTexture = {};
 }
 
@@ -63,9 +60,9 @@ void SsaoPass::execute(const FrameContext& ctx, const RenderSettings& settings,
 
 void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
                                DeferredRenderTargets& targets) {
-    if (m_ssaoShader == nullptr) return;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice)) {
         return;
     }
 
@@ -91,38 +88,48 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!ensureNoiseTextureView(rhiDevice)) {
+        return;
+    }
+    const std::array<RhiTextureViewHandle, 3> views = {
+        targets.depthTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),
+        m_noiseTextureView
+    };
+    if (!ensureBaseRhiPipeline(rhiDevice) ||
+        !ensureBaseBindGroup(rhiDevice, views)) {
+        return;
+    }
+
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-
-    m_ssaoShader->use();
-    m_ssaoShader->setInt("uDepthTex", 0);
-    m_ssaoShader->setInt("uNormalAoTex", 1);
-    m_ssaoShader->setInt("uNoiseTex", 2);
-    const glm::mat4& proj = ctx.camera.projection;
-    m_ssaoShader->setMat4("uProjection", proj);
-    m_ssaoShader->setMat4("uInvProjection", glm::inverse(proj));
-    m_ssaoShader->setFloat("uRadius", ssao.radius);
-    m_ssaoShader->setFloat("uStrength", ssao.strength);
     // Half-res: invResolution refers to the half-res viewport for UV computation
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
-    m_ssaoShader->setVec2("uInvResolution", glm::vec2(1.0f / halfW, 1.0f / halfH));
-    m_ssaoShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex % 64));
-    m_ssaoShader->setInt("uSamples", std::clamp(ssao.samples, 1, 64));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssaoShader);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
+    struct BasePushConstants {
+        glm::mat4 projection;
+        glm::mat4 invProjection;
+        glm::vec4 params0;
+        glm::ivec4 params1;
+    };
+    const glm::mat4& projection = ctx.camera.projection;
+    const BasePushConstants pushConstants{
+        projection,
+        glm::inverse(projection),
+        glm::vec4(1.0f / static_cast<float>(halfW),
+                  1.0f / static_cast<float>(halfH),
+                  ssao.radius,
+                  ssao.strength),
+        glm::ivec4(static_cast<int>(ctx.frameIndex % 64),
+                   std::clamp(ssao.samples, 1, 64),
+                   0,
+                   0)
+    };
+    commandList.setGraphicsPipeline(m_basePipeline);
+    commandList.setBindGroup(0u, m_baseBindGroup);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
 }
@@ -290,6 +297,229 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
 
     // Copy temporal result to history[current] for next frame's reprojection
     targets.copySsaoTemporalToHistory(rhiDevice);
+}
+
+bool SsaoPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
+    if (m_noiseViewDevice != nullptr && m_noiseViewDevice != &rhiDevice) {
+        destroyNoiseTextureView();
+    }
+    if (m_noiseTextureView.isValid()) {
+        return true;
+    }
+    if (!m_noiseTexture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_noiseTexture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_noiseTextureView = rhiDevice.createTextureView(viewDesc);
+    if (!m_noiseTextureView.isValid()) {
+        return false;
+    }
+
+    m_noiseViewDevice = &rhiDevice;
+    return true;
+}
+
+void SsaoPass::destroyNoiseTextureView() {
+    if (m_noiseViewDevice != nullptr && m_noiseTextureView.isValid()) {
+        m_noiseViewDevice->destroyTextureView(m_noiseTextureView);
+    }
+    m_noiseTextureView = {};
+    m_noiseViewDevice = nullptr;
+}
+
+bool SsaoPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_baseRhiDevice != nullptr && m_baseRhiDevice != &rhiDevice) {
+        destroyBaseRhiResources();
+    }
+    if (m_basePipeline.isValid()) {
+        return true;
+    }
+    m_baseRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ssao.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "SsaoBase.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_baseVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "SsaoBase.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_baseFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_baseVertexShader.isValid() || !m_baseFragmentShader.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc nearestSamplerDesc;
+    nearestSamplerDesc.minFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.magFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    nearestSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_baseNearestSampler = rhiDevice.createSampler(nearestSamplerDesc);
+
+    RhiSamplerDesc noiseSamplerDesc;
+    noiseSamplerDesc.minFilter = RhiFilter::Linear;
+    noiseSamplerDesc.magFilter = RhiFilter::Linear;
+    noiseSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    noiseSamplerDesc.addressU = RhiAddressMode::Repeat;
+    noiseSamplerDesc.addressV = RhiAddressMode::Repeat;
+    noiseSamplerDesc.addressW = RhiAddressMode::Repeat;
+    m_baseNoiseSampler = rhiDevice.createSampler(noiseSamplerDesc);
+    if (!m_baseNearestSampler.isValid() || !m_baseNoiseSampler.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "SsaoBase.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_baseBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_baseBindGroupLayout.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "SsaoBase.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_baseBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::mat4) * 2u +
+                                                                 sizeof(glm::vec4) +
+                                                                 sizeof(glm::ivec4));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_basePipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_basePipelineLayout.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "SsaoBase.Pipeline";
+    pipelineDesc.vertexShader = m_baseVertexShader;
+    pipelineDesc.fragmentShader = m_baseFragmentShader;
+    pipelineDesc.layout = m_basePipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::R8Unorm);
+    pipelineDesc.blend.attachments.push_back({});
+    m_basePipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_basePipeline.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool SsaoPass::ensureBaseBindGroup(RhiDevice& rhiDevice,
+                                   const std::array<RhiTextureViewHandle, 3>& views) {
+    if (!ensureBaseRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_baseBindGroup.isValid() && sameTextureViews(m_baseBoundViews, views)) {
+        return true;
+    }
+
+    destroyBaseBindGroup();
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_baseBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler =
+            binding == 2u ? m_baseNoiseSampler : m_baseNearestSampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_baseBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_baseBindGroup.isValid()) {
+        m_baseBoundViews = {};
+        return false;
+    }
+
+    m_baseBoundViews = views;
+    return true;
+}
+
+void SsaoPass::destroyBaseBindGroup() {
+    if (m_baseRhiDevice != nullptr && m_baseBindGroup.isValid()) {
+        m_baseRhiDevice->destroyBindGroup(m_baseBindGroup);
+    }
+    m_baseBindGroup = {};
+    m_baseBoundViews = {};
+}
+
+void SsaoPass::destroyBaseRhiResources() {
+    destroyBaseBindGroup();
+    if (m_baseRhiDevice != nullptr) {
+        if (m_basePipeline.isValid()) {
+            m_baseRhiDevice->destroyPipeline(m_basePipeline);
+        }
+        if (m_baseVertexShader.isValid()) {
+            m_baseRhiDevice->destroyShader(m_baseVertexShader);
+        }
+        if (m_baseFragmentShader.isValid()) {
+            m_baseRhiDevice->destroyShader(m_baseFragmentShader);
+        }
+        if (m_basePipelineLayout.isValid()) {
+            m_baseRhiDevice->destroyPipelineLayout(m_basePipelineLayout);
+        }
+        if (m_baseBindGroupLayout.isValid()) {
+            m_baseRhiDevice->destroyBindGroupLayout(m_baseBindGroupLayout);
+        }
+        if (m_baseNearestSampler.isValid()) {
+            m_baseRhiDevice->destroySampler(m_baseNearestSampler);
+        }
+        if (m_baseNoiseSampler.isValid()) {
+            m_baseRhiDevice->destroySampler(m_baseNoiseSampler);
+        }
+    }
+
+    m_basePipeline = {};
+    m_baseVertexShader = {};
+    m_baseFragmentShader = {};
+    m_basePipelineLayout = {};
+    m_baseBindGroupLayout = {};
+    m_baseNearestSampler = {};
+    m_baseNoiseSampler = {};
+    m_baseRhiDevice = nullptr;
 }
 
 bool SsaoPass::ensureFilterRhiPipeline(RhiDevice& rhiDevice) {
