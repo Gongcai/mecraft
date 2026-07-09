@@ -35,9 +35,7 @@ void WaterCompositePass::shutdown() {
 
 bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& settings,
                                    DeferredRenderTargets& targets, const IWorldView& worldView,
-                                   int windowWidth, int windowHeight,
                                    bool deferredFrameActive, bool preTemporalResolve,
-                                   int32_t capturedFramebuffer, const int32_t* capturedViewport,
                                    bool transparentCompositeEnabled,
                                    bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
                                    bool volumetricFogActive,
@@ -70,8 +68,6 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     const bool deferredInputsEnabled = deferredFrameActive && targets.isReady();
     const bool compositeInputsEnabled = deferredInputsEnabled &&
                                         (preTemporalResolve || transparentCompositeEnabled);
-    const int capturedWidth = capturedViewport[2] > 0 ? capturedViewport[2] : windowWidth;
-    const int capturedHeight = capturedViewport[3] > 0 ? capturedViewport[3] : windowHeight;
 
     RhiCommandList* commandList = nullptr;
     RhiDevice* rhiDevice = nullptr;
@@ -109,8 +105,37 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         commandList = &rhiDevice->beginFrame();
         commandList->beginRendering(renderingInfo);
     } else if (deferredFrameActive) {
-        // Restore the captured framebuffer viewport
-        targets.bindDefaultLike(capturedFramebuffer, capturedWidth, capturedHeight);
+        if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+            !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
+            return false;
+        }
+
+        rhiDevice = ctx.shared->rhiDevice;
+
+        RhiColorAttachment colorAttachment;
+        colorAttachment.view = ctx.sceneCaptureColorView;
+        colorAttachment.loadOp = RhiLoadOp::Load;
+        colorAttachment.storeOp = RhiStoreOp::Store;
+
+        RhiDepthStencilAttachment depthAttachment;
+        depthAttachment.view = ctx.sceneCaptureDepthView;
+        depthAttachment.depthLoadOp = RhiLoadOp::Load;
+        depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "WaterComposite.SceneCapture";
+        renderingInfo.renderArea = {
+            0,
+            0,
+            static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
+            static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+        };
+        renderingInfo.colorAttachments = &colorAttachment;
+        renderingInfo.colorAttachmentCount = 1u;
+        renderingInfo.depthStencilAttachment = &depthAttachment;
+
+        commandList = &rhiDevice->beginFrame();
+        commandList->beginRendering(renderingInfo);
     }
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();

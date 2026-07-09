@@ -103,8 +103,6 @@ private:
     bool m_hasPreviousFrameData = false;
     bool m_waterRenderedBeforeTemporal = false;
     bool m_deferredHistoryUpdatedThisFrame = false;
-    int32_t m_capturedFramebuffer = 0;
-    int32_t m_capturedViewport[4] = {};
     int m_heldBlockLightValue = 0;
 
     // Settings (cached from RenderSettings for current frame)
@@ -116,7 +114,6 @@ private:
     std::vector<ChunkRenderEntry> m_transparentEntries;
 
     // Private orchestration methods
-    void captureCurrentFramebuffer();
     void clearDeferredAuxiliaryTargets();
     void updateDeferredHistoryTargets();
     void renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings);

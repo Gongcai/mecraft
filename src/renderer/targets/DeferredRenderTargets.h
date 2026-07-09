@@ -16,7 +16,6 @@ public:
 
     bool ensureSize(int width, int height, int shadowResolution);
 
-    void bindDefaultLike(int32_t framebuffer, int width, int height);
     void copyTextureColorToSceneLighting(RhiDevice& rhiDevice, RhiTextureHandle source) const;
     void copySceneLightingToTransparentComposite(RhiDevice& rhiDevice) const;
     void copySceneLightingToSceneComposite(RhiDevice& rhiDevice) const;

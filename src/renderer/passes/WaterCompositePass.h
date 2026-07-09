@@ -36,11 +36,8 @@ public:
     /// @param settings Render settings
     /// @param targets Deferred render targets
     /// @param world World for frame data queries
-    /// @param window Window for viewport dimensions
     /// @param deferredFrameActive Whether deferred pipeline is active this frame
     /// @param preTemporalResolve Whether rendering before TAA (affects jitter)
-    /// @param capturedFramebuffer The captured FBO to restore
-    /// @param capturedViewport The captured viewport dimensions
     /// @param transparentCompositeEnabled Whether transparent composite is enabled
     /// @param waterEffectsEnabled Whether water effects are enabled
     /// @param rainSurfaceRipplesEnabled Whether rain surface ripples are enabled
@@ -51,9 +48,7 @@ public:
     /// @return true if water was rendered before temporal resolve (caller must set m_waterRenderedBeforeTemporal)
     bool execute(const FrameContext& ctx, const RenderSettings& settings,
                  DeferredRenderTargets& targets, const IWorldView& worldView,
-                 int windowWidth, int windowHeight,
                  bool deferredFrameActive, bool preTemporalResolve,
-                 int32_t capturedFramebuffer, const int32_t* capturedViewport,
                  bool transparentCompositeEnabled,
                  bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
                  bool volumetricFogActive,

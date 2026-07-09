@@ -678,11 +678,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     return true;
 }
 
-void DeferredRenderTargets::bindDefaultLike(const int32_t framebuffer, const int width, const int height) {
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-    glViewport(0, 0, std::max(1, width), std::max(1, height));
-}
-
 void DeferredRenderTargets::copyTextureColorToSceneLighting(RhiDevice& rhiDevice, const RhiTextureHandle source) const {
     if (!m_ready || !source.isValid()) {
         return;

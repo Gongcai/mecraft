@@ -208,9 +208,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     m_deferredHistoryUpdatedThisFrame = false;
     m_waterRenderedBeforeTemporal = false;
 
-    // Capture current framebuffer for later restore
-    captureCurrentFramebuffer();
-
     // Ensure deferred targets are sized correctly
     if (!targets.ensureSize(windowWidth, windowHeight, m_currentSettings.shadow.resolution)) {
         return {};
@@ -296,8 +293,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     }
 
     // Copy forward alpha to scene lighting
-    const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : windowWidth;
-    const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : windowHeight;
     targets.copyTextureColorToSceneLighting(rhiDevice, ctx.sceneCaptureColorTexture);
 
     // Deferred lighting
@@ -411,7 +406,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     updateDeferredHistoryTargets();
     targets.copySceneResolvedToTransparentComposite(rhiDevice);
     if (m_currentSettings.debug.viewMode > 0 && m_debugPass) {
-        m_debugPass->execute(ctx, m_currentSettings, targets, capturedWidth, capturedHeight);
+        m_debugPass->execute(ctx, m_currentSettings, targets, windowWidth, windowHeight);
     } else {
         targets.copySceneResolvedToTexture(rhiDevice, ctx.sceneCaptureColorTexture);
     }
@@ -428,17 +423,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     m_hasPreviousFrameData = true;
 
     return buildFrameOutput(ctx);
-}
-
-void DeferredPipeline::captureCurrentFramebuffer() {
-    GLint framebuffer = 0;
-    GLint viewport[4] = {};
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &framebuffer);
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    m_capturedFramebuffer = framebuffer;
-    for (int i = 0; i < 4; ++i) {
-        m_capturedViewport[i] = viewport[i];
-    }
 }
 
 void DeferredPipeline::clearDeferredAuxiliaryTargets() {
@@ -941,9 +925,7 @@ void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool pr
     ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Water);
     const bool waterRenderedBeforeTemporal = m_waterCompositePass->execute(
         ctx, m_currentSettings, targets, *ctx.worldView,
-        ctx.frameWidth, ctx.frameHeight,
         m_deferredFrameActive, preTemporalResolve,
-        m_capturedFramebuffer, m_capturedViewport,
         m_currentSettings.transparent.compositeEnabled,
         m_currentSettings.transparent.waterEffectsEnabled,
         m_currentSettings.weather.surfaceRipplesEnabled,
