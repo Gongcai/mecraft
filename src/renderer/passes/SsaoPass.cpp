@@ -1,6 +1,10 @@
 #include "SsaoPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -45,12 +49,38 @@ void SsaoPass::execute(const FrameContext& ctx, const RenderSettings& settings,
 void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
                                DeferredRenderTargets& targets) {
     if (m_ssaoShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsaoHalfResTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
     // Render SSAO at half resolution for performance
-    targets.bindSsaoHalfRes();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.ssaoHalfResTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SsaoHalfRes";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
-    glClear(GL_COLOR_BUFFER_BIT);
 
     m_ssaoShader->use();
     m_ssaoShader->setInt("uDepthTex", 0);
@@ -78,6 +108,8 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
     glActiveTexture(GL_TEXTURE2);
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& targets) {

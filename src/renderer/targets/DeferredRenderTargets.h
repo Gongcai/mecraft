@@ -94,6 +94,8 @@ public:
     [[nodiscard]] RhiTextureHandle ssaoTextureHandle() const { return m_ssaoHandle; }
     [[nodiscard]] RhiTextureHandle ssaoFilteredTextureHandle() const { return m_ssaoFilteredHandle; }
     [[nodiscard]] RhiTextureHandle ssaoHalfResTextureHandle() const { return m_ssaoHalfResHandle; }
+    [[nodiscard]] RhiTextureViewHandle ssaoHalfResTextureViewHandle() const { return m_ssaoHalfResView; }
+    bool ensureSsaoHalfResTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle ssaoHalfResFilteredTextureHandle() const { return m_ssaoHalfResFilteredHandle; }
     [[nodiscard]] int halfWidth() const { return m_width / 2; }
     [[nodiscard]] int halfHeight() const { return m_height / 2; }
@@ -272,6 +274,7 @@ private:
     uint32_t m_ssaoHalfResFbo = 0;
     uint32_t m_ssaoHalfResTex = 0;
     RhiTextureHandle m_ssaoHalfResHandle;
+    RhiTextureViewHandle m_ssaoHalfResView;
     uint32_t m_ssaoHalfResFilteredFbo = 0;
     uint32_t m_ssaoHalfResFilteredTex = 0;
     RhiTextureHandle m_ssaoHalfResFilteredHandle;
