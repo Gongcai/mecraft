@@ -266,35 +266,14 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         constexpr float clearHistoryDepth = 1.0f;
         glClearNamedFramebufferfv(m_historySceneFbo[i], GL_DEPTH, 0, &clearHistoryDepth);
 
-        glCreateFramebuffers(1, &m_historyReflectionFbo[i]);
         m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                     GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_historyReflectionFbo[i], GL_COLOR_ATTACHMENT0, m_historyReflectionTex[i], 0);
-        glNamedFramebufferDrawBuffers(m_historyReflectionFbo[i], 1, &historyDrawBuffer);
-        if (!checkFramebufferComplete(m_historyReflectionFbo[i], "HistoryReflection")) {
-            shutdown();
-            return false;
-        }
 
-        glCreateFramebuffers(1, &m_historyCloudFbo[i]);
         m_historyCloudTex[i] = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT,
                                                GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_historyCloudFbo[i], GL_COLOR_ATTACHMENT0, m_historyCloudTex[i], 0);
-        glNamedFramebufferDrawBuffers(m_historyCloudFbo[i], 1, &historyDrawBuffer);
-        if (!checkFramebufferComplete(m_historyCloudFbo[i], "HistoryCloud")) {
-            shutdown();
-            return false;
-        }
 
-        glCreateFramebuffers(1, &m_historyVolumetricFbo[i]);
         m_historyVolumetricTex[i] = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT,
                                                     GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_historyVolumetricFbo[i], GL_COLOR_ATTACHMENT0, m_historyVolumetricTex[i], 0);
-        glNamedFramebufferDrawBuffers(m_historyVolumetricFbo[i], 1, &historyDrawBuffer);
-        if (!checkFramebufferComplete(m_historyVolumetricFbo[i], "HistoryVolumetric")) {
-            shutdown();
-            return false;
-        }
     }
     m_currentHistoryIndex = 0;
 
@@ -385,24 +364,18 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         renderer::debug::labelTexture(m_historyDepthTex[i], depthName);
     }
     for (int i = 0; i < 2; ++i) {
-        char fboName[48], texName[48];
-        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryReflection[%d]", i);
+        char texName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryReflectionTex[%d]", i);
-        renderer::debug::labelFramebuffer(m_historyReflectionFbo[i], fboName);
         renderer::debug::labelTexture(m_historyReflectionTex[i], texName);
     }
     for (int i = 0; i < 2; ++i) {
-        char fboName[48], texName[48];
-        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryCloud[%d]", i);
+        char texName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryCloudTex[%d]", i);
-        renderer::debug::labelFramebuffer(m_historyCloudFbo[i], fboName);
         renderer::debug::labelTexture(m_historyCloudTex[i], texName);
     }
     for (int i = 0; i < 2; ++i) {
-        char fboName[48], texName[48];
-        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryVolumetric[%d]", i);
+        char texName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryVolumetricTex[%d]", i);
-        renderer::debug::labelFramebuffer(m_historyVolumetricFbo[i], fboName);
         renderer::debug::labelTexture(m_historyVolumetricTex[i], texName);
     }
     renderer::debug::labelTexture(m_temporalCurrentTex, "DeferredTargets.TemporalCurrentTex");
@@ -2530,7 +2503,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1]};
+    const GLuint framebuffers[] = {m_historySceneFbo[0], m_historySceneFbo[1], m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1]};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -2538,9 +2511,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         }
     }
     m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
-    m_historyReflectionFbo[0] = 0; m_historyReflectionFbo[1] = 0;
-    m_historyCloudFbo[0] = 0; m_historyCloudFbo[1] = 0;
-    m_historyVolumetricFbo[0] = 0; m_historyVolumetricFbo[1] = 0;
     m_ssaoHistoryFbo[0] = 0; m_ssaoHistoryFbo[1] = 0;
     m_ssgiHistoryFbo[0] = 0; m_ssgiHistoryFbo[1] = 0;
     m_currentHistoryIndex = 0;

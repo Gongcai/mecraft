@@ -358,13 +358,10 @@ private:
     uint32_t m_historyDepthTex[2] = {0, 0};
     RhiTextureHandle m_historySceneHandle[2];
     RhiTextureHandle m_historyDepthHandle[2];
-    uint32_t m_historyReflectionFbo[2] = {0, 0};
     uint32_t m_historyReflectionTex[2] = {0, 0};
     RhiTextureHandle m_historyReflectionHandle[2];
-    uint32_t m_historyCloudFbo[2] = {0, 0};
     uint32_t m_historyCloudTex[2] = {0, 0};
     RhiTextureHandle m_historyCloudHandle[2];
-    uint32_t m_historyVolumetricFbo[2] = {0, 0};
     uint32_t m_historyVolumetricTex[2] = {0, 0};
     RhiTextureHandle m_historyVolumetricHandle[2];
     RhiTextureViewHandle m_historyVolumetricView[2];
