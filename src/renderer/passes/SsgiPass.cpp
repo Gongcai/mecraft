@@ -1,6 +1,10 @@
 #include "SsgiPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -60,14 +64,39 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
     if (m_ssgiShader == nullptr) {
         return;
     }
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsgiHalfResTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
     const SsgiSettings& ssgi = settings.ssgi;
 
-    targets.bindSsgiHalfRes();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.ssgiHalfResTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 0.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SsgiHalfRes";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
@@ -115,19 +144,46 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
         glBindTexture(GL_TEXTURE_2D, 0);
     }
     glActiveTexture(GL_TEXTURE0);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets& targets) {
     if (m_ssgiUpsampleShader == nullptr) {
         return;
     }
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindSsgi();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.ssgiTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 0.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Ssgi";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
 
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
@@ -150,6 +206,8 @@ void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets
         glBindTexture(GL_TEXTURE_2D, 0);
     }
     glActiveTexture(GL_TEXTURE0);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,

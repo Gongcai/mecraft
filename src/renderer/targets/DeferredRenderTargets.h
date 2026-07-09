@@ -103,7 +103,11 @@ public:
     void swapSsaoHistory() { m_ssaoHistoryIndex = 1 - m_ssaoHistoryIndex; }
     void copySsaoTemporalToHistory();
     [[nodiscard]] RhiTextureHandle ssgiTextureHandle() const { return m_ssgiHandle; }
+    [[nodiscard]] RhiTextureViewHandle ssgiTextureViewHandle() const { return m_ssgiView; }
+    bool ensureSsgiTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle ssgiHalfResTextureHandle() const { return m_ssgiHalfResHandle; }
+    [[nodiscard]] RhiTextureViewHandle ssgiHalfResTextureViewHandle() const { return m_ssgiHalfResView; }
+    bool ensureSsgiHalfResTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle ssgiDenoiseTextureHandle(int slot) const;
     [[nodiscard]] RhiTextureHandle ssgiHistoryTextureHandle() const { return m_ssgiHistoryHandle[m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiHistoryTexturePrevHandle() const { return m_ssgiHistoryHandle[1 - m_ssgiHistoryIndex]; }
@@ -279,9 +283,11 @@ private:
     uint32_t m_ssgiFbo = 0;
     uint32_t m_ssgiTex = 0;
     RhiTextureHandle m_ssgiHandle;
+    RhiTextureViewHandle m_ssgiView;
     uint32_t m_ssgiHalfResFbo = 0;
     uint32_t m_ssgiHalfResTex = 0;
     RhiTextureHandle m_ssgiHalfResHandle;
+    RhiTextureViewHandle m_ssgiHalfResView;
     uint32_t m_ssgiDenoiseFbo[2] = {0, 0};
     uint32_t m_ssgiDenoiseTex[2] = {0, 0};
     RhiTextureHandle m_ssgiDenoiseHandle[2];

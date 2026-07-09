@@ -2044,6 +2044,66 @@ bool DeferredRenderTargets::ensureSceneLightingTextureView(RhiDevice& rhiDevice)
     return true;
 }
 
+bool DeferredRenderTargets::ensureSsgiTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssgiView.isValid()) {
+        return true;
+    }
+
+    if (!m_ssgiHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_ssgiHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_ssgiView = rhiDevice.createTextureView(desc);
+    if (!m_ssgiView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool DeferredRenderTargets::ensureSsgiHalfResTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssgiHalfResView.isValid()) {
+        return true;
+    }
+
+    if (!m_ssgiHalfResHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_ssgiHalfResHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_ssgiHalfResView = rhiDevice.createTextureView(desc);
+    if (!m_ssgiHalfResView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2171,6 +2231,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_sceneLightingView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneLightingView);
     }
+    if (m_rhiViewDevice != nullptr && m_ssgiView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_ssgiView);
+    }
+    if (m_rhiViewDevice != nullptr && m_ssgiHalfResView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_ssgiHalfResView);
+    }
     if (m_rhiViewDevice != nullptr && m_sceneCompositeView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneCompositeView);
     }
@@ -2185,6 +2251,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     }
     m_velocityView = {};
     m_sceneLightingView = {};
+    m_ssgiView = {};
+    m_ssgiHalfResView = {};
     m_sceneCompositeView = {};
     m_halfResView = {};
     m_reflectionView = {};
