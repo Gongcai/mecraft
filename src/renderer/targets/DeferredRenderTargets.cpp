@@ -1990,6 +1990,38 @@ bool DeferredRenderTargets::ensureSceneResolvedTextureView(RhiDevice& rhiDevice)
     return true;
 }
 
+bool DeferredRenderTargets::ensureHistorySceneTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+
+    const int historyIndex = m_currentHistoryIndex;
+    if (m_historySceneView[historyIndex].isValid()) {
+        return true;
+    }
+
+    if (!m_historySceneHandle[historyIndex].isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_historySceneHandle[historyIndex];
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_historySceneView[historyIndex] = rhiDevice.createTextureView(desc);
+    if (!m_historySceneView[historyIndex].isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2246,6 +2278,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_skyCaptureView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_skyCaptureView);
     }
+    for (RhiTextureViewHandle& view : m_historySceneView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
     for (RhiTextureViewHandle& view : m_historyVolumetricView) {
         if (m_rhiViewDevice != nullptr && view.isValid()) {
             m_rhiViewDevice->destroyTextureView(view);
@@ -2280,6 +2318,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_reflectionView = {};
     m_cloudView = {};
     m_skyCaptureView = {};
+    m_historySceneView[0] = {};
+    m_historySceneView[1] = {};
     m_weatherMaskView = {};
     m_rhiViewDevice = nullptr;
 }

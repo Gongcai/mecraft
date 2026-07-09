@@ -1,14 +1,15 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSceneTex;
-uniform sampler2D uVelocityTex;
-uniform sampler2D uDepthTex;
-uniform float uStrength;
-uniform int uSamples;
-uniform vec2 uScreenSize;
+layout(binding = 0) uniform sampler2D uSceneTex;
+layout(binding = 1) uniform sampler2D uVelocityTex;
+layout(binding = 2) uniform sampler2D uDepthTex;
+
+layout(std140, binding = 15) uniform RhiPushConstants {
+    vec4 uMotionBlurParams;
+};
 
 // Interleaved Gradient Noise for reducing banding artifacts
 float interleavedGradientNoise(vec2 screenPos) {
@@ -17,6 +18,10 @@ float interleavedGradientNoise(vec2 screenPos) {
 }
 
 void main() {
+    float uStrength = uMotionBlurParams.x;
+    int uSamples = int(uMotionBlurParams.y);
+    vec2 uScreenSize = uMotionBlurParams.zw;
+
     vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
     float speed = length(velocity) * uScreenSize.x;
 

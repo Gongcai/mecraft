@@ -141,6 +141,8 @@ public:
     // History ping-pong for temporal accumulation
     [[nodiscard]] RhiTextureHandle historySceneTextureHandle() const { return m_historySceneHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historySceneTexturePrevHandle() const { return m_historySceneHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle historySceneTextureViewHandle() const { return m_historySceneView[m_currentHistoryIndex]; }
+    bool ensureHistorySceneTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyDepthTextureHandle() const { return m_historyDepthHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const { return m_historyDepthHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const { return m_historyReflectionHandle[m_currentHistoryIndex]; }
@@ -354,6 +356,7 @@ private:
     uint32_t m_historyDepthTex[2] = {0, 0};
     RhiTextureHandle m_historySceneHandle[2];
     RhiTextureHandle m_historyDepthHandle[2];
+    RhiTextureViewHandle m_historySceneView[2];
     uint32_t m_historyReflectionTex[2] = {0, 0};
     RhiTextureHandle m_historyReflectionHandle[2];
     uint32_t m_historyCloudTex[2] = {0, 0};
