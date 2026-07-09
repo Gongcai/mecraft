@@ -352,7 +352,7 @@ float PostProcessPass::updateAutoExposure(RhiDevice& rhiDevice, const float fram
                               std::max(1, m_targetHeight >> exposureLod));
         bool sourceIsScene = true;
         for (int mip = 0; mip < m_exposureMipCount; ++mip) {
-            if (m_exposureFbos[mip] == 0 || m_exposureTex[mip] == 0) {
+            if (m_exposureTex[mip] == 0) {
                 break;
             }
             finalMip = mip;
@@ -449,7 +449,7 @@ bool PostProcessPass::renderBloom(RhiDevice& rhiDevice, const int maxMipCount) {
     bool hasBloom = false;
     if (m_effects.bloomEnabled && m_bloomExtractShader != nullptr && m_bloomBlurShader != nullptr &&
         m_effects.bloomStrength > 0.001f &&
-        m_bloomFbos[0][0] != 0 && m_bloomFbos[0][1] != 0 && m_bloomTex[0][0] != 0 && m_bloomTex[0][1] != 0 &&
+        m_bloomTex[0][0] != 0 && m_bloomTex[0][1] != 0 &&
         ensureBloomTargetViews(rhiDevice)) {
         const int mipCount = std::clamp(maxMipCount, 1, kBloomMipCount);
         glActiveTexture(GL_TEXTURE0);
@@ -459,7 +459,7 @@ bool PostProcessPass::renderBloom(RhiDevice& rhiDevice, const int maxMipCount) {
         m_bloomExtractShader->use();
         glBindVertexArray(m_fullscreenVao);
         for (int mip = 0; mip < mipCount; ++mip) {
-            if (m_bloomFbos[mip][0] == 0) {
+            if (m_bloomTex[mip][0] == 0) {
                 break;
             }
             beginPostProcessColorOutput(commandList, "BloomExtract", m_bloomView[mip][0],
@@ -472,7 +472,7 @@ bool PostProcessPass::renderBloom(RhiDevice& rhiDevice, const int maxMipCount) {
         m_bloomBlurShader->use();
         glUniform1f(kBloomBlurWeightLocation, 1.0f);
         for (int mip = 0; mip < mipCount; ++mip) {
-            if (m_bloomFbos[mip][0] == 0 || m_bloomFbos[mip][1] == 0) {
+            if (m_bloomTex[mip][0] == 0 || m_bloomTex[mip][1] == 0) {
                 break;
             }
 
@@ -510,7 +510,8 @@ void PostProcessPass::renderComposite(uint32_t gbufDepthTex, uint32_t weatherMas
         m_effects.autoExposureEnabled &&
         m_autoExposureInitialized &&
         m_exposureStateTex[m_exposureStateReadIndex] != 0;
-    const bool hasBloom = bloomReady && m_effects.bloomEnabled && m_effects.bloomStrength > 0.001f && m_bloomFbos[0][0] != 0;
+    const bool hasBloom = bloomReady && m_effects.bloomEnabled &&
+                          m_effects.bloomStrength > 0.001f && m_bloomTex[0][0] != 0;
     updateCompositeParams(useAutoExposureTexture, hasBloom);
 
     glActiveTexture(GL_TEXTURE0);
@@ -663,17 +664,13 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
         const int divisor = 1 << (mip + 1);
         m_bloomMipSize[mip] = glm::ivec2(std::max(1, width / divisor), std::max(1, height / divisor));
         for (int ping = 0; ping < 2; ++ping) {
-            glCreateFramebuffers(1, &m_bloomFbos[mip][ping]);
             glCreateTextures(GL_TEXTURE_2D, 1, &m_bloomTex[mip][ping]);
             glTextureStorage2D(m_bloomTex[mip][ping], 1, GL_RGBA16F, m_bloomMipSize[mip].x, m_bloomMipSize[mip].y);
             glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
             glTextureParameteri(m_bloomTex[mip][ping], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glNamedFramebufferTexture(m_bloomFbos[mip][ping], GL_COLOR_ATTACHMENT0, m_bloomTex[mip][ping], 0);
-            const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-            glNamedFramebufferDrawBuffers(m_bloomFbos[mip][ping], 1, &drawBuffer);
-            if (glCheckNamedFramebufferStatus(m_bloomFbos[mip][ping], GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            if (m_bloomTex[mip][ping] == 0) {
                 destroyRenderTargets();
                 return false;
             }
@@ -701,17 +698,13 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     m_exposureMipCount = 0;
     for (int mip = 0; mip < kExposureMipCount; ++mip) {
         m_exposureMipSize[mip] = exposureSize;
-        glCreateFramebuffers(1, &m_exposureFbos[mip]);
         glCreateTextures(GL_TEXTURE_2D, 1, &m_exposureTex[mip]);
         glTextureStorage2D(m_exposureTex[mip], 1, GL_RG16F, exposureSize.x, exposureSize.y);
         glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(m_exposureTex[mip], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_exposureFbos[mip], GL_COLOR_ATTACHMENT0, m_exposureTex[mip], 0);
-        const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-        glNamedFramebufferDrawBuffers(m_exposureFbos[mip], 1, &drawBuffer);
-        if (glCheckNamedFramebufferStatus(m_exposureFbos[mip], GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        if (m_exposureTex[mip] == 0) {
             destroyRenderTargets();
             return false;
         }
@@ -734,17 +727,13 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     }
 
     for (int i = 0; i < 2; ++i) {
-        glCreateFramebuffers(1, &m_exposureStateFbos[i]);
         glCreateTextures(GL_TEXTURE_2D, 1, &m_exposureStateTex[i]);
         glTextureStorage2D(m_exposureStateTex[i], 1, GL_RGBA16F, 1, 1);
         glTextureParameteri(m_exposureStateTex[i], GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTextureParameteri(m_exposureStateTex[i], GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTextureParameteri(m_exposureStateTex[i], GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(m_exposureStateTex[i], GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_exposureStateFbos[i], GL_COLOR_ATTACHMENT0, m_exposureStateTex[i], 0);
-        const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-        glNamedFramebufferDrawBuffers(m_exposureStateFbos[i], 1, &drawBuffer);
-        if (glCheckNamedFramebufferStatus(m_exposureStateFbos[i], GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        if (m_exposureStateTex[i] == 0) {
             destroyRenderTargets();
             return false;
         }
@@ -1103,10 +1092,6 @@ void PostProcessPass::destroyRenderTargets() {
                 glDeleteTextures(1, &m_bloomTex[mip][ping]);
                 m_bloomTex[mip][ping] = 0;
             }
-            if (m_bloomFbos[mip][ping] != 0) {
-                glDeleteFramebuffers(1, &m_bloomFbos[mip][ping]);
-                m_bloomFbos[mip][ping] = 0;
-            }
         }
     }
     for (int mip = 0; mip < kExposureMipCount; ++mip) {
@@ -1116,20 +1101,12 @@ void PostProcessPass::destroyRenderTargets() {
             glDeleteTextures(1, &m_exposureTex[mip]);
             m_exposureTex[mip] = 0;
         }
-        if (m_exposureFbos[mip] != 0) {
-            glDeleteFramebuffers(1, &m_exposureFbos[mip]);
-            m_exposureFbos[mip] = 0;
-        }
     }
     for (int i = 0; i < 2; ++i) {
         renderer::rhi::gl::unregisterTextureAndReset(m_exposureStateHandle[i]);
         if (m_exposureStateTex[i] != 0) {
             glDeleteTextures(1, &m_exposureStateTex[i]);
             m_exposureStateTex[i] = 0;
-        }
-        if (m_exposureStateFbos[i] != 0) {
-            glDeleteFramebuffers(1, &m_exposureStateFbos[i]);
-            m_exposureStateFbos[i] = 0;
         }
     }
     m_exposureMipCount = 0;

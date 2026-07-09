@@ -193,7 +193,6 @@ private:
     bool m_renderCompositeToTexture = false;
 
     // Bloom chain
-    uint32_t m_bloomFbos[kBloomMipCount][2] = {};
     uint32_t m_bloomTex[kBloomMipCount][2] = {};
     RhiTextureHandle m_bloomHandle[kBloomMipCount][2] = {};
     RhiTextureViewHandle m_bloomView[kBloomMipCount][2] = {};
@@ -201,13 +200,11 @@ private:
     glm::ivec2 m_bloomMipSize[kBloomMipCount] = {};
 
     // Auto-exposure downsample chain
-    uint32_t m_exposureFbos[kExposureMipCount] = {};
     uint32_t m_exposureTex[kExposureMipCount] = {};
     RhiTextureHandle m_exposureHandle[kExposureMipCount] = {};
     RhiTextureViewHandle m_exposureView[kExposureMipCount] = {};
     glm::ivec2 m_exposureMipSize[kExposureMipCount] = {};
     int m_exposureMipCount = 0;
-    uint32_t m_exposureStateFbos[2] = {};
     uint32_t m_exposureStateTex[2] = {};
     RhiTextureHandle m_exposureStateHandle[2] = {};
     RhiTextureViewHandle m_exposureStateView[2] = {};
