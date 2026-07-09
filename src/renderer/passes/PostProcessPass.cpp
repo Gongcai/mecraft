@@ -784,6 +784,60 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     return true;
 }
 
+bool PostProcessPass::ensureSceneCaptureViews(RhiDevice& rhiDevice) {
+    if (m_sceneColorView.isValid() && m_sceneDepthView.isValid() &&
+        m_sceneCaptureViewDevice == &rhiDevice) {
+        return true;
+    }
+
+    if (m_sceneCaptureViewDevice != nullptr) {
+        if (m_sceneColorView.isValid()) {
+            m_sceneCaptureViewDevice->destroyTextureView(m_sceneColorView);
+        }
+        if (m_sceneDepthView.isValid()) {
+            m_sceneCaptureViewDevice->destroyTextureView(m_sceneDepthView);
+        }
+    }
+    m_sceneColorView = {};
+    m_sceneDepthView = {};
+    m_sceneCaptureViewDevice = nullptr;
+
+    if (!m_sceneColorHandle.isValid() || !m_sceneDepthHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc colorDesc;
+    colorDesc.texture = m_sceneColorHandle;
+    colorDesc.viewType = RhiTextureViewType::Texture2D;
+    colorDesc.format = RhiTextureFormat::Rgba16Float;
+    colorDesc.baseMip = 0;
+    colorDesc.mipCount = 1;
+    colorDesc.baseLayer = 0;
+    colorDesc.layerCount = 1;
+    m_sceneColorView = rhiDevice.createTextureView(colorDesc);
+    if (!m_sceneColorView.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc depthDesc;
+    depthDesc.texture = m_sceneDepthHandle;
+    depthDesc.viewType = RhiTextureViewType::Texture2D;
+    depthDesc.format = RhiTextureFormat::Depth32Float;
+    depthDesc.baseMip = 0;
+    depthDesc.mipCount = 1;
+    depthDesc.baseLayer = 0;
+    depthDesc.layerCount = 1;
+    m_sceneDepthView = rhiDevice.createTextureView(depthDesc);
+    if (!m_sceneDepthView.isValid()) {
+        rhiDevice.destroyTextureView(m_sceneColorView);
+        m_sceneColorView = {};
+        return false;
+    }
+
+    m_sceneCaptureViewDevice = &rhiDevice;
+    return true;
+}
+
 bool PostProcessPass::ensureCompositeTarget(RhiDevice& rhiDevice, const int width, const int height) {
     const int targetWidth = std::max(1, width);
     const int targetHeight = std::max(1, height);
@@ -1000,6 +1054,17 @@ void PostProcessPass::bindBackbufferOutput(RhiCommandList& commandList,
 }
 
 void PostProcessPass::destroyRenderTargets() {
+    if (m_sceneCaptureViewDevice != nullptr) {
+        if (m_sceneColorView.isValid()) {
+            m_sceneCaptureViewDevice->destroyTextureView(m_sceneColorView);
+        }
+        if (m_sceneDepthView.isValid()) {
+            m_sceneCaptureViewDevice->destroyTextureView(m_sceneDepthView);
+        }
+    }
+    m_sceneColorView = {};
+    m_sceneDepthView = {};
+    m_sceneCaptureViewDevice = nullptr;
     if (m_compositeViewDevice != nullptr && m_compositeView.isValid()) {
         m_compositeViewDevice->destroyTextureView(m_compositeView);
     }

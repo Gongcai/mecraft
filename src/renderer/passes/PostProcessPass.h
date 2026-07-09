@@ -119,6 +119,9 @@ public:
     [[nodiscard]] int targetHeight() const { return m_targetHeight; }
     [[nodiscard]] RhiTextureHandle sceneColorTextureHandle() const { return m_sceneColorHandle; }
     [[nodiscard]] RhiTextureHandle sceneDepthTextureHandle() const { return m_sceneDepthHandle; }
+    [[nodiscard]] RhiTextureViewHandle sceneColorTextureViewHandle() const { return m_sceneColorView; }
+    [[nodiscard]] RhiTextureViewHandle sceneDepthTextureViewHandle() const { return m_sceneDepthView; }
+    bool ensureSceneCaptureViews(RhiDevice& rhiDevice);
 
 private:
     static constexpr int kBloomMipCount = 7;
@@ -178,8 +181,11 @@ private:
     uint32_t m_sceneFbo = 0;
     uint32_t m_sceneColorTex = 0;
     RhiTextureHandle m_sceneColorHandle;
+    RhiTextureViewHandle m_sceneColorView;
     uint32_t m_sceneDepthTex = 0;
     RhiTextureHandle m_sceneDepthHandle;
+    RhiTextureViewHandle m_sceneDepthView;
+    RhiDevice* m_sceneCaptureViewDevice = nullptr;
 
     uint32_t m_compositeTex = 0;
     RhiTextureHandle m_compositeHandle;

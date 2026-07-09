@@ -251,6 +251,11 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         m_terrainStreamingService.endFrame();
         return;
     }
+    if (!skipPostProcess && !m_postProcessPass.ensureSceneCaptureViews(*m_shared.rhiDevice)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to create post-process scene capture views\n");
+        m_terrainStreamingService.endFrame();
+        return;
+    }
 
     const bool lightDebugActive = isLightDebugActive();
     float cameraRainVisibility = 1.0f;
@@ -745,6 +750,8 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.swapchainDepthStencilFormat = m_shared.rhiDevice->swapchainDepthStencilFormat();
     ctx.sceneCaptureColorTexture = m_postProcessPass.sceneColorTextureHandle();
     ctx.sceneCaptureDepthTexture = m_postProcessPass.sceneDepthTextureHandle();
+    ctx.sceneCaptureColorView = m_postProcessPass.sceneColorTextureViewHandle();
+    ctx.sceneCaptureDepthView = m_postProcessPass.sceneDepthTextureViewHandle();
 
     // Frame timing
     ctx.frameIndex = m_frameCounter++;
