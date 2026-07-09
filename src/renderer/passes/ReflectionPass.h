@@ -31,6 +31,11 @@ private:
                       DeferredRenderTargets& targets);
     void renderTemporal(const FrameContext& ctx, const ReflectionSettings& reflection,
                         DeferredRenderTargets& targets);
+    bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureFilterBindGroup(RhiDevice& rhiDevice,
+                               const std::array<RhiTextureViewHandle, 5>& views);
+    void destroyFilterBindGroup();
+    void destroyFilterRhiResources();
     bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
     bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
                                  const std::array<RhiTextureViewHandle, 7>& views);
@@ -38,11 +43,21 @@ private:
     void destroyTemporalRhiResources();
 
     Shader* m_reflectionShader = nullptr;
-    Shader* m_reflectionFilterShader = nullptr;
 
     RhiTextureHandle m_noiseTexture;
     RhiTextureHandle m_rippleNormalTexture;
     ResourceMgr* m_resourceMgr = nullptr;
+
+    RhiDevice* m_filterRhiDevice = nullptr;
+    RhiSamplerHandle m_filterNearestSampler;
+    RhiSamplerHandle m_filterLinearSampler;
+    RhiBindGroupLayoutHandle m_filterBindGroupLayout;
+    RhiPipelineLayoutHandle m_filterPipelineLayout;
+    RhiShaderHandle m_filterVertexShader;
+    RhiShaderHandle m_filterFragmentShader;
+    RhiPipelineHandle m_filterPipeline;
+    RhiBindGroupHandle m_filterBindGroup;
+    std::array<RhiTextureViewHandle, 5> m_filterBoundViews = {};
 
     RhiDevice* m_rhiDevice = nullptr;
     RhiSamplerHandle m_temporalNearestSampler;

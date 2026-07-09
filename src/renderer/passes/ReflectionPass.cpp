@@ -21,8 +21,9 @@ namespace {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
-[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, 7>& lhs,
-                                    const std::array<RhiTextureViewHandle, 7>& rhs) {
+template <size_t Count>
+[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, Count>& lhs,
+                                    const std::array<RhiTextureViewHandle, Count>& rhs) {
     for (size_t i = 0u; i < lhs.size(); ++i) {
         if (!sameTextureView(lhs[i], rhs[i])) {
             return false;
@@ -34,16 +35,15 @@ namespace {
 
 void ReflectionPass::init(ResourceMgr& resourceMgr) {
     m_reflectionShader = resourceMgr.getShader("reflection_probe");
-    m_reflectionFilterShader = resourceMgr.getShader("reflection_filter");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
     m_rippleNormalTexture = resourceMgr.getTexture2DHandle("shader_ripple_normal");
     m_resourceMgr = &resourceMgr;
 }
 
 void ReflectionPass::shutdown() {
+    destroyFilterRhiResources();
     destroyTemporalRhiResources();
     m_reflectionShader = nullptr;
-    m_reflectionFilterShader = nullptr;
     m_noiseTexture = {};
     m_rippleNormalTexture = {};
     m_resourceMgr = nullptr;
@@ -56,8 +56,7 @@ void ReflectionPass::execute(const FrameContext& ctx, const RenderSettings& sett
     renderReflection(ctx, settings, targets);
 
     if (settings.reflection.filterEnabled &&
-        settings.debug.reflectionDebugMode == 0 &&
-        m_reflectionFilterShader != nullptr) {
+        settings.debug.reflectionDebugMode == 0) {
         renderFilter(ctx, settings.reflection, targets);
     }
     if (settings.reflection.temporalEnabled &&
@@ -177,10 +176,10 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
 
 void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSettings& reflection,
                                    DeferredRenderTargets& targets) {
-    if (m_reflectionFilterShader == nullptr) return;
-
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureReflectionTemporalScratchTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice)) {
         return;
     }
 
@@ -202,48 +201,48 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     targets.copyReflectionToTemporalScratch(rhiDevice);
-    RhiCommandList& commandList = rhiDevice.beginFrame();
-    commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_reflectionFilterShader->use();
-    m_reflectionFilterShader->setInt("uReflectionTex", 0);
-    m_reflectionFilterShader->setInt("uDepthTex", 1);
-    m_reflectionFilterShader->setInt("uNormalAoTex", 2);
-    m_reflectionFilterShader->setInt("uMaterialTex", 3);
-    m_reflectionFilterShader->setInt("uMaterialAuxTex", 4);
-    m_reflectionFilterShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, targets.width())),
-                   static_cast<float>(std::max(1, targets.height()))));
-    m_reflectionFilterShader->setFloat("uFilterStrength", reflection.filterStrength);
-    m_reflectionFilterShader->setFloat("uSurfaceWetness", ctx.weather.surfaceWetness);
-    m_reflectionFilterShader->setMat4("uInvViewProj", ctx.camera.invViewProj);
-    m_reflectionFilterShader->setVec3("uCameraPos", ctx.camera.position);
-    m_reflectionFilterShader->setFloat("uNearPlane", ctx.camera.nearPlane);
-    m_reflectionFilterShader->setFloat("uFarPlane", ctx.camera.farPlane);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.reflectionTemporalScratchTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialTextureHandle()));
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_reflectionFilterShader);
-
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    const std::array<RhiTextureViewHandle, 5> views = {
+        targets.reflectionTemporalScratchTextureViewHandle(),
+        targets.depthTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),
+        targets.materialTextureViewHandle(),
+        targets.materialAuxTextureViewHandle()
+    };
+    if (!ensureFilterRhiPipeline(rhiDevice) ||
+        !ensureFilterBindGroup(rhiDevice, views)) {
+        return;
     }
 
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+    commandList.setGraphicsPipeline(m_filterPipeline);
+    commandList.setBindGroup(0u, m_filterBindGroup);
+    const glm::vec4 pushConstants[4] = {
+        glm::vec4(static_cast<float>(std::max(1, targets.width())),
+                  static_cast<float>(std::max(1, targets.height())),
+                  reflection.filterStrength,
+                  ctx.weather.surfaceWetness),
+        glm::vec4(ctx.camera.position, ctx.camera.nearPlane),
+        glm::vec4(ctx.camera.farPlane, 0.0f, 0.0f, 0.0f),
+        glm::vec4(0.0f)
+    };
+    struct FilterPushConstants {
+        glm::mat4 invViewProj;
+        glm::vec4 params[4];
+    };
+    const FilterPushConstants filterPushConstants{
+        ctx.camera.invViewProj,
+        {
+            pushConstants[0],
+            pushConstants[1],
+            pushConstants[2],
+            pushConstants[3]
+        }
+    };
+    commandList.pushConstants(&filterPushConstants,
+                              sizeof(filterPushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
 }
@@ -304,6 +303,191 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
+}
+
+bool ReflectionPass::ensureFilterRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_filterRhiDevice != nullptr && m_filterRhiDevice != &rhiDevice) {
+        destroyFilterRhiResources();
+    }
+    if (m_filterPipeline.isValid()) {
+        return true;
+    }
+    m_filterRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/reflection_filter.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "ReflectionFilter.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_filterVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "ReflectionFilter.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_filterFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_filterVertexShader.isValid() || !m_filterFragmentShader.isValid()) {
+        destroyFilterRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc nearestSamplerDesc;
+    nearestSamplerDesc.minFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.magFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    nearestSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_filterNearestSampler = rhiDevice.createSampler(nearestSamplerDesc);
+
+    RhiSamplerDesc linearSamplerDesc;
+    linearSamplerDesc.minFilter = RhiFilter::Linear;
+    linearSamplerDesc.magFilter = RhiFilter::Linear;
+    linearSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    linearSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_filterLinearSampler = rhiDevice.createSampler(linearSamplerDesc);
+    if (!m_filterNearestSampler.isValid() || !m_filterLinearSampler.isValid()) {
+        destroyFilterRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "ReflectionFilter.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 5u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_filterBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_filterBindGroupLayout.isValid()) {
+        destroyFilterRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "ReflectionFilter.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_filterBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::mat4) + sizeof(glm::vec4) * 4u);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_filterPipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_filterPipelineLayout.isValid()) {
+        destroyFilterRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "ReflectionFilter.Pipeline";
+    pipelineDesc.vertexShader = m_filterVertexShader;
+    pipelineDesc.fragmentShader = m_filterFragmentShader;
+    pipelineDesc.layout = m_filterPipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_filterPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_filterPipeline.isValid()) {
+        destroyFilterRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool ReflectionPass::ensureFilterBindGroup(RhiDevice& rhiDevice,
+                                           const std::array<RhiTextureViewHandle, 5>& views) {
+    if (!ensureFilterRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_filterBindGroup.isValid() && sameTextureViews(m_filterBoundViews, views)) {
+        return true;
+    }
+
+    destroyFilterBindGroup();
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_filterBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler =
+            binding == 0u ? m_filterLinearSampler : m_filterNearestSampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_filterBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_filterBindGroup.isValid()) {
+        m_filterBoundViews = {};
+        return false;
+    }
+
+    m_filterBoundViews = views;
+    return true;
+}
+
+void ReflectionPass::destroyFilterBindGroup() {
+    if (m_filterRhiDevice != nullptr && m_filterBindGroup.isValid()) {
+        m_filterRhiDevice->destroyBindGroup(m_filterBindGroup);
+    }
+    m_filterBindGroup = {};
+    m_filterBoundViews = {};
+}
+
+void ReflectionPass::destroyFilterRhiResources() {
+    destroyFilterBindGroup();
+    if (m_filterRhiDevice != nullptr) {
+        if (m_filterPipeline.isValid()) {
+            m_filterRhiDevice->destroyPipeline(m_filterPipeline);
+        }
+        if (m_filterVertexShader.isValid()) {
+            m_filterRhiDevice->destroyShader(m_filterVertexShader);
+        }
+        if (m_filterFragmentShader.isValid()) {
+            m_filterRhiDevice->destroyShader(m_filterFragmentShader);
+        }
+        if (m_filterPipelineLayout.isValid()) {
+            m_filterRhiDevice->destroyPipelineLayout(m_filterPipelineLayout);
+        }
+        if (m_filterBindGroupLayout.isValid()) {
+            m_filterRhiDevice->destroyBindGroupLayout(m_filterBindGroupLayout);
+        }
+        if (m_filterNearestSampler.isValid()) {
+            m_filterRhiDevice->destroySampler(m_filterNearestSampler);
+        }
+        if (m_filterLinearSampler.isValid()) {
+            m_filterRhiDevice->destroySampler(m_filterLinearSampler);
+        }
+    }
+
+    m_filterPipeline = {};
+    m_filterVertexShader = {};
+    m_filterFragmentShader = {};
+    m_filterPipelineLayout = {};
+    m_filterBindGroupLayout = {};
+    m_filterNearestSampler = {};
+    m_filterLinearSampler = {};
+    m_filterRhiDevice = nullptr;
 }
 
 bool ReflectionPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {

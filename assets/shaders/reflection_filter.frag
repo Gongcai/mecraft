@@ -2,22 +2,22 @@
 #include "gbuffer_contract.glsl"
 #include "derivative_shadow.glsl"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uReflectionTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uMaterialTex;
-uniform sampler2D uMaterialAuxTex;
+layout(binding = 0) uniform sampler2D uReflectionTex;
+layout(binding = 1) uniform sampler2D uDepthTex;
+layout(binding = 2) uniform sampler2D uNormalAoTex;
+layout(binding = 3) uniform sampler2D uMaterialTex;
+layout(binding = 4) uniform sampler2D uMaterialAuxTex;
 
-uniform vec2 uScreenSize;
-uniform float uFilterStrength;
-uniform float uSurfaceWetness;
-uniform mat4 uInvViewProj;
-uniform vec3 uCameraPos;
-uniform float uNearPlane;
-uniform float uFarPlane;
+layout(std140, binding = 15) uniform RhiPushConstants {
+    mat4 uInvViewProj;
+    vec4 uScreenFilterParams;
+    vec4 uCameraNearPlane;
+    vec4 uFarPlanePadding;
+    vec4 uFilterPadding;
+};
 
 vec3 reconstructNormal(vec3 packedNormal) {
     return normalize(packedNormal * 2.0 - 1.0);
@@ -31,8 +31,9 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
 
 float linearDepthFromDepth(float depth) {
     float ndc = depth * 2.0 - 1.0;
-    return (2.0 * uNearPlane * uFarPlane) /
-           max(uFarPlane + uNearPlane - ndc * (uFarPlane - uNearPlane), 0.0001);
+    return (2.0 * uCameraNearPlane.w * uFarPlanePadding.x) /
+           max(uFarPlanePadding.x + uCameraNearPlane.w -
+               ndc * (uFarPlanePadding.x - uCameraNearPlane.w), 0.0001);
 }
 
 vec4 derivativeReflectionFilter(ivec2 texel,
@@ -67,7 +68,7 @@ vec4 derivativeReflectionFilter(ivec2 texel,
                    normalize(max(filtered.rgb, vec3(1e-6)));
     float sumWeight = 1.0;
 
-    ivec2 maxTexel = ivec2(uScreenSize) - ivec2(1);
+    ivec2 maxTexel = ivec2(uScreenFilterParams.xy) - ivec2(1);
     for (int i = 0; i < 8; ++i) {
         ivec2 sampleTexel = clamp(texel + ivec2((vec2(offsets[i]) + dither) * coordOffset),
                                   ivec2(0), maxTexel);
@@ -120,8 +121,8 @@ void main() {
     float centerWetness = clamp(centerAux.wetnessMask, 0.0, 1.0);
     bool centerCanReceiveRain = !centerTransMask.isTranslucent &&
                                 materialKindId(centerAux.materialKind) != MATERIAL_SKIN;
-    if (centerCanReceiveRain && centerWetness > 1e-4 && uSurfaceWetness > 1e-2) {
-        float wetRoughnessScale = oneMinus(clamp(uSurfaceWetness, 0.0, 1.0) * 0.3);
+    if (centerCanReceiveRain && centerWetness > 1e-4 && uScreenFilterParams.w > 1e-2) {
+        float wetRoughnessScale = oneMinus(clamp(uScreenFilterParams.w, 0.0, 1.0) * 0.3);
         centerRoughness = min(sqr(sqrt(centerRoughness) * wetRoughnessScale),
                               sqr(oneMinus(centerWetness) * wetRoughnessScale));
     }
@@ -129,13 +130,13 @@ void main() {
     float reflectionMask = max(0.625 - centerRoughness, 0.0) + centerAux.metalness;
     bool materialHasReflections = reflectionMask > 0.005;
     bool materialIsRough = centerRoughness > 0.005;
-    if (!materialHasReflections || reflection.a <= 1e-3 || !materialIsRough || uFilterStrength <= 1e-4) {
+    if (!materialHasReflections || reflection.a <= 1e-3 || !materialIsRough || uScreenFilterParams.z <= 1e-4) {
         FragColor = reflection;
         return;
     }
 
     vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-    vec3 viewDir = normalize(worldPos - uCameraPos);
+    vec3 viewDir = normalize(worldPos - uCameraNearPlane.xyz);
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec4 filtered = derivativeReflectionFilter(texel, reflection, centerRoughness,
                                                centerNormal, viewDir, 1.0, vec2(0.0));
@@ -143,7 +144,7 @@ void main() {
     // before reflection. In Mecraft the separate reflection filter can otherwise
     // blur that animated normal contrast back into a soft puddle blob.
     float wetRipplePreserve = (centerCanReceiveRain ? smoothstep(0.08, 0.55, centerWetness) : 0.0) *
-                              clamp(uSurfaceWetness, 0.0, 1.0);
-    float filterStrength = clamp(uFilterStrength, 0.0, 1.0) * mix(1.0, 0.18, wetRipplePreserve);
+                              clamp(uScreenFilterParams.w, 0.0, 1.0);
+    float filterStrength = clamp(uScreenFilterParams.z, 0.0, 1.0) * mix(1.0, 0.18, wetRipplePreserve);
     FragColor = mix(reflection, filtered, filterStrength);
 }
