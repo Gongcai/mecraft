@@ -2704,6 +2704,63 @@ bool DeferredRenderTargets::ensureSceneResolvedTextureView(RhiDevice& rhiDevice)
     return true;
 }
 
+bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_transparentCompositeView.isValid() && m_transparentCompositeDepthView.isValid()) {
+        return true;
+    }
+
+    if (!m_transparentCompositeHandle.isValid() || !m_transparentCompositeDepthHandle.isValid()) {
+        return false;
+    }
+
+    if (m_transparentCompositeView.isValid()) {
+        rhiDevice.destroyTextureView(m_transparentCompositeView);
+        m_transparentCompositeView = {};
+    }
+    if (m_transparentCompositeDepthView.isValid()) {
+        rhiDevice.destroyTextureView(m_transparentCompositeDepthView);
+        m_transparentCompositeDepthView = {};
+    }
+
+    RhiTextureViewDesc colorDesc;
+    colorDesc.texture = m_transparentCompositeHandle;
+    colorDesc.viewType = RhiTextureViewType::Texture2D;
+    colorDesc.format = RhiTextureFormat::Rgba16Float;
+    colorDesc.baseMip = 0;
+    colorDesc.mipCount = 1;
+    colorDesc.baseLayer = 0;
+    colorDesc.layerCount = 1;
+
+    RhiTextureViewDesc depthDesc;
+    depthDesc.texture = m_transparentCompositeDepthHandle;
+    depthDesc.viewType = RhiTextureViewType::Texture2D;
+    depthDesc.format = RhiTextureFormat::Depth32Float;
+    depthDesc.baseMip = 0;
+    depthDesc.mipCount = 1;
+    depthDesc.baseLayer = 0;
+    depthDesc.layerCount = 1;
+
+    m_transparentCompositeView = rhiDevice.createTextureView(colorDesc);
+    m_transparentCompositeDepthView = rhiDevice.createTextureView(depthDesc);
+    if (!m_transparentCompositeView.isValid() || !m_transparentCompositeDepthView.isValid()) {
+        if (m_transparentCompositeView.isValid()) {
+            rhiDevice.destroyTextureView(m_transparentCompositeView);
+        }
+        if (m_transparentCompositeDepthView.isValid()) {
+            rhiDevice.destroyTextureView(m_transparentCompositeDepthView);
+        }
+        m_transparentCompositeView = {};
+        m_transparentCompositeDepthView = {};
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureHalfResTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2885,6 +2942,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_sceneResolvedView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneResolvedView);
     }
+    if (m_rhiViewDevice != nullptr && m_transparentCompositeView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_transparentCompositeView);
+    }
+    if (m_rhiViewDevice != nullptr && m_transparentCompositeDepthView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_transparentCompositeDepthView);
+    }
     if (m_rhiViewDevice != nullptr && m_halfResView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_halfResView);
     }
@@ -2925,6 +2988,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_ssgiTemporalMomentsView = {};
     m_sceneCompositeView = {};
     m_sceneResolvedView = {};
+    m_transparentCompositeView = {};
+    m_transparentCompositeDepthView = {};
     m_halfResView = {};
     m_reflectionView = {};
     m_cloudView = {};

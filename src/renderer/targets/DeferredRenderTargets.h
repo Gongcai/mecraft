@@ -154,7 +154,10 @@ public:
     [[nodiscard]] RhiTextureViewHandle sceneResolvedTextureViewHandle() const { return m_sceneResolvedView; }
     bool ensureSceneResolvedTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle transparentCompositeTextureHandle() const { return m_transparentCompositeHandle; }
+    [[nodiscard]] RhiTextureViewHandle transparentCompositeTextureViewHandle() const { return m_transparentCompositeView; }
     [[nodiscard]] RhiTextureHandle transparentCompositeDepthTextureHandle() const { return m_transparentCompositeDepthHandle; }
+    [[nodiscard]] RhiTextureViewHandle transparentCompositeDepthTextureViewHandle() const { return m_transparentCompositeDepthView; }
+    bool ensureTransparentCompositeTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle halfResTextureHandle() const { return m_halfResHandle; }
     [[nodiscard]] RhiTextureViewHandle halfResTextureViewHandle() const { return m_halfResView; }
     bool ensureHalfResTextureView(RhiDevice& rhiDevice);
@@ -377,6 +380,8 @@ private:
     uint32_t m_transparentCompositeDepth = 0;
     RhiTextureHandle m_transparentCompositeHandle;
     RhiTextureHandle m_transparentCompositeDepthHandle;
+    RhiTextureViewHandle m_transparentCompositeView;
+    RhiTextureViewHandle m_transparentCompositeDepthView;
 
     uint32_t m_halfResFbo = 0;
     uint32_t m_halfResTex = 0;

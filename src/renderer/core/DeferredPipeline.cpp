@@ -700,7 +700,36 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
 
     targets.copySceneCompositeToTransparentComposite();
     targets.copyDepthToTransparentComposite();
-    targets.bindTransparentComposite();
+
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
+    if (!targets.ensureTransparentCompositeTextureViews(rhiDevice)) {
+        return;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.transparentCompositeTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = targets.transparentCompositeDepthTextureViewHandle();
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "GenericTransparent.TransparentComposite";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
 
     TerrainFrameData tfd;
     tfd.view = ctx.camera.view;
@@ -811,6 +840,9 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     glDisable(GL_BLEND);
     glEnable(GL_CULL_FACE);
     shader->setInt("uForceBaseLod", 0);
+
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     targets.copyTransparentCompositeToSceneComposite();
     targets.copyTransparentCompositeToSceneResolved();
