@@ -104,6 +104,50 @@ bool blitBlurTargetToSwapchain(RhiDevice& rhiDevice,
     rhiDevice.submitFrame(commandList);
     return true;
 }
+
+RhiTextureViewHandle createBlurTargetView(RhiDevice& rhiDevice, const RhiTextureHandle texture) {
+    if (!texture.isValid()) {
+        return {};
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = texture;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+    return rhiDevice.createTextureView(desc);
+}
+
+void beginSkyboxBlurOutput(RhiCommandList& commandList,
+                           const char* debugName,
+                           const RhiTextureViewHandle view,
+                           const int width,
+                           const int height,
+                           const bool clearColor) {
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = view;
+    colorAttachment.loadOp = clearColor ? RhiLoadOp::Clear : RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = debugName;
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    commandList.beginRendering(renderingInfo);
+}
 }
 
 void SkyboxRenderer::init(ResourceMgr& resourceMgr) {
@@ -152,15 +196,14 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
     const int blurW = std::max(1, vpWidth / 2);
     const int blurH = std::max(1, vpHeight / 2);
 
-    if (!ensureBlurTargets(blurW, blurH)) {
+    if (!ensureBlurTargets(rhiDevice, blurW, blurH)) {
         return;
     }
 
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+
     // --- Pass 1: Render skybox to scene FBO ---
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneFbo);
-    glViewport(0, 0, blurW, blurH);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    beginSkyboxBlurOutput(commandList, "SkyboxScene", m_sceneColorView, blurW, blurH, true);
 
     glm::mat4 view(1.0f);
     view = glm::rotate(view, glm::radians(pitchDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -183,10 +226,10 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
     glBindVertexArray(m_cubeVao);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
+    commandList.endRendering();
 
     // --- Pass 2: Horizontal blur (scene -> ping) ---
-    glBindFramebuffer(GL_FRAMEBUFFER, m_pingFbo);
-    glViewport(0, 0, blurW, blurH);
+    beginSkyboxBlurOutput(commandList, "SkyboxBlurHorizontal", m_pingColorView, blurW, blurH, false);
 
     m_blurShader->use();
     m_blurShader->setInt("uTexture", 0);
@@ -198,10 +241,10 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+    commandList.endRendering();
 
     // --- Pass 3: Vertical blur (ping -> pong) ---
-    glBindFramebuffer(GL_FRAMEBUFFER, m_pongFbo);
-    glViewport(0, 0, blurW, blurH);
+    beginSkyboxBlurOutput(commandList, "SkyboxBlurVertical", m_pongColorView, blurW, blurH, false);
 
     m_blurShader->setVec2("uDirection", glm::vec2(0.0f, 1.0f / static_cast<float>(blurH)));
 
@@ -210,6 +253,8 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     const bool blitted = blitBlurTargetToSwapchain(rhiDevice, m_pongColorHandle, vpWidth, vpHeight);
 
@@ -222,8 +267,10 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
     }
 }
 
-bool SkyboxRenderer::ensureBlurTargets(int width, int height) {
-    if (width == m_blurWidth && height == m_blurHeight && m_sceneFbo != 0) {
+bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int height) {
+    if (width == m_blurWidth && height == m_blurHeight && m_sceneFbo != 0 &&
+        m_sceneColorView.isValid() && m_pingColorView.isValid() && m_pongColorView.isValid() &&
+        m_blurViewDevice == &rhiDevice) {
         return true;
     }
 
@@ -235,20 +282,40 @@ bool SkyboxRenderer::ensureBlurTargets(int width, int height) {
     m_sceneColorHandle = registerBlurTargetTexture(m_sceneColorTex, width, height);
     m_pingColorHandle = registerBlurTargetTexture(m_pingColorTex, width, height);
     m_pongColorHandle = registerBlurTargetTexture(m_pongColorTex, width, height);
+    m_sceneColorView = createBlurTargetView(rhiDevice, m_sceneColorHandle);
+    m_pingColorView = createBlurTargetView(rhiDevice, m_pingColorHandle);
+    m_pongColorView = createBlurTargetView(rhiDevice, m_pongColorHandle);
 
     if (m_sceneFbo == 0 || m_pingFbo == 0 || m_pongFbo == 0 ||
         !m_sceneColorHandle.isValid() || !m_pingColorHandle.isValid() ||
-        !m_pongColorHandle.isValid()) {
+        !m_pongColorHandle.isValid() ||
+        !m_sceneColorView.isValid() || !m_pingColorView.isValid() ||
+        !m_pongColorView.isValid()) {
         destroyBlurTargets();
         return false;
     }
 
+    m_blurViewDevice = &rhiDevice;
     m_blurWidth = width;
     m_blurHeight = height;
     return true;
 }
 
 void SkyboxRenderer::destroyBlurTargets() {
+    if (m_blurViewDevice != nullptr && m_sceneColorView.isValid()) {
+        m_blurViewDevice->destroyTextureView(m_sceneColorView);
+    }
+    if (m_blurViewDevice != nullptr && m_pingColorView.isValid()) {
+        m_blurViewDevice->destroyTextureView(m_pingColorView);
+    }
+    if (m_blurViewDevice != nullptr && m_pongColorView.isValid()) {
+        m_blurViewDevice->destroyTextureView(m_pongColorView);
+    }
+    m_sceneColorView = {};
+    m_pingColorView = {};
+    m_pongColorView = {};
+    m_blurViewDevice = nullptr;
+
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneColorHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_pingColorHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_pongColorHandle);
