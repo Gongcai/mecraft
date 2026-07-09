@@ -208,6 +208,7 @@ private:
 
     mutable RhiTextureHandle m_backdropSource;
     mutable RhiTextureHandle m_backdropBlur[2];
+    mutable RhiTextureViewHandle m_backdropSourceView;
     mutable RhiTextureViewHandle m_backdropBlurView[2];
     mutable RhiDevice* m_backdropRhiViewDevice = nullptr;
     mutable uint32_t m_backdropSourceTex = 0;

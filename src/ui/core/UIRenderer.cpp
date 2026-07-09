@@ -869,6 +869,9 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
     glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
     configureLinearClampTexture();
     if (sizeChanged) {
+        if (m_backdropSourceView.isValid()) {
+            destroyBackdropBlurViews();
+        }
         renderer::rhi::gl::unregisterTextureAndReset(m_backdropSource);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sourceWidth, sourceHeight, 0,
                      GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -877,6 +880,17 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
             sourceWidth,
             sourceHeight,
             rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst));
+    }
+    if (!m_backdropSourceView.isValid() && m_backdropSource.isValid()) {
+        RhiTextureViewDesc desc;
+        desc.texture = m_backdropSource;
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::Rgba8Unorm;
+        desc.baseMip = 0;
+        desc.mipCount = 1;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+        m_backdropSourceView = rhiDevice.createTextureView(desc);
     }
 
     for (int i = 0; i < 2; ++i) {
@@ -922,6 +936,10 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
     }
 
     if (!m_backdropBlurView[0].isValid() || !m_backdropBlurView[1].isValid()) {
+        destroyBackdropBlurTargets();
+        return false;
+    }
+    if (!m_backdropSourceView.isValid()) {
         destroyBackdropBlurTargets();
         return false;
     }
@@ -1007,9 +1025,12 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         return;
     }
 
-    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
-    glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
-    glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, viewport[0], viewport[1], sourceWidth, sourceHeight);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+
+    RhiTextureBlit sourceBlit;
+    sourceBlit.srcView = rhiDevice.currentSwapchainColorView();
+    sourceBlit.dstView = m_backdropSourceView;
+    commandList.blitTexture(sourceBlit);
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -1018,8 +1039,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
 
     blurShader->use();
     blurShader->setInt("uTexture", 0);
-
-    RhiCommandList& commandList = rhiDevice.beginFrame();
 
     auto blurPass = [&](const GLuint inputTexture, const RhiTextureViewHandle outputView, const glm::vec2 direction) {
         RhiColorAttachment colorAttachment;
@@ -1092,6 +1111,10 @@ void UIRenderer::destroyBackdropBlurTargets() const
 void UIRenderer::destroyBackdropBlurViews() const
 {
     if (m_backdropRhiViewDevice != nullptr) {
+        if (m_backdropSourceView.isValid()) {
+            m_backdropRhiViewDevice->destroyTextureView(m_backdropSourceView);
+        }
+        m_backdropSourceView = {};
         for (RhiTextureViewHandle& view : m_backdropBlurView) {
             if (view.isValid()) {
                 m_backdropRhiViewDevice->destroyTextureView(view);
@@ -1099,6 +1122,7 @@ void UIRenderer::destroyBackdropBlurViews() const
             view = {};
         }
     } else {
+        m_backdropSourceView = {};
         m_backdropBlurView[0] = {};
         m_backdropBlurView[1] = {};
     }
