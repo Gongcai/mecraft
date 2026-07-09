@@ -287,26 +287,6 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     return true;
 }
 
-void ShadowTargets::bindCsmShadowLayer(int cascadeIndex) {
-    glBindFramebuffer(GL_FRAMEBUFFER, m_csmShadowFbo);
-    const uint32_t csmShadowDepth = renderer::rhi::gl::textureId(m_csmShadowDepthHandle);
-    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, csmShadowDepth, 0, cascadeIndex);
-    int res = (cascadeIndex >= 2) ? m_shadowResolution / 2 : m_shadowResolution;
-    glViewport(0, 0, res, res);
-}
-
-void ShadowTargets::bindCsmShadowTransparentLayer(int cascadeIndex) {
-    glBindFramebuffer(GL_FRAMEBUFFER, m_csmShadowTransparentFbo);
-    const uint32_t csmShadowDepthAll = renderer::rhi::gl::textureId(m_csmShadowDepthAllHandle);
-    const uint32_t csmShadowColor0 = renderer::rhi::gl::textureId(m_csmShadowColor0Handle);
-    const uint32_t csmShadowColor1 = renderer::rhi::gl::textureId(m_csmShadowColor1Handle);
-    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, csmShadowDepthAll, 0, cascadeIndex);
-    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, csmShadowColor0, 0, cascadeIndex);
-    glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, csmShadowColor1, 0, cascadeIndex);
-    int res = (cascadeIndex >= 2) ? m_shadowResolution / 2 : m_shadowResolution;
-    glViewport(0, 0, res, res);
-}
-
 void ShadowTargets::destroyFramebuffers() {
     uint32_t csmShadowDepth = renderer::rhi::gl::textureId(m_csmShadowDepthHandle);
     uint32_t csmShadowDepthComparison = renderer::rhi::gl::textureId(m_csmShadowDepthComparisonHandle);

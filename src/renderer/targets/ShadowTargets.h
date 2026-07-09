@@ -20,10 +20,6 @@ public:
     /// Resize shadow map to new resolution
     bool ensureSize(int shadowResolution);
 
-    // Bind operations
-    void bindCsmShadowLayer(int cascadeIndex);
-    void bindCsmShadowTransparentLayer(int cascadeIndex);
-
     // CSM shadow texture accessors
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
