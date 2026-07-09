@@ -89,7 +89,9 @@ public:
                                uint32_t weatherMaskTex = 0);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
-    [[nodiscard]] uint32_t compositeToTexture(const Window& window, float frameTime,
+    [[nodiscard]] uint32_t compositeToTexture(RhiDevice& rhiDevice,
+                                              const Window& window,
+                                              float frameTime,
                                               uint32_t gbufDepthTex = 0,
                                               uint32_t weatherMaskTex = 0);
 
@@ -137,8 +139,8 @@ private:
     /// Apply final composite (tonemap, color grading, underwater, etc.)
     void renderComposite(uint32_t gbufDepthTex, uint32_t weatherMaskTex, bool bloomReady);
     void updateCompositeParams(bool useAutoExposureTexture, bool hasBloom);
-    bool ensureCompositeTarget(int width, int height);
-    void bindCompositeOutput(int width, int height);
+    bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
+    void bindCompositeOutput(RhiCommandList& commandList, int width, int height);
     void bindBackbufferOutput(RhiCommandList& commandList,
                               RhiTextureViewHandle swapchainColorView,
                               int width,
@@ -174,9 +176,10 @@ private:
     RhiTextureHandle m_sceneColorHandle;
     uint32_t m_sceneDepthTex = 0;
 
-    uint32_t m_compositeFbo = 0;
     uint32_t m_compositeTex = 0;
     RhiTextureHandle m_compositeHandle;
+    RhiTextureViewHandle m_compositeView;
+    RhiDevice* m_compositeViewDevice = nullptr;
     bool m_renderCompositeToTexture = false;
 
     // Bloom chain

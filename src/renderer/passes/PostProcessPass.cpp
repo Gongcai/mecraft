@@ -214,7 +214,9 @@ void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
     glEnable(GL_DEPTH_TEST);
 }
 
-uint32_t PostProcessPass::compositeToTexture(const Window& window, const float frameTime,
+uint32_t PostProcessPass::compositeToTexture(RhiDevice& rhiDevice,
+                                             const Window& window,
+                                             const float frameTime,
                                              uint32_t gbufDepthTex,
                                              uint32_t weatherMaskTex) {
     static_cast<void>(window);
@@ -222,7 +224,7 @@ uint32_t PostProcessPass::compositeToTexture(const Window& window, const float f
     const int height = std::max(1, m_targetHeight);
 
     if (!m_sceneCaptured || m_postProcessShader == nullptr || m_fullscreenVao == 0 ||
-        !ensureCompositeTarget(width, height)) {
+        !ensureCompositeTarget(rhiDevice, width, height)) {
         return 0;
     }
 
@@ -235,8 +237,11 @@ uint32_t PostProcessPass::compositeToTexture(const Window& window, const float f
 
     const bool hasBloom = renderBloom(m_effects.bloomMipCount);
 
-    bindCompositeOutput(width, height);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    bindCompositeOutput(commandList, width, height);
     renderComposite(gbufDepthTex, weatherMaskTex, hasBloom);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
@@ -681,44 +686,32 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     return true;
 }
 
-bool PostProcessPass::ensureCompositeTarget(const int width, const int height) {
+bool PostProcessPass::ensureCompositeTarget(RhiDevice& rhiDevice, const int width, const int height) {
     const int targetWidth = std::max(1, width);
     const int targetHeight = std::max(1, height);
-    if (m_compositeFbo != 0 && m_compositeTex != 0 &&
+    if (m_compositeTex != 0 && m_compositeHandle.isValid() && m_compositeView.isValid() &&
+        m_compositeViewDevice == &rhiDevice &&
         m_targetWidth == targetWidth && m_targetHeight == targetHeight) {
         return true;
     }
+    if (m_compositeViewDevice != nullptr && m_compositeView.isValid()) {
+        m_compositeViewDevice->destroyTextureView(m_compositeView);
+    }
+    m_compositeView = {};
+    m_compositeViewDevice = nullptr;
     renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
     if (m_compositeTex != 0) {
         glDeleteTextures(1, &m_compositeTex);
         m_compositeTex = 0;
     }
-    if (m_compositeFbo != 0) {
-        glDeleteFramebuffers(1, &m_compositeFbo);
-        m_compositeFbo = 0;
-    }
 
-    glCreateFramebuffers(1, &m_compositeFbo);
     glCreateTextures(GL_TEXTURE_2D, 1, &m_compositeTex);
     glTextureStorage2D(m_compositeTex, 1, GL_RGBA8, targetWidth, targetHeight);
     glTextureParameteri(m_compositeTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(m_compositeTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(m_compositeTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_compositeTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_compositeFbo, GL_COLOR_ATTACHMENT0, m_compositeTex, 0);
-    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_compositeFbo, 1, &drawBuffer);
-    if (glCheckNamedFramebufferStatus(m_compositeFbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        if (m_compositeTex != 0) {
-            glDeleteTextures(1, &m_compositeTex);
-            m_compositeTex = 0;
-        }
-        if (m_compositeFbo != 0) {
-            glDeleteFramebuffers(1, &m_compositeFbo);
-            m_compositeFbo = 0;
-        }
-        return false;
-    }
+
     m_compositeHandle = registerPostProcessTexture(
         m_compositeTex,
         RhiTextureFormat::Rgba8Unorm,
@@ -732,19 +725,48 @@ bool PostProcessPass::ensureCompositeTarget(const int width, const int height) {
             glDeleteTextures(1, &m_compositeTex);
             m_compositeTex = 0;
         }
-        if (m_compositeFbo != 0) {
-            glDeleteFramebuffers(1, &m_compositeFbo);
-            m_compositeFbo = 0;
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_compositeHandle;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    viewDesc.baseMip = 0;
+    viewDesc.mipCount = 1;
+    viewDesc.baseLayer = 0;
+    viewDesc.layerCount = 1;
+    m_compositeView = rhiDevice.createTextureView(viewDesc);
+    if (!m_compositeView.isValid()) {
+        renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
+        if (m_compositeTex != 0) {
+            glDeleteTextures(1, &m_compositeTex);
+            m_compositeTex = 0;
         }
         return false;
     }
+    m_compositeViewDevice = &rhiDevice;
     return true;
 }
 
-void PostProcessPass::bindCompositeOutput(const int width, const int height) {
+void PostProcessPass::bindCompositeOutput(RhiCommandList& commandList, const int width, const int height) {
     m_renderCompositeToTexture = true;
-    glBindFramebuffer(GL_FRAMEBUFFER, m_compositeFbo);
-    glViewport(0, 0, std::max(1, width), std::max(1, height));
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = m_compositeView;
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "PostProcessCompositeTexture";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    commandList.beginRendering(renderingInfo);
 }
 
 void PostProcessPass::bindBackbufferOutput(RhiCommandList& commandList,
@@ -772,15 +794,16 @@ void PostProcessPass::bindBackbufferOutput(RhiCommandList& commandList,
 }
 
 void PostProcessPass::destroyRenderTargets() {
+    if (m_compositeViewDevice != nullptr && m_compositeView.isValid()) {
+        m_compositeViewDevice->destroyTextureView(m_compositeView);
+    }
+    m_compositeView = {};
+    m_compositeViewDevice = nullptr;
     renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneColorHandle);
     if (m_compositeTex != 0) {
         glDeleteTextures(1, &m_compositeTex);
         m_compositeTex = 0;
-    }
-    if (m_compositeFbo != 0) {
-        glDeleteFramebuffers(1, &m_compositeFbo);
-        m_compositeFbo = 0;
     }
     if (m_sceneDepthTex != 0) {
         glDeleteTextures(1, &m_sceneDepthTex);

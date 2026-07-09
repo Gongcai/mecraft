@@ -335,6 +335,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                     m_settings.upscale.renderScale < 0.999f;
             if (fsrEnabled) {
                 const GLuint postTex = m_postProcessPass.compositeToTexture(
+                    *m_shared.rhiDevice,
                     request.window,
                     request.frameTime,
                     gbufferDepthTex,
