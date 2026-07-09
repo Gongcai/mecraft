@@ -1,35 +1,78 @@
 #include "DepthOfFieldPass.h"
+
 #include "../core/RenderScene.h"
-#include "../targets/DeferredRenderTargets.h"
-#include "../core/Shader.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../targets/DeferredRenderTargets.h"
 #include "../../resource/ResourceMgr.h"
 
-#include <glad/glad.h>
+#include <algorithm>
+#include <fstream>
+#include <optional>
+#include <sstream>
+#include <string>
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <algorithm>
+#include <glm/gtc/matrix_inverse.hpp>
+
+namespace {
+struct DofPushConstants {
+    glm::mat4 projection;
+    glm::mat4 invProjection;
+    glm::vec4 params;
+    glm::vec4 screenParams;
+};
+
+[[nodiscard]] std::optional<std::string> loadRhiShaderSource(const std::string& path) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        return std::nullopt;
+    }
+
+    std::stringstream stream;
+    stream << file.rdbuf();
+    if (file.bad()) {
+        return std::nullopt;
+    }
+    return stream.str();
+}
+
+[[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+} // namespace
 
 void DepthOfFieldPass::init(ResourceMgr& resourceMgr) {
-    m_dofShader = resourceMgr.getShader("dof");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void DepthOfFieldPass::shutdown() {
-    m_dofShader = nullptr;
+    destroyRhiResources();
     m_noiseTexture = {};
 }
 
 void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                                DeferredRenderTargets& targets) {
-    if (m_dofShader == nullptr) return;
+                               DeferredRenderTargets& targets) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return;
+    }
 
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSceneResolvedTextureView(*ctx.shared->rhiDevice)) {
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!targets.ensureSceneResolvedTextureView(rhiDevice) ||
+        !targets.ensureHistorySceneTextureView(rhiDevice) ||
+        !targets.ensureGBufferTextureViews(rhiDevice) ||
+        !ensureRhiPipeline(rhiDevice) ||
+        !ensureNoiseTextureView(rhiDevice) ||
+        !ensureRhiBindGroup(rhiDevice,
+                            targets.currentHistoryIndex(),
+                            targets.historySceneTextureViewHandle(),
+                            targets.depthTextureViewHandle(),
+                            m_noiseTextureView)) {
         return;
     }
 
@@ -49,44 +92,274 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     targets.copySceneResolvedToHistory(rhiDevice);
+
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
+    commandList.setGraphicsPipeline(m_pipeline);
+    commandList.setBindGroup(0u, m_bindGroup[targets.currentHistoryIndex()]);
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_dofShader->use();
-    m_dofShader->setInt("uSceneTex", 0);
-    m_dofShader->setInt("uDepthTex", 1);
-    m_dofShader->setInt("uNoiseTex", 2);
-    m_dofShader->setMat4("uProjection", ctx.camera.projection);
-    m_dofShader->setMat4("uInvProjection", glm::inverse(ctx.camera.projection));
-    m_dofShader->setFloat("uFocusDistance", settings.postProcess.dofFocusDistance);
-    m_dofShader->setFloat("uAperture", settings.postProcess.dofAperture);
-    m_dofShader->setFloat("uDofIntensity", settings.postProcess.dofIntensity);
-    m_dofShader->setFloat("uDofAnamorphic", 1.0f);
-    m_dofShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, targets.width())),
-                   static_cast<float>(std::max(1, targets.height()))));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historySceneTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_dofShader);
-
-    for (int i = 2; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    const DofPushConstants pushConstants{
+        ctx.camera.projection,
+        glm::inverse(ctx.camera.projection),
+        glm::vec4(settings.postProcess.dofFocusDistance,
+                  settings.postProcess.dofAperture,
+                  settings.postProcess.dofIntensity,
+                  1.0f),
+        glm::vec4(static_cast<float>(std::max(1, targets.width())),
+                  static_cast<float>(std::max(1, targets.height())),
+                  0.0f,
+                  0.0f)
+    };
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
+}
+
+bool DepthOfFieldPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        destroyRhiResources();
+    }
+    if (m_pipeline.isValid()) {
+        return true;
+    }
+    m_rhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        loadRhiShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        loadRhiShaderSource("assets/shaders/dof.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "DepthOfField.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_vertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "DepthOfField.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Linear;
+    samplerDesc.magFilter = RhiFilter::Linear;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_sampler = rhiDevice.createSampler(samplerDesc);
+    if (!m_sampler.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "DepthOfField.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_bindGroupLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "DepthOfField.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(DofPushConstants));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_pipelineLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "DepthOfField.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_pipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_pipeline.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool DepthOfFieldPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        destroyRhiResources();
+    }
+    m_rhiDevice = &rhiDevice;
+
+    if (m_noiseTextureView.isValid() && sameTextureHandle(m_noiseViewTexture, m_noiseTexture)) {
+        return true;
+    }
+
+    if (m_noiseTextureView.isValid()) {
+        destroyRhiBindGroup();
+        rhiDevice.destroyTextureView(m_noiseTextureView);
+        m_noiseTextureView = {};
+        m_noiseViewTexture = {};
+    }
+
+    if (!m_noiseTexture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_noiseTexture;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_noiseTextureView = rhiDevice.createTextureView(desc);
+    if (!m_noiseTextureView.isValid()) {
+        return false;
+    }
+
+    m_noiseViewTexture = m_noiseTexture;
+    return true;
+}
+
+bool DepthOfFieldPass::ensureRhiBindGroup(RhiDevice& rhiDevice,
+                                          const int historyIndex,
+                                          const RhiTextureViewHandle sceneView,
+                                          const RhiTextureViewHandle depthView,
+                                          const RhiTextureViewHandle noiseView) {
+    if (!ensureRhiPipeline(rhiDevice) ||
+        historyIndex < 0 ||
+        historyIndex >= 2 ||
+        !sceneView.isValid() ||
+        !depthView.isValid() ||
+        !noiseView.isValid()) {
+        return false;
+    }
+
+    if (m_bindGroup[historyIndex].isValid() &&
+        sameTextureView(m_boundSceneView[historyIndex], sceneView) &&
+        sameTextureView(m_boundDepthView[historyIndex], depthView) &&
+        sameTextureView(m_boundNoiseView[historyIndex], noiseView)) {
+        return true;
+    }
+
+    if (m_bindGroup[historyIndex].isValid()) {
+        rhiDevice.destroyBindGroup(m_bindGroup[historyIndex]);
+        m_bindGroup[historyIndex] = {};
+    }
+
+    const RhiTextureViewHandle views[3] = {
+        sceneView,
+        depthView,
+        noiseView
+    };
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_bindGroupLayout;
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = m_sampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_bindGroup[historyIndex] = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_bindGroup[historyIndex].isValid()) {
+        m_boundSceneView[historyIndex] = {};
+        m_boundDepthView[historyIndex] = {};
+        m_boundNoiseView[historyIndex] = {};
+        return false;
+    }
+
+    m_boundSceneView[historyIndex] = sceneView;
+    m_boundDepthView[historyIndex] = depthView;
+    m_boundNoiseView[historyIndex] = noiseView;
+    return true;
+}
+
+void DepthOfFieldPass::destroyRhiBindGroup() {
+    if (m_rhiDevice != nullptr) {
+        for (RhiBindGroupHandle& bindGroup : m_bindGroup) {
+            if (bindGroup.isValid()) {
+                m_rhiDevice->destroyBindGroup(bindGroup);
+            }
+            bindGroup = {};
+        }
+    } else {
+        m_bindGroup[0] = {};
+        m_bindGroup[1] = {};
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        m_boundSceneView[i] = {};
+        m_boundDepthView[i] = {};
+        m_boundNoiseView[i] = {};
+    }
+}
+
+void DepthOfFieldPass::destroyRhiResources() {
+    destroyRhiBindGroup();
+    if (m_rhiDevice != nullptr) {
+        if (m_noiseTextureView.isValid()) {
+            m_rhiDevice->destroyTextureView(m_noiseTextureView);
+        }
+        if (m_pipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        }
+        if (m_vertexShader.isValid()) {
+            m_rhiDevice->destroyShader(m_vertexShader);
+        }
+        if (m_fragmentShader.isValid()) {
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        }
+        if (m_pipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        }
+        if (m_bindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+        }
+        if (m_sampler.isValid()) {
+            m_rhiDevice->destroySampler(m_sampler);
+        }
+    }
+
+    m_noiseTextureView = {};
+    m_noiseViewTexture = {};
+    m_pipeline = {};
+    m_vertexShader = {};
+    m_fragmentShader = {};
+    m_pipelineLayout = {};
+    m_bindGroupLayout = {};
+    m_sampler = {};
+    m_rhiDevice = nullptr;
 }

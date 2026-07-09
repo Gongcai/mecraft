@@ -2,25 +2,30 @@
 // DerivativeMain-style Depth of Field (program/Post/DoF.glsl)
 // Golden-angle spiral sampling with thin-lens CoC
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSceneTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uNoiseTex;
-uniform mat4 uProjection;
-uniform mat4 uInvProjection;
-uniform float uFocusDistance;    // in blocks (world units)
-uniform float uAperture;         // f-stop (e.g. 2.8)
-uniform float uDofIntensity;     // 0.0 = off, 0.05 = subtle, 0.3 = strong
-uniform float uDofAnamorphic;    // anamorphic ratio (1.0 = normal)
-uniform vec2 uScreenSize;
+layout(binding = 0) uniform sampler2D uSceneTex;
+layout(binding = 1) uniform sampler2D uDepthTex;
+layout(binding = 2) uniform sampler2D uNoiseTex;
+
+layout(std140, binding = 15) uniform RhiPushConstants {
+    mat4 uProjection;
+    mat4 uInvProjection;
+    vec4 uDofParams;
+    vec4 uScreenParams;
+};
 
 const float PHI = 1.61803398875;
 const float GOLDEN_ANGLE = 6.28318530718 / (PHI + 1.0);
 const float TAU = 6.28318530718;
 
 void main() {
+    float uAperture = uDofParams.y;         // f-stop (e.g. 2.8)
+    float uDofIntensity = uDofParams.z;     // 0.0 = off, 0.05 = subtle, 0.3 = strong
+    float uDofAnamorphic = uDofParams.w;    // anamorphic ratio (1.0 = normal)
+    vec2 uScreenSize = uScreenParams.xy;
+
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec2 screenCoord = gl_FragCoord.xy / uScreenSize;
 
