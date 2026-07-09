@@ -194,10 +194,6 @@ bool PostProcessPass::beginSceneCapture(const int requestedWidth, const int requ
         return false;
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneFbo);
-    glViewport(0, 0, width, height);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
     m_sceneCaptured = true;
     return true;
 }
@@ -618,13 +614,12 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
         return false;
     }
 
-    if (m_sceneFbo != 0 && m_targetWidth == width && m_targetHeight == height) {
+    if (m_sceneColorTex != 0 && m_sceneDepthTex != 0 &&
+        m_targetWidth == width && m_targetHeight == height) {
         return true;
     }
 
     destroyRenderTargets();
-
-    glCreateFramebuffers(1, &m_sceneFbo);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &m_sceneColorTex);
     glTextureStorage2D(m_sceneColorTex, 1, GL_RGBA16F, width, height);
@@ -633,9 +628,6 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_MAX_LEVEL, 0);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_sceneColorTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_sceneFbo, GL_COLOR_ATTACHMENT0, m_sceneColorTex, 0);
-    const GLenum sceneDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_sceneFbo, 1, &sceneDrawBuffer);
 
     glCreateTextures(GL_TEXTURE_2D, 1, &m_sceneDepthTex);
     glTextureStorage2D(m_sceneDepthTex, 1, GL_DEPTH_COMPONENT32F, width, height);
@@ -643,14 +635,6 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
     glTextureParameteri(m_sceneDepthTex, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTextureParameteri(m_sceneDepthTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_sceneDepthTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_sceneFbo, GL_DEPTH_ATTACHMENT, m_sceneDepthTex, 0);
-
-    const bool complete = glCheckNamedFramebufferStatus(m_sceneFbo, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-
-    if (!complete) {
-        destroyRenderTargets();
-        return false;
-    }
 
     m_sceneColorHandle = registerPostProcessTexture(
         m_sceneColorTex,
@@ -1110,10 +1094,6 @@ void PostProcessPass::destroyRenderTargets() {
     if (m_sceneColorTex != 0) {
         glDeleteTextures(1, &m_sceneColorTex);
         m_sceneColorTex = 0;
-    }
-    if (m_sceneFbo != 0) {
-        glDeleteFramebuffers(1, &m_sceneFbo);
-        m_sceneFbo = 0;
     }
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         m_bloomMipSize[mip] = glm::ivec2(0);

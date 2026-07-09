@@ -177,8 +177,7 @@ private:
     Shader* m_exposureResolveShader = nullptr;
     RhiTextureHandle m_noiseTexture;
 
-    // Scene capture FBO
-    uint32_t m_sceneFbo = 0;
+    // Scene capture textures
     uint32_t m_sceneColorTex = 0;
     RhiTextureHandle m_sceneColorHandle;
     RhiTextureViewHandle m_sceneColorView;
