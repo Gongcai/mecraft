@@ -28,16 +28,13 @@ private:
     uint32_t m_cubeVbo = 0;
     uint32_t m_fullscreenVao = 0;
 
-    // Blur pipeline: scene FBO + two ping-pong FBOs at half resolution
-    uint32_t m_sceneFbo = 0;
+    // Blur pipeline: scene texture + two ping-pong textures at half resolution
     uint32_t m_sceneColorTex = 0;
     RhiTextureHandle m_sceneColorHandle;
     RhiTextureViewHandle m_sceneColorView;
-    uint32_t m_pingFbo = 0;
     uint32_t m_pingColorTex = 0;
     RhiTextureHandle m_pingColorHandle;
     RhiTextureViewHandle m_pingColorView;
-    uint32_t m_pongFbo = 0;
     uint32_t m_pongColorTex = 0;
     RhiTextureHandle m_pongColorHandle;
     RhiTextureViewHandle m_pongColorView;

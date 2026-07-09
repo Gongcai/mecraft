@@ -36,29 +36,14 @@ constexpr float kCubeVertices[] = {
      1.0f, -1.0f,  1.0f,   -1.0f, -1.0f,  1.0f,   -1.0f, -1.0f, -1.0f,
 };
 
-GLuint createFboWithColor(GLuint& colorTex, int width, int height) {
-    GLuint fbo = 0;
-    glCreateFramebuffers(1, &fbo);
-
+bool createBlurColorTexture(GLuint& colorTex, int width, int height) {
     glCreateTextures(GL_TEXTURE_2D, 1, &colorTex);
     glTextureStorage2D(colorTex, 1, GL_RGBA8, width, height);
     glTextureParameteri(colorTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(colorTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(colorTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(colorTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(fbo, GL_COLOR_ATTACHMENT0, colorTex, 0);
-    glNamedFramebufferDrawBuffer(fbo, GL_COLOR_ATTACHMENT0);
-    glNamedFramebufferReadBuffer(fbo, GL_COLOR_ATTACHMENT0);
-
-    const bool complete = glCheckNamedFramebufferStatus(fbo, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
-
-    if (!complete) {
-        glDeleteTextures(1, &colorTex);
-        colorTex = 0;
-        glDeleteFramebuffers(1, &fbo);
-        return 0;
-    }
-    return fbo;
+    return colorTex != 0;
 }
 
 RhiTextureHandle registerBlurTargetTexture(const GLuint texture,
@@ -268,7 +253,8 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
 }
 
 bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int height) {
-    if (width == m_blurWidth && height == m_blurHeight && m_sceneFbo != 0 &&
+    if (width == m_blurWidth && height == m_blurHeight && m_sceneColorTex != 0 &&
+        m_pingColorTex != 0 && m_pongColorTex != 0 &&
         m_sceneColorView.isValid() && m_pingColorView.isValid() && m_pongColorView.isValid() &&
         m_blurViewDevice == &rhiDevice) {
         return true;
@@ -276,9 +262,13 @@ bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int heig
 
     destroyBlurTargets();
 
-    m_sceneFbo = createFboWithColor(m_sceneColorTex, width, height);
-    m_pingFbo = createFboWithColor(m_pingColorTex, width, height);
-    m_pongFbo = createFboWithColor(m_pongColorTex, width, height);
+    if (!createBlurColorTexture(m_sceneColorTex, width, height) ||
+        !createBlurColorTexture(m_pingColorTex, width, height) ||
+        !createBlurColorTexture(m_pongColorTex, width, height)) {
+        destroyBlurTargets();
+        return false;
+    }
+
     m_sceneColorHandle = registerBlurTargetTexture(m_sceneColorTex, width, height);
     m_pingColorHandle = registerBlurTargetTexture(m_pingColorTex, width, height);
     m_pongColorHandle = registerBlurTargetTexture(m_pongColorTex, width, height);
@@ -286,8 +276,7 @@ bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int heig
     m_pingColorView = createBlurTargetView(rhiDevice, m_pingColorHandle);
     m_pongColorView = createBlurTargetView(rhiDevice, m_pongColorHandle);
 
-    if (m_sceneFbo == 0 || m_pingFbo == 0 || m_pongFbo == 0 ||
-        !m_sceneColorHandle.isValid() || !m_pingColorHandle.isValid() ||
+    if (!m_sceneColorHandle.isValid() || !m_pingColorHandle.isValid() ||
         !m_pongColorHandle.isValid() ||
         !m_sceneColorView.isValid() || !m_pingColorView.isValid() ||
         !m_pongColorView.isValid()) {
@@ -320,13 +309,12 @@ void SkyboxRenderer::destroyBlurTargets() {
     renderer::rhi::gl::unregisterTextureAndReset(m_pingColorHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_pongColorHandle);
 
-    auto deleteFbo = [](GLuint& fbo, GLuint& tex) {
+    auto deleteTexture = [](GLuint& tex) {
         if (tex != 0) { glDeleteTextures(1, &tex); tex = 0; }
-        if (fbo != 0) { glDeleteFramebuffers(1, &fbo); fbo = 0; }
     };
-    deleteFbo(m_sceneFbo, m_sceneColorTex);
-    deleteFbo(m_pingFbo, m_pingColorTex);
-    deleteFbo(m_pongFbo, m_pongColorTex);
+    deleteTexture(m_sceneColorTex);
+    deleteTexture(m_pingColorTex);
+    deleteTexture(m_pongColorTex);
     m_blurWidth = 0;
     m_blurHeight = 0;
 }
