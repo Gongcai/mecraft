@@ -37,7 +37,7 @@ public:
     void copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice) const;
     void copySceneResolvedToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
     void copyDepthToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
-    void blitTransparentCompositeTo(int32_t framebuffer, int width, int height) const;
+    void copyTransparentCompositeToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
 
     [[nodiscard]] RhiTextureHandle albedoTextureHandle() const { return m_gAlbedoHandle; }
     [[nodiscard]] RhiTextureHandle normalAoTextureHandle() const { return m_gNormalAoHandle; }

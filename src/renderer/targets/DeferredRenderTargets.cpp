@@ -22,28 +22,6 @@ constexpr GLenum kGMaterialAttachment = GL_COLOR_ATTACHMENT3;
 constexpr GLenum kGMaterialAuxAttachment = GL_COLOR_ATTACHMENT4;
 constexpr GLsizei kGBufferAttachmentCount = 5;
 
-void blitFramebuffer(const GLuint readFramebuffer,
-                     const GLuint drawFramebuffer,
-                     const int srcWidth,
-                     const int srcHeight,
-                     const int dstWidth,
-                     const int dstHeight,
-                     const GLbitfield mask,
-                     const GLenum filter) {
-    glBlitNamedFramebuffer(readFramebuffer,
-                           drawFramebuffer,
-                           0,
-                           0,
-                           srcWidth,
-                           srcHeight,
-                           0,
-                           0,
-                           dstWidth,
-                           dstHeight,
-                           mask,
-                           filter);
-}
-
 void blitTexture(RhiDevice& rhiDevice,
                  const RhiTextureHandle src,
                  const RhiTextureHandle dst) {
@@ -847,6 +825,13 @@ void DeferredRenderTargets::copyDepthToTexture(RhiDevice& rhiDevice, const RhiTe
     blitTexture(rhiDevice, m_gDepthHandle, destination);
 }
 
+void DeferredRenderTargets::copyTransparentCompositeToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
+    if (!m_ready || !destination.isValid()) {
+        return;
+    }
+    blitTexture(rhiDevice, m_transparentCompositeHandle, destination);
+}
+
 void DeferredRenderTargets::copySsaoTemporalToHistory(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
@@ -885,16 +870,6 @@ void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiDevice& rhiDevice) {
         return;
     }
     blitTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHandle);
-}
-
-void DeferredRenderTargets::blitTransparentCompositeTo(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
-        return;
-    }
-    blitFramebuffer(m_transparentCompositeFbo, static_cast<GLuint>(framebuffer),
-                    m_width, m_height, std::max(1, width), std::max(1, height),
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 
 uint32_t DeferredRenderTargets::createTexture2D(const uint32_t internalFormat,
