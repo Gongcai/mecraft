@@ -1,6 +1,10 @@
 #include "DeferredLightingPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
@@ -28,15 +32,39 @@ void DeferredLightingPass::shutdown() {
 void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                                     DeferredRenderTargets& targets) {
     if (m_deferredLightingShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindSceneLighting();
+    const bool clearForDebug = settings.debug.deferredLightDebugMode > 0;
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.sceneLightingTextureViewHandle();
+    colorAttachment.loadOp = clearForDebug ? RhiLoadOp::Clear : RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "DeferredLighting";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    if (settings.debug.deferredLightDebugMode > 0) {
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
 
     // Pre-bind CSM shadow array on unit 15 before shader->use()
     glActiveTexture(GL_TEXTURE15);
@@ -271,4 +299,6 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     glBindTexture(GL_TEXTURE_3D, 0);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }

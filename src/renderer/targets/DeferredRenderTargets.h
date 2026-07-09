@@ -116,6 +116,8 @@ public:
     void copySsgiTemporalToSsgi();
     void copySsgiTemporalToHistory();
     [[nodiscard]] RhiTextureHandle sceneLightingTextureHandle() const { return m_sceneLightingHandle; }
+    [[nodiscard]] RhiTextureViewHandle sceneLightingTextureViewHandle() const { return m_sceneLightingView; }
+    bool ensureSceneLightingTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle sceneCompositeTextureHandle() const { return m_sceneCompositeHandle; }
     [[nodiscard]] RhiTextureViewHandle sceneCompositeTextureViewHandle() const { return m_sceneCompositeView; }
     bool ensureSceneCompositeTextureView(RhiDevice& rhiDevice);
@@ -296,6 +298,7 @@ private:
     uint32_t m_sceneLightingFbo = 0;
     uint32_t m_sceneLightingTex = 0;
     RhiTextureHandle m_sceneLightingHandle;
+    RhiTextureViewHandle m_sceneLightingView;
 
     // SceneComposite is the opaque HDR scene after screen-space base effects such as clouds/reflections.
     uint32_t m_sceneCompositeFbo = 0;
