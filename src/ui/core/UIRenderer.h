@@ -51,6 +51,11 @@ public:
                 const Inventory& inventory,
                 const PlayerStatsData& playerStats,
                 const InputSnapshot& inputSnapshot);
+    UIRenderContext prepareRenderContext(const Window& window,
+                                         const Inventory& inventory,
+                                         const PlayerStatsData& playerStats,
+                                         const InputSnapshot& inputSnapshot);
+    void renderPrepared(const UIRenderContext& context);
     void renderCommandInputBox(const std::string& text);
     void renderPickable(const Pickable::SlotInfo* slots, int count, float mouseX, float mouseY);
     [[nodiscard]] UIEventResult routeUIInput(const UIInputEvent& event) const;

@@ -2,6 +2,7 @@
 #define MECRAFT_GAMEPLAY_HUD_PRESENTER_H
 
 #include "GameplayPresentationSnapshot.h"
+#include "../../ui/core/UIRenderContext.h"
 #include <functional>
 #ifdef MECRAFT_DEBUG
 #include "../../ui/Dashboard.h"
@@ -28,6 +29,8 @@ public:
 
     /// Render gameplay UI overlay.
     void render(const GameplayPresentationSnapshot& snap, GameStateMachine& stateMachine);
+    UIRenderContext prepareRenderContext(const GameplayPresentationSnapshot& snap);
+    void renderPrepared(const UIRenderContext& context, GameStateMachine& stateMachine);
 
 #ifdef MECRAFT_DEBUG
     /// Set the Dashboard instance (owned by Game, injected here for rendering).

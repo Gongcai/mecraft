@@ -371,12 +371,13 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
+        UIRenderContext uiContext = hudPresenter->prepareRenderContext(snap);
         RhiCommandList* uiCommandList = nullptr;
         if (!beginUiOverlayPass(renderer, window, uiCommandList)) {
             return false;
         }
 
-        hudPresenter->render(snap, session.stateMachine());
+        hudPresenter->renderPrepared(uiContext, session.stateMachine());
 #ifdef MECRAFT_DEBUG
         uiEnd = std::chrono::steady_clock::now();
 #endif

@@ -51,6 +51,7 @@ struct UIRenderContext {
     const UITheme* theme = nullptr;
     const LocaleManager* localeManager = nullptr;
     RhiTextureHandle backdropBlur;
+    bool backdropBlurPrepared = false;
     int backdropSourceWidth = 0;
     int backdropSourceHeight = 0;
     int backdropBlurWidth = 0;

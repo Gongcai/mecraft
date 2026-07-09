@@ -3,9 +3,8 @@
 #include "../states/GameStateMachine.h"
 #include "../../engine/input/InputManager.h"
 
-void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
-                                   GameStateMachine& stateMachine) {
-    // Convert snapshot player stats to UI format
+namespace {
+PlayerStatsData toPlayerStatsData(const GameplayPresentationSnapshot& snap) {
     PlayerStatsData playerStats;
     playerStats.health = snap.playerStats.health;
     playerStats.maxHealth = snap.playerStats.maxHealth;
@@ -15,8 +14,24 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
     playerStats.maxFood = snap.playerStats.maxFood;
     playerStats.showSurvivalStats = snap.playerStats.showSurvivalStats;
     playerStats.isDead = snap.playerStats.isDead;
+    return playerStats;
+}
+} // namespace
 
-    m_uiRenderer.render(m_window, *snap.inventory, playerStats, m_input.snapshot());
+void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
+                                   GameStateMachine& stateMachine) {
+    UIRenderContext context = prepareRenderContext(snap);
+    renderPrepared(context, stateMachine);
+}
+
+UIRenderContext GameplayHudPresenter::prepareRenderContext(const GameplayPresentationSnapshot& snap) {
+    const PlayerStatsData playerStats = toPlayerStatsData(snap);
+    return m_uiRenderer.prepareRenderContext(m_window, *snap.inventory, playerStats, m_input.snapshot());
+}
+
+void GameplayHudPresenter::renderPrepared(const UIRenderContext& context,
+                                          GameStateMachine& stateMachine) {
+    m_uiRenderer.renderPrepared(context);
     stateMachine.render();
 }
 

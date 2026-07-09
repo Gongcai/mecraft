@@ -623,6 +623,15 @@ void UIRenderer::render(const Window& window,
                         const PlayerStatsData& playerStats,
                         const InputSnapshot& inputSnapshot)
 {
+    UIRenderContext context = prepareRenderContext(window, inventory, playerStats, inputSnapshot);
+    renderPrepared(context);
+}
+
+UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
+                                                 const Inventory& inventory,
+                                                 const PlayerStatsData& playerStats,
+                                                 const InputSnapshot& inputSnapshot)
+{
     glViewport(0, 0, std::max(1, window.getWidth()), std::max(1, window.getHeight()));
 
     m_hotbar.setInventorySource(&inventory);
@@ -631,8 +640,23 @@ void UIRenderer::render(const Window& window,
     m_machinePanel.setPlayerInventorySource(&inventory);
     m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible =(m_commandInputRequested);
-    const UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, inputSnapshot);
+
+    UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, inputSnapshot);
+    if (m_activeScene && m_activeScene->visible) {
+        prepareBackdropBlur(context);
+    }
     m_lastSceneContext = context;
+
+    return context;
+}
+
+void UIRenderer::renderPrepared(const UIRenderContext& context)
+{
+    glViewport(0,
+               0,
+               std::max(1, static_cast<int>(static_cast<float>(context.scaleConfig.virtualWidth) * context.pixelScale())),
+               std::max(1, static_cast<int>(static_cast<float>(context.scaleConfig.virtualHeight) * context.pixelScale())));
+
     m_crosshair.render(context);
     renderControls(context);
     m_commandInputRequested = false;
@@ -745,7 +769,7 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
 void UIRenderer::renderControls(const UIRenderContext& context)
 {
     UIRenderContext renderContext = context;
-    if (m_activeScene && m_activeScene->visible) {
+    if (m_activeScene && m_activeScene->visible && !renderContext.backdropBlurPrepared) {
         prepareBackdropBlur(renderContext);
     }
 
@@ -872,6 +896,7 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
 void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
 {
     context.backdropBlur = {};
+    context.backdropBlurPrepared = true;
     context.backdropSourceWidth = 0;
     context.backdropSourceHeight = 0;
     context.backdropBlurWidth = 0;
