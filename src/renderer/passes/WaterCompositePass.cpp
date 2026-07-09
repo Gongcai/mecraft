@@ -7,6 +7,10 @@
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../core/Shader.h"
+#include "../core/RenderScene.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../engine/platform/Window.h"
 #include "../../world/World.h"
@@ -69,10 +73,41 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     const int capturedWidth = capturedViewport[2] > 0 ? capturedViewport[2] : windowWidth;
     const int capturedHeight = capturedViewport[3] > 0 ? capturedViewport[3] : windowHeight;
 
+    RhiCommandList* commandList = nullptr;
+    RhiDevice* rhiDevice = nullptr;
+
     if (compositeInputsEnabled) {
         targets.copySceneResolvedToTransparentComposite();
         targets.copyDepthToTransparentComposite();
-        targets.bindTransparentComposite();
+        rhiDevice = ctx.shared->rhiDevice;
+        if (!targets.ensureTransparentCompositeTextureViews(*rhiDevice)) {
+            return false;
+        }
+
+        RhiColorAttachment colorAttachment;
+        colorAttachment.view = targets.transparentCompositeTextureViewHandle();
+        colorAttachment.loadOp = RhiLoadOp::Load;
+        colorAttachment.storeOp = RhiStoreOp::Store;
+
+        RhiDepthStencilAttachment depthAttachment;
+        depthAttachment.view = targets.transparentCompositeDepthTextureViewHandle();
+        depthAttachment.depthLoadOp = RhiLoadOp::Load;
+        depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "WaterComposite.TransparentComposite";
+        renderingInfo.renderArea = {
+            0,
+            0,
+            static_cast<uint32_t>(std::max(1, targets.width())),
+            static_cast<uint32_t>(std::max(1, targets.height()))
+        };
+        renderingInfo.colorAttachments = &colorAttachment;
+        renderingInfo.colorAttachmentCount = 1u;
+        renderingInfo.depthStencilAttachment = &depthAttachment;
+
+        commandList = &rhiDevice->beginFrame();
+        commandList->beginRendering(renderingInfo);
     } else if (deferredFrameActive) {
         // Restore the captured framebuffer viewport
         targets.bindDefaultLike(capturedFramebuffer, capturedWidth, capturedHeight);
@@ -248,6 +283,11 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_3D, 0);
     glActiveTexture(GL_TEXTURE0);
+
+    if (commandList != nullptr && rhiDevice != nullptr) {
+        commandList->endRendering();
+        rhiDevice->submitFrame(*commandList);
+    }
 
     if (preTemporalResolve && compositeInputsEnabled) {
         targets.copyTransparentCompositeToSceneComposite();
