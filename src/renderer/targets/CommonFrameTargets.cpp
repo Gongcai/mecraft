@@ -54,23 +54,6 @@ bool CommonFrameTargets::ensureSize(int width, int height) {
     glTextureParameteri(sceneDepthTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(sceneDepthTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    // Scene color FBO
-    GLuint sceneColorFbo = 0;
-    glCreateFramebuffers(1, &sceneColorFbo);
-    glNamedFramebufferTexture(sceneColorFbo, GL_COLOR_ATTACHMENT0, sceneColorTex, 0);
-    glNamedFramebufferTexture(sceneColorFbo, GL_DEPTH_ATTACHMENT, sceneDepthTex, 0);
-    const GLenum sceneDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffer(sceneColorFbo, sceneDrawBuffer);
-    glNamedFramebufferReadBuffer(sceneColorFbo, sceneDrawBuffer);
-
-    if (glCheckNamedFramebufferStatus(sceneColorFbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        MECRAFT_LOG_FPRINTF(stderr, "CommonFrameTargets: scene color FBO incomplete\n");
-        if (sceneColorFbo != 0) { glDeleteFramebuffers(1, &sceneColorFbo); }
-        if (sceneColorTex != 0) { glDeleteTextures(1, &sceneColorTex); }
-        if (sceneDepthTex != 0) { glDeleteTextures(1, &sceneDepthTex); }
-        return false;
-    }
-
     RhiTextureHandle sceneColor = renderer::rhi::gl::registerTexture({
         sceneColorTex,
         RhiTextureDimension::Texture2D,
@@ -99,18 +82,15 @@ bool CommonFrameTargets::ensureSize(int width, int height) {
         MECRAFT_LOG_FPRINTF(stderr, "CommonFrameTargets: failed to register RHI texture handles\n");
         renderer::rhi::gl::unregisterTextureAndReset(sceneColor);
         renderer::rhi::gl::unregisterTextureAndReset(sceneDepth);
-        glDeleteFramebuffers(1, &sceneColorFbo);
         glDeleteTextures(1, &sceneColorTex);
         glDeleteTextures(1, &sceneDepthTex);
         return false;
     }
 
-    m_sceneColorFbo = sceneColorFbo;
     m_sceneColor = sceneColor;
     m_sceneDepth = sceneDepth;
 
     // Label GL objects for RenderDoc / KHR_debug inspection
-    renderer::debug::labelFramebuffer(m_sceneColorFbo, "CommonTargets.SceneColor");
     renderer::debug::labelTexture(sceneColorTex, "CommonTargets.SceneColorTex");
     renderer::debug::labelTexture(sceneDepthTex, "CommonTargets.SceneDepthTex");
     renderer::debug::labelVertexArray(m_fullscreenVao, "CommonTargets.FullscreenVAO");
@@ -124,7 +104,6 @@ void CommonFrameTargets::destroyFramebuffers() {
     GLuint sceneDepthTex = static_cast<GLuint>(renderer::rhi::gl::textureId(m_sceneDepth));
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneColor);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneDepth);
-    if (m_sceneColorFbo) { glDeleteFramebuffers(1, &m_sceneColorFbo); m_sceneColorFbo = 0; }
     if (sceneColorTex != 0) { glDeleteTextures(1, &sceneColorTex); }
     if (sceneDepthTex != 0) { glDeleteTextures(1, &sceneDepthTex); }
 }

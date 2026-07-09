@@ -35,7 +35,6 @@ private:
     void destroyFullscreenTriangle();
 
     // Scene color (RGBA16F HDR) - main render target for both pipelines
-    uint32_t m_sceneColorFbo = 0;
     RhiTextureHandle m_sceneColor;
 
     // Scene depth (DEPTH32F) - shared depth buffer
