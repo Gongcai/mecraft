@@ -149,49 +149,17 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
                                              kShadowCascadeCount,
                                              GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowColor1, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    glCreateFramebuffers(1, &m_ssaoFbo);
     m_ssaoTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssaoFbo, GL_COLOR_ATTACHMENT0, m_ssaoTex, 0);
-    const GLenum ssaoDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_ssaoFbo, 1, &ssaoDrawBuffer);
-    if (!checkFramebufferComplete(m_ssaoFbo, "SSAO")) {
-        shutdown();
-        return false;
-    }
 
     // SSAO filtered output (bilateral filter resolves into this)
-    glCreateFramebuffers(1, &m_ssaoFilteredFbo);
     m_ssaoFilteredTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssaoFilteredFbo, GL_COLOR_ATTACHMENT0, m_ssaoFilteredTex, 0);
-    const GLenum ssaoFilteredDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_ssaoFilteredFbo, 1, &ssaoFilteredDrawBuffer);
-    if (!checkFramebufferComplete(m_ssaoFilteredFbo, "SSAOFiltered")) {
-        shutdown();
-        return false;
-    }
 
     // Half-res SSAO: raw and filtered at width/2 x height/2
     const int halfW = std::max(1, m_width / 2);
     const int halfH = std::max(1, m_height / 2);
-    glCreateFramebuffers(1, &m_ssaoHalfResFbo);
     m_ssaoHalfResTex = createTexture2D(GL_R8, halfW, halfH, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssaoHalfResFbo, GL_COLOR_ATTACHMENT0, m_ssaoHalfResTex, 0);
-    const GLenum ssaoHalfResDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_ssaoHalfResFbo, 1, &ssaoHalfResDrawBuffer);
-    if (!checkFramebufferComplete(m_ssaoHalfResFbo, "SSAOHalfRes")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_ssaoHalfResFilteredFbo);
     m_ssaoHalfResFilteredTex = createTexture2D(GL_R8, halfW, halfH, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssaoHalfResFilteredFbo, GL_COLOR_ATTACHMENT0, m_ssaoHalfResFilteredTex, 0);
-    const GLenum ssaoHalfResFilteredDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_ssaoHalfResFilteredFbo, 1, &ssaoHalfResFilteredDrawBuffer);
-    if (!checkFramebufferComplete(m_ssaoHalfResFilteredFbo, "SSAOHalfResFiltered")) {
-        shutdown();
-        return false;
-    }
 
     // SSAO temporal history ping-pong (R8, matches SSAO format)
     for (int i = 0; i < 2; ++i) {
@@ -212,54 +180,18 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_ssaoHistoryIndex = 0;
 
     // SSAO temporal resolve output (R8, same format as SSAO)
-    glCreateFramebuffers(1, &m_ssaoTemporalFbo);
     m_ssaoTemporalTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
                                         GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssaoTemporalFbo, GL_COLOR_ATTACHMENT0, m_ssaoTemporalTex, 0);
-    const GLenum ssaoTemporalDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_ssaoTemporalFbo, 1, &ssaoTemporalDrawBuffer);
-    if (!checkFramebufferComplete(m_ssaoTemporalFbo, "SSAOTemporal")) {
-        shutdown();
-        return false;
-    }
-    // Clear temporal output to 1.0 (no occlusion)
-    const float clearWhiteTemporal = 1.0f;
-    glClearNamedFramebufferfv(m_ssaoTemporalFbo, GL_COLOR, 0, &clearWhiteTemporal);
 
-    glCreateFramebuffers(1, &m_ssgiHalfResFbo);
     m_ssgiHalfResTex = createTexture2D(GL_RGBA16F, halfW, halfH, GL_RGBA, GL_FLOAT,
                                        GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssgiHalfResFbo, GL_COLOR_ATTACHMENT0, m_ssgiHalfResTex, 0);
-    const GLenum ssgiHalfResDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_ssgiHalfResFbo, 1, &ssgiHalfResDrawBuffer);
-    if (!checkFramebufferComplete(m_ssgiHalfResFbo, "SSGIHalfRes")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_ssgiFbo);
     m_ssgiTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                 GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssgiFbo, GL_COLOR_ATTACHMENT0, m_ssgiTex, 0);
-    const GLenum ssgiDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_ssgiFbo, 1, &ssgiDrawBuffer);
-    if (!checkFramebufferComplete(m_ssgiFbo, "SSGI")) {
-        shutdown();
-        return false;
-    }
 
     for (int i = 0; i < 2; ++i) {
-        glCreateFramebuffers(1, &m_ssgiDenoiseFbo[i]);
         m_ssgiDenoiseTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_ssgiDenoiseFbo[i], GL_COLOR_ATTACHMENT0, m_ssgiDenoiseTex[i], 0);
-        glNamedFramebufferDrawBuffers(m_ssgiDenoiseFbo[i], 1, &ssgiDrawBuffer);
-        if (!checkFramebufferComplete(m_ssgiDenoiseFbo[i], "SSGIDenoise")) {
-            shutdown();
-            return false;
-        }
-        constexpr float clearBlack[] = {0.0f, 0.0f, 0.0f, 0.0f};
-        glClearNamedFramebufferfv(m_ssgiDenoiseFbo[i], GL_COLOR, 0, clearBlack);
     }
 
     for (int i = 0; i < 2; ++i) {
@@ -282,22 +214,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
     m_ssgiHistoryIndex = 0;
 
-    glCreateFramebuffers(1, &m_ssgiTemporalFbo);
     m_ssgiTemporalTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                         GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
     m_ssgiTemporalMomentsTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT0, m_ssgiTemporalTex, 0);
-    glNamedFramebufferTexture(m_ssgiTemporalFbo, GL_COLOR_ATTACHMENT1, m_ssgiTemporalMomentsTex, 0);
-    const GLenum ssgiTemporalDrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-    glNamedFramebufferDrawBuffers(m_ssgiTemporalFbo, 2, ssgiTemporalDrawBuffers);
-    if (!checkFramebufferComplete(m_ssgiTemporalFbo, "SSGITemporal")) {
-        shutdown();
-        return false;
-    }
-    constexpr float clearSsgiTemporal[] = {0.0f, 0.0f, 0.0f, 0.0f};
-    glClearNamedFramebufferfv(m_ssgiTemporalFbo, GL_COLOR, 0, clearSsgiTemporal);
-    glClearNamedFramebufferfv(m_ssgiTemporalFbo, GL_COLOR, 1, clearSsgiTemporal);
 
     m_sceneLightingTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
@@ -415,15 +335,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     renderer::debug::labelTexture(m_csmShadowDepthAllComparison, "DeferredTargets.CSMDepthAllComparison");
     renderer::debug::labelTexture(m_csmShadowColor0, "DeferredTargets.CSMColor0");
     renderer::debug::labelTexture(m_csmShadowColor1, "DeferredTargets.CSMColor1");
-    renderer::debug::labelFramebuffer(m_ssaoFbo, "DeferredTargets.SSAO");
     renderer::debug::labelTexture(m_ssaoTex, "DeferredTargets.SSAOTex");
-    renderer::debug::labelFramebuffer(m_ssaoFilteredFbo, "DeferredTargets.SSAOFiltered");
     renderer::debug::labelTexture(m_ssaoFilteredTex, "DeferredTargets.SSAOFilteredTex");
-    renderer::debug::labelFramebuffer(m_ssaoHalfResFbo, "DeferredTargets.SSAOHalfRes");
     renderer::debug::labelTexture(m_ssaoHalfResTex, "DeferredTargets.SSAOHalfResTex");
-    renderer::debug::labelFramebuffer(m_ssaoHalfResFilteredFbo, "DeferredTargets.SSAOHalfResFiltered");
     renderer::debug::labelTexture(m_ssaoHalfResFilteredTex, "DeferredTargets.SSAOHalfResFilteredTex");
-    renderer::debug::labelFramebuffer(m_ssaoTemporalFbo, "DeferredTargets.SSAOTemporal");
     renderer::debug::labelTexture(m_ssaoTemporalTex, "DeferredTargets.SSAOTemporalTex");
     for (int i = 0; i < 2; ++i) {
         char fboName[48], texName[48];
@@ -432,18 +347,13 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         renderer::debug::labelFramebuffer(m_ssaoHistoryFbo[i], fboName);
         renderer::debug::labelTexture(m_ssaoHistoryTex[i], texName);
     }
-    renderer::debug::labelFramebuffer(m_ssgiFbo, "DeferredTargets.SSGI");
     renderer::debug::labelTexture(m_ssgiTex, "DeferredTargets.SSGITex");
-    renderer::debug::labelFramebuffer(m_ssgiHalfResFbo, "DeferredTargets.SSGIHalfRes");
     renderer::debug::labelTexture(m_ssgiHalfResTex, "DeferredTargets.SSGIHalfResTex");
-    renderer::debug::labelFramebuffer(m_ssgiTemporalFbo, "DeferredTargets.SSGITemporal");
     renderer::debug::labelTexture(m_ssgiTemporalTex, "DeferredTargets.SSGITemporalTex");
     renderer::debug::labelTexture(m_ssgiTemporalMomentsTex, "DeferredTargets.SSGITemporalMomentsTex");
     for (int i = 0; i < 2; ++i) {
-        char fboName[48], texName[48];
-        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.SSGIDenoise[%d]", i);
+        char texName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIDenoiseTex[%d]", i);
-        renderer::debug::labelFramebuffer(m_ssgiDenoiseFbo[i], fboName);
         renderer::debug::labelTexture(m_ssgiDenoiseTex[i], texName);
     }
     for (int i = 0; i < 2; ++i) {
@@ -2620,28 +2530,19 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_ssaoFbo, m_ssaoFilteredFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_ssgiFbo, m_ssgiHalfResFbo, m_ssgiDenoiseFbo[0], m_ssgiDenoiseFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1], m_ssgiTemporalFbo};
+    const GLuint framebuffers[] = {m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1]};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
             glDeleteFramebuffers(1, &mutableFramebuffer);
         }
     }
-    m_ssaoFbo = 0;
-    m_ssaoFilteredFbo = 0;
-    m_ssaoHalfResFbo = 0;
-    m_ssaoHalfResFilteredFbo = 0;
     m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
     m_historyReflectionFbo[0] = 0; m_historyReflectionFbo[1] = 0;
     m_historyCloudFbo[0] = 0; m_historyCloudFbo[1] = 0;
     m_historyVolumetricFbo[0] = 0; m_historyVolumetricFbo[1] = 0;
     m_ssaoHistoryFbo[0] = 0; m_ssaoHistoryFbo[1] = 0;
-    m_ssaoTemporalFbo = 0;
-    m_ssgiFbo = 0;
-    m_ssgiHalfResFbo = 0;
-    m_ssgiDenoiseFbo[0] = 0; m_ssgiDenoiseFbo[1] = 0;
     m_ssgiHistoryFbo[0] = 0; m_ssgiHistoryFbo[1] = 0;
-    m_ssgiTemporalFbo = 0;
     m_currentHistoryIndex = 0;
     m_ssaoHistoryIndex = 0;
     m_ssgiHistoryIndex = 0;

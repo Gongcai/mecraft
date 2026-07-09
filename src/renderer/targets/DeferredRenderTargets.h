@@ -265,19 +265,15 @@ private:
     RhiTextureViewHandle m_csmShadowColor0View[kShadowCascadeCount];
     RhiTextureViewHandle m_csmShadowColor1View[kShadowCascadeCount];
 
-    uint32_t m_ssaoFbo = 0;
     uint32_t m_ssaoTex = 0;
     RhiTextureHandle m_ssaoHandle;
-    uint32_t m_ssaoFilteredFbo = 0;
     uint32_t m_ssaoFilteredTex = 0;
     RhiTextureHandle m_ssaoFilteredHandle;
     RhiTextureViewHandle m_ssaoFilteredView;
     // Half-res SSAO: raw and filtered at width/2 x height/2
-    uint32_t m_ssaoHalfResFbo = 0;
     uint32_t m_ssaoHalfResTex = 0;
     RhiTextureHandle m_ssaoHalfResHandle;
     RhiTextureViewHandle m_ssaoHalfResView;
-    uint32_t m_ssaoHalfResFilteredFbo = 0;
     uint32_t m_ssaoHalfResFilteredTex = 0;
     RhiTextureHandle m_ssaoHalfResFilteredHandle;
     RhiTextureViewHandle m_ssaoHalfResFilteredView;
@@ -287,20 +283,16 @@ private:
     RhiTextureHandle m_ssaoHistoryHandle[2];
     int m_ssaoHistoryIndex = 0;
     // SSAO temporal resolve output (R8) — deferred lighting reads from this
-    uint32_t m_ssaoTemporalFbo = 0;
     uint32_t m_ssaoTemporalTex = 0;
     RhiTextureHandle m_ssaoTemporalHandle;
     RhiTextureViewHandle m_ssaoTemporalView;
 
-    uint32_t m_ssgiFbo = 0;
     uint32_t m_ssgiTex = 0;
     RhiTextureHandle m_ssgiHandle;
     RhiTextureViewHandle m_ssgiView;
-    uint32_t m_ssgiHalfResFbo = 0;
     uint32_t m_ssgiHalfResTex = 0;
     RhiTextureHandle m_ssgiHalfResHandle;
     RhiTextureViewHandle m_ssgiHalfResView;
-    uint32_t m_ssgiDenoiseFbo[2] = {0, 0};
     uint32_t m_ssgiDenoiseTex[2] = {0, 0};
     RhiTextureHandle m_ssgiDenoiseHandle[2];
     RhiTextureViewHandle m_ssgiDenoiseView[2];
@@ -310,7 +302,6 @@ private:
     RhiTextureHandle m_ssgiHistoryHandle[2];
     RhiTextureHandle m_ssgiMomentsHistoryHandle[2];
     int m_ssgiHistoryIndex = 0;
-    uint32_t m_ssgiTemporalFbo = 0;
     uint32_t m_ssgiTemporalTex = 0;
     uint32_t m_ssgiTemporalMomentsTex = 0;
     RhiTextureHandle m_ssgiTemporalHandle;
