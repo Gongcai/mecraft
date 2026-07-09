@@ -133,6 +133,8 @@ public:
     [[nodiscard]] RhiTextureViewHandle sceneCompositeTextureViewHandle() const { return m_sceneCompositeView; }
     bool ensureSceneCompositeTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle sceneResolvedTextureHandle() const { return m_sceneResolvedHandle; }
+    [[nodiscard]] RhiTextureViewHandle sceneResolvedTextureViewHandle() const { return m_sceneResolvedView; }
+    bool ensureSceneResolvedTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle transparentCompositeTextureHandle() const { return m_transparentCompositeHandle; }
     [[nodiscard]] RhiTextureHandle transparentCompositeDepthTextureHandle() const { return m_transparentCompositeDepthHandle; }
     [[nodiscard]] RhiTextureHandle halfResTextureHandle() const { return m_halfResHandle; }
@@ -166,6 +168,8 @@ public:
     bool ensureVelocityTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle perObjectVelocityTextureHandle() const { return m_perObjectVelocityHandle; }
     [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
+    [[nodiscard]] RhiTextureViewHandle weatherMaskTextureViewHandle() const { return m_weatherMaskView; }
+    bool ensureWeatherMaskTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle atmosphereLutTextureHandle() const { return m_atmosphereLutHandle; }
     bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
@@ -329,6 +333,7 @@ private:
     uint32_t m_sceneResolvedFbo = 0;
     uint32_t m_sceneResolvedTex = 0;
     RhiTextureHandle m_sceneResolvedHandle;
+    RhiTextureViewHandle m_sceneResolvedView;
 
     // TransparentComposite is a scratch scene copy used while forward water/generic transparent geometry is blended.
     uint32_t m_transparentCompositeFbo = 0;
@@ -403,6 +408,7 @@ private:
     uint32_t m_weatherMaskFbo = 0;
     uint32_t m_weatherMaskTex = 0;
     RhiTextureHandle m_weatherMaskHandle;
+    RhiTextureViewHandle m_weatherMaskView;
 
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
     uint32_t m_atmosphereLut3d = 0;

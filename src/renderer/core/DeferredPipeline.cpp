@@ -6,6 +6,9 @@
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../targets/DeferredRenderTargets.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../mesh/TerrainRenderer.h"
@@ -42,6 +45,42 @@ private:
     GpuTimerPass m_pass = GpuTimerPass::GBuffer;
     bool m_started = false;
 };
+
+void setClearAttachment(RhiColorAttachment& attachment,
+                        const RhiTextureViewHandle view,
+                        const float red,
+                        const float green,
+                        const float blue,
+                        const float alpha) {
+    attachment.view = view;
+    attachment.loadOp = RhiLoadOp::Clear;
+    attachment.storeOp = RhiStoreOp::Store;
+    attachment.clearColor[0] = red;
+    attachment.clearColor[1] = green;
+    attachment.clearColor[2] = blue;
+    attachment.clearColor[3] = alpha;
+}
+
+void clearColorAttachments(RhiCommandList& commandList,
+                           const char* debugName,
+                           const int width,
+                           const int height,
+                           const RhiColorAttachment* attachments,
+                           const uint32_t attachmentCount) {
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = debugName;
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height))
+    };
+    renderingInfo.colorAttachments = attachments;
+    renderingInfo.colorAttachmentCount = attachmentCount;
+
+    commandList.beginRendering(renderingInfo);
+    commandList.endRendering();
+}
 } // namespace
 
 void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer) {
@@ -415,48 +454,53 @@ void DeferredPipeline::restoreCapturedFramebufferViewport(int windowWidth, int w
 }
 
 void DeferredPipeline::clearDeferredAuxiliaryTargets() {
-    if (!m_shared || !m_shared->deferredTargets) return;
+    if (!m_shared || !m_shared->deferredTargets || !m_shared->rhiDevice) return;
     auto& targets = *m_shared->deferredTargets;
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
-    targets.bindReflection();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    if (!targets.ensureReflectionTextureView(rhiDevice) ||
+        !targets.ensureCloudTextureView(rhiDevice) ||
+        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
+        !targets.ensureSceneResolvedTextureView(rhiDevice) ||
+        !targets.ensureSsgiTextureView(rhiDevice) ||
+        !targets.ensureSsgiHalfResTextureView(rhiDevice) ||
+        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
+        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 1) ||
+        !targets.ensureSsgiTemporalTextureViews(rhiDevice) ||
+        !targets.ensureWeatherMaskTextureView(rhiDevice)) {
+        return;
+    }
 
-    targets.bindCloud();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
 
-    targets.bindSceneComposite();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    RhiColorAttachment sceneAttachments[3];
+    setClearAttachment(sceneAttachments[0], targets.reflectionTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
+    setClearAttachment(sceneAttachments[1], targets.sceneCompositeTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
+    setClearAttachment(sceneAttachments[2], targets.sceneResolvedTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
+    clearColorAttachments(commandList, "DeferredAuxiliarySceneClear",
+                          targets.width(), targets.height(), sceneAttachments, 3u);
 
-    targets.bindSceneResolved();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    RhiColorAttachment halfResAttachments[2];
+    setClearAttachment(halfResAttachments[0], targets.cloudTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
+    setClearAttachment(halfResAttachments[1], targets.ssgiHalfResTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    clearColorAttachments(commandList, "DeferredAuxiliaryHalfResClear",
+                          targets.halfWidth(), targets.halfHeight(), halfResAttachments, 2u);
 
-    targets.bindSsgi();
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    RhiColorAttachment ssgiAttachments[6];
+    setClearAttachment(ssgiAttachments[0], targets.ssgiTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[1], targets.ssgiDenoiseTextureViewHandle(0), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[2], targets.ssgiDenoiseTextureViewHandle(1), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[3], targets.ssgiTemporalTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[4], targets.ssgiTemporalMomentsTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[5], targets.weatherMaskTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    clearColorAttachments(commandList, "DeferredAuxiliarySsgiClear",
+                          targets.width(), targets.height(), ssgiAttachments, 6u);
 
-    targets.bindSsgiHalfRes();
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    targets.bindSsgiDenoise(0);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    targets.bindSsgiDenoise(1);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    targets.bindSsgiTemporal();
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    targets.clearWeatherMask();
+    rhiDevice.submitFrame(commandList);
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    glDisable(GL_BLEND);
 }
 
 void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings) {
