@@ -121,6 +121,7 @@ public:
     [[nodiscard]] RhiTextureHandle sceneDepthTextureHandle() const { return m_sceneDepthHandle; }
     [[nodiscard]] RhiTextureViewHandle sceneColorTextureViewHandle() const { return m_sceneColorView; }
     [[nodiscard]] RhiTextureViewHandle sceneDepthTextureViewHandle() const { return m_sceneDepthView; }
+    [[nodiscard]] RhiTextureViewHandle compositeTextureViewHandle() const { return m_compositeView; }
     bool ensureSceneCaptureViews(RhiDevice& rhiDevice);
 
 private:

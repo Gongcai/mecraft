@@ -9,7 +9,6 @@
 
 class ResourceMgr;
 class RhiDevice;
-class Shader;
 
 class Fsr1Pass : public RenderPass {
 public:
@@ -21,7 +20,7 @@ public:
 
     bool execute(RhiDevice& rhiDevice,
                  RhiTextureViewHandle swapchainColorView,
-                 uint32_t inputTex,
+                 RhiTextureViewHandle inputView,
                  int inputWidth,
                  int inputHeight,
                  int outputWidth,
@@ -30,9 +29,12 @@ public:
 
 private:
     bool ensureTargets(RhiDevice& rhiDevice, int width, int height);
+    bool ensureRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureEasuBindGroup(RhiDevice& rhiDevice, RhiTextureViewHandle inputView);
+    bool ensureRcasBindGroup(RhiDevice& rhiDevice);
+    void destroyRhiBindGroups();
+    void destroyRhiResources();
     void destroyTargets();
-    void initFullscreenTriangle();
-    void destroyFullscreenTriangle();
 
     static void populateEasuConstants(glm::vec4& con0,
                                       glm::vec4& con1,
@@ -46,13 +48,23 @@ private:
                                       float outputHeight);
     static glm::vec4 populateRcasConstants(float sharpness);
 
-    Shader* m_easuShader = nullptr;
-    Shader* m_rcasShader = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiSamplerHandle m_sampler;
+    RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_easuFragmentShader;
+    RhiShaderHandle m_rcasFragmentShader;
+    RhiPipelineHandle m_easuPipeline;
+    RhiPipelineHandle m_rcasPipeline;
+    RhiBindGroupHandle m_easuBindGroup;
+    RhiBindGroupHandle m_rcasBindGroup;
+    RhiTextureViewHandle m_boundEasuInputView;
+    RhiTextureViewHandle m_boundRcasInputView;
     uint32_t m_easuTex = 0;
     RhiTextureHandle m_easuHandle;
     RhiTextureViewHandle m_easuView;
     RhiDevice* m_rhiViewDevice = nullptr;
-    uint32_t m_fullscreenVao = 0;
     int m_width = 0;
     int m_height = 0;
 };

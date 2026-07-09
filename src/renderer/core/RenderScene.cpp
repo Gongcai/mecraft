@@ -409,7 +409,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     upscaled = m_fsr1Pass.execute(
                         *m_shared.rhiDevice,
                         m_currentContext.swapchainColorView,
-                        postTex,
+                        m_postProcessPass.compositeTextureViewHandle(),
                         inputWidth,
                         inputHeight,
                         std::max(1, request.window.getWidth()),
