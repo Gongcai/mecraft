@@ -163,8 +163,31 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
     if (m_reflectionFilterShader == nullptr) return;
 
     targets.copyReflectionToTemporalScratch();
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindReflection();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.reflectionTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "ReflectionFilter";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -204,6 +227,8 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSettings& reflection,
@@ -211,8 +236,31 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     if (m_reflectionTemporalShader == nullptr) return;
 
     targets.copyReflectionToTemporalScratch();
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindReflection();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.reflectionTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "ReflectionTemporal";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -255,4 +303,6 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
