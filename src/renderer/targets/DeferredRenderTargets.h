@@ -17,35 +17,10 @@ public:
     bool ensureSize(int width, int height, int shadowResolution);
 
     void bindGBuffer();
-    void bindShadowMap();
-    void bindCsmShadowLayer(int cascadeIndex, int cascadeResolution = 0);
-    void bindCsmShadowTransparentLayer(int cascadeIndex, int cascadeResolution = 0);
-    void bindShadowColor();
-    void bindSsao();
-    void bindSsaoFiltered();
-    void bindSsaoTemporal();
-    void bindSsaoHalfRes();
-    void bindSsaoHalfResFiltered();
-    void bindSsgi();
-    void bindSsgiHalfRes();
-    void bindSsgiDenoise(int slot);
-    void bindSsgiTemporal();
-    void bindSceneLighting();
-    void bindSceneComposite();
-    void bindSceneResolved();
-    void bindTransparentComposite();
-    void bindHalfRes();
-    void bindReflection();
-    void bindReflectionTemporalScratch();
-    void bindCloud();
-    void bindVolumetricTemporal();
-    void bindVelocity();
     // Per-object velocity: temporarily attaches the RG16F texture to the GBuffer FBO
     // as the sixth color attachment so entity/drop shaders can write velocity via MRT.
     void attachPerObjectVelocityToGBuffer();
     void detachPerObjectVelocityFromGBuffer();
-    void bindWeatherMask();
-    void clearWeatherMask();
     void bindDefaultLike(int32_t framebuffer, int width, int height);
     void copyFramebufferColorToSceneLighting(int32_t framebuffer, int width, int height) const;
     void copyFramebufferColorToSceneResolved(int32_t framebuffer, int width, int height) const;
