@@ -213,7 +213,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Ensure deferred targets are sized correctly
     if (!targets.ensureSize(windowWidth, windowHeight, m_currentSettings.shadow.resolution)) {
-        restoreCapturedFramebufferViewport(windowWidth, windowHeight);
         return {};
     }
 
@@ -317,7 +316,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         updateDeferredHistoryTargets();
         targets.copySceneResolvedToTexture(rhiDevice, ctx.sceneCaptureColorTexture);
         targets.copyDepthToTexture(rhiDevice, ctx.sceneCaptureDepthTexture);
-        restoreCapturedFramebufferViewport(windowWidth, windowHeight);
         return buildFrameOutput(ctx);
     }
 
@@ -361,7 +359,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         updateDeferredHistoryTargets();
         targets.copySceneResolvedToTexture(rhiDevice, ctx.sceneCaptureColorTexture);
         targets.copyDepthToTexture(rhiDevice, ctx.sceneCaptureDepthTexture);
-        restoreCapturedFramebufferViewport(windowWidth, windowHeight);
         return buildFrameOutput(ctx);
     }
 
@@ -427,8 +424,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         renderWaterCompositePass(ctx, false);
     }
 
-    restoreCapturedFramebufferViewport(windowWidth, windowHeight);
-
     // Mark that we now have valid previous frame data for temporal effects
     m_hasPreviousFrameData = true;
 
@@ -444,15 +439,6 @@ void DeferredPipeline::captureCurrentFramebuffer() {
     for (int i = 0; i < 4; ++i) {
         m_capturedViewport[i] = viewport[i];
     }
-}
-
-void DeferredPipeline::restoreCapturedFramebufferViewport(int windowWidth, int windowHeight) {
-    if (!m_shared || !m_shared->deferredTargets) return;
-    const int fallbackWidth = std::max(1, windowWidth);
-    const int fallbackHeight = std::max(1, windowHeight);
-    const int width = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : fallbackWidth;
-    const int height = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : fallbackHeight;
-    m_shared->deferredTargets->bindDefaultLike(m_capturedFramebuffer, width, height);
 }
 
 void DeferredPipeline::clearDeferredAuxiliaryTargets() {

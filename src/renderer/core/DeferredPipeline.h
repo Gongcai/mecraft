@@ -117,7 +117,6 @@ private:
 
     // Private orchestration methods
     void captureCurrentFramebuffer();
-    void restoreCapturedFramebufferViewport(int windowWidth, int windowHeight);
     void clearDeferredAuxiliaryTargets();
     void updateDeferredHistoryTargets();
     void renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings);

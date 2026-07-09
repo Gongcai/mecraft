@@ -5,7 +5,9 @@
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/BlockEntityRenderer.h"
@@ -104,6 +106,49 @@ float computeHeldItemSceneHdrScale(const FrameContext& ctx,
                                                        0.70f);
     const float scale = 1.0f + directEnergy * 2.25f * weatherAttenuation + skyEnergy * 1.20f;
     return std::clamp(scale, 1.0f, 6.5f);
+}
+
+RhiCommandList* beginSceneCaptureRendering(RhiDevice& rhiDevice,
+                                           const FrameContext& ctx,
+                                           const char* debugName) {
+    if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
+        return nullptr;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = ctx.sceneCaptureColorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = ctx.sceneCaptureDepthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = debugName;
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
+        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+    return &commandList;
+}
+
+void endSceneCaptureRendering(RhiDevice& rhiDevice, RhiCommandList* commandList) {
+    if (commandList == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    rhiDevice.submitFrame(*commandList);
 }
 
 glm::vec2 sampleHeldItemLight(const IWorldView& worldView, const glm::vec3& cameraPosition) {
@@ -233,7 +278,10 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
 
     // R5: Render block interaction overlays (outline + break overlay)
     const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
+    RhiCommandList* overlayCommandList = beginSceneCaptureRendering(
+        *m_shared.rhiDevice, m_currentContext, "SceneCapture.BlockOverlay");
     m_overlayRenderer.render(worldView, viewProj, target, blockBreak);
+    endSceneCaptureRendering(*m_shared.rhiDevice, overlayCommandList);
 }
 
 void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
@@ -268,6 +316,11 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         cameraRainVisibility = m_currentContext.cameraRainVisibility;
         if (m_settings.weather.rainLinesEnabled) {
             const auto& weather = request.weatherSystem.getDerived();
+            RhiCommandList* weatherCommandList = nullptr;
+            if (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f) {
+                weatherCommandList = beginSceneCaptureRendering(
+                    *m_shared.rhiDevice, m_currentContext, "SceneCapture.Weather");
+            }
             const glm::vec3 camPos = request.camera.getPosition();
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));
@@ -298,6 +351,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                                 precipitationScreenSize, request.frameTime,
                                                 hardwareDepthTest);
             }
+            endSceneCaptureRendering(*m_shared.rhiDevice, weatherCommandList);
         }
     }
 
@@ -312,12 +366,15 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->setSceneHdrScale(
             computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
+        RhiCommandList* heldItemCommandList = beginSceneCaptureRendering(
+            *m_shared.rhiDevice, m_currentContext, "SceneCapture.FirstPersonHeldItem");
         request.firstPersonHeldItemRenderer->render(
             frameRenderSize.x,
             frameRenderSize.y,
             *request.firstPersonInventory,
             *request.firstPersonHeldItemMotion,
             static_cast<float>(Time::getGameTime()));
+        endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList);
     }
 
     if (!skipPostProcess) {
