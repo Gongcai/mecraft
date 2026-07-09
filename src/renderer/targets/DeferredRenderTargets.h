@@ -206,7 +206,6 @@ private:
                                          uint32_t wrap);
 
     static void generateMipmaps(uint32_t texture);
-    static bool checkFramebufferComplete(uint32_t framebuffer, const char* label);
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -278,7 +277,6 @@ private:
     RhiTextureHandle m_ssaoHalfResFilteredHandle;
     RhiTextureViewHandle m_ssaoHalfResFilteredView;
     // SSAO temporal history ping-pong (R8)
-    uint32_t m_ssaoHistoryFbo[2] = {0, 0};
     uint32_t m_ssaoHistoryTex[2] = {0, 0};
     RhiTextureHandle m_ssaoHistoryHandle[2];
     int m_ssaoHistoryIndex = 0;
@@ -296,7 +294,6 @@ private:
     uint32_t m_ssgiDenoiseTex[2] = {0, 0};
     RhiTextureHandle m_ssgiDenoiseHandle[2];
     RhiTextureViewHandle m_ssgiDenoiseView[2];
-    uint32_t m_ssgiHistoryFbo[2] = {0, 0};
     uint32_t m_ssgiHistoryTex[2] = {0, 0};
     uint32_t m_ssgiMomentsHistoryTex[2] = {0, 0};
     RhiTextureHandle m_ssgiHistoryHandle[2];
@@ -353,7 +350,6 @@ private:
     RhiTextureViewHandle m_skyCaptureView;
 
     // History ping-pong for temporal accumulation
-    uint32_t m_historySceneFbo[2] = {0, 0};
     uint32_t m_historySceneTex[2] = {0, 0};
     uint32_t m_historyDepthTex[2] = {0, 0};
     RhiTextureHandle m_historySceneHandle[2];

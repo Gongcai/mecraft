@@ -163,19 +163,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 
     // SSAO temporal history ping-pong (R8, matches SSAO format)
     for (int i = 0; i < 2; ++i) {
-        glCreateFramebuffers(1, &m_ssaoHistoryFbo[i]);
         m_ssaoHistoryTex[i] = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_ssaoHistoryFbo[i], GL_COLOR_ATTACHMENT0, m_ssaoHistoryTex[i], 0);
-        const GLenum ssaoHistoryDrawBuffer = GL_COLOR_ATTACHMENT0;
-        glNamedFramebufferDrawBuffers(m_ssaoHistoryFbo[i], 1, &ssaoHistoryDrawBuffer);
-        if (!checkFramebufferComplete(m_ssaoHistoryFbo[i], "SSAOHistory")) {
-            shutdown();
-            return false;
-        }
-        // Clear to 1.0 (no occlusion) so first frame reads valid history
-        const float clearWhite = 1.0f;
-        glClearNamedFramebufferfv(m_ssaoHistoryFbo[i], GL_COLOR, 0, &clearWhite);
     }
     m_ssaoHistoryIndex = 0;
 
@@ -195,22 +184,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     for (int i = 0; i < 2; ++i) {
-        glCreateFramebuffers(1, &m_ssgiHistoryFbo[i]);
         m_ssgiHistoryTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
         m_ssgiMomentsHistoryTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                      GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_ssgiHistoryFbo[i], GL_COLOR_ATTACHMENT0, m_ssgiHistoryTex[i], 0);
-        glNamedFramebufferTexture(m_ssgiHistoryFbo[i], GL_COLOR_ATTACHMENT1, m_ssgiMomentsHistoryTex[i], 0);
-        const GLenum ssgiHistoryDrawBuffers[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-        glNamedFramebufferDrawBuffers(m_ssgiHistoryFbo[i], 2, ssgiHistoryDrawBuffers);
-        if (!checkFramebufferComplete(m_ssgiHistoryFbo[i], "SSGIHistory")) {
-            shutdown();
-            return false;
-        }
-        constexpr float clearBlack[] = {0.0f, 0.0f, 0.0f, 0.0f};
-        glClearNamedFramebufferfv(m_ssgiHistoryFbo[i], GL_COLOR, 0, clearBlack);
-        glClearNamedFramebufferfv(m_ssgiHistoryFbo[i], GL_COLOR, 1, clearBlack);
     }
     m_ssgiHistoryIndex = 0;
 
@@ -248,23 +225,12 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 
     m_skyCaptureTex = createTexture2D(GL_RGBA16F, kSkyCaptureWidth, kSkyCaptureHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-    // History scene FBO ping-pong (RGBA16F color + depth)
+    // History scene ping-pong (RGBA16F color + depth)
     for (int i = 0; i < 2; ++i) {
-        glCreateFramebuffers(1, &m_historySceneFbo[i]);
         m_historySceneTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
         m_historyDepthTex[i] = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT,
                                                GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-        glNamedFramebufferTexture(m_historySceneFbo[i], GL_COLOR_ATTACHMENT0, m_historySceneTex[i], 0);
-        glNamedFramebufferTexture(m_historySceneFbo[i], GL_DEPTH_ATTACHMENT, m_historyDepthTex[i], 0);
-        const GLenum historyDrawBuffer = GL_COLOR_ATTACHMENT0;
-        glNamedFramebufferDrawBuffers(m_historySceneFbo[i], 1, &historyDrawBuffer);
-        if (!checkFramebufferComplete(m_historySceneFbo[i], "HistoryScene")) {
-            shutdown();
-            return false;
-        }
-        constexpr float clearHistoryDepth = 1.0f;
-        glClearNamedFramebufferfv(m_historySceneFbo[i], GL_DEPTH, 0, &clearHistoryDepth);
 
         m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                     GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -320,10 +286,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     renderer::debug::labelTexture(m_ssaoHalfResFilteredTex, "DeferredTargets.SSAOHalfResFilteredTex");
     renderer::debug::labelTexture(m_ssaoTemporalTex, "DeferredTargets.SSAOTemporalTex");
     for (int i = 0; i < 2; ++i) {
-        char fboName[48], texName[48];
-        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.SSAOHistory[%d]", i);
+        char texName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSAOHistoryTex[%d]", i);
-        renderer::debug::labelFramebuffer(m_ssaoHistoryFbo[i], fboName);
         renderer::debug::labelTexture(m_ssaoHistoryTex[i], texName);
     }
     renderer::debug::labelTexture(m_ssgiTex, "DeferredTargets.SSGITex");
@@ -336,10 +300,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         renderer::debug::labelTexture(m_ssgiDenoiseTex[i], texName);
     }
     for (int i = 0; i < 2; ++i) {
-        char fboName[48], texName[48];
-        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.SSGIHistory[%d]", i);
+        char texName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIHistoryTex[%d]", i);
-        renderer::debug::labelFramebuffer(m_ssgiHistoryFbo[i], fboName);
         renderer::debug::labelTexture(m_ssgiHistoryTex[i], texName);
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
@@ -355,11 +317,9 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     renderer::debug::labelTexture(m_cloudTex, "DeferredTargets.CloudTex");
     renderer::debug::labelTexture(m_skyCaptureTex, "DeferredTargets.SkyCaptureTex");
     for (int i = 0; i < 2; ++i) {
-        char fboName[48], texName[48], depthName[48];
-        std::snprintf(fboName, sizeof(fboName), "DeferredTargets.HistoryScene[%d]", i);
+        char texName[48], depthName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.HistorySceneTex[%d]", i);
         std::snprintf(depthName, sizeof(depthName), "DeferredTargets.HistoryDepthTex[%d]", i);
-        renderer::debug::labelFramebuffer(m_historySceneFbo[i], fboName);
         renderer::debug::labelTexture(m_historySceneTex[i], texName);
         renderer::debug::labelTexture(m_historyDepthTex[i], depthName);
     }
@@ -626,16 +586,6 @@ void DeferredRenderTargets::generateMipmaps(const uint32_t texture) {
     if (texture != 0) {
         glGenerateTextureMipmap(texture);
     }
-}
-
-bool DeferredRenderTargets::checkFramebufferComplete(const uint32_t framebuffer, const char* label) {
-    const GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
-    if (status == GL_FRAMEBUFFER_COMPLETE) {
-        return true;
-    }
-    MECRAFT_LOG_STREAM(std::cerr << "DeferredRenderTargets: incomplete " << label << " framebuffer, status=0x"
-                                 << std::hex << status << std::dec << "\n");
-    return false;
 }
 
 bool DeferredRenderTargets::registerRhiTextures() {
@@ -2503,16 +2453,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_historySceneFbo[0], m_historySceneFbo[1], m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1]};
-    for (const GLuint framebuffer : framebuffers) {
-        if (framebuffer != 0) {
-            GLuint mutableFramebuffer = framebuffer;
-            glDeleteFramebuffers(1, &mutableFramebuffer);
-        }
-    }
-    m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
-    m_ssaoHistoryFbo[0] = 0; m_ssaoHistoryFbo[1] = 0;
-    m_ssgiHistoryFbo[0] = 0; m_ssgiHistoryFbo[1] = 0;
     m_currentHistoryIndex = 0;
     m_ssaoHistoryIndex = 0;
     m_ssgiHistoryIndex = 0;

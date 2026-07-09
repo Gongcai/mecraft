@@ -81,6 +81,127 @@ void clearColorAttachments(RhiCommandList& commandList,
     commandList.beginRendering(renderingInfo);
     commandList.endRendering();
 }
+
+void clearDepthAttachment(RhiCommandList& commandList,
+                          const char* debugName,
+                          const int width,
+                          const int height,
+                          const RhiTextureViewHandle view,
+                          const float depth) {
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = view;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = depth;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = debugName;
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height))
+    };
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    commandList.beginRendering(renderingInfo);
+    commandList.endRendering();
+}
+
+RhiTextureViewHandle createTexture2DView(RhiDevice& rhiDevice,
+                                         const RhiTextureHandle texture,
+                                         const RhiTextureFormat format) {
+    if (!texture.isValid()) {
+        return {};
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = texture;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = format;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+    return rhiDevice.createTextureView(desc);
+}
+
+void destroyTextureViews(RhiDevice& rhiDevice, RhiTextureViewHandle* views, const int viewCount) {
+    for (int i = 0; i < viewCount; ++i) {
+        if (views[i].isValid()) {
+            rhiDevice.destroyTextureView(views[i]);
+            views[i] = {};
+        }
+    }
+}
+
+bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice, DeferredRenderTargets& targets) {
+    RhiTextureViewHandle views[8];
+    int viewCount = 0;
+
+    const auto createView = [&](const RhiTextureHandle texture, const RhiTextureFormat format) {
+        RhiTextureViewHandle view = createTexture2DView(rhiDevice, texture, format);
+        if (view.isValid()) {
+            views[viewCount] = view;
+            ++viewCount;
+        }
+        return view;
+    };
+
+    const RhiTextureViewHandle ssaoHistoryView = createView(targets.ssaoHistoryTextureHandle(),
+                                                            RhiTextureFormat::R8Unorm);
+    const RhiTextureViewHandle ssaoHistoryPrevView = createView(targets.ssaoHistoryTexturePrevHandle(),
+                                                                RhiTextureFormat::R8Unorm);
+    const RhiTextureViewHandle ssgiHistoryView = createView(targets.ssgiHistoryTextureHandle(),
+                                                            RhiTextureFormat::Rgba16Float);
+    const RhiTextureViewHandle ssgiMomentsHistoryView = createView(targets.ssgiMomentsHistoryTextureHandle(),
+                                                                   RhiTextureFormat::Rgba16Float);
+    const RhiTextureViewHandle ssgiHistoryPrevView = createView(targets.ssgiHistoryTexturePrevHandle(),
+                                                                RhiTextureFormat::Rgba16Float);
+    const RhiTextureViewHandle ssgiMomentsHistoryPrevView = createView(targets.ssgiMomentsHistoryTexturePrevHandle(),
+                                                                       RhiTextureFormat::Rgba16Float);
+    const RhiTextureViewHandle historyDepthView = createView(targets.historyDepthTextureHandle(),
+                                                             RhiTextureFormat::Depth32Float);
+    const RhiTextureViewHandle historyDepthPrevView = createView(targets.historyDepthTexturePrevHandle(),
+                                                                 RhiTextureFormat::Depth32Float);
+
+    if (!ssaoHistoryView.isValid() ||
+        !ssaoHistoryPrevView.isValid() ||
+        !ssgiHistoryView.isValid() ||
+        !ssgiMomentsHistoryView.isValid() ||
+        !ssgiHistoryPrevView.isValid() ||
+        !ssgiMomentsHistoryPrevView.isValid() ||
+        !historyDepthView.isValid() ||
+        !historyDepthPrevView.isValid()) {
+        destroyTextureViews(rhiDevice, views, viewCount);
+        return false;
+    }
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+
+    RhiColorAttachment ssaoAttachments[2];
+    setClearAttachment(ssaoAttachments[0], ssaoHistoryView, 1.0f, 1.0f, 1.0f, 1.0f);
+    setClearAttachment(ssaoAttachments[1], ssaoHistoryPrevView, 1.0f, 1.0f, 1.0f, 1.0f);
+    clearColorAttachments(commandList, "DeferredHistorySsaoInit",
+                          targets.width(), targets.height(), ssaoAttachments, 2u);
+
+    RhiColorAttachment ssgiAttachments[4];
+    setClearAttachment(ssgiAttachments[0], ssgiHistoryView, 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[1], ssgiMomentsHistoryView, 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[2], ssgiHistoryPrevView, 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[3], ssgiMomentsHistoryPrevView, 0.0f, 0.0f, 0.0f, 0.0f);
+    clearColorAttachments(commandList, "DeferredHistorySsgiInit",
+                          targets.width(), targets.height(), ssgiAttachments, 4u);
+
+    clearDepthAttachment(commandList, "DeferredHistoryDepthInit",
+                         targets.width(), targets.height(), historyDepthView, 1.0f);
+    clearDepthAttachment(commandList, "DeferredHistoryDepthPrevInit",
+                         targets.width(), targets.height(), historyDepthPrevView, 1.0f);
+
+    rhiDevice.submitFrame(commandList);
+    destroyTextureViews(rhiDevice, views, viewCount);
+    return true;
+}
 } // namespace
 
 void DeferredPipeline::init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer) {
@@ -215,6 +336,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // After resize/rebuild, invalidate temporal history
     if (targets.consumeRebuiltFlag()) {
+        if (!clearRebuiltHistoryTargets(rhiDevice, targets)) {
+            return {};
+        }
         m_hasPreviousFrameData = false;
         if (m_cloudPass) {
             m_cloudPass->invalidateHistory();
