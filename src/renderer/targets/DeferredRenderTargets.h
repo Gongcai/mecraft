@@ -220,7 +220,6 @@ private:
     // 2 RG8      = sky light.r, block light.g
     // 3 RGBA8    = roughness.r, f0.g, emission.b, subsurface.a
     // 4 RGBA8    = DerivativeMain material id.r, wetness mask.g, porosity.b, metalness.a
-    uint32_t m_gBufferFbo = 0;
     uint32_t m_gAlbedo = 0;
     uint32_t m_gNormalAo = 0;
     uint32_t m_gVoxelLight = 0;
@@ -240,7 +239,6 @@ private:
     RhiTextureViewHandle m_gMaterialAuxView;
     RhiTextureViewHandle m_gDepthView;
 
-    uint32_t m_shadowFbo = 0;
     uint32_t m_shadowDepth = 0;
     uint32_t m_shadowDepthComparison = 0; // Zero-copy comparison view for sampler2DShadow
     uint32_t m_shadowColor = 0;   // RGBA8: albedo color for colored shadows / caustics
@@ -249,14 +247,12 @@ private:
     RhiTextureHandle m_shadowDepthComparisonHandle;
     RhiTextureHandle m_shadowColorHandle;
     RhiTextureHandle m_shadowNormalHandle;
-    uint32_t m_csmShadowFbo = 0;
     uint32_t m_csmShadowDepth = 0; // Raw depth texture array, one layer per cascade
     uint32_t m_csmShadowDepthComparison = 0; // Comparison texture array for sampler2DArrayShadow
     RhiTextureHandle m_csmShadowDepthHandle;
     RhiTextureHandle m_csmShadowDepthComparisonHandle;
     RhiTextureViewHandle m_csmShadowDepthView[kShadowCascadeCount];
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
-    uint32_t m_csmShadowTransparentFbo = 0;
     uint32_t m_csmShadowDepthAll = 0; // depth including water/transparent surfaces
     uint32_t m_csmShadowDepthAllComparison = 0;
     uint32_t m_csmShadowColor0 = 0; // RGBA8: RGB caustics/tint, A transparent flag

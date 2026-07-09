@@ -15,13 +15,6 @@
 #include <vector>
 
 namespace {
-constexpr GLenum kGAlbedoAttachment = GL_COLOR_ATTACHMENT0;
-constexpr GLenum kGNormalAoAttachment = GL_COLOR_ATTACHMENT1;
-constexpr GLenum kGVoxelLightAttachment = GL_COLOR_ATTACHMENT2;
-constexpr GLenum kGMaterialAttachment = GL_COLOR_ATTACHMENT3;
-constexpr GLenum kGMaterialAuxAttachment = GL_COLOR_ATTACHMENT4;
-constexpr GLsizei kGBufferAttachmentCount = 5;
-
 void blitTexture(RhiDevice& rhiDevice,
                  const RhiTextureHandle src,
                  const RhiTextureHandle dst) {
@@ -73,8 +66,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_height = targetHeight;
     m_shadowResolution = targetShadow;
 
-    glCreateFramebuffers(1, &m_gBufferFbo);
-
     m_gAlbedo = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gNormalAo = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gVoxelLight = createTexture2D(GL_RG8, m_width, m_height, GL_RG, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
@@ -82,26 +73,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_gMaterialAux = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     m_gDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
 
-    glNamedFramebufferTexture(m_gBufferFbo, kGAlbedoAttachment, m_gAlbedo, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, kGNormalAoAttachment, m_gNormalAo, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, kGVoxelLightAttachment, m_gVoxelLight, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, kGMaterialAttachment, m_gMaterial, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, kGMaterialAuxAttachment, m_gMaterialAux, 0);
-    glNamedFramebufferTexture(m_gBufferFbo, GL_DEPTH_ATTACHMENT, m_gDepth, 0);
-    const GLenum gBufferDrawBuffers[] = {
-        kGAlbedoAttachment,
-        kGNormalAoAttachment,
-        kGVoxelLightAttachment,
-        kGMaterialAttachment,
-        kGMaterialAuxAttachment
-    };
-    glNamedFramebufferDrawBuffers(m_gBufferFbo, kGBufferAttachmentCount, gBufferDrawBuffers);
-    if (!checkFramebufferComplete(m_gBufferFbo, "GBuffer")) {
-        shutdown();
-        return false;
-    }
-
-    glCreateFramebuffers(1, &m_shadowFbo);
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -129,17 +100,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_shadowNormal = createTexture2D(GL_RGBA16F, m_shadowResolution, m_shadowResolution,
                                      GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_shadowNormal, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    glNamedFramebufferTexture(m_shadowFbo, GL_DEPTH_ATTACHMENT, m_shadowDepth, 0);
-    glNamedFramebufferTexture(m_shadowFbo, GL_COLOR_ATTACHMENT0, m_shadowColor, 0);
-    glNamedFramebufferTexture(m_shadowFbo, GL_COLOR_ATTACHMENT1, m_shadowNormal, 0);
-    const GLenum shadowDrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-    glNamedFramebufferDrawBuffers(m_shadowFbo, 2, shadowDrawBuffers);
-    if (!checkFramebufferComplete(m_shadowFbo, "ShadowMap")) {
-        shutdown();
-        return false;
-    }
-
-    glCreateFramebuffers(1, &m_csmShadowFbo);
     m_csmShadowDepth = createTexture2DArray(GL_DEPTH_COMPONENT32F,
                                             m_shadowResolution,
                                             m_shadowResolution,
@@ -160,17 +120,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
     glTextureParameteri(m_csmShadowDepthComparison, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTextureParameterfv(m_csmShadowDepthComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    glNamedFramebufferTextureLayer(m_csmShadowFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepth, 0, 0);
-    glNamedFramebufferDrawBuffer(m_csmShadowFbo, GL_NONE);
-    glNamedFramebufferReadBuffer(m_csmShadowFbo, GL_NONE);
-    if (!checkFramebufferComplete(m_csmShadowFbo, "CsmShadowMap")) {
-        shutdown();
-        return false;
-    }
-
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
     // (DerivativeMain shadowtex0/shadowcolor0/shadowcolor1 equivalent)
-    glCreateFramebuffers(1, &m_csmShadowTransparentFbo);
     m_csmShadowDepthAll = createTexture2DArray(GL_DEPTH_COMPONENT32F,
                                                m_shadowResolution, m_shadowResolution,
                                                kShadowCascadeCount,
@@ -198,16 +149,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
                                              kShadowCascadeCount,
                                              GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowColor1, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_DEPTH_ATTACHMENT, m_csmShadowDepthAll, 0, 0);
-    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT0, m_csmShadowColor0, 0, 0);
-    glNamedFramebufferTextureLayer(m_csmShadowTransparentFbo, GL_COLOR_ATTACHMENT1, m_csmShadowColor1, 0, 0);
-    const GLenum transparentDrawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-    glNamedFramebufferDrawBuffers(m_csmShadowTransparentFbo, 2, transparentDrawBuffers);
-    if (!checkFramebufferComplete(m_csmShadowTransparentFbo, "CsmShadowTransparent")) {
-        shutdown();
-        return false;
-    }
-
     glCreateFramebuffers(1, &m_ssaoFbo);
     m_ssaoTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
     glNamedFramebufferTexture(m_ssaoFbo, GL_COLOR_ATTACHMENT0, m_ssaoTex, 0);
@@ -555,22 +496,18 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     // Label GL objects for RenderDoc / KHR_debug inspection
-    renderer::debug::labelFramebuffer(m_gBufferFbo, "DeferredTargets.GBuffer");
     renderer::debug::labelTexture(m_gAlbedo, "DeferredTargets.GBufferAlbedo");
     renderer::debug::labelTexture(m_gNormalAo, "DeferredTargets.GBufferNormalAo");
     renderer::debug::labelTexture(m_gVoxelLight, "DeferredTargets.GBufferVoxelLight");
     renderer::debug::labelTexture(m_gMaterial, "DeferredTargets.GBufferMaterial");
     renderer::debug::labelTexture(m_gMaterialAux, "DeferredTargets.GBufferMaterialAux");
     renderer::debug::labelTexture(m_gDepth, "DeferredTargets.GBufferDepth");
-    renderer::debug::labelFramebuffer(m_shadowFbo, "DeferredTargets.ShadowMap");
     renderer::debug::labelTexture(m_shadowDepth, "DeferredTargets.ShadowDepth");
     renderer::debug::labelTexture(m_shadowDepthComparison, "DeferredTargets.ShadowDepthComparison");
     renderer::debug::labelTexture(m_shadowColor, "DeferredTargets.ShadowColor");
     renderer::debug::labelTexture(m_shadowNormal, "DeferredTargets.ShadowNormal");
-    renderer::debug::labelFramebuffer(m_csmShadowFbo, "DeferredTargets.CSMDepth");
     renderer::debug::labelTexture(m_csmShadowDepth, "DeferredTargets.CSMDepthArray");
     renderer::debug::labelTexture(m_csmShadowDepthComparison, "DeferredTargets.CSMDepthComparison");
-    renderer::debug::labelFramebuffer(m_csmShadowTransparentFbo, "DeferredTargets.CSMTransparent");
     renderer::debug::labelTexture(m_csmShadowDepthAll, "DeferredTargets.CSMDepthAll");
     renderer::debug::labelTexture(m_csmShadowDepthAllComparison, "DeferredTargets.CSMDepthAllComparison");
     renderer::debug::labelTexture(m_csmShadowColor0, "DeferredTargets.CSMColor0");
@@ -2792,17 +2729,13 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_gBufferFbo, m_shadowFbo, m_csmShadowFbo, m_csmShadowTransparentFbo, m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_reflectionTemporalScratchFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_ssgiFbo, m_ssgiHalfResFbo, m_ssgiDenoiseFbo[0], m_ssgiDenoiseFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1], m_ssgiTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
+    const GLuint framebuffers[] = {m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_reflectionTemporalScratchFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_ssgiFbo, m_ssgiHalfResFbo, m_ssgiDenoiseFbo[0], m_ssgiDenoiseFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1], m_ssgiTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
             glDeleteFramebuffers(1, &mutableFramebuffer);
         }
     }
-    m_gBufferFbo = 0;
-    m_shadowFbo = 0;
-    m_csmShadowFbo = 0;
-    m_csmShadowTransparentFbo = 0;
     m_ssaoFbo = 0;
     m_ssaoFilteredFbo = 0;
     m_ssaoHalfResFbo = 0;
