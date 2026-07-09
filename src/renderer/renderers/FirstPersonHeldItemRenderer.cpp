@@ -166,7 +166,7 @@ void dumpShadowSamplerStateOnce(const char* label, const Shader& shader) {
 }
 }
 
-void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr) {
+void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     if (m_initialized) {
         shutdown();
     }
@@ -177,6 +177,7 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr) {
     m_blockShader = m_deferredBlockShader;
     m_itemShader = m_deferredItemShader;
     m_steveShader = m_deferredSteveShader;
+    MecraftTextureContract::initializeNeutralShadowTextures(rhiDevice);
     loadConfig();
     m_initialized = true;
 }

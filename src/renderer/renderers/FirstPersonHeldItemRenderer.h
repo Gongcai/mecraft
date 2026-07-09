@@ -11,6 +11,7 @@
 #include "../core/FrameOutput.h"
 
 class Inventory;
+class RhiDevice;
 class ResourceMgr;
 class Shader;
 class Window;
@@ -86,7 +87,7 @@ public:
         float nz = 0.0f;
     };
 
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
     /// Switch to forward vanilla shaders (no CSM shadow / held_item_shadow contract).
     /// Must be called after init(). Reverts to deferred shaders if false.

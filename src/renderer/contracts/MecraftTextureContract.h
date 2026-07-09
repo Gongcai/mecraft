@@ -3,6 +3,8 @@
 
 #include <cstdint>
 
+class RhiDevice;
+
 namespace MecraftTextureContract {
 
 // Six CSM shadow textures consumed by mecraft_shadow.glsl.
@@ -15,6 +17,7 @@ struct ShadowTextureBundle {
     uint32_t csmColor1 = 0;          // sampler2DArray uCsmShadowColor1
 };
 
+bool initializeNeutralShadowTextures(RhiDevice& rhiDevice);
 void bindShadowSamplers(uint32_t program, int baseUnit, const ShadowTextureBundle& textures);
 
 uint32_t neutralDepthCompare();

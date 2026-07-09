@@ -98,7 +98,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     blockEntityRenderer.init(resourceMgr);
     dropRenderer.init(resourceMgr);
     fallingBlockRenderer.init(resourceMgr);
-    firstPersonHeldItemRenderer.init(resourceMgr);
+    firstPersonHeldItemRenderer.init(resourceMgr, renderer.rhiDevice());
     humanoidRenderer.init(resourceMgr, renderer.rhiDevice());
 
     // Cross-wire renderers into RenderScene
