@@ -854,7 +854,29 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
     Shader* particleShader = m_resourceMgr->getShader("particle_gbuffer");
     if (!particleShader) return;
 
-    targets.bindSceneComposite();
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
+    if (!targets.ensureSceneCompositeTextureView(rhiDevice)) {
+        return;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.sceneCompositeTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Particles.SceneComposite";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
 
     const glm::mat4& viewProj = m_currentSettings.taa.enabled
         ? ctx.camera.jitteredViewProj
@@ -877,6 +899,9 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve) {
