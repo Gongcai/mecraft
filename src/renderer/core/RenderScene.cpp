@@ -623,27 +623,13 @@ bool RenderScene::prepareFrameResources(const Window& window) {
         return true;
     }
 
-    GLint previousDrawFramebuffer = 0;
-    GLint previousReadFramebuffer = 0;
-    GLint previousViewport[4] = {};
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
-    glGetIntegerv(GL_VIEWPORT, previousViewport);
-
     DeferredRenderTargets& targets = *m_shared.deferredTargets;
     if (!targets.init()) {
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
-        glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
         return false;
     }
 
     const glm::ivec2 internalSize = internalRenderSize(window);
-    const bool ready = targets.ensureSize(internalSize.x, internalSize.y, m_settings.shadow.resolution);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
-    glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
-    return ready;
+    return targets.ensureSize(internalSize.x, internalSize.y, m_settings.shadow.resolution);
 }
 
 PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
