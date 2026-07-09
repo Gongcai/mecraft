@@ -44,7 +44,6 @@ public:
     // as the sixth color attachment so entity/drop shaders can write velocity via MRT.
     void attachPerObjectVelocityToGBuffer();
     void detachPerObjectVelocityFromGBuffer();
-    void clearPerObjectVelocity();
     void bindWeatherMask();
     void clearWeatherMask();
     void bindDefaultLike(int32_t framebuffer, int width, int height);
@@ -188,6 +187,8 @@ public:
     [[nodiscard]] RhiTextureViewHandle velocityTextureViewHandle() const { return m_velocityView; }
     bool ensureVelocityTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle perObjectVelocityTextureHandle() const { return m_perObjectVelocityHandle; }
+    [[nodiscard]] RhiTextureViewHandle perObjectVelocityTextureViewHandle() const { return m_perObjectVelocityView; }
+    bool ensurePerObjectVelocityTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
     [[nodiscard]] RhiTextureViewHandle weatherMaskTextureViewHandle() const { return m_weatherMaskView; }
     bool ensureWeatherMaskTextureView(RhiDevice& rhiDevice);
@@ -436,6 +437,7 @@ private:
     // as the sixth color attachment on the GBuffer FBO. Consumed by velocity_resolve.fs.
     uint32_t m_perObjectVelocityTex = 0;
     RhiTextureHandle m_perObjectVelocityHandle;
+    RhiTextureViewHandle m_perObjectVelocityView;
 
     // Weather mask: single-channel R8 storing accumulated weather particle alpha.
     // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.

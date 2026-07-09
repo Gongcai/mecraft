@@ -1,7 +1,11 @@
 #include "GBufferPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
 #include "../core/RenderSettings.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
@@ -11,6 +15,8 @@
 #include "../../world/IWorldView.h"
 
 #include <glad/glad.h>
+
+#include <algorithm>
 
 void GBufferPass::init(ResourceMgr& resourceMgr) {
     m_entityGBufferShader = resourceMgr.getShader("entity_gbuffer");
@@ -37,8 +43,38 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
-    // Per-object velocity: attach RG16F texture as GL_COLOR_ATTACHMENT5
-    targets.clearPerObjectVelocity();
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensurePerObjectVelocityTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.perObjectVelocityTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 0.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "PerObjectVelocityClear";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
+
+    targets.bindGBuffer();
     targets.attachPerObjectVelocityToGBuffer();
 
     // Rasterize with the same projection flavor as terrain, but reproject

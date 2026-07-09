@@ -912,16 +912,6 @@ void DeferredRenderTargets::detachPerObjectVelocityFromGBuffer() {
     glDrawBuffers(kGBufferAttachmentCount, drawBuffers);
 }
 
-void DeferredRenderTargets::clearPerObjectVelocity() {
-    // Clear the velocity texture directly. Clearing COLOR_ATTACHMENT5 through
-    // the GBuffer FBO depends on draw-buffer state and can leave stale values.
-    if (m_perObjectVelocityTex == 0) {
-        return;
-    }
-    const float zero[] = {0.0f, 0.0f};
-    glClearTexImage(m_perObjectVelocityTex, 0, GL_RG, GL_FLOAT, zero);
-}
-
 void DeferredRenderTargets::bindDefaultLike(const int32_t framebuffer, const int width, const int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
     glViewport(0, 0, std::max(1, width), std::max(1, height));
@@ -2251,6 +2241,36 @@ bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool DeferredRenderTargets::ensurePerObjectVelocityTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_perObjectVelocityView.isValid()) {
+        return true;
+    }
+
+    if (!m_perObjectVelocityHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_perObjectVelocityHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rg16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_perObjectVelocityView = rhiDevice.createTextureView(desc);
+    if (!m_perObjectVelocityView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureSsaoFilteredTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2793,6 +2813,9 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_velocityView);
     }
+    if (m_rhiViewDevice != nullptr && m_perObjectVelocityView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_perObjectVelocityView);
+    }
     if (m_rhiViewDevice != nullptr && m_ssaoFilteredView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_ssaoFilteredView);
     }
@@ -2857,6 +2880,7 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_gMaterialAuxView = {};
     m_gDepthView = {};
     m_velocityView = {};
+    m_perObjectVelocityView = {};
     m_ssaoFilteredView = {};
     m_ssaoHalfResView = {};
     m_ssaoHalfResFilteredView = {};
