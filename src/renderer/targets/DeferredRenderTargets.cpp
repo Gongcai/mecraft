@@ -1989,6 +1989,112 @@ bool DeferredRenderTargets::registerAtmosphereLutTexture() {
     return m_atmosphereLutHandle.isValid();
 }
 
+bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+
+    const bool allViewsValid = m_gAlbedoView.isValid() &&
+                               m_gNormalAoView.isValid() &&
+                               m_gVoxelLightView.isValid() &&
+                               m_gMaterialView.isValid() &&
+                               m_gMaterialAuxView.isValid() &&
+                               m_gDepthView.isValid();
+    if (allViewsValid) {
+        return true;
+    }
+
+    if (!m_gAlbedoHandle.isValid() ||
+        !m_gNormalAoHandle.isValid() ||
+        !m_gVoxelLightHandle.isValid() ||
+        !m_gMaterialHandle.isValid() ||
+        !m_gMaterialAuxHandle.isValid() ||
+        !m_gDepthHandle.isValid()) {
+        return false;
+    }
+
+    const auto destroyGBufferViews = [&rhiDevice, this]() {
+        if (m_gAlbedoView.isValid()) {
+            rhiDevice.destroyTextureView(m_gAlbedoView);
+        }
+        if (m_gNormalAoView.isValid()) {
+            rhiDevice.destroyTextureView(m_gNormalAoView);
+        }
+        if (m_gVoxelLightView.isValid()) {
+            rhiDevice.destroyTextureView(m_gVoxelLightView);
+        }
+        if (m_gMaterialView.isValid()) {
+            rhiDevice.destroyTextureView(m_gMaterialView);
+        }
+        if (m_gMaterialAuxView.isValid()) {
+            rhiDevice.destroyTextureView(m_gMaterialAuxView);
+        }
+        if (m_gDepthView.isValid()) {
+            rhiDevice.destroyTextureView(m_gDepthView);
+        }
+        m_gAlbedoView = {};
+        m_gNormalAoView = {};
+        m_gVoxelLightView = {};
+        m_gMaterialView = {};
+        m_gMaterialAuxView = {};
+        m_gDepthView = {};
+    };
+
+    const bool anyViewValid = m_gAlbedoView.isValid() ||
+                              m_gNormalAoView.isValid() ||
+                              m_gVoxelLightView.isValid() ||
+                              m_gMaterialView.isValid() ||
+                              m_gMaterialAuxView.isValid() ||
+                              m_gDepthView.isValid();
+    if (anyViewValid) {
+        destroyGBufferViews();
+    }
+
+    RhiTextureViewDesc desc;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    desc.texture = m_gAlbedoHandle;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    m_gAlbedoView = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_gNormalAoHandle;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    m_gNormalAoView = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_gVoxelLightHandle;
+    desc.format = RhiTextureFormat::Rg8Unorm;
+    m_gVoxelLightView = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_gMaterialHandle;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    m_gMaterialView = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_gMaterialAuxHandle;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    m_gMaterialAuxView = rhiDevice.createTextureView(desc);
+
+    desc.texture = m_gDepthHandle;
+    desc.format = RhiTextureFormat::Depth32Float;
+    m_gDepthView = rhiDevice.createTextureView(desc);
+
+    if (!m_gAlbedoView.isValid() ||
+        !m_gNormalAoView.isValid() ||
+        !m_gVoxelLightView.isValid() ||
+        !m_gMaterialView.isValid() ||
+        !m_gMaterialAuxView.isValid() ||
+        !m_gDepthView.isValid()) {
+        destroyGBufferViews();
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2393,6 +2499,24 @@ bool DeferredRenderTargets::ensureWeatherMaskTextureView(RhiDevice& rhiDevice) {
 }
 
 void DeferredRenderTargets::destroyRhiTextureViews() {
+    if (m_rhiViewDevice != nullptr && m_gAlbedoView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gAlbedoView);
+    }
+    if (m_rhiViewDevice != nullptr && m_gNormalAoView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gNormalAoView);
+    }
+    if (m_rhiViewDevice != nullptr && m_gVoxelLightView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gVoxelLightView);
+    }
+    if (m_rhiViewDevice != nullptr && m_gMaterialView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gMaterialView);
+    }
+    if (m_rhiViewDevice != nullptr && m_gMaterialAuxView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gMaterialAuxView);
+    }
+    if (m_rhiViewDevice != nullptr && m_gDepthView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_gDepthView);
+    }
     if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_velocityView);
     }
@@ -2438,6 +2562,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_weatherMaskView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_weatherMaskView);
     }
+    m_gAlbedoView = {};
+    m_gNormalAoView = {};
+    m_gVoxelLightView = {};
+    m_gMaterialView = {};
+    m_gMaterialAuxView = {};
+    m_gDepthView = {};
     m_velocityView = {};
     m_ssaoHalfResView = {};
     m_sceneLightingView = {};

@@ -80,6 +80,13 @@ public:
     [[nodiscard]] RhiTextureHandle materialTextureHandle() const { return m_gMaterialHandle; }
     [[nodiscard]] RhiTextureHandle materialAuxTextureHandle() const { return m_gMaterialAuxHandle; }
     [[nodiscard]] RhiTextureHandle depthTextureHandle() const { return m_gDepthHandle; }
+    [[nodiscard]] RhiTextureViewHandle albedoTextureViewHandle() const { return m_gAlbedoView; }
+    [[nodiscard]] RhiTextureViewHandle normalAoTextureViewHandle() const { return m_gNormalAoView; }
+    [[nodiscard]] RhiTextureViewHandle voxelLightTextureViewHandle() const { return m_gVoxelLightView; }
+    [[nodiscard]] RhiTextureViewHandle materialTextureViewHandle() const { return m_gMaterialView; }
+    [[nodiscard]] RhiTextureViewHandle materialAuxTextureViewHandle() const { return m_gMaterialAuxView; }
+    [[nodiscard]] RhiTextureViewHandle depthTextureViewHandle() const { return m_gDepthView; }
+    bool ensureGBufferTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle shadowDepthTextureHandle() const { return m_shadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle shadowDepthComparisonTextureHandle() const { return m_shadowDepthComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
@@ -242,6 +249,12 @@ private:
     RhiTextureHandle m_gMaterialHandle;
     RhiTextureHandle m_gMaterialAuxHandle;
     RhiTextureHandle m_gDepthHandle;
+    RhiTextureViewHandle m_gAlbedoView;
+    RhiTextureViewHandle m_gNormalAoView;
+    RhiTextureViewHandle m_gVoxelLightView;
+    RhiTextureViewHandle m_gMaterialView;
+    RhiTextureViewHandle m_gMaterialAuxView;
+    RhiTextureViewHandle m_gDepthView;
 
     uint32_t m_shadowFbo = 0;
     uint32_t m_shadowDepth = 0;

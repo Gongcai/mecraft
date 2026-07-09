@@ -505,30 +505,53 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
 
 void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings) {
     if (!m_shared || !m_shared->deferredTargets || !m_shared->terrain ||
-        !m_shared->worldRenderBuffer || !m_shared->resources) {
+        !m_shared->worldRenderBuffer || !m_shared->resources || !m_shared->rhiDevice) {
         return;
     }
 
     auto& targets = *m_shared->deferredTargets;
     auto& terrain = *m_shared->terrain;
     auto& worldBuffer = *m_shared->worldRenderBuffer;
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
-    // Bind GBuffer and clear
+    if (!targets.ensureGBufferTextureViews(rhiDevice)) {
+        return;
+    }
+
+    RhiColorAttachment gbufferAttachments[5];
+    setClearAttachment(gbufferAttachments[0], targets.albedoTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(gbufferAttachments[1], targets.normalAoTextureViewHandle(), 0.5f, 0.5f, 1.0f, 1.0f);
+    setClearAttachment(gbufferAttachments[2], targets.voxelLightTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
+    setClearAttachment(gbufferAttachments[3], targets.materialTextureViewHandle(), 0.86f, 0.035f, 0.0f, 0.0f);
+    setClearAttachment(gbufferAttachments[4], targets.materialAuxTextureViewHandle(), 0.0f, 0.0f, 0.65f, 0.0f);
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = targets.depthTextureViewHandle();
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "GBufferInitialClear";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = gbufferAttachments;
+    renderingInfo.colorAttachmentCount = 5u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
+
     targets.bindGBuffer();
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
-    constexpr GLfloat clearAlbedo[] = {0.0f, 0.0f, 0.0f, 0.0f};
-    constexpr GLfloat clearNormal[] = {0.5f, 0.5f, 1.0f, 1.0f};
-    constexpr GLfloat clearLight[] = {0.0f, 0.0f, 0.0f, 1.0f};
-    constexpr GLfloat clearMaterial[] = {0.86f, 0.035f, 0.0f, 0.0f};
-    constexpr GLfloat clearMaterialAux[] = {0.0f, 0.0f, 0.65f, 0.0f};
-    glClearBufferfv(GL_COLOR, 0, clearAlbedo);
-    glClearBufferfv(GL_COLOR, 1, clearNormal);
-    glClearBufferfv(GL_COLOR, 2, clearLight);
-    glClearBufferfv(GL_COLOR, 3, clearMaterial);
-    glClearBufferfv(GL_COLOR, 4, clearMaterialAux);
-    glClear(GL_DEPTH_BUFFER_BIT);
 
     // Terrain cache operations
     if (m_shared->terrainCache) {
