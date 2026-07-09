@@ -41,6 +41,11 @@ private:
                             DeferredRenderTargets& targets);
     void renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao,
                             DeferredRenderTargets& targets);
+    bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureFilterBindGroup(RhiDevice& rhiDevice,
+                               const std::array<RhiTextureViewHandle, 3>& views);
+    void destroyFilterBindGroup();
+    void destroyFilterRhiResources();
     bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
     bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
                                  const std::array<RhiTextureViewHandle, 4>& views);
@@ -49,10 +54,19 @@ private:
 
     // Shaders (non-owning, loaded by ResourceMgr)
     Shader* m_ssaoShader = nullptr;
-    Shader* m_ssaoFilterShader = nullptr;
     Shader* m_ssaoUpsampleShader = nullptr;
 
     RhiTextureHandle m_noiseTexture;
+    RhiDevice* m_filterRhiDevice = nullptr;
+    RhiSamplerHandle m_filterSampler;
+    RhiBindGroupLayoutHandle m_filterBindGroupLayout;
+    RhiPipelineLayoutHandle m_filterPipelineLayout;
+    RhiShaderHandle m_filterVertexShader;
+    RhiShaderHandle m_filterFragmentShader;
+    RhiPipelineHandle m_filterPipeline;
+    RhiBindGroupHandle m_filterBindGroup;
+    std::array<RhiTextureViewHandle, 3> m_filterBoundViews = {};
+
     RhiDevice* m_temporalRhiDevice = nullptr;
     RhiSamplerHandle m_temporalNearestSampler;
     RhiSamplerHandle m_temporalLinearSampler;

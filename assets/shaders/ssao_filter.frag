@@ -1,13 +1,17 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSsaoTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uNormalAoTex;
-uniform vec2 uScreenSize;
-uniform float uNear;
+layout(binding = 0) uniform sampler2D uSsaoTex;
+layout(binding = 1) uniform sampler2D uDepthTex;
+layout(binding = 2) uniform sampler2D uNormalAoTex;
+
+layout(std140, binding = 15) uniform RhiPushConstants {
+    vec2 uScreenSize;
+    float uNear;
+    float uPadding0;
+};
 
 void main() {
     float centerDepth = texture(uDepthTex, vTexCoord).r;
