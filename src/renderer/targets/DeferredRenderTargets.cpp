@@ -2125,6 +2125,36 @@ bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool DeferredRenderTargets::ensureSsaoFilteredTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssaoFilteredView.isValid()) {
+        return true;
+    }
+
+    if (!m_ssaoFilteredHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_ssaoFilteredHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::R8Unorm;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_ssaoFilteredView = rhiDevice.createTextureView(desc);
+    if (!m_ssaoFilteredView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureSsaoHalfResTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2148,6 +2178,66 @@ bool DeferredRenderTargets::ensureSsaoHalfResTextureView(RhiDevice& rhiDevice) {
 
     m_ssaoHalfResView = rhiDevice.createTextureView(desc);
     if (!m_ssaoHalfResView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool DeferredRenderTargets::ensureSsaoHalfResFilteredTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssaoHalfResFilteredView.isValid()) {
+        return true;
+    }
+
+    if (!m_ssaoHalfResFilteredHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_ssaoHalfResFilteredHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::R8Unorm;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_ssaoHalfResFilteredView = rhiDevice.createTextureView(desc);
+    if (!m_ssaoHalfResFilteredView.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool DeferredRenderTargets::ensureSsaoTemporalTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssaoTemporalView.isValid()) {
+        return true;
+    }
+
+    if (!m_ssaoTemporalHandle.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_ssaoTemporalHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::R8Unorm;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_ssaoTemporalView = rhiDevice.createTextureView(desc);
+    if (!m_ssaoTemporalView.isValid()) {
         return false;
     }
 
@@ -2520,8 +2610,17 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_velocityView);
     }
+    if (m_rhiViewDevice != nullptr && m_ssaoFilteredView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_ssaoFilteredView);
+    }
     if (m_rhiViewDevice != nullptr && m_ssaoHalfResView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_ssaoHalfResView);
+    }
+    if (m_rhiViewDevice != nullptr && m_ssaoHalfResFilteredView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_ssaoHalfResFilteredView);
+    }
+    if (m_rhiViewDevice != nullptr && m_ssaoTemporalView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_ssaoTemporalView);
     }
     if (m_rhiViewDevice != nullptr && m_sceneLightingView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneLightingView);
@@ -2569,7 +2668,10 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_gMaterialAuxView = {};
     m_gDepthView = {};
     m_velocityView = {};
+    m_ssaoFilteredView = {};
     m_ssaoHalfResView = {};
+    m_ssaoHalfResFilteredView = {};
+    m_ssaoTemporalView = {};
     m_sceneLightingView = {};
     m_ssgiView = {};
     m_ssgiHalfResView = {};

@@ -114,9 +114,31 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
 
 void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& targets) {
     if (m_ssaoFilterShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsaoHalfResFilteredTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    // Bilateral filter at half resolution, reading from half-res raw SSAO
-    targets.bindSsaoHalfResFiltered();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.ssaoHalfResFilteredTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SsaoHalfResFilter";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -147,13 +169,37 @@ void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& 
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& ssao, DeferredRenderTargets& targets) {
     if (m_ssaoUpsampleShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsaoFilteredTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    // Upsample half-res filtered SSAO to full-res ssaoFilteredTex
-    targets.bindSsaoFiltered();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.ssaoFilteredTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SsaoUpsample";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -184,12 +230,37 @@ void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& s
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao, DeferredRenderTargets& targets) {
     if (m_ssaoTemporalShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsaoTemporalTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindSsaoTemporal();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.ssaoTemporalTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SsaoTemporal";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -224,6 +295,9 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(GL_TEXTURE_2D, 0);
     }
+
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 
     // Copy temporal result to history[current] for next frame's reprojection
     targets.copySsaoTemporalToHistory();
