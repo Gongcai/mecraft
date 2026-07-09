@@ -294,7 +294,6 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         targets.copyTransparentCompositeToSceneResolved(*rhiDevice);
     } else if (compositeInputsEnabled) {
         targets.copyTransparentCompositeToTexture(*rhiDevice, ctx.sceneCaptureColorTexture);
-        targets.bindDefaultLike(capturedFramebuffer, capturedWidth, capturedHeight);
     }
 
     for (int unit = 8; unit >= 5; --unit) {
