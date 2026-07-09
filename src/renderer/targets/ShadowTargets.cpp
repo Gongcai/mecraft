@@ -26,23 +26,6 @@ uint32_t createShadowTexture2DArray(GLenum internalFormat,
     return tex;
 }
 
-bool checkShadowFramebufferComplete(uint32_t framebuffer, const char* label) {
-    GLenum status = glCheckNamedFramebufferStatus(framebuffer, GL_FRAMEBUFFER);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        MECRAFT_LOG_FPRINTF(stderr, "ShadowTargets: %s FBO incomplete (status 0x%X)\n", label, status);
-        return false;
-    }
-    return true;
-}
-
-void deleteFramebuffer(uint32_t& framebuffer) {
-    if (framebuffer != 0) {
-        const GLuint glFramebuffer = static_cast<GLuint>(framebuffer);
-        glDeleteFramebuffers(1, &glFramebuffer);
-        framebuffer = 0;
-    }
-}
-
 void deleteTexture(uint32_t& texture) {
     if (texture != 0) {
         const GLuint glTexture = static_cast<GLuint>(texture);
@@ -76,10 +59,8 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
 
     constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
 
-    uint32_t csmShadowFbo = 0;
     uint32_t csmShadowDepth = 0;
     uint32_t csmShadowDepthComparison = 0;
-    uint32_t csmShadowTransparentFbo = 0;
     uint32_t csmShadowDepthAll = 0;
     uint32_t csmShadowDepthAllComparison = 0;
     uint32_t csmShadowColor0 = 0;
@@ -98,10 +79,8 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
         renderer::rhi::gl::unregisterTextureAndReset(csmShadowDepthAllComparisonHandle);
         renderer::rhi::gl::unregisterTextureAndReset(csmShadowColor0Handle);
         renderer::rhi::gl::unregisterTextureAndReset(csmShadowColor1Handle);
-        deleteFramebuffer(csmShadowFbo);
         deleteTexture(csmShadowDepth);
         deleteTexture(csmShadowDepthComparison);
-        deleteFramebuffer(csmShadowTransparentFbo);
         deleteTexture(csmShadowDepthAll);
         deleteTexture(csmShadowDepthAllComparison);
         deleteTexture(csmShadowColor0);
@@ -109,7 +88,6 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     };
 
     // CSM shadow depth array
-    glGenFramebuffers(1, &csmShadowFbo);
     csmShadowDepth = createShadowTexture2DArray(GL_DEPTH_COMPONENT24,
                                                 m_shadowResolution, m_shadowResolution,
                                                 CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -128,18 +106,7 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     glTextureParameteri(csmShadowDepthComparison, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTextureParameterfv(csmShadowDepthComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
 
-    // Bind first layer to FBO
-    glNamedFramebufferTextureLayer(csmShadowFbo, GL_DEPTH_ATTACHMENT, csmShadowDepth, 0, 0);
-    glNamedFramebufferDrawBuffer(csmShadowFbo, GL_NONE);
-    glNamedFramebufferReadBuffer(csmShadowFbo, GL_NONE);
-
-    if (!checkShadowFramebufferComplete(csmShadowFbo, "CsmShadowMap")) {
-        destroyPending();
-        return false;
-    }
-
     // CSM transparent shadow
-    glGenFramebuffers(1, &csmShadowTransparentFbo);
     csmShadowDepthAll = createShadowTexture2DArray(GL_DEPTH_COMPONENT24,
                                                    m_shadowResolution, m_shadowResolution,
                                                    CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -167,18 +134,6 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
                                                  m_shadowResolution, m_shadowResolution,
                                                  CASCADE_COUNT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(csmShadowColor1, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-
-    // Bind first layer to transparent FBO
-    glNamedFramebufferTextureLayer(csmShadowTransparentFbo, GL_DEPTH_ATTACHMENT, csmShadowDepthAll, 0, 0);
-    glNamedFramebufferTextureLayer(csmShadowTransparentFbo, GL_COLOR_ATTACHMENT0, csmShadowColor0, 0, 0);
-    glNamedFramebufferTextureLayer(csmShadowTransparentFbo, GL_COLOR_ATTACHMENT1, csmShadowColor1, 0, 0);
-    const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-    glNamedFramebufferDrawBuffers(csmShadowTransparentFbo, 2, drawBuffers);
-
-    if (!checkShadowFramebufferComplete(csmShadowTransparentFbo, "CsmShadowTransparent")) {
-        destroyPending();
-        return false;
-    }
 
     csmShadowDepthHandle = renderer::rhi::gl::registerTexture({
         csmShadowDepth,
@@ -264,8 +219,6 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
         return false;
     }
 
-    m_csmShadowFbo = csmShadowFbo;
-    m_csmShadowTransparentFbo = csmShadowTransparentFbo;
     m_csmShadowDepthHandle = csmShadowDepthHandle;
     m_csmShadowDepthComparisonHandle = csmShadowDepthComparisonHandle;
     m_csmShadowDepthAllHandle = csmShadowDepthAllHandle;
@@ -274,10 +227,8 @@ bool ShadowTargets::ensureSize(int shadowResolution) {
     m_csmShadowColor1Handle = csmShadowColor1Handle;
 
     // Label GL objects for RenderDoc / KHR_debug inspection
-    renderer::debug::labelFramebuffer(m_csmShadowFbo, "ShadowTargets.CSMDepth");
     renderer::debug::labelTexture(csmShadowDepth, "ShadowTargets.CSMDepthArray");
     renderer::debug::labelTexture(csmShadowDepthComparison, "ShadowTargets.CSMDepthComparison");
-    renderer::debug::labelFramebuffer(m_csmShadowTransparentFbo, "ShadowTargets.CSMTransparent");
     renderer::debug::labelTexture(csmShadowDepthAll, "ShadowTargets.CSMDepthAll");
     renderer::debug::labelTexture(csmShadowDepthAllComparison, "ShadowTargets.CSMDepthAllComparison");
     renderer::debug::labelTexture(csmShadowColor0, "ShadowTargets.CSMTransparentColor0");
@@ -300,10 +251,8 @@ void ShadowTargets::destroyFramebuffers() {
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthAllComparisonHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowColor0Handle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowColor1Handle);
-    deleteFramebuffer(m_csmShadowFbo);
     deleteTexture(csmShadowDepth);
     deleteTexture(csmShadowDepthComparison);
-    deleteFramebuffer(m_csmShadowTransparentFbo);
     deleteTexture(csmShadowDepthAll);
     deleteTexture(csmShadowDepthAllComparison);
     deleteTexture(csmShadowColor0);

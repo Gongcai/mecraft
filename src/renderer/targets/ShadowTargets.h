@@ -39,12 +39,10 @@ private:
     void destroyFramebuffers();
 
     // CSM shadow: 4-cascade depth texture array
-    uint32_t m_csmShadowFbo = 0;
     RhiTextureHandle m_csmShadowDepthHandle;
     RhiTextureHandle m_csmShadowDepthComparisonHandle;
 
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
-    uint32_t m_csmShadowTransparentFbo = 0;
     RhiTextureHandle m_csmShadowDepthAllHandle;
     RhiTextureHandle m_csmShadowDepthAllComparisonHandle;
     RhiTextureHandle m_csmShadowColor0Handle;
