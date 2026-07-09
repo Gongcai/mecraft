@@ -9,6 +9,7 @@ class GameplaySkyRenderer;
 class ResourceMgr;
 class DayNightSystem;
 class WeatherSystem;
+class RhiDevice;
 
 /// Sky capture pass: renders equirectangular sky radiance and cloud data for IBL and lighting.
 class SkyCapturePass : public RenderPass {
@@ -20,7 +21,8 @@ public:
     /// Execute sky capture rendering.
     /// @param dayNightSystem Day/night system for sky colors and time
     /// @param weatherSystem Weather system for wetness and storm state
-    /// @param targets Deferred render targets (sky capture FBO, atmosphere LUT)
+    /// @param rhiDevice RHI device used to begin the sky capture render targets
+    /// @param targets Deferred render targets for sky capture and atmosphere LUT resources
     /// @param skyRenderer Gameplay sky renderer (owns shaders and rendering)
     /// @param resourceMgr Resource manager for noise texture
     /// @param cameraY Camera altitude for atmosphere scattering
@@ -28,6 +30,7 @@ public:
     /// @param cameraPos Camera position for cloud rendering
     /// @param cloudTimeScale Cloud time scale from settings
     void execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
+                 RhiDevice& rhiDevice,
                  DeferredRenderTargets& targets,
                  GameplaySkyRenderer& skyRenderer, ResourceMgr* resourceMgr,
                  float cameraY, float shaderTime, const glm::vec3& cameraPos,

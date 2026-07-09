@@ -5,11 +5,14 @@
 
 #include <glm/glm.hpp>
 
+#include "renderer/rhi/RhiHandles.h"
+
 #include <utility>
 
 class Camera;
 class DayNightSystem;
 class ResourceMgr;
+class RhiDevice;
 class Shader;
 
 class GameplaySkyRenderer {
@@ -58,10 +61,12 @@ public:
     /// Must be called after init(). Reverts to deferred shader if false.
     void setForwardMode(bool forward);
     void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, uint32_t skyCaptureTexture);
-    void renderSkyCapture(const DayNightSystem& dayNight, uint32_t framebuffer, int width, int height,
+    void renderSkyCapture(const DayNightSystem& dayNight, RhiDevice& rhiDevice, RhiTextureViewHandle targetView,
+                          int width, int height,
                           float cameraAltitude, uint32_t atmosphereLutTexture, float moonPhaseFlux,
                           float weatherWetness = 0.0f, float weatherStorm = 0.0f);
-    void renderCloudySkyCapture(const DayNightSystem& dayNight, uint32_t framebuffer, int skyCaptureWidth,
+    void renderCloudySkyCapture(const DayNightSystem& dayNight, RhiDevice& rhiDevice,
+                                RhiTextureViewHandle targetView, int skyCaptureWidth,
                                 int skyCaptureHeight, float cameraAltitude, uint32_t atmosphereLutTexture,
                                 float moonPhaseFlux, uint32_t noiseTexture, float shaderTime,
                                 const SkyIlluminanceData& illuminance,
@@ -71,7 +76,8 @@ public:
                                 float planarCloudAltitude,
                                 float cloudTimeScale, const glm::vec3& cameraPos,
                                 float weatherWetness = 0.0f, float weatherStorm = 0.0f);
-    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, uint32_t framebuffer, int skyCaptureWidth,
+    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, RhiDevice& rhiDevice,
+                               RhiTextureViewHandle targetView, int skyCaptureWidth,
                                float cameraAltitude, uint32_t atmosphereLutTexture, float moonPhaseFlux,
                                float weatherWetness = 0.0f, float weatherStorm = 0.0f);
 

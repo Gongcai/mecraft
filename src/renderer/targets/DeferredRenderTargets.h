@@ -165,8 +165,9 @@ public:
     [[nodiscard]] RhiTextureHandle cloudTextureHandle() const { return m_cloudHandle; }
     [[nodiscard]] RhiTextureViewHandle cloudTextureViewHandle() const { return m_cloudView; }
     bool ensureCloudTextureView(RhiDevice& rhiDevice);
-    [[nodiscard]] uint32_t skyCaptureFramebuffer() const { return m_skyCaptureFbo; }
     [[nodiscard]] RhiTextureHandle skyCaptureTextureHandle() const { return m_skyCaptureHandle; }
+    [[nodiscard]] RhiTextureViewHandle skyCaptureTextureViewHandle() const { return m_skyCaptureView; }
+    bool ensureSkyCaptureTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] int skyCaptureWidth() const { return kSkyCaptureWidth; }
     [[nodiscard]] int skyCaptureHeight() const { return kSkyCaptureHeight; }
     // History ping-pong for temporal accumulation
@@ -401,6 +402,7 @@ private:
     uint32_t m_skyCaptureFbo = 0;
     uint32_t m_skyCaptureTex = 0;
     RhiTextureHandle m_skyCaptureHandle;
+    RhiTextureViewHandle m_skyCaptureView;
 
     // History ping-pong for temporal accumulation
     uint32_t m_historySceneFbo[2] = {0, 0};

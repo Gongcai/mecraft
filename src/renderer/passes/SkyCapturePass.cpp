@@ -1,6 +1,7 @@
 #include "SkyCapturePass.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
+#include "../rhi/RhiDevice.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/DayNightSystem.h"
@@ -18,10 +19,15 @@ void SkyCapturePass::shutdown() {
 }
 
 void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
+                              RhiDevice& rhiDevice,
                               DeferredRenderTargets& targets,
                               GameplaySkyRenderer& skyRenderer, ResourceMgr* resourceMgr,
                               float cameraY, float shaderTime, const glm::vec3& cameraPos,
                               float cloudTimeScale) {
+    if (!targets.ensureSkyCaptureTextureView(rhiDevice)) {
+        return;
+    }
+
     const float cameraAltitude = cameraY;
     const uint32_t atmosphereLut = renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle());
     const int moonPhase = dayNightSystem.getMoonPhaseIndex();
@@ -55,7 +61,8 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
 
     // Raw sky radiance (rows 0..257)
     skyRenderer.renderSkyCapture(dayNightSystem,
-                                  targets.skyCaptureFramebuffer(),
+                                  rhiDevice,
+                                  targets.skyCaptureTextureViewHandle(),
                                   targets.skyCaptureWidth(),
                                   targets.skyCaptureHeight(),
                                   cameraAltitude, atmosphereLut, moonPhaseFlux,
@@ -63,7 +70,8 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
 
     // Cloudy sky radiance (rows 258..513)
     skyRenderer.renderCloudySkyCapture(dayNightSystem,
-                                        targets.skyCaptureFramebuffer(),
+                                        rhiDevice,
+                                        targets.skyCaptureTextureViewHandle(),
                                         targets.skyCaptureWidth(),
                                         targets.skyCaptureHeight(),
                                         cameraAltitude, atmosphereLut, moonPhaseFlux,
@@ -79,7 +87,8 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                                         weatherWetness, weatherStorm);
 
     skyRenderer.writeSkyCacheMetadata(illum,
-                                       targets.skyCaptureFramebuffer(),
+                                       rhiDevice,
+                                       targets.skyCaptureTextureViewHandle(),
                                        targets.skyCaptureWidth(),
                                        cameraAltitude, atmosphereLut, moonPhaseFlux,
                                        weatherWetness, weatherStorm);

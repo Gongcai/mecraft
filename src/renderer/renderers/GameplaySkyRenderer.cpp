@@ -10,6 +10,9 @@
 #include <glad/glad.h>
 
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "engine/camera/Camera.h"
 #include "../../Paths.h"
 #include "../../resource/ResourceMgr.h"
@@ -242,7 +245,8 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
 }
 
 void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
-                                           const uint32_t framebuffer,
+                                           RhiDevice& rhiDevice,
+                                           const RhiTextureViewHandle targetView,
                                            const int width,
                                            const int height,
                                            const float cameraAltitude,
@@ -251,19 +255,32 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
                                            const float weatherWetness,
                                            const float weatherStorm) {
     m_lastColors = computeSkyColors(dayNight);
-    if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || width <= 0 || height <= 0) {
+    if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || width <= 0 || height <= 0) {
         return;
     }
 
     const renderer::gl::ScopedStateSnapshot stateGuard;
-    GLint previousFramebuffer = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
     // Raw sky: rows 0..skyCaptureRes.y+1 (258 rows). Matches DerivativeMain Deferred0.glsl.
-    glViewport(0, 0, width, std::min(height, 258));
-    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-    glDrawBuffers(1, &drawBuffer);
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SkyCapture.Raw";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, std::min(height, 258)))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -312,12 +329,14 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
     // GL state restored by ScopedStateSnapshot destructor
 }
 
 void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
-                                                  const uint32_t framebuffer,
+                                                  RhiDevice& rhiDevice,
+                                                  const RhiTextureViewHandle targetView,
                                                   const int skyCaptureWidth,
                                                   const int skyCaptureHeight,
                                                   const float cameraAltitude,
@@ -338,19 +357,32 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
                                                   const float weatherWetness,
                                                   const float weatherStorm) {
     (void)dayNight; // Uses m_lastColors from preceding renderSkyCapture() call.
-    if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
+    if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
     }
 
     const renderer::gl::ScopedStateSnapshot stateGuard;
-    GLint previousFramebuffer = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
     // Cloudy sky: rows 258..513 (256 rows). Matches DerivativeMain Deferred0.glsl cloudy sky region.
-    glViewport(0, 258, skyCaptureWidth, 256);
-    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-    glDrawBuffers(1, &drawBuffer);
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SkyCapture.Cloudy";
+    renderingInfo.renderArea = {
+        0,
+        258,
+        static_cast<uint32_t>(std::max(1, skyCaptureWidth)),
+        256u
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -422,32 +454,47 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     glBindTexture(GL_TEXTURE_2D, 0);
     glActiveTexture(GL_TEXTURE0);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
     // GL state restored by ScopedStateSnapshot destructor
 }
 
 void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illuminance,
-                                                 uint32_t framebuffer,
-                                                 int skyCaptureWidth,
-                                                 float cameraAltitude,
-                                                 uint32_t atmosphereLutTexture,
-                                                 float moonPhaseFlux,
-                                                 float weatherWetness,
-                                                 float weatherStorm) {
-    if (m_shader == nullptr || m_skyVao == 0 || framebuffer == 0 || skyCaptureWidth <= 0) {
+                                                 RhiDevice& rhiDevice,
+                                                 const RhiTextureViewHandle targetView,
+                                                 const int skyCaptureWidth,
+                                                 const float cameraAltitude,
+                                                 const uint32_t atmosphereLutTexture,
+                                                 const float moonPhaseFlux,
+                                                 const float weatherWetness,
+                                                 const float weatherStorm) {
+    if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || skyCaptureWidth <= 0) {
         return;
     }
 
     const renderer::gl::ScopedStateSnapshot stateGuard;
-    GLint previousFramebuffer = 0;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targetView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
     // Write to column skyCaptureWidth-1, rows 0..5 (6 pixels).
     // Rows 0-3: illuminance, row 5: cloudDynamicWeather.
-    glViewport(skyCaptureWidth - 1, 0, 1, 6);
-    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-    glDrawBuffers(1, &drawBuffer);
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SkyCapture.Metadata";
+    renderingInfo.renderArea = {
+        static_cast<int32_t>(skyCaptureWidth - 1),
+        0,
+        1u,
+        6u
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -487,7 +534,8 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
     // GL state restored by ScopedStateSnapshot destructor
 }
 

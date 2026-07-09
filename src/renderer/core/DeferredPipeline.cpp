@@ -233,7 +233,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Sky capture
     if (m_skyCapturePass && m_shared->sky) {
         renderer::debug::ScopedDebugGroup passGroup("SkyCapture");
-        m_skyCapturePass->execute(*ctx.dayNightSystem, *ctx.weatherSystem, targets, *m_shared->sky,
+        m_skyCapturePass->execute(*ctx.dayNightSystem, *ctx.weatherSystem, *m_shared->rhiDevice,
+                                  targets, *m_shared->sky,
                                   m_resourceMgr, ctx.camera.position.y,
                                   ctx.shaderTime, ctx.camera.position,
                                   m_currentSettings.cloud.timeScale);
