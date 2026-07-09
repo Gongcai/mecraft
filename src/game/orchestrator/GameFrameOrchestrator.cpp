@@ -371,7 +371,7 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
-        UIRenderContext uiContext = hudPresenter->prepareRenderContext(snap);
+        UIRenderContext uiContext = hudPresenter->prepareRenderContext(snap, renderer.rhiDevice());
         RhiCommandList* uiCommandList = nullptr;
         if (!beginUiOverlayPass(renderer, window, uiCommandList)) {
             return false;

@@ -26,6 +26,7 @@
 
 class Window;
 class ResourceMgr;
+class RhiDevice;
 class Inventory;
 class LocaleManager;
 class CraftingSystem;
@@ -48,10 +49,12 @@ public:
     void shutdown();
 
     void render(const Window& window,
+                RhiDevice& rhiDevice,
                 const Inventory& inventory,
                 const PlayerStatsData& playerStats,
                 const InputSnapshot& inputSnapshot);
     UIRenderContext prepareRenderContext(const Window& window,
+                                         RhiDevice& rhiDevice,
                                          const Inventory& inventory,
                                          const PlayerStatsData& playerStats,
                                          const InputSnapshot& inputSnapshot);
@@ -121,7 +124,11 @@ public:
     void setActiveScene(UIScene* scene);
     [[nodiscard]] UIScene* getActiveScene() const;
     [[nodiscard]] ResourceMgr* getResourceMgr() const;
-    void renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot);
+    void renderSceneOnly(const Window& window, RhiDevice& rhiDevice, const InputSnapshot& inputSnapshot);
+    UIRenderContext prepareSceneContext(const Window& window,
+                                        RhiDevice& rhiDevice,
+                                        const InputSnapshot& inputSnapshot);
+    void renderSceneOnlyPrepared(const UIRenderContext& context);
 
     void setCommandCaretBlinkPeriodMs(float periodMs);
     [[nodiscard]] float getCommandCaretBlinkPeriodMs() const;
@@ -167,8 +174,9 @@ private:
     [[nodiscard]] UIRenderContext makeContextFromViewport() const;
     void renderControls(const UIRenderContext& context);
     void renderDeathOverlay(const UIRenderContext& context);
-    void prepareBackdropBlur(UIRenderContext& context) const;
-    void ensureBackdropBlurTargets(int sourceWidth, int sourceHeight) const;
+    void prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const;
+    bool ensureBackdropBlurTargets(int sourceWidth, int sourceHeight, RhiDevice& rhiDevice) const;
+    void destroyBackdropBlurViews() const;
     void destroyBackdropBlurTargets() const;
 
     CrosshairControl m_crosshair;
@@ -200,9 +208,10 @@ private:
 
     mutable RhiTextureHandle m_backdropSource;
     mutable RhiTextureHandle m_backdropBlur[2];
+    mutable RhiTextureViewHandle m_backdropBlurView[2];
+    mutable RhiDevice* m_backdropRhiViewDevice = nullptr;
     mutable uint32_t m_backdropSourceTex = 0;
     mutable uint32_t m_backdropBlurTex[2] = {0, 0};
-    mutable uint32_t m_backdropBlurFbo[2] = {0, 0};
     mutable uint32_t m_backdropFullscreenVao = 0;
     mutable int m_backdropSourceWidth = 0;
     mutable int m_backdropSourceHeight = 0;

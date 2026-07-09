@@ -11,6 +11,9 @@
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiResources.h"
 #include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "UIRenderUtils.h"
 #include "UIScene.h"
@@ -619,15 +622,17 @@ void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
 }
 
 void UIRenderer::render(const Window& window,
+                        RhiDevice& rhiDevice,
                         const Inventory& inventory,
                         const PlayerStatsData& playerStats,
                         const InputSnapshot& inputSnapshot)
 {
-    UIRenderContext context = prepareRenderContext(window, inventory, playerStats, inputSnapshot);
+    UIRenderContext context = prepareRenderContext(window, rhiDevice, inventory, playerStats, inputSnapshot);
     renderPrepared(context);
 }
 
 UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
+                                                 RhiDevice& rhiDevice,
                                                  const Inventory& inventory,
                                                  const PlayerStatsData& playerStats,
                                                  const InputSnapshot& inputSnapshot)
@@ -643,7 +648,7 @@ UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
 
     UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, inputSnapshot);
     if (m_activeScene && m_activeScene->visible) {
-        prepareBackdropBlur(context);
+        prepareBackdropBlur(context, rhiDevice);
     }
     m_lastSceneContext = context;
 
@@ -734,7 +739,17 @@ ResourceMgr* UIRenderer::getResourceMgr() const
     return m_resourceMgr;
 }
 
-void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot)
+void UIRenderer::renderSceneOnly(const Window& window,
+                                 RhiDevice& rhiDevice,
+                                 const InputSnapshot& inputSnapshot)
+{
+    UIRenderContext context = prepareSceneContext(window, rhiDevice, inputSnapshot);
+    renderSceneOnlyPrepared(context);
+}
+
+UIRenderContext UIRenderer::prepareSceneContext(const Window& window,
+                                                RhiDevice& rhiDevice,
+                                                const InputSnapshot& inputSnapshot)
 {
     const int windowW = std::max(1, window.getWidth());
     const int windowH = std::max(1, window.getHeight());
@@ -760,7 +775,14 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
     m_lastSceneContext = context;
 
     if (m_activeScene && m_activeScene->visible) {
-        prepareBackdropBlur(context);
+        prepareBackdropBlur(context, rhiDevice);
+    }
+    return context;
+}
+
+void UIRenderer::renderSceneOnlyPrepared(const UIRenderContext& context)
+{
+    if (m_activeScene && m_activeScene->visible) {
         m_activeScene->setInputContext(context);
         m_activeScene->render(context);
     }
@@ -769,9 +791,6 @@ void UIRenderer::renderSceneOnly(const Window& window, const InputSnapshot& inpu
 void UIRenderer::renderControls(const UIRenderContext& context)
 {
     UIRenderContext renderContext = context;
-    if (m_activeScene && m_activeScene->visible && !renderContext.backdropBlurPrepared) {
-        prepareBackdropBlur(renderContext);
-    }
 
     const UIRenderUtils::UIScopeGuard uiScope;
 
@@ -824,7 +843,9 @@ void UIRenderer::renderDeathOverlay(const UIRenderContext& context)
     m_deathPrompt.render(context);
 }
 
-void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sourceHeight) const
+bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
+                                           const int sourceHeight,
+                                           RhiDevice& rhiDevice) const
 {
     const int blurWidth = std::max(1, sourceWidth / kBackdropBlurDownsample);
     const int blurHeight = std::max(1, sourceHeight / kBackdropBlurDownsample);
@@ -840,6 +861,11 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
     if (m_backdropSourceTex == 0) {
         glGenTextures(1, &m_backdropSourceTex);
     }
+
+    if (m_backdropRhiViewDevice != nullptr && m_backdropRhiViewDevice != &rhiDevice) {
+        destroyBackdropBlurViews();
+    }
+
     glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
     configureLinearClampTexture();
     if (sizeChanged) {
@@ -860,6 +886,9 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
         glBindTexture(GL_TEXTURE_2D, m_backdropBlurTex[i]);
         configureLinearClampTexture();
         if (sizeChanged) {
+            if (m_backdropBlurView[i].isValid()) {
+                destroyBackdropBlurViews();
+            }
             renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[i]);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, blurWidth, blurHeight, 0,
                          GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
@@ -870,12 +899,17 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
                 rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment));
         }
 
-        if (m_backdropBlurFbo[i] == 0) {
-            glCreateFramebuffers(1, &m_backdropBlurFbo[i]);
+        if (!m_backdropBlurView[i].isValid() && m_backdropBlur[i].isValid()) {
+            RhiTextureViewDesc desc;
+            desc.texture = m_backdropBlur[i];
+            desc.viewType = RhiTextureViewType::Texture2D;
+            desc.format = RhiTextureFormat::Rgba8Unorm;
+            desc.baseMip = 0;
+            desc.mipCount = 1;
+            desc.baseLayer = 0;
+            desc.layerCount = 1;
+            m_backdropBlurView[i] = rhiDevice.createTextureView(desc);
         }
-        glNamedFramebufferTexture(m_backdropBlurFbo[i], GL_COLOR_ATTACHMENT0, m_backdropBlurTex[i], 0);
-        const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-        glNamedFramebufferDrawBuffers(m_backdropBlurFbo[i], 1, &drawBuffer);
     }
 
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -884,16 +918,23 @@ void UIRenderer::ensureBackdropBlurTargets(const int sourceWidth, const int sour
         !m_backdropBlur[0].isValid() ||
         !m_backdropBlur[1].isValid()) {
         destroyBackdropBlurTargets();
-        return;
+        return false;
     }
 
+    if (!m_backdropBlurView[0].isValid() || !m_backdropBlurView[1].isValid()) {
+        destroyBackdropBlurTargets();
+        return false;
+    }
+
+    m_backdropRhiViewDevice = &rhiDevice;
     m_backdropSourceWidth = sourceWidth;
     m_backdropSourceHeight = sourceHeight;
     m_backdropBlurWidth = blurWidth;
     m_backdropBlurHeight = blurHeight;
+    return true;
 }
 
-void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
+void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const
 {
     context.backdropBlur = {};
     context.backdropBlurPrepared = true;
@@ -916,8 +957,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
     const int sourceWidth = std::max(1, viewport[2]);
     const int sourceHeight = std::max(1, viewport[3]);
 
-    GLint prevReadFbo = 0;
-    GLint prevDrawFbo = 0;
     GLint prevViewport[4] = {0, 0, 0, 0};
     GLint prevProgram = 0;
     GLint prevVao = 0;
@@ -927,8 +966,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
     GLboolean prevBlend = GL_FALSE;
     GLboolean prevDepthMask = GL_TRUE;
 
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevReadFbo);
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevDrawFbo);
     glGetIntegerv(GL_VIEWPORT, prevViewport);
     glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
     glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVao);
@@ -940,8 +977,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
     glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
 
     auto restoreState = [&]() {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDrawFbo);
         glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
         glUseProgram(static_cast<GLuint>(prevProgram));
         glBindVertexArray(static_cast<GLuint>(prevVao));
@@ -961,15 +996,17 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
         glDepthMask(prevDepthMask);
     };
 
-    ensureBackdropBlurTargets(sourceWidth, sourceHeight);
-    if (m_backdropSourceTex == 0 || m_backdropBlurTex[0] == 0 || m_backdropBlurTex[1] == 0 ||
-        m_backdropBlurFbo[0] == 0 || m_backdropBlurFbo[1] == 0 || m_backdropFullscreenVao == 0) {
+    if (!ensureBackdropBlurTargets(sourceWidth, sourceHeight, rhiDevice)) {
         restoreState();
         return;
     }
 
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, prevReadFbo);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDrawFbo);
+    if (m_backdropSourceTex == 0 || m_backdropBlurTex[0] == 0 || m_backdropBlurTex[1] == 0 ||
+        !m_backdropBlurView[0].isValid() || !m_backdropBlurView[1].isValid() || m_backdropFullscreenVao == 0) {
+        restoreState();
+        return;
+    }
+
     glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
     glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, viewport[0], viewport[1], sourceWidth, sourceHeight);
@@ -977,24 +1014,44 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
-    glViewport(0, 0, m_backdropBlurWidth, m_backdropBlurHeight);
     glBindVertexArray(m_backdropFullscreenVao);
 
     blurShader->use();
     blurShader->setInt("uTexture", 0);
 
-    auto blurPass = [&](const GLuint inputTexture, const GLuint outputFbo, const glm::vec2 direction) {
-        glBindFramebuffer(GL_FRAMEBUFFER, outputFbo);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+
+    auto blurPass = [&](const GLuint inputTexture, const RhiTextureViewHandle outputView, const glm::vec2 direction) {
+        RhiColorAttachment colorAttachment;
+        colorAttachment.view = outputView;
+        colorAttachment.loadOp = RhiLoadOp::DontCare;
+        colorAttachment.storeOp = RhiStoreOp::Store;
+
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "UiBackdropBlur";
+        renderingInfo.renderArea = {
+            0,
+            0,
+            static_cast<uint32_t>(std::max(1, m_backdropBlurWidth)),
+            static_cast<uint32_t>(std::max(1, m_backdropBlurHeight))
+        };
+        renderingInfo.colorAttachments = &colorAttachment;
+        renderingInfo.colorAttachmentCount = 1u;
+
+        commandList.beginRendering(renderingInfo);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, inputTexture);
         blurShader->setVec2("uDirection", direction);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+        commandList.endRendering();
     };
 
-    blurPass(m_backdropSourceTex, m_backdropBlurFbo[0], glm::vec2(1.0f / static_cast<float>(sourceWidth), 0.0f));
-    blurPass(m_backdropBlurTex[0], m_backdropBlurFbo[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
-    blurPass(m_backdropBlurTex[1], m_backdropBlurFbo[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
-    blurPass(m_backdropBlurTex[0], m_backdropBlurFbo[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+    blurPass(m_backdropSourceTex, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(sourceWidth), 0.0f));
+    blurPass(m_backdropBlurTex[0], m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+    blurPass(m_backdropBlurTex[1], m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
+    blurPass(m_backdropBlurTex[0], m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+
+    rhiDevice.submitFrame(commandList);
 
     restoreState();
 
@@ -1007,6 +1064,7 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context) const
 
 void UIRenderer::destroyBackdropBlurTargets() const
 {
+    destroyBackdropBlurViews();
     renderer::rhi::gl::unregisterTextureAndReset(m_backdropSource);
     renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[0]);
     renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[1]);
@@ -1019,10 +1077,6 @@ void UIRenderer::destroyBackdropBlurTargets() const
             glDeleteTextures(1, &m_backdropBlurTex[i]);
             m_backdropBlurTex[i] = 0;
         }
-        if (m_backdropBlurFbo[i] != 0) {
-            glDeleteFramebuffers(1, &m_backdropBlurFbo[i]);
-            m_backdropBlurFbo[i] = 0;
-        }
     }
     if (m_backdropFullscreenVao != 0) {
         glDeleteVertexArrays(1, &m_backdropFullscreenVao);
@@ -1033,4 +1087,20 @@ void UIRenderer::destroyBackdropBlurTargets() const
     m_backdropSourceHeight = 0;
     m_backdropBlurWidth = 0;
     m_backdropBlurHeight = 0;
+}
+
+void UIRenderer::destroyBackdropBlurViews() const
+{
+    if (m_backdropRhiViewDevice != nullptr) {
+        for (RhiTextureViewHandle& view : m_backdropBlurView) {
+            if (view.isValid()) {
+                m_backdropRhiViewDevice->destroyTextureView(view);
+            }
+            view = {};
+        }
+    } else {
+        m_backdropBlurView[0] = {};
+        m_backdropBlurView[1] = {};
+    }
+    m_backdropRhiViewDevice = nullptr;
 }

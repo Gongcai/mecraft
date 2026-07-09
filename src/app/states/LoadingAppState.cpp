@@ -142,13 +142,16 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
 
 void LoadingAppState::render(const double frameTime) {
     (void)frameTime;
+    UIRenderContext sceneContext =
+        m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
+
     RhiCommandList* commandList = nullptr;
     if (!beginLoadingPass(m_deps.rhiDevice, m_deps.window, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
         return;
     }
 
-    m_deps.uiRenderer.renderSceneOnly(m_deps.window, m_deps.input.snapshot());
+    m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
     endLoadingPass(m_deps.rhiDevice, commandList);
     m_deps.rhiDevice.present();
     m_deps.window.swapBuffers();

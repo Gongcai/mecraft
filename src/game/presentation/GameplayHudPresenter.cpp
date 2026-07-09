@@ -19,14 +19,16 @@ PlayerStatsData toPlayerStatsData(const GameplayPresentationSnapshot& snap) {
 } // namespace
 
 void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
+                                   RhiDevice& rhiDevice,
                                    GameStateMachine& stateMachine) {
-    UIRenderContext context = prepareRenderContext(snap);
+    UIRenderContext context = prepareRenderContext(snap, rhiDevice);
     renderPrepared(context, stateMachine);
 }
 
-UIRenderContext GameplayHudPresenter::prepareRenderContext(const GameplayPresentationSnapshot& snap) {
+UIRenderContext GameplayHudPresenter::prepareRenderContext(const GameplayPresentationSnapshot& snap,
+                                                           RhiDevice& rhiDevice) {
     const PlayerStatsData playerStats = toPlayerStatsData(snap);
-    return m_uiRenderer.prepareRenderContext(m_window, *snap.inventory, playerStats, m_input.snapshot());
+    return m_uiRenderer.prepareRenderContext(m_window, rhiDevice, *snap.inventory, playerStats, m_input.snapshot());
 }
 
 void GameplayHudPresenter::renderPrepared(const UIRenderContext& context,

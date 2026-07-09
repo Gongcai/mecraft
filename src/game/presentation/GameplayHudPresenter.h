@@ -13,6 +13,7 @@ class UIRenderer;
 class GameStateMachine;
 class InputManager;
 struct InputSnapshot;
+class RhiDevice;
 
 namespace ecs { class GameplayRegistry; }
 class World;
@@ -28,8 +29,8 @@ public:
         : m_window(window), m_uiRenderer(uiRenderer), m_input(input) {}
 
     /// Render gameplay UI overlay.
-    void render(const GameplayPresentationSnapshot& snap, GameStateMachine& stateMachine);
-    UIRenderContext prepareRenderContext(const GameplayPresentationSnapshot& snap);
+    void render(const GameplayPresentationSnapshot& snap, RhiDevice& rhiDevice, GameStateMachine& stateMachine);
+    UIRenderContext prepareRenderContext(const GameplayPresentationSnapshot& snap, RhiDevice& rhiDevice);
     void renderPrepared(const UIRenderContext& context, GameStateMachine& stateMachine);
 
 #ifdef MECRAFT_DEBUG

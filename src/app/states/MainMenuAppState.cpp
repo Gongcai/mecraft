@@ -353,12 +353,14 @@ void MainMenuAppState::render(double frameTime) {
     endMenuPass(m_deps.rhiDevice, commandList);
 
     m_skyboxRenderer.render(m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f, m_deps.rhiDevice);
+    UIRenderContext sceneContext =
+        m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
 
     if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.window, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
         return;
     }
-    m_deps.uiRenderer.renderSceneOnly(m_deps.window, m_deps.input.snapshot());
+    m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
 
     if (m_transitioningToGame) {
         m_transition.render(m_deps.window.getWidth(), m_deps.window.getHeight());
