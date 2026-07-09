@@ -29,7 +29,7 @@ public:
                  float sharpness);
 
 private:
-    bool ensureTargets(int width, int height);
+    bool ensureTargets(RhiDevice& rhiDevice, int width, int height);
     void destroyTargets();
     void initFullscreenTriangle();
     void destroyFullscreenTriangle();
@@ -48,8 +48,10 @@ private:
 
     Shader* m_easuShader = nullptr;
     Shader* m_rcasShader = nullptr;
-    uint32_t m_easuFbo = 0;
     uint32_t m_easuTex = 0;
+    RhiTextureHandle m_easuHandle;
+    RhiTextureViewHandle m_easuView;
+    RhiDevice* m_rhiViewDevice = nullptr;
     uint32_t m_fullscreenVao = 0;
     int m_width = 0;
     int m_height = 0;

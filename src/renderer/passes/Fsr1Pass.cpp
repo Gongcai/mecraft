@@ -4,6 +4,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
@@ -40,7 +41,7 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
         m_easuShader == nullptr || m_rcasShader == nullptr || m_fullscreenVao == 0) {
         return false;
     }
-    if (!ensureTargets(outputWidth, outputHeight)) {
+    if (!ensureTargets(rhiDevice, outputWidth, outputHeight)) {
         return false;
     }
 
@@ -60,8 +61,25 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, m_easuFbo);
-    glViewport(0, 0, outputWidth, outputHeight);
+    RhiColorAttachment easuAttachment;
+    easuAttachment.view = m_easuView;
+    easuAttachment.loadOp = RhiLoadOp::DontCare;
+    easuAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo easuRenderingInfo;
+    easuRenderingInfo.debugName = "FSR1EASU";
+    easuRenderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, outputWidth)),
+        static_cast<uint32_t>(std::max(1, outputHeight))
+    };
+    easuRenderingInfo.colorAttachments = &easuAttachment;
+    easuRenderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& easuCommandList = rhiDevice.beginFrame();
+    easuCommandList.beginRendering(easuRenderingInfo);
+
     m_easuShader->use();
     m_easuShader->setInt("uInputTex", 0);
     m_easuShader->setVec4("uCon0", con0);
@@ -72,6 +90,8 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     glBindTexture(GL_TEXTURE_2D, inputTex);
     glBindVertexArray(m_fullscreenVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
+    easuCommandList.endRendering();
+    rhiDevice.submitFrame(easuCommandList);
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = swapchainColorView;
@@ -108,10 +128,11 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     return true;
 }
 
-bool Fsr1Pass::ensureTargets(const int width, const int height) {
+bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int height) {
     const int targetWidth = std::max(1, width);
     const int targetHeight = std::max(1, height);
-    if (m_easuFbo != 0 && m_easuTex != 0 && m_width == targetWidth && m_height == targetHeight) {
+    if (m_easuTex != 0 && m_easuHandle.isValid() && m_easuView.isValid() &&
+        m_rhiViewDevice == &rhiDevice && m_width == targetWidth && m_height == targetHeight) {
         return true;
     }
 
@@ -119,31 +140,57 @@ bool Fsr1Pass::ensureTargets(const int width, const int height) {
     m_width = targetWidth;
     m_height = targetHeight;
 
-    glCreateFramebuffers(1, &m_easuFbo);
     glCreateTextures(GL_TEXTURE_2D, 1, &m_easuTex);
     glTextureStorage2D(m_easuTex, 1, GL_RGBA8, m_width, m_height);
     glTextureParameteri(m_easuTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTextureParameteri(m_easuTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTextureParameteri(m_easuTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTextureParameteri(m_easuTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_easuFbo, GL_COLOR_ATTACHMENT0, m_easuTex, 0);
-    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_easuFbo, 1, &drawBuffer);
-    if (glCheckNamedFramebufferStatus(m_easuFbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    m_easuHandle = renderer::rhi::gl::registerTexture({
+        m_easuTex,
+        RhiTextureDimension::Texture2D,
+        RhiTextureFormat::Rgba8Unorm,
+        static_cast<uint32_t>(m_width),
+        static_cast<uint32_t>(m_height),
+        1u,
+        1u,
+        1u,
+        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
+        false
+    });
+    if (!m_easuHandle.isValid()) {
         destroyTargets();
         return false;
     }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_easuHandle;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_easuView = rhiDevice.createTextureView(viewDesc);
+    if (!m_easuView.isValid()) {
+        destroyTargets();
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
     return true;
 }
 
 void Fsr1Pass::destroyTargets() {
+    if (m_rhiViewDevice != nullptr && m_easuView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_easuView);
+    }
+    m_easuView = {};
+    m_rhiViewDevice = nullptr;
+    renderer::rhi::gl::unregisterTextureAndReset(m_easuHandle);
     if (m_easuTex != 0) {
         glDeleteTextures(1, &m_easuTex);
         m_easuTex = 0;
-    }
-    if (m_easuFbo != 0) {
-        glDeleteFramebuffers(1, &m_easuFbo);
-        m_easuFbo = 0;
     }
     m_width = 0;
     m_height = 0;
