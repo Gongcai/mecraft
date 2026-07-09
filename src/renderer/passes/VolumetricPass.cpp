@@ -292,8 +292,31 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
 void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSettings& settings,
                                      DeferredRenderTargets& targets) {
     if (m_volumetricTemporalShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureHistoryVolumetricTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindVolumetricTemporal();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.historyVolumetricTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "VolumetricTemporal";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -330,13 +353,38 @@ void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSetting
     }
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& settings,
                                 DeferredRenderTargets& targets, bool hasPreviousFrame) {
     if (m_volumetricCompositeShader == nullptr) return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSceneResolvedTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
 
-    targets.bindSceneResolved();
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.sceneResolvedTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "VolumetricComposite";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -377,4 +425,6 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
     }
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }

@@ -2558,6 +2558,39 @@ bool DeferredRenderTargets::ensureHalfResTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool DeferredRenderTargets::ensureHistoryVolumetricTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+
+    RhiTextureViewHandle& view = m_historyVolumetricView[m_currentHistoryIndex];
+    if (view.isValid()) {
+        return true;
+    }
+
+    const RhiTextureHandle texture = m_historyVolumetricHandle[m_currentHistoryIndex];
+    if (!texture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = texture;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    view = rhiDevice.createTextureView(desc);
+    if (!view.isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureWeatherMaskTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2657,6 +2690,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     }
     if (m_rhiViewDevice != nullptr && m_cloudView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_cloudView);
+    }
+    for (RhiTextureViewHandle& view : m_historyVolumetricView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
     }
     if (m_rhiViewDevice != nullptr && m_weatherMaskView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_weatherMaskView);

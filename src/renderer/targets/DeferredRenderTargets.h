@@ -175,6 +175,8 @@ public:
     [[nodiscard]] RhiTextureHandle historyCloudTexturePrevHandle() const { return m_historyCloudHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const { return m_historyVolumetricHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const { return m_historyVolumetricHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle historyVolumetricTextureViewHandle() const { return m_historyVolumetricView[m_currentHistoryIndex]; }
+    bool ensureHistoryVolumetricTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
     [[nodiscard]] RhiTextureHandle velocityTextureHandle() const { return m_velocityHandle; }
     [[nodiscard]] RhiTextureViewHandle velocityTextureViewHandle() const { return m_velocityView; }
@@ -404,6 +406,7 @@ private:
     uint32_t m_historyVolumetricFbo[2] = {0, 0};
     uint32_t m_historyVolumetricTex[2] = {0, 0};
     RhiTextureHandle m_historyVolumetricHandle[2];
+    RhiTextureViewHandle m_historyVolumetricView[2];
     int m_currentHistoryIndex = 0;
     bool m_rebuiltSinceCheck = false;
 
