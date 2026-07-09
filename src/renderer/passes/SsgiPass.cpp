@@ -221,6 +221,13 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
     if (iterations <= 0) {
         return;
     }
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice, 0) ||
+        (iterations > 1 && !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice, 1))) {
+        return;
+    }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
 
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -243,9 +250,28 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
     int outputSlot = 0;
     for (int i = 0; i < iterations; ++i) {
         outputSlot = i & 1;
-        targets.bindSsgiDenoise(outputSlot);
-        glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        RhiColorAttachment colorAttachment;
+        colorAttachment.view = targets.ssgiDenoiseTextureViewHandle(outputSlot);
+        colorAttachment.loadOp = RhiLoadOp::Clear;
+        colorAttachment.storeOp = RhiStoreOp::Store;
+        colorAttachment.clearColor[0] = 0.0f;
+        colorAttachment.clearColor[1] = 0.0f;
+        colorAttachment.clearColor[2] = 0.0f;
+        colorAttachment.clearColor[3] = 0.0f;
+
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "SsgiDenoise";
+        renderingInfo.renderArea = {
+            0,
+            0,
+            static_cast<uint32_t>(std::max(1, targets.width())),
+            static_cast<uint32_t>(std::max(1, targets.height()))
+        };
+        renderingInfo.colorAttachments = &colorAttachment;
+        renderingInfo.colorAttachmentCount = 1u;
+
+        RhiCommandList& commandList = rhiDevice.beginFrame();
+        commandList.beginRendering(renderingInfo);
 
         const GLuint passInputTexture = (i == 0)
             ? initialInputTexture
@@ -262,6 +288,8 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
         glBindTexture(GL_TEXTURE_2D, momentsTexture);
 
         RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiDenoiseShader);
+        commandList.endRendering();
+        rhiDevice.submitFrame(commandList);
     }
 
     targets.copySsgiDenoiseToSsgi(outputSlot);

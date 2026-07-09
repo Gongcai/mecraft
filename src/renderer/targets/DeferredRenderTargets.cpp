@@ -1172,6 +1172,11 @@ RhiTextureHandle DeferredRenderTargets::ssgiDenoiseTextureHandle(const int slot)
     return m_ssgiDenoiseHandle[slot];
 }
 
+RhiTextureViewHandle DeferredRenderTargets::ssgiDenoiseTextureViewHandle(const int slot) const {
+    assert(slot >= 0 && slot < 2);
+    return m_ssgiDenoiseView[slot];
+}
+
 void DeferredRenderTargets::copySsgiDenoiseToSsgi(const int slot) {
     assert(slot >= 0 && slot < 2);
     if (!m_ready) {
@@ -2104,6 +2109,37 @@ bool DeferredRenderTargets::ensureSsgiHalfResTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool DeferredRenderTargets::ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, const int slot) {
+    assert(slot >= 0 && slot < 2);
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_ssgiDenoiseView[slot].isValid()) {
+        return true;
+    }
+
+    if (!m_ssgiDenoiseHandle[slot].isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = m_ssgiDenoiseHandle[slot];
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.baseMip = 0;
+    desc.mipCount = 1;
+    desc.baseLayer = 0;
+    desc.layerCount = 1;
+
+    m_ssgiDenoiseView[slot] = rhiDevice.createTextureView(desc);
+    if (!m_ssgiDenoiseView[slot].isValid()) {
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2236,6 +2272,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     }
     if (m_rhiViewDevice != nullptr && m_ssgiHalfResView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_ssgiHalfResView);
+    }
+    for (RhiTextureViewHandle& view : m_ssgiDenoiseView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
     }
     if (m_rhiViewDevice != nullptr && m_sceneCompositeView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneCompositeView);

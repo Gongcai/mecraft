@@ -115,6 +115,8 @@ public:
     [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTexturePrevHandle() const { return m_ssgiMomentsHistoryHandle[1 - m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiTemporalTextureHandle() const { return m_ssgiTemporalHandle; }
     [[nodiscard]] RhiTextureHandle ssgiTemporalMomentsTextureHandle() const { return m_ssgiTemporalMomentsHandle; }
+    [[nodiscard]] RhiTextureViewHandle ssgiDenoiseTextureViewHandle(int slot) const;
+    bool ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, int slot);
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
     void copySsgiDenoiseToSsgi(int slot);
     void copySsgiTemporalToSsgi();
@@ -291,6 +293,7 @@ private:
     uint32_t m_ssgiDenoiseFbo[2] = {0, 0};
     uint32_t m_ssgiDenoiseTex[2] = {0, 0};
     RhiTextureHandle m_ssgiDenoiseHandle[2];
+    RhiTextureViewHandle m_ssgiDenoiseView[2];
     uint32_t m_ssgiHistoryFbo[2] = {0, 0};
     uint32_t m_ssgiHistoryTex[2] = {0, 0};
     uint32_t m_ssgiMomentsHistoryTex[2] = {0, 0};
