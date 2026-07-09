@@ -12,6 +12,7 @@
 #include <vector>
 
 namespace {
+constexpr GLuint kRhiPushConstantBinding = 15u;
 
 struct GlFormatInfo {
     GLenum internalFormat = GL_RGBA8;
@@ -433,6 +434,8 @@ struct GlRhiDeviceData {
     RhiTextureFormat swapchainDepthStencilFormat = RhiTextureFormat::Depth24;
     uint32_t swapchainWidth = 1u;
     uint32_t swapchainHeight = 1u;
+    GLuint pushConstantBuffer = 0u;
+    uint32_t pushConstantCapacity = 0u;
     GLuint currentFramebuffer = 0u;
     std::vector<GLenum> currentStoreDiscardAttachments;
     RhiIndexFormat indexFormat = RhiIndexFormat::Uint32;
@@ -1090,12 +1093,56 @@ void GlRhiCommandList::setIndexBuffer(RhiBufferHandle buffer, RhiIndexFormat for
 }
 
 void GlRhiCommandList::pushConstants(const void* data, size_t size, RhiShaderStageFlags stages) {
-    (void) data;
-    (void) size;
-    (void) stages;
-    if (size != 0u) {
-        logRhiError("pushConstants is not implemented for the OpenGL backend yet");
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("pushConstants requires an initialized device");
+        return;
     }
+    if (size == 0u) {
+        return;
+    }
+    if (data == nullptr) {
+        logRhiError("pushConstants received null data");
+        return;
+    }
+
+    auto& deviceData = *m_device->m_data;
+    const GlPipelineRecord* pipeline = nullptr;
+    if (m_graphicsPipeline.isValid()) {
+        pipeline = recordForHandle(deviceData.pipelines, deviceData.pipelineRecords, m_graphicsPipeline);
+    } else if (m_computePipeline.isValid()) {
+        pipeline = recordForHandle(deviceData.pipelines, deviceData.pipelineRecords, m_computePipeline);
+    }
+    if (pipeline == nullptr) {
+        logRhiError("pushConstants requires a bound pipeline");
+        return;
+    }
+
+    const RhiPipelineLayoutHandle layoutHandle =
+        pipeline->compute ? pipeline->computeDesc.layout : pipeline->graphicsDesc.layout;
+    const GlPipelineLayoutRecord* layout =
+        recordForHandle(deviceData.pipelineLayouts, deviceData.pipelineLayoutRecords, layoutHandle);
+    if (layout == nullptr ||
+        layout->desc.pushConstantBytes == 0u ||
+        size > layout->desc.pushConstantBytes ||
+        (stages & ~layout->desc.pushConstantStages) != 0u) {
+        logRhiError("pushConstants exceeds the bound pipeline layout contract");
+        return;
+    }
+
+    const auto byteSize = static_cast<GLsizeiptr>(size);
+    if (deviceData.pushConstantBuffer == 0u) {
+        glCreateBuffers(1, &deviceData.pushConstantBuffer);
+    }
+    if (deviceData.pushConstantCapacity < size) {
+        glNamedBufferData(deviceData.pushConstantBuffer, byteSize, nullptr, GL_DYNAMIC_DRAW);
+        deviceData.pushConstantCapacity = static_cast<uint32_t>(size);
+    }
+    glNamedBufferSubData(deviceData.pushConstantBuffer, 0, byteSize, data);
+    glBindBufferRange(GL_UNIFORM_BUFFER,
+                      kRhiPushConstantBinding,
+                      deviceData.pushConstantBuffer,
+                      0,
+                      byteSize);
 }
 
 void GlRhiCommandList::draw(uint32_t vertexCount, uint32_t instanceCount,
@@ -1390,6 +1437,12 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
         logRhiError("init received invalid swapchain dimensions");
         return false;
     }
+    GLint maxUniformBufferBindings = 0;
+    glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &maxUniformBufferBindings);
+    if (maxUniformBufferBindings <= static_cast<GLint>(kRhiPushConstantBinding)) {
+        logRhiError("init requires enough uniform buffer bindings for RHI push constants");
+        return false;
+    }
 
     m_initialized = true;
     m_capabilities.multiDrawIndirect = true;
@@ -1512,6 +1565,11 @@ void GlRhiDevice::shutdown() {
             glDeleteBuffers(1, &record.buffer);
         }
         record = {};
+    }
+    if (m_data->pushConstantBuffer != 0u) {
+        glDeleteBuffers(1, &m_data->pushConstantBuffer);
+        m_data->pushConstantBuffer = 0u;
+        m_data->pushConstantCapacity = 0u;
     }
 
     m_data->framebufferCache.clear();
