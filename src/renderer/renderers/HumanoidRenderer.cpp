@@ -2,6 +2,9 @@
 #include "../gl/GlStateGuard.h"
 #include "../core/Shader.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <algorithm>
@@ -295,8 +298,9 @@ HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForEntityModelPart(const st
     return &inserted.first->second;
 }
 
-void HumanoidRenderer::init(ResourceMgr& resourceMgr) {
+void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
+    m_rhiDevice = &rhiDevice;
     m_shader = resourceMgr.getShader("steve");
     m_forwardShader = resourceMgr.getShader("steve_forward");
     m_gbufferShader = resourceMgr.getShader("entity_gbuffer");
@@ -333,6 +337,7 @@ void HumanoidRenderer::shutdown() {
     }
     m_shader = nullptr;
     m_forwardShader = nullptr;
+    m_rhiDevice = nullptr;
     m_resourceMgr = nullptr;
 }
 
@@ -426,8 +431,39 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     glEnable(GL_SCISSOR_TEST);
     glScissor(viewportX, viewportY, viewportW, viewportH);
     glDepthMask(GL_TRUE);
-    glClearDepth(1.0);
-    glClear(GL_DEPTH_BUFFER_BIT);
+    if (m_rhiDevice == nullptr ||
+        !m_rhiDevice->currentSwapchainColorView().isValid() ||
+        !m_rhiDevice->currentSwapchainDepthStencilView().isValid()) {
+        return;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = m_rhiDevice->currentSwapchainColorView();
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = m_rhiDevice->currentSwapchainDepthStencilView();
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Humanoid.InventoryPreviewDepthClear";
+    renderingInfo.renderArea = {
+        viewportX,
+        viewportY,
+        static_cast<uint32_t>(viewportW),
+        static_cast<uint32_t>(viewportH)
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    RhiCommandList& commandList = m_rhiDevice->beginFrame();
+    commandList.beginRendering(renderingInfo);
+    commandList.endRendering();
+    m_rhiDevice->submitFrame(commandList);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glEnable(GL_BLEND);

@@ -15,6 +15,7 @@
 
 class Camera;
 class IWorldView;
+class RhiDevice;
 class Shader;
 class ResourceMgr;
 class Window;
@@ -31,7 +32,7 @@ public:
         kRenderMobsOnly   // hide only the local Steve model (first-person view)
     };
 
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
     void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
                 RenderMode mode = kRenderAll);
@@ -88,6 +89,7 @@ private:
     Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
     Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     uint32_t m_neutralShadowDepth = 0;
     uint32_t m_neutralShadowDepthCompare = 0;
     float m_inventoryPreviewHeadLookX = 0.0f;
