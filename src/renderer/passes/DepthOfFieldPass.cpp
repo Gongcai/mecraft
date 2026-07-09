@@ -1,6 +1,10 @@
 #include "DepthOfFieldPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -25,7 +29,31 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     if (m_dofShader == nullptr) return;
 
     targets.copySceneResolvedToHistory();
-    targets.bindSceneResolved();
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSceneResolvedTextureView(*ctx.shared->rhiDevice)) {
+        return;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.sceneResolvedTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "DepthOfField";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -59,4 +87,6 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
 
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
