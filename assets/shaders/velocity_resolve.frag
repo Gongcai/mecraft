@@ -1,14 +1,17 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec2 FragVelocity;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec2 FragVelocity;
 
-uniform sampler2D uDepthTex;
-uniform sampler2D uPerObjectVelocityTex;
-uniform mat4 uInvViewProj;
-uniform mat4 uPreviousViewProj;
-uniform vec2 uScreenSize;
-uniform int uForceZeroVelocity; // A/B test: 1 = output zero velocity everywhere
+layout(binding = 0) uniform sampler2D uDepthTex;
+layout(binding = 1) uniform sampler2D uPerObjectVelocityTex;
+
+layout(std140, binding = 15) uniform RhiPushConstants {
+    mat4 uInvViewProj;
+    mat4 uPreviousViewProj;
+    vec4 uScreenParams;
+};
+
 const vec2 kRejectHistoryVelocity = vec2(2.0);
 
 // DerivativeMain: 3x3 neighborhood offsets (excluding center)
@@ -46,7 +49,7 @@ vec3 reconstructWorldPosition(vec2 uv, float depth, out bool valid) {
 
 void main() {
     // A/B test: force zero velocity to verify TAA pure accumulation
-    if (uForceZeroVelocity != 0) {
+    if (uScreenParams.z != 0.0) {
         FragVelocity = vec2(0.0);
         return;
     }
@@ -59,7 +62,7 @@ void main() {
     vec3 closestFragment = vec3(texel, depth);
     for (int i = 0; i < 8; ++i) {
         ivec2 sampleTexel = offset3x3N[i] + texel;
-        float sampleDepth = texelFetch(uDepthTex, clamp(sampleTexel, ivec2(0), ivec2(uScreenSize) - 1), 0).r;
+        float sampleDepth = texelFetch(uDepthTex, clamp(sampleTexel, ivec2(0), ivec2(uScreenParams.xy) - 1), 0).r;
         if (sampleDepth < closestFragment.z) {
             closestFragment = vec3(sampleTexel, sampleDepth);
         }
@@ -71,7 +74,7 @@ void main() {
     // rotation, not stay pinned to screen space.
     // DerivativeMain/program/Post/Temporal.frag::GetClosestFragment returns
     // closestFragment.xy *= screenPixelSize, without a half-texel offset.
-    vec2 closestUv = closestFragment.xy / uScreenSize;
+    vec2 closestUv = closestFragment.xy / uScreenParams.xy;
     bool worldValid = false;
     vec3 worldPos = reconstructWorldPosition(closestUv, closestFragment.z, worldValid);
     if (!worldValid) {
