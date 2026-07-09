@@ -688,47 +688,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     return true;
 }
 
-void DeferredRenderTargets::bindGBuffer() {
-    glBindFramebuffer(GL_FRAMEBUFFER, m_gBufferFbo);
-    glViewport(0, 0, m_width, m_height);
-    const GLenum drawBuffers[] = {
-        kGAlbedoAttachment,
-        kGNormalAoAttachment,
-        kGVoxelLightAttachment,
-        kGMaterialAttachment,
-        kGMaterialAuxAttachment
-    };
-    glDrawBuffers(kGBufferAttachmentCount, drawBuffers);
-}
-
-void DeferredRenderTargets::attachPerObjectVelocityToGBuffer() {
-    // Attach per-object velocity texture as GL_COLOR_ATTACHMENT5 on the GBuffer FBO.
-    // Entity/drop fragment shaders write velocity as layout(location=5).
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, m_perObjectVelocityTex, 0);
-    const GLenum drawBuffers[] = {
-        kGAlbedoAttachment,
-        kGNormalAoAttachment,
-        kGVoxelLightAttachment,
-        kGMaterialAttachment,
-        kGMaterialAuxAttachment,
-        GL_COLOR_ATTACHMENT5
-    };
-    glDrawBuffers(6, drawBuffers);
-}
-
-void DeferredRenderTargets::detachPerObjectVelocityFromGBuffer() {
-    // Detach per-object velocity from GBuffer FBO and restore 5-target MRT.
-    glNamedFramebufferTexture(m_gBufferFbo, GL_COLOR_ATTACHMENT5, 0, 0);
-    const GLenum drawBuffers[] = {
-        kGAlbedoAttachment,
-        kGNormalAoAttachment,
-        kGVoxelLightAttachment,
-        kGMaterialAttachment,
-        kGMaterialAuxAttachment
-    };
-    glDrawBuffers(kGBufferAttachmentCount, drawBuffers);
-}
-
 void DeferredRenderTargets::bindDefaultLike(const int32_t framebuffer, const int width, const int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
     glViewport(0, 0, std::max(1, width), std::max(1, height));

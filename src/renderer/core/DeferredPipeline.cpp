@@ -515,6 +515,9 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     auto& worldBuffer = *m_shared->worldRenderBuffer;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
+    Shader* gbufferShader = m_shared->resources->getShader("chunk_gbuffer");
+    if (!gbufferShader) return;
+
     if (!targets.ensureGBufferTextureViews(rhiDevice)) {
         return;
     }
@@ -546,10 +549,7 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
 
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
-    commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
 
-    targets.bindGBuffer();
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -561,10 +561,6 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
-
-    // Get GBuffer shader from resource manager
-    Shader* gbufferShader = m_shared->resources->getShader("chunk_gbuffer");
-    if (!gbufferShader) return;
 
     // Build terrain frame data from FrameContext
     TerrainFrameData tfd;
@@ -678,6 +674,9 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
         glActiveTexture(GL_TEXTURE0 + i);
         glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
     }
+
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
 }
 
 void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {

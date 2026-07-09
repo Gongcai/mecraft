@@ -16,11 +16,6 @@ public:
 
     bool ensureSize(int width, int height, int shadowResolution);
 
-    void bindGBuffer();
-    // Per-object velocity: temporarily attaches the RG16F texture to the GBuffer FBO
-    // as the sixth color attachment so entity/drop shaders can write velocity via MRT.
-    void attachPerObjectVelocityToGBuffer();
-    void detachPerObjectVelocityFromGBuffer();
     void bindDefaultLike(int32_t framebuffer, int width, int height);
     void copyFramebufferColorToSceneLighting(int32_t framebuffer, int width, int height) const;
     void copyFramebufferColorToSceneResolved(int32_t framebuffer, int width, int height) const;
