@@ -705,34 +705,11 @@ void DeferredRenderTargets::bindDefaultLike(const int32_t framebuffer, const int
     glViewport(0, 0, std::max(1, width), std::max(1, height));
 }
 
-void DeferredRenderTargets::copyFramebufferColorToSceneLighting(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
+void DeferredRenderTargets::copyTextureColorToSceneLighting(RhiDevice& rhiDevice, const RhiTextureHandle source) const {
+    if (!m_ready || !source.isValid()) {
         return;
     }
-    blitFramebuffer(static_cast<GLuint>(framebuffer), m_sceneLightingFbo,
-                    std::max(1, width), std::max(1, height), m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneLightingFbo);
-}
-
-void DeferredRenderTargets::copyFramebufferColorToSceneResolved(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
-        return;
-    }
-    blitFramebuffer(static_cast<GLuint>(framebuffer), m_sceneResolvedFbo,
-                    std::max(1, width), std::max(1, height), m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_sceneResolvedFbo);
-}
-
-void DeferredRenderTargets::copyFramebufferColorToTransparentComposite(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
-        return;
-    }
-    blitFramebuffer(static_cast<GLuint>(framebuffer), m_transparentCompositeFbo,
-                    std::max(1, width), std::max(1, height), m_width, m_height,
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, m_transparentCompositeFbo);
+    blitTexture(rhiDevice, source, m_sceneLightingHandle);
 }
 
 void DeferredRenderTargets::copySceneLightingToTransparentComposite(RhiDevice& rhiDevice) const {
@@ -856,6 +833,20 @@ void DeferredRenderTargets::copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice)
     blitTexture(rhiDevice, previous, m_historyVolumetricHandle[m_currentHistoryIndex]);
 }
 
+void DeferredRenderTargets::copySceneResolvedToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
+    if (!m_ready || !destination.isValid()) {
+        return;
+    }
+    blitTexture(rhiDevice, m_sceneResolvedHandle, destination);
+}
+
+void DeferredRenderTargets::copyDepthToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
+    if (!m_ready || !destination.isValid()) {
+        return;
+    }
+    blitTexture(rhiDevice, m_gDepthHandle, destination);
+}
+
 void DeferredRenderTargets::copySsaoTemporalToHistory(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
@@ -896,36 +887,6 @@ void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiDevice& rhiDevice) {
     blitTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHandle);
 }
 
-void DeferredRenderTargets::blitSceneLightingTo(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
-        return;
-    }
-    blitFramebuffer(m_sceneLightingFbo, static_cast<GLuint>(framebuffer),
-                    m_width, m_height, std::max(1, width), std::max(1, height),
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-}
-
-void DeferredRenderTargets::blitSceneCompositeTo(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
-        return;
-    }
-    blitFramebuffer(m_sceneCompositeFbo, static_cast<GLuint>(framebuffer),
-                    m_width, m_height, std::max(1, width), std::max(1, height),
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-}
-
-void DeferredRenderTargets::blitSceneResolvedTo(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
-        return;
-    }
-    blitFramebuffer(m_sceneResolvedFbo, static_cast<GLuint>(framebuffer),
-                    m_width, m_height, std::max(1, width), std::max(1, height),
-                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-}
-
 void DeferredRenderTargets::blitTransparentCompositeTo(const int32_t framebuffer, const int width, const int height) const {
     if (!m_ready) {
         return;
@@ -933,16 +894,6 @@ void DeferredRenderTargets::blitTransparentCompositeTo(const int32_t framebuffer
     blitFramebuffer(m_transparentCompositeFbo, static_cast<GLuint>(framebuffer),
                     m_width, m_height, std::max(1, width), std::max(1, height),
                     GL_COLOR_BUFFER_BIT, GL_LINEAR);
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
-}
-
-void DeferredRenderTargets::blitDepthTo(const int32_t framebuffer, const int width, const int height) const {
-    if (!m_ready) {
-        return;
-    }
-    blitFramebuffer(m_gBufferFbo, static_cast<GLuint>(framebuffer),
-                    m_width, m_height, std::max(1, width), std::max(1, height),
-                    GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(framebuffer));
 }
 

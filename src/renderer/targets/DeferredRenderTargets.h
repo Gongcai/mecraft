@@ -17,9 +17,7 @@ public:
     bool ensureSize(int width, int height, int shadowResolution);
 
     void bindDefaultLike(int32_t framebuffer, int width, int height);
-    void copyFramebufferColorToSceneLighting(int32_t framebuffer, int width, int height) const;
-    void copyFramebufferColorToSceneResolved(int32_t framebuffer, int width, int height) const;
-    void copyFramebufferColorToTransparentComposite(int32_t framebuffer, int width, int height) const;
+    void copyTextureColorToSceneLighting(RhiDevice& rhiDevice, RhiTextureHandle source) const;
     void copySceneLightingToTransparentComposite(RhiDevice& rhiDevice) const;
     void copySceneLightingToSceneComposite(RhiDevice& rhiDevice) const;
     void copySceneCompositeToSceneResolved(RhiDevice& rhiDevice) const;
@@ -37,11 +35,9 @@ public:
     void copyHistoryCloudToCloud(RhiDevice& rhiDevice) const;
     void copyVolumetricToHistory(RhiDevice& rhiDevice) const;
     void copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice) const;
-    void blitSceneLightingTo(int32_t framebuffer, int width, int height) const;
-    void blitSceneCompositeTo(int32_t framebuffer, int width, int height) const;
-    void blitSceneResolvedTo(int32_t framebuffer, int width, int height) const;
+    void copySceneResolvedToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
+    void copyDepthToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
     void blitTransparentCompositeTo(int32_t framebuffer, int width, int height) const;
-    void blitDepthTo(int32_t framebuffer, int width, int height) const;
 
     [[nodiscard]] RhiTextureHandle albedoTextureHandle() const { return m_gAlbedoHandle; }
     [[nodiscard]] RhiTextureHandle normalAoTextureHandle() const { return m_gNormalAoHandle; }

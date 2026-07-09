@@ -659,8 +659,18 @@ bool PostProcessPass::ensureRenderTargets(const int width, const int height) {
         height,
         rhiFlag(RhiTextureUsage::Sampled) |
             rhiFlag(RhiTextureUsage::ColorAttachment) |
-            rhiFlag(RhiTextureUsage::TransferSrc));
-    if (!m_sceneColorHandle.isValid()) {
+            rhiFlag(RhiTextureUsage::TransferSrc) |
+            rhiFlag(RhiTextureUsage::TransferDst));
+    m_sceneDepthHandle = registerPostProcessTexture(
+        m_sceneDepthTex,
+        RhiTextureFormat::Depth32Float,
+        width,
+        height,
+        rhiFlag(RhiTextureUsage::Sampled) |
+            rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+            rhiFlag(RhiTextureUsage::TransferSrc) |
+            rhiFlag(RhiTextureUsage::TransferDst));
+    if (!m_sceneColorHandle.isValid() || !m_sceneDepthHandle.isValid()) {
         destroyRenderTargets();
         return false;
     }
@@ -1023,6 +1033,7 @@ void PostProcessPass::destroyRenderTargets() {
     m_exposureViewDevice = nullptr;
     renderer::rhi::gl::unregisterTextureAndReset(m_compositeHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneColorHandle);
+    renderer::rhi::gl::unregisterTextureAndReset(m_sceneDepthHandle);
     if (m_compositeTex != 0) {
         glDeleteTextures(1, &m_compositeTex);
         m_compositeTex = 0;

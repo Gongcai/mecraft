@@ -160,6 +160,8 @@ struct FrameContext {
     RhiTextureViewHandle swapchainDepthStencilView;
     RhiTextureFormat swapchainColorFormat = RhiTextureFormat::Undefined;
     RhiTextureFormat swapchainDepthStencilFormat = RhiTextureFormat::Undefined;
+    RhiTextureHandle sceneCaptureColorTexture;
+    RhiTextureHandle sceneCaptureDepthTexture;
 
     // TAA jitter
     glm::vec2 jitter = glm::vec2(0.0f);

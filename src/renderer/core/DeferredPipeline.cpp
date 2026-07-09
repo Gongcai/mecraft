@@ -299,7 +299,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Copy forward alpha to scene lighting
     const int capturedWidth = m_capturedViewport[2] > 0 ? m_capturedViewport[2] : windowWidth;
     const int capturedHeight = m_capturedViewport[3] > 0 ? m_capturedViewport[3] : windowHeight;
-    targets.copyFramebufferColorToSceneLighting(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    targets.copyTextureColorToSceneLighting(rhiDevice, ctx.sceneCaptureColorTexture);
 
     // Deferred lighting
     if (m_lightingPass) {
@@ -315,8 +315,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         targets.copySceneCompositeToTransparentComposite(rhiDevice);
         targets.copySceneCompositeToSceneResolved(rhiDevice);
         updateDeferredHistoryTargets();
-        targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
-        targets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        targets.copySceneResolvedToTexture(rhiDevice, ctx.sceneCaptureColorTexture);
+        targets.copyDepthToTexture(rhiDevice, ctx.sceneCaptureDepthTexture);
         restoreCapturedFramebufferViewport(windowWidth, windowHeight);
         return buildFrameOutput(ctx);
     }
@@ -359,8 +359,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Reflection debug early-out
     if (m_currentSettings.debug.reflectionDebugMode > 0) {
         updateDeferredHistoryTargets();
-        targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
-        targets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        targets.copySceneResolvedToTexture(rhiDevice, ctx.sceneCaptureColorTexture);
+        targets.copyDepthToTexture(rhiDevice, ctx.sceneCaptureDepthTexture);
         restoreCapturedFramebufferViewport(windowWidth, windowHeight);
         return buildFrameOutput(ctx);
     }
@@ -416,9 +416,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     if (m_currentSettings.debug.viewMode > 0 && m_debugPass) {
         m_debugPass->execute(ctx, m_currentSettings, targets, m_capturedFramebuffer, capturedWidth, capturedHeight);
     } else {
-        targets.blitSceneResolvedTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+        targets.copySceneResolvedToTexture(rhiDevice, ctx.sceneCaptureColorTexture);
     }
-    targets.blitDepthTo(m_capturedFramebuffer, capturedWidth, capturedHeight);
+    targets.copyDepthToTexture(rhiDevice, ctx.sceneCaptureDepthTexture);
 
     // Match the legacy split path: if water was not rendered before temporal
     // resolve, composite it over the already-blitted final scene.

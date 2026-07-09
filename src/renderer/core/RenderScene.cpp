@@ -743,6 +743,8 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.swapchainDepthStencilView = m_shared.rhiDevice->currentSwapchainDepthStencilView();
     ctx.swapchainColorFormat = m_shared.rhiDevice->swapchainColorFormat();
     ctx.swapchainDepthStencilFormat = m_shared.rhiDevice->swapchainDepthStencilFormat();
+    ctx.sceneCaptureColorTexture = m_postProcessPass.sceneColorTextureHandle();
+    ctx.sceneCaptureDepthTexture = m_postProcessPass.sceneDepthTextureHandle();
 
     // Frame timing
     ctx.frameIndex = m_frameCounter++;

@@ -117,6 +117,8 @@ public:
     }
     [[nodiscard]] int targetWidth() const { return m_targetWidth; }
     [[nodiscard]] int targetHeight() const { return m_targetHeight; }
+    [[nodiscard]] RhiTextureHandle sceneColorTextureHandle() const { return m_sceneColorHandle; }
+    [[nodiscard]] RhiTextureHandle sceneDepthTextureHandle() const { return m_sceneDepthHandle; }
 
 private:
     static constexpr int kBloomMipCount = 7;
@@ -177,6 +179,7 @@ private:
     uint32_t m_sceneColorTex = 0;
     RhiTextureHandle m_sceneColorHandle;
     uint32_t m_sceneDepthTex = 0;
+    RhiTextureHandle m_sceneDepthHandle;
 
     uint32_t m_compositeTex = 0;
     RhiTextureHandle m_compositeHandle;
