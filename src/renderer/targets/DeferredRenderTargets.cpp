@@ -299,115 +299,34 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     glClearNamedFramebufferfv(m_ssgiTemporalFbo, GL_COLOR, 0, clearSsgiTemporal);
     glClearNamedFramebufferfv(m_ssgiTemporalFbo, GL_COLOR, 1, clearSsgiTemporal);
 
-    glCreateFramebuffers(1, &m_sceneLightingFbo);
     m_sceneLightingTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_sceneLightingFbo, GL_COLOR_ATTACHMENT0, m_sceneLightingTex, 0);
-    const GLenum sceneLightingDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_sceneLightingFbo, 1, &sceneLightingDrawBuffer);
-    if (!checkFramebufferComplete(m_sceneLightingFbo, "SceneLighting")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_sceneCompositeFbo);
     m_sceneCompositeTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_sceneCompositeFbo, GL_COLOR_ATTACHMENT0, m_sceneCompositeTex, 0);
-    const GLenum sceneCompositeDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_sceneCompositeFbo, 1, &sceneCompositeDrawBuffer);
-    if (!checkFramebufferComplete(m_sceneCompositeFbo, "SceneComposite")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_sceneResolvedFbo);
     m_sceneResolvedTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_sceneResolvedFbo, GL_COLOR_ATTACHMENT0, m_sceneResolvedTex, 0);
-    const GLenum sceneResolvedDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_sceneResolvedFbo, 1, &sceneResolvedDrawBuffer);
-    if (!checkFramebufferComplete(m_sceneResolvedFbo, "SceneResolved")) {
-        shutdown();
-        return false;
-    }
 
     // TemporalCurrent: TAA current-frame scratch buffer. Avoids reading
     // history[current] as TAA input (which conflicts with the "history
     // only written once per frame" invariant).
-    glCreateFramebuffers(1, &m_temporalCurrentFbo);
     m_temporalCurrentTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_temporalCurrentFbo, GL_COLOR_ATTACHMENT0, m_temporalCurrentTex, 0);
-    const GLenum temporalCurrentDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_temporalCurrentFbo, 1, &temporalCurrentDrawBuffer);
-    if (!checkFramebufferComplete(m_temporalCurrentFbo, "TemporalCurrent")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_transparentCompositeFbo);
     m_transparentCompositeTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
     // Keep transparent depth separate from the sampled G-buffer depth to avoid feedback while drawing water/transparent materials.
     m_transparentCompositeDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_transparentCompositeFbo, GL_COLOR_ATTACHMENT0, m_transparentCompositeTex, 0);
-    glNamedFramebufferTexture(m_transparentCompositeFbo, GL_DEPTH_ATTACHMENT, m_transparentCompositeDepth, 0);
-    const GLenum transparentCompositeDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_transparentCompositeFbo, 1, &transparentCompositeDrawBuffer);
-    if (!checkFramebufferComplete(m_transparentCompositeFbo, "TransparentComposite")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_halfResFbo);
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
     m_halfResTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_halfResFbo, GL_COLOR_ATTACHMENT0, m_halfResTex, 0);
-    const GLenum halfResDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_halfResFbo, 1, &halfResDrawBuffer);
-    if (!checkFramebufferComplete(m_halfResFbo, "HalfRes")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_reflectionFbo);
     m_reflectionTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_reflectionFbo, GL_COLOR_ATTACHMENT0, m_reflectionTex, 0);
-    const GLenum reflectionDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_reflectionFbo, 1, &reflectionDrawBuffer);
-    if (!checkFramebufferComplete(m_reflectionFbo, "Reflection")) {
-        shutdown();
-        return false;
-    }
 
     // Reflection temporal scratch: holds a copy of the filtered reflection so
-    // the temporal pass can read it while writing the blended result to m_reflectionFbo.
-    glCreateFramebuffers(1, &m_reflectionTemporalScratchFbo);
+    // the temporal pass can read it while writing the blended result.
     m_reflectionTemporalScratchTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_reflectionTemporalScratchFbo, GL_COLOR_ATTACHMENT0, m_reflectionTemporalScratchTex, 0);
-    const GLenum reflectionTemporalScratchDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_reflectionTemporalScratchFbo, 1, &reflectionTemporalScratchDrawBuffer);
-    if (!checkFramebufferComplete(m_reflectionTemporalScratchFbo, "ReflectionTemporalScratch")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_cloudFbo);
     m_cloudTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_cloudFbo, GL_COLOR_ATTACHMENT0, m_cloudTex, 0);
-    const GLenum cloudDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_cloudFbo, 1, &cloudDrawBuffer);
-    if (!checkFramebufferComplete(m_cloudFbo, "Cloud")) {
-        shutdown();
-        return false;
-    }
 
-    glCreateFramebuffers(1, &m_skyCaptureFbo);
     m_skyCaptureTex = createTexture2D(GL_RGBA16F, kSkyCaptureWidth, kSkyCaptureHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_skyCaptureFbo, GL_COLOR_ATTACHMENT0, m_skyCaptureTex, 0);
-    const GLenum skyCaptureDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_skyCaptureFbo, 1, &skyCaptureDrawBuffer);
-    if (!checkFramebufferComplete(m_skyCaptureFbo, "SkyCapture")) {
-        shutdown();
-        return false;
-    }
 
     // History scene FBO ping-pong (RGBA16F color + depth)
     for (int i = 0; i < 2; ++i) {
@@ -460,16 +379,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_currentHistoryIndex = 0;
 
     // Velocity buffer (RG16F)
-    glCreateFramebuffers(1, &m_velocityFbo);
     m_velocityTex = createTexture2D(GL_RG16F, m_width, m_height, GL_RG, GL_FLOAT,
                                     GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_velocityFbo, GL_COLOR_ATTACHMENT0, m_velocityTex, 0);
-    const GLenum velocityDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_velocityFbo, 1, &velocityDrawBuffer);
-    if (!checkFramebufferComplete(m_velocityFbo, "Velocity")) {
-        shutdown();
-        return false;
-    }
 
     // Per-object velocity (RG16F) — screen-space velocity written by entity/drop
     // shaders during GBuffer fill. Temporarily attached to GBuffer FBO as
@@ -479,16 +390,8 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 
     // Weather mask (R8) — additive-blended weather particle alpha.
     // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
-    glCreateFramebuffers(1, &m_weatherMaskFbo);
     m_weatherMaskTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
                                        GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_weatherMaskFbo, GL_COLOR_ATTACHMENT0, m_weatherMaskTex, 0);
-    const GLenum weatherMaskDrawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_weatherMaskFbo, 1, &weatherMaskDrawBuffer);
-    if (!checkFramebufferComplete(m_weatherMaskFbo, "WeatherMask")) {
-        shutdown();
-        return false;
-    }
 
     if (!registerRhiTextures()) {
         shutdown();
@@ -552,24 +455,15 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
     }
-    renderer::debug::labelFramebuffer(m_sceneLightingFbo, "DeferredTargets.SceneLighting");
     renderer::debug::labelTexture(m_sceneLightingTex, "DeferredTargets.SceneLightingTex");
-    renderer::debug::labelFramebuffer(m_sceneCompositeFbo, "DeferredTargets.SceneComposite");
     renderer::debug::labelTexture(m_sceneCompositeTex, "DeferredTargets.SceneCompositeTex");
-    renderer::debug::labelFramebuffer(m_sceneResolvedFbo, "DeferredTargets.SceneResolved");
     renderer::debug::labelTexture(m_sceneResolvedTex, "DeferredTargets.SceneResolvedTex");
-    renderer::debug::labelFramebuffer(m_transparentCompositeFbo, "DeferredTargets.TransparentComposite");
     renderer::debug::labelTexture(m_transparentCompositeTex, "DeferredTargets.TransparentCompositeTex");
     renderer::debug::labelTexture(m_transparentCompositeDepth, "DeferredTargets.TransparentCompositeDepth");
-    renderer::debug::labelFramebuffer(m_halfResFbo, "DeferredTargets.HalfRes");
     renderer::debug::labelTexture(m_halfResTex, "DeferredTargets.HalfResTex");
-    renderer::debug::labelFramebuffer(m_reflectionFbo, "DeferredTargets.Reflection");
     renderer::debug::labelTexture(m_reflectionTex, "DeferredTargets.ReflectionTex");
-    renderer::debug::labelFramebuffer(m_reflectionTemporalScratchFbo, "DeferredTargets.ReflectionTemporalScratch");
     renderer::debug::labelTexture(m_reflectionTemporalScratchTex, "DeferredTargets.ReflectionTemporalScratchTex");
-    renderer::debug::labelFramebuffer(m_cloudFbo, "DeferredTargets.Cloud");
     renderer::debug::labelTexture(m_cloudTex, "DeferredTargets.CloudTex");
-    renderer::debug::labelFramebuffer(m_skyCaptureFbo, "DeferredTargets.SkyCapture");
     renderer::debug::labelTexture(m_skyCaptureTex, "DeferredTargets.SkyCaptureTex");
     for (int i = 0; i < 2; ++i) {
         char fboName[48], texName[48], depthName[48];
@@ -601,12 +495,9 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         renderer::debug::labelFramebuffer(m_historyVolumetricFbo[i], fboName);
         renderer::debug::labelTexture(m_historyVolumetricTex[i], texName);
     }
-    renderer::debug::labelFramebuffer(m_temporalCurrentFbo, "DeferredTargets.TemporalCurrent");
     renderer::debug::labelTexture(m_temporalCurrentTex, "DeferredTargets.TemporalCurrentTex");
-    renderer::debug::labelFramebuffer(m_velocityFbo, "DeferredTargets.Velocity");
     renderer::debug::labelTexture(m_velocityTex, "DeferredTargets.VelocityTex");
     renderer::debug::labelTexture(m_perObjectVelocityTex, "DeferredTargets.PerObjectVelocity");
-    renderer::debug::labelFramebuffer(m_weatherMaskFbo, "DeferredTargets.WeatherMask");
     renderer::debug::labelTexture(m_weatherMaskTex, "DeferredTargets.WeatherMaskTex");
     renderer::debug::labelTexture(m_atmosphereLut3d, "DeferredTargets.AtmosphereLUT");
     renderer::debug::labelVertexArray(m_fullscreenVao, "DeferredTargets.FullscreenVAO");
@@ -2729,7 +2620,7 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_perObjectVelocityTex = 0;
     m_weatherMaskTex = 0;
 
-    const GLuint framebuffers[] = {m_ssaoFbo, m_ssaoFilteredFbo, m_sceneLightingFbo, m_sceneCompositeFbo, m_sceneResolvedFbo, m_temporalCurrentFbo, m_transparentCompositeFbo, m_halfResFbo, m_reflectionFbo, m_reflectionTemporalScratchFbo, m_cloudFbo, m_skyCaptureFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_ssgiFbo, m_ssgiHalfResFbo, m_ssgiDenoiseFbo[0], m_ssgiDenoiseFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1], m_ssgiTemporalFbo, m_velocityFbo, m_weatherMaskFbo};
+    const GLuint framebuffers[] = {m_ssaoFbo, m_ssaoFilteredFbo, m_historySceneFbo[0], m_historySceneFbo[1], m_historyReflectionFbo[0], m_historyReflectionFbo[1], m_historyCloudFbo[0], m_historyCloudFbo[1], m_historyVolumetricFbo[0], m_historyVolumetricFbo[1], m_ssaoHalfResFbo, m_ssaoHalfResFilteredFbo, m_ssaoHistoryFbo[0], m_ssaoHistoryFbo[1], m_ssaoTemporalFbo, m_ssgiFbo, m_ssgiHalfResFbo, m_ssgiDenoiseFbo[0], m_ssgiDenoiseFbo[1], m_ssgiHistoryFbo[0], m_ssgiHistoryFbo[1], m_ssgiTemporalFbo};
     for (const GLuint framebuffer : framebuffers) {
         if (framebuffer != 0) {
             GLuint mutableFramebuffer = framebuffer;
@@ -2740,16 +2631,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoFilteredFbo = 0;
     m_ssaoHalfResFbo = 0;
     m_ssaoHalfResFilteredFbo = 0;
-    m_sceneLightingFbo = 0;
-    m_sceneCompositeFbo = 0;
-    m_sceneResolvedFbo = 0;
-    m_temporalCurrentFbo = 0;
-    m_transparentCompositeFbo = 0;
-    m_halfResFbo = 0;
-    m_reflectionFbo = 0;
-    m_reflectionTemporalScratchFbo = 0;
-    m_cloudFbo = 0;
-    m_skyCaptureFbo = 0;
     m_historySceneFbo[0] = 0; m_historySceneFbo[1] = 0;
     m_historyReflectionFbo[0] = 0; m_historyReflectionFbo[1] = 0;
     m_historyCloudFbo[0] = 0; m_historyCloudFbo[1] = 0;
@@ -2761,8 +2642,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssgiDenoiseFbo[0] = 0; m_ssgiDenoiseFbo[1] = 0;
     m_ssgiHistoryFbo[0] = 0; m_ssgiHistoryFbo[1] = 0;
     m_ssgiTemporalFbo = 0;
-    m_velocityFbo = 0;
-    m_weatherMaskFbo = 0;
     m_currentHistoryIndex = 0;
     m_ssaoHistoryIndex = 0;
     m_ssgiHistoryIndex = 0;

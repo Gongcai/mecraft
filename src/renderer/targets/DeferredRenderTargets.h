@@ -318,25 +318,21 @@ private:
     RhiTextureViewHandle m_ssgiTemporalView;
     RhiTextureViewHandle m_ssgiTemporalMomentsView;
 
-    uint32_t m_sceneLightingFbo = 0;
     uint32_t m_sceneLightingTex = 0;
     RhiTextureHandle m_sceneLightingHandle;
     RhiTextureViewHandle m_sceneLightingView;
 
     // SceneComposite is the opaque HDR scene after screen-space base effects such as clouds/reflections.
-    uint32_t m_sceneCompositeFbo = 0;
     uint32_t m_sceneCompositeTex = 0;
     RhiTextureHandle m_sceneCompositeHandle;
     RhiTextureViewHandle m_sceneCompositeView;
 
     // SceneResolved is the current full-world HDR color. It becomes the post input and temporal scene history source.
-    uint32_t m_sceneResolvedFbo = 0;
     uint32_t m_sceneResolvedTex = 0;
     RhiTextureHandle m_sceneResolvedHandle;
     RhiTextureViewHandle m_sceneResolvedView;
 
     // TransparentComposite is a scratch scene copy used while forward water/generic transparent geometry is blended.
-    uint32_t m_transparentCompositeFbo = 0;
     uint32_t m_transparentCompositeTex = 0;
     uint32_t m_transparentCompositeDepth = 0;
     RhiTextureHandle m_transparentCompositeHandle;
@@ -344,28 +340,23 @@ private:
     RhiTextureViewHandle m_transparentCompositeView;
     RhiTextureViewHandle m_transparentCompositeDepthView;
 
-    uint32_t m_halfResFbo = 0;
     uint32_t m_halfResTex = 0;
     RhiTextureHandle m_halfResHandle;
     RhiTextureViewHandle m_halfResView;
 
-    uint32_t m_reflectionFbo = 0;
     uint32_t m_reflectionTex = 0;
     RhiTextureHandle m_reflectionHandle;
     RhiTextureViewHandle m_reflectionView;
 
     // Reflection temporal scratch: holds filtered reflection copy while
-    // temporal pass reads it and writes blended result to m_reflectionFbo.
-    uint32_t m_reflectionTemporalScratchFbo = 0;
+    // temporal pass reads it and writes blended result.
     uint32_t m_reflectionTemporalScratchTex = 0;
     RhiTextureHandle m_reflectionTemporalScratchHandle;
 
-    uint32_t m_cloudFbo = 0;
     uint32_t m_cloudTex = 0;
     RhiTextureHandle m_cloudHandle;
     RhiTextureViewHandle m_cloudView;
 
-    uint32_t m_skyCaptureFbo = 0;
     uint32_t m_skyCaptureTex = 0;
     RhiTextureHandle m_skyCaptureHandle;
     RhiTextureViewHandle m_skyCaptureView;
@@ -390,19 +381,17 @@ private:
     bool m_rebuiltSinceCheck = false;
 
     // TAA current-frame scratch: avoids reading history[current] as TAA input.
-    uint32_t m_temporalCurrentFbo = 0;
     uint32_t m_temporalCurrentTex = 0;
     RhiTextureHandle m_temporalCurrentHandle;
 
     // Velocity buffer (RG16F encodes screen-space velocity xy)
-    uint32_t m_velocityFbo = 0;
     uint32_t m_velocityTex = 0;
     RhiTextureHandle m_velocityHandle;
     RhiTextureViewHandle m_velocityView;
     RhiDevice* m_rhiViewDevice = nullptr;
 
-    // Per-object velocity (RG16F): written by entity/drop GBuffer shaders via MRT
-    // as the sixth color attachment on the GBuffer FBO. Consumed by velocity_resolve.fs.
+    // Per-object velocity (RG16F): written by entity/drop GBuffer shaders as an MRT color attachment.
+    // Consumed by velocity_resolve.fs.
     uint32_t m_perObjectVelocityTex = 0;
     RhiTextureHandle m_perObjectVelocityHandle;
     RhiTextureViewHandle m_perObjectVelocityView;
@@ -410,7 +399,6 @@ private:
     // Weather mask: single-channel R8 storing accumulated weather particle alpha.
     // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
     // Written with additive blending by weather geometry, read by postprocess.
-    uint32_t m_weatherMaskFbo = 0;
     uint32_t m_weatherMaskTex = 0;
     RhiTextureHandle m_weatherMaskHandle;
     RhiTextureViewHandle m_weatherMaskView;
