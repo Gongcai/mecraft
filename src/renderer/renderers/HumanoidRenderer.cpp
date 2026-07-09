@@ -327,6 +327,11 @@ void HumanoidRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_entityModelPartMeshes.clear();
+    if (m_rhiDevice != nullptr && m_neutralShadowDepthView.isValid()) {
+        m_rhiDevice->destroyTextureView(m_neutralShadowDepthView);
+        m_neutralShadowDepthView = {};
+    }
+    renderer::rhi::gl::unregisterTextureAndReset(m_neutralShadowDepthHandle);
     if (m_neutralShadowDepth != 0) {
         glDeleteTextures(1, &m_neutralShadowDepth);
         m_neutralShadowDepth = 0;
@@ -341,9 +346,13 @@ void HumanoidRenderer::shutdown() {
     m_resourceMgr = nullptr;
 }
 
-void HumanoidRenderer::ensureNeutralShadowTextures() {
+bool HumanoidRenderer::ensureNeutralShadowTextures() {
     if (m_neutralShadowDepth != 0 && m_neutralShadowDepthCompare != 0) {
-        return;
+        return true;
+    }
+
+    if (m_rhiDevice == nullptr) {
+        return false;
     }
 
     if (m_neutralShadowDepth == 0) {
@@ -354,8 +363,56 @@ void HumanoidRenderer::ensureNeutralShadowTextures() {
         glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-        constexpr float depth = 1.0f;
-        glClearTexImage(m_neutralShadowDepth, 0, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+
+        m_neutralShadowDepthHandle = renderer::rhi::gl::registerTexture({
+            m_neutralShadowDepth,
+            RhiTextureDimension::Texture2DArray,
+            RhiTextureFormat::Depth32Float,
+            1u,
+            1u,
+            1u,
+            1u,
+            1u,
+            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+            false
+        });
+        if (!m_neutralShadowDepthHandle.isValid()) {
+            glDeleteTextures(1, &m_neutralShadowDepth);
+            m_neutralShadowDepth = 0;
+            return false;
+        }
+
+        RhiTextureViewDesc depthViewDesc;
+        depthViewDesc.texture = m_neutralShadowDepthHandle;
+        depthViewDesc.viewType = RhiTextureViewType::Texture2DArray;
+        depthViewDesc.format = RhiTextureFormat::Depth32Float;
+        depthViewDesc.baseMip = 0;
+        depthViewDesc.mipCount = 1;
+        depthViewDesc.baseLayer = 0;
+        depthViewDesc.layerCount = 1;
+        m_neutralShadowDepthView = m_rhiDevice->createTextureView(depthViewDesc);
+        if (!m_neutralShadowDepthView.isValid()) {
+            renderer::rhi::gl::unregisterTextureAndReset(m_neutralShadowDepthHandle);
+            glDeleteTextures(1, &m_neutralShadowDepth);
+            m_neutralShadowDepth = 0;
+            return false;
+        }
+
+        RhiDepthStencilAttachment depthAttachment;
+        depthAttachment.view = m_neutralShadowDepthView;
+        depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+        depthAttachment.depthStoreOp = RhiStoreOp::Store;
+        depthAttachment.clearDepth = 1.0f;
+
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "Humanoid.NeutralShadowDepthClear";
+        renderingInfo.renderArea = {0, 0, 1u, 1u};
+        renderingInfo.depthStencilAttachment = &depthAttachment;
+
+        RhiCommandList& commandList = m_rhiDevice->beginFrame();
+        commandList.beginRendering(renderingInfo);
+        commandList.endRendering();
+        m_rhiDevice->submitFrame(commandList);
     }
 
     if (m_neutralShadowDepthCompare == 0) {
@@ -375,10 +432,14 @@ void HumanoidRenderer::ensureNeutralShadowTextures() {
         glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
         glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
     }
+
+    return m_neutralShadowDepth != 0 && m_neutralShadowDepthCompare != 0;
 }
 
-void HumanoidRenderer::bindDisabledShadowNeutralTextures(Shader& shader) {
-    ensureNeutralShadowTextures();
+bool HumanoidRenderer::bindDisabledShadowNeutralTextures(Shader& shader) {
+    if (!ensureNeutralShadowTextures()) {
+        return false;
+    }
 
     shader.setInt("uShadowsEnabled", 0);
     shader.setInt("uSoftShadowsEnabled", 0);
@@ -400,6 +461,7 @@ void HumanoidRenderer::bindDisabledShadowNeutralTextures(Shader& shader) {
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_neutralShadowDepthCompare);
     glActiveTexture(GL_TEXTURE6);
     glBindTexture(GL_TEXTURE_2D_ARRAY, m_neutralShadowDepth);
+    return true;
 }
 
 void HumanoidRenderer::renderInventoryPreview(const float x,
@@ -510,7 +572,9 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     m_shader->setMat4(viewProjLoc, projection * view);
     m_shader->setInt("uTexture", 0);
     setHurtFlash(*m_shader, 0.0f);
-    bindDisabledShadowNeutralTextures(*m_shader);
+    if (!bindDisabledShadowNeutralTextures(*m_shader)) {
+        return;
+    }
 
     // Set lighting uniforms for UI preview (full bright, no world light sampling)
     m_shader->setFloat("uHeldSunlight", 1.0f);

@@ -11,6 +11,7 @@
 #include "../../ecs/components/Components.h"
 #include "../../ecs/entity/EntitySkinLayout.h"
 #include "../../ecs/entity/EntityModelRegistry.h"
+#include "../rhi/RhiHandles.h"
 #include "HumanoidSkinLayoutCatalog.h"
 
 class Camera;
@@ -92,6 +93,8 @@ private:
     RhiDevice* m_rhiDevice = nullptr;
     uint32_t m_neutralShadowDepth = 0;
     uint32_t m_neutralShadowDepthCompare = 0;
+    RhiTextureHandle m_neutralShadowDepthHandle;
+    RhiTextureViewHandle m_neutralShadowDepthView;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;
     float m_inventoryPreviewBodyLookX = 0.0f;
@@ -112,8 +115,8 @@ private:
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
-    void ensureNeutralShadowTextures();
-    void bindDisabledShadowNeutralTextures(Shader& shader);
+    [[nodiscard]] bool ensureNeutralShadowTextures();
+    [[nodiscard]] bool bindDisabledShadowNeutralTextures(Shader& shader);
 
     // Per-object velocity: stores previous-frame model matrix per entity part.
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;
