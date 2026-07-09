@@ -1,10 +1,7 @@
 #include "UIRenderer.h"
 
 #include <algorithm>
-#include <fstream>
 #include <optional>
-#include <sstream>
-#include <string>
 
 #include <glad/glad.h>
 #include <glm/vec2.hpp>
@@ -19,6 +16,7 @@
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiResources.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
 #include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "UIRenderUtils.h"
 #include "UIScene.h"
@@ -55,19 +53,6 @@ void configureLinearClampTexture() {
     });
 }
 
-[[nodiscard]] std::optional<std::string> loadRhiShaderSource(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return std::nullopt;
-    }
-
-    std::stringstream stream;
-    stream << file.rdbuf();
-    if (file.bad()) {
-        return std::nullopt;
-    }
-    return stream.str();
-}
 }
 
 UIRenderer::UIRenderer() = default;
@@ -977,9 +962,9 @@ bool UIRenderer::ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const
     }
 
     const std::optional<std::string> vertexSource =
-        loadRhiShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
     const std::optional<std::string> fragmentSource =
-        loadRhiShaderSource("assets/shaders/blur_rhi.frag");
+        renderer::rhi::loadShaderSource("assets/shaders/blur_rhi.frag");
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         return false;
     }

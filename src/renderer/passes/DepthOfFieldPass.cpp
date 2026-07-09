@@ -4,14 +4,12 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <algorithm>
-#include <fstream>
 #include <optional>
-#include <sstream>
-#include <string>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_inverse.hpp>
@@ -23,20 +21,6 @@ struct DofPushConstants {
     glm::vec4 params;
     glm::vec4 screenParams;
 };
-
-[[nodiscard]] std::optional<std::string> loadRhiShaderSource(const std::string& path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        return std::nullopt;
-    }
-
-    std::stringstream stream;
-    stream << file.rdbuf();
-    if (file.bad()) {
-        return std::nullopt;
-    }
-    return stream.str();
-}
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -127,9 +111,9 @@ bool DepthOfFieldPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
 
     const std::optional<std::string> vertexSource =
-        loadRhiShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
     const std::optional<std::string> fragmentSource =
-        loadRhiShaderSource("assets/shaders/dof.frag");
+        renderer::rhi::loadShaderSource("assets/shaders/dof.frag");
     if (!vertexSource.has_value() || !fragmentSource.has_value()) {
         return false;
     }
