@@ -414,7 +414,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     updateDeferredHistoryTargets();
     targets.copySceneResolvedToTransparentComposite(rhiDevice);
     if (m_currentSettings.debug.viewMode > 0 && m_debugPass) {
-        m_debugPass->execute(ctx, m_currentSettings, targets, m_capturedFramebuffer, capturedWidth, capturedHeight);
+        m_debugPass->execute(ctx, m_currentSettings, targets, capturedWidth, capturedHeight);
     } else {
         targets.copySceneResolvedToTexture(rhiDevice, ctx.sceneCaptureColorTexture);
     }

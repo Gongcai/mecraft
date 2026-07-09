@@ -29,11 +29,10 @@ public:
     /// @param ctx Frame context (camera, sky, timing)
     /// @param settings Render settings (debug view mode, shadow parameters)
     /// @param targets Deferred render targets (all intermediate textures)
-    /// @param framebuffer Destination framebuffer (0 = backbuffer)
     /// @param width Destination viewport width
     /// @param height Destination viewport height
     void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets, int32_t framebuffer, int width, int height);
+                 DeferredRenderTargets& targets, int width, int height);
 
 private:
     Shader* m_deferredDebugShader = nullptr;

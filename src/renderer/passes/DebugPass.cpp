@@ -1,6 +1,10 @@
 #include "DebugPass.h"
+#include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../../resource/ResourceMgr.h"
@@ -24,12 +28,51 @@ void DebugPass::shutdown() {
 
 void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                          DeferredRenderTargets& targets,
-                         const int32_t framebuffer, const int width, const int height) {
+                         const int width, const int height) {
     if (m_deferredDebugShader == nullptr) {
         return;
     }
 
-    targets.bindDefaultLike(framebuffer, width, height);
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !ctx.sceneCaptureColorTexture.isValid()) {
+        return;
+    }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+
+    RhiTextureViewDesc outputViewDesc;
+    outputViewDesc.texture = ctx.sceneCaptureColorTexture;
+    outputViewDesc.viewType = RhiTextureViewType::Texture2D;
+    outputViewDesc.format = RhiTextureFormat::Rgba16Float;
+    outputViewDesc.baseMip = 0;
+    outputViewDesc.mipCount = 1;
+    outputViewDesc.baseLayer = 0;
+    outputViewDesc.layerCount = 1;
+
+    const RhiTextureViewHandle outputView = rhiDevice.createTextureView(outputViewDesc);
+    if (!outputView.isValid()) {
+        return;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = outputView;
+    colorAttachment.loadOp = RhiLoadOp::DontCare;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Debug.SceneCapture";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, width)),
+        static_cast<uint32_t>(std::max(1, height))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.beginRendering(renderingInfo);
+
     glDisable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
     glDisable(GL_BLEND);
@@ -226,6 +269,9 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         glBindTexture(GL_TEXTURE_2D, 0);
     }
     glActiveTexture(GL_TEXTURE0);
+    commandList.endRendering();
+    rhiDevice.submitFrame(commandList);
+    rhiDevice.destroyTextureView(outputView);
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 }
