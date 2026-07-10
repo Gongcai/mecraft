@@ -45,9 +45,13 @@ private:
                                  const std::array<RhiTextureViewHandle, 2>& views);
     void destroyUpsampleBindGroup();
     void destroyUpsampleRhiResources();
+    bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
+                                 const std::array<RhiTextureViewHandle, 7>& views);
+    void destroyTemporalBindGroup();
+    void destroyTemporalRhiResources();
 
     Shader* m_ssgiDenoiseShader = nullptr;
-    Shader* m_ssgiTemporalShader = nullptr;
     RhiTextureHandle m_noiseTexture;
     RhiTextureViewHandle m_noiseTextureView;
     RhiDevice* m_noiseViewDevice = nullptr;
@@ -75,6 +79,17 @@ private:
     RhiPipelineHandle m_upsamplePipeline;
     RhiBindGroupHandle m_upsampleBindGroup;
     std::array<RhiTextureViewHandle, 2> m_upsampleBoundViews = {};
+
+    RhiDevice* m_temporalRhiDevice = nullptr;
+    RhiSamplerHandle m_temporalNearestSampler;
+    RhiSamplerHandle m_temporalLinearSampler;
+    RhiBindGroupLayoutHandle m_temporalBindGroupLayout;
+    RhiPipelineLayoutHandle m_temporalPipelineLayout;
+    RhiShaderHandle m_temporalVertexShader;
+    RhiShaderHandle m_temporalFragmentShader;
+    RhiPipelineHandle m_temporalPipeline;
+    RhiBindGroupHandle m_temporalBindGroup;
+    std::array<RhiTextureViewHandle, 7> m_temporalBoundViews = {};
 };
 
 #endif // MECRAFT_SSGI_PASS_H

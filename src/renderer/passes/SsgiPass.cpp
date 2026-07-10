@@ -45,16 +45,15 @@ static_assert(sizeof(SsgiBaseParams) == 192u);
 
 void SsgiPass::init(ResourceMgr& resourceMgr) {
     m_ssgiDenoiseShader = resourceMgr.getShader("ssgi_denoise");
-    m_ssgiTemporalShader = resourceMgr.getShader("ssgi_temporal");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void SsgiPass::shutdown() {
     destroyBaseRhiResources();
     destroyUpsampleRhiResources();
+    destroyTemporalRhiResources();
     destroyNoiseTextureView();
     m_ssgiDenoiseShader = nullptr;
-    m_ssgiTemporalShader = nullptr;
     m_noiseTexture = {};
 }
 
@@ -66,7 +65,7 @@ void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
 
     renderSsgiBase(ctx, settings, targets);
     renderSsgiUpsample(ctx, targets);
-    const bool temporalActive = settings.ssgi.temporalEnabled && m_ssgiTemporalShader != nullptr;
+    const bool temporalActive = settings.ssgi.temporalEnabled;
     if (temporalActive) {
         renderSsgiTemporal(ctx, settings.ssgi, targets);
     }
@@ -758,11 +757,27 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
 
 void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& ssgi,
                                   DeferredRenderTargets& targets) {
-    if (m_ssgiTemporalShader == nullptr) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureSsgiTemporalTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureSsgiHistoryTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureVelocityTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureHistoryDepthTextureViews(*ctx.shared->rhiDevice)) {
         return;
     }
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSsgiTemporalTextureViews(*ctx.shared->rhiDevice)) {
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    const std::array<RhiTextureViewHandle, 7> views = {
+        targets.ssgiTextureViewHandle(),
+        targets.ssgiHistoryTexturePrevViewHandle(),
+        targets.velocityTextureViewHandle(),
+        targets.depthTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),
+        targets.historyDepthTexturePrevViewHandle(),
+        targets.ssgiMomentsHistoryTexturePrevViewHandle()
+    };
+    if (!ensureTemporalRhiPipeline(rhiDevice) || !ensureTemporalBindGroup(rhiDevice, views)) {
         return;
     }
 
@@ -793,54 +808,209 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     renderingInfo.colorAttachments = colorAttachments;
     renderingInfo.colorAttachmentCount = 2u;
 
-    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_ssgiTemporalShader->use();
-    m_ssgiTemporalShader->setInt("uCurrentTex", 0);
-    m_ssgiTemporalShader->setInt("uHistoryTex", 1);
-    m_ssgiTemporalShader->setInt("uVelocityTex", 2);
-    m_ssgiTemporalShader->setInt("uDepthTex", 3);
-    m_ssgiTemporalShader->setInt("uNormalAoTex", 4);
-    m_ssgiTemporalShader->setInt("uHistoryDepthTex", 5);
-    m_ssgiTemporalShader->setInt("uHistoryMomentsTex", 6);
-    m_ssgiTemporalShader->setVec2("uScreenSize",
-        glm::vec2(static_cast<float>(std::max(1, targets.width())),
-                  static_cast<float>(std::max(1, targets.height()))));
-    m_ssgiTemporalShader->setFloat("uHistoryWeight", ssgi.historyWeight);
-    m_ssgiTemporalShader->setFloat("uNear", ctx.camera.nearPlane);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiHistoryTexturePrevHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.velocityTextureHandle()));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyDepthTexturePrevHandle()));
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiMomentsHistoryTexturePrevHandle()));
-
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiTemporalShader);
-
-    for (int i = 6; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE0);
-
+    const glm::vec4 pushConstants(
+        static_cast<float>(std::max(1, targets.width())),
+        static_cast<float>(std::max(1, targets.height())),
+        ssgi.historyWeight,
+        ctx.camera.nearPlane);
+    commandList.setGraphicsPipeline(m_temporalPipeline);
+    commandList.setBindGroup(0u, m_temporalBindGroup);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
     targets.copySsgiTemporalToHistory(rhiDevice);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+}
+
+bool SsgiPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_temporalRhiDevice != nullptr && m_temporalRhiDevice != &rhiDevice) {
+        destroyTemporalRhiResources();
+    }
+    if (m_temporalPipeline.isValid()) {
+        return true;
+    }
+    m_temporalRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ssgi_temporal.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "SsgiTemporal.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_temporalVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "SsgiTemporal.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_temporalFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_temporalVertexShader.isValid() || !m_temporalFragmentShader.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    auto createSampler = [&](const RhiFilter filter) {
+        RhiSamplerDesc samplerDesc;
+        samplerDesc.minFilter = filter;
+        samplerDesc.magFilter = filter;
+        samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+        samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+        return rhiDevice.createSampler(samplerDesc);
+    };
+    m_temporalNearestSampler = createSampler(RhiFilter::Nearest);
+    m_temporalLinearSampler = createSampler(RhiFilter::Linear);
+    if (!m_temporalNearestSampler.isValid() || !m_temporalLinearSampler.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "SsgiTemporal.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 7u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_temporalBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_temporalBindGroupLayout.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "SsgiTemporal.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_temporalBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_temporalPipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_temporalPipelineLayout.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "SsgiTemporal.Pipeline";
+    pipelineDesc.vertexShader = m_temporalVertexShader;
+    pipelineDesc.fragmentShader = m_temporalFragmentShader;
+    pipelineDesc.layout = m_temporalPipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    pipelineDesc.blend.attachments.push_back({});
+    m_temporalPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_temporalPipeline.isValid()) {
+        destroyTemporalRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool SsgiPass::ensureTemporalBindGroup(
+    RhiDevice& rhiDevice,
+    const std::array<RhiTextureViewHandle, 7>& views) {
+    if (!ensureTemporalRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_temporalBindGroup.isValid() && sameTextureViews(m_temporalBoundViews, views)) {
+        return true;
+    }
+
+    destroyTemporalBindGroup();
+    const RhiSamplerHandle samplers[7] = {
+        m_temporalNearestSampler,
+        m_temporalLinearSampler,
+        m_temporalNearestSampler,
+        m_temporalNearestSampler,
+        m_temporalNearestSampler,
+        m_temporalNearestSampler,
+        m_temporalLinearSampler
+    };
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_temporalBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = samplers[binding];
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_temporalBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_temporalBindGroup.isValid()) {
+        m_temporalBoundViews = {};
+        return false;
+    }
+
+    m_temporalBoundViews = views;
+    return true;
+}
+
+void SsgiPass::destroyTemporalBindGroup() {
+    if (m_temporalRhiDevice != nullptr && m_temporalBindGroup.isValid()) {
+        m_temporalRhiDevice->destroyBindGroup(m_temporalBindGroup);
+    }
+    m_temporalBindGroup = {};
+    m_temporalBoundViews = {};
+}
+
+void SsgiPass::destroyTemporalRhiResources() {
+    destroyTemporalBindGroup();
+    if (m_temporalRhiDevice != nullptr) {
+        if (m_temporalPipeline.isValid()) {
+            m_temporalRhiDevice->destroyPipeline(m_temporalPipeline);
+        }
+        if (m_temporalVertexShader.isValid()) {
+            m_temporalRhiDevice->destroyShader(m_temporalVertexShader);
+        }
+        if (m_temporalFragmentShader.isValid()) {
+            m_temporalRhiDevice->destroyShader(m_temporalFragmentShader);
+        }
+        if (m_temporalPipelineLayout.isValid()) {
+            m_temporalRhiDevice->destroyPipelineLayout(m_temporalPipelineLayout);
+        }
+        if (m_temporalBindGroupLayout.isValid()) {
+            m_temporalRhiDevice->destroyBindGroupLayout(m_temporalBindGroupLayout);
+        }
+        if (m_temporalNearestSampler.isValid()) {
+            m_temporalRhiDevice->destroySampler(m_temporalNearestSampler);
+        }
+        if (m_temporalLinearSampler.isValid()) {
+            m_temporalRhiDevice->destroySampler(m_temporalLinearSampler);
+        }
+    }
+
+    m_temporalPipeline = {};
+    m_temporalVertexShader = {};
+    m_temporalFragmentShader = {};
+    m_temporalPipelineLayout = {};
+    m_temporalBindGroupLayout = {};
+    m_temporalNearestSampler = {};
+    m_temporalLinearSampler = {};
+    m_temporalRhiDevice = nullptr;
 }
