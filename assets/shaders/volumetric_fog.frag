@@ -1,85 +1,131 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uDepthTex;
-uniform sampler2D uSkyCaptureTex;
-uniform sampler2D uNoiseTex;
-uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch/textureSize
-uniform sampler2D uShadowColorTex;
-uniform sampler3D uAtmosphereLut;
-uniform mat4 uInvViewProj;
-uniform vec2 uJitter;
-uniform mat4 uShadowViewProj;
-uniform mat4 uShadowModelView;
-uniform mat4 uShadowProjection;
-uniform mat4 uShadowProjectionInverse;
-uniform vec3 uCameraPos;
-uniform vec3 uSunDirection;
-uniform vec3 uShadowLightDirection;
-uniform vec3 uSunLightColor;
-uniform vec3 uMoonLightColor;
-uniform vec3 uHorizonScatterColor;
-uniform float uSkyIntensity;
-uniform float uAerialStrength;
-uniform float uHorizonScatterStrength;
-uniform float uVolumetricFogStrength;
-uniform float uVolumetricBaseDensity;
-uniform float uVolumetricMaxDistance;
-uniform float uSkyWetness;
-uniform float uWeatherStorm; // DerivativeMain BiomeSandstorm: desert storm intensity
-uniform float uLightningFlash;
-uniform float uShadowDistance;
-uniform float uShadowExtent;
-uniform float uShadowTexelWorldSize;
-uniform float uShadowConstantBias;
-uniform float uShadowSlopeBias;
-uniform float uCloudCoverage;
-uniform float uCloudDensity;
-uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
-uniform float uCloudHeight;
-uniform float uCloudThickness;
-uniform float uCloudWetness;        // cloud wetness for density modulation
+layout(binding = 0) uniform sampler2D uDepthTex;
+layout(binding = 1) uniform sampler2D uSkyCaptureTex;
+layout(binding = 2) uniform sampler2D uNoiseTex;
+layout(binding = 3) uniform sampler2D uShadowMapRaw;
+layout(binding = 4) uniform sampler2D uShadowColorTex;
+layout(binding = 5) uniform sampler3D uAtmosphereLut;
+layout(binding = 6) uniform sampler2DArrayShadow uCsmShadowMap;
+layout(binding = 7) uniform sampler2DArray uCsmShadowDepthRaw;
+layout(binding = 8) uniform sampler2DArrayShadow uCsmShadowDepthAll;
+layout(binding = 9) uniform sampler2DArray uCsmShadowDepthAllRaw;
+layout(binding = 10) uniform sampler2DArray uCsmShadowColor0;
+layout(binding = 11) uniform sampler2DArray uCsmShadowColor1;
 
-// Planar cloud uniforms (for cloud shadow projection to cirrus layer)
-uniform float uPlanarCloudCoverage;
-uniform float uPlanarCloudDensity;
-uniform float uPlanarCloudAltitude;
-uniform int uShadowsEnabled;
-uniform int uVolumetricLightEnabled; // DerivativeMain VOLUMETRIC_LIGHT: base haze (airDensity)
-uniform int uVolumetricFogEnabled;
-uniform int uShadowLightMode;
-uniform float uTime;
-uniform float uCloudTimeScale;
-uniform bool uNoiseEnabled;
-uniform int uVolumetricDebugMode;
-uniform int uVolumetricSkyRayEnabled;
-uniform int uVolumetricTimeFadeEnabled; // DerivativeMain TIME_FADE toggle
-uniform int uVolumetricQualityTier; // DerivativeMain FOG_TYPE: 0=Low, 1=Medium, 2=High, 3=Ultra
-uniform int uVolumetricFogSamples; // DerivativeMain VOLUMETRIC_FOG_SAMPLES: march step count (default 20)
-uniform int uVolumetricStaticJitter; // 1 = freeze jitter for stable debug
-uniform int uFrameIndex;
-uniform float uVolumetricShadowBiasScale; // bias multiplier for A/B testing (default 1.0)
+#define MECRAFT_CSM_CASCADE_COUNT 4
+struct CsmCascade {
+    mat4 viewProj;
+    float splitNear;
+    float splitFar;
+    float texelWorldSize;
+    float resolutionScale;
+    float depthExtent;
+};
+#define MECRAFT_SHADOW_CASCADE_TYPE_DEFINED 1
 
-// Underwater volumetric light (DerivativeMain UW_VOLUMETRIC_LIGHT)
-uniform int uIsEyeInWater;
-uniform int uUwVolumetricLightEnabled; // DerivativeMain UW_VOLUMETRIC_LIGHT toggle
-uniform vec3 uWaterAbsorption; // RGB absorption coefficients (default 0.4, 0.14, 0.08)
-uniform float uUnderwaterVolumetricLightStrength; // DerivativeMain UW_VOLUMETRIC_LIGHT_STRENGTH
+layout(std140, binding = 12) uniform VolumetricFogParams {
+    mat4 pInvViewProj;
+    mat4 pShadowViewProj;
+    mat4 pShadowModelView;
+    mat4 pShadowProjection;
+    mat4 pShadowProjectionInverse;
+    CsmCascade pCsmCascades[MECRAFT_CSM_CASCADE_COUNT];
+    vec4 pCameraPosSkyIntensity;
+    vec4 pJitterTimeMoonFlux;
+    vec4 pSunDirection;
+    vec4 pShadowLightDirection;
+    vec4 pSunLightColor;
+    vec4 pMoonLightColor;
+    vec4 pHorizonScatterColor;
+    vec4 pAtmosphere;
+    vec4 pFog;
+    vec4 pShadow0;
+    vec4 pShadow1;
+    vec4 pCloud0;
+    vec4 pCloud1;
+    vec4 pCloudDynamicWeather;
+    vec4 pWater;
+    vec4 pVFog0;
+    vec4 pVFog1;
+    ivec4 pFlags0;
+    ivec4 pFlags1;
+    ivec4 pFlags2;
+    ivec4 pFlags3;
+};
 
-// DerivativeMain-style VFog independent profile (decoupled from weather)
-uniform float uVFogCenterHeight;   // SEA_LEVEL: y-level where fog is densest (default 63.0)
-uniform float uVFogHeightSpread;   // High/Ultra falloff denominator: 100 -> exponent 0.01
-uniform float uVFogNoiseScale;     // noise sampling scale for structured fog (default 0.04)
-uniform float uVFogLightStrength;  // DerivativeMain VOLUMETRIC_LIGHT_STRENGTH (default 0.2)
-uniform float uVFogDensityScale;   // user density multiplier / volFogDensity (default 1.0)
+#define uInvViewProj pInvViewProj
+#define uShadowViewProj pShadowViewProj
+#define uShadowModelView pShadowModelView
+#define uShadowProjection pShadowProjection
+#define uShadowProjectionInverse pShadowProjectionInverse
+#define uCsmCascades pCsmCascades
+#define uCameraPos pCameraPosSkyIntensity.xyz
+#define uSkyIntensity pCameraPosSkyIntensity.w
+#define uJitter pJitterTimeMoonFlux.xy
+#define uTime pJitterTimeMoonFlux.z
+#define uMoonPhaseFlux pJitterTimeMoonFlux.w
+#define uSunDirection pSunDirection.xyz
+#define uShadowLightDirection pShadowLightDirection.xyz
+#define uSunLightColor pSunLightColor.xyz
+#define uMoonLightColor pMoonLightColor.xyz
+#define uHorizonScatterColor pHorizonScatterColor.xyz
+#define uAerialStrength pAtmosphere.x
+#define uHorizonScatterStrength pAtmosphere.y
+#define uSkyWetness pAtmosphere.z
+#define uWeatherStorm pAtmosphere.w
+#define uVolumetricFogStrength pFog.x
+#define uVolumetricBaseDensity pFog.y
+#define uVolumetricMaxDistance pFog.z
+#define uLightningFlash pFog.w
+#define uShadowDistance pShadow0.x
+#define uShadowExtent pShadow0.y
+#define uShadowTexelWorldSize pShadow0.z
+#define uShadowConstantBias pShadow0.w
+#define uShadowSlopeBias pShadow1.x
+#define uVolumetricShadowBiasScale pShadow1.y
+#define uCloudCoverage pCloud0.x
+#define uCloudDensity pCloud0.y
+#define uCloudHeight pCloud0.z
+#define uCloudThickness pCloud0.w
+#define uCloudWetness pCloud1.x
+#define uPlanarCloudCoverage pCloud1.y
+#define uPlanarCloudDensity pCloud1.z
+#define uPlanarCloudAltitude pCloud1.w
+#define uCloudDynamicWeather pCloudDynamicWeather.xyz
+#define uCloudTimeScale pCloudDynamicWeather.w
+#define uWaterAbsorption pWater.xyz
+#define uUnderwaterVolumetricLightStrength pWater.w
+#define uVFogCenterHeight pVFog0.x
+#define uVFogHeightSpread pVFog0.y
+#define uVFogNoiseScale pVFog0.z
+#define uVFogLightStrength pVFog0.w
+#define uVFogDensityScale pVFog1.x
+#define uCloudShadowStrength pVFog1.y
+#define uCloudShadowScale pVFog1.z
+#define uCloudShadowSpeed pVFog1.w
+#define uCsmCascadeCount pFlags0.x
+#define uShadowsEnabled pFlags0.y
+#define uVolumetricLightEnabled pFlags0.z
+#define uVolumetricFogEnabled pFlags0.w
+#define uShadowLightMode pFlags1.x
+#define uVolumetricDebugMode pFlags1.z
+#define uVolumetricSkyRayEnabled pFlags1.w
+#define uVolumetricTimeFadeEnabled pFlags2.x
+#define uVolumetricQualityTier pFlags2.y
+#define uVolumetricFogSamples pFlags2.z
+#define uVolumetricStaticJitter pFlags2.w
+#define uFrameIndex pFlags3.x
+#define uIsEyeInWater pFlags3.y
+#define uUwVolumetricLightEnabled pFlags3.z
+#define uCloudShadowsEnabled pFlags3.w
 
-// Cloud shadow uniforms (shared with deferred_lighting)
-uniform int uCloudShadowsEnabled;
-uniform float uCloudShadowStrength;
-uniform float uCloudShadowScale;
-uniform float uCloudShadowSpeed;
+#define MECRAFT_SHADOW_EXTERNAL_UNIFORMS 1
+#define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS 1
+#define MECRAFT_CLOUD_NOISE_REQUIRED 1
 
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
@@ -150,23 +196,13 @@ vec3 reconstructWorldPosition(vec2 uv, float depth) {
     return world.xyz / max(world.w, 0.00001);
 }
 
-float hash13(vec3 p) {
-    p = fract(p * 0.1031);
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.x + p.y) * p.z);
-}
-
 vec3 vfogCurve3(vec3 x) {
     return x * x * (3.0 - 2.0 * x);
 }
 
 // DerivativeMain/lib/Head/Noise.inc Get3DNoiseSmooth().
-// Mecraft adaptation: use uNoiseTex and hash fallback when the shaderpack noise texture is unavailable.
+// Mecraft adaptation: sample the shaderpack noise texture through the RHI resource binding.
 float get3DNoiseSmooth(vec3 position) {
-    if (!uNoiseEnabled) {
-        return hash13(position);
-    }
-
     vec3 p = floor(position);
     vec3 b = vfogCurve3(position - p);
     vec2 uv = p.xy + b.xy + 97.0 * p.z;
@@ -668,9 +704,7 @@ void main() {
         // DerivativeMain/world0/composite.fsh computes the half-resolution fog
         // seed as: texel = ivec2(gl_FragCoord.xy); texel *= 2; texel & 255.
         ivec2 noiseTexel = (ivec2(gl_FragCoord.xy) * 2) & ivec2(255);
-        float seed = uNoiseEnabled
-            ? texelFetch(uNoiseTex, noiseTexel, 0).a
-            : hash13(vec3(gl_FragCoord.xy, 17.0));
+        float seed = texelFetch(uNoiseTex, noiseTexel, 0).a;
         const float PHI1 = 1.61803398874;
         jitter = fract(seed + float(uFrameIndex) / PHI1);
     }

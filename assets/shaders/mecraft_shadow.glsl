@@ -13,6 +13,7 @@
 #define MECRAFT_CSM_CASCADE_COUNT 4
 #endif
 
+#ifndef MECRAFT_SHADOW_CASCADE_TYPE_DEFINED
 struct CsmCascade {
     mat4 viewProj;
     float splitNear;
@@ -21,7 +22,9 @@ struct CsmCascade {
     float resolutionScale;
     float depthExtent;
 };
+#endif
 
+#ifndef MECRAFT_SHADOW_EXTERNAL_UNIFORMS
 uniform int uCsmCascadeCount;
 uniform CsmCascade uCsmCascades[MECRAFT_CSM_CASCADE_COUNT];
 
@@ -33,6 +36,7 @@ uniform sampler2DArrayShadow uCsmShadowDepthAll;   // shadowtex0: depth includin
 uniform sampler2DArray uCsmShadowDepthAllRaw;      // shadowtex0: depth including water (raw)
 uniform sampler2DArray uCsmShadowColor0;           // shadowcolor0: RGB tint/caustics, A transparent flag
 uniform sampler2DArray uCsmShadowColor1;           // shadowcolor1: RG normal, B skylight, A water height
+#endif
 #endif
 #endif
 

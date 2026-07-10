@@ -12,7 +12,6 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class RhiDevice;
-class Shader;
 
 namespace shadow { class ShadowRenderer; }
 
@@ -27,7 +26,7 @@ public:
 
     /// Check if all required shaders are loaded.
     [[nodiscard]] bool hasShaders() const {
-        return m_volumetricFogShader != nullptr;
+        return m_resourceMgr != nullptr;
     }
 
     /// Check if temporal shader is available.
@@ -61,11 +60,35 @@ private:
                                  const std::array<RhiTextureViewHandle, 5>& views);
     void destroyTemporalBindGroup();
     void destroyTemporalRhiResources();
+    bool ensureFogRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureFogBindGroup(RhiDevice& rhiDevice,
+                            const std::array<RhiTextureViewHandle, 12>& views);
+    bool ensureFogNoiseTextureView(RhiDevice& rhiDevice);
+    void destroyFogBindGroup();
+    void destroyFogRhiResources();
+    void destroyFogNoiseTextureView();
 
-    Shader* m_volumetricFogShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     RhiTextureHandle m_noiseTexture;
+    RhiTextureViewHandle m_fogNoiseTextureView;
+    RhiDevice* m_fogNoiseViewDevice = nullptr;
+
+    RhiDevice* m_fogRhiDevice = nullptr;
+    RhiBufferHandle m_fogUniformBuffer;
+    RhiSamplerHandle m_fogNearestClampSampler;
+    RhiSamplerHandle m_fogLinearClampSampler;
+    RhiSamplerHandle m_fogLinearRepeatSampler;
+    RhiSamplerHandle m_fogNearestBorderSampler;
+    RhiSamplerHandle m_fogCompareBorderSampler;
+    RhiBindGroupLayoutHandle m_fogBindGroupLayout;
+    RhiPipelineLayoutHandle m_fogPipelineLayout;
+    RhiShaderHandle m_fogVertexShader;
+    RhiShaderHandle m_fogFragmentShader;
+    RhiPipelineHandle m_fogPipeline;
+    RhiBindGroupHandle m_fogBindGroup;
+    std::array<RhiTextureViewHandle, 12> m_fogBoundViews = {};
+
     RhiDevice* m_compositeRhiDevice = nullptr;
     RhiSamplerHandle m_compositeNearestSampler;
     RhiSamplerHandle m_compositeLinearSampler;

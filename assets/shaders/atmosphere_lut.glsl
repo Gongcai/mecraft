@@ -247,7 +247,9 @@ vec3 atmGetSkyRadianceForLight(float eyeAltitude, vec3 viewRay, vec3 lightDirect
 
 // Moon brightness factor — scales moon contribution based on moon phase.
 // Must be set by the calling shader or C++ uniform binding.
+#ifndef MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS
 uniform float uMoonPhaseFlux;
+#endif
 
 // Combined sky radiance for both sun and moon, matching DerivativeMain's GetSkyRadiance.
 // Returns sky radiance in DerivativeMain's irradiance convention (* 20.0).
