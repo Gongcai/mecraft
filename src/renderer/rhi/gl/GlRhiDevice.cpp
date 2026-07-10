@@ -174,6 +174,15 @@ template <typename Handle>
     return GL_CLAMP_TO_EDGE;
 }
 
+[[nodiscard]] std::array<GLfloat, 4> toGlBorderColor(const RhiBorderColor color) {
+    switch (color) {
+        case RhiBorderColor::TransparentBlack: return {0.0f, 0.0f, 0.0f, 0.0f};
+        case RhiBorderColor::OpaqueBlack: return {0.0f, 0.0f, 0.0f, 1.0f};
+        case RhiBorderColor::OpaqueWhite: return {1.0f, 1.0f, 1.0f, 1.0f};
+    }
+    return {0.0f, 0.0f, 0.0f, 0.0f};
+}
+
 [[nodiscard]] GLenum toGlCompareOp(const RhiCompareOp op) {
     switch (op) {
         case RhiCompareOp::Never: return GL_NEVER;
@@ -1775,6 +1784,8 @@ RhiSamplerHandle GlRhiDevice::createSampler(const RhiSamplerDesc& desc) {
     glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, toGlAddressMode(desc.addressU));
     glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, toGlAddressMode(desc.addressV));
     glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, toGlAddressMode(desc.addressW));
+    const std::array<GLfloat, 4> borderColor = toGlBorderColor(desc.borderColor);
+    glSamplerParameterfv(sampler, GL_TEXTURE_BORDER_COLOR, borderColor.data());
     if (desc.compareEnabled) {
         glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
         glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_FUNC, toGlCompareOp(desc.compareOp));

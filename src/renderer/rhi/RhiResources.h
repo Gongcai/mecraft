@@ -51,6 +51,7 @@ struct RhiSamplerDesc {
     RhiAddressMode addressU = RhiAddressMode::ClampToEdge;
     RhiAddressMode addressV = RhiAddressMode::ClampToEdge;
     RhiAddressMode addressW = RhiAddressMode::ClampToEdge;
+    RhiBorderColor borderColor = RhiBorderColor::TransparentBlack;
     float maxAnisotropy = 1.0f;
     bool compareEnabled = false;
     RhiCompareOp compareOp = RhiCompareOp::LessOrEqual;

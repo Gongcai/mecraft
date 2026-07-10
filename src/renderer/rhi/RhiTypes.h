@@ -115,6 +115,12 @@ enum class RhiAddressMode {
     ClampToBorder
 };
 
+enum class RhiBorderColor {
+    TransparentBlack,
+    OpaqueBlack,
+    OpaqueWhite
+};
+
 enum class RhiCompareOp {
     Never,
     Less,
