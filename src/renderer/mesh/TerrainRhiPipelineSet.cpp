@@ -22,6 +22,9 @@ constexpr std::array<uint32_t, 7> kGBufferTextureBindings = {
 constexpr std::array<uint32_t, 10> kTransparentTextureBindings = {
     0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 14u
 };
+constexpr std::array<uint32_t, 9> kWaterTextureBindings = {
+    0u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u
+};
 
 template <typename Handle>
 bool sameHandle(const Handle lhs, const Handle rhs) {
@@ -79,6 +82,28 @@ struct alignas(16) TerrainLitParams {
 static_assert(sizeof(TerrainLitParams) == 480u,
               "Terrain lit parameters must match the std140 shader block");
 
+struct alignas(16) TerrainWaterParams {
+    glm::mat4 view = glm::mat4(1.0f);
+    glm::mat4 viewProj = glm::mat4(1.0f);
+    glm::mat4 invViewProj = glm::mat4(1.0f);
+    glm::vec4 cameraNear = glm::vec4(0.0f);
+    glm::vec4 absorptionFar = glm::vec4(0.0f);
+    glm::vec4 sunDirectionAnimation = glm::vec4(0.0f);
+    glm::vec4 moonDirectionTime = glm::vec4(0.0f);
+    glm::vec4 sunLightSkyIntensity = glm::vec4(0.0f);
+    glm::vec4 moonLightVisibility = glm::vec4(0.0f);
+    glm::vec4 skyAmbientWeather = glm::vec4(0.0f);
+    glm::vec4 wetness = glm::vec4(0.0f);
+    glm::vec4 waveParams = glm::vec4(0.0f);
+    glm::vec4 waterLayers = glm::vec4(0.0f);
+    glm::ivec4 controlFlags0 = glm::ivec4(0);
+    glm::ivec4 controlFlags1 = glm::ivec4(0);
+    glm::ivec4 controlFlags2 = glm::ivec4(0);
+};
+
+static_assert(sizeof(TerrainWaterParams) == 400u,
+              "Terrain water parameters must match the std140 shader block");
+
 void setPackedTerrainVertexInput(RhiGraphicsPipelineDesc& pipelineDesc) {
     pipelineDesc.vertexInput.bindings.push_back({
         0u,
@@ -110,6 +135,7 @@ void TerrainRhiPipelineSet::init(RhiDevice& rhiDevice) {
 }
 
 void TerrainRhiPipelineSet::shutdown() {
+    destroyWaterResources();
     destroyTransparentResources();
     destroyShadowResources();
     destroyGBufferResources();
@@ -253,6 +279,56 @@ bool TerrainRhiPipelineSet::prepareTransparent(
         volumetricFogActive ? 1 : 0,
         heldBlockLightValue);
     commandList.updateBuffer(m_transparentParamsBuffer, 0u, &params, sizeof(params));
+    return true;
+}
+
+bool TerrainRhiPipelineSet::prepareWater(
+    RhiCommandList& commandList,
+    ResourceMgr& resourceMgr,
+    DeferredRenderTargets& targets,
+    const TerrainWaterFrameData& frame) {
+    if (m_rhiDevice == nullptr || !ensureWaterPipeline(resourceMgr) ||
+        !ensureWaterTextureViews(resourceMgr, targets) || !ensureWaterBindGroup()) {
+        return false;
+    }
+
+    const TextureAnimationInfo still = resourceMgr.getTextureAnimation("water_still");
+    const TextureAnimationInfo flow = resourceMgr.getTextureAnimation("water_flow");
+
+    TerrainWaterParams params;
+    params.view = frame.view;
+    params.viewProj = frame.viewProj;
+    params.invViewProj = frame.invViewProj;
+    params.cameraNear = glm::vec4(frame.cameraPos, frame.nearPlane);
+    params.absorptionFar = glm::vec4(0.4f, 0.14f, 0.08f, frame.farPlane);
+    params.sunDirectionAnimation = glm::vec4(frame.sunDirection, frame.animationTime);
+    params.moonDirectionTime = glm::vec4(frame.moonDirection, frame.shaderTime);
+    params.sunLightSkyIntensity = glm::vec4(frame.sunLightColor, frame.skyIntensity);
+    params.moonLightVisibility = glm::vec4(frame.moonLightColor, frame.moonVisibility);
+    params.skyAmbientWeather = glm::vec4(frame.skyAmbientColor, frame.weatherWetness);
+    params.wetness = glm::vec4(
+        frame.skyWetness,
+        frame.fogWetness,
+        frame.cloudWetness,
+        frame.surfaceWetness);
+    params.waveParams = glm::vec4(1.0f, 1.0f, 1.33f, 0.0f);
+    params.waterLayers = glm::vec4(
+        static_cast<float>(still.firstLayer),
+        static_cast<float>(std::max(1, still.frameCount)),
+        static_cast<float>(flow.firstLayer),
+        static_cast<float>(std::max(1, flow.frameCount)));
+    params.controlFlags0 = glm::ivec4(
+        frame.skyCaptureEnabled ? 1 : 0,
+        frame.compositeInputsEnabled ? 1 : 0,
+        frame.compositeInputsEnabled ? 1 : 0,
+        frame.depthSofteningEnabled ? 1 : 0);
+    params.controlFlags1 = glm::ivec4(
+        frame.volumetricFogActive ? 1 : 0,
+        static_cast<int>(frame.frameIndex & 0x7fffffffULL),
+        frame.freezeBias ? 1 : 0,
+        frame.rainSurfaceRipplesEnabled ? 1 : 0);
+    params.controlFlags2 = glm::ivec4(frame.eyeInWater ? 1 : 0, 0, 0, 0);
+    commandList.updateBuffer(m_waterParamsBuffer, 0u, &params, sizeof(params));
     return true;
 }
 
@@ -550,6 +626,326 @@ bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot,
     }
     m_gbufferViewTextures[slot] = texture;
     return true;
+}
+
+bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
+    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+    if (m_waterPipeline.isValid() && anisotropy == m_waterSamplerAnisotropy) {
+        return true;
+    }
+
+    destroyWaterResources();
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+    m_waterSamplerAnisotropy = anisotropy;
+
+    renderer::rhi::RhiShaderSourceOptions sourceOptions;
+    sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_WATER_MDI");
+    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/chunk_lit.vert",
+        sourceOptions);
+    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/water_composite.frag",
+        sourceOptions);
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        destroyWaterResources();
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "Terrain.Water.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_waterVertexShader = m_rhiDevice->createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "Terrain.Water.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_waterFragmentShader = m_rhiDevice->createShader(fragmentDesc);
+    if (!m_waterVertexShader.isValid() || !m_waterFragmentShader.isValid()) {
+        destroyWaterResources();
+        return false;
+    }
+
+    RhiBufferDesc paramsDesc;
+    paramsDesc.debugName = "Terrain.Water.Params";
+    paramsDesc.size = sizeof(TerrainWaterParams);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_waterParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
+    if (!m_waterParamsBuffer.isValid()) {
+        destroyWaterResources();
+        return false;
+    }
+
+    RhiSamplerDesc blockSamplerDesc;
+    blockSamplerDesc.minFilter = RhiFilter::Nearest;
+    blockSamplerDesc.magFilter = RhiFilter::Nearest;
+    blockSamplerDesc.mipmapMode = RhiMipmapMode::Linear;
+    blockSamplerDesc.addressU = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressV = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressW = RhiAddressMode::Repeat;
+    blockSamplerDesc.maxAnisotropy = m_waterSamplerAnisotropy;
+    m_waterBlockSampler = m_rhiDevice->createSampler(blockSamplerDesc);
+
+    RhiSamplerDesc linearClampDesc;
+    linearClampDesc.minFilter = RhiFilter::Linear;
+    linearClampDesc.magFilter = RhiFilter::Linear;
+    linearClampDesc.mipmapMode = RhiMipmapMode::Nearest;
+    m_waterLinearClampSampler = m_rhiDevice->createSampler(linearClampDesc);
+
+    RhiSamplerDesc linearRepeatDesc = linearClampDesc;
+    linearRepeatDesc.addressU = RhiAddressMode::Repeat;
+    linearRepeatDesc.addressV = RhiAddressMode::Repeat;
+    linearRepeatDesc.addressW = RhiAddressMode::Repeat;
+    m_waterLinearRepeatSampler = m_rhiDevice->createSampler(linearRepeatDesc);
+
+    RhiSamplerDesc nearestClampDesc;
+    nearestClampDesc.minFilter = RhiFilter::Nearest;
+    nearestClampDesc.magFilter = RhiFilter::Nearest;
+    nearestClampDesc.mipmapMode = RhiMipmapMode::Nearest;
+    m_waterNearestClampSampler = m_rhiDevice->createSampler(nearestClampDesc);
+    if (!m_waterBlockSampler.isValid() || !m_waterLinearClampSampler.isValid() ||
+        !m_waterLinearRepeatSampler.isValid() || !m_waterNearestClampSampler.isValid()) {
+        destroyWaterResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc metadataLayoutDesc;
+    metadataLayoutDesc.debugName = "Terrain.WaterMetadataLayout";
+    metadataLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::StorageBuffer,
+        rhiFlag(RhiShaderStage::Vertex),
+        1u
+    });
+    m_waterMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
+
+    RhiBindGroupLayoutDesc materialLayoutDesc;
+    materialLayoutDesc.debugName = "Terrain.WaterMaterialLayout";
+    for (const uint32_t binding : kWaterTextureBindings) {
+        materialLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    materialLayoutDesc.entries.push_back({
+        13u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_waterMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
+    if (!m_waterMetadataLayout.isValid() || !m_waterMaterialLayout.isValid()) {
+        destroyWaterResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Terrain.WaterPipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_waterMetadataLayout);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_waterMaterialLayout);
+    m_waterPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    if (!m_waterPipelineLayout.isValid()) {
+        destroyWaterResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Terrain.Water.Pipeline";
+    pipelineDesc.vertexShader = m_waterVertexShader;
+    pipelineDesc.fragmentShader = m_waterFragmentShader;
+    pipelineDesc.layout = m_waterPipelineLayout;
+    setPackedTerrainVertexInput(pipelineDesc);
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    m_waterPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    if (!m_waterPipeline.isValid()) {
+        destroyWaterResources();
+        return false;
+    }
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureWaterTextureViews(
+    ResourceMgr& resourceMgr,
+    DeferredRenderTargets& targets) {
+    return ensureWaterTextureView(
+               0u,
+               resourceMgr.getTextureArray().texture,
+               RhiTextureViewType::Texture2DArray,
+               RhiTextureFormat::Rgba8Unorm) &&
+           ensureWaterTextureView(
+               1u,
+               targets.depthTextureHandle(),
+               RhiTextureViewType::Texture2D,
+               RhiTextureFormat::Depth32Float) &&
+           ensureWaterTextureView(
+               2u,
+               targets.skyCaptureTextureHandle(),
+               RhiTextureViewType::Texture2D,
+               RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(
+               3u,
+               targets.sceneResolvedTextureHandle(),
+               RhiTextureViewType::Texture2D,
+               RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(
+               4u,
+               resourceMgr.getTexture2DHandle("shader_noise2d"),
+               RhiTextureViewType::Texture2D,
+               RhiTextureFormat::Rgba8Unorm) &&
+           ensureWaterTextureView(
+               5u,
+               targets.reflectionTextureHandle(),
+               RhiTextureViewType::Texture2D,
+               RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(
+               6u,
+               targets.atmosphereLutTextureHandle(),
+               RhiTextureViewType::Texture3D,
+               RhiTextureFormat::Rgba32Float) &&
+           ensureWaterTextureView(
+               7u,
+               targets.halfResTextureHandle(),
+               RhiTextureViewType::Texture2D,
+               RhiTextureFormat::Rgba16Float) &&
+           ensureWaterTextureView(
+               8u,
+               resourceMgr.getTexture2DHandle("shader_ripple_normal"),
+               RhiTextureViewType::Texture2D,
+               RhiTextureFormat::Rgba8Unorm);
+}
+
+bool TerrainRhiPipelineSet::ensureWaterBindGroup() {
+    bool viewsChanged = false;
+    for (size_t slot = 0u; slot < m_waterTextureViews.size(); ++slot) {
+        viewsChanged = viewsChanged || !sameHandle(m_waterBoundViews[slot], m_waterTextureViews[slot]);
+    }
+    if (m_waterBindGroup.isValid() && !viewsChanged) {
+        return true;
+    }
+
+    destroyWaterBindGroup();
+    RhiBindGroupDesc desc;
+    desc.layout = m_waterMaterialLayout;
+    for (size_t slot = 0u; slot < m_waterTextureViews.size(); ++slot) {
+        RhiBindGroupEntry entry;
+        entry.binding = kWaterTextureBindings[slot];
+        entry.resource.combinedTextureSampler.textureView = m_waterTextureViews[slot];
+        if (slot == 0u) {
+            entry.resource.combinedTextureSampler.sampler = m_waterBlockSampler;
+        } else if (slot == 1u) {
+            entry.resource.combinedTextureSampler.sampler = m_waterNearestClampSampler;
+        } else if (slot == 4u || slot == 8u) {
+            entry.resource.combinedTextureSampler.sampler = m_waterLinearRepeatSampler;
+        } else {
+            entry.resource.combinedTextureSampler.sampler = m_waterLinearClampSampler;
+        }
+        desc.entries.push_back(entry);
+    }
+    RhiBindGroupEntry paramsEntry;
+    paramsEntry.binding = 13u;
+    paramsEntry.resource.buffer.buffer = m_waterParamsBuffer;
+    paramsEntry.resource.buffer.range = sizeof(TerrainWaterParams);
+    desc.entries.push_back(paramsEntry);
+    m_waterBindGroup = m_rhiDevice->createBindGroup(desc);
+    if (!m_waterBindGroup.isValid()) {
+        return false;
+    }
+    m_waterBoundViews = m_waterTextureViews;
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureWaterTextureView(
+    const size_t slot,
+    const RhiTextureHandle texture,
+    const RhiTextureViewType viewType,
+    const RhiTextureFormat format) {
+    if (m_rhiDevice == nullptr || slot >= m_waterTextureViews.size() || !texture.isValid()) {
+        return false;
+    }
+    if (sameHandle(m_waterViewTextures[slot], texture) && m_waterTextureViews[slot].isValid()) {
+        return true;
+    }
+    if (m_waterTextureViews[slot].isValid()) {
+        m_rhiDevice->destroyTextureView(m_waterTextureViews[slot]);
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = texture;
+    desc.viewType = viewType;
+    desc.format = format;
+    desc.mipCount = kRhiRemainingMipLevels;
+    desc.layerCount = kRhiRemainingArrayLayers;
+    m_waterTextureViews[slot] = m_rhiDevice->createTextureView(desc);
+    if (!m_waterTextureViews[slot].isValid()) {
+        m_waterViewTextures[slot] = {};
+        return false;
+    }
+    m_waterViewTextures[slot] = texture;
+    return true;
+}
+
+void TerrainRhiPipelineSet::destroyWaterBindGroup() {
+    if (m_rhiDevice != nullptr && m_waterBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_waterBindGroup);
+    }
+    m_waterBindGroup = {};
+    m_waterBoundViews = {};
+}
+
+void TerrainRhiPipelineSet::destroyWaterTextureViews() {
+    if (m_rhiDevice != nullptr) {
+        for (RhiTextureViewHandle& view : m_waterTextureViews) {
+            if (view.isValid()) {
+                m_rhiDevice->destroyTextureView(view);
+            }
+            view = {};
+        }
+    }
+    m_waterViewTextures = {};
+}
+
+void TerrainRhiPipelineSet::destroyWaterResources() {
+    destroyWaterBindGroup();
+    destroyWaterTextureViews();
+    if (m_rhiDevice != nullptr) {
+        if (m_waterPipeline.isValid()) m_rhiDevice->destroyPipeline(m_waterPipeline);
+        if (m_waterPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_waterPipelineLayout);
+        if (m_waterMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_waterMaterialLayout);
+        if (m_waterMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_waterMetadataLayout);
+        if (m_waterFragmentShader.isValid()) m_rhiDevice->destroyShader(m_waterFragmentShader);
+        if (m_waterVertexShader.isValid()) m_rhiDevice->destroyShader(m_waterVertexShader);
+        if (m_waterParamsBuffer.isValid()) m_rhiDevice->destroyBuffer(m_waterParamsBuffer);
+        if (m_waterBlockSampler.isValid()) m_rhiDevice->destroySampler(m_waterBlockSampler);
+        if (m_waterLinearClampSampler.isValid()) m_rhiDevice->destroySampler(m_waterLinearClampSampler);
+        if (m_waterLinearRepeatSampler.isValid()) m_rhiDevice->destroySampler(m_waterLinearRepeatSampler);
+        if (m_waterNearestClampSampler.isValid()) m_rhiDevice->destroySampler(m_waterNearestClampSampler);
+    }
+    m_waterPipeline = {};
+    m_waterPipelineLayout = {};
+    m_waterMaterialLayout = {};
+    m_waterMetadataLayout = {};
+    m_waterFragmentShader = {};
+    m_waterVertexShader = {};
+    m_waterParamsBuffer = {};
+    m_waterBlockSampler = {};
+    m_waterLinearClampSampler = {};
+    m_waterLinearRepeatSampler = {};
+    m_waterNearestClampSampler = {};
+    m_waterSamplerAnisotropy = 1.0f;
 }
 
 bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) {

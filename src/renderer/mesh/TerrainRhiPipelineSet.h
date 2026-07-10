@@ -23,6 +23,37 @@ struct TerrainShadowFrameData {
     int passMode = 0;
 };
 
+struct TerrainWaterFrameData {
+    glm::mat4 view = glm::mat4(1.0f);
+    glm::mat4 viewProj = glm::mat4(1.0f);
+    glm::mat4 invViewProj = glm::mat4(1.0f);
+    glm::vec3 cameraPos = glm::vec3(0.0f);
+    float nearPlane = 0.1f;
+    float farPlane = 1000.0f;
+    float animationTime = 0.0f;
+    float shaderTime = 0.0f;
+    glm::vec3 sunDirection = glm::vec3(0.0f);
+    glm::vec3 moonDirection = glm::vec3(0.0f);
+    glm::vec3 sunLightColor = glm::vec3(0.0f);
+    glm::vec3 moonLightColor = glm::vec3(0.0f);
+    glm::vec3 skyAmbientColor = glm::vec3(0.0f);
+    float skyIntensity = 1.0f;
+    float moonVisibility = 0.0f;
+    float weatherWetness = 0.0f;
+    float skyWetness = 0.0f;
+    float fogWetness = 0.0f;
+    float cloudWetness = 0.0f;
+    float surfaceWetness = 0.0f;
+    uint64_t frameIndex = 0u;
+    bool skyCaptureEnabled = false;
+    bool compositeInputsEnabled = false;
+    bool depthSofteningEnabled = false;
+    bool volumetricFogActive = false;
+    bool freezeBias = false;
+    bool rainSurfaceRipplesEnabled = false;
+    bool eyeInWater = false;
+};
+
 class TerrainRhiPipelineSet {
 public:
     TerrainRhiPipelineSet();
@@ -45,6 +76,10 @@ public:
                             const TerrainRenderSettings& settings,
                             int heldBlockLightValue,
                             bool volumetricFogShadersReady);
+    bool prepareWater(RhiCommandList& commandList,
+                      ResourceMgr& resourceMgr,
+                      DeferredRenderTargets& targets,
+                      const TerrainWaterFrameData& frame);
 
     [[nodiscard]] RhiBindGroupLayoutHandle metadataLayout() const { return m_metadataLayout; }
     [[nodiscard]] RhiPipelineHandle gbufferOpaquePipeline() const { return m_gbufferOpaquePipeline; }
@@ -59,11 +94,15 @@ public:
     [[nodiscard]] RhiBindGroupLayoutHandle transparentMetadataLayout() const { return m_transparentMetadataLayout; }
     [[nodiscard]] RhiPipelineHandle transparentPipeline() const { return m_transparentPipeline; }
     [[nodiscard]] RhiBindGroupHandle transparentBindGroup() const { return m_transparentBindGroup; }
+    [[nodiscard]] RhiBindGroupLayoutHandle waterMetadataLayout() const { return m_waterMetadataLayout; }
+    [[nodiscard]] RhiPipelineHandle waterPipeline() const { return m_waterPipeline; }
+    [[nodiscard]] RhiBindGroupHandle waterBindGroup() const { return m_waterBindGroup; }
 
 private:
     static constexpr size_t kGBufferTextureSlotCount = 7u;
     static constexpr size_t kShadowTextureSlotCount = 4u;
     static constexpr size_t kTransparentTextureSlotCount = 10u;
+    static constexpr size_t kWaterTextureSlotCount = 9u;
 
     bool ensureGBufferPipeline(ResourceMgr& resourceMgr);
     bool ensureGBufferTextureViews(ResourceMgr& resourceMgr);
@@ -94,6 +133,17 @@ private:
     void destroyTransparentBindGroup();
     void destroyTransparentTextureViews();
     void destroyTransparentResources();
+    bool ensureWaterPipeline(ResourceMgr& resourceMgr);
+    bool ensureWaterTextureViews(ResourceMgr& resourceMgr,
+                                 DeferredRenderTargets& targets);
+    bool ensureWaterBindGroup();
+    bool ensureWaterTextureView(size_t slot,
+                                RhiTextureHandle texture,
+                                RhiTextureViewType viewType,
+                                RhiTextureFormat format);
+    void destroyWaterBindGroup();
+    void destroyWaterTextureViews();
+    void destroyWaterResources();
 
     RhiDevice* m_rhiDevice = nullptr;
     bool m_hasNormalMaps = false;
@@ -150,6 +200,23 @@ private:
     std::array<RhiTextureHandle, kTransparentTextureSlotCount> m_transparentViewTextures{};
     std::array<RhiTextureViewHandle, kTransparentTextureSlotCount> m_transparentTextureViews{};
     std::array<RhiTextureViewHandle, kTransparentTextureSlotCount> m_transparentBoundViews{};
+
+    float m_waterSamplerAnisotropy = 1.0f;
+    RhiBindGroupLayoutHandle m_waterMetadataLayout;
+    RhiBindGroupLayoutHandle m_waterMaterialLayout;
+    RhiPipelineLayoutHandle m_waterPipelineLayout;
+    RhiShaderHandle m_waterVertexShader;
+    RhiShaderHandle m_waterFragmentShader;
+    RhiPipelineHandle m_waterPipeline;
+    RhiBufferHandle m_waterParamsBuffer;
+    RhiBindGroupHandle m_waterBindGroup;
+    RhiSamplerHandle m_waterBlockSampler;
+    RhiSamplerHandle m_waterLinearClampSampler;
+    RhiSamplerHandle m_waterLinearRepeatSampler;
+    RhiSamplerHandle m_waterNearestClampSampler;
+    std::array<RhiTextureHandle, kWaterTextureSlotCount> m_waterViewTextures{};
+    std::array<RhiTextureViewHandle, kWaterTextureSlotCount> m_waterTextureViews{};
+    std::array<RhiTextureViewHandle, kWaterTextureSlotCount> m_waterBoundViews{};
 };
 
 #endif // MECRAFT_TERRAIN_RHI_PIPELINE_SET_H

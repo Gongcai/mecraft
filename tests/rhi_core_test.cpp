@@ -2115,6 +2115,131 @@ bool testGlRhiTerrainTransparentPipeline() {
     device.shutdown();
     return true;
 }
+
+bool testGlRhiTerrainWaterPipeline() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for water terrain pipeline")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_terrain_water_pipeline_test";
+    if (!requireTrue(device.init(deviceDesc),
+                     "OpenGL RHI device must initialize for water terrain pipeline")) {
+        return false;
+    }
+
+    renderer::rhi::RhiShaderSourceOptions sourceOptions;
+    sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_WATER_MDI");
+    const auto vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/chunk_lit.vert",
+        sourceOptions);
+    const auto fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/water_composite.frag",
+        sourceOptions);
+    if (!requireTrue(vertexSource.has_value() && fragmentSource.has_value(),
+                     "water terrain RHI shader sources must load")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiShaderDesc vertexShaderDesc;
+    vertexShaderDesc.debugName = "TerrainWater.Vertex";
+    vertexShaderDesc.stage = RhiShaderStage::Vertex;
+    vertexShaderDesc.source = vertexSource->c_str();
+    vertexShaderDesc.sourceSize = vertexSource->size();
+    const RhiShaderHandle vertexShader = device.createShader(vertexShaderDesc);
+
+    RhiShaderDesc fragmentShaderDesc;
+    fragmentShaderDesc.debugName = "TerrainWater.Fragment";
+    fragmentShaderDesc.stage = RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = fragmentSource->c_str();
+    fragmentShaderDesc.sourceSize = fragmentSource->size();
+    const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(),
+                     "water terrain RHI shaders must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc metadataLayoutDesc;
+    metadataLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::StorageBuffer,
+        rhiFlag(RhiShaderStage::Vertex),
+        1u
+    });
+    const RhiBindGroupLayoutHandle metadataLayout = device.createBindGroupLayout(metadataLayoutDesc);
+
+    RhiBindGroupLayoutDesc materialLayoutDesc;
+    constexpr std::array<uint32_t, 9> kTextureBindings = {
+        0u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u
+    };
+    for (const uint32_t binding : kTextureBindings) {
+        materialLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    materialLayoutDesc.entries.push_back({
+        13u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    const RhiBindGroupLayoutHandle materialLayout = device.createBindGroupLayout(materialLayoutDesc);
+    if (!requireTrue(metadataLayout.isValid() && materialLayout.isValid(),
+                     "water terrain bind group layouts must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.bindGroupLayouts.push_back(metadataLayout);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(materialLayout);
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(pipelineLayout.isValid(), "water terrain pipeline layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t) * 4u, RhiVertexInputRate::Vertex});
+    for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
+        pipelineDesc.vertexInput.attributes.push_back({
+            11u + attribute,
+            0u,
+            RhiVertexFormat::Uint,
+            attribute * static_cast<uint32_t>(sizeof(uint32_t))
+        });
+    }
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "water terrain RHI pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyBindGroupLayout(materialLayout);
+    device.destroyBindGroupLayout(metadataLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.shutdown();
+    return true;
+}
 } // namespace
 
 int main() {
@@ -2170,6 +2295,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiTerrainTransparentPipeline()) {
+        return 1;
+    }
+    if (!testGlRhiTerrainWaterPipeline()) {
         return 1;
     }
     return 0;

@@ -536,6 +536,11 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
             commandBytes,
             rhiFlag(RhiBufferUsage::Indirect),
             "WorldRenderBuffer.RhiTransparentIndirect") ||
+        !m_rhiWaterIndirectBuffer.init(
+            rhiDevice,
+            commandBytes,
+            rhiFlag(RhiBufferUsage::Indirect),
+            "WorldRenderBuffer.RhiWaterIndirect") ||
         !m_rhiMetadataBuffer.init(
             rhiDevice,
             metadataBytes,
@@ -626,6 +631,7 @@ void WorldRenderBuffer::shutdown() {
     m_rhiMetadataLayout = {};
     m_rhiMetadataBoundBuffer = {};
     m_rhiMetadataBuffer.shutdown();
+    m_rhiWaterIndirectBuffer.shutdown();
     m_rhiTransparentIndirectBuffer.shutdown();
     m_rhiCutoutIndirectBuffer.shutdown();
     m_rhiOpaqueIndirectBuffer.shutdown();
@@ -950,6 +956,42 @@ void WorldRenderBuffer::recordRhiTransparent(
         m_rhiTransparentIndirectBuffer.buffer(),
         0u,
         static_cast<uint32_t>(m_transparentCommands.size()),
+        sizeof(DrawArraysIndirectCommand));
+    ++m_glSubmitCount;
+}
+
+bool WorldRenderBuffer::prepareRhiWater(
+    RhiCommandList& commandList,
+    const RhiBindGroupLayoutHandle metadataLayout) {
+    if (m_rhiDevice == nullptr || !metadataLayout.isValid()) {
+        return false;
+    }
+    if (!m_waterCommands.empty() &&
+        !m_rhiWaterIndirectBuffer.write(
+            commandList,
+            0u,
+            m_waterCommands.data(),
+            m_waterCommands.size() * sizeof(DrawArraysIndirectCommand))) {
+        return false;
+    }
+    return ensureRhiMetadataBindGroup(metadataLayout);
+}
+
+void WorldRenderBuffer::recordRhiWater(
+    RhiCommandList& commandList,
+    const RhiPipelineHandle pipeline,
+    const RhiBindGroupHandle materialBindGroup) {
+    if (m_waterCommands.empty()) {
+        return;
+    }
+    commandList.setGraphicsPipeline(pipeline);
+    commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
+    commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setVertexBuffer(0u, m_rhiTransparentVertexBuffer.buffer(), 0u);
+    commandList.drawIndirect(
+        m_rhiWaterIndirectBuffer.buffer(),
+        0u,
+        static_cast<uint32_t>(m_waterCommands.size()),
         sizeof(DrawArraysIndirectCommand));
     ++m_glSubmitCount;
 }

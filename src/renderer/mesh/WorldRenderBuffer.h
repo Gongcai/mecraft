@@ -195,6 +195,11 @@ public:
     void recordRhiTransparent(RhiCommandList& commandList,
                               RhiPipelineHandle pipeline,
                               RhiBindGroupHandle materialBindGroup);
+    bool prepareRhiWater(RhiCommandList& commandList,
+                         RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiWater(RhiCommandList& commandList,
+                        RhiPipelineHandle pipeline,
+                        RhiBindGroupHandle materialBindGroup);
 
     void clearWaterCommands();
 
@@ -250,6 +255,7 @@ private:
     RhiGrowableBuffer m_rhiOpaqueIndirectBuffer;
     RhiGrowableBuffer m_rhiCutoutIndirectBuffer;
     RhiGrowableBuffer m_rhiTransparentIndirectBuffer;
+    RhiGrowableBuffer m_rhiWaterIndirectBuffer;
     RhiGrowableBuffer m_rhiMetadataBuffer;
     RhiBindGroupHandle m_rhiMetadataBindGroup;
     RhiBindGroupLayoutHandle m_rhiMetadataLayout;

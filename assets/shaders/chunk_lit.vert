@@ -17,8 +17,10 @@ layout (location = 13) in uint aPackedLightAoLayer;
 layout (location = 14) in uint aPackedTintAnim;
 #include "terrain_vertex_decode.glsl"
 
-#ifdef RHI_TERRAIN_LIT_MDI
+#if defined(RHI_TERRAIN_LIT_MDI)
 #include "terrain_lit_params.glsl"
+#elif defined(RHI_TERRAIN_WATER_MDI)
+#include "terrain_water_params.glsl"
 #else
 uniform mat4 view;
 uniform mat4 viewProj;
@@ -44,7 +46,7 @@ flat out float vMaterialKind;
 out vec2 vTintUV;
 
 void main() {
-#ifdef RHI_TERRAIN_LIT_MDI
+#if defined(RHI_TERRAIN_LIT_MDI) || defined(RHI_TERRAIN_WATER_MDI)
     TerrainVertexDecoded vertex = decodeTerrainPackedVertex(
         aPackedPos,
         aPackedUV,
@@ -61,9 +63,12 @@ void main() {
     vec4 localPos = vec4(vertex.pos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
 #endif
-#ifdef RHI_TERRAIN_LIT_MDI
+#if defined(RHI_TERRAIN_LIT_MDI)
     vec4 viewPos = rhiTerrainLitView * worldPos;
     gl_Position = rhiTerrainLitViewProj * worldPos;
+#elif defined(RHI_TERRAIN_WATER_MDI)
+    vec4 viewPos = rhiTerrainWaterView * worldPos;
+    gl_Position = rhiTerrainWaterViewProj * worldPos;
 #else
     vec4 viewPos = view * worldPos;
     gl_Position = viewProj * worldPos;

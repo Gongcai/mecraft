@@ -18,6 +18,18 @@ flat in float vTintKind;
 flat in float vMaterialKind;
 in vec2 vTintUV;
 
+#ifdef RHI_TERRAIN_WATER_MDI
+layout(binding = 0) uniform sampler2DArray texArray;
+layout(binding = 5) uniform sampler2D uOpaqueDepthTex;
+layout(binding = 6) uniform sampler2D uSkyCaptureTex;
+layout(binding = 7) uniform sampler2D uSceneColorTex;
+layout(binding = 8) uniform sampler2D uNoiseTex;
+layout(binding = 9) uniform sampler2D uReflectionTex;
+layout(binding = 10) uniform sampler3D uAtmosphereLut;
+layout(binding = 11) uniform sampler2D uVolumetricTex;
+layout(binding = 12) uniform sampler2D uRippleNormalTex;
+#include "terrain_water_params.glsl"
+#else
 uniform sampler2DArray texArray;
 uniform sampler2D uOpaqueDepthTex;
 uniform sampler2D uSceneColorTex;
@@ -64,6 +76,8 @@ uniform float uWaterStillFirstLayer;
 uniform float uWaterStillLayerCount;
 uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
+#define uWaterViewProj viewProj
+#endif
 
 out vec4 FragColor;
 
@@ -137,7 +151,7 @@ vec4 sampleDepthAwareVolumetric(vec2 uv) {
 }
 
 vec2 projectWorldUv(vec3 worldPos, out float projectedDepth) {
-    vec4 clip = viewProj * vec4(worldPos, 1.0);
+    vec4 clip = uWaterViewProj * vec4(worldPos, 1.0);
     vec3 ndc = clip.xyz / max(clip.w, 0.00001);
     projectedDepth = ndc.z * 0.5 + 0.5;
     return ndc.xy * 0.5 + 0.5;
