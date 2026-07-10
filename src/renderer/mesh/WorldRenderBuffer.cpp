@@ -1,5 +1,7 @@
 #include "WorldRenderBuffer.h"
 #include "../debug/RenderDebugLabels.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
 
 #include <glad/glad.h>
 
@@ -197,7 +199,8 @@ bool VertexRangeAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& ou
 }
 
 void VertexRangeAllocator::free(const GpuMeshRange& range) {
-    if (range.vertexCount == 0 || range.firstVertex + range.vertexCount > m_capacityVertices) {
+    if (range.vertexCount == 0 ||
+        static_cast<size_t>(range.firstVertex) + range.vertexCount > m_capacityVertices) {
         return;
     }
     if (m_liveAllocations.erase(range.generation) == 0) {
@@ -328,6 +331,137 @@ void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
 void VertexPoolAllocator::beginFrame() {
     m_expandCountThisFrame = 0;
     m_uploadedBytesThisFrame = 0;
+}
+
+// ---------------------------------------------------------------------------
+// RhiVertexPoolAllocator
+// ---------------------------------------------------------------------------
+
+RhiVertexPoolAllocator::RhiVertexPoolAllocator() = default;
+
+RhiVertexPoolAllocator::~RhiVertexPoolAllocator() {
+    shutdown();
+}
+
+bool RhiVertexPoolAllocator::init(RhiDevice& rhiDevice,
+                                  const size_t initialCapacityVertices,
+                                  const char* debugName) {
+    shutdown();
+    if (initialCapacityVertices == 0u ||
+        initialCapacityVertices > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
+        return false;
+    }
+
+    RhiBufferDesc desc;
+    desc.debugName = debugName;
+    desc.size = initialCapacityVertices * sizeof(PackedBlockVertex);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferSrc) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_buffer = rhiDevice.createBuffer(desc, nullptr, 0u);
+    if (!m_buffer.isValid()) {
+        return false;
+    }
+
+    m_rhiDevice = &rhiDevice;
+    m_debugName = debugName;
+    m_ranges.init(initialCapacityVertices);
+    return true;
+}
+
+void RhiVertexPoolAllocator::shutdown() {
+    if (m_rhiDevice != nullptr && m_buffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_buffer);
+    }
+    m_buffer = {};
+    m_rhiDevice = nullptr;
+    m_debugName = nullptr;
+    m_ranges.shutdown();
+    m_expandCountThisFrame = 0u;
+    m_uploadedBytesThisFrame = 0u;
+}
+
+bool RhiVertexPoolAllocator::allocate(RhiCommandList& commandList,
+                                      const uint32_t vertexCount,
+                                      GpuMeshRange& outRange) {
+    if (m_rhiDevice == nullptr || !m_buffer.isValid()) {
+        return false;
+    }
+    if (m_ranges.allocate(vertexCount, outRange)) {
+        return true;
+    }
+
+    const size_t currentCapacity = m_ranges.capacityVertices();
+    const size_t requiredCapacity = currentCapacity + vertexCount;
+    constexpr size_t kMaxCapacity = static_cast<size_t>(std::numeric_limits<uint32_t>::max());
+    if (requiredCapacity > kMaxCapacity) {
+        return false;
+    }
+    const size_t doubledCapacity = std::min(currentCapacity * 2u, kMaxCapacity);
+    const size_t newCapacity = std::max(requiredCapacity, doubledCapacity);
+    if (!expand(commandList, newCapacity)) {
+        return false;
+    }
+    return m_ranges.allocate(vertexCount, outRange);
+}
+
+void RhiVertexPoolAllocator::free(const GpuMeshRange& range) {
+    m_ranges.free(range);
+}
+
+bool RhiVertexPoolAllocator::upload(RhiCommandList& commandList,
+                                    const GpuMeshRange& range,
+                                    const std::vector<PackedBlockVertex>& vertices) {
+    if (!m_buffer.isValid() || vertices.empty() || vertices.size() != range.vertexCount ||
+        static_cast<size_t>(range.firstVertex) + range.vertexCount > m_ranges.capacityVertices()) {
+        return false;
+    }
+    const size_t bytes = vertices.size() * sizeof(PackedBlockVertex);
+    commandList.updateBuffer(
+        m_buffer,
+        static_cast<uint64_t>(range.firstVertex) * sizeof(PackedBlockVertex),
+        vertices.data(),
+        bytes);
+    m_uploadedBytesThisFrame += bytes;
+    return true;
+}
+
+bool RhiVertexPoolAllocator::expand(RhiCommandList& commandList,
+                                    const size_t newCapacityVertices) {
+    const size_t oldCapacityVertices = m_ranges.capacityVertices();
+    if (m_rhiDevice == nullptr || !m_buffer.isValid() ||
+        newCapacityVertices <= oldCapacityVertices) {
+        return false;
+    }
+
+    RhiBufferDesc desc;
+    desc.debugName = m_debugName;
+    desc.size = newCapacityVertices * sizeof(PackedBlockVertex);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferSrc) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
+    if (!newBuffer.isValid()) {
+        return false;
+    }
+
+    RhiBufferCopy copy;
+    copy.src = m_buffer;
+    copy.dst = newBuffer;
+    copy.size = oldCapacityVertices * sizeof(PackedBlockVertex);
+    commandList.copyBuffer(copy);
+    m_rhiDevice->destroyBuffer(m_buffer);
+    m_buffer = newBuffer;
+    m_ranges.grow(newCapacityVertices);
+    ++m_expandCountThisFrame;
+    return true;
+}
+
+void RhiVertexPoolAllocator::beginFrame() {
+    m_expandCountThisFrame = 0u;
+    m_uploadedBytesThisFrame = 0u;
 }
 
 // ---------------------------------------------------------------------------

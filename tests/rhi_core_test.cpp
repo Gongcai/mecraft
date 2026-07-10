@@ -1493,7 +1493,6 @@ bool testGlRhiDrawIndirect() {
         uint32_t baseInstance;
     };
     constexpr DrawArraysIndirectCommand kDrawCommand = {3u, 1u, 0u, 1u};
-    constexpr std::array<uint32_t, 3> kVertexIndices = {0u, 1u, 2u};
     constexpr std::array<std::array<float, 4>, 2> kMetadata = {{
         {{4.0f, 0.0f, 0.0f, 0.0f}},
         {{0.0f, 0.0f, 0.0f, 0.0f}}
@@ -1512,17 +1511,6 @@ bool testGlRhiDrawIndirect() {
     indirectBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     const RhiBufferHandle indirectBuffer = device.createBuffer(indirectBufferDesc, nullptr, 0u);
     if (!requireTrue(indirectBuffer.isValid(), "indirect buffer must be created")) {
-        device.shutdown();
-        return false;
-    }
-
-    RhiBufferDesc vertexBufferDesc;
-    vertexBufferDesc.debugName = "terrain-contract-vertices";
-    vertexBufferDesc.size = sizeof(kVertexIndices);
-    vertexBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
-    const RhiBufferHandle vertexBuffer =
-        device.createBuffer(vertexBufferDesc, kVertexIndices.data(), sizeof(kVertexIndices));
-    if (!requireTrue(vertexBuffer.isValid(), "terrain contract vertex buffer must be created")) {
         device.shutdown();
         return false;
     }
@@ -1666,7 +1654,11 @@ void main() {
     pipelineDesc.vertexShader = vertexShader;
     pipelineDesc.fragmentShader = fragmentShader;
     pipelineDesc.layout = pipelineLayout;
-    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t), RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.bindings.push_back({
+        0u,
+        static_cast<uint32_t>(sizeof(PackedBlockVertex)),
+        RhiVertexInputRate::Vertex
+    });
     pipelineDesc.vertexInput.attributes.push_back({11u, 0u, RhiVertexFormat::Uint, 0u});
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = false;
@@ -1720,6 +1712,25 @@ void main() {
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiCommandList& cmd = device.beginFrame();
+    RhiVertexPoolAllocator vertexPool;
+    if (!requireTrue(vertexPool.init(device, 2u, "terrain-contract-vertices"),
+                     "terrain RHI vertex pool must initialize")) {
+        device.shutdown();
+        return false;
+    }
+    GpuMeshRange vertexRange;
+    std::vector<PackedBlockVertex> terrainVertices(3u);
+    terrainVertices[0].posPacked = 0u;
+    terrainVertices[1].posPacked = 1u;
+    terrainVertices[2].posPacked = 2u;
+    if (!requireTrue(vertexPool.allocate(cmd, 3u, vertexRange) &&
+                     vertexPool.capacityVertices() == 5u &&
+                     vertexPool.upload(cmd, vertexRange, terrainVertices),
+                     "terrain RHI vertex pool must expand and upload packed vertices")) {
+        vertexPool.shutdown();
+        device.shutdown();
+        return false;
+    }
     std::vector<uint8_t> indirectUpload(kIndirectBufferSize, 0u);
     std::memcpy(indirectUpload.data() + kCommandOffset, &kDrawCommand, sizeof(kDrawCommand));
     cmd.updateBuffer(indirectBuffer, 0u, indirectUpload.data(), indirectUpload.size());
@@ -1728,7 +1739,7 @@ void main() {
     cmd.setGraphicsPipeline(pipeline);
     cmd.setBindGroup(0u, metadataBindGroup);
     cmd.setBindGroup(1u, drawParamsBindGroup);
-    cmd.setVertexBuffer(0u, vertexBuffer, 0u);
+    cmd.setVertexBuffer(0u, vertexPool.buffer(), 0u);
     cmd.drawIndirect(indirectBuffer, kCommandOffset, 1u, 0u);
     std::array<uint8_t, 4> pixel{};
     glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
@@ -1742,10 +1753,12 @@ void main() {
                   << static_cast<int>(pixel[1]) << ", "
                   << static_cast<int>(pixel[2]) << ", "
                   << static_cast<int>(pixel[3]) << ")\n";
+        vertexPool.shutdown();
         device.shutdown();
         return false;
     }
 
+    vertexPool.shutdown();
     device.destroyBindGroup(drawParamsBindGroup);
     device.destroyBindGroup(metadataBindGroup);
     device.destroyPipeline(pipeline);
@@ -1758,7 +1771,6 @@ void main() {
     device.destroyTexture(target);
     device.destroyBuffer(drawParamsBuffer);
     device.destroyBuffer(metadataBuffer);
-    device.destroyBuffer(vertexBuffer);
     device.destroyBuffer(indirectBuffer);
     device.shutdown();
     return true;

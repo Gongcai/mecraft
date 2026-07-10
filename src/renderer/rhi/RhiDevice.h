@@ -40,6 +40,8 @@ public:
     [[nodiscard]] virtual RhiTextureFormat swapchainDepthStencilFormat() const = 0;
     virtual bool resizeSwapchain(uint32_t width, uint32_t height) = 0;
 
+    // Destruction invalidates the public handle immediately. Backends with deferred
+    // command execution must retain the native resource until recorded work completes.
     virtual void destroyBuffer(RhiBufferHandle handle) = 0;
     virtual void destroyTexture(RhiTextureHandle handle) = 0;
     virtual void destroyTextureView(RhiTextureViewHandle handle) = 0;

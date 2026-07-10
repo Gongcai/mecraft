@@ -6,7 +6,11 @@
 #include <unordered_set>
 #include <vector>
 
+#include "renderer/rhi/RhiHandles.h"
 #include "../../world/chunk/SubChunk.h"
+
+class RhiCommandList;
+class RhiDevice;
 
 struct DrawArraysIndirectCommand {
     uint32_t count;
@@ -80,6 +84,40 @@ private:
     uint32_t m_vbo = 0;
 
     // Per-frame stats
+    size_t m_expandCountThisFrame = 0;
+    size_t m_uploadedBytesThisFrame = 0;
+};
+
+class RhiVertexPoolAllocator {
+public:
+    RhiVertexPoolAllocator();
+    ~RhiVertexPoolAllocator();
+
+    bool init(RhiDevice& rhiDevice, size_t initialCapacityVertices, const char* debugName);
+    void shutdown();
+
+    bool allocate(RhiCommandList& commandList, uint32_t vertexCount, GpuMeshRange& outRange);
+    void free(const GpuMeshRange& range);
+    bool upload(RhiCommandList& commandList,
+                const GpuMeshRange& range,
+                const std::vector<PackedBlockVertex>& vertices);
+
+    [[nodiscard]] RhiBufferHandle buffer() const { return m_buffer; }
+    [[nodiscard]] size_t capacityVertices() const { return m_ranges.capacityVertices(); }
+    [[nodiscard]] size_t usedVertices() const { return m_ranges.usedVertices(); }
+    [[nodiscard]] float fragmentationRatio() const { return m_ranges.fragmentationRatio(); }
+
+    void beginFrame();
+    [[nodiscard]] size_t expandCountThisFrame() const { return m_expandCountThisFrame; }
+    [[nodiscard]] size_t uploadedBytesThisFrame() const { return m_uploadedBytesThisFrame; }
+
+private:
+    bool expand(RhiCommandList& commandList, size_t newCapacityVertices);
+
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_buffer;
+    VertexRangeAllocator m_ranges;
+    const char* m_debugName = nullptr;
     size_t m_expandCountThisFrame = 0;
     size_t m_uploadedBytesThisFrame = 0;
 };
