@@ -327,6 +327,7 @@ set(SRC_RENDERER
         src/renderer/mesh/TerrainRenderCache.cpp
         src/renderer/mesh/TerrainStreamingService.cpp
         src/renderer/mesh/TerrainRenderer.cpp
+        src/renderer/mesh/TerrainRhiPipelineSet.cpp
 
         # Shadow system
         src/renderer/shadow/ShadowMatrices.cpp

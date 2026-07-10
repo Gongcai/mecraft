@@ -587,6 +587,7 @@ void RenderScene::setupResources(
     ThreadPool* threadPool,
     RhiDevice* rhiDevice,
     TerrainRenderer* terrain,
+    TerrainRhiPipelineSet* terrainRhiPipelines,
     WorldRenderBuffer* worldRenderBuffer,
     DeferredRenderTargets* deferredTargets,
     GameplaySkyRenderer* sky,
@@ -605,6 +606,7 @@ void RenderScene::setupResources(
     m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
     m_shared.terrainStreaming = &m_terrainStreamingService;
     m_shared.terrain = terrain;
+    m_shared.terrainRhiPipelines = terrainRhiPipelines;
     m_shared.worldRenderBuffer = worldRenderBuffer;
     m_shared.meshingService = &m_terrainStreamingService.meshingService();
     m_shared.deferredTargets = deferredTargets;

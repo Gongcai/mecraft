@@ -34,6 +34,7 @@ class DropSystem;
 class TerrainRenderCache;
 class TerrainStreamingService;
 class TerrainRenderer;
+class TerrainRhiPipelineSet;
 class CommonFrameTargets;
 class DeferredRenderTargets;
 class ShadowTargets;
@@ -64,6 +65,7 @@ struct SharedRenderResources {
     TerrainRenderCache* terrainCache = nullptr;
     TerrainStreamingService* terrainStreaming = nullptr;
     TerrainRenderer* terrain = nullptr;
+    TerrainRhiPipelineSet* terrainRhiPipelines = nullptr;
     WorldRenderBuffer* worldRenderBuffer = nullptr;
     ChunkMeshingService* meshingService = nullptr;
 
@@ -195,6 +197,7 @@ public:
         ThreadPool* threadPool,
         RhiDevice* rhiDevice,
         TerrainRenderer* terrain,
+        TerrainRhiPipelineSet* terrainRhiPipelines,
         WorldRenderBuffer* worldRenderBuffer,
         DeferredRenderTargets* deferredTargets,
         GameplaySkyRenderer* sky,

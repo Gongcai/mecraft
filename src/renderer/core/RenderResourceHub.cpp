@@ -124,6 +124,7 @@ bool RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool, c
     //m_uiShader = resourceMgr.getShader("ui");
     // R8: Overlay initialization removed — handled by BlockInteractionOverlayRenderer
     m_worldRenderBuffer.init();
+    m_terrainRhiPipelines.init(*m_rhiDevice);
     m_terrainCache.init();
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainCache.setChunkMeshingService(&m_meshingService);
@@ -172,6 +173,7 @@ void RenderResourceHub::shutdown() {
     // Always shutdown owned terrain cache and meshing service to prevent thread/lifecycle leaks
     m_terrainCache.shutdown();
     m_meshingService.shutdown();
+    m_terrainRhiPipelines.shutdown();
     m_worldRenderBuffer.shutdown();
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();

@@ -11,6 +11,7 @@
 #include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../renderers/GameplaySkyRenderer.h"
+#include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/TerrainRenderCache.h"
@@ -650,16 +651,10 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
 
-    commandList.beginRendering(renderingInfo);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-
     // Build terrain frame data from FrameContext
     TerrainFrameData tfd;
     tfd.view = ctx.camera.view;
-    tfd.viewProj = ctx.camera.viewProj;
+    tfd.viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     tfd.cameraPos = ctx.camera.position;
     tfd.animationTime = ctx.animationTime;
     tfd.shaderTime = ctx.shaderTime;
@@ -725,6 +720,21 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     trs.blockParallaxMapsEnabled = settings.blockMaterialMaps.parallaxMapsEnabled;
     trs.blockParallaxDepth = settings.blockMaterialMaps.parallaxDepth;
 
+    if (m_shared->terrainRhiPipelines == nullptr ||
+        !m_shared->terrainRhiPipelines->prepareGBuffer(
+            commandList,
+            *m_shared->resources,
+            tfd,
+            trs)) {
+        return;
+    }
+
+    commandList.beginRendering(renderingInfo);
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+
     const TextureArray& texArray = m_shared->resources->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
     terrain.bindChunkRenderState(tfd, texArray, *gbufferShader,
@@ -732,10 +742,6 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
                                   ctx.eyeInWater, m_heldBlockLightValue,
                                   targets, m_resourceMgr,
                                   volFogShadersReady, trs);
-
-    if (settings.taa.enabled) {
-        gbufferShader->setMat4("viewProj", ctx.camera.jitteredViewProj);
-    }
 
     // Submit meshing jobs
     if (m_shared->terrainCache) {

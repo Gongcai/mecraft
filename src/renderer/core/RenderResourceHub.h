@@ -20,6 +20,7 @@
 #include "../mesh/TerrainRenderCache.h"
 #include "../mesh/TerrainStreamingService.h"
 #include "../mesh/TerrainRenderer.h"
+#include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
@@ -139,6 +140,7 @@ public:
 
     // Shared resource accessors (for RenderScene integration)
     [[nodiscard]] TerrainRenderer& getTerrainRenderer() { return m_terrainRenderer; }
+    [[nodiscard]] TerrainRhiPipelineSet& getTerrainRhiPipelineSet() { return m_terrainRhiPipelines; }
     [[nodiscard]] GameplaySkyRenderer& getGameplaySkyRenderer() { return m_gameplaySkyRenderer; }
     [[nodiscard]] DeferredRenderTargets& getDeferredRenderTargets() { return m_deferredTargets; }
     [[nodiscard]] shadow::ShadowRenderer& getShadowRenderer() { return m_shadowRenderer; }
@@ -187,6 +189,7 @@ private:
     int drawCallCount = 0;
 
     WorldRenderBuffer m_worldRenderBuffer;
+    TerrainRhiPipelineSet m_terrainRhiPipelines;
     bool m_useMultiDrawIndirect = true;
 
     // Shaders actively used by Renderer rendering methods
