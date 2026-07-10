@@ -1391,6 +1391,99 @@ bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rh
     return true;
 }
 
+bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_shadowDepthView.isValid() && m_shadowColorView.isValid() &&
+        m_atmosphereLutView.isValid() && m_csmShadowDepthArrayView.isValid() &&
+        m_csmShadowDepthComparisonArrayView.isValid() &&
+        m_csmShadowDepthAllArrayView.isValid() &&
+        m_csmShadowDepthAllComparisonArrayView.isValid() &&
+        m_csmShadowColor0ArrayView.isValid() && m_csmShadowColor1ArrayView.isValid()) {
+        return true;
+    }
+    if (!m_shadowDepthHandle.isValid() || !m_shadowColorHandle.isValid() ||
+        !m_atmosphereLutHandle.isValid() || !m_csmShadowDepthHandle.isValid() ||
+        !m_csmShadowDepthAllHandle.isValid() || !m_csmShadowColor0Handle.isValid() ||
+        !m_csmShadowColor1Handle.isValid()) {
+        return false;
+    }
+
+    auto destroyCreatedViews = [&]() {
+        RhiTextureViewHandle* views[] = {
+            &m_shadowDepthView,
+            &m_shadowColorView,
+            &m_atmosphereLutView,
+            &m_csmShadowDepthArrayView,
+            &m_csmShadowDepthComparisonArrayView,
+            &m_csmShadowDepthAllArrayView,
+            &m_csmShadowDepthAllComparisonArrayView,
+            &m_csmShadowColor0ArrayView,
+            &m_csmShadowColor1ArrayView
+        };
+        for (RhiTextureViewHandle* view : views) {
+            if (view->isValid()) {
+                rhiDevice.destroyTextureView(*view);
+                *view = {};
+            }
+        }
+    };
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+
+    viewDesc.texture = m_shadowDepthHandle;
+    viewDesc.format = RhiTextureFormat::Depth32Float;
+    m_shadowDepthView = rhiDevice.createTextureView(viewDesc);
+
+    viewDesc.texture = m_shadowColorHandle;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    m_shadowColorView = rhiDevice.createTextureView(viewDesc);
+
+    viewDesc.texture = m_atmosphereLutHandle;
+    viewDesc.viewType = RhiTextureViewType::Texture3D;
+    viewDesc.format = RhiTextureFormat::Rgba32Float;
+    viewDesc.layerCount = static_cast<uint32_t>(kAtmosphereLutDepth);
+    m_atmosphereLutView = rhiDevice.createTextureView(viewDesc);
+
+    viewDesc.viewType = RhiTextureViewType::Texture2DArray;
+    viewDesc.format = RhiTextureFormat::Depth24;
+    viewDesc.layerCount = static_cast<uint32_t>(kShadowCascadeCount);
+    viewDesc.texture = m_csmShadowDepthHandle;
+    m_csmShadowDepthArrayView = rhiDevice.createTextureView(viewDesc);
+    m_csmShadowDepthComparisonArrayView = rhiDevice.createTextureView(viewDesc);
+
+    viewDesc.texture = m_csmShadowDepthAllHandle;
+    m_csmShadowDepthAllArrayView = rhiDevice.createTextureView(viewDesc);
+    m_csmShadowDepthAllComparisonArrayView = rhiDevice.createTextureView(viewDesc);
+
+    viewDesc.texture = m_csmShadowColor0Handle;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    m_csmShadowColor0ArrayView = rhiDevice.createTextureView(viewDesc);
+
+    viewDesc.texture = m_csmShadowColor1Handle;
+    viewDesc.format = RhiTextureFormat::Rgba16Float;
+    m_csmShadowColor1ArrayView = rhiDevice.createTextureView(viewDesc);
+
+    if (!m_shadowDepthView.isValid() || !m_shadowColorView.isValid() ||
+        !m_atmosphereLutView.isValid() || !m_csmShadowDepthArrayView.isValid() ||
+        !m_csmShadowDepthComparisonArrayView.isValid() ||
+        !m_csmShadowDepthAllArrayView.isValid() ||
+        !m_csmShadowDepthAllComparisonArrayView.isValid() ||
+        !m_csmShadowColor0ArrayView.isValid() || !m_csmShadowColor1ArrayView.isValid()) {
+        destroyCreatedViews();
+        return false;
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2480,6 +2573,23 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
+    RhiTextureViewHandle* volumetricFogViews[] = {
+        &m_shadowDepthView,
+        &m_shadowColorView,
+        &m_atmosphereLutView,
+        &m_csmShadowDepthArrayView,
+        &m_csmShadowDepthComparisonArrayView,
+        &m_csmShadowDepthAllArrayView,
+        &m_csmShadowDepthAllComparisonArrayView,
+        &m_csmShadowColor0ArrayView,
+        &m_csmShadowColor1ArrayView
+    };
+    for (RhiTextureViewHandle* view : volumetricFogViews) {
+        if (m_rhiViewDevice != nullptr && view->isValid()) {
+            m_rhiViewDevice->destroyTextureView(*view);
+        }
+        *view = {};
+    }
     if (m_rhiViewDevice != nullptr && m_velocityView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_velocityView);
     }
@@ -2588,6 +2698,15 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_gMaterialView = {};
     m_gMaterialAuxView = {};
     m_gDepthView = {};
+    m_shadowDepthView = {};
+    m_shadowColorView = {};
+    m_atmosphereLutView = {};
+    m_csmShadowDepthArrayView = {};
+    m_csmShadowDepthComparisonArrayView = {};
+    m_csmShadowDepthAllArrayView = {};
+    m_csmShadowDepthAllComparisonArrayView = {};
+    m_csmShadowColor0ArrayView = {};
+    m_csmShadowColor1ArrayView = {};
     m_velocityView = {};
     m_perObjectVelocityView = {};
     m_ssaoFilteredView = {};

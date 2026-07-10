@@ -68,6 +68,8 @@ public:
     bool ensureCsmShadowTransparentTextureViews(RhiDevice& rhiDevice, int cascadeIndex);
     [[nodiscard]] RhiTextureHandle shadowColorTextureHandle() const { return m_shadowColorHandle; }
     [[nodiscard]] RhiTextureHandle shadowNormalTextureHandle() const { return m_shadowNormalHandle; }
+    [[nodiscard]] RhiTextureViewHandle shadowDepthTextureViewHandle() const { return m_shadowDepthView; }
+    [[nodiscard]] RhiTextureViewHandle shadowColorTextureViewHandle() const { return m_shadowColorView; }
     [[nodiscard]] RhiTextureHandle ssaoTextureHandle() const { return m_ssaoHandle; }
     [[nodiscard]] RhiTextureHandle ssaoFilteredTextureHandle() const { return m_ssaoFilteredHandle; }
     [[nodiscard]] RhiTextureViewHandle ssaoFilteredTextureViewHandle() const { return m_ssaoFilteredView; }
@@ -178,6 +180,14 @@ public:
     [[nodiscard]] RhiTextureViewHandle weatherMaskTextureViewHandle() const { return m_weatherMaskView; }
     bool ensureWeatherMaskTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle atmosphereLutTextureHandle() const { return m_atmosphereLutHandle; }
+    [[nodiscard]] RhiTextureViewHandle atmosphereLutTextureViewHandle() const { return m_atmosphereLutView; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthArrayTextureViewHandle() const { return m_csmShadowDepthArrayView; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthComparisonArrayTextureViewHandle() const { return m_csmShadowDepthComparisonArrayView; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllArrayTextureViewHandle() const { return m_csmShadowDepthAllArrayView; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowDepthAllComparisonArrayTextureViewHandle() const { return m_csmShadowDepthAllComparisonArrayView; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowColor0ArrayTextureViewHandle() const { return m_csmShadowColor0ArrayView; }
+    [[nodiscard]] RhiTextureViewHandle csmShadowColor1ArrayTextureViewHandle() const { return m_csmShadowColor1ArrayView; }
+    bool ensureVolumetricFogTextureViews(RhiDevice& rhiDevice);
     bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
     void swapHistory() { m_currentHistoryIndex = 1 - m_currentHistoryIndex; }
@@ -262,11 +272,15 @@ private:
     RhiTextureHandle m_shadowDepthComparisonHandle;
     RhiTextureHandle m_shadowColorHandle;
     RhiTextureHandle m_shadowNormalHandle;
+    RhiTextureViewHandle m_shadowDepthView;
+    RhiTextureViewHandle m_shadowColorView;
     uint32_t m_csmShadowDepth = 0; // Raw depth texture array, one layer per cascade
     uint32_t m_csmShadowDepthComparison = 0; // Comparison texture array for sampler2DArrayShadow
     RhiTextureHandle m_csmShadowDepthHandle;
     RhiTextureHandle m_csmShadowDepthComparisonHandle;
     RhiTextureViewHandle m_csmShadowDepthView[kShadowCascadeCount];
+    RhiTextureViewHandle m_csmShadowDepthArrayView;
+    RhiTextureViewHandle m_csmShadowDepthComparisonArrayView;
     // CSM transparent shadow: depth-all + color for water/transparent occlusion
     uint32_t m_csmShadowDepthAll = 0; // depth including water/transparent surfaces
     uint32_t m_csmShadowDepthAllComparison = 0;
@@ -276,6 +290,10 @@ private:
     RhiTextureHandle m_csmShadowDepthAllComparisonHandle;
     RhiTextureHandle m_csmShadowColor0Handle;
     RhiTextureHandle m_csmShadowColor1Handle;
+    RhiTextureViewHandle m_csmShadowDepthAllArrayView;
+    RhiTextureViewHandle m_csmShadowDepthAllComparisonArrayView;
+    RhiTextureViewHandle m_csmShadowColor0ArrayView;
+    RhiTextureViewHandle m_csmShadowColor1ArrayView;
     RhiTextureViewHandle m_csmShadowDepthAllView[kShadowCascadeCount];
     RhiTextureViewHandle m_csmShadowColor0View[kShadowCascadeCount];
     RhiTextureViewHandle m_csmShadowColor1View[kShadowCascadeCount];
@@ -408,6 +426,7 @@ private:
     uint32_t m_weatherMaskTex = 0;
     RhiTextureHandle m_weatherMaskHandle;
     RhiTextureViewHandle m_weatherMaskView;
+    RhiTextureViewHandle m_atmosphereLutView;
 
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
     uint32_t m_atmosphereLut3d = 0;
