@@ -61,10 +61,8 @@ private:
     RhiBindGroupHandle m_rcasBindGroup;
     RhiTextureViewHandle m_boundEasuInputView;
     RhiTextureViewHandle m_boundRcasInputView;
-    uint32_t m_easuTex = 0;
     RhiTextureHandle m_easuHandle;
     RhiTextureViewHandle m_easuView;
-    RhiDevice* m_rhiViewDevice = nullptr;
     int m_width = 0;
     int m_height = 0;
 };

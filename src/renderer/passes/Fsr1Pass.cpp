@@ -4,9 +4,6 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
-
-#include <glad/glad.h>
 
 #include <algorithm>
 #include <cmath>
@@ -25,8 +22,8 @@ Fsr1Pass::~Fsr1Pass() {
 void Fsr1Pass::init(ResourceMgr&) {}
 
 void Fsr1Pass::shutdown() {
-    destroyRhiResources();
     destroyTargets();
+    destroyRhiResources();
 }
 
 bool Fsr1Pass::execute(RhiDevice& rhiDevice,
@@ -122,8 +119,8 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
 
 bool Fsr1Pass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
-        destroyRhiResources();
         destroyTargets();
+        destroyRhiResources();
     }
     if (m_easuPipeline.isValid() && m_rcasPipeline.isValid()) {
         return true;
@@ -301,8 +298,8 @@ bool Fsr1Pass::ensureRcasBindGroup(RhiDevice& rhiDevice) {
 bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int height) {
     const int targetWidth = std::max(1, width);
     const int targetHeight = std::max(1, height);
-    if (m_easuTex != 0 && m_easuHandle.isValid() && m_easuView.isValid() &&
-        m_rhiViewDevice == &rhiDevice && m_width == targetWidth && m_height == targetHeight) {
+    if (m_easuHandle.isValid() && m_easuView.isValid() && m_rhiDevice == &rhiDevice &&
+        m_width == targetWidth && m_height == targetHeight) {
         return true;
     }
 
@@ -310,24 +307,18 @@ bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int he
     m_width = targetWidth;
     m_height = targetHeight;
 
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_easuTex);
-    glTextureStorage2D(m_easuTex, 1, GL_RGBA8, m_width, m_height);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    m_easuHandle = renderer::rhi::gl::registerTexture({
-        m_easuTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1u,
-        1u,
-        1u,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "FSR1.EASU.Target";
+    textureDesc.dimension = RhiTextureDimension::Texture2D;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = static_cast<uint32_t>(m_width);
+    textureDesc.height = static_cast<uint32_t>(m_height);
+    textureDesc.depthOrLayers = 1u;
+    textureDesc.mipLevels = 1u;
+    textureDesc.sampleCount = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    m_easuHandle = rhiDevice.createTexture(textureDesc, nullptr);
     if (!m_easuHandle.isValid()) {
         destroyTargets();
         return false;
@@ -347,22 +338,19 @@ bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int he
         return false;
     }
 
-    m_rhiViewDevice = &rhiDevice;
     return true;
 }
 
 void Fsr1Pass::destroyTargets() {
     destroyRhiBindGroups();
-    if (m_rhiViewDevice != nullptr && m_easuView.isValid()) {
-        m_rhiViewDevice->destroyTextureView(m_easuView);
+    if (m_rhiDevice != nullptr && m_easuView.isValid()) {
+        m_rhiDevice->destroyTextureView(m_easuView);
+    }
+    if (m_rhiDevice != nullptr && m_easuHandle.isValid()) {
+        m_rhiDevice->destroyTexture(m_easuHandle);
     }
     m_easuView = {};
-    m_rhiViewDevice = nullptr;
-    renderer::rhi::gl::unregisterTextureAndReset(m_easuHandle);
-    if (m_easuTex != 0) {
-        glDeleteTextures(1, &m_easuTex);
-        m_easuTex = 0;
-    }
+    m_easuHandle = {};
     m_width = 0;
     m_height = 0;
 }
