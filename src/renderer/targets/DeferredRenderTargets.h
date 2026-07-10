@@ -196,7 +196,6 @@ public:
     bool loadAtmosphereLut(const char* path);
     [[nodiscard]] int currentHistoryIndex() const { return m_currentHistoryIndex; }
     void swapHistory() { m_currentHistoryIndex = 1 - m_currentHistoryIndex; }
-    [[nodiscard]] uint32_t fullscreenVao() const { return m_fullscreenVao; }
     [[nodiscard]] int width() const { return m_width; }
     [[nodiscard]] int height() const { return m_height; }
     [[nodiscard]] int shadowResolution() const { return m_shadowResolution; }
@@ -242,7 +241,6 @@ private:
     void unregisterRhiTextures();
     void destroyRhiTextureViews();
     void destroyFramebuffers();
-    void destroyFullscreenTriangle();
 
     // G-buffer contract:
     // 0 RGBA8    = linear albedo.rgb, emissive hint.a
@@ -439,8 +437,6 @@ private:
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
     uint32_t m_atmosphereLut3d = 0;
     RhiTextureHandle m_atmosphereLutHandle;
-
-    uint32_t m_fullscreenVao = 0;
 
     int m_width = 0;
     int m_height = 0;

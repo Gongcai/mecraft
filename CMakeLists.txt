@@ -287,7 +287,6 @@ set(SRC_RENDERER
         src/renderer/targets/ShadowTargets.cpp
 
         # Render passes
-        src/renderer/passes/RenderPass.cpp
         src/renderer/passes/SsaoPass.cpp
         src/renderer/passes/SsgiPass.cpp
         src/renderer/passes/VelocityPass.cpp

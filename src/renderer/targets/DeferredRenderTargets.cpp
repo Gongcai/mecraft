@@ -33,15 +33,11 @@ DeferredRenderTargets::~DeferredRenderTargets() {
 }
 
 bool DeferredRenderTargets::init() {
-    if (m_fullscreenVao == 0) {
-        glGenVertexArrays(1, &m_fullscreenVao);
-    }
-    return m_fullscreenVao != 0;
+    return true;
 }
 
 void DeferredRenderTargets::shutdown() {
     destroyFramebuffers();
-    destroyFullscreenTriangle();
     m_currentHistoryIndex = 0;
     m_ssaoHistoryIndex = 0;
     m_ssgiHistoryIndex = 0;
@@ -343,8 +339,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     renderer::debug::labelTexture(m_perObjectVelocityTex, "DeferredTargets.PerObjectVelocity");
     renderer::debug::labelTexture(m_weatherMaskTex, "DeferredTargets.WeatherMaskTex");
     renderer::debug::labelTexture(m_atmosphereLut3d, "DeferredTargets.AtmosphereLUT");
-    renderer::debug::labelVertexArray(m_fullscreenVao, "DeferredTargets.FullscreenVAO");
-
     m_ready = true;
     return true;
 }
@@ -3034,13 +3028,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoHistoryIndex = 0;
     m_ssgiHistoryIndex = 0;
     m_ready = false;
-}
-
-void DeferredRenderTargets::destroyFullscreenTriangle() {
-    if (m_fullscreenVao != 0) {
-        glDeleteVertexArrays(1, &m_fullscreenVao);
-        m_fullscreenVao = 0;
-    }
 }
 
 bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
