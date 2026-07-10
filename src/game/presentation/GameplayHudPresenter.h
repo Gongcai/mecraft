@@ -52,6 +52,7 @@ private:
     Window& m_window;
     UIRenderer& m_uiRenderer;
     InputManager& m_input;
+    PlayerStatsData m_playerStats;
 #ifdef MECRAFT_DEBUG
     Dashboard* m_dashboard = nullptr;  // Non-owning, injected by Game via setDashboard()
 #endif
