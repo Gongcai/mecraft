@@ -942,7 +942,6 @@ void GlRhiCommandList::setComputePipeline(RhiPipelineHandle pipeline) {
 }
 
 void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGroup) {
-    (void) setIndex;
     if (m_device == nullptr || !m_device->m_data) {
         logRhiError("setBindGroup requires an initialized device");
         return;
@@ -959,6 +958,26 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
         recordForHandle(data.bindGroupLayouts, data.bindGroupLayoutRecords, record->desc.layout);
     if (layoutRecord == nullptr) {
         logRhiError("setBindGroup references an invalid layout");
+        return;
+    }
+
+    const GlPipelineRecord* pipeline = nullptr;
+    if (m_graphicsPipeline.isValid()) {
+        pipeline = recordForHandle(data.pipelines, data.pipelineRecords, m_graphicsPipeline);
+    } else if (m_computePipeline.isValid()) {
+        pipeline = recordForHandle(data.pipelines, data.pipelineRecords, m_computePipeline);
+    }
+    if (pipeline == nullptr) {
+        logRhiError("setBindGroup requires a bound pipeline");
+        return;
+    }
+    const RhiPipelineLayoutHandle pipelineLayoutHandle =
+        pipeline->compute ? pipeline->computeDesc.layout : pipeline->graphicsDesc.layout;
+    const GlPipelineLayoutRecord* pipelineLayout =
+        recordForHandle(data.pipelineLayouts, data.pipelineLayoutRecords, pipelineLayoutHandle);
+    if (pipelineLayout == nullptr || setIndex >= pipelineLayout->desc.bindGroupLayouts.size() ||
+        !sameHandle(pipelineLayout->desc.bindGroupLayouts[setIndex], record->desc.layout)) {
+        logRhiError("setBindGroup is incompatible with the bound pipeline layout set");
         return;
     }
 

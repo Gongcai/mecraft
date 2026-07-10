@@ -1447,6 +1447,7 @@ bool testGlRhiDrawIndirect() {
         {{4.0f, 0.0f, 0.0f, 0.0f}},
         {{0.0f, 0.0f, 0.0f, 0.0f}}
     }};
+    constexpr std::array<float, 4> kDrawColor = {0.0f, 1.0f, 1.0f, 1.0f};
     constexpr uint64_t kCommandOffset = 65536u;
     constexpr uint64_t kIndirectBufferSize = kCommandOffset + sizeof(DrawArraysIndirectCommand);
     constexpr uint32_t kWidth = 4u;
@@ -1482,6 +1483,17 @@ bool testGlRhiDrawIndirect() {
     const RhiBufferHandle metadataBuffer =
         device.createBuffer(metadataBufferDesc, kMetadata.data(), sizeof(kMetadata));
     if (!requireTrue(metadataBuffer.isValid(), "terrain metadata buffer must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBufferDesc drawParamsBufferDesc;
+    drawParamsBufferDesc.debugName = "terrain-contract-draw-params";
+    drawParamsBufferDesc.size = sizeof(kDrawColor);
+    drawParamsBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform);
+    const RhiBufferHandle drawParamsBuffer =
+        device.createBuffer(drawParamsBufferDesc, kDrawColor.data(), sizeof(kDrawColor));
+    if (!requireTrue(drawParamsBuffer.isValid(), "terrain draw parameter buffer must be created")) {
         device.shutdown();
         return false;
     }
@@ -1527,9 +1539,12 @@ void main() {
     constexpr char kFragmentShader[] = R"glsl(
 #version 450 core
 layout(location = 0) out vec4 outColor;
+layout(std140, binding = 13) uniform DrawParams {
+    vec4 drawColor;
+};
 
 void main() {
-    outColor = vec4(0.0, 1.0, 1.0, 1.0);
+    outColor = drawColor;
 }
 )glsl";
 
@@ -1570,9 +1585,25 @@ void main() {
         return false;
     }
 
+    RhiBindGroupLayoutDesc drawParamsLayoutDesc;
+    drawParamsLayoutDesc.debugName = "terrain-contract-draw-params-layout";
+    drawParamsLayoutDesc.entries.push_back({
+        13u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    const RhiBindGroupLayoutHandle drawParamsLayout =
+        device.createBindGroupLayout(drawParamsLayoutDesc);
+    if (!requireTrue(drawParamsLayout.isValid(), "terrain draw parameter layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "indirect-layout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(drawParamsLayout);
     const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
     if (!requireTrue(pipelineLayout.isValid(), "indirect pipeline layout must be created")) {
         device.shutdown();
@@ -1603,8 +1634,21 @@ void main() {
     metadataEntry.resource.buffer.buffer = metadataBuffer;
     metadataEntry.resource.buffer.range = sizeof(kMetadata);
     bindGroupDesc.entries.push_back(metadataEntry);
-    const RhiBindGroupHandle bindGroup = device.createBindGroup(bindGroupDesc);
-    if (!requireTrue(bindGroup.isValid(), "terrain metadata bind group must be created")) {
+    const RhiBindGroupHandle metadataBindGroup = device.createBindGroup(bindGroupDesc);
+    if (!requireTrue(metadataBindGroup.isValid(), "terrain metadata bind group must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupDesc drawParamsBindGroupDesc;
+    drawParamsBindGroupDesc.layout = drawParamsLayout;
+    RhiBindGroupEntry drawParamsEntry;
+    drawParamsEntry.binding = 13u;
+    drawParamsEntry.resource.buffer.buffer = drawParamsBuffer;
+    drawParamsEntry.resource.buffer.range = sizeof(kDrawColor);
+    drawParamsBindGroupDesc.entries.push_back(drawParamsEntry);
+    const RhiBindGroupHandle drawParamsBindGroup = device.createBindGroup(drawParamsBindGroupDesc);
+    if (!requireTrue(drawParamsBindGroup.isValid(), "terrain draw parameter bind group must be created")) {
         device.shutdown();
         return false;
     }
@@ -1631,7 +1675,8 @@ void main() {
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
-    cmd.setBindGroup(0u, bindGroup);
+    cmd.setBindGroup(0u, metadataBindGroup);
+    cmd.setBindGroup(1u, drawParamsBindGroup);
     cmd.setVertexBuffer(0u, vertexBuffer, 0u);
     cmd.drawIndirect(indirectBuffer, kCommandOffset, 1u, 0u);
     std::array<uint8_t, 4> pixel{};
@@ -1650,14 +1695,17 @@ void main() {
         return false;
     }
 
-    device.destroyBindGroup(bindGroup);
+    device.destroyBindGroup(drawParamsBindGroup);
+    device.destroyBindGroup(metadataBindGroup);
     device.destroyPipeline(pipeline);
     device.destroyPipelineLayout(pipelineLayout);
+    device.destroyBindGroupLayout(drawParamsLayout);
     device.destroyBindGroupLayout(bindGroupLayout);
     device.destroyShader(fragmentShader);
     device.destroyShader(vertexShader);
     device.destroyTextureView(targetView);
     device.destroyTexture(target);
+    device.destroyBuffer(drawParamsBuffer);
     device.destroyBuffer(metadataBuffer);
     device.destroyBuffer(vertexBuffer);
     device.destroyBuffer(indirectBuffer);
