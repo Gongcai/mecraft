@@ -294,13 +294,11 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const glm::ivec2 frameRenderSize = skipPostProcess
         ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
         : internalRenderSize(request.window);
-    if (!skipPostProcess && !m_postProcessPass.beginSceneCapture(frameRenderSize.x, frameRenderSize.y)) {
+    if (!skipPostProcess &&
+        !m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice,
+                                             frameRenderSize.x,
+                                             frameRenderSize.y)) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to begin post-process scene capture\n");
-        m_terrainStreamingService.endFrame();
-        return;
-    }
-    if (!skipPostProcess && !m_postProcessPass.ensureSceneCaptureViews(*m_shared.rhiDevice)) {
-        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to create post-process scene capture views\n");
         m_terrainStreamingService.endFrame();
         return;
     }
@@ -389,21 +387,16 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                                            m_currentContext.swapchainColorView,
                                                            request.window);
         } else {
-            const GLuint gbufferDepthTex =
-                static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.gbufferDepth));
-            const GLuint weatherMaskTex =
-                static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.weatherMask));
             const bool fsrEnabled = m_settings.upscale.fsr1Enabled &&
                                     m_settings.upscale.renderScale < 0.999f;
             if (fsrEnabled) {
-                const GLuint postTex = m_postProcessPass.compositeToTexture(
+                const RhiTextureHandle postTexture = m_postProcessPass.compositeToTexture(
                     *m_shared.rhiDevice,
                     request.window,
                     request.frameTime,
-                    gbufferDepthTex,
-                    weatherMaskTex);
+                    m_lastFrameOutput.gbufferDepth);
                 bool upscaled = false;
-                if (postTex != 0) {
+                if (postTexture.isValid()) {
                     const int inputWidth = m_postProcessPass.targetWidth();
                     const int inputHeight = m_postProcessPass.targetHeight();
                     upscaled = m_fsr1Pass.execute(
@@ -416,7 +409,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                         std::max(1, request.window.getHeight()),
                         m_settings.upscale.sharpness);
                 }
-                if (!upscaled && postTex != 0) {
+                if (!upscaled && postTexture.isValid()) {
                     m_postProcessPass.blitCompositeToBackbuffer(*m_shared.rhiDevice,
                                                                 m_currentContext.swapchainColorView,
                                                                 request.window);
@@ -424,19 +417,19 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     m_postProcessPass.compositeToBackbuffer(
                         *m_shared.rhiDevice,
                         m_currentContext.swapchainColorView,
+                        m_currentContext.swapchainColorFormat,
                         request.window,
                         request.frameTime,
-                        gbufferDepthTex,
-                        weatherMaskTex);
+                        m_lastFrameOutput.gbufferDepth);
                 }
             } else {
                 m_postProcessPass.compositeToBackbuffer(
                     *m_shared.rhiDevice,
                     m_currentContext.swapchainColorView,
+                    m_currentContext.swapchainColorFormat,
                     request.window,
                     request.frameTime,
-                    gbufferDepthTex,
-                    weatherMaskTex);
+                    m_lastFrameOutput.gbufferDepth);
             }
         }
         if (postTimerStarted) {

@@ -7,12 +7,16 @@
 // Weights are 8th-order binomial coefficients normalized to sum to 1:
 //   [70, 56, 28, 8, 1] / 256
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uImage;
-layout(location = 0) uniform vec2 uDirection;  // (1,0) for horizontal, (0,1) for vertical
-layout(location = 1) uniform float uWeight;
+layout(std140, binding = 15) uniform RhiPushConstants {
+    vec4 pBlur;
+};
+
+#define uDirection pBlur.xy
+#define uWeight pBlur.z
 
 const float w0 = 70.0 / 256.0;  // center
 const float w1 = 56.0 / 256.0;  // +/-1

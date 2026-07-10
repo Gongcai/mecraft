@@ -6,11 +6,15 @@
 // the tile-local coord after DerivativeMain's CalculateTileOffset mapping.
 // BLUR_SAMPLES=1 matches DerivativeMain default.
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneTex;
-layout(location = 0) uniform int uSourceLod;
+layout(std140, binding = 15) uniform RhiPushConstants {
+    ivec4 pSource;
+};
+
+#define uSourceLod pSource.x
 
 vec3 DualBlurDownSample(vec2 uv, int lod) {
     const int BLUR_SAMPLES = 1;

@@ -1,12 +1,17 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uInputTex;
-layout(location = 0) uniform bool uSourceIsScene;
-layout(location = 1) uniform vec2 uSourceSize;
-layout(location = 2) uniform int uSourceLod;
+layout(std140, binding = 15) uniform RhiPushConstants {
+    vec4 pSourceSize;
+    ivec4 pFlags;
+};
+
+#define uSourceSize pSourceSize.xy
+#define uSourceIsScene (pFlags.x != 0)
+#define uSourceLod pFlags.y
 
 float luminance709(vec3 color) {
     return dot(max(color, vec3(0.0)), vec3(0.2126, 0.7152, 0.0722));
