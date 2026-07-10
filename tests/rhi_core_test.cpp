@@ -103,7 +103,22 @@ bool testHandleGeneration() {
     if (!requireTrue(second.generation != first.generation, "reused handle generation must change")) {
         return false;
     }
-    return requireTrue(!allocator.release(first), "release must reject stale texture handles");
+    if (!requireTrue(!allocator.release(first), "release must reject stale texture handles")) {
+        return false;
+    }
+
+    RhiHandleAllocator<RhiTextureHandle> externalAllocator{0x80000000u};
+    const RhiTextureHandle external = externalAllocator.allocate();
+    if (!requireTrue(external.index == 0x80000000u,
+                     "allocator must honor its configured first handle index")) {
+        return false;
+    }
+    if (!requireTrue(external.index != second.index,
+                     "allocators with disjoint index ranges must not collide")) {
+        return false;
+    }
+    return requireTrue(externalAllocator.slotForHandle(external) == 0u,
+                       "allocator must resolve a live handle to its local slot");
 }
 
 bool testVertexRangeAllocator() {

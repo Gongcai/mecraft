@@ -2,7 +2,9 @@
 
 #include "renderer/rhi/RhiHandleAllocator.h"
 
+#include <cassert>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 namespace renderer::rhi::gl {
@@ -13,20 +15,22 @@ struct TextureRecord {
     bool active = false;
 };
 
-RhiHandleAllocator<RhiTextureHandle> g_textureHandles;
+constexpr uint32_t kExternalTextureFirstIndex = 0x80000000u;
+
+RhiHandleAllocator<RhiTextureHandle> g_textureHandles{kExternalTextureFirstIndex};
 std::vector<TextureRecord> g_textures;
 std::mutex g_textureMutex;
 
 [[nodiscard]] TextureRecord* recordForHandle(const RhiTextureHandle handle) {
-    if (!g_textureHandles.isAlive(handle)) {
+    const std::optional<uint32_t> slot = g_textureHandles.slotForHandle(handle);
+    if (!slot.has_value()) {
         return nullptr;
     }
 
-    const uint32_t slot = handle.index - 1;
-    if (slot >= g_textures.size() || !g_textures[slot].active) {
+    if (*slot >= g_textures.size() || !g_textures[*slot].active) {
         return nullptr;
     }
-    return &g_textures[slot];
+    return &g_textures[*slot];
 }
 
 } // namespace
@@ -41,13 +45,14 @@ RhiTextureHandle registerTexture(const GlRhiTextureRegistration& registration) {
     std::lock_guard<std::mutex> lock(g_textureMutex);
 
     const RhiTextureHandle handle = g_textureHandles.allocate();
-    const uint32_t slot = handle.index - 1;
-    if (slot >= g_textures.size()) {
-        g_textures.resize(slot + 1);
+    const std::optional<uint32_t> slot = g_textureHandles.slotForHandle(handle);
+    assert(slot.has_value());
+    if (*slot >= g_textures.size()) {
+        g_textures.resize(*slot + 1);
     }
 
-    g_textures[slot].registration = registration;
-    g_textures[slot].active = true;
+    g_textures[*slot].registration = registration;
+    g_textures[*slot].active = true;
     return handle;
 }
 

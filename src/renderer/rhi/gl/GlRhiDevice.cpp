@@ -1831,7 +1831,22 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
         resolvedDesc.mipCount > textureRecord.desc.mipLevels - resolvedDesc.baseMip ||
         resolvedDesc.baseLayer >= textureRecord.desc.depthOrLayers ||
         resolvedDesc.layerCount > textureRecord.desc.depthOrLayers - resolvedDesc.baseLayer) {
-        logRhiError("createTextureView received an invalid descriptor");
+        std::cerr << "GlRhiDevice: invalid texture view"
+                  << " handle=" << desc.texture.index << ':' << desc.texture.generation
+                  << " resolved=" << textureResolved
+                  << " viewType=" << static_cast<uint32_t>(desc.viewType)
+                  << " format=" << static_cast<uint32_t>(resolvedFormat)
+                  << " baseMip=" << resolvedDesc.baseMip
+                  << " mipCount=" << resolvedDesc.mipCount
+                  << " baseLayer=" << resolvedDesc.baseLayer
+                  << " layerCount=" << resolvedDesc.layerCount;
+        if (textureResolved) {
+            std::cerr << " textureDimension=" << static_cast<uint32_t>(textureRecord.desc.dimension)
+                      << " textureFormat=" << static_cast<uint32_t>(textureRecord.desc.format)
+                      << " textureMips=" << textureRecord.desc.mipLevels
+                      << " textureLayers=" << textureRecord.desc.depthOrLayers;
+        }
+        std::cerr << '\n';
         return {};
     }
 
