@@ -477,16 +477,18 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         {
             renderer::debug::ScopedDebugGroup transparentGroup("Transparent");
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
-            const uint32_t csmShadowDepthId =
-                renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle());
-            const uint32_t csmShadowDepthAllId =
-                renderer::rhi::gl::textureId(targets.csmShadowDepthAllTextureHandle());
-            glCopyImageSubData(
-                csmShadowDepthId, GL_TEXTURE_2D_ARRAY,
-                0, 0, 0, cascade,
-                csmShadowDepthAllId, GL_TEXTURE_2D_ARRAY,
-                0, 0, 0, cascade,
-                cascadeRes, cascadeRes, 1);
+            RhiCommandList& commandList = rhiDevice.beginFrame();
+            RhiTextureCopy depthCopy;
+            depthCopy.src = targets.csmShadowDepthTextureHandle();
+            depthCopy.srcSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
+            depthCopy.dst = targets.csmShadowDepthAllTextureHandle();
+            depthCopy.dstSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
+            depthCopy.extent = {
+                static_cast<uint32_t>(std::max(1, cascadeRes)),
+                static_cast<uint32_t>(std::max(1, cascadeRes)),
+                1u
+            };
+            commandList.copyTexture(depthCopy);
 
             RhiColorAttachment colorAttachments[2];
             colorAttachments[0].view = targets.csmShadowColor0TextureViewHandle(cascade);
@@ -521,7 +523,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             renderingInfo.colorAttachmentCount = 2u;
             renderingInfo.depthStencilAttachment = &depthAttachment;
 
-            RhiCommandList& commandList = rhiDevice.beginFrame();
             commandList.beginRendering(renderingInfo);
 
             if (renderTransparentCasters) {
@@ -619,17 +620,17 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     // Transitional compatibility for historical debug modes that still inspect
     // the legacy single-map projection: expose cascade 0 there.
     if (settings.debug.deferredLightDebugMode > 0 || settings.debug.lightDebugMode > 0) {
-        const uint32_t csmShadowDepthId =
-            renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle());
-        const uint32_t shadowDepthId =
-            renderer::rhi::gl::textureId(targets.shadowDepthTextureHandle());
-        glCopyImageSubData(csmShadowDepthId, GL_TEXTURE_2D_ARRAY,
-                           0, 0, 0, 0,
-                           shadowDepthId, GL_TEXTURE_2D,
-                           0, 0, 0, 0,
-                           targets.shadowResolution(),
-                           targets.shadowResolution(),
-                           1);
+        RhiCommandList& commandList = rhiDevice.beginFrame();
+        RhiTextureCopy debugDepthCopy;
+        debugDepthCopy.src = targets.csmShadowDepthTextureHandle();
+        debugDepthCopy.dst = targets.shadowDepthTextureHandle();
+        debugDepthCopy.extent = {
+            static_cast<uint32_t>(std::max(1, targets.shadowResolution())),
+            static_cast<uint32_t>(std::max(1, targets.shadowResolution())),
+            1u
+        };
+        commandList.copyTexture(debugDepthCopy);
+        rhiDevice.submitFrame(commandList);
     }
 
     m_worldRenderBuffer->beginFrame();
