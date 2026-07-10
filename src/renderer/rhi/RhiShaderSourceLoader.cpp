@@ -81,9 +81,75 @@ namespace {
     }
     return output;
 }
+
+[[nodiscard]] bool validDefinitionName(const std::string& definition) {
+    if (definition.empty()) {
+        return false;
+    }
+    const auto validFirstCharacter = [](const char character) {
+        return (character >= 'A' && character <= 'Z') ||
+               (character >= 'a' && character <= 'z') || character == '_';
+    };
+    const auto validCharacter = [&](const char character) {
+        return validFirstCharacter(character) ||
+               (character >= '0' && character <= '9');
+    };
+    if (!validFirstCharacter(definition.front())) {
+        return false;
+    }
+    for (const char character : definition) {
+        if (!validCharacter(character)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] std::optional<std::string> injectDefinitions(
+    const std::string& source,
+    const std::vector<std::string>& definitions) {
+    if (definitions.empty()) {
+        return source;
+    }
+    for (const std::string& definition : definitions) {
+        if (!validDefinitionName(definition)) {
+            return std::nullopt;
+        }
+    }
+
+    std::stringstream input(source);
+    std::string output;
+    std::string line;
+    bool injected = false;
+    while (std::getline(input, line)) {
+        output += line;
+        output += '\n';
+
+        const size_t directiveStart = line.find_first_not_of(" \t");
+        if (!injected && directiveStart != std::string::npos &&
+            line.compare(directiveStart, 8, "#version") == 0) {
+            for (const std::string& definition : definitions) {
+                output += "#define ";
+                output += definition;
+                output += " 1\n";
+            }
+            injected = true;
+        }
+    }
+    if (!injected) {
+        return std::nullopt;
+    }
+    return output;
+}
 } // namespace
 
 std::optional<std::string> loadShaderSource(const std::string& path) {
+    return loadShaderSource(path, {});
+}
+
+std::optional<std::string> loadShaderSource(
+    const std::string& path,
+    const RhiShaderSourceOptions& options) {
     const std::optional<std::string> source = readTextFile(path);
     if (!source.has_value()) {
         return std::nullopt;
@@ -92,7 +158,12 @@ std::optional<std::string> loadShaderSource(const std::string& path) {
     const std::filesystem::path sourcePath = std::filesystem::absolute(path).lexically_normal();
     std::unordered_set<std::string> includeStack;
     includeStack.insert(sourcePath.string());
-    return resolveIncludes(*source, sourcePath.string(), includeStack);
+    const std::optional<std::string> resolvedSource =
+        resolveIncludes(*source, sourcePath.string(), includeStack);
+    if (!resolvedSource.has_value()) {
+        return std::nullopt;
+    }
+    return injectDefinitions(*resolvedSource, options.preprocessorDefinitions);
 }
 
 } // namespace renderer::rhi
