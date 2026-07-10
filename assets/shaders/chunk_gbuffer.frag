@@ -29,8 +29,12 @@ layout(binding = 3) uniform sampler2D uGrassColormap;
 layout(binding = 4) uniform sampler2D uFoliageColormap;
 layout(binding = 9) uniform sampler2D uNoiseTex;
 layout(binding = 10) uniform sampler2D uRippleNormalTex;
+#ifdef RHI_TERRAIN_NORMAL_MAPS
 layout(binding = 11) uniform sampler2DArray uBlockNormalTex;
+#endif
+#ifdef RHI_TERRAIN_SPECULAR_MAPS
 layout(binding = 12) uniform sampler2DArray uBlockSpecularTex;
+#endif
 #include "terrain_gbuffer_params.glsl"
 
 #define uCameraPos rhiTerrainCameraAnimation.xyz
@@ -127,6 +131,7 @@ vec4 sampleBlockMap(sampler2DArray mapTex,
         : textureGrad(mapTex, coord, uvDx, uvDy);
 }
 
+#if !defined(RHI_TERRAIN_MDI) || defined(RHI_TERRAIN_NORMAL_MAPS)
 float sampleLabPbrHeight(vec2 uv, float layer, bool forceBaseLod, vec2 uvDx, vec2 uvDy) {
     return sampleBlockMap(uBlockNormalTex, uv, layer, forceBaseLod, uvDx, uvDy).a;
 }
@@ -187,6 +192,7 @@ vec2 applyBlockParallaxMap(vec3 geometricNormal,
     float weight = abs(denom) > 1e-5 ? clamp(afterDepth / denom, 0.0, 1.0) : 0.0;
     return mix(currentUv, previousUv, weight);
 }
+#endif
 
 vec3 applyBlockNormalMap(vec3 geometricNormal, vec3 position, vec2 derivativeUv, vec4 normalTexel) {
     vec3 tangentNormal = normalize(normalTexel.xyz * 2.0 - 1.0);
@@ -223,9 +229,11 @@ void main() {
     vec2 uvDy = dFdy(vUV);
     vec3 geometricNormal = decodeFaceNormal(vNormal);
     vec2 sampleUv = vUV;
+#if !defined(RHI_TERRAIN_MDI) || defined(RHI_TERRAIN_NORMAL_MAPS)
     if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
         sampleUv = applyBlockParallaxMap(geometricNormal, vWorldPos, vUV, sampledLayer, forceBaseLod, uvDx, uvDy);
     }
+#endif
 
     vec4 texColor = sampleBlockMap(texArray, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
     if (texColor.a < 0.1) {
@@ -254,17 +262,21 @@ void main() {
     SurfaceMaterial material = surfaceMaterialForKind(vMaterialKind, emissiveHint);
     SurfaceMaterialAux aux = surfaceMaterialAuxForKind(vMaterialKind);
 
+#if !defined(RHI_TERRAIN_MDI) || defined(RHI_TERRAIN_NORMAL_MAPS)
     if (!isCrossVegetation && uHasBlockNormalMaps != 0) {
         vec4 normalTexel = sampleBlockMap(uBlockNormalTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
         normal = applyBlockNormalMap(normal, vWorldPos, vUV, normalTexel);
     }
+#endif
 
+#if !defined(RHI_TERRAIN_MDI) || defined(RHI_TERRAIN_SPECULAR_MAPS)
     if (uHasBlockSpecularMaps != 0) {
         vec4 specularTexel = sampleBlockMap(uBlockSpecularTex, sampleUv, sampledLayer, forceBaseLod, uvDx, uvDy);
         if (hasAuthoredSpecularData(specularTexel)) {
             applyLabPbrSpecularMap(specularTexel, derivativeMaterialId, emissiveHint, material, aux);
         }
     }
+#endif
 
     bool canReceiveTerrainRain = !isCrossVegetation &&
                                  derivativeMaterialId != MATERIAL_WATER &&

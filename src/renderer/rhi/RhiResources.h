@@ -7,6 +7,9 @@
 #include <cstddef>
 #include <cstdint>
 
+inline constexpr uint32_t kRhiRemainingMipLevels = 0xFFFFFFFFu;
+inline constexpr uint32_t kRhiRemainingArrayLayers = 0xFFFFFFFFu;
+
 struct RhiTextureDesc {
     const char* debugName = nullptr;
     RhiTextureDimension dimension = RhiTextureDimension::Texture2D;

@@ -1812,23 +1812,34 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
 RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
     GlResolvedTextureRecord textureRecord;
     const bool textureResolved = resolveTextureRecord(*m_data, desc.texture, textureRecord);
+    RhiTextureViewDesc resolvedDesc = desc;
+    if (textureResolved && desc.baseMip < textureRecord.desc.mipLevels &&
+        desc.mipCount == kRhiRemainingMipLevels) {
+        resolvedDesc.mipCount = textureRecord.desc.mipLevels - desc.baseMip;
+    }
+    if (textureResolved && desc.baseLayer < textureRecord.desc.depthOrLayers &&
+        desc.layerCount == kRhiRemainingArrayLayers) {
+        resolvedDesc.layerCount = textureRecord.desc.depthOrLayers - desc.baseLayer;
+    }
     const RhiTextureFormat resolvedFormat =
         desc.format == RhiTextureFormat::Undefined && textureResolved ? textureRecord.desc.format : desc.format;
     GlFormatInfo format;
     const GLenum viewTarget = toGlTextureViewTarget(desc.viewType);
     if (!m_initialized || !textureResolved || viewTarget == 0u ||
-        !toGlFormatInfo(resolvedFormat, format) || desc.mipCount == 0u ||
-        desc.layerCount == 0u || desc.baseMip + desc.mipCount > textureRecord.desc.mipLevels ||
-        desc.baseLayer + desc.layerCount > textureRecord.desc.depthOrLayers) {
+        !toGlFormatInfo(resolvedFormat, format) || resolvedDesc.mipCount == 0u ||
+        resolvedDesc.layerCount == 0u || resolvedDesc.baseMip >= textureRecord.desc.mipLevels ||
+        resolvedDesc.mipCount > textureRecord.desc.mipLevels - resolvedDesc.baseMip ||
+        resolvedDesc.baseLayer >= textureRecord.desc.depthOrLayers ||
+        resolvedDesc.layerCount > textureRecord.desc.depthOrLayers - resolvedDesc.baseLayer) {
         logRhiError("createTextureView received an invalid descriptor");
         return {};
     }
 
     const bool aliasesWholeTexture =
         resolvedFormat == textureRecord.desc.format &&
-        desc.baseMip == 0u && desc.mipCount == textureRecord.desc.mipLevels &&
-        desc.baseLayer == 0u && desc.layerCount == textureRecord.desc.depthOrLayers &&
-        viewTarget == textureRecord.target && !desc.depthCompare;
+        resolvedDesc.baseMip == 0u && resolvedDesc.mipCount == textureRecord.desc.mipLevels &&
+        resolvedDesc.baseLayer == 0u && resolvedDesc.layerCount == textureRecord.desc.depthOrLayers &&
+        viewTarget == textureRecord.target && !resolvedDesc.depthCompare;
 
     GLuint textureView = textureRecord.texture;
     bool ownsTexture = false;
@@ -1838,22 +1849,22 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
                       viewTarget,
                       textureRecord.texture,
                       format.internalFormat,
-                      desc.baseMip,
-                      desc.mipCount,
-                      desc.baseLayer,
-                      desc.layerCount);
+                      resolvedDesc.baseMip,
+                      resolvedDesc.mipCount,
+                      resolvedDesc.baseLayer,
+                      resolvedDesc.layerCount);
         glTextureParameteri(textureView, GL_TEXTURE_BASE_LEVEL, 0);
         glTextureParameteri(textureView,
                             GL_TEXTURE_MAX_LEVEL,
-                            static_cast<GLint>(desc.mipCount - 1u));
+                            static_cast<GLint>(resolvedDesc.mipCount - 1u));
         glTextureParameteri(textureView,
                             GL_TEXTURE_MIN_FILTER,
-                            desc.mipCount > 1u ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+                            resolvedDesc.mipCount > 1u ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
         glTextureParameteri(textureView, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTextureParameteri(textureView, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(textureView, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTextureParameteri(textureView, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-        if (desc.depthCompare) {
+        if (resolvedDesc.depthCompare) {
             glTextureParameteri(textureView, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
             glTextureParameteri(textureView, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
         }
@@ -1869,7 +1880,7 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
     m_data->textureViewRecords[slot] = {
         textureView,
         viewTarget,
-        desc,
+        resolvedDesc,
         resolvedFormat,
         format,
         false,

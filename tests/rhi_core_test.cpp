@@ -281,6 +281,7 @@ bool testGlRhiDeviceHandles() {
     textureDesc.debugName = "test-texture";
     textureDesc.width = 4;
     textureDesc.height = 4;
+    textureDesc.mipLevels = 3u;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
     if (!requireTrue(texture.isValid(), "OpenGL RHI device must create texture handles")) {
@@ -289,6 +290,8 @@ bool testGlRhiDeviceHandles() {
 
     RhiTextureViewDesc viewDesc;
     viewDesc.texture = texture;
+    viewDesc.mipCount = kRhiRemainingMipLevels;
+    viewDesc.layerCount = kRhiRemainingArrayLayers;
     const RhiTextureViewHandle view = device.createTextureView(viewDesc);
     if (!requireTrue(view.isValid(), "OpenGL RHI device must create texture view handles")) {
         return false;
@@ -1836,6 +1839,8 @@ bool testGlRhiTerrainGBufferPipeline() {
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_MDI");
+    sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_NORMAL_MAPS");
+    sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SPECULAR_MAPS");
     const auto vertexSource = renderer::rhi::loadShaderSource(
         "assets/shaders/chunk_gbuffer.vert",
         sourceOptions);
