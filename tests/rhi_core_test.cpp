@@ -1,4 +1,5 @@
 #include "renderer/rhi/RhiHandleAllocator.h"
+#include "renderer/rhi/RhiGrowableBuffer.h"
 #include "renderer/rhi/RhiHash.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 #include "renderer/rhi/gl/GlRhiDevice.h"
@@ -296,6 +297,50 @@ bool testGlRhiDeviceHandles() {
     device.destroyTextureView(view);
     device.destroyTexture(texture);
     device.destroyBuffer(buffer);
+    device.shutdown();
+    return true;
+}
+
+bool testGlRhiGrowableBuffer() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for growable buffer")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_growable_buffer_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for growable buffer")) {
+        return false;
+    }
+
+    RhiGrowableBuffer buffer;
+    if (!requireTrue(buffer.init(device,
+                                 16u,
+                                 rhiFlag(RhiBufferUsage::Indirect),
+                                 "growable-indirect-buffer"),
+                     "growable RHI buffer must initialize")) {
+        device.shutdown();
+        return false;
+    }
+
+    constexpr std::array<uint32_t, 4> kCommand = {3u, 1u, 0u, 0u};
+    constexpr uint64_t kOffset = 65536u;
+    RhiCommandList& commandList = device.beginFrame();
+    const bool writeSucceeded = buffer.write(
+        commandList,
+        kOffset,
+        kCommand.data(),
+        sizeof(kCommand));
+    device.submitFrame(commandList);
+    if (!requireTrue(writeSucceeded && buffer.capacity() == kOffset + sizeof(kCommand),
+                     "growable RHI buffer must expand and write beyond its initial capacity")) {
+        buffer.shutdown();
+        device.shutdown();
+        return false;
+    }
+
+    buffer.shutdown();
     device.shutdown();
     return true;
 }
@@ -1926,6 +1971,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiDeviceHandles()) {
+        return 1;
+    }
+    if (!testGlRhiGrowableBuffer()) {
         return 1;
     }
     if (!testGlRhiSwapchainBackbuffer()) {

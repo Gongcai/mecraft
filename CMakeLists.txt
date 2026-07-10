@@ -263,6 +263,7 @@ set(SRC_RENDERER
         src/renderer/contracts/MecraftTextureContract.cpp
 
         # RHI
+        src/renderer/rhi/RhiGrowableBuffer.cpp
         src/renderer/rhi/RhiHash.cpp
         src/renderer/rhi/RhiDeviceFactory.cpp
         src/renderer/rhi/RhiShaderSourceLoader.cpp
