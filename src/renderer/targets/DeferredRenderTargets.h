@@ -100,13 +100,16 @@ public:
     [[nodiscard]] RhiTextureHandle ssgiDenoiseTextureHandle(int slot) const;
     [[nodiscard]] RhiTextureHandle ssgiHistoryTextureHandle() const { return m_ssgiHistoryHandle[m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiHistoryTexturePrevHandle() const { return m_ssgiHistoryHandle[1 - m_ssgiHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle ssgiHistoryTexturePrevViewHandle() const { return m_ssgiHistoryView[1 - m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTextureHandle() const { return m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiMomentsHistoryTexturePrevHandle() const { return m_ssgiMomentsHistoryHandle[1 - m_ssgiHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle ssgiMomentsHistoryTexturePrevViewHandle() const { return m_ssgiMomentsHistoryView[1 - m_ssgiHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle ssgiTemporalTextureHandle() const { return m_ssgiTemporalHandle; }
     [[nodiscard]] RhiTextureViewHandle ssgiTemporalTextureViewHandle() const { return m_ssgiTemporalView; }
     [[nodiscard]] RhiTextureHandle ssgiTemporalMomentsTextureHandle() const { return m_ssgiTemporalMomentsHandle; }
     [[nodiscard]] RhiTextureViewHandle ssgiTemporalMomentsTextureViewHandle() const { return m_ssgiTemporalMomentsView; }
     bool ensureSsgiTemporalTextureViews(RhiDevice& rhiDevice);
+    bool ensureSsgiHistoryTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureViewHandle ssgiDenoiseTextureViewHandle(int slot) const;
     bool ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, int slot);
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
@@ -333,6 +336,8 @@ private:
     uint32_t m_ssgiMomentsHistoryTex[2] = {0, 0};
     RhiTextureHandle m_ssgiHistoryHandle[2];
     RhiTextureHandle m_ssgiMomentsHistoryHandle[2];
+    RhiTextureViewHandle m_ssgiHistoryView[2];
+    RhiTextureViewHandle m_ssgiMomentsHistoryView[2];
     int m_ssgiHistoryIndex = 0;
     uint32_t m_ssgiTemporalTex = 0;
     uint32_t m_ssgiTemporalMomentsTex = 0;
