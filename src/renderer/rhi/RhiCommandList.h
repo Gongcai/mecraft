@@ -42,6 +42,8 @@ public:
                               uint32_t drawCount, uint32_t stride) = 0;
     virtual void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
 
+    virtual void updateBuffer(RhiBufferHandle buffer, uint64_t offset,
+                              const void* data, size_t size) = 0;
     virtual void copyBuffer(const RhiBufferCopy& copy) = 0;
     virtual void copyBufferToTexture(const RhiBufferTextureCopy& copy) = 0;
     virtual void copyTexture(const RhiTextureCopy& copy) = 0;

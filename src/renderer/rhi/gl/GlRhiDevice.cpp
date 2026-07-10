@@ -1232,6 +1232,36 @@ void GlRhiCommandList::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint
     glDispatchCompute(groupCountX, groupCountY, groupCountZ);
 }
 
+void GlRhiCommandList::updateBuffer(const RhiBufferHandle buffer,
+                                    const uint64_t offset,
+                                    const void* data,
+                                    const size_t size) {
+    if (m_device == nullptr || !m_device->m_data) {
+        logRhiError("updateBuffer requires an initialized device");
+        return;
+    }
+    if (m_rendering) {
+        logRhiError("updateBuffer cannot be recorded inside a rendering scope");
+        return;
+    }
+
+    const GlBufferRecord* record =
+        recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
+    constexpr size_t kMaxUpdateBytes = 65536u;
+    if (record == nullptr || data == nullptr || size == 0u || size > kMaxUpdateBytes ||
+        (offset & 3u) != 0u || (size & 3u) != 0u || offset > record->desc.size ||
+        size > record->desc.size - offset ||
+        (record->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u) {
+        logRhiError("updateBuffer received an invalid buffer, range, or transfer contract");
+        return;
+    }
+
+    glNamedBufferSubData(record->buffer,
+                         static_cast<GLintptr>(offset),
+                         static_cast<GLsizeiptr>(size),
+                         data);
+}
+
 void GlRhiCommandList::copyBuffer(const RhiBufferCopy& copy) {
     if (m_device == nullptr || !m_device->m_data) {
         logRhiError("copyBuffer requires an initialized device");
