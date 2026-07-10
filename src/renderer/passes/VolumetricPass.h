@@ -6,10 +6,12 @@
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
 
+#include <array>
 #include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiDevice;
 class Shader;
 
 namespace shadow { class ShadowRenderer; }
@@ -25,7 +27,7 @@ public:
 
     /// Check if all required shaders are loaded.
     [[nodiscard]] bool hasShaders() const {
-        return m_volumetricFogShader != nullptr && m_volumetricCompositeShader != nullptr;
+        return m_volumetricFogShader != nullptr;
     }
 
     /// Check if temporal shader is available.
@@ -49,13 +51,27 @@ private:
                         DeferredRenderTargets& targets);
     void composite(const FrameContext& ctx, const RenderSettings& settings,
                    DeferredRenderTargets& targets, bool hasPreviousFrame);
+    bool ensureCompositeRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureCompositeBindGroup(RhiDevice& rhiDevice,
+                                  const std::array<RhiTextureViewHandle, 3>& views);
+    void destroyCompositeBindGroup();
+    void destroyCompositeRhiResources();
 
     Shader* m_volumetricFogShader = nullptr;
     Shader* m_volumetricTemporalShader = nullptr;
-    Shader* m_volumetricCompositeShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     RhiTextureHandle m_noiseTexture;
+    RhiDevice* m_compositeRhiDevice = nullptr;
+    RhiSamplerHandle m_compositeNearestSampler;
+    RhiSamplerHandle m_compositeLinearSampler;
+    RhiBindGroupLayoutHandle m_compositeBindGroupLayout;
+    RhiPipelineLayoutHandle m_compositePipelineLayout;
+    RhiShaderHandle m_compositeVertexShader;
+    RhiShaderHandle m_compositeFragmentShader;
+    RhiPipelineHandle m_compositePipeline;
+    RhiBindGroupHandle m_compositeBindGroup;
+    std::array<RhiTextureViewHandle, 3> m_compositeBoundViews = {};
     bool m_hasRenderedFog = false;
     glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
     float m_lastWeatherSignal = 0.0f;

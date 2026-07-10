@@ -5,6 +5,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
@@ -13,20 +14,38 @@
 
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
+#include <optional>
+
+namespace {
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+template <size_t Count>
+[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, Count>& lhs,
+                                    const std::array<RhiTextureViewHandle, Count>& rhs) {
+    for (size_t i = 0u; i < lhs.size(); ++i) {
+        if (!sameTextureView(lhs[i], rhs[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
 
 void VolumetricPass::init(ResourceMgr& resourceMgr) {
     m_volumetricFogShader = resourceMgr.getShader("volumetric_fog");
     m_volumetricTemporalShader = resourceMgr.getShader("volumetric_temporal");
-    m_volumetricCompositeShader = resourceMgr.getShader("volumetric_composite");
     m_resourceMgr = &resourceMgr;
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void VolumetricPass::shutdown() {
+    destroyCompositeRhiResources();
     m_volumetricFogShader = nullptr;
     m_volumetricTemporalShader = nullptr;
-    m_volumetricCompositeShader = nullptr;
     m_shadowRenderer = nullptr;
     m_resourceMgr = nullptr;
     m_noiseTexture = {};
@@ -85,9 +104,7 @@ void VolumetricPass::execute(const FrameContext& ctx, const RenderSettings& sett
     }
 
     // Composite (always runs to ensure correct transmittance)
-    if (m_volumetricCompositeShader != nullptr) {
-        composite(ctx, settings, targets, hasPreviousFrame);
-    }
+    composite(ctx, settings, targets, hasPreviousFrame);
 }
 
 void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& settings,
@@ -362,9 +379,32 @@ void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSetting
 
 void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& settings,
                                 DeferredRenderTargets& targets, bool hasPreviousFrame) {
-    if (m_volumetricCompositeShader == nullptr) return;
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSceneResolvedTextureView(*ctx.shared->rhiDevice)) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled &&
+                                       hasPreviousFrame &&
+                                       m_volumetricTemporalShader != nullptr;
+    if (!targets.ensureSceneResolvedTextureView(rhiDevice) ||
+        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
+        !targets.ensureGBufferTextureViews(rhiDevice) ||
+        !(useTemporalVolumetric
+              ? targets.ensureHistoryVolumetricTextureView(rhiDevice)
+              : targets.ensureHalfResTextureView(rhiDevice))) {
+        return;
+    }
+
+    const std::array<RhiTextureViewHandle, 3> views = {
+        targets.sceneCompositeTextureViewHandle(),
+        useTemporalVolumetric
+            ? targets.historyVolumetricTextureViewHandle()
+            : targets.halfResTextureViewHandle(),
+        targets.depthTextureViewHandle()
+    };
+    if (!ensureCompositeRhiPipeline(rhiDevice) ||
+        !ensureCompositeBindGroup(rhiDevice, views)) {
         return;
     }
 
@@ -384,50 +424,215 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_volumetricCompositeShader->use();
-    m_volumetricCompositeShader->setInt("uSceneTex", 0);
-    m_volumetricCompositeShader->setInt("uVolumetricTex", 1);
-    m_volumetricCompositeShader->setInt("uDepthTex", 2);
-    m_volumetricCompositeShader->setFloat("uNearPlane", ctx.camera.nearPlane);
-    m_volumetricCompositeShader->setFloat("uFarPlane", ctx.camera.farPlane);
-    m_volumetricCompositeShader->setInt("uIsEyeInWater", ctx.eyeInWater ? 1 : 0);
-    m_volumetricCompositeShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
-    m_volumetricCompositeShader->setInt("uFreezeBias", settings.volumetric.freezeBias ? 1 : 0);
 
     const bool underwaterVolumetricActive = ctx.eyeInWater && settings.volumetric.uwLightEnabled;
     const bool volFogCompositeActive = (underwaterVolumetricActive ||
                                         settings.volumetric.lightEnabled ||
                                         (settings.volumetric.fogEnabled &&
                                          settings.volumetric.fogStrength > 0.001f));
-    m_volumetricCompositeShader->setInt("uVolumetricFogActive", volFogCompositeActive ? 1 : 0);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    if (settings.volumetric.temporalEnabled && hasPreviousFrame && m_volumetricTemporalShader != nullptr) {
-        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyVolumetricTextureHandle()));
-    } else {
-        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.halfResTextureHandle()));
-    }
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_volumetricCompositeShader);
-
-    for (int i = 2; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    struct CompositePushConstants {
+        glm::vec4 depthParams;
+        glm::ivec4 flags;
+    };
+    const CompositePushConstants pushConstants{
+        glm::vec4(ctx.camera.nearPlane, ctx.camera.farPlane, 0.0f, 0.0f),
+        glm::ivec4(static_cast<int>(ctx.frameIndex & 0x7fffffffULL),
+                   settings.volumetric.freezeBias ? 1 : 0,
+                   ctx.eyeInWater ? 1 : 0,
+                   volFogCompositeActive ? 1 : 0)
+    };
+    commandList.setGraphicsPipeline(m_compositePipeline);
+    commandList.setBindGroup(0u, m_compositeBindGroup);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
+}
+
+bool VolumetricPass::ensureCompositeRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_compositeRhiDevice != nullptr && m_compositeRhiDevice != &rhiDevice) {
+        destroyCompositeRhiResources();
+    }
+    if (m_compositePipeline.isValid()) {
+        return true;
+    }
+    m_compositeRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/volumetric_composite.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "VolumetricComposite.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_compositeVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "VolumetricComposite.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_compositeFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_compositeVertexShader.isValid() || !m_compositeFragmentShader.isValid()) {
+        destroyCompositeRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc nearestSamplerDesc;
+    nearestSamplerDesc.minFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.magFilter = RhiFilter::Nearest;
+    nearestSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    nearestSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    nearestSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_compositeNearestSampler = rhiDevice.createSampler(nearestSamplerDesc);
+
+    RhiSamplerDesc linearSamplerDesc;
+    linearSamplerDesc.minFilter = RhiFilter::Linear;
+    linearSamplerDesc.magFilter = RhiFilter::Linear;
+    linearSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    linearSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    linearSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_compositeLinearSampler = rhiDevice.createSampler(linearSamplerDesc);
+    if (!m_compositeNearestSampler.isValid() || !m_compositeLinearSampler.isValid()) {
+        destroyCompositeRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "VolumetricComposite.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_compositeBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_compositeBindGroupLayout.isValid()) {
+        destroyCompositeRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "VolumetricComposite.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_compositeBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4) + sizeof(glm::ivec4));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_compositePipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_compositePipelineLayout.isValid()) {
+        destroyCompositeRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "VolumetricComposite.Pipeline";
+    pipelineDesc.vertexShader = m_compositeVertexShader;
+    pipelineDesc.fragmentShader = m_compositeFragmentShader;
+    pipelineDesc.layout = m_compositePipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_compositePipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_compositePipeline.isValid()) {
+        destroyCompositeRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool VolumetricPass::ensureCompositeBindGroup(
+    RhiDevice& rhiDevice,
+    const std::array<RhiTextureViewHandle, 3>& views) {
+    if (!ensureCompositeRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_compositeBindGroup.isValid() && sameTextureViews(m_compositeBoundViews, views)) {
+        return true;
+    }
+
+    destroyCompositeBindGroup();
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_compositeBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler =
+            binding == 2u ? m_compositeNearestSampler : m_compositeLinearSampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_compositeBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_compositeBindGroup.isValid()) {
+        m_compositeBoundViews = {};
+        return false;
+    }
+
+    m_compositeBoundViews = views;
+    return true;
+}
+
+void VolumetricPass::destroyCompositeBindGroup() {
+    if (m_compositeRhiDevice != nullptr && m_compositeBindGroup.isValid()) {
+        m_compositeRhiDevice->destroyBindGroup(m_compositeBindGroup);
+    }
+    m_compositeBindGroup = {};
+    m_compositeBoundViews = {};
+}
+
+void VolumetricPass::destroyCompositeRhiResources() {
+    destroyCompositeBindGroup();
+    if (m_compositeRhiDevice != nullptr) {
+        if (m_compositePipeline.isValid()) {
+            m_compositeRhiDevice->destroyPipeline(m_compositePipeline);
+        }
+        if (m_compositeVertexShader.isValid()) {
+            m_compositeRhiDevice->destroyShader(m_compositeVertexShader);
+        }
+        if (m_compositeFragmentShader.isValid()) {
+            m_compositeRhiDevice->destroyShader(m_compositeFragmentShader);
+        }
+        if (m_compositePipelineLayout.isValid()) {
+            m_compositeRhiDevice->destroyPipelineLayout(m_compositePipelineLayout);
+        }
+        if (m_compositeBindGroupLayout.isValid()) {
+            m_compositeRhiDevice->destroyBindGroupLayout(m_compositeBindGroupLayout);
+        }
+        if (m_compositeNearestSampler.isValid()) {
+            m_compositeRhiDevice->destroySampler(m_compositeNearestSampler);
+        }
+        if (m_compositeLinearSampler.isValid()) {
+            m_compositeRhiDevice->destroySampler(m_compositeLinearSampler);
+        }
+    }
+
+    m_compositePipeline = {};
+    m_compositeVertexShader = {};
+    m_compositeFragmentShader = {};
+    m_compositePipelineLayout = {};
+    m_compositeBindGroupLayout = {};
+    m_compositeNearestSampler = {};
+    m_compositeLinearSampler = {};
+    m_compositeRhiDevice = nullptr;
 }
