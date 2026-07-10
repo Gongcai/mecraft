@@ -30,6 +30,11 @@ void logRhiError(const char* message) {
     std::cerr << "GlRhiDevice: " << message << '\n';
 }
 
+void logFramebufferStatus(const char* context, const GLenum status) {
+    std::cerr << "GlRhiDevice: " << context << " framebuffer status=0x"
+              << std::hex << status << std::dec << '\n';
+}
+
 void labelGlObject(const GLenum identifier, const GLuint name, const char* label) {
     if (name == 0u || label == nullptr || label[0] == '\0' || !GLAD_GL_VERSION_4_3) {
         return;
@@ -337,6 +342,7 @@ struct GlTextureViewRecord {
     GlFormatInfo format;
     bool swapchainBackbuffer = false;
     bool swapchainDepthStencil = false;
+    bool ownsTexture = false;
     bool active = false;
 };
 
@@ -776,9 +782,11 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
                 glNamedFramebufferReadBuffer(record.framebuffer, GL_NONE);
             }
 
-            if (glCheckNamedFramebufferStatus(record.framebuffer, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            const GLenum framebufferStatus =
+                glCheckNamedFramebufferStatus(record.framebuffer, GL_FRAMEBUFFER);
+            if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
                 glDeleteFramebuffers(1, &record.framebuffer);
-                logRhiError("beginRendering created an incomplete framebuffer");
+                logFramebufferStatus("beginRendering", framebufferStatus);
                 return;
             }
 
@@ -1426,12 +1434,20 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
         }
     }
 
-    if ((!src.swapchain &&
-         glCheckNamedFramebufferStatus(readFramebuffer, GL_READ_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) ||
-        (!dst.swapchain &&
-         glCheckNamedFramebufferStatus(drawFramebuffer, GL_DRAW_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)) {
+    const GLenum readStatus = src.swapchain
+        ? GL_FRAMEBUFFER_COMPLETE
+        : glCheckNamedFramebufferStatus(readFramebuffer, GL_READ_FRAMEBUFFER);
+    const GLenum drawStatus = dst.swapchain
+        ? GL_FRAMEBUFFER_COMPLETE
+        : glCheckNamedFramebufferStatus(drawFramebuffer, GL_DRAW_FRAMEBUFFER);
+    if (readStatus != GL_FRAMEBUFFER_COMPLETE || drawStatus != GL_FRAMEBUFFER_COMPLETE) {
         destroyFramebuffers();
-        logRhiError("blitTexture created an incomplete framebuffer");
+        if (readStatus != GL_FRAMEBUFFER_COMPLETE) {
+            logFramebufferStatus("blitTexture read", readStatus);
+        }
+        if (drawStatus != GL_FRAMEBUFFER_COMPLETE) {
+            logFramebufferStatus("blitTexture draw", drawStatus);
+        }
         return;
     }
 
@@ -1529,6 +1545,7 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
         swapchainFormat,
         true,
         false,
+        false,
         true
     };
 
@@ -1545,6 +1562,7 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
         swapchainDepthFormat,
         false,
         true,
+        false,
         true
     };
     return true;
@@ -1588,7 +1606,7 @@ void GlRhiDevice::shutdown() {
         record = {};
     }
     for (GlTextureViewRecord& record : m_data->textureViewRecords) {
-        if (record.active && record.texture != 0u) {
+        if (record.active && record.ownsTexture && record.texture != 0u) {
             glDeleteTextures(1, &record.texture);
         }
         record = {};
@@ -1701,6 +1719,17 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
                            static_cast<GLsizei>(desc.height),
                            static_cast<GLsizei>(desc.depthOrLayers));
     }
+    glTextureParameteri(texture, GL_TEXTURE_BASE_LEVEL, 0);
+    glTextureParameteri(texture,
+                        GL_TEXTURE_MAX_LEVEL,
+                        static_cast<GLint>(desc.mipLevels - 1u));
+    glTextureParameteri(texture,
+                        GL_TEXTURE_MIN_FILTER,
+                        desc.mipLevels > 1u ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+    glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTextureParameteri(texture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     labelGlObject(GL_TEXTURE, texture, desc.debugName);
 
     if (initialData != nullptr) {
@@ -1746,28 +1775,59 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
         return {};
     }
 
-    GLuint textureView = 0u;
-    glGenTextures(1, &textureView);
-    glTextureView(textureView,
-                  viewTarget,
-                  textureRecord.texture,
-                  format.internalFormat,
-                  desc.baseMip,
-                  desc.mipCount,
-                  desc.baseLayer,
-                  desc.layerCount);
-    if (desc.depthCompare) {
-        glTextureParameteri(textureView, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-        glTextureParameteri(textureView, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+    const bool aliasesWholeTexture =
+        resolvedFormat == textureRecord.desc.format &&
+        desc.baseMip == 0u && desc.mipCount == textureRecord.desc.mipLevels &&
+        desc.baseLayer == 0u && desc.layerCount == textureRecord.desc.depthOrLayers &&
+        viewTarget == textureRecord.target && !desc.depthCompare;
+
+    GLuint textureView = textureRecord.texture;
+    bool ownsTexture = false;
+    if (!aliasesWholeTexture) {
+        glGenTextures(1, &textureView);
+        glTextureView(textureView,
+                      viewTarget,
+                      textureRecord.texture,
+                      format.internalFormat,
+                      desc.baseMip,
+                      desc.mipCount,
+                      desc.baseLayer,
+                      desc.layerCount);
+        glTextureParameteri(textureView, GL_TEXTURE_BASE_LEVEL, 0);
+        glTextureParameteri(textureView,
+                            GL_TEXTURE_MAX_LEVEL,
+                            static_cast<GLint>(desc.mipCount - 1u));
+        glTextureParameteri(textureView,
+                            GL_TEXTURE_MIN_FILTER,
+                            desc.mipCount > 1u ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST);
+        glTextureParameteri(textureView, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTextureParameteri(textureView, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(textureView, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(textureView, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        if (desc.depthCompare) {
+            glTextureParameteri(textureView, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+            glTextureParameteri(textureView, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+        }
+        labelGlObject(GL_TEXTURE, textureView, rhiDebugName(textureRecord.desc.debugName));
+        ownsTexture = true;
     }
-    labelGlObject(GL_TEXTURE, textureView, rhiDebugName(textureRecord.desc.debugName));
 
     const RhiTextureViewHandle handle = m_data->textureViews.allocate();
     const uint32_t slot = handle.index - 1u;
     if (slot >= m_data->textureViewRecords.size()) {
         m_data->textureViewRecords.resize(slot + 1u);
     }
-    m_data->textureViewRecords[slot] = {textureView, viewTarget, desc, resolvedFormat, format, false, false, true};
+    m_data->textureViewRecords[slot] = {
+        textureView,
+        viewTarget,
+        desc,
+        resolvedFormat,
+        format,
+        false,
+        false,
+        ownsTexture,
+        true
+    };
     return handle;
 }
 
@@ -2059,7 +2119,9 @@ void GlRhiDevice::destroyTexture(RhiTextureHandle handle) {
 void GlRhiDevice::destroyTextureView(RhiTextureViewHandle handle) {
     GlTextureViewRecord* record = recordForHandle(m_data->textureViews, m_data->textureViewRecords, handle);
     if (record != nullptr) {
-        glDeleteTextures(1, &record->texture);
+        if (record->ownsTexture) {
+            glDeleteTextures(1, &record->texture);
+        }
         *record = {};
     }
     for (GlFramebufferRecord& framebuffer : m_data->framebufferCache) {
