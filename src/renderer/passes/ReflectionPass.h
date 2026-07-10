@@ -12,7 +12,6 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class RhiDevice;
-class Shader;
 
 /// Reflection pass: SSR probe, bilateral filter, and temporal reprojection.
 class ReflectionPass : public RenderPass {
@@ -31,6 +30,11 @@ private:
                       DeferredRenderTargets& targets);
     void renderTemporal(const FrameContext& ctx, const ReflectionSettings& reflection,
                         DeferredRenderTargets& targets);
+    bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureBaseBindGroup(RhiDevice& rhiDevice,
+                             const std::array<RhiTextureViewHandle, 7>& views);
+    void destroyBaseBindGroup();
+    void destroyBaseRhiResources();
     bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
     bool ensureFilterBindGroup(RhiDevice& rhiDevice,
                                const std::array<RhiTextureViewHandle, 5>& views);
@@ -42,11 +46,17 @@ private:
     void destroyTemporalBindGroup();
     void destroyTemporalRhiResources();
 
-    Shader* m_reflectionShader = nullptr;
-
-    RhiTextureHandle m_noiseTexture;
-    RhiTextureHandle m_rippleNormalTexture;
-    ResourceMgr* m_resourceMgr = nullptr;
+    RhiDevice* m_baseRhiDevice = nullptr;
+    RhiBufferHandle m_baseUniformBuffer;
+    RhiSamplerHandle m_baseNearestSampler;
+    RhiSamplerHandle m_baseLinearSampler;
+    RhiBindGroupLayoutHandle m_baseBindGroupLayout;
+    RhiPipelineLayoutHandle m_basePipelineLayout;
+    RhiShaderHandle m_baseVertexShader;
+    RhiShaderHandle m_baseFragmentShader;
+    RhiPipelineHandle m_basePipeline;
+    RhiBindGroupHandle m_baseBindGroup;
+    std::array<RhiTextureViewHandle, 7> m_baseBoundViews = {};
 
     RhiDevice* m_filterRhiDevice = nullptr;
     RhiSamplerHandle m_filterNearestSampler;

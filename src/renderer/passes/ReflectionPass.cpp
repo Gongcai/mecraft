@@ -1,15 +1,11 @@
 #include "ReflectionPass.h"
 #include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../core/Shader.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
-
-#include <glad/glad.h>
 
 #include <glm/glm.hpp>
 #include <algorithm>
@@ -31,28 +27,27 @@ template <size_t Count>
     }
     return true;
 }
+
+struct alignas(16) ReflectionBaseParams {
+    glm::mat4 viewProj;
+    glm::mat4 invViewProj;
+    glm::vec4 cameraPosNear;
+    glm::vec4 farSurfaceTime;
+    glm::ivec4 controls;
+};
+static_assert(sizeof(ReflectionBaseParams) == 176u);
 } // namespace
 
-void ReflectionPass::init(ResourceMgr& resourceMgr) {
-    m_reflectionShader = resourceMgr.getShader("reflection_probe");
-    m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
-    m_rippleNormalTexture = resourceMgr.getTexture2DHandle("shader_ripple_normal");
-    m_resourceMgr = &resourceMgr;
-}
+void ReflectionPass::init(ResourceMgr&) {}
 
 void ReflectionPass::shutdown() {
+    destroyBaseRhiResources();
     destroyFilterRhiResources();
     destroyTemporalRhiResources();
-    m_reflectionShader = nullptr;
-    m_noiseTexture = {};
-    m_rippleNormalTexture = {};
-    m_resourceMgr = nullptr;
 }
 
 void ReflectionPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                               DeferredRenderTargets& targets) {
-    if (m_reflectionShader == nullptr) return;
-
     renderReflection(ctx, settings, targets);
 
     if (settings.reflection.filterEnabled &&
@@ -68,11 +63,42 @@ void ReflectionPass::execute(const FrameContext& ctx, const RenderSettings& sett
 
 void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSettings& settings,
                                        DeferredRenderTargets& targets) {
-    if (m_reflectionShader == nullptr) return;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice)) {
         return;
     }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    const std::array<RhiTextureViewHandle, 7> views = {
+        targets.sceneLightingTextureViewHandle(),
+        targets.depthTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),
+        targets.materialTextureViewHandle(),
+        targets.materialAuxTextureViewHandle(),
+        targets.skyCaptureTextureViewHandle(),
+        targets.voxelLightTextureViewHandle()
+    };
+    if (!ensureBaseRhiPipeline(rhiDevice) || !ensureBaseBindGroup(rhiDevice, views)) {
+        return;
+    }
+
+    ReflectionBaseParams params{};
+    params.viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    params.invViewProj = settings.taa.enabled
+        ? ctx.camera.jitteredInvViewProj
+        : ctx.camera.invViewProj;
+    params.cameraPosNear = glm::vec4(ctx.camera.position, ctx.camera.nearPlane);
+    params.farSurfaceTime = glm::vec4(ctx.camera.farPlane,
+                                      ctx.weather.surfaceWetness,
+                                      ctx.shaderTime,
+                                      0.0f);
+    params.controls = glm::ivec4(settings.debug.reflectionDebugMode,
+                                 settings.weather.rainLinesEnabled ? 1 : 0,
+                                 0,
+                                 0);
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targets.reflectionTextureViewHandle();
@@ -94,84 +120,229 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.updateBuffer(m_baseUniformBuffer, 0u, &params, sizeof(params));
     commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_reflectionShader->use();
-    m_reflectionShader->setInt("uSceneLightingTex", 0);
-    m_reflectionShader->setInt("uDepthTex", 1);
-    m_reflectionShader->setInt("uNormalAoTex", 2);
-    m_reflectionShader->setInt("uMaterialTex", 3);
-    m_reflectionShader->setInt("uMaterialAuxTex", 4);
-    m_reflectionShader->setInt("uSkyCaptureTex", 5);
-    m_reflectionShader->setInt("uAtmosphereLut", 6);
-    m_reflectionShader->setInt("uVoxelLightTex", 7);
-    m_reflectionShader->setInt("uNoiseTex", 8);
-    m_reflectionShader->setInt("uRippleNormalTex", 9);
-    m_reflectionShader->setMat4("uViewProj",
-        settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj);
-    m_reflectionShader->setMat4("uInvViewProj",
-        settings.taa.enabled ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj);
-    m_reflectionShader->setVec3("uCameraPos", ctx.camera.position);
-    m_reflectionShader->setVec3("uSunDirection", ctx.skyColors.sunDirection);
-    m_reflectionShader->setVec3("uMoonDirection", ctx.skyColors.moonDirection);
-    m_reflectionShader->setFloat("uSkyIntensity", ctx.skyIntensity);
-    m_reflectionShader->setFloat("uMoonVisibility", ctx.skyColors.moonVisibility);
-    m_reflectionShader->setFloat("uWeatherWetness", ctx.weather.wetness);
-    m_reflectionShader->setFloat("uSurfaceWetness", ctx.weather.surfaceWetness);
-    m_reflectionShader->setFloat("uSkyWetness", ctx.weather.skyWetness);
-    m_reflectionShader->setFloat("uFogWetness", ctx.weather.fogWetness);
-    m_reflectionShader->setFloat("uCloudWetness", ctx.weather.cloudWetness);
-    m_reflectionShader->setFloat("uTime", ctx.shaderTime);
-    m_reflectionShader->setInt("uReflectionDebugMode", settings.debug.reflectionDebugMode);
-    m_reflectionShader->setInt("uRainWetSurfacesEnabled", settings.weather.rainLinesEnabled ? 1 : 0);
-    m_reflectionShader->setInt("uRainSurfaceRipplesEnabled", settings.weather.surfaceRipplesEnabled ? 1 : 0);
-    m_reflectionShader->setFloat("uNearPlane", ctx.camera.nearPlane);
-    m_reflectionShader->setFloat("uFarPlane", ctx.camera.farPlane);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneLightingTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialTextureHandle()));
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.voxelLightTextureHandle()));
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_rippleNormalTexture));
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_reflectionShader);
-
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    for (int unit = 5; unit >= 0; --unit) {
-        glActiveTexture(GL_TEXTURE0 + unit);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_3D, 0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    commandList.setGraphicsPipeline(m_basePipeline);
+    commandList.setBindGroup(0u, m_baseBindGroup);
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
+}
+
+bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_baseRhiDevice != nullptr && m_baseRhiDevice != &rhiDevice) {
+        destroyBaseRhiResources();
+    }
+    if (m_basePipeline.isValid()) {
+        return true;
+    }
+    m_baseRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/reflection_probe.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "ReflectionBase.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_baseVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "ReflectionBase.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_baseFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_baseVertexShader.isValid() || !m_baseFragmentShader.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiBufferDesc uniformBufferDesc;
+    uniformBufferDesc.debugName = "ReflectionBase.Params";
+    uniformBufferDesc.size = sizeof(ReflectionBaseParams);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_baseUniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
+    if (!m_baseUniformBuffer.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    auto createSampler = [&](const RhiFilter filter) {
+        RhiSamplerDesc samplerDesc;
+        samplerDesc.minFilter = filter;
+        samplerDesc.magFilter = filter;
+        samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+        samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+        return rhiDevice.createSampler(samplerDesc);
+    };
+    m_baseNearestSampler = createSampler(RhiFilter::Nearest);
+    m_baseLinearSampler = createSampler(RhiFilter::Linear);
+    if (!m_baseNearestSampler.isValid() || !m_baseLinearSampler.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "ReflectionBase.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 7u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    bindGroupLayoutDesc.entries.push_back({
+        7u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_baseBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_baseBindGroupLayout.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "ReflectionBase.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_baseBindGroupLayout);
+    m_basePipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_basePipelineLayout.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "ReflectionBase.Pipeline";
+    pipelineDesc.vertexShader = m_baseVertexShader;
+    pipelineDesc.fragmentShader = m_baseFragmentShader;
+    pipelineDesc.layout = m_basePipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_basePipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_basePipeline.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool ReflectionPass::ensureBaseBindGroup(
+    RhiDevice& rhiDevice,
+    const std::array<RhiTextureViewHandle, 7>& views) {
+    if (!ensureBaseRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_baseBindGroup.isValid() && sameTextureViews(m_baseBoundViews, views)) {
+        return true;
+    }
+
+    destroyBaseBindGroup();
+    const RhiSamplerHandle samplers[7] = {
+        m_baseLinearSampler,
+        m_baseNearestSampler,
+        m_baseNearestSampler,
+        m_baseNearestSampler,
+        m_baseNearestSampler,
+        m_baseLinearSampler,
+        m_baseNearestSampler
+    };
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_baseBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = samplers[binding];
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    RhiBindGroupEntry uniformEntry;
+    uniformEntry.binding = 7u;
+    uniformEntry.resource.buffer.buffer = m_baseUniformBuffer;
+    uniformEntry.resource.buffer.offset = 0u;
+    uniformEntry.resource.buffer.range = sizeof(ReflectionBaseParams);
+    bindGroupDesc.entries.push_back(uniformEntry);
+
+    m_baseBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_baseBindGroup.isValid()) {
+        m_baseBoundViews = {};
+        return false;
+    }
+
+    m_baseBoundViews = views;
+    return true;
+}
+
+void ReflectionPass::destroyBaseBindGroup() {
+    if (m_baseRhiDevice != nullptr && m_baseBindGroup.isValid()) {
+        m_baseRhiDevice->destroyBindGroup(m_baseBindGroup);
+    }
+    m_baseBindGroup = {};
+    m_baseBoundViews = {};
+}
+
+void ReflectionPass::destroyBaseRhiResources() {
+    destroyBaseBindGroup();
+    if (m_baseRhiDevice != nullptr) {
+        if (m_basePipeline.isValid()) {
+            m_baseRhiDevice->destroyPipeline(m_basePipeline);
+        }
+        if (m_baseVertexShader.isValid()) {
+            m_baseRhiDevice->destroyShader(m_baseVertexShader);
+        }
+        if (m_baseFragmentShader.isValid()) {
+            m_baseRhiDevice->destroyShader(m_baseFragmentShader);
+        }
+        if (m_basePipelineLayout.isValid()) {
+            m_baseRhiDevice->destroyPipelineLayout(m_basePipelineLayout);
+        }
+        if (m_baseBindGroupLayout.isValid()) {
+            m_baseRhiDevice->destroyBindGroupLayout(m_baseBindGroupLayout);
+        }
+        if (m_baseUniformBuffer.isValid()) {
+            m_baseRhiDevice->destroyBuffer(m_baseUniformBuffer);
+        }
+        if (m_baseNearestSampler.isValid()) {
+            m_baseRhiDevice->destroySampler(m_baseNearestSampler);
+        }
+        if (m_baseLinearSampler.isValid()) {
+            m_baseRhiDevice->destroySampler(m_baseLinearSampler);
+        }
+    }
+
+    m_baseUniformBuffer = {};
+    m_baseNearestSampler = {};
+    m_baseLinearSampler = {};
+    m_baseBindGroupLayout = {};
+    m_basePipelineLayout = {};
+    m_baseVertexShader = {};
+    m_baseFragmentShader = {};
+    m_basePipeline = {};
+    m_baseRhiDevice = nullptr;
 }
 
 void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSettings& reflection,

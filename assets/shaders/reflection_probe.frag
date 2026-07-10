@@ -1,39 +1,36 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSceneLightingTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uMaterialTex;
-uniform sampler2D uMaterialAuxTex;
-uniform sampler2D uSkyCaptureTex;
-uniform sampler3D uAtmosphereLut;
-uniform sampler2D uNoiseTex;
-uniform sampler2D uRippleNormalTex;
-uniform mat4 uViewProj;
-uniform mat4 uInvViewProj;
-uniform vec3 uCameraPos;
-uniform vec3 uSunDirection;
-uniform vec3 uMoonDirection;
-uniform float uSkyIntensity;
-uniform float uMoonVisibility;
-uniform float uWeatherWetness;
-uniform float uSurfaceWetness;
-uniform float uSkyWetness;
-uniform float uFogWetness;
-uniform float uCloudWetness;
-uniform float uTime;
-uniform sampler2D uVoxelLightTex; // GBuffer attachment 2: sky light.r, block light.g
-uniform int uReflectionDebugMode; // 0=off, 1=pixelWetness, 2=reflectance, 3=ssrHit, 4=roughness, 5=specularWeight, 7=puddleMask, 8=rainSplashMask, 9=rainRippleNormal, 10=rainRippleStrength, 11=f0, 12=skyFallback, 13=reflectionRgb, 14=hasReflection, 15=skyLightRaw, 16=voxelLightRG, 17=materialAux, 18=skyGradient, 19=finalContribution, 20=reflectionSource, 21=reflectanceX32, 22=f0X32, 23=roughness, 24=reflectionSourceX8, 25=finalContributionX32, 29=reflectanceX128, 30=sourceGradientX128
-uniform int uRainWetSurfacesEnabled;
-uniform int uRainSurfaceRipplesEnabled;
-uniform float uNearPlane;
-uniform float uFarPlane;
+layout(binding = 0) uniform sampler2D uSceneLightingTex;
+layout(binding = 1) uniform sampler2D uDepthTex;
+layout(binding = 2) uniform sampler2D uNormalAoTex;
+layout(binding = 3) uniform sampler2D uMaterialTex;
+layout(binding = 4) uniform sampler2D uMaterialAuxTex;
+layout(binding = 5) uniform sampler2D uSkyCaptureTex;
+layout(binding = 6) uniform sampler2D uVoxelLightTex;
 
-#include "atmosphere_lut.glsl"
+layout(std140, binding = 7) uniform ReflectionParams {
+    mat4 pViewProj;
+    mat4 pInvViewProj;
+    vec4 pCameraPosNear;
+    vec4 pFarSurfaceTime;
+    ivec4 pControls;
+};
+
+#define uViewProj pViewProj
+#define uInvViewProj pInvViewProj
+#define uCameraPos pCameraPosNear.xyz
+#define uNearPlane pCameraPosNear.w
+#define uFarPlane pFarSurfaceTime.x
+#define uSurfaceWetness pFarSurfaceTime.y
+#define uTime pFarSurfaceTime.z
+#define uReflectionDebugMode pControls.x
+#define uRainWetSurfacesEnabled pControls.y
+
+#include "render_contract.glsl"
 
 #include "derivative_brdf.glsl"
 
