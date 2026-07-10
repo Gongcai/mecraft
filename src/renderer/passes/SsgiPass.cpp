@@ -1,15 +1,11 @@
 #include "SsgiPass.h"
 #include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../core/Shader.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
-
-#include <glad/glad.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -44,7 +40,6 @@ static_assert(sizeof(SsgiBaseParams) == 192u);
 } // namespace
 
 void SsgiPass::init(ResourceMgr& resourceMgr) {
-    m_ssgiDenoiseShader = resourceMgr.getShader("ssgi_denoise");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
@@ -52,8 +47,8 @@ void SsgiPass::shutdown() {
     destroyBaseRhiResources();
     destroyUpsampleRhiResources();
     destroyTemporalRhiResources();
+    destroyDenoiseRhiResources();
     destroyNoiseTextureView();
-    m_ssgiDenoiseShader = nullptr;
     m_noiseTexture = {};
 }
 
@@ -70,16 +65,9 @@ void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         renderSsgiTemporal(ctx, settings.ssgi, targets);
     }
     const bool denoiseActive = settings.ssgi.denoiseEnabled &&
-        m_ssgiDenoiseShader != nullptr &&
         std::clamp(settings.ssgi.denoiseIterations, 0, 4) > 0;
     if (denoiseActive) {
-        renderSsgiDenoise(ctx, settings.ssgi, targets,
-                          temporalActive
-                              ? renderer::rhi::gl::textureId(targets.ssgiTemporalTextureHandle())
-                              : renderer::rhi::gl::textureId(targets.ssgiTextureHandle()),
-                          temporalActive
-                              ? renderer::rhi::gl::textureId(targets.ssgiTemporalMomentsTextureHandle())
-                              : 0);
+        renderSsgiDenoise(ctx, settings.ssgi, targets, temporalActive);
     } else if (temporalActive) {
         if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
             return;
@@ -665,45 +653,52 @@ void SsgiPass::destroyUpsampleRhiResources() {
 }
 
 void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
-                                 DeferredRenderTargets& targets, const uint32_t initialInputTexture,
-                                 const uint32_t momentsTexture) {
-    if (m_ssgiDenoiseShader == nullptr) {
-        return;
-    }
-
+                                 DeferredRenderTargets& targets, const bool momentsEnabled) {
     const int iterations = std::clamp(ssgi.denoiseIterations, 0, 4);
     if (iterations <= 0) {
         return;
     }
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice, 0) ||
-        (iterations > 1 && !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice, 1))) {
+        (iterations > 1 && !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice, 1)) ||
+        !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        (momentsEnabled && !targets.ensureSsgiTemporalTextureViews(*ctx.shared->rhiDevice))) {
         return;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
+    if (!ensureDenoiseRhiPipelines(rhiDevice)) {
+        return;
+    }
 
     const glm::vec2 screenSize(
         static_cast<float>(std::max(1, targets.width())),
         static_cast<float>(std::max(1, targets.height())));
 
-    m_ssgiDenoiseShader->use();
-    m_ssgiDenoiseShader->setInt("uInputTex", 0);
-    m_ssgiDenoiseShader->setInt("uDepthTex", 1);
-    m_ssgiDenoiseShader->setInt("uNormalAoTex", 2);
-    m_ssgiDenoiseShader->setInt("uMomentsTex", 3);
-    m_ssgiDenoiseShader->setInt("uMomentsAvailable", momentsTexture != 0 ? 1 : 0);
-    m_ssgiDenoiseShader->setVec2("uScreenSize", screenSize);
-    m_ssgiDenoiseShader->setFloat("uNear", ctx.camera.nearPlane);
-    m_ssgiDenoiseShader->setFloat("uStrength", ssgi.denoiseStrength);
-
     int outputSlot = 0;
     for (int i = 0; i < iterations; ++i) {
         outputSlot = i & 1;
+        const int inputSlot = i == 0 ? -1 : 1 - outputSlot;
+        const uint32_t bindGroupCacheIndex =
+            inputSlot < 0 ? 0u : static_cast<uint32_t>(inputSlot + 1);
+        const RhiTextureViewHandle inputView = inputSlot < 0
+            ? (momentsEnabled
+                   ? targets.ssgiTemporalTextureViewHandle()
+                   : targets.ssgiTextureViewHandle())
+            : targets.ssgiDenoiseTextureViewHandle(inputSlot);
+        const std::array<RhiTextureViewHandle, 4> views = {
+            inputView,
+            targets.depthTextureViewHandle(),
+            targets.normalAoTextureViewHandle(),
+            momentsEnabled
+                ? targets.ssgiTemporalMomentsTextureViewHandle()
+                : RhiTextureViewHandle{}
+        };
+        if (!ensureDenoiseBindGroup(rhiDevice, momentsEnabled, bindGroupCacheIndex, views)) {
+            return;
+        }
+
         RhiColorAttachment colorAttachment;
         colorAttachment.view = targets.ssgiDenoiseTextureViewHandle(outputSlot);
         colorAttachment.loadOp = RhiLoadOp::Clear;
@@ -726,33 +721,302 @@ void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ss
 
         RhiCommandList& commandList = rhiDevice.beginFrame();
         commandList.beginRendering(renderingInfo);
-
-        const GLuint passInputTexture = (i == 0)
-            ? initialInputTexture
-            : renderer::rhi::gl::textureId(targets.ssgiDenoiseTextureHandle(1 - outputSlot));
-        m_ssgiDenoiseShader->setFloat("uStepWidth", static_cast<float>(1 << i));
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, passInputTexture);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, momentsTexture);
-
-        RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiDenoiseShader);
+        const glm::vec4 pushConstants[2] = {
+            glm::vec4(screenSize,
+                      ctx.camera.nearPlane,
+                      static_cast<float>(1 << i)),
+            glm::vec4(ssgi.denoiseStrength, 0.0f, 0.0f, 0.0f)
+        };
+        commandList.setGraphicsPipeline(
+            momentsEnabled ? m_denoiseMomentsPipeline : m_denoiseSpatialPipeline);
+        commandList.setBindGroup(
+            0u,
+            momentsEnabled
+                ? m_denoiseMomentsBindGroups[bindGroupCacheIndex]
+                : m_denoiseSpatialBindGroups[bindGroupCacheIndex]);
+        commandList.pushConstants(pushConstants,
+                                  sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(3u, 1u, 0u, 0u);
         commandList.endRendering();
         rhiDevice.submitFrame(commandList);
     }
 
     targets.copySsgiDenoiseToSsgi(rhiDevice, outputSlot);
+}
 
-    for (int i = 3; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
+bool SsgiPass::ensureDenoiseRhiPipelines(RhiDevice& rhiDevice) {
+    if (m_denoiseRhiDevice != nullptr && m_denoiseRhiDevice != &rhiDevice) {
+        destroyDenoiseRhiResources();
     }
-    glActiveTexture(GL_TEXTURE0);
+    if (m_denoiseSpatialPipeline.isValid() && m_denoiseMomentsPipeline.isValid()) {
+        return true;
+    }
+    m_denoiseRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> spatialFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ssgi_denoise_spatial.frag");
+    const std::optional<std::string> momentsFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ssgi_denoise.frag");
+    if (!vertexSource.has_value() || !spatialFragmentSource.has_value() ||
+        !momentsFragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "SsgiDenoise.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_denoiseVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "SsgiDenoiseSpatial.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = spatialFragmentSource->c_str();
+    fragmentDesc.sourceSize = spatialFragmentSource->size();
+    m_denoiseSpatialFragmentShader = rhiDevice.createShader(fragmentDesc);
+    fragmentDesc.debugName = "SsgiDenoiseMoments.Fragment";
+    fragmentDesc.source = momentsFragmentSource->c_str();
+    fragmentDesc.sourceSize = momentsFragmentSource->size();
+    m_denoiseMomentsFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_denoiseVertexShader.isValid() || !m_denoiseSpatialFragmentShader.isValid() ||
+        !m_denoiseMomentsFragmentShader.isValid()) {
+        destroyDenoiseRhiResources();
+        return false;
+    }
+
+    auto createSampler = [&](const RhiFilter filter) {
+        RhiSamplerDesc samplerDesc;
+        samplerDesc.minFilter = filter;
+        samplerDesc.magFilter = filter;
+        samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+        samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+        samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+        return rhiDevice.createSampler(samplerDesc);
+    };
+    m_denoiseNearestSampler = createSampler(RhiFilter::Nearest);
+    m_denoiseLinearSampler = createSampler(RhiFilter::Linear);
+    if (!m_denoiseNearestSampler.isValid() || !m_denoiseLinearSampler.isValid()) {
+        destroyDenoiseRhiResources();
+        return false;
+    }
+
+    auto createBindGroupLayout = [&](const char* debugName, const uint32_t bindingCount) {
+        RhiBindGroupLayoutDesc desc;
+        desc.debugName = debugName;
+        for (uint32_t binding = 0u; binding < bindingCount; ++binding) {
+            desc.entries.push_back({
+                binding,
+                RhiBindingType::CombinedTextureSampler,
+                rhiFlag(RhiShaderStage::Fragment),
+                1u
+            });
+        }
+        return rhiDevice.createBindGroupLayout(desc);
+    };
+    m_denoiseSpatialBindGroupLayout =
+        createBindGroupLayout("SsgiDenoiseSpatial.BindGroupLayout", 3u);
+    m_denoiseMomentsBindGroupLayout =
+        createBindGroupLayout("SsgiDenoiseMoments.BindGroupLayout", 4u);
+    if (!m_denoiseSpatialBindGroupLayout.isValid() ||
+        !m_denoiseMomentsBindGroupLayout.isValid()) {
+        destroyDenoiseRhiResources();
+        return false;
+    }
+
+    auto createPipelineLayout = [&](const char* debugName,
+                                    const RhiBindGroupLayoutHandle bindGroupLayout) {
+        RhiPipelineLayoutDesc desc;
+        desc.debugName = debugName;
+        desc.bindGroupLayouts.push_back(bindGroupLayout);
+        desc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4) * 2u);
+        desc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+        return rhiDevice.createPipelineLayout(desc);
+    };
+    m_denoiseSpatialPipelineLayout = createPipelineLayout(
+        "SsgiDenoiseSpatial.PipelineLayout",
+        m_denoiseSpatialBindGroupLayout);
+    m_denoiseMomentsPipelineLayout = createPipelineLayout(
+        "SsgiDenoiseMoments.PipelineLayout",
+        m_denoiseMomentsBindGroupLayout);
+    if (!m_denoiseSpatialPipelineLayout.isValid() ||
+        !m_denoiseMomentsPipelineLayout.isValid()) {
+        destroyDenoiseRhiResources();
+        return false;
+    }
+
+    auto createPipeline = [&](const char* debugName,
+                              const RhiShaderHandle fragmentShader,
+                              const RhiPipelineLayoutHandle pipelineLayout) {
+        RhiGraphicsPipelineDesc desc;
+        desc.debugName = debugName;
+        desc.vertexShader = m_denoiseVertexShader;
+        desc.fragmentShader = fragmentShader;
+        desc.layout = pipelineLayout;
+        desc.topology = RhiPrimitiveTopology::TriangleList;
+        desc.raster.cullMode = RhiCullMode::None;
+        desc.depthStencil.depthTestEnabled = false;
+        desc.depthStencil.depthWriteEnabled = false;
+        desc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+        desc.blend.attachments.push_back({});
+        return rhiDevice.createGraphicsPipeline(desc);
+    };
+    m_denoiseSpatialPipeline = createPipeline(
+        "SsgiDenoiseSpatial.Pipeline",
+        m_denoiseSpatialFragmentShader,
+        m_denoiseSpatialPipelineLayout);
+    m_denoiseMomentsPipeline = createPipeline(
+        "SsgiDenoiseMoments.Pipeline",
+        m_denoiseMomentsFragmentShader,
+        m_denoiseMomentsPipelineLayout);
+    if (!m_denoiseSpatialPipeline.isValid() || !m_denoiseMomentsPipeline.isValid()) {
+        destroyDenoiseRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool SsgiPass::ensureDenoiseBindGroup(
+    RhiDevice& rhiDevice,
+    const bool momentsEnabled,
+    const uint32_t cacheIndex,
+    const std::array<RhiTextureViewHandle, 4>& views) {
+    if (!ensureDenoiseRhiPipelines(rhiDevice) || cacheIndex >= 3u) {
+        return false;
+    }
+    const uint32_t bindingCount = momentsEnabled ? 4u : 3u;
+    for (uint32_t binding = 0u; binding < bindingCount; ++binding) {
+        if (!views[binding].isValid()) {
+            return false;
+        }
+    }
+
+    std::array<RhiBindGroupHandle, 3>& bindGroups = momentsEnabled
+        ? m_denoiseMomentsBindGroups
+        : m_denoiseSpatialBindGroups;
+    std::array<std::array<RhiTextureViewHandle, 4>, 3>& boundViews = momentsEnabled
+        ? m_denoiseMomentsBoundViews
+        : m_denoiseSpatialBoundViews;
+    if (bindGroups[cacheIndex].isValid() &&
+        sameTextureViews(boundViews[cacheIndex], views)) {
+        return true;
+    }
+    if (bindGroups[cacheIndex].isValid()) {
+        m_denoiseRhiDevice->destroyBindGroup(bindGroups[cacheIndex]);
+        bindGroups[cacheIndex] = {};
+    }
+
+    const RhiSamplerHandle samplers[4] = {
+        m_denoiseLinearSampler,
+        m_denoiseNearestSampler,
+        m_denoiseNearestSampler,
+        m_denoiseLinearSampler
+    };
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = momentsEnabled
+        ? m_denoiseMomentsBindGroupLayout
+        : m_denoiseSpatialBindGroupLayout;
+    for (uint32_t binding = 0u; binding < bindingCount; ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = samplers[binding];
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    bindGroups[cacheIndex] = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!bindGroups[cacheIndex].isValid()) {
+        boundViews[cacheIndex] = {};
+        return false;
+    }
+    boundViews[cacheIndex] = views;
+    return true;
+}
+
+void SsgiPass::destroyDenoiseBindGroups() {
+    if (m_denoiseRhiDevice != nullptr) {
+        for (RhiBindGroupHandle& bindGroup : m_denoiseSpatialBindGroups) {
+            if (bindGroup.isValid()) {
+                m_denoiseRhiDevice->destroyBindGroup(bindGroup);
+            }
+            bindGroup = {};
+        }
+        for (RhiBindGroupHandle& bindGroup : m_denoiseMomentsBindGroups) {
+            if (bindGroup.isValid()) {
+                m_denoiseRhiDevice->destroyBindGroup(bindGroup);
+            }
+            bindGroup = {};
+        }
+    }
+    m_denoiseSpatialBoundViews = {};
+    m_denoiseMomentsBoundViews = {};
+}
+
+void SsgiPass::destroyDenoiseRhiResources() {
+    destroyDenoiseBindGroups();
+    if (m_denoiseRhiDevice != nullptr) {
+        const RhiPipelineHandle pipelines[] = {
+            m_denoiseSpatialPipeline,
+            m_denoiseMomentsPipeline
+        };
+        for (const RhiPipelineHandle pipeline : pipelines) {
+            if (pipeline.isValid()) {
+                m_denoiseRhiDevice->destroyPipeline(pipeline);
+            }
+        }
+        const RhiShaderHandle shaders[] = {
+            m_denoiseVertexShader,
+            m_denoiseSpatialFragmentShader,
+            m_denoiseMomentsFragmentShader
+        };
+        for (const RhiShaderHandle shader : shaders) {
+            if (shader.isValid()) {
+                m_denoiseRhiDevice->destroyShader(shader);
+            }
+        }
+        const RhiPipelineLayoutHandle pipelineLayouts[] = {
+            m_denoiseSpatialPipelineLayout,
+            m_denoiseMomentsPipelineLayout
+        };
+        for (const RhiPipelineLayoutHandle layout : pipelineLayouts) {
+            if (layout.isValid()) {
+                m_denoiseRhiDevice->destroyPipelineLayout(layout);
+            }
+        }
+        const RhiBindGroupLayoutHandle bindGroupLayouts[] = {
+            m_denoiseSpatialBindGroupLayout,
+            m_denoiseMomentsBindGroupLayout
+        };
+        for (const RhiBindGroupLayoutHandle layout : bindGroupLayouts) {
+            if (layout.isValid()) {
+                m_denoiseRhiDevice->destroyBindGroupLayout(layout);
+            }
+        }
+        if (m_denoiseNearestSampler.isValid()) {
+            m_denoiseRhiDevice->destroySampler(m_denoiseNearestSampler);
+        }
+        if (m_denoiseLinearSampler.isValid()) {
+            m_denoiseRhiDevice->destroySampler(m_denoiseLinearSampler);
+        }
+    }
+
+    m_denoiseSpatialPipeline = {};
+    m_denoiseMomentsPipeline = {};
+    m_denoiseVertexShader = {};
+    m_denoiseSpatialFragmentShader = {};
+    m_denoiseMomentsFragmentShader = {};
+    m_denoiseSpatialPipelineLayout = {};
+    m_denoiseMomentsPipelineLayout = {};
+    m_denoiseSpatialBindGroupLayout = {};
+    m_denoiseMomentsBindGroupLayout = {};
+    m_denoiseNearestSampler = {};
+    m_denoiseLinearSampler = {};
+    m_denoiseRhiDevice = nullptr;
 }
 
 void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& ssgi,
