@@ -2365,6 +2365,47 @@ bool DeferredRenderTargets::ensureHistoryReflectionTextureViews(RhiDevice& rhiDe
     return true;
 }
 
+bool DeferredRenderTargets::ensureHistoryCloudTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_historyCloudView[0].isValid() && m_historyCloudView[1].isValid()) {
+        return true;
+    }
+    if (!m_historyCloudHandle[0].isValid() || !m_historyCloudHandle[1].isValid()) {
+        return false;
+    }
+
+    for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
+        if (m_historyCloudView[historyIndex].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc desc;
+        desc.texture = m_historyCloudHandle[historyIndex];
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.baseMip = 0u;
+        desc.mipCount = 1u;
+        desc.baseLayer = 0u;
+        desc.layerCount = 1u;
+
+        m_historyCloudView[historyIndex] = rhiDevice.createTextureView(desc);
+        if (!m_historyCloudView[historyIndex].isValid()) {
+            for (RhiTextureViewHandle& view : m_historyCloudView) {
+                if (view.isValid()) {
+                    rhiDevice.destroyTextureView(view);
+                }
+                view = {};
+            }
+            return false;
+        }
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2754,6 +2795,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
+    for (RhiTextureViewHandle& view : m_historyCloudView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
     if (m_rhiViewDevice != nullptr && m_temporalCurrentView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_temporalCurrentView);
     }
@@ -2807,6 +2854,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_historyDepthView[1] = {};
     m_historyReflectionView[0] = {};
     m_historyReflectionView[1] = {};
+    m_historyCloudView[0] = {};
+    m_historyCloudView[1] = {};
     m_temporalCurrentView = {};
     m_weatherMaskView = {};
     m_rhiViewDevice = nullptr;

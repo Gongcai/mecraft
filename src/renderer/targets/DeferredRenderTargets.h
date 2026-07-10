@@ -164,6 +164,8 @@ public:
     bool ensureHistoryReflectionTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyCloudTextureHandle() const { return m_historyCloudHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyCloudTexturePrevHandle() const { return m_historyCloudHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle historyCloudTexturePrevViewHandle() const { return m_historyCloudView[1 - m_currentHistoryIndex]; }
+    bool ensureHistoryCloudTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const { return m_historyVolumetricHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const { return m_historyVolumetricHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureViewHandle historyVolumetricTextureViewHandle() const { return m_historyVolumetricView[m_currentHistoryIndex]; }
@@ -402,6 +404,7 @@ private:
     RhiTextureViewHandle m_historyReflectionView[2];
     uint32_t m_historyCloudTex[2] = {0, 0};
     RhiTextureHandle m_historyCloudHandle[2];
+    RhiTextureViewHandle m_historyCloudView[2];
     uint32_t m_historyVolumetricTex[2] = {0, 0};
     RhiTextureHandle m_historyVolumetricHandle[2];
     RhiTextureViewHandle m_historyVolumetricView[2];
