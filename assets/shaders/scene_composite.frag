@@ -2,84 +2,76 @@
 #include "gbuffer_contract.glsl"
 #include "render_contract.glsl"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSceneLightingTex;
-uniform sampler2D uReflectionTex;
-uniform sampler2D uCloudTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uMaterialTex;
-uniform sampler2D uMaterialAuxTex;
-uniform sampler2D uVelocityTex;
-uniform sampler2D uHistorySceneTex;
-uniform sampler2D uHistoryDepthTex;
-uniform sampler2D uHistoryReflectionTex;
-uniform sampler2D uHistoryCloudTex;
-uniform sampler2D uSkyCaptureTex;
-uniform sampler2D uSsgiTex;
-uniform sampler3D uVoxelGiTex;
+layout(binding = 0) uniform sampler2D uSceneLightingTex;
+layout(binding = 1) uniform sampler2D uReflectionTex;
+layout(binding = 2) uniform sampler2D uCloudTex;
+layout(binding = 3) uniform sampler2D uDepthTex;
+layout(binding = 4) uniform sampler2D uNormalAoTex;
+layout(binding = 5) uniform sampler2D uMaterialTex;
+layout(binding = 6) uniform sampler2D uMaterialAuxTex;
+layout(binding = 7) uniform sampler2D uSkyCaptureTex;
+layout(binding = 8) uniform sampler2D uAlbedoTex;
+layout(binding = 9) uniform sampler2D uSsgiTex;
+#ifdef MECRAFT_SCENE_VOXEL_GI
+layout(binding = 10) uniform sampler3D uVoxelGiTex;
+#endif
 
-// Albedo texture for refraction sampling (DerivativeMain composite1 equivalent)
-uniform sampler2D uAlbedoTex;
+layout(std140, binding = 11) uniform SceneCompositeParams {
+    mat4 pInvViewProj;
+    vec4 pCameraPosSkyIntensity;
+    vec4 pSunDirectionVisibility;
+    vec4 pMoonDirectionVisibility;
+    vec4 pAtmosphereComposite;
+    vec4 pReflectionWater;
+    vec4 pStatus;
+    vec4 pVoxelOriginSize;
+    vec4 pVoxel0;
+    vec4 pVoxel1;
+    vec4 pVoxel2;
+    ivec4 pFlags0;
+    ivec4 pFlags1;
+};
 
-// Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
-uniform sampler3D uAtmosphereLut;
-
-// Scene composite resource contract:
-// - SceneLighting is opaque HDR lighting before screen-space scene effects.
-// - Reflection/Cloud are half-res effect targets sampled in full-res scene UV space.
-// - Velocity and history inputs are intentionally bound now so future temporal resolve,
-//   SSR rejection, and cloud reprojection can evolve inside this shader without C++ churn.
-uniform mat4 uViewProj;
-uniform mat4 uInvViewProj;
-uniform mat4 uPreviousViewProj;
-uniform mat4 uPreviousInvViewProj;
-uniform vec2 uJitter;
-uniform vec2 uPreviousJitter;
-uniform int uFrameIndex;
-uniform float uTime;
-uniform float uWeatherWetness;
-uniform vec3 uCameraPos;
-uniform vec3 uSunDirection;
-uniform vec3 uMoonDirection;
-uniform float uSunVisibility;
-uniform float uSkyIntensity;
-uniform float uMoonVisibility;
-uniform float uMoonPhaseAngle;
-uniform float uSkyWetness;
-uniform float uCloudCompositeStrength;
-uniform float uReflectionCompositeStrength;
-uniform int uSsgiEnabled;
-uniform int uVoxelGiEnabled;
-uniform int uVoxelGiDebugEnabled;
-uniform float uVoxelGiStrength;
-uniform float uVoxelGiVoxelSize;
-uniform float uVoxelGiResolution;
-uniform float uVoxelGiMipCount;
-uniform float uVoxelGiNormalBias;
-uniform float uVoxelGiSampleDistance;
-uniform float uVoxelGiTraceDistance;
-uniform float uVoxelGiConeAperture;
-uniform float uVoxelGiOccupancyScale;
-uniform float uVoxelGiOcclusionStrength;
-uniform float uVoxelGiReceiverShadowBoost;
-uniform int uVoxelGiConeSteps;
-uniform vec3 uVoxelGiOrigin;
-uniform int uReflectionDebugMode; // >0: bypass composite, output raw reflection. 6=composite delta, 26=reflection/scene ratio
-uniform int uIsEyeInWater;
-uniform vec3 uWaterAbsorption;
+#define uInvViewProj pInvViewProj
+#define uCameraPos pCameraPosSkyIntensity.xyz
+#define uSkyIntensity pCameraPosSkyIntensity.w
+#define uSunDirection pSunDirectionVisibility.xyz
+#define uSunVisibility pSunDirectionVisibility.w
+#define uMoonDirection pMoonDirectionVisibility.xyz
+#define uMoonVisibility pMoonDirectionVisibility.w
+#define uMoonPhaseAngle pAtmosphereComposite.x
+#define uSkyWetness pAtmosphereComposite.y
+#define uWeatherWetness pAtmosphereComposite.z
+#define uCloudCompositeStrength pAtmosphereComposite.w
+#define uReflectionCompositeStrength pReflectionWater.x
+#define uWaterAbsorption pReflectionWater.yzw
+#define uBlindness pStatus.x
+#define uDarknessFactor pStatus.y
+#define uVoxelGiOrigin pVoxelOriginSize.xyz
+#define uVoxelGiVoxelSize pVoxelOriginSize.w
+#define uVoxelGiResolution pVoxel0.x
+#define uVoxelGiMipCount pVoxel0.y
+#define uVoxelGiStrength pVoxel0.z
+#define uVoxelGiNormalBias pVoxel0.w
+#define uVoxelGiSampleDistance pVoxel1.x
+#define uVoxelGiTraceDistance pVoxel1.y
+#define uVoxelGiConeAperture pVoxel1.z
+#define uVoxelGiOccupancyScale pVoxel1.w
+#define uVoxelGiOcclusionStrength pVoxel2.x
+#define uVoxelGiReceiverShadowBoost pVoxel2.y
+#define uSsgiEnabled pFlags0.x
+#define uVoxelGiEnabled pFlags0.y
+#define uVoxelGiDebugEnabled pFlags0.z
+#define uVoxelGiConeSteps pFlags0.w
+#define uReflectionDebugMode pFlags1.x
+#define uIsEyeInWater pFlags1.y
 
 #include "lighting_environment.glsl"
-#include "atmosphere_lut.glsl"
 #include "fogs.glsl"
 #include "procedural_celestials.glsl"
-
-// DerivativeMain Fogs.glsl: uniform float blindness / darknessFactor
-// Mecraft: default 0 until status effect system is implemented.
-uniform float uBlindness;
-uniform float uDarknessFactor;
 
 vec3 tonemapDebugSafe(vec3 color) {
     return max(color, vec3(0.0));
@@ -95,6 +87,7 @@ float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
+#ifdef MECRAFT_SCENE_VOXEL_GI
 vec3 voxelGiUv(vec3 worldPos) {
     return (worldPos - uVoxelGiOrigin) / max(uVoxelGiVoxelSize * uVoxelGiResolution, 0.0001);
 }
@@ -191,6 +184,7 @@ vec3 sampleVoxelGiContribution(vec3 worldPos, vec3 normal, vec3 albedo, float ve
                            (backlitWeight * 0.75 + lowLightWeight * 0.45 + (1.0 - ao) * 0.35);
     return irradiance * receiverTint * aoWeight * receiverWeight * max(uVoxelGiStrength, 0.0);
 }
+#endif
 
 void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment env) {
     // DerivativeMain/lib/Water/WaterFog.glsl UnderwaterFog(), adapted for
@@ -277,19 +271,20 @@ void main() {
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
-    vec3 voxelGi = vec3(0.0);
+#ifdef MECRAFT_SCENE_VOXEL_GI
     if (uVoxelGiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
         vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
         vec4 normalAo = texture(uNormalAoTex, vTexCoord);
         vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
         vec3 albedo = texture(uAlbedoTex, vTexCoord).rgb;
-        voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, normalAo.a, color);
+        vec3 voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, normalAo.a, color);
         if (uVoxelGiDebugEnabled != 0) {
             FragColor = vec4(max(voxelGi, vec3(0.0)) * 6.0, 1.0);
             return;
         }
         color += max(voxelGi, vec3(0.0));
     }
+#endif
     if (uSsgiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
         vec4 ssgi = texture(uSsgiTex, vTexCoord);
         float confidence = smoothstep(0.06, 0.45, ssgi.a);
