@@ -10,6 +10,7 @@
 #include <glm/vec3.hpp>
 
 class ResourceMgr;
+class DeferredRenderTargets;
 class RhiCommandList;
 class RhiDevice;
 
@@ -37,6 +38,13 @@ public:
     bool prepareShadow(RhiCommandList& commandList,
                        ResourceMgr& resourceMgr,
                        const TerrainShadowFrameData& frame);
+    bool prepareTransparent(RhiCommandList& commandList,
+                            ResourceMgr& resourceMgr,
+                            DeferredRenderTargets& targets,
+                            const TerrainFrameData& frame,
+                            const TerrainRenderSettings& settings,
+                            int heldBlockLightValue,
+                            bool volumetricFogShadersReady);
 
     [[nodiscard]] RhiBindGroupLayoutHandle metadataLayout() const { return m_metadataLayout; }
     [[nodiscard]] RhiPipelineHandle gbufferOpaquePipeline() const { return m_gbufferOpaquePipeline; }
@@ -48,10 +56,14 @@ public:
     [[nodiscard]] RhiPipelineHandle shadowCutoutPipeline() const { return m_shadowCutoutPipeline; }
     [[nodiscard]] RhiPipelineHandle shadowTransparentPipeline() const { return m_shadowTransparentPipeline; }
     [[nodiscard]] RhiBindGroupHandle shadowBindGroup() const { return m_shadowBindGroup; }
+    [[nodiscard]] RhiBindGroupLayoutHandle transparentMetadataLayout() const { return m_transparentMetadataLayout; }
+    [[nodiscard]] RhiPipelineHandle transparentPipeline() const { return m_transparentPipeline; }
+    [[nodiscard]] RhiBindGroupHandle transparentBindGroup() const { return m_transparentBindGroup; }
 
 private:
     static constexpr size_t kGBufferTextureSlotCount = 7u;
     static constexpr size_t kShadowTextureSlotCount = 4u;
+    static constexpr size_t kTransparentTextureSlotCount = 10u;
 
     bool ensureGBufferPipeline(ResourceMgr& resourceMgr);
     bool ensureGBufferTextureViews(ResourceMgr& resourceMgr);
@@ -71,6 +83,17 @@ private:
     void destroyShadowBindGroup();
     void destroyShadowTextureViews();
     void destroyShadowResources();
+    bool ensureTransparentPipeline(ResourceMgr& resourceMgr);
+    bool ensureTransparentTextureViews(ResourceMgr& resourceMgr,
+                                       DeferredRenderTargets& targets);
+    bool ensureTransparentBindGroup();
+    bool ensureTransparentTextureView(size_t slot,
+                                      RhiTextureHandle texture,
+                                      RhiTextureViewType viewType,
+                                      RhiTextureFormat format);
+    void destroyTransparentBindGroup();
+    void destroyTransparentTextureViews();
+    void destroyTransparentResources();
 
     RhiDevice* m_rhiDevice = nullptr;
     bool m_hasNormalMaps = false;
@@ -110,6 +133,23 @@ private:
     std::array<RhiTextureHandle, kShadowTextureSlotCount> m_shadowViewTextures{};
     std::array<RhiTextureViewHandle, kShadowTextureSlotCount> m_shadowTextureViews{};
     std::array<RhiTextureViewHandle, kShadowTextureSlotCount> m_shadowBoundViews{};
+
+    float m_transparentSamplerAnisotropy = 1.0f;
+    RhiBindGroupLayoutHandle m_transparentMetadataLayout;
+    RhiBindGroupLayoutHandle m_transparentMaterialLayout;
+    RhiPipelineLayoutHandle m_transparentPipelineLayout;
+    RhiShaderHandle m_transparentVertexShader;
+    RhiShaderHandle m_transparentFragmentShader;
+    RhiPipelineHandle m_transparentPipeline;
+    RhiBufferHandle m_transparentParamsBuffer;
+    RhiBindGroupHandle m_transparentBindGroup;
+    RhiSamplerHandle m_transparentBlockSampler;
+    RhiSamplerHandle m_transparentLinearClampSampler;
+    RhiSamplerHandle m_transparentLinearRepeatSampler;
+    RhiSamplerHandle m_transparentNearestClampSampler;
+    std::array<RhiTextureHandle, kTransparentTextureSlotCount> m_transparentViewTextures{};
+    std::array<RhiTextureViewHandle, kTransparentTextureSlotCount> m_transparentTextureViews{};
+    std::array<RhiTextureViewHandle, kTransparentTextureSlotCount> m_transparentBoundViews{};
 };
 
 #endif // MECRAFT_TERRAIN_RHI_PIPELINE_SET_H

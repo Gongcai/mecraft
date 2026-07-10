@@ -818,18 +818,25 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
         return;
     }
 
-    Shader* shader = m_resourceMgr->getShader("transparent_composite");
-    if (shader == nullptr) {
-        shader = m_resourceMgr->getShader("forward_basic_terrain");
-    }
-    if (shader == nullptr) {
-        return;
-    }
-
     auto& targets = *m_shared->deferredTargets;
     auto& terrain = *m_shared->terrain;
     auto& worldBuffer = *m_shared->worldRenderBuffer;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
+    const bool useRhiMdi = terrain.useMultiDrawIndirect();
+    if (useRhiMdi && m_shared->terrainRhiPipelines == nullptr) {
+        return;
+    }
+
+    Shader* shader = nullptr;
+    if (!useRhiMdi) {
+        shader = m_resourceMgr->getShader("transparent_composite");
+        if (shader == nullptr) {
+            shader = m_resourceMgr->getShader("forward_basic_terrain");
+        }
+        if (shader == nullptr) {
+            return;
+        }
+    }
 
     targets.copySceneCompositeToTransparentComposite(rhiDevice);
     targets.copyDepthToTransparentComposite(rhiDevice);
@@ -861,7 +868,6 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     RhiCommandList& commandList = rhiDevice.beginFrame();
-    commandList.beginRendering(renderingInfo);
 
     TerrainFrameData tfd;
     tfd.view = ctx.camera.view;
@@ -928,19 +934,7 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     trs.blockParallaxMapsEnabled = m_currentSettings.blockMaterialMaps.parallaxMapsEnabled;
     trs.blockParallaxDepth = m_currentSettings.blockMaterialMaps.parallaxDepth;
 
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
-    terrain.bindChunkRenderState(tfd, texArray, *shader,
-                                  true, 0, ctx.eyeInWater, m_heldBlockLightValue,
-                                  targets, m_resourceMgr, volFogShadersReady, trs);
-    shader->setInt("uCompositeInputsEnabled", 1);
-    shader->setInt("uDepthSofteningEnabled", 1);
-    shader->setInt("uForceBaseLod", 1);
-
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle()));
 
     std::vector<const DrawBatchEntry*> genericEntries;
     genericEntries.reserve(m_transparentBatch.size());
@@ -954,24 +948,58 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
                   return a->distanceSq > b->distanceSq;
               });
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_CULL_FACE);
-
     worldBuffer.beginFrame();
     for (const DrawBatchEntry* entry : genericEntries) {
         worldBuffer.addTransparent(entry->range);
     }
-    worldBuffer.flushTransparent();
 
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    shader->setInt("uForceBaseLod", 0);
+    if (useRhiMdi &&
+        (!m_shared->terrainRhiPipelines->prepareTransparent(
+             commandList,
+             *m_resourceMgr,
+             targets,
+             tfd,
+             trs,
+             m_heldBlockLightValue,
+             volFogShadersReady) ||
+         !worldBuffer.prepareRhiTransparent(
+             commandList,
+             m_shared->terrainRhiPipelines->transparentMetadataLayout()))) {
+        return;
+    }
+
+    commandList.beginRendering(renderingInfo);
+    if (useRhiMdi) {
+        worldBuffer.recordRhiTransparent(
+            commandList,
+            m_shared->terrainRhiPipelines->transparentPipeline(),
+            m_shared->terrainRhiPipelines->transparentBindGroup());
+    } else {
+        const TextureArray& texArray = m_resourceMgr->getTextureArray();
+        terrain.bindChunkRenderState(tfd, texArray, *shader,
+                                     true, 0, ctx.eyeInWater, m_heldBlockLightValue,
+                                     targets, m_resourceMgr, volFogShadersReady, trs);
+        shader->setInt("uCompositeInputsEnabled", 1);
+        shader->setInt("uDepthSofteningEnabled", 1);
+        shader->setInt("uForceBaseLod", 1);
+
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle()));
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+        glDisable(GL_CULL_FACE);
+        worldBuffer.flushTransparent();
+        glDepthMask(GL_TRUE);
+        glDepthFunc(GL_LESS);
+        glDisable(GL_BLEND);
+        glEnable(GL_CULL_FACE);
+        shader->setInt("uForceBaseLod", 0);
+    }
 
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
@@ -979,12 +1007,14 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     targets.copyTransparentCompositeToSceneComposite(rhiDevice);
     targets.copyTransparentCompositeToSceneResolved(rhiDevice);
 
-    glBindVertexArray(0);
-    for (int i = 14; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : (i == 14 ? GL_TEXTURE_3D : GL_TEXTURE_2D), 0);
+    if (!useRhiMdi) {
+        glBindVertexArray(0);
+        for (int i = 14; i >= 0; --i) {
+            glActiveTexture(GL_TEXTURE0 + i);
+            glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : (i == 14 ? GL_TEXTURE_3D : GL_TEXTURE_2D), 0);
+        }
+        glActiveTexture(GL_TEXTURE0);
     }
-    glActiveTexture(GL_TEXTURE0);
 }
 
 void DeferredPipeline::updateDeferredHistoryTargets() {

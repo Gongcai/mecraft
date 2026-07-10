@@ -1,7 +1,11 @@
 out vec4 FragColor;
 #include "gbuffer_contract.glsl"
 #include "lighting_environment.glsl"
+#ifdef RHI_TERRAIN_LIT_MDI
+layout(binding = 14) uniform sampler3D uAtmosphereLut;
+#else
 uniform sampler3D uAtmosphereLut;
+#endif
 #include "atmosphere_lut.glsl"
 
 #ifndef MECRAFT_TRANSPARENT_COMPOSITE
@@ -24,6 +28,18 @@ flat in float vTintKind;
 flat in float vMaterialKind;
 in vec2 vTintUV;
 
+#ifdef RHI_TERRAIN_LIT_MDI
+layout(binding = 0) uniform sampler2DArray texArray;
+layout(binding = 1) uniform sampler2D uLightmapDay;
+layout(binding = 2) uniform sampler2D uLightmapNight;
+layout(binding = 3) uniform sampler2D uGrassColormap;
+layout(binding = 4) uniform sampler2D uFoliageColormap;
+layout(binding = 5) uniform sampler2D uOpaqueDepthTex;
+layout(binding = 6) uniform sampler2D uSkyCaptureTex;
+layout(binding = 7) uniform sampler2D uSceneColorTex;
+layout(binding = 8) uniform sampler2D uWaterNoiseTex;
+#include "terrain_lit_params.glsl"
+#else
 uniform sampler2DArray texArray;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
@@ -88,6 +104,7 @@ uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
 uniform vec3 uWaterAbsorption;
 uniform vec3 uCameraPos;
+#endif
 
     const float kTwoPi = 6.28318530718;
 

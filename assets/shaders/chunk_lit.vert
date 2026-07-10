@@ -17,11 +17,15 @@ layout (location = 13) in uint aPackedLightAoLayer;
 layout (location = 14) in uint aPackedTintAnim;
 #include "terrain_vertex_decode.glsl"
 
+#ifdef RHI_TERRAIN_LIT_MDI
+#include "terrain_lit_params.glsl"
+#else
 uniform mat4 view;
 uniform mat4 viewProj;
 uniform mat4 model;
 uniform int uUseModel;
 uniform int uVertexFormat;
+#endif
 
 out vec2 vUV;
 out float vLight;
@@ -40,6 +44,15 @@ flat out float vMaterialKind;
 out vec2 vTintUV;
 
 void main() {
+#ifdef RHI_TERRAIN_LIT_MDI
+    TerrainVertexDecoded vertex = decodeTerrainPackedVertex(
+        aPackedPos,
+        aPackedUV,
+        aPackedLightAoLayer,
+        aPackedTintAnim,
+        gl_BaseInstanceARB);
+    vec4 worldPos = vec4(vertex.pos, 1.0);
+#else
     TerrainVertexDecoded vertex = (uVertexFormat == 1)
         ? decodeTerrainPackedVertex(aPackedPos, aPackedUV, aPackedLightAoLayer, aPackedTintAnim, gl_BaseInstanceARB)
         : decodeLegacyBlockVertex(aLegacyPos, aLegacyUV, aLegacyNormal, aLegacySunlight, aLegacyBlockLight,
@@ -47,8 +60,14 @@ void main() {
                                   aLegacyAnimated, aLegacyTintPacked);
     vec4 localPos = vec4(vertex.pos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
+#endif
+#ifdef RHI_TERRAIN_LIT_MDI
+    vec4 viewPos = rhiTerrainLitView * worldPos;
+    gl_Position = rhiTerrainLitViewProj * worldPos;
+#else
     vec4 viewPos = view * worldPos;
     gl_Position = viewProj * worldPos;
+#endif
 
     vUV = vertex.uv;
 
