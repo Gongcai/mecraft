@@ -1440,7 +1440,12 @@ bool testGlRhiDrawIndirect() {
         uint32_t first;
         uint32_t baseInstance;
     };
-    constexpr DrawArraysIndirectCommand kDrawCommand = {3u, 1u, 0u, 0u};
+    constexpr DrawArraysIndirectCommand kDrawCommand = {3u, 1u, 0u, 1u};
+    constexpr std::array<uint32_t, 3> kVertexIndices = {0u, 1u, 2u};
+    constexpr std::array<std::array<float, 4>, 2> kMetadata = {{
+        {{4.0f, 0.0f, 0.0f, 0.0f}},
+        {{0.0f, 0.0f, 0.0f, 0.0f}}
+    }};
     constexpr uint64_t kCommandOffset = 65536u;
     constexpr uint64_t kIndirectBufferSize = kCommandOffset + sizeof(DrawArraysIndirectCommand);
     constexpr uint32_t kWidth = 4u;
@@ -1454,6 +1459,28 @@ bool testGlRhiDrawIndirect() {
     indirectBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
     const RhiBufferHandle indirectBuffer = device.createBuffer(indirectBufferDesc, nullptr, 0u);
     if (!requireTrue(indirectBuffer.isValid(), "indirect buffer must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBufferDesc vertexBufferDesc;
+    vertexBufferDesc.debugName = "terrain-contract-vertices";
+    vertexBufferDesc.size = sizeof(kVertexIndices);
+    vertexBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    const RhiBufferHandle vertexBuffer =
+        device.createBuffer(vertexBufferDesc, kVertexIndices.data(), sizeof(kVertexIndices));
+    if (!requireTrue(vertexBuffer.isValid(), "terrain contract vertex buffer must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBufferDesc metadataBufferDesc;
+    metadataBufferDesc.debugName = "terrain-contract-metadata";
+    metadataBufferDesc.size = sizeof(kMetadata);
+    metadataBufferDesc.usage = rhiFlag(RhiBufferUsage::Storage);
+    const RhiBufferHandle metadataBuffer =
+        device.createBuffer(metadataBufferDesc, kMetadata.data(), sizeof(kMetadata));
+    if (!requireTrue(metadataBuffer.isValid(), "terrain metadata buffer must be created")) {
         device.shutdown();
         return false;
     }
@@ -1480,6 +1507,12 @@ bool testGlRhiDrawIndirect() {
 
     constexpr char kVertexShader[] = R"glsl(
 #version 450 core
+#extension GL_ARB_shader_draw_parameters : require
+layout(location = 11) in uint aVertexIndex;
+layout(std430, binding = 0) readonly buffer TerrainMetadata {
+    vec4 offsets[];
+};
+
 const vec2 kPositions[3] = vec2[3](
     vec2(-1.0, -1.0),
     vec2(3.0, -1.0),
@@ -1487,7 +1520,7 @@ const vec2 kPositions[3] = vec2[3](
 );
 
 void main() {
-    gl_Position = vec4(kPositions[gl_VertexID], 0.0, 1.0);
+    gl_Position = vec4(kPositions[aVertexIndex] + offsets[gl_BaseInstanceARB].xy, 0.0, 1.0);
 }
 )glsl";
     constexpr char kFragmentShader[] = R"glsl(
@@ -1521,8 +1554,24 @@ void main() {
         return false;
     }
 
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "terrain-contract-bind-group-layout";
+    bindGroupLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::StorageBuffer,
+        rhiFlag(RhiShaderStage::Vertex),
+        1u
+    });
+    const RhiBindGroupLayoutHandle bindGroupLayout =
+        device.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!requireTrue(bindGroupLayout.isValid(), "terrain bind group layout must be created")) {
+        device.shutdown();
+        return false;
+    }
+
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "indirect-layout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(bindGroupLayout);
     const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
     if (!requireTrue(pipelineLayout.isValid(), "indirect pipeline layout must be created")) {
         device.shutdown();
@@ -1534,12 +1583,27 @@ void main() {
     pipelineDesc.vertexShader = vertexShader;
     pipelineDesc.fragmentShader = fragmentShader;
     pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t), RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({11u, 0u, RhiVertexFormat::Uint, 0u});
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = false;
     pipelineDesc.depthStencil.depthWriteEnabled = false;
     pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
     const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
     if (!requireTrue(pipeline.isValid(), "indirect graphics pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = bindGroupLayout;
+    RhiBindGroupEntry metadataEntry;
+    metadataEntry.binding = 0u;
+    metadataEntry.resource.buffer.buffer = metadataBuffer;
+    metadataEntry.resource.buffer.range = sizeof(kMetadata);
+    bindGroupDesc.entries.push_back(metadataEntry);
+    const RhiBindGroupHandle bindGroup = device.createBindGroup(bindGroupDesc);
+    if (!requireTrue(bindGroup.isValid(), "terrain metadata bind group must be created")) {
         device.shutdown();
         return false;
     }
@@ -1566,6 +1630,8 @@ void main() {
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
+    cmd.setBindGroup(0u, bindGroup);
+    cmd.setVertexBuffer(0u, vertexBuffer, 0u);
     cmd.drawIndirect(indirectBuffer, kCommandOffset, 1u, 0u);
     std::array<uint8_t, 4> pixel{};
     glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
@@ -1583,12 +1649,16 @@ void main() {
         return false;
     }
 
+    device.destroyBindGroup(bindGroup);
     device.destroyPipeline(pipeline);
     device.destroyPipelineLayout(pipelineLayout);
+    device.destroyBindGroupLayout(bindGroupLayout);
     device.destroyShader(fragmentShader);
     device.destroyShader(vertexShader);
     device.destroyTextureView(targetView);
     device.destroyTexture(target);
+    device.destroyBuffer(metadataBuffer);
+    device.destroyBuffer(vertexBuffer);
     device.destroyBuffer(indirectBuffer);
     device.shutdown();
     return true;
