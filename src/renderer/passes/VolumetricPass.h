@@ -31,7 +31,7 @@ public:
     }
 
     /// Check if temporal shader is available.
-    [[nodiscard]] bool hasTemporalShader() const { return m_volumetricTemporalShader != nullptr; }
+    [[nodiscard]] bool hasTemporalShader() const { return m_resourceMgr != nullptr; }
 
     /// Execute volumetric fog march, temporal resolve, and composite.
     /// @param ctx Frame context
@@ -56,9 +56,13 @@ private:
                                   const std::array<RhiTextureViewHandle, 3>& views);
     void destroyCompositeBindGroup();
     void destroyCompositeRhiResources();
+    bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
+                                 const std::array<RhiTextureViewHandle, 5>& views);
+    void destroyTemporalBindGroup();
+    void destroyTemporalRhiResources();
 
     Shader* m_volumetricFogShader = nullptr;
-    Shader* m_volumetricTemporalShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     RhiTextureHandle m_noiseTexture;
@@ -72,6 +76,17 @@ private:
     RhiPipelineHandle m_compositePipeline;
     RhiBindGroupHandle m_compositeBindGroup;
     std::array<RhiTextureViewHandle, 3> m_compositeBoundViews = {};
+
+    RhiDevice* m_temporalRhiDevice = nullptr;
+    RhiSamplerHandle m_temporalNearestSampler;
+    RhiSamplerHandle m_temporalLinearSampler;
+    RhiBindGroupLayoutHandle m_temporalBindGroupLayout;
+    RhiPipelineLayoutHandle m_temporalPipelineLayout;
+    RhiShaderHandle m_temporalVertexShader;
+    RhiShaderHandle m_temporalFragmentShader;
+    RhiPipelineHandle m_temporalPipeline;
+    RhiBindGroupHandle m_temporalBindGroup;
+    std::array<RhiTextureViewHandle, 5> m_temporalBoundViews = {};
     bool m_hasRenderedFog = false;
     glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
     float m_lastWeatherSignal = 0.0f;

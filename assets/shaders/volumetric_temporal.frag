@@ -6,30 +6,31 @@
 //   rgb = volumetric scattering
 //   a   = transmittance
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uCurrentTex;
-uniform sampler2D uHistoryTex;
-uniform sampler2D uVelocityTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uHistoryDepthTex;
+layout(binding = 0) uniform sampler2D uCurrentTex;
+layout(binding = 1) uniform sampler2D uHistoryTex;
+layout(binding = 2) uniform sampler2D uVelocityTex;
+layout(binding = 3) uniform sampler2D uDepthTex;
+layout(binding = 4) uniform sampler2D uHistoryDepthTex;
 
-uniform vec2 uScreenSize; // Half-resolution viewport size
-uniform float uHistoryWeight;
-uniform float uNearPlane;
-uniform float uFarPlane;
+layout(std140, binding = 15) uniform RhiPushConstants {
+    vec4 uTemporalParams0;
+    vec4 uTemporalParams1;
+};
 
 float viewDistanceFromDepth(float depth) {
     if (depth >= 0.9999) {
         return 1e6;
     }
-    return (uNearPlane * uFarPlane) / (depth * (uNearPlane - uFarPlane) + uFarPlane);
+    return (uTemporalParams0.w * uTemporalParams1.x) /
+           (depth * (uTemporalParams0.w - uTemporalParams1.x) + uTemporalParams1.x);
 }
 
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
-    vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
+    vec2 texelSize = 1.0 / max(uTemporalParams0.xy, vec2(1.0));
     vec2 screenCoord = gl_FragCoord.xy * texelSize;
 
     vec4 current = texelFetch(uCurrentTex, texel, 0);
@@ -78,7 +79,7 @@ void main() {
     history.a = clamp(history.a, minAlpha, maxAlpha);
 
     // Blend weight: base weight reduced by disocclusion
-    float blendWeight = uHistoryWeight * (1.0 - disocclusion);
+    float blendWeight = uTemporalParams0.z * (1.0 - disocclusion);
 
     vec4 result = mix(current, history, blendWeight);
     FragColor = vec4(max(result.rgb, vec3(0.0)), result.a);

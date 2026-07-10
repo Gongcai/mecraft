@@ -2134,6 +2134,47 @@ bool DeferredRenderTargets::ensureHistorySceneTextureViews(RhiDevice& rhiDevice)
     return true;
 }
 
+bool DeferredRenderTargets::ensureHistoryDepthTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_historyDepthView[0].isValid() && m_historyDepthView[1].isValid()) {
+        return true;
+    }
+    if (!m_historyDepthHandle[0].isValid() || !m_historyDepthHandle[1].isValid()) {
+        return false;
+    }
+
+    for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
+        if (m_historyDepthView[historyIndex].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc desc;
+        desc.texture = m_historyDepthHandle[historyIndex];
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::Depth32Float;
+        desc.baseMip = 0;
+        desc.mipCount = 1;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+
+        m_historyDepthView[historyIndex] = rhiDevice.createTextureView(desc);
+        if (!m_historyDepthView[historyIndex].isValid()) {
+            for (RhiTextureViewHandle& view : m_historyDepthView) {
+                if (view.isValid()) {
+                    rhiDevice.destroyTextureView(view);
+                }
+                view = {};
+            }
+            return false;
+        }
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureHistoryReflectionTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2325,6 +2366,47 @@ bool DeferredRenderTargets::ensureHistoryVolumetricTextureView(RhiDevice& rhiDev
     return true;
 }
 
+bool DeferredRenderTargets::ensureHistoryVolumetricTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_historyVolumetricView[0].isValid() && m_historyVolumetricView[1].isValid()) {
+        return true;
+    }
+    if (!m_historyVolumetricHandle[0].isValid() || !m_historyVolumetricHandle[1].isValid()) {
+        return false;
+    }
+
+    for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
+        if (m_historyVolumetricView[historyIndex].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc desc;
+        desc.texture = m_historyVolumetricHandle[historyIndex];
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.baseMip = 0;
+        desc.mipCount = 1;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+
+        m_historyVolumetricView[historyIndex] = rhiDevice.createTextureView(desc);
+        if (!m_historyVolumetricView[historyIndex].isValid()) {
+            for (RhiTextureViewHandle& view : m_historyVolumetricView) {
+                if (view.isValid()) {
+                    rhiDevice.destroyTextureView(view);
+                }
+                view = {};
+            }
+            return false;
+        }
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureWeatherMaskTextureView(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2476,6 +2558,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
+    for (RhiTextureViewHandle& view : m_historyDepthView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
     for (RhiTextureViewHandle& view : m_historyVolumetricView) {
         if (m_rhiViewDevice != nullptr && view.isValid()) {
             m_rhiViewDevice->destroyTextureView(view);
@@ -2524,6 +2612,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_skyCaptureView = {};
     m_historySceneView[0] = {};
     m_historySceneView[1] = {};
+    m_historyDepthView[0] = {};
+    m_historyDepthView[1] = {};
     m_historyReflectionView[0] = {};
     m_historyReflectionView[1] = {};
     m_temporalCurrentView = {};

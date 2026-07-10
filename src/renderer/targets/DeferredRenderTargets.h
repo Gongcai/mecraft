@@ -151,6 +151,8 @@ public:
     bool ensureHistorySceneTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyDepthTextureHandle() const { return m_historyDepthHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const { return m_historyDepthHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle historyDepthTexturePrevViewHandle() const { return m_historyDepthView[1 - m_currentHistoryIndex]; }
+    bool ensureHistoryDepthTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const { return m_historyReflectionHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyReflectionTexturePrevHandle() const { return m_historyReflectionHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureViewHandle historyReflectionTexturePrevViewHandle() const { return m_historyReflectionView[1 - m_currentHistoryIndex]; }
@@ -160,7 +162,9 @@ public:
     [[nodiscard]] RhiTextureHandle historyVolumetricTextureHandle() const { return m_historyVolumetricHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyVolumetricTexturePrevHandle() const { return m_historyVolumetricHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureViewHandle historyVolumetricTextureViewHandle() const { return m_historyVolumetricView[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle historyVolumetricTexturePrevViewHandle() const { return m_historyVolumetricView[1 - m_currentHistoryIndex]; }
     bool ensureHistoryVolumetricTextureView(RhiDevice& rhiDevice);
+    bool ensureHistoryVolumetricTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
     [[nodiscard]] RhiTextureViewHandle temporalCurrentTextureViewHandle() const { return m_temporalCurrentView; }
     bool ensureTemporalCurrentTextureView(RhiDevice& rhiDevice);
@@ -369,6 +373,7 @@ private:
     RhiTextureHandle m_historySceneHandle[2];
     RhiTextureHandle m_historyDepthHandle[2];
     RhiTextureViewHandle m_historySceneView[2];
+    RhiTextureViewHandle m_historyDepthView[2];
     uint32_t m_historyReflectionTex[2] = {0, 0};
     RhiTextureHandle m_historyReflectionHandle[2];
     RhiTextureViewHandle m_historyReflectionView[2];
