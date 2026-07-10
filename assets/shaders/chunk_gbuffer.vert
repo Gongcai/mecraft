@@ -17,11 +17,15 @@ layout (location = 13) in uint aPackedLightAoLayer;
 layout (location = 14) in uint aPackedTintAnim;
 #include "terrain_vertex_decode.glsl"
 
+#ifdef RHI_TERRAIN_MDI
+#include "terrain_gbuffer_params.glsl"
+#else
 uniform mat4 view;
 uniform mat4 viewProj;
 uniform mat4 model;
 uniform int uUseModel;
 uniform int uVertexFormat;
+#endif
 
 out vec2 vUV;
 out float vSunlight;
@@ -38,6 +42,16 @@ out vec2 vTintUV;
 out vec3 vWorldPos;
 
 void main() {
+#ifdef RHI_TERRAIN_MDI
+    TerrainVertexDecoded vertex = decodeTerrainPackedVertex(
+        aPackedPos,
+        aPackedUV,
+        aPackedLightAoLayer,
+        aPackedTintAnim,
+        gl_BaseInstanceARB);
+    vec4 worldPos = vec4(vertex.pos, 1.0);
+    gl_Position = rhiTerrainViewProj * worldPos;
+#else
     TerrainVertexDecoded vertex = (uVertexFormat == 1)
         ? decodeTerrainPackedVertex(aPackedPos, aPackedUV, aPackedLightAoLayer, aPackedTintAnim, gl_BaseInstanceARB)
         : decodeLegacyBlockVertex(aLegacyPos, aLegacyUV, aLegacyNormal, aLegacySunlight, aLegacyBlockLight,
@@ -46,6 +60,7 @@ void main() {
     vec4 localPos = vec4(vertex.pos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
     gl_Position = viewProj * worldPos;
+#endif
 
     vUV = vertex.uv;
     vSunlight = vertex.sunlight;

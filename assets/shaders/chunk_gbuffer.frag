@@ -23,6 +23,28 @@ flat in float vMaterialKind;
 in vec2 vTintUV;
 in vec3 vWorldPos;
 
+#ifdef RHI_TERRAIN_MDI
+layout(binding = 0) uniform sampler2DArray texArray;
+layout(binding = 3) uniform sampler2D uGrassColormap;
+layout(binding = 4) uniform sampler2D uFoliageColormap;
+layout(binding = 9) uniform sampler2D uNoiseTex;
+layout(binding = 10) uniform sampler2D uRippleNormalTex;
+layout(binding = 11) uniform sampler2DArray uBlockNormalTex;
+layout(binding = 12) uniform sampler2DArray uBlockSpecularTex;
+#include "terrain_gbuffer_params.glsl"
+
+#define uCameraPos rhiTerrainCameraAnimation.xyz
+#define uAnimationTime rhiTerrainCameraAnimation.w
+#define uShaderTime rhiTerrainSurfaceParams.x
+#define uSurfaceWetness rhiTerrainSurfaceParams.y
+#define uBlockParallaxDepth rhiTerrainSurfaceParams.z
+#define uForceBaseLod rhiTerrainMaterialFlags.x
+#define uHasBlockNormalMaps rhiTerrainMaterialFlags.y
+#define uHasBlockSpecularMaps rhiTerrainMaterialFlags.z
+#define uBlockParallaxEnabled rhiTerrainMaterialFlags.w
+#define uRainWetSurfacesEnabled rhiTerrainWeatherFlags.x
+#define uRainSurfaceRipplesEnabled rhiTerrainWeatherFlags.y
+#else
 uniform sampler2DArray texArray;
 uniform sampler2DArray uBlockNormalTex;
 uniform sampler2DArray uBlockSpecularTex;
@@ -41,6 +63,7 @@ uniform float uSurfaceWetness;
 uniform int uRainWetSurfacesEnabled;
 uniform int uRainSurfaceRipplesEnabled;
 uniform vec3 uCameraPos;
+#endif
 
 const int kBlockParallaxMaxSteps = 28;
 const float kBlockParallaxMinViewZ = 0.10;
