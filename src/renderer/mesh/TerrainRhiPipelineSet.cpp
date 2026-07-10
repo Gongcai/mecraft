@@ -104,6 +104,18 @@ struct alignas(16) TerrainWaterParams {
 static_assert(sizeof(TerrainWaterParams) == 400u,
               "Terrain water parameters must match the std140 shader block");
 
+struct alignas(16) TerrainForwardParams {
+    glm::mat4 view = glm::mat4(1.0f);
+    glm::mat4 viewProj = glm::mat4(1.0f);
+    glm::vec4 animationSky = glm::vec4(0.0f);
+    glm::vec4 fogColorStart = glm::vec4(0.0f);
+    glm::vec4 fogParams = glm::vec4(0.0f);
+    glm::ivec4 controlFlags = glm::ivec4(0);
+};
+
+static_assert(sizeof(TerrainForwardParams) == 192u,
+              "Terrain forward parameters must match the std140 shader block");
+
 void setPackedTerrainVertexInput(RhiGraphicsPipelineDesc& pipelineDesc) {
     pipelineDesc.vertexInput.bindings.push_back({
         0u,
@@ -135,6 +147,7 @@ void TerrainRhiPipelineSet::init(RhiDevice& rhiDevice) {
 }
 
 void TerrainRhiPipelineSet::shutdown() {
+    destroyForwardResources();
     destroyWaterResources();
     destroyTransparentResources();
     destroyShadowResources();
@@ -329,6 +342,36 @@ bool TerrainRhiPipelineSet::prepareWater(
         frame.rainSurfaceRipplesEnabled ? 1 : 0);
     params.controlFlags2 = glm::ivec4(frame.eyeInWater ? 1 : 0, 0, 0, 0);
     commandList.updateBuffer(m_waterParamsBuffer, 0u, &params, sizeof(params));
+    return true;
+}
+
+bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList,
+                                           ResourceMgr& resourceMgr,
+                                           const TerrainFrameData& frame) {
+    if (m_rhiDevice == nullptr || !ensureForwardPipeline(resourceMgr) ||
+        !ensureForwardTextureViews(resourceMgr) || !ensureForwardBindGroups()) {
+        return false;
+    }
+
+    TerrainForwardParams baseParams;
+    baseParams.view = frame.view;
+    baseParams.viewProj = frame.viewProj;
+    baseParams.animationSky = glm::vec4(
+        frame.animationTime,
+        frame.skyLighting.skyIntensity,
+        0.0f,
+        0.0f);
+    baseParams.fogColorStart = glm::vec4(frame.fog.color, frame.fog.start);
+    baseParams.fogParams = glm::vec4(frame.fog.end, frame.fog.density, 0.0f, 0.0f);
+    baseParams.controlFlags = glm::ivec4(
+        0,
+        frame.fog.enabled ? 1 : 0,
+        frame.fog.mode,
+        0);
+    TerrainForwardParams transparentParams = baseParams;
+    transparentParams.controlFlags.x = 1;
+    commandList.updateBuffer(m_forwardParamsBuffers[0], 0u, &baseParams, sizeof(baseParams));
+    commandList.updateBuffer(m_forwardParamsBuffers[1], 0u, &transparentParams, sizeof(transparentParams));
     return true;
 }
 
@@ -626,6 +669,306 @@ bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot,
     }
     m_gbufferViewTextures[slot] = texture;
     return true;
+}
+
+bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
+    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+    if (m_forwardOpaquePipeline.isValid() && m_forwardCutoutPipeline.isValid() &&
+        m_forwardTransparentPipeline.isValid() && anisotropy == m_forwardSamplerAnisotropy) {
+        return true;
+    }
+
+    destroyForwardResources();
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+    m_forwardSamplerAnisotropy = anisotropy;
+
+    renderer::rhi::RhiShaderSourceOptions sourceOptions;
+    sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_FORWARD_MDI");
+    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/chunk_lit.vert",
+        sourceOptions);
+    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/forward_basic_terrain.frag",
+        sourceOptions);
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        destroyForwardResources();
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "Terrain.Forward.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_forwardVertexShader = m_rhiDevice->createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "Terrain.Forward.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_forwardFragmentShader = m_rhiDevice->createShader(fragmentDesc);
+    if (!m_forwardVertexShader.isValid() || !m_forwardFragmentShader.isValid()) {
+        destroyForwardResources();
+        return false;
+    }
+
+    RhiBufferDesc paramsDesc;
+    paramsDesc.debugName = "Terrain.Forward.Params";
+    paramsDesc.size = sizeof(TerrainForwardParams);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    for (RhiBufferHandle& buffer : m_forwardParamsBuffers) {
+        buffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
+    }
+    if (!m_forwardParamsBuffers[0].isValid() || !m_forwardParamsBuffers[1].isValid()) {
+        destroyForwardResources();
+        return false;
+    }
+
+    RhiSamplerDesc blockSamplerDesc;
+    blockSamplerDesc.minFilter = RhiFilter::Nearest;
+    blockSamplerDesc.magFilter = RhiFilter::Nearest;
+    blockSamplerDesc.mipmapMode = RhiMipmapMode::Linear;
+    blockSamplerDesc.addressU = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressV = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressW = RhiAddressMode::Repeat;
+    blockSamplerDesc.maxAnisotropy = m_forwardSamplerAnisotropy;
+    m_forwardBlockSampler = m_rhiDevice->createSampler(blockSamplerDesc);
+
+    RhiSamplerDesc linearClampDesc;
+    linearClampDesc.minFilter = RhiFilter::Linear;
+    linearClampDesc.magFilter = RhiFilter::Linear;
+    linearClampDesc.mipmapMode = RhiMipmapMode::Nearest;
+    m_forwardLinearClampSampler = m_rhiDevice->createSampler(linearClampDesc);
+    if (!m_forwardBlockSampler.isValid() || !m_forwardLinearClampSampler.isValid()) {
+        destroyForwardResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc metadataLayoutDesc;
+    metadataLayoutDesc.debugName = "Terrain.ForwardMetadataLayout";
+    metadataLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::StorageBuffer,
+        rhiFlag(RhiShaderStage::Vertex),
+        1u
+    });
+    m_forwardMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
+
+    RhiBindGroupLayoutDesc materialLayoutDesc;
+    materialLayoutDesc.debugName = "Terrain.ForwardMaterialLayout";
+    for (uint32_t binding = 0u; binding < 5u; ++binding) {
+        materialLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    materialLayoutDesc.entries.push_back({
+        5u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_forwardMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
+    if (!m_forwardMetadataLayout.isValid() || !m_forwardMaterialLayout.isValid()) {
+        destroyForwardResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Terrain.ForwardPipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_forwardMetadataLayout);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_forwardMaterialLayout);
+    m_forwardPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    if (!m_forwardPipelineLayout.isValid()) {
+        destroyForwardResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = m_forwardVertexShader;
+    pipelineDesc.fragmentShader = m_forwardFragmentShader;
+    pipelineDesc.layout = m_forwardPipelineLayout;
+    setPackedTerrainVertexInput(pipelineDesc);
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth24;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.debugName = "Terrain.Forward.OpaquePipeline";
+    m_forwardOpaquePipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    pipelineDesc.debugName = "Terrain.Forward.CutoutPipeline";
+    m_forwardCutoutPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::SrcAlpha;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    pipelineDesc.debugName = "Terrain.Forward.TransparentPipeline";
+    m_forwardTransparentPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    if (!m_forwardOpaquePipeline.isValid() || !m_forwardCutoutPipeline.isValid() ||
+        !m_forwardTransparentPipeline.isValid()) {
+        destroyForwardResources();
+        return false;
+    }
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureForwardTextureViews(ResourceMgr& resourceMgr) {
+    return ensureForwardTextureView(
+               0u,
+               resourceMgr.getTextureArray().texture,
+               RhiTextureViewType::Texture2DArray) &&
+           ensureForwardTextureView(
+               1u,
+               resourceMgr.getLightmapDay(),
+               RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(
+               2u,
+               resourceMgr.getLightmapNight(),
+               RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(
+               3u,
+               resourceMgr.getGrassColormap(),
+               RhiTextureViewType::Texture2D) &&
+           ensureForwardTextureView(
+               4u,
+               resourceMgr.getFoliageColormap(),
+               RhiTextureViewType::Texture2D);
+}
+
+bool TerrainRhiPipelineSet::ensureForwardBindGroups() {
+    bool viewsChanged = false;
+    for (size_t slot = 0u; slot < m_forwardTextureViews.size(); ++slot) {
+        viewsChanged = viewsChanged || !sameHandle(m_forwardBoundViews[slot], m_forwardTextureViews[slot]);
+    }
+    if (m_forwardBindGroups[0].isValid() && m_forwardBindGroups[1].isValid() && !viewsChanged) {
+        return true;
+    }
+
+    destroyForwardBindGroups();
+    for (size_t pass = 0u; pass < m_forwardBindGroups.size(); ++pass) {
+        RhiBindGroupDesc desc;
+        desc.layout = m_forwardMaterialLayout;
+        for (size_t slot = 0u; slot < m_forwardTextureViews.size(); ++slot) {
+            RhiBindGroupEntry entry;
+            entry.binding = static_cast<uint32_t>(slot);
+            entry.resource.combinedTextureSampler.textureView = m_forwardTextureViews[slot];
+            entry.resource.combinedTextureSampler.sampler = slot == 0u
+                ? m_forwardBlockSampler
+                : m_forwardLinearClampSampler;
+            desc.entries.push_back(entry);
+        }
+        RhiBindGroupEntry paramsEntry;
+        paramsEntry.binding = 5u;
+        paramsEntry.resource.buffer.buffer = m_forwardParamsBuffers[pass];
+        paramsEntry.resource.buffer.range = sizeof(TerrainForwardParams);
+        desc.entries.push_back(paramsEntry);
+        m_forwardBindGroups[pass] = m_rhiDevice->createBindGroup(desc);
+    }
+    if (!m_forwardBindGroups[0].isValid() || !m_forwardBindGroups[1].isValid()) {
+        destroyForwardBindGroups();
+        return false;
+    }
+    m_forwardBoundViews = m_forwardTextureViews;
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureForwardTextureView(
+    const size_t slot,
+    const RhiTextureHandle texture,
+    const RhiTextureViewType viewType) {
+    if (m_rhiDevice == nullptr || slot >= m_forwardTextureViews.size() || !texture.isValid()) {
+        return false;
+    }
+    if (sameHandle(m_forwardViewTextures[slot], texture) && m_forwardTextureViews[slot].isValid()) {
+        return true;
+    }
+    if (m_forwardTextureViews[slot].isValid()) {
+        m_rhiDevice->destroyTextureView(m_forwardTextureViews[slot]);
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = texture;
+    desc.viewType = viewType;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.mipCount = kRhiRemainingMipLevels;
+    desc.layerCount = kRhiRemainingArrayLayers;
+    m_forwardTextureViews[slot] = m_rhiDevice->createTextureView(desc);
+    if (!m_forwardTextureViews[slot].isValid()) {
+        m_forwardViewTextures[slot] = {};
+        return false;
+    }
+    m_forwardViewTextures[slot] = texture;
+    return true;
+}
+
+void TerrainRhiPipelineSet::destroyForwardBindGroups() {
+    if (m_rhiDevice != nullptr) {
+        for (RhiBindGroupHandle& bindGroup : m_forwardBindGroups) {
+            if (bindGroup.isValid()) {
+                m_rhiDevice->destroyBindGroup(bindGroup);
+            }
+            bindGroup = {};
+        }
+    }
+    m_forwardBoundViews = {};
+}
+
+void TerrainRhiPipelineSet::destroyForwardTextureViews() {
+    if (m_rhiDevice != nullptr) {
+        for (RhiTextureViewHandle& view : m_forwardTextureViews) {
+            if (view.isValid()) {
+                m_rhiDevice->destroyTextureView(view);
+            }
+            view = {};
+        }
+    }
+    m_forwardViewTextures = {};
+}
+
+void TerrainRhiPipelineSet::destroyForwardResources() {
+    destroyForwardBindGroups();
+    destroyForwardTextureViews();
+    if (m_rhiDevice != nullptr) {
+        if (m_forwardOpaquePipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardOpaquePipeline);
+        if (m_forwardCutoutPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardCutoutPipeline);
+        if (m_forwardTransparentPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardTransparentPipeline);
+        if (m_forwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
+        if (m_forwardMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_forwardMaterialLayout);
+        if (m_forwardMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_forwardMetadataLayout);
+        if (m_forwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardFragmentShader);
+        if (m_forwardVertexShader.isValid()) m_rhiDevice->destroyShader(m_forwardVertexShader);
+        for (RhiBufferHandle& buffer : m_forwardParamsBuffers) {
+            if (buffer.isValid()) m_rhiDevice->destroyBuffer(buffer);
+            buffer = {};
+        }
+        if (m_forwardBlockSampler.isValid()) m_rhiDevice->destroySampler(m_forwardBlockSampler);
+        if (m_forwardLinearClampSampler.isValid()) m_rhiDevice->destroySampler(m_forwardLinearClampSampler);
+    }
+    m_forwardOpaquePipeline = {};
+    m_forwardCutoutPipeline = {};
+    m_forwardTransparentPipeline = {};
+    m_forwardPipelineLayout = {};
+    m_forwardMaterialLayout = {};
+    m_forwardMetadataLayout = {};
+    m_forwardFragmentShader = {};
+    m_forwardVertexShader = {};
+    m_forwardBlockSampler = {};
+    m_forwardLinearClampSampler = {};
+    m_forwardSamplerAnisotropy = 1.0f;
 }
 
 bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {

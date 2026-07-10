@@ -23,6 +23,14 @@ flat in float vMaterialKind;
 in vec2 vTintUV;
 
 // Textures
+#ifdef RHI_TERRAIN_FORWARD_MDI
+layout(binding = 0) uniform sampler2DArray texArray;
+layout(binding = 1) uniform sampler2D uLightmapDay;
+layout(binding = 2) uniform sampler2D uLightmapNight;
+layout(binding = 3) uniform sampler2D uGrassColormap;
+layout(binding = 4) uniform sampler2D uFoliageColormap;
+#include "terrain_forward_params.glsl"
+#else
 uniform sampler2DArray texArray;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
@@ -44,6 +52,7 @@ uniform float uFogDensity;
 
 // Debug
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined
+#endif
 
 vec3 redstoneTintSrgb(vec2 tintUV) {
     float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;

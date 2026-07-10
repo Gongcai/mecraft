@@ -1,6 +1,7 @@
 #include "ForwardPipeline.h"
 #include "RenderScene.h"
 #include "../mesh/TerrainRenderCache.h"
+#include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
@@ -56,16 +57,25 @@ void ForwardPipeline::shutdown() {
     m_backbufferCommandList = nullptr;
     m_transparentBatch.clear();
     m_transparentPassPlan = {};
-    m_transparentEntries.clear();
     m_initialized = false;
 }
 
 FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_initialized || !ctx.worldView) {
+    if (!m_initialized || !ctx.worldView || m_shared == nullptr ||
+        m_shared->rhiDevice == nullptr) {
         return {};
     }
 
+    RhiCommandList& commandList = m_shared->rhiDevice->beginFrame();
+    m_backbufferCommandList = &commandList;
+    if (!prepareTerrain(ctx, commandList)) {
+        m_shared->rhiDevice->submitFrame(commandList);
+        m_backbufferCommandList = nullptr;
+        return {};
+    }
     if (!beginBackbufferFrame(ctx)) {
+        m_shared->rhiDevice->submitFrame(commandList);
+        m_backbufferCommandList = nullptr;
         return {};
     }
 
@@ -73,13 +83,13 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     renderSky(ctx);
 
     // 2. Opaque + cutout terrain
-    renderTerrain(ctx, settings);
+    renderTerrain();
 
     // 3. Forward-only scene objects that should depth-test against terrain.
     renderEntitiesAndParticles(ctx, settings);
 
     // 4. Transparent terrain (water, glass, etc.)
-    renderTransparent(ctx, settings);
+    renderTransparent();
 
     endBackbufferFrame();
 
@@ -88,8 +98,8 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
 }
 
 bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
-    m_backbufferCommandList = nullptr;
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
+        m_backbufferCommandList == nullptr ||
         !ctx.swapchainColorView.isValid() || !ctx.swapchainDepthStencilView.isValid()) {
         return false;
     }
@@ -121,9 +131,15 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    RhiCommandList& commandList = m_shared->rhiDevice->beginFrame();
-    commandList.beginRendering(renderingInfo);
-    m_backbufferCommandList = &commandList;
+    m_backbufferCommandList->beginRendering(renderingInfo);
+    m_backbufferCommandList->setViewport({
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, ctx.frameWidth)),
+        static_cast<float>(std::max(1, ctx.frameHeight)),
+        0.0f,
+        1.0f
+    });
 
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
@@ -164,70 +180,79 @@ void ForwardPipeline::renderSky(const FrameContext& ctx) {
 // Terrain rendering (opaque + cutout)
 // ============================================================================
 
-void ForwardPipeline::renderTerrain(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_shared || !m_shared->rhiDevice || !m_terrainRenderer ||
-        !m_resourceMgr || !m_worldRenderBuffer) return;
+bool ForwardPipeline::prepareTerrain(const FrameContext& ctx,
+                                     RhiCommandList& commandList) {
+    if (!m_shared || !m_shared->terrainRhiPipelines || !m_terrainRenderer ||
+        !m_resourceMgr || !m_worldRenderBuffer) {
+        return false;
+    }
 
     auto& terrain = *m_terrainRenderer;
     auto& worldBuffer = *m_worldRenderBuffer;
+    if (!terrain.useMultiDrawIndirect()) {
+        return false;
+    }
 
-    // Terrain cache maintenance
     if (m_terrainCache) {
-        RhiCommandList& uploadCommandList = m_shared->rhiDevice->beginFrame();
         m_terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        m_terrainCache->drainMeshingResults(*ctx.worldView, uploadCommandList);
-        m_shared->rhiDevice->submitFrame(uploadCommandList);
+        m_terrainCache->drainMeshingResults(*ctx.worldView, commandList);
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
 
-    // Get forward basic shader
-    Shader* terrainShader = m_resourceMgr->getShader("forward_basic_terrain");
-    if (!terrainShader) return;
-
-    // Build terrain frame data from FrameContext
     TerrainFrameData tfd = buildTerrainFrameData(ctx);
-
-    // Frustum + camera
     terrain.setCameraPos(ctx.camera.position);
     terrain.updateFrustum(ctx.camera.viewProj);
 
-    // Terrain render settings
-    TerrainRenderSettings trs = buildTerrainRenderSettings(settings);
-
-    // Bind lightweight forward state
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    terrain.bindBasicForwardState(tfd, texArray, *terrainShader,
-                                   ctx.eyeInWater, 0/*heldBlockLight*/,
-                                   m_resourceMgr, trs);
-
-    // Submit meshing jobs
     if (m_terrainCache) {
         m_terrainCache->submitMeshingJobs(*ctx.worldView, ctx.camera.position);
     }
 
-    // Render opaque + collect cutout/transparent entries
     std::vector<ChunkRenderEntry> cutoutEntries;
     std::vector<ChunkRenderEntry> transparentEntries;
     terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, cutoutEntries, transparentEntries, true);
     terrain.syncTransparentBatches();
 
-    // Save transparent batch for transparent pass
     m_transparentBatch = terrain.transparentBatches();
     m_transparentPassPlan = terrain.transparentPassPlan();
-    m_transparentEntries = transparentEntries;
-
-    // Flush MDI opaque + render cutout
-    worldBuffer.flushOpaque();
-    terrain.renderCutoutChunks(cutoutEntries, *terrainShader);
-    worldBuffer.captureSceneFrameStats();
-
-    // Unbind textures (units 0-4)
-    glBindVertexArray(0);
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
+    std::sort(m_transparentBatch.begin(), m_transparentBatch.end(),
+              [](const DrawBatchEntry& lhs, const DrawBatchEntry& rhs) {
+                  return lhs.distanceSq > rhs.distanceSq;
+              });
+    for (const DrawBatchEntry& entry : m_transparentBatch) {
+        worldBuffer.addTransparent(entry.range);
     }
+
+    if (!m_shared->terrainRhiPipelines->prepareForward(
+            commandList,
+            *m_resourceMgr,
+            tfd) ||
+        !worldBuffer.prepareRhiOpaqueAndCutout(
+            commandList,
+            m_shared->terrainRhiPipelines->forwardMetadataLayout()) ||
+        !worldBuffer.prepareRhiTransparent(
+            commandList,
+            m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
+        return false;
+    }
+    return true;
+}
+
+void ForwardPipeline::renderTerrain() {
+    if (m_backbufferCommandList == nullptr || m_shared == nullptr ||
+        m_shared->terrainRhiPipelines == nullptr || m_worldRenderBuffer == nullptr) {
+        return;
+    }
+
+    m_worldRenderBuffer->recordRhiOpaque(
+        *m_backbufferCommandList,
+        m_shared->terrainRhiPipelines->forwardOpaquePipeline(),
+        m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
+    m_worldRenderBuffer->recordRhiCutout(
+        *m_backbufferCommandList,
+        m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
+        m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
+    m_worldRenderBuffer->captureSceneFrameStats();
 }
 
 void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings) {
@@ -263,58 +288,24 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
 // Transparent rendering (water, glass, etc.)
 // ============================================================================
 
-void ForwardPipeline::renderTransparent(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_terrainRenderer || !m_worldRenderBuffer) return;
-    if (!m_transparentPassPlan.hasAny()) return;
-
-    Shader* shader = m_resourceMgr->getShader("forward_basic_terrain");
-    if (!shader) return;
-
-    auto& terrain = *m_terrainRenderer;
-    auto& worldBuffer = *m_worldRenderBuffer;
-
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    TerrainFrameData tfd = buildTerrainFrameData(ctx);
-    TerrainRenderSettings trs = buildTerrainRenderSettings(settings);
-
-    terrain.bindBasicForwardState(tfd, texArray, *shader,
-                                   ctx.eyeInWater, 0, m_resourceMgr, trs);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-
-    // MDI path: sort back-to-front, flush transparent
-    shader->setInt("uForceBaseLod", 1);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-
-    std::sort(m_transparentBatch.begin(), m_transparentBatch.end(),
-              [](const DrawBatchEntry& a, const DrawBatchEntry& b) {
-                  return a.distanceSq > b.distanceSq;
-              });
-    for (const auto& entry : m_transparentBatch) {
-        worldBuffer.addTransparent(entry.range);
+void ForwardPipeline::renderTransparent() {
+    if (!m_transparentPassPlan.hasAny() || m_backbufferCommandList == nullptr ||
+        m_shared == nullptr || m_shared->terrainRhiPipelines == nullptr ||
+        m_worldRenderBuffer == nullptr) {
+        return;
     }
-    worldBuffer.flushTransparent();
 
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    shader->setInt("uForceBaseLod", 0);
-
-    // Unbind
-    glBindVertexArray(0);
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
-    }
+    m_worldRenderBuffer->recordRhiTransparent(
+        *m_backbufferCommandList,
+        m_shared->terrainRhiPipelines->forwardTransparentPipeline(),
+        m_shared->terrainRhiPipelines->forwardTransparentBindGroup());
 }
 
 // ============================================================================
 // Frame output
 // ============================================================================
 
-FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext& ctx) {
+FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext&) {
     FrameOutput output{};
     if (m_commonTargets) {
         output.sceneColor = m_commonTargets->sceneColorTextureHandle();
@@ -352,10 +343,4 @@ TerrainFrameData ForwardPipeline::buildTerrainFrameData(const FrameContext& ctx)
     tfd.skyLighting.skyIntensity = ctx.skyIntensity;
 
     return tfd;
-}
-
-TerrainRenderSettings ForwardPipeline::buildTerrainRenderSettings(const RenderSettings& /*settings*/) {
-    // Forward vanilla: TerrainRenderSettings is unused by bindBasicForwardState.
-    // Return defaults. No deferred/shaderpack parameters are read.
-    return TerrainRenderSettings{};
 }

@@ -35,14 +35,14 @@ public:
 private:
     bool beginBackbufferFrame(const FrameContext& ctx);
     void endBackbufferFrame();
+    bool prepareTerrain(const FrameContext& ctx, RhiCommandList& commandList);
     void renderSky(const FrameContext& ctx);
-    void renderTerrain(const FrameContext& ctx, const RenderSettings& settings);
+    void renderTerrain();
     void renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings);
-    void renderTransparent(const FrameContext& ctx, const RenderSettings& settings);
+    void renderTransparent();
     FrameOutput buildFrameOutput(const FrameContext& ctx);
 
     static TerrainFrameData buildTerrainFrameData(const FrameContext& ctx);
-    static TerrainRenderSettings buildTerrainRenderSettings(const RenderSettings& settings);
 
     // Shared resources (non-owning, set during init)
     TerrainRenderer* m_terrainRenderer = nullptr;
@@ -57,7 +57,6 @@ private:
     // Transparent batch state (populated by renderTerrain, consumed by renderTransparent)
     std::vector<DrawBatchEntry> m_transparentBatch;
     TransparentPassPlan m_transparentPassPlan;
-    std::vector<ChunkRenderEntry> m_transparentEntries;
 
     bool m_initialized = false;
 };

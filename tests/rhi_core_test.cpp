@@ -2240,6 +2240,122 @@ bool testGlRhiTerrainWaterPipeline() {
     device.shutdown();
     return true;
 }
+
+bool testGlRhiTerrainForwardPipeline() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for forward terrain pipeline")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_terrain_forward_pipeline_test";
+    if (!requireTrue(device.init(deviceDesc),
+                     "OpenGL RHI device must initialize for forward terrain pipeline")) {
+        return false;
+    }
+
+    renderer::rhi::RhiShaderSourceOptions sourceOptions;
+    sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_FORWARD_MDI");
+    const auto vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/chunk_lit.vert",
+        sourceOptions);
+    const auto fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/forward_basic_terrain.frag",
+        sourceOptions);
+    if (!requireTrue(vertexSource.has_value() && fragmentSource.has_value(),
+                     "forward terrain RHI shader sources must load")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiShaderDesc vertexShaderDesc;
+    vertexShaderDesc.stage = RhiShaderStage::Vertex;
+    vertexShaderDesc.source = vertexSource->c_str();
+    vertexShaderDesc.sourceSize = vertexSource->size();
+    const RhiShaderHandle vertexShader = device.createShader(vertexShaderDesc);
+
+    RhiShaderDesc fragmentShaderDesc;
+    fragmentShaderDesc.stage = RhiShaderStage::Fragment;
+    fragmentShaderDesc.source = fragmentSource->c_str();
+    fragmentShaderDesc.sourceSize = fragmentSource->size();
+    const RhiShaderHandle fragmentShader = device.createShader(fragmentShaderDesc);
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid(),
+                     "forward terrain RHI shaders must compile")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc metadataLayoutDesc;
+    metadataLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::StorageBuffer,
+        rhiFlag(RhiShaderStage::Vertex),
+        1u
+    });
+    const RhiBindGroupLayoutHandle metadataLayout = device.createBindGroupLayout(metadataLayoutDesc);
+
+    RhiBindGroupLayoutDesc materialLayoutDesc;
+    for (uint32_t binding = 0u; binding < 5u; ++binding) {
+        materialLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    materialLayoutDesc.entries.push_back({
+        5u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    const RhiBindGroupLayoutHandle materialLayout = device.createBindGroupLayout(materialLayoutDesc);
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.bindGroupLayouts.push_back(metadataLayout);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(materialLayout);
+    const RhiPipelineLayoutHandle pipelineLayout = device.createPipelineLayout(pipelineLayoutDesc);
+    if (!requireTrue(metadataLayout.isValid() && materialLayout.isValid() && pipelineLayout.isValid(),
+                     "forward terrain pipeline layouts must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(uint32_t) * 4u, RhiVertexInputRate::Vertex});
+    for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
+        pipelineDesc.vertexInput.attributes.push_back({
+            11u + attribute,
+            0u,
+            RhiVertexFormat::Uint,
+            attribute * static_cast<uint32_t>(sizeof(uint32_t))
+        });
+    }
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth24;
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!requireTrue(pipeline.isValid(), "forward terrain RHI pipeline must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyBindGroupLayout(materialLayout);
+    device.destroyBindGroupLayout(metadataLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.shutdown();
+    return true;
+}
 } // namespace
 
 int main() {
@@ -2298,6 +2414,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiTerrainWaterPipeline()) {
+        return 1;
+    }
+    if (!testGlRhiTerrainForwardPipeline()) {
         return 1;
     }
     return 0;

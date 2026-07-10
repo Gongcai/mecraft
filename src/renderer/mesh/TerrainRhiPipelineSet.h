@@ -80,6 +80,9 @@ public:
                       ResourceMgr& resourceMgr,
                       DeferredRenderTargets& targets,
                       const TerrainWaterFrameData& frame);
+    bool prepareForward(RhiCommandList& commandList,
+                        ResourceMgr& resourceMgr,
+                        const TerrainFrameData& frame);
 
     [[nodiscard]] RhiBindGroupLayoutHandle metadataLayout() const { return m_metadataLayout; }
     [[nodiscard]] RhiPipelineHandle gbufferOpaquePipeline() const { return m_gbufferOpaquePipeline; }
@@ -97,12 +100,20 @@ public:
     [[nodiscard]] RhiBindGroupLayoutHandle waterMetadataLayout() const { return m_waterMetadataLayout; }
     [[nodiscard]] RhiPipelineHandle waterPipeline() const { return m_waterPipeline; }
     [[nodiscard]] RhiBindGroupHandle waterBindGroup() const { return m_waterBindGroup; }
+    [[nodiscard]] RhiBindGroupLayoutHandle forwardMetadataLayout() const { return m_forwardMetadataLayout; }
+    [[nodiscard]] RhiPipelineHandle forwardOpaquePipeline() const { return m_forwardOpaquePipeline; }
+    [[nodiscard]] RhiPipelineHandle forwardCutoutPipeline() const { return m_forwardCutoutPipeline; }
+    [[nodiscard]] RhiPipelineHandle forwardTransparentPipeline() const { return m_forwardTransparentPipeline; }
+    [[nodiscard]] RhiBindGroupHandle forwardOpaqueBindGroup() const { return m_forwardBindGroups[0]; }
+    [[nodiscard]] RhiBindGroupHandle forwardCutoutBindGroup() const { return m_forwardBindGroups[0]; }
+    [[nodiscard]] RhiBindGroupHandle forwardTransparentBindGroup() const { return m_forwardBindGroups[1]; }
 
 private:
     static constexpr size_t kGBufferTextureSlotCount = 7u;
     static constexpr size_t kShadowTextureSlotCount = 4u;
     static constexpr size_t kTransparentTextureSlotCount = 10u;
     static constexpr size_t kWaterTextureSlotCount = 9u;
+    static constexpr size_t kForwardTextureSlotCount = 5u;
 
     bool ensureGBufferPipeline(ResourceMgr& resourceMgr);
     bool ensureGBufferTextureViews(ResourceMgr& resourceMgr);
@@ -144,6 +155,15 @@ private:
     void destroyWaterBindGroup();
     void destroyWaterTextureViews();
     void destroyWaterResources();
+    bool ensureForwardPipeline(ResourceMgr& resourceMgr);
+    bool ensureForwardTextureViews(ResourceMgr& resourceMgr);
+    bool ensureForwardBindGroups();
+    bool ensureForwardTextureView(size_t slot,
+                                  RhiTextureHandle texture,
+                                  RhiTextureViewType viewType);
+    void destroyForwardBindGroups();
+    void destroyForwardTextureViews();
+    void destroyForwardResources();
 
     RhiDevice* m_rhiDevice = nullptr;
     bool m_hasNormalMaps = false;
@@ -217,6 +237,23 @@ private:
     std::array<RhiTextureHandle, kWaterTextureSlotCount> m_waterViewTextures{};
     std::array<RhiTextureViewHandle, kWaterTextureSlotCount> m_waterTextureViews{};
     std::array<RhiTextureViewHandle, kWaterTextureSlotCount> m_waterBoundViews{};
+
+    float m_forwardSamplerAnisotropy = 1.0f;
+    RhiBindGroupLayoutHandle m_forwardMetadataLayout;
+    RhiBindGroupLayoutHandle m_forwardMaterialLayout;
+    RhiPipelineLayoutHandle m_forwardPipelineLayout;
+    RhiShaderHandle m_forwardVertexShader;
+    RhiShaderHandle m_forwardFragmentShader;
+    RhiPipelineHandle m_forwardOpaquePipeline;
+    RhiPipelineHandle m_forwardCutoutPipeline;
+    RhiPipelineHandle m_forwardTransparentPipeline;
+    std::array<RhiBufferHandle, 2> m_forwardParamsBuffers{};
+    std::array<RhiBindGroupHandle, 2> m_forwardBindGroups{};
+    RhiSamplerHandle m_forwardBlockSampler;
+    RhiSamplerHandle m_forwardLinearClampSampler;
+    std::array<RhiTextureHandle, kForwardTextureSlotCount> m_forwardViewTextures{};
+    std::array<RhiTextureViewHandle, kForwardTextureSlotCount> m_forwardTextureViews{};
+    std::array<RhiTextureViewHandle, kForwardTextureSlotCount> m_forwardBoundViews{};
 };
 
 #endif // MECRAFT_TERRAIN_RHI_PIPELINE_SET_H
