@@ -896,6 +896,13 @@ void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
         glCullFace(desc.raster.cullMode == RhiCullMode::Front ? GL_FRONT : GL_BACK);
     }
     glFrontFace(desc.raster.frontFace == RhiFrontFace::CounterClockwise ? GL_CCW : GL_CW);
+    if (desc.raster.depthBiasEnabled) {
+        glEnable(GL_POLYGON_OFFSET_FILL);
+        glPolygonOffset(desc.raster.depthBiasSlopeFactor,
+                        desc.raster.depthBiasConstantFactor);
+    } else {
+        glDisable(GL_POLYGON_OFFSET_FILL);
+    }
     if (!desc.raster.scissorEnabled) {
         glDisable(GL_SCISSOR_TEST);
     }
@@ -1383,30 +1390,72 @@ void GlRhiCommandList::copyTexture(const RhiTextureCopy& copy) {
         return;
     }
 
-    const GlTextureRecord* src =
-        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, copy.src);
-    const GlTextureRecord* dst =
-        recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, copy.dst);
-    if (src == nullptr || dst == nullptr) {
+    GlResolvedTextureRecord src;
+    GlResolvedTextureRecord dst;
+    if (!resolveTextureRecord(*m_device->m_data, copy.src, src) ||
+        !resolveTextureRecord(*m_device->m_data, copy.dst, dst)) {
         logRhiError("copyTexture received invalid texture handles");
         return;
     }
 
-    glCopyImageSubData(src->texture,
-                       src->target,
-                       static_cast<GLint>(copy.srcMipLevel),
-                       0,
-                       0,
-                       0,
-                       dst->texture,
-                       dst->target,
-                       static_cast<GLint>(copy.dstMipLevel),
-                       0,
-                       0,
-                       0,
-                       static_cast<GLsizei>(copy.width),
-                       static_cast<GLsizei>(copy.height),
-                       static_cast<GLsizei>(copy.depth));
+    const auto validateSubresource = [](const GlResolvedTextureRecord& texture,
+                                        const RhiTextureSubresourceLayers& subresource,
+                                        const RhiOffset3D& offset,
+                                        const RhiExtent3D& extent) {
+        if (subresource.mipLevel >= texture.desc.mipLevels ||
+            subresource.layerCount == 0u || extent.width == 0u ||
+            extent.height == 0u || extent.depth == 0u) {
+            return false;
+        }
+        const uint32_t width = mipExtent(texture.desc.width, subresource.mipLevel);
+        const uint32_t height = mipExtent(texture.desc.height, subresource.mipLevel);
+        if (offset.x > width || extent.width > width - offset.x ||
+            offset.y > height || extent.height > height - offset.y) {
+            return false;
+        }
+        if (texture.desc.dimension == RhiTextureDimension::Texture3D) {
+            const uint32_t depth = mipExtent(texture.desc.depthOrLayers, subresource.mipLevel);
+            return subresource.baseArrayLayer == 0u && subresource.layerCount == 1u &&
+                   offset.z <= depth && extent.depth <= depth - offset.z;
+        }
+        return offset.z == 0u && extent.depth == 1u &&
+               subresource.baseArrayLayer < texture.desc.depthOrLayers &&
+               subresource.layerCount <= texture.desc.depthOrLayers - subresource.baseArrayLayer;
+    };
+    if (src.desc.format != dst.desc.format ||
+        copy.srcSubresource.layerCount != copy.dstSubresource.layerCount ||
+        !validateSubresource(src, copy.srcSubresource, copy.srcOffset, copy.extent) ||
+        !validateSubresource(dst, copy.dstSubresource, copy.dstOffset, copy.extent)) {
+        logRhiError("copyTexture received an invalid copy region");
+        return;
+    }
+
+    const auto copyZ = [](const GlResolvedTextureRecord& texture,
+                          const RhiTextureSubresourceLayers& subresource,
+                          const RhiOffset3D& offset) {
+        return texture.desc.dimension == RhiTextureDimension::Texture3D
+            ? offset.z
+            : subresource.baseArrayLayer;
+    };
+    const uint32_t copyDepth = src.desc.dimension == RhiTextureDimension::Texture3D
+        ? copy.extent.depth
+        : copy.srcSubresource.layerCount;
+
+    glCopyImageSubData(src.texture,
+                       src.target,
+                       static_cast<GLint>(copy.srcSubresource.mipLevel),
+                       static_cast<GLint>(copy.srcOffset.x),
+                       static_cast<GLint>(copy.srcOffset.y),
+                       static_cast<GLint>(copyZ(src, copy.srcSubresource, copy.srcOffset)),
+                       dst.texture,
+                       dst.target,
+                       static_cast<GLint>(copy.dstSubresource.mipLevel),
+                       static_cast<GLint>(copy.dstOffset.x),
+                       static_cast<GLint>(copy.dstOffset.y),
+                       static_cast<GLint>(copyZ(dst, copy.dstSubresource, copy.dstOffset)),
+                       static_cast<GLsizei>(copy.extent.width),
+                       static_cast<GLsizei>(copy.extent.height),
+                       static_cast<GLsizei>(copyDepth));
 }
 
 void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {

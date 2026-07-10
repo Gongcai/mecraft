@@ -114,14 +114,32 @@ struct RhiBufferTextureCopy {
     uint32_t depth = 1;
 };
 
-struct RhiTextureCopy {
-    RhiTextureHandle src;
-    RhiTextureHandle dst;
-    uint32_t srcMipLevel = 0;
-    uint32_t dstMipLevel = 0;
+struct RhiTextureSubresourceLayers {
+    uint32_t mipLevel = 0;
+    uint32_t baseArrayLayer = 0;
+    uint32_t layerCount = 1;
+};
+
+struct RhiOffset3D {
+    uint32_t x = 0;
+    uint32_t y = 0;
+    uint32_t z = 0;
+};
+
+struct RhiExtent3D {
     uint32_t width = 1;
     uint32_t height = 1;
     uint32_t depth = 1;
+};
+
+struct RhiTextureCopy {
+    RhiTextureHandle src;
+    RhiTextureHandle dst;
+    RhiTextureSubresourceLayers srcSubresource;
+    RhiOffset3D srcOffset;
+    RhiTextureSubresourceLayers dstSubresource;
+    RhiOffset3D dstOffset;
+    RhiExtent3D extent;
 };
 
 struct RhiTextureBlit {

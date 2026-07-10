@@ -38,7 +38,10 @@ struct RhiVertexInputLayout {
 struct RhiRasterState {
     RhiCullMode cullMode = RhiCullMode::Back;
     RhiFrontFace frontFace = RhiFrontFace::CounterClockwise;
+    float depthBiasConstantFactor = 0.0f;
+    float depthBiasSlopeFactor = 0.0f;
     bool depthClampEnabled = false;
+    bool depthBiasEnabled = false;
     bool scissorEnabled = false;
 };
 

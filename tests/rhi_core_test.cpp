@@ -188,8 +188,18 @@ bool testDescHashStability() {
     }
 
     desc.mipLevels = 1;
-    return requireTrue(firstHash != rhiHashTextureDesc(desc),
-                       "texture desc hash must change when semantic fields change");
+    if (!requireTrue(firstHash != rhiHashTextureDesc(desc),
+                     "texture desc hash must change when semantic fields change")) {
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    const uint64_t pipelineHash = rhiHashGraphicsPipelineDesc(pipelineDesc);
+    pipelineDesc.raster.depthBiasEnabled = true;
+    pipelineDesc.raster.depthBiasConstantFactor = 4.0f;
+    pipelineDesc.raster.depthBiasSlopeFactor = 2.0f;
+    return requireTrue(pipelineHash != rhiHashGraphicsPipelineDesc(pipelineDesc),
+                       "graphics pipeline hash must include depth bias state");
 }
 
 bool testGlTextureRegistry() {
