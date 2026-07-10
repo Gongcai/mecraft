@@ -190,6 +190,11 @@ public:
     void recordRhiCutout(RhiCommandList& commandList,
                          RhiPipelineHandle pipeline,
                          RhiBindGroupHandle materialBindGroup);
+    bool prepareRhiTransparent(RhiCommandList& commandList,
+                               RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiTransparent(RhiCommandList& commandList,
+                              RhiPipelineHandle pipeline,
+                              RhiBindGroupHandle materialBindGroup);
 
     void clearWaterCommands();
 
@@ -241,8 +246,10 @@ private:
     RhiDevice* m_rhiDevice = nullptr;
     RhiGrowableBuffer m_rhiOpaqueVertexBuffer;
     RhiGrowableBuffer m_rhiCutoutVertexBuffer;
+    RhiGrowableBuffer m_rhiTransparentVertexBuffer;
     RhiGrowableBuffer m_rhiOpaqueIndirectBuffer;
     RhiGrowableBuffer m_rhiCutoutIndirectBuffer;
+    RhiGrowableBuffer m_rhiTransparentIndirectBuffer;
     RhiGrowableBuffer m_rhiMetadataBuffer;
     RhiBindGroupHandle m_rhiMetadataBindGroup;
     RhiBindGroupLayoutHandle m_rhiMetadataLayout;

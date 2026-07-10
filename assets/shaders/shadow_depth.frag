@@ -13,6 +13,13 @@ in float vSkylight;
 flat in float vTintKind;
 in vec2 vTintUV;
 
+#ifdef RHI_TERRAIN_SHADOW_MDI
+layout(binding = 0) uniform sampler2DArray texArray;
+layout(binding = 1) uniform sampler2D uNoiseTex;
+layout(binding = 2) uniform sampler2D uGrassColormap;
+layout(binding = 3) uniform sampler2D uFoliageColormap;
+#include "terrain_shadow_params.glsl"
+#else
 uniform sampler2DArray texArray;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uGrassColormap;
@@ -23,6 +30,7 @@ uniform float uTime;
 uniform vec3 uShadowLightDirection;
 uniform mat4 uShadowModelView;
 uniform int uShadowPassMode; // 0 = opaque-only, 1 = transparent shadow (DepthAll + Color)
+#endif
 
 vec3 redstoneTintSrgb(vec2 tintUV) {
     float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;

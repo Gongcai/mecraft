@@ -11,6 +11,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../core/Shader.h"
@@ -176,6 +177,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         m_resourceMgr == nullptr ||
         ctx.shared == nullptr ||
         ctx.shared->rhiDevice == nullptr) {
+        return output;
+    }
+    if (useMultiDrawIndirect && ctx.shared->terrainRhiPipelines == nullptr) {
         return output;
     }
 
@@ -420,17 +424,46 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             renderingInfo.depthStencilAttachment = &depthAttachment;
 
             RhiCommandList& commandList = rhiDevice.beginFrame();
+            if (useMultiDrawIndirect) {
+                TerrainShadowFrameData shadowFrame;
+                shadowFrame.modelView = cascadeData.view;
+                shadowFrame.projection = cascadeData.projection;
+                shadowFrame.lightDirection = m_shadowRenderer->lightDirection();
+                shadowFrame.animationTime = ctx.animationTime;
+                shadowFrame.shaderTime = ctx.shaderTime;
+                shadowFrame.passMode = 0;
+                if (!ctx.shared->terrainRhiPipelines->prepareShadow(
+                        commandList,
+                        *m_resourceMgr,
+                        shadowFrame) ||
+                    !m_worldRenderBuffer->prepareRhiOpaqueAndCutout(
+                        commandList,
+                        ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
+                    return output;
+                }
+            }
             commandList.beginRendering(renderingInfo);
 
-            bindTerrainShadowInputs();
-            m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
-            m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
-            m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
-            m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
-            m_shadowDepthShader->setInt("uShadowPassMode", 0);
             if (useMultiDrawIndirect) {
-                m_worldRenderBuffer->flushOpaque();
+                m_worldRenderBuffer->recordRhiOpaque(
+                    commandList,
+                    ctx.shared->terrainRhiPipelines->shadowOpaquePipeline(),
+                    ctx.shared->terrainRhiPipelines->shadowBindGroup());
+                if (renderCutoutCasters) {
+                    m_worldRenderBuffer->recordRhiCutout(
+                        commandList,
+                        ctx.shared->terrainRhiPipelines->shadowCutoutPipeline(),
+                        ctx.shared->terrainRhiPipelines->shadowBindGroup());
+                    commandList.setGraphicsPipeline(
+                        ctx.shared->terrainRhiPipelines->shadowOpaquePipeline());
+                }
             } else {
+                bindTerrainShadowInputs();
+                m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
+                m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
+                m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
+                m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
+                m_shadowDepthShader->setInt("uShadowPassMode", 0);
                 GLuint lastVao = 0;
                 for (const auto& entry : m_cascadeOpaqueEntries[cascade]) {
                     if (entry.chunk == nullptr) continue;
@@ -442,15 +475,15 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     }
                     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
                 }
-            }
-            // Cutout shadow: render with polygon offset to prevent self-shadowing artifacts.
-            // Cutout geometry (grass, flowers) are single-layer planes that would otherwise
-            // cast shadows on themselves, producing stripe patterns.
-            if (renderCutoutCasters) {
-                glEnable(GL_POLYGON_OFFSET_FILL);
-                glPolygonOffset(2.0f, 4.0f);
-                m_terrainRenderer->renderCutoutChunks(m_cascadeCutoutEntries[cascade], *m_shadowDepthShader);
-                glDisable(GL_POLYGON_OFFSET_FILL);
+                // Cutout geometry needs depth bias to avoid self-shadowing on single-layer planes.
+                if (renderCutoutCasters) {
+                    glEnable(GL_POLYGON_OFFSET_FILL);
+                    glPolygonOffset(2.0f, 4.0f);
+                    m_terrainRenderer->renderCutoutChunks(
+                        m_cascadeCutoutEntries[cascade],
+                        *m_shadowDepthShader);
+                    glDisable(GL_POLYGON_OFFSET_FILL);
+                }
             }
             // Block entity shadow: render chest-style entity models into this cascade.
             renderShadowBlockEntities(worldView, cascadeData.viewProj, ctx.camera.position,
@@ -523,33 +556,52 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             renderingInfo.colorAttachmentCount = 2u;
             renderingInfo.depthStencilAttachment = &depthAttachment;
 
+            if (renderTransparentCasters && useMultiDrawIndirect) {
+                m_worldRenderBuffer->beginFrame();
+                for (const GpuMeshRange& range : m_cascadeTransparentRanges[cascade]) {
+                    m_worldRenderBuffer->addTransparent(range);
+                }
+                stats.transparentCommands = m_worldRenderBuffer->transparentCommandCount();
+                stats.transparentVertices = m_worldRenderBuffer->transparentVertexCount();
+
+                TerrainShadowFrameData shadowFrame;
+                shadowFrame.modelView = cascadeData.view;
+                shadowFrame.projection = cascadeData.projection;
+                shadowFrame.lightDirection = m_shadowRenderer->lightDirection();
+                shadowFrame.animationTime = ctx.animationTime;
+                shadowFrame.shaderTime = ctx.shaderTime;
+                shadowFrame.passMode = 1;
+                if (!ctx.shared->terrainRhiPipelines->prepareShadow(
+                        commandList,
+                        *m_resourceMgr,
+                        shadowFrame) ||
+                    !m_worldRenderBuffer->prepareRhiTransparent(
+                        commandList,
+                        ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
+                    return output;
+                }
+            }
             commandList.beginRendering(renderingInfo);
 
             if (renderTransparentCasters) {
-                bindTerrainShadowInputs();
-                m_shadowDepthShader->setInt("uShadowPassMode", 1);
-                m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
-                m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
-                m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
-                m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
-                // Transparent casters: depth write ON, no blending, no sort.
-                glDepthMask(GL_TRUE);
-                glDepthFunc(GL_LESS);
-                glDisable(GL_BLEND);
-                glDisable(GL_CULL_FACE);
-
-                // Render transparent shadow chunks using the same terrain shadow shader.
-                m_shadowDepthShader->use();
-                m_shadowDepthShader->setInt("uForceBaseLod", 1);
                 if (useMultiDrawIndirect) {
-                    m_worldRenderBuffer->beginFrame();
-                    for (const GpuMeshRange& range : m_cascadeTransparentRanges[cascade]) {
-                        m_worldRenderBuffer->addTransparent(range);
-                    }
-                    stats.transparentCommands = m_worldRenderBuffer->transparentCommandCount();
-                    stats.transparentVertices = m_worldRenderBuffer->transparentVertexCount();
-                    m_worldRenderBuffer->flushTransparent();
+                    m_worldRenderBuffer->recordRhiTransparent(
+                        commandList,
+                        ctx.shared->terrainRhiPipelines->shadowTransparentPipeline(),
+                        ctx.shared->terrainRhiPipelines->shadowBindGroup());
                 } else {
+                    bindTerrainShadowInputs();
+                    m_shadowDepthShader->setInt("uShadowPassMode", 1);
+                    m_shadowDepthShader->setMat4("viewProj", cascadeData.viewProj);
+                    m_shadowDepthShader->setMat4("uShadowModelView", cascadeData.view);
+                    m_shadowDepthShader->setMat4("uShadowProjection", cascadeData.projection);
+                    m_shadowDepthShader->setMat4("uShadowProjectionInverse", glm::inverse(cascadeData.projection));
+                    glDepthMask(GL_TRUE);
+                    glDepthFunc(GL_LESS);
+                    glDisable(GL_BLEND);
+                    glDisable(GL_CULL_FACE);
+                    m_shadowDepthShader->use();
+                    m_shadowDepthShader->setInt("uForceBaseLod", 1);
                     uint64_t transparentVertices = 0;
                     size_t transparentCommands = 0;
                     for (const ChunkRenderEntry& entry : m_cascadeTransparentEntries[cascade]) {
@@ -565,9 +617,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     }
                     stats.transparentCommands = transparentCommands;
                     stats.transparentVertices = transparentVertices;
+                    m_shadowDepthShader->use();
+                    m_shadowDepthShader->setInt("uForceBaseLod", 0);
                 }
-                m_shadowDepthShader->use();
-                m_shadowDepthShader->setInt("uForceBaseLod", 0);
                 stats.transparentRendered = true;
             }
             commandList.endRendering();

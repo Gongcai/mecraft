@@ -34,6 +34,32 @@ struct alignas(16) TerrainGBufferParams {
 
 static_assert(sizeof(TerrainGBufferParams) == 128u,
               "Terrain GBuffer parameters must match the std140 shader block");
+
+struct alignas(16) TerrainShadowParams {
+    glm::mat4 modelView = glm::mat4(1.0f);
+    glm::mat4 projection = glm::mat4(1.0f);
+    glm::vec4 lightAnimation = glm::vec4(0.0f);
+    glm::vec4 timePass = glm::vec4(0.0f);
+};
+
+static_assert(sizeof(TerrainShadowParams) == 160u,
+              "Terrain shadow parameters must match the std140 shader block");
+
+void setPackedTerrainVertexInput(RhiGraphicsPipelineDesc& pipelineDesc) {
+    pipelineDesc.vertexInput.bindings.push_back({
+        0u,
+        static_cast<uint32_t>(sizeof(PackedBlockVertex)),
+        RhiVertexInputRate::Vertex
+    });
+    for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
+        pipelineDesc.vertexInput.attributes.push_back({
+            11u + attribute,
+            0u,
+            RhiVertexFormat::Uint,
+            attribute * static_cast<uint32_t>(sizeof(uint32_t))
+        });
+    }
+}
 } // namespace
 
 TerrainRhiPipelineSet::TerrainRhiPipelineSet() = default;
@@ -50,6 +76,7 @@ void TerrainRhiPipelineSet::init(RhiDevice& rhiDevice) {
 }
 
 void TerrainRhiPipelineSet::shutdown() {
+    destroyShadowResources();
     destroyGBufferResources();
     m_rhiDevice = nullptr;
 }
@@ -93,6 +120,26 @@ bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList,
     cutoutParams.materialFlags.x = 1;
     commandList.updateBuffer(m_gbufferParamsBuffers[0], 0u, &baseParams, sizeof(baseParams));
     commandList.updateBuffer(m_gbufferParamsBuffers[1], 0u, &cutoutParams, sizeof(cutoutParams));
+    return true;
+}
+
+bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList,
+                                          ResourceMgr& resourceMgr,
+                                          const TerrainShadowFrameData& frame) {
+    if (m_rhiDevice == nullptr || !ensureShadowPipeline(resourceMgr) ||
+        !ensureShadowTextureViews(resourceMgr) || !ensureShadowBindGroup()) {
+        return false;
+    }
+
+    TerrainShadowParams params;
+    params.modelView = frame.modelView;
+    params.projection = frame.projection;
+    params.lightAnimation = glm::vec4(frame.lightDirection, frame.animationTime);
+    params.timePass = glm::vec4(frame.shaderTime,
+                                static_cast<float>(frame.passMode),
+                                0.0f,
+                                0.0f);
+    commandList.updateBuffer(m_shadowParamsBuffer, 0u, &params, sizeof(params));
     return true;
 }
 
@@ -254,19 +301,7 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.vertexShader = m_gbufferVertexShader;
     pipelineDesc.fragmentShader = m_gbufferFragmentShader;
     pipelineDesc.layout = m_gbufferPipelineLayout;
-    pipelineDesc.vertexInput.bindings.push_back({
-        0u,
-        static_cast<uint32_t>(sizeof(PackedBlockVertex)),
-        RhiVertexInputRate::Vertex
-    });
-    for (uint32_t attribute = 0u; attribute < 4u; ++attribute) {
-        pipelineDesc.vertexInput.attributes.push_back({
-            11u + attribute,
-            0u,
-            RhiVertexFormat::Uint,
-            attribute * static_cast<uint32_t>(sizeof(uint32_t))
-        });
-    }
+    setPackedTerrainVertexInput(pipelineDesc);
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
@@ -402,6 +437,303 @@ bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot,
     }
     m_gbufferViewTextures[slot] = texture;
     return true;
+}
+
+bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
+    const float anisotropy = std::max(1.0f, resourceMgr.getAtlasAnisotropy());
+    if (m_shadowOpaquePipeline.isValid() && m_shadowCutoutPipeline.isValid() &&
+        m_shadowTransparentPipeline.isValid() && anisotropy == m_shadowSamplerAnisotropy) {
+        return true;
+    }
+
+    destroyShadowResources();
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+    m_shadowSamplerAnisotropy = anisotropy;
+
+    renderer::rhi::RhiShaderSourceOptions sourceOptions;
+    sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SHADOW_MDI");
+    const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/shadow_depth.vert",
+        sourceOptions);
+    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/shadow_depth.frag",
+        sourceOptions);
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        destroyShadowResources();
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "Terrain.Shadow.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_shadowVertexShader = m_rhiDevice->createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "Terrain.Shadow.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_shadowFragmentShader = m_rhiDevice->createShader(fragmentDesc);
+    if (!m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid()) {
+        destroyShadowResources();
+        return false;
+    }
+
+    RhiBufferDesc paramsDesc;
+    paramsDesc.debugName = "Terrain.Shadow.Params";
+    paramsDesc.size = sizeof(TerrainShadowParams);
+    paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_shadowParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
+    if (!m_shadowParamsBuffer.isValid()) {
+        destroyShadowResources();
+        return false;
+    }
+
+    RhiSamplerDesc blockSamplerDesc;
+    blockSamplerDesc.minFilter = RhiFilter::Nearest;
+    blockSamplerDesc.magFilter = RhiFilter::Nearest;
+    blockSamplerDesc.mipmapMode = RhiMipmapMode::Linear;
+    blockSamplerDesc.addressU = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressV = RhiAddressMode::Repeat;
+    blockSamplerDesc.addressW = RhiAddressMode::Repeat;
+    blockSamplerDesc.maxAnisotropy = m_shadowSamplerAnisotropy;
+    m_shadowBlockSampler = m_rhiDevice->createSampler(blockSamplerDesc);
+
+    RhiSamplerDesc linearClampDesc;
+    linearClampDesc.minFilter = RhiFilter::Linear;
+    linearClampDesc.magFilter = RhiFilter::Linear;
+    linearClampDesc.mipmapMode = RhiMipmapMode::Nearest;
+    m_shadowLinearClampSampler = m_rhiDevice->createSampler(linearClampDesc);
+
+    RhiSamplerDesc linearRepeatDesc = linearClampDesc;
+    linearRepeatDesc.addressU = RhiAddressMode::Repeat;
+    linearRepeatDesc.addressV = RhiAddressMode::Repeat;
+    linearRepeatDesc.addressW = RhiAddressMode::Repeat;
+    m_shadowLinearRepeatSampler = m_rhiDevice->createSampler(linearRepeatDesc);
+    if (!m_shadowBlockSampler.isValid() || !m_shadowLinearClampSampler.isValid() ||
+        !m_shadowLinearRepeatSampler.isValid()) {
+        destroyShadowResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc metadataLayoutDesc;
+    metadataLayoutDesc.debugName = "Terrain.ShadowMetadataLayout";
+    metadataLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::StorageBuffer,
+        rhiFlag(RhiShaderStage::Vertex),
+        1u
+    });
+    m_shadowMetadataLayout = m_rhiDevice->createBindGroupLayout(metadataLayoutDesc);
+
+    RhiBindGroupLayoutDesc materialLayoutDesc;
+    materialLayoutDesc.debugName = "Terrain.ShadowMaterialLayout";
+    for (uint32_t binding = 0u; binding < 4u; ++binding) {
+        materialLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    materialLayoutDesc.entries.push_back({
+        4u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_shadowMaterialLayout = m_rhiDevice->createBindGroupLayout(materialLayoutDesc);
+    if (!m_shadowMetadataLayout.isValid() || !m_shadowMaterialLayout.isValid()) {
+        destroyShadowResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Terrain.ShadowPipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_shadowMetadataLayout);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_shadowMaterialLayout);
+    m_shadowPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    if (!m_shadowPipelineLayout.isValid()) {
+        destroyShadowResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = m_shadowVertexShader;
+    pipelineDesc.fragmentShader = m_shadowFragmentShader;
+    pipelineDesc.layout = m_shadowPipelineLayout;
+    setPackedTerrainVertexInput(pipelineDesc);
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth24;
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
+    pipelineDesc.debugName = "Terrain.Shadow.OpaquePipeline";
+    m_shadowOpaquePipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.raster.depthBiasEnabled = true;
+    pipelineDesc.raster.depthBiasConstantFactor = 4.0f;
+    pipelineDesc.raster.depthBiasSlopeFactor = 2.0f;
+    pipelineDesc.debugName = "Terrain.Shadow.CutoutPipeline";
+    m_shadowCutoutPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    pipelineDesc.raster.depthBiasEnabled = false;
+    pipelineDesc.raster.depthBiasConstantFactor = 0.0f;
+    pipelineDesc.raster.depthBiasSlopeFactor = 0.0f;
+    pipelineDesc.colorFormats = {
+        RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rgba16Float
+    };
+    pipelineDesc.debugName = "Terrain.Shadow.TransparentPipeline";
+    m_shadowTransparentPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    if (!m_shadowOpaquePipeline.isValid() || !m_shadowCutoutPipeline.isValid() ||
+        !m_shadowTransparentPipeline.isValid()) {
+        destroyShadowResources();
+        return false;
+    }
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureShadowTextureViews(ResourceMgr& resourceMgr) {
+    return ensureShadowTextureView(
+               0u,
+               resourceMgr.getTextureArray().texture,
+               RhiTextureViewType::Texture2DArray) &&
+           ensureShadowTextureView(
+               1u,
+               resourceMgr.getTexture2DHandle("shader_noise2d"),
+               RhiTextureViewType::Texture2D) &&
+           ensureShadowTextureView(
+               2u,
+               resourceMgr.getGrassColormap(),
+               RhiTextureViewType::Texture2D) &&
+           ensureShadowTextureView(
+               3u,
+               resourceMgr.getFoliageColormap(),
+               RhiTextureViewType::Texture2D);
+}
+
+bool TerrainRhiPipelineSet::ensureShadowBindGroup() {
+    bool viewsChanged = false;
+    for (size_t slot = 0u; slot < m_shadowTextureViews.size(); ++slot) {
+        viewsChanged = viewsChanged ||
+                       !sameHandle(m_shadowBoundViews[slot], m_shadowTextureViews[slot]);
+    }
+    if (m_shadowBindGroup.isValid() && !viewsChanged) {
+        return true;
+    }
+
+    destroyShadowBindGroup();
+    RhiBindGroupDesc desc;
+    desc.layout = m_shadowMaterialLayout;
+    for (uint32_t binding = 0u; binding < m_shadowTextureViews.size(); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = m_shadowTextureViews[binding];
+        entry.resource.combinedTextureSampler.sampler = binding == 0u
+            ? m_shadowBlockSampler
+            : (binding == 1u ? m_shadowLinearRepeatSampler : m_shadowLinearClampSampler);
+        desc.entries.push_back(entry);
+    }
+    RhiBindGroupEntry paramsEntry;
+    paramsEntry.binding = 4u;
+    paramsEntry.resource.buffer.buffer = m_shadowParamsBuffer;
+    paramsEntry.resource.buffer.range = sizeof(TerrainShadowParams);
+    desc.entries.push_back(paramsEntry);
+    m_shadowBindGroup = m_rhiDevice->createBindGroup(desc);
+    if (!m_shadowBindGroup.isValid()) {
+        return false;
+    }
+    m_shadowBoundViews = m_shadowTextureViews;
+    return true;
+}
+
+bool TerrainRhiPipelineSet::ensureShadowTextureView(
+    const size_t slot,
+    const RhiTextureHandle texture,
+    const RhiTextureViewType viewType) {
+    if (m_rhiDevice == nullptr || slot >= m_shadowTextureViews.size() || !texture.isValid()) {
+        return false;
+    }
+    if (sameHandle(m_shadowViewTextures[slot], texture) && m_shadowTextureViews[slot].isValid()) {
+        return true;
+    }
+    if (m_shadowTextureViews[slot].isValid()) {
+        m_rhiDevice->destroyTextureView(m_shadowTextureViews[slot]);
+    }
+
+    RhiTextureViewDesc desc;
+    desc.texture = texture;
+    desc.viewType = viewType;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.mipCount = kRhiRemainingMipLevels;
+    desc.layerCount = kRhiRemainingArrayLayers;
+    m_shadowTextureViews[slot] = m_rhiDevice->createTextureView(desc);
+    if (!m_shadowTextureViews[slot].isValid()) {
+        m_shadowViewTextures[slot] = {};
+        return false;
+    }
+    m_shadowViewTextures[slot] = texture;
+    return true;
+}
+
+void TerrainRhiPipelineSet::destroyShadowBindGroup() {
+    if (m_rhiDevice != nullptr && m_shadowBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_shadowBindGroup);
+    }
+    m_shadowBindGroup = {};
+    m_shadowBoundViews = {};
+}
+
+void TerrainRhiPipelineSet::destroyShadowTextureViews() {
+    if (m_rhiDevice != nullptr) {
+        for (RhiTextureViewHandle& view : m_shadowTextureViews) {
+            if (view.isValid()) {
+                m_rhiDevice->destroyTextureView(view);
+            }
+            view = {};
+        }
+    }
+    m_shadowViewTextures = {};
+}
+
+void TerrainRhiPipelineSet::destroyShadowResources() {
+    destroyShadowBindGroup();
+    destroyShadowTextureViews();
+    if (m_rhiDevice != nullptr) {
+        if (m_shadowOpaquePipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowOpaquePipeline);
+        if (m_shadowCutoutPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowCutoutPipeline);
+        if (m_shadowTransparentPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowTransparentPipeline);
+        if (m_shadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
+        if (m_shadowMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowMaterialLayout);
+        if (m_shadowMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowMetadataLayout);
+        if (m_shadowFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowFragmentShader);
+        if (m_shadowVertexShader.isValid()) m_rhiDevice->destroyShader(m_shadowVertexShader);
+        if (m_shadowParamsBuffer.isValid()) m_rhiDevice->destroyBuffer(m_shadowParamsBuffer);
+        if (m_shadowBlockSampler.isValid()) m_rhiDevice->destroySampler(m_shadowBlockSampler);
+        if (m_shadowLinearClampSampler.isValid()) m_rhiDevice->destroySampler(m_shadowLinearClampSampler);
+        if (m_shadowLinearRepeatSampler.isValid()) m_rhiDevice->destroySampler(m_shadowLinearRepeatSampler);
+    }
+    m_shadowOpaquePipeline = {};
+    m_shadowCutoutPipeline = {};
+    m_shadowTransparentPipeline = {};
+    m_shadowPipelineLayout = {};
+    m_shadowMaterialLayout = {};
+    m_shadowMetadataLayout = {};
+    m_shadowFragmentShader = {};
+    m_shadowVertexShader = {};
+    m_shadowParamsBuffer = {};
+    m_shadowBlockSampler = {};
+    m_shadowLinearClampSampler = {};
+    m_shadowLinearRepeatSampler = {};
+    m_shadowSamplerAnisotropy = 1.0f;
 }
 
 void TerrainRhiPipelineSet::destroyGBufferBindGroups() {

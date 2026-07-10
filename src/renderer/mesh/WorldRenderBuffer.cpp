@@ -516,6 +516,11 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
             kInitialCutoutPoolVertices * sizeof(PackedBlockVertex),
             rhiFlag(RhiBufferUsage::Vertex),
             "WorldRenderBuffer.RhiCutoutVertices") ||
+        !m_rhiTransparentVertexBuffer.init(
+            rhiDevice,
+            kInitialTransparentPoolVertices * sizeof(PackedBlockVertex),
+            rhiFlag(RhiBufferUsage::Vertex),
+            "WorldRenderBuffer.RhiTransparentVertices") ||
         !m_rhiOpaqueIndirectBuffer.init(
             rhiDevice,
             commandBytes,
@@ -526,6 +531,11 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
             commandBytes,
             rhiFlag(RhiBufferUsage::Indirect),
             "WorldRenderBuffer.RhiCutoutIndirect") ||
+        !m_rhiTransparentIndirectBuffer.init(
+            rhiDevice,
+            commandBytes,
+            rhiFlag(RhiBufferUsage::Indirect),
+            "WorldRenderBuffer.RhiTransparentIndirect") ||
         !m_rhiMetadataBuffer.init(
             rhiDevice,
             metadataBytes,
@@ -616,8 +626,10 @@ void WorldRenderBuffer::shutdown() {
     m_rhiMetadataLayout = {};
     m_rhiMetadataBoundBuffer = {};
     m_rhiMetadataBuffer.shutdown();
+    m_rhiTransparentIndirectBuffer.shutdown();
     m_rhiCutoutIndirectBuffer.shutdown();
     m_rhiOpaqueIndirectBuffer.shutdown();
+    m_rhiTransparentVertexBuffer.shutdown();
     m_rhiCutoutVertexBuffer.shutdown();
     m_rhiOpaqueVertexBuffer.shutdown();
     m_rhiDevice = nullptr;
@@ -749,7 +761,16 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
             return {};
         }
         result.transparent.metadataIndex = result.metadataIndex;
-        m_transparentPool.upload(result.transparent, makePacked(transparent));
+        const std::vector<PackedBlockVertex> packed = makePacked(transparent);
+        m_transparentPool.upload(result.transparent, packed);
+        if (!m_rhiTransparentVertexBuffer.write(
+                commandList,
+                static_cast<uint64_t>(result.transparent.firstVertex) * sizeof(PackedBlockVertex),
+                packed.data(),
+                packed.size() * sizeof(PackedBlockVertex))) {
+            free(result);
+            return {};
+        }
     }
     if (!water.empty()) {
         if (!m_transparentPool.allocate(static_cast<uint32_t>(water.size()), result.water)) {
@@ -757,7 +778,16 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
             return {};
         }
         result.water.metadataIndex = result.metadataIndex;
-        m_transparentPool.upload(result.water, makePacked(water));
+        const std::vector<PackedBlockVertex> packed = makePacked(water);
+        m_transparentPool.upload(result.water, packed);
+        if (!m_rhiTransparentVertexBuffer.write(
+                commandList,
+                static_cast<uint64_t>(result.water.firstVertex) * sizeof(PackedBlockVertex),
+                packed.data(),
+                packed.size() * sizeof(PackedBlockVertex))) {
+            free(result);
+            return {};
+        }
     }
 
     result.hasBounds = hasBounds;
@@ -884,6 +914,42 @@ void WorldRenderBuffer::recordRhiCutout(RhiCommandList& commandList,
         m_rhiCutoutIndirectBuffer.buffer(),
         0u,
         static_cast<uint32_t>(m_cutoutCommands.size()),
+        sizeof(DrawArraysIndirectCommand));
+    ++m_glSubmitCount;
+}
+
+bool WorldRenderBuffer::prepareRhiTransparent(
+    RhiCommandList& commandList,
+    const RhiBindGroupLayoutHandle metadataLayout) {
+    if (m_rhiDevice == nullptr || !metadataLayout.isValid()) {
+        return false;
+    }
+    if (!m_transparentCommands.empty() &&
+        !m_rhiTransparentIndirectBuffer.write(
+            commandList,
+            0u,
+            m_transparentCommands.data(),
+            m_transparentCommands.size() * sizeof(DrawArraysIndirectCommand))) {
+        return false;
+    }
+    return ensureRhiMetadataBindGroup(metadataLayout);
+}
+
+void WorldRenderBuffer::recordRhiTransparent(
+    RhiCommandList& commandList,
+    const RhiPipelineHandle pipeline,
+    const RhiBindGroupHandle materialBindGroup) {
+    if (m_transparentCommands.empty()) {
+        return;
+    }
+    commandList.setGraphicsPipeline(pipeline);
+    commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
+    commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setVertexBuffer(0u, m_rhiTransparentVertexBuffer.buffer(), 0u);
+    commandList.drawIndirect(
+        m_rhiTransparentIndirectBuffer.buffer(),
+        0u,
+        static_cast<uint32_t>(m_transparentCommands.size()),
         sizeof(DrawArraysIndirectCommand));
     ++m_glSubmitCount;
 }
