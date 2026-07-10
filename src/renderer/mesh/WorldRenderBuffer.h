@@ -15,6 +15,41 @@ struct DrawArraysIndirectCommand {
     uint32_t baseInstance;
 };
 
+class VertexRangeAllocator {
+public:
+    void init(size_t capacityVertices);
+    void shutdown();
+
+    bool allocate(uint32_t vertexCount, GpuMeshRange& outRange);
+    void free(const GpuMeshRange& range);
+    void grow(size_t newCapacityVertices);
+
+    [[nodiscard]] uint64_t generation() const { return m_generationCounter; }
+    [[nodiscard]] size_t capacityVertices() const { return m_capacityVertices; }
+    [[nodiscard]] size_t usedVertices() const { return m_usedVertices; }
+    [[nodiscard]] float fragmentationRatio() const;
+
+private:
+    struct FreeBlock {
+        uint32_t offset = 0;
+        uint32_t size = 0;
+        int next = -1;
+    };
+
+    static constexpr size_t kFreeBlockPoolSize = 256;
+    std::vector<FreeBlock> m_freeBlocks;
+    int m_freeHead = -1;
+    std::vector<int> m_freeBlockFreeList;
+    size_t m_capacityVertices = 0;
+    size_t m_usedVertices = 0;
+    uint64_t m_generationCounter = 1;
+    std::unordered_set<uint64_t> m_liveAllocations;
+
+    int allocFreeBlockNode();
+    void returnFreeBlockNode(int nodeIdx);
+    void coalesce();
+};
+
 class VertexPoolAllocator {
 public:
     VertexPoolAllocator();
@@ -28,10 +63,10 @@ public:
     void upload(const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices);
 
     uint32_t vbo() const { return m_vbo; }
-    uint64_t generation() const { return m_generationCounter; }
-    size_t capacityVertices() const { return m_capacityVertices; }
-    size_t usedVertices() const { return m_usedVertices; }
-    float fragmentationRatio() const;
+    uint64_t generation() const { return m_ranges.generation(); }
+    size_t capacityVertices() const { return m_ranges.capacityVertices(); }
+    size_t usedVertices() const { return m_ranges.usedVertices(); }
+    float fragmentationRatio() const { return m_ranges.fragmentationRatio(); }
 
     // Per-frame stats (reset by beginFrame)
     void beginFrame();
@@ -39,32 +74,14 @@ public:
     size_t uploadedBytesThisFrame() const { return m_uploadedBytesThisFrame; }
 
 private:
-    struct FreeBlock {
-        uint32_t offset = 0;
-        uint32_t size = 0;
-        int next = -1;
-    };
-
     void expand(size_t newCapacityVertices);
 
-    static constexpr size_t kFreeBlockPoolSize = 256;
-    std::vector<FreeBlock> m_freeBlocks;
-    int m_freeHead = -1;
-    std::vector<int> m_freeBlockFreeList;
-
+    VertexRangeAllocator m_ranges;
     uint32_t m_vbo = 0;
-    size_t m_capacityVertices = 0;
-    size_t m_usedVertices = 0;
-    uint64_t m_generationCounter = 1;
-    std::unordered_set<uint64_t> m_liveAllocations;
 
     // Per-frame stats
     size_t m_expandCountThisFrame = 0;
     size_t m_uploadedBytesThisFrame = 0;
-
-    int allocFreeBlockNode();
-    void returnFreeBlockNode(int nodeIdx);
-    void coalesceAt(int nodeIdx);
 };
 
 class WorldRenderBuffer {

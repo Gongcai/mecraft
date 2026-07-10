@@ -3,6 +3,7 @@
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 #include "renderer/rhi/gl/GlRhiDevice.h"
 #include "renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "renderer/mesh/WorldRenderBuffer.h"
 #include "resource/RhiTextureResourceUtils.h"
 
 #include <glad/glad.h>
@@ -102,6 +103,56 @@ bool testHandleGeneration() {
         return false;
     }
     return requireTrue(!allocator.release(first), "release must reject stale texture handles");
+}
+
+bool testVertexRangeAllocator() {
+    VertexRangeAllocator allocator;
+    allocator.init(16u);
+
+    GpuMeshRange first;
+    GpuMeshRange second;
+    if (!requireTrue(allocator.allocate(6u, first) && first.firstVertex == 0u,
+                     "vertex range allocator must allocate the first range at zero")) {
+        return false;
+    }
+    if (!requireTrue(allocator.allocate(4u, second) && second.firstVertex == 6u,
+                     "vertex range allocator must append the second range")) {
+        return false;
+    }
+
+    allocator.free(first);
+    GpuMeshRange reused;
+    if (!requireTrue(allocator.allocate(5u, reused) && reused.firstVertex == 0u,
+                     "vertex range allocator must reuse a released range")) {
+        return false;
+    }
+    const size_t usedBeforeStaleFree = allocator.usedVertices();
+    allocator.free(first);
+    if (!requireTrue(allocator.usedVertices() == usedBeforeStaleFree,
+                     "vertex range allocator must reject stale generations")) {
+        return false;
+    }
+
+    allocator.grow(32u);
+    GpuMeshRange expanded;
+    if (!requireTrue(allocator.allocate(20u, expanded) && expanded.firstVertex == 10u,
+                     "vertex range allocator must merge newly grown trailing capacity")) {
+        return false;
+    }
+    if (!requireTrue(allocator.capacityVertices() == 32u && allocator.usedVertices() == 29u,
+                     "vertex range allocator must track grown capacity and usage")) {
+        return false;
+    }
+
+    allocator.free(reused);
+    allocator.free(second);
+    allocator.free(expanded);
+    if (!requireTrue(allocator.usedVertices() == 0u && allocator.fragmentationRatio() == 0.0f,
+                     "vertex range allocator must fully coalesce released ranges")) {
+        return false;
+    }
+    allocator.shutdown();
+    return true;
 }
 
 bool testDescHashStability() {
@@ -1851,6 +1902,9 @@ int main() {
         return 1;
     }
     if (!testDescHashStability()) {
+        return 1;
+    }
+    if (!testVertexRangeAllocator()) {
         return 1;
     }
     if (!testGlTextureRegistry()) {

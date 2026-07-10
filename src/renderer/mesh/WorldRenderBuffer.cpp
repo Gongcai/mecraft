@@ -78,25 +78,12 @@ void subtractOrigin(std::vector<BlockVertex>& vertices, const glm::vec3& origin)
 }
 
 // ---------------------------------------------------------------------------
-// VertexPoolAllocator
+// VertexRangeAllocator
 // ---------------------------------------------------------------------------
 
-VertexPoolAllocator::VertexPoolAllocator() = default;
-
-VertexPoolAllocator::~VertexPoolAllocator() {
+void VertexRangeAllocator::init(const size_t capacityVertices) {
     shutdown();
-}
-
-void VertexPoolAllocator::init(const size_t initialCapacityVertices) {
-    shutdown();
-
-    const size_t bytes = initialCapacityVertices * sizeof(PackedBlockVertex);
-    glCreateBuffers(1, &m_vbo);
-    glNamedBufferStorage(m_vbo, static_cast<GLsizeiptr>(bytes), nullptr, GL_DYNAMIC_STORAGE_BIT);
-
-    m_capacityVertices = initialCapacityVertices;
-    m_usedVertices = 0;
-    m_generationCounter = 1;
+    m_capacityVertices = capacityVertices;
 
     m_freeBlocks.resize(kFreeBlockPoolSize);
     m_freeBlockFreeList.clear();
@@ -104,28 +91,23 @@ void VertexPoolAllocator::init(const size_t initialCapacityVertices) {
         m_freeBlockFreeList.push_back(static_cast<int>(kFreeBlockPoolSize - 1 - i));
     }
 
-    // Initial free block covering the whole buffer
+    // The initial free block covers the complete logical range.
     const int node = allocFreeBlockNode();
-    m_freeBlocks[node] = {0, static_cast<uint32_t>(initialCapacityVertices), -1};
+    m_freeBlocks[node] = {0, static_cast<uint32_t>(capacityVertices), -1};
     m_freeHead = node;
 }
 
-void VertexPoolAllocator::shutdown() {
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
+void VertexRangeAllocator::shutdown() {
     m_freeBlocks.clear();
     m_freeBlockFreeList.clear();
     m_freeHead = -1;
     m_capacityVertices = 0;
     m_usedVertices = 0;
+    m_generationCounter = 1;
     m_liveAllocations.clear();
-    m_expandCountThisFrame = 0;
-    m_uploadedBytesThisFrame = 0;
 }
 
-int VertexPoolAllocator::allocFreeBlockNode() {
+int VertexRangeAllocator::allocFreeBlockNode() {
     if (m_freeBlockFreeList.empty()) {
         const int idx = static_cast<int>(m_freeBlocks.size());
         m_freeBlocks.emplace_back();
@@ -136,13 +118,11 @@ int VertexPoolAllocator::allocFreeBlockNode() {
     return idx;
 }
 
-void VertexPoolAllocator::returnFreeBlockNode(const int nodeIdx) {
+void VertexRangeAllocator::returnFreeBlockNode(const int nodeIdx) {
     m_freeBlockFreeList.push_back(nodeIdx);
 }
 
-void VertexPoolAllocator::coalesceAt(const int nodeIdx) {
-    (void)nodeIdx;
-
+void VertexRangeAllocator::coalesce() {
     std::vector<FreeBlock> blocks;
     int curr = m_freeHead;
     while (curr != -1) {
@@ -179,13 +159,13 @@ void VertexPoolAllocator::coalesceAt(const int nodeIdx) {
     }
 }
 
-bool VertexPoolAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& outRange) {
+bool VertexRangeAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& outRange) {
     if (vertexCount == 0) {
         outRange = {};
         return true;
     }
 
-    // First-fit search
+    // First-fit keeps allocation cost bounded by the current free-list length.
     int prev = -1;
     int curr = m_freeHead;
     while (curr != -1) {
@@ -213,34 +193,10 @@ bool VertexPoolAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& out
         curr = block.next;
     }
 
-    // No block fits: skip defragment and grow the pool.
-    const size_t newCapacity = std::max<size_t>(
-        m_capacityVertices + vertexCount,
-        m_capacityVertices == 0 ? vertexCount : m_capacityVertices * 2);
-    expand(newCapacity);
-
-    if (m_freeHead != -1) {
-        FreeBlock& head = m_freeBlocks[m_freeHead];
-        if (head.size >= vertexCount) {
-            const uint32_t offset = head.offset;
-            head.offset += vertexCount;
-            head.size -= vertexCount;
-            if (head.size == 0) {
-                const int next = head.next;
-                returnFreeBlockNode(m_freeHead);
-                m_freeHead = next;
-            }
-            m_usedVertices += vertexCount;
-            outRange = {offset, vertexCount, m_generationCounter++};
-            m_liveAllocations.insert(outRange.generation);
-            return true;
-        }
-    }
-
     return false;
 }
 
-void VertexPoolAllocator::free(const GpuMeshRange& range) {
+void VertexRangeAllocator::free(const GpuMeshRange& range) {
     if (range.vertexCount == 0 || range.firstVertex + range.vertexCount > m_capacityVertices) {
         return;
     }
@@ -253,7 +209,86 @@ void VertexPoolAllocator::free(const GpuMeshRange& range) {
     m_freeHead = node;
     m_usedVertices = range.vertexCount <= m_usedVertices ? m_usedVertices - range.vertexCount : 0;
 
-    coalesceAt(node);
+    coalesce();
+}
+
+void VertexRangeAllocator::grow(const size_t newCapacityVertices) {
+    if (newCapacityVertices <= m_capacityVertices) {
+        return;
+    }
+    const size_t oldCapacity = m_capacityVertices;
+    m_capacityVertices = newCapacityVertices;
+
+    const int node = allocFreeBlockNode();
+    m_freeBlocks[node] = {
+        static_cast<uint32_t>(oldCapacity),
+        static_cast<uint32_t>(newCapacityVertices - oldCapacity),
+        m_freeHead
+    };
+    m_freeHead = node;
+    coalesce();
+}
+
+float VertexRangeAllocator::fragmentationRatio() const {
+    if (m_capacityVertices == 0) return 0.0f;
+    const size_t freeVertices = m_capacityVertices - m_usedVertices;
+    if (freeVertices == 0) return 0.0f;
+
+    uint32_t largestBlock = 0;
+    int curr = m_freeHead;
+    while (curr != -1) {
+        largestBlock = std::max(largestBlock, m_freeBlocks[curr].size);
+        curr = m_freeBlocks[curr].next;
+    }
+
+    if (largestBlock == 0) return 1.0f;
+    return 1.0f - static_cast<float>(largestBlock) / static_cast<float>(freeVertices);
+}
+
+// ---------------------------------------------------------------------------
+// VertexPoolAllocator
+// ---------------------------------------------------------------------------
+
+VertexPoolAllocator::VertexPoolAllocator() = default;
+
+VertexPoolAllocator::~VertexPoolAllocator() {
+    shutdown();
+}
+
+void VertexPoolAllocator::init(const size_t initialCapacityVertices) {
+    shutdown();
+
+    const size_t bytes = initialCapacityVertices * sizeof(PackedBlockVertex);
+    glCreateBuffers(1, &m_vbo);
+    glNamedBufferStorage(m_vbo, static_cast<GLsizeiptr>(bytes), nullptr, GL_DYNAMIC_STORAGE_BIT);
+    m_ranges.init(initialCapacityVertices);
+}
+
+void VertexPoolAllocator::shutdown() {
+    if (m_vbo != 0) {
+        glDeleteBuffers(1, &m_vbo);
+        m_vbo = 0;
+    }
+    m_ranges.shutdown();
+    m_expandCountThisFrame = 0;
+    m_uploadedBytesThisFrame = 0;
+}
+
+bool VertexPoolAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& outRange) {
+    if (m_ranges.allocate(vertexCount, outRange)) {
+        return true;
+    }
+
+    const size_t currentCapacity = m_ranges.capacityVertices();
+    const size_t newCapacity = std::max<size_t>(
+        currentCapacity + vertexCount,
+        currentCapacity == 0 ? vertexCount : currentCapacity * 2);
+    expand(newCapacity);
+    return m_ranges.allocate(vertexCount, outRange);
+}
+
+void VertexPoolAllocator::free(const GpuMeshRange& range) {
+    m_ranges.free(range);
 }
 
 void VertexPoolAllocator::upload(const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices) {
@@ -267,7 +302,8 @@ void VertexPoolAllocator::upload(const GpuMeshRange& range, const std::vector<Pa
 }
 
 void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
-    if (newCapacityVertices <= m_capacityVertices) return;
+    const size_t oldCapacity = m_ranges.capacityVertices();
+    if (newCapacityVertices <= oldCapacity) return;
     ++m_expandCountThisFrame;
 
     GLuint newVbo = 0;
@@ -277,23 +313,14 @@ void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
                          nullptr,
                          GL_DYNAMIC_STORAGE_BIT);
 
-    if (m_vbo != 0 && m_capacityVertices > 0) {
+    if (m_vbo != 0 && oldCapacity > 0) {
         glCopyNamedBufferSubData(m_vbo, newVbo, 0, 0,
-                                 static_cast<GLsizeiptr>(m_capacityVertices * sizeof(PackedBlockVertex)));
+                                 static_cast<GLsizeiptr>(oldCapacity * sizeof(PackedBlockVertex)));
         glDeleteBuffers(1, &m_vbo);
     }
 
     m_vbo = newVbo;
-    const size_t oldCapacity = m_capacityVertices;
-    m_capacityVertices = newCapacityVertices;
-
-    // Add the new trailing space as a free block
-    const int node = allocFreeBlockNode();
-    m_freeBlocks[node] = {static_cast<uint32_t>(oldCapacity),
-                          static_cast<uint32_t>(newCapacityVertices - oldCapacity),
-                          m_freeHead};
-    m_freeHead = node;
-    coalesceAt(node);
+    m_ranges.grow(newCapacityVertices);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
@@ -301,23 +328,6 @@ void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
 void VertexPoolAllocator::beginFrame() {
     m_expandCountThisFrame = 0;
     m_uploadedBytesThisFrame = 0;
-}
-
-float VertexPoolAllocator::fragmentationRatio() const {
-    if (m_capacityVertices == 0) return 0.0f;
-    size_t freeVertices = m_capacityVertices - m_usedVertices;
-    if (freeVertices == 0) return 0.0f;
-
-    // Largest free block
-    uint32_t largestBlock = 0;
-    int curr = m_freeHead;
-    while (curr != -1) {
-        largestBlock = std::max(largestBlock, m_freeBlocks[curr].size);
-        curr = m_freeBlocks[curr].next;
-    }
-
-    if (largestBlock == 0) return 1.0f;
-    return 1.0f - static_cast<float>(largestBlock) / static_cast<float>(freeVertices);
 }
 
 // ---------------------------------------------------------------------------
