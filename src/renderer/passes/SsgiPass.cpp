@@ -5,16 +5,45 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 #include <glad/glad.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <glm/glm.hpp>
+#include <optional>
+
+namespace {
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+template <size_t Count>
+[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, Count>& lhs,
+                                    const std::array<RhiTextureViewHandle, Count>& rhs) {
+    for (size_t index = 0u; index < lhs.size(); ++index) {
+        if (!sameTextureView(lhs[index], rhs[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct alignas(16) SsgiBaseParams {
+    glm::mat4 viewProj;
+    glm::mat4 invViewProj;
+    glm::vec4 cameraPosRadius;
+    glm::vec4 halfResolutionStrengthMaxDistance;
+    glm::vec4 quality;
+    glm::ivec4 controls;
+};
+static_assert(sizeof(SsgiBaseParams) == 192u);
+} // namespace
 
 void SsgiPass::init(ResourceMgr& resourceMgr) {
-    m_ssgiShader = resourceMgr.getShader("ssgi");
     m_ssgiUpsampleShader = resourceMgr.getShader("ssgi_upsample");
     m_ssgiDenoiseShader = resourceMgr.getShader("ssgi_denoise");
     m_ssgiTemporalShader = resourceMgr.getShader("ssgi_temporal");
@@ -22,7 +51,8 @@ void SsgiPass::init(ResourceMgr& resourceMgr) {
 }
 
 void SsgiPass::shutdown() {
-    m_ssgiShader = nullptr;
+    destroyBaseRhiResources();
+    destroyNoiseTextureView();
     m_ssgiUpsampleShader = nullptr;
     m_ssgiDenoiseShader = nullptr;
     m_ssgiTemporalShader = nullptr;
@@ -64,14 +94,29 @@ void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
 
 void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& settings,
                               DeferredRenderTargets& targets) {
-    if (m_ssgiShader == nullptr) {
-        return;
-    }
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSsgiHalfResTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureSsgiHalfResTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice)) {
         return;
     }
     const SsgiSettings& ssgi = settings.ssgi;
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!ensureNoiseTextureView(rhiDevice)) {
+        return;
+    }
+    const std::array<RhiTextureViewHandle, 6> views = {
+        targets.sceneLightingTextureViewHandle(),
+        targets.albedoTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),
+        targets.materialAuxTextureViewHandle(),
+        targets.depthTextureViewHandle(),
+        m_noiseTextureView
+    };
+    if (!ensureBaseRhiPipeline(rhiDevice) || !ensureBaseBindGroup(rhiDevice, views)) {
+        return;
+    }
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targets.ssgiHalfResTextureViewHandle();
@@ -93,62 +138,294 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    RhiCommandList& commandList = rhiDevice.beginFrame();
-    commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
+    SsgiBaseParams params{};
+    params.viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    params.invViewProj = settings.taa.enabled
+        ? ctx.camera.jitteredInvViewProj
+        : ctx.camera.invViewProj;
+    params.cameraPosRadius = glm::vec4(ctx.camera.position, ssgi.radius);
+    params.halfResolutionStrengthMaxDistance = glm::vec4(
+        static_cast<float>(halfW),
+        static_cast<float>(halfH),
+        ssgi.strength,
+        ssgi.maxDistance);
+    params.quality = glm::vec4(ssgi.thickness,
+                               ssgi.radianceFilterStrength,
+                               ssgi.colorBleedStrength,
+                               0.0f);
+    params.controls = glm::ivec4(std::clamp(ssgi.samples, 1, 32),
+                                 static_cast<int>(ctx.frameIndex & 0x7fffffffULL),
+                                 0,
+                                 0);
 
-    m_ssgiShader->use();
-    m_ssgiShader->setInt("uSceneLightingTex", 0);
-    m_ssgiShader->setInt("uAlbedoTex", 1);
-    m_ssgiShader->setInt("uNormalAoTex", 2);
-    m_ssgiShader->setInt("uMaterialAuxTex", 3);
-    m_ssgiShader->setInt("uDepthTex", 4);
-    m_ssgiShader->setInt("uNoiseTex", 5);
-    m_ssgiShader->setMat4("uViewProj",
-        settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj);
-    m_ssgiShader->setMat4("uInvViewProj",
-        settings.taa.enabled ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj);
-    m_ssgiShader->setVec3("uCameraPos", ctx.camera.position);
-    m_ssgiShader->setVec2("uHalfResolution",
-        glm::vec2(static_cast<float>(halfW), static_cast<float>(halfH)));
-    m_ssgiShader->setFloat("uRadius", ssgi.radius);
-    m_ssgiShader->setFloat("uStrength", ssgi.strength);
-    m_ssgiShader->setFloat("uMaxDistance", ssgi.maxDistance);
-    m_ssgiShader->setFloat("uThickness", ssgi.thickness);
-    m_ssgiShader->setFloat("uRadianceFilterStrength", ssgi.radianceFilterStrength);
-    m_ssgiShader->setFloat("uColorBleedStrength", ssgi.colorBleedStrength);
-    m_ssgiShader->setInt("uSamples", std::clamp(ssgi.samples, 1, 32));
-    m_ssgiShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneLightingTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.albedoTextureHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialAuxTextureHandle()));
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
-
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_ssgiShader);
-
-    for (int i = 5; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE0);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.updateBuffer(m_baseUniformBuffer, 0u, &params, sizeof(params));
+    commandList.beginRendering(renderingInfo);
+    commandList.setGraphicsPipeline(m_basePipeline);
+    commandList.setBindGroup(0u, m_baseBindGroup);
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
+}
+
+bool SsgiPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
+    if (m_noiseViewDevice != nullptr && m_noiseViewDevice != &rhiDevice) {
+        destroyNoiseTextureView();
+    }
+    if (m_noiseTextureView.isValid()) {
+        return true;
+    }
+    if (!m_noiseTexture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_noiseTexture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_noiseTextureView = rhiDevice.createTextureView(viewDesc);
+    if (!m_noiseTextureView.isValid()) {
+        return false;
+    }
+
+    m_noiseViewDevice = &rhiDevice;
+    return true;
+}
+
+void SsgiPass::destroyNoiseTextureView() {
+    if (m_noiseViewDevice != nullptr && m_noiseTextureView.isValid()) {
+        m_noiseViewDevice->destroyTextureView(m_noiseTextureView);
+    }
+    m_noiseTextureView = {};
+    m_noiseViewDevice = nullptr;
+}
+
+bool SsgiPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_baseRhiDevice != nullptr && m_baseRhiDevice != &rhiDevice) {
+        destroyBaseRhiResources();
+    }
+    if (m_basePipeline.isValid()) {
+        return true;
+    }
+    m_baseRhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ssgi.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "SsgiBase.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_baseVertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "SsgiBase.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_baseFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_baseVertexShader.isValid() || !m_baseFragmentShader.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiBufferDesc uniformBufferDesc;
+    uniformBufferDesc.debugName = "SsgiBase.Params";
+    uniformBufferDesc.size = sizeof(SsgiBaseParams);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_baseUniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
+    if (!m_baseUniformBuffer.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    auto createSampler = [&](const RhiFilter filter, const RhiAddressMode addressMode) {
+        RhiSamplerDesc samplerDesc;
+        samplerDesc.minFilter = filter;
+        samplerDesc.magFilter = filter;
+        samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+        samplerDesc.addressU = addressMode;
+        samplerDesc.addressV = addressMode;
+        samplerDesc.addressW = addressMode;
+        return rhiDevice.createSampler(samplerDesc);
+    };
+    m_baseNearestSampler = createSampler(RhiFilter::Nearest, RhiAddressMode::ClampToEdge);
+    m_baseLinearSampler = createSampler(RhiFilter::Linear, RhiAddressMode::ClampToEdge);
+    m_baseNoiseSampler = createSampler(RhiFilter::Linear, RhiAddressMode::Repeat);
+    if (!m_baseNearestSampler.isValid() || !m_baseLinearSampler.isValid() ||
+        !m_baseNoiseSampler.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "SsgiBase.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 6u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    bindGroupLayoutDesc.entries.push_back({
+        6u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_baseBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_baseBindGroupLayout.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "SsgiBase.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_baseBindGroupLayout);
+    m_basePipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_basePipelineLayout.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "SsgiBase.Pipeline";
+    pipelineDesc.vertexShader = m_baseVertexShader;
+    pipelineDesc.fragmentShader = m_baseFragmentShader;
+    pipelineDesc.layout = m_basePipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_basePipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_basePipeline.isValid()) {
+        destroyBaseRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool SsgiPass::ensureBaseBindGroup(
+    RhiDevice& rhiDevice,
+    const std::array<RhiTextureViewHandle, 6>& views) {
+    if (!ensureBaseRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_baseBindGroup.isValid() && sameTextureViews(m_baseBoundViews, views)) {
+        return true;
+    }
+
+    destroyBaseBindGroup();
+    const RhiSamplerHandle samplers[6] = {
+        m_baseLinearSampler,
+        m_baseNearestSampler,
+        m_baseNearestSampler,
+        m_baseNearestSampler,
+        m_baseNearestSampler,
+        m_baseNoiseSampler
+    };
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_baseBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = samplers[binding];
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    RhiBindGroupEntry uniformEntry;
+    uniformEntry.binding = 6u;
+    uniformEntry.resource.buffer.buffer = m_baseUniformBuffer;
+    uniformEntry.resource.buffer.offset = 0u;
+    uniformEntry.resource.buffer.range = sizeof(SsgiBaseParams);
+    bindGroupDesc.entries.push_back(uniformEntry);
+
+    m_baseBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_baseBindGroup.isValid()) {
+        m_baseBoundViews = {};
+        return false;
+    }
+
+    m_baseBoundViews = views;
+    return true;
+}
+
+void SsgiPass::destroyBaseBindGroup() {
+    if (m_baseRhiDevice != nullptr && m_baseBindGroup.isValid()) {
+        m_baseRhiDevice->destroyBindGroup(m_baseBindGroup);
+    }
+    m_baseBindGroup = {};
+    m_baseBoundViews = {};
+}
+
+void SsgiPass::destroyBaseRhiResources() {
+    destroyBaseBindGroup();
+    if (m_baseRhiDevice != nullptr) {
+        if (m_basePipeline.isValid()) {
+            m_baseRhiDevice->destroyPipeline(m_basePipeline);
+        }
+        if (m_baseVertexShader.isValid()) {
+            m_baseRhiDevice->destroyShader(m_baseVertexShader);
+        }
+        if (m_baseFragmentShader.isValid()) {
+            m_baseRhiDevice->destroyShader(m_baseFragmentShader);
+        }
+        if (m_basePipelineLayout.isValid()) {
+            m_baseRhiDevice->destroyPipelineLayout(m_basePipelineLayout);
+        }
+        if (m_baseBindGroupLayout.isValid()) {
+            m_baseRhiDevice->destroyBindGroupLayout(m_baseBindGroupLayout);
+        }
+        if (m_baseUniformBuffer.isValid()) {
+            m_baseRhiDevice->destroyBuffer(m_baseUniformBuffer);
+        }
+        const RhiSamplerHandle samplers[] = {
+            m_baseNearestSampler,
+            m_baseLinearSampler,
+            m_baseNoiseSampler
+        };
+        for (const RhiSamplerHandle sampler : samplers) {
+            if (sampler.isValid()) {
+                m_baseRhiDevice->destroySampler(sampler);
+            }
+        }
+    }
+
+    m_baseUniformBuffer = {};
+    m_baseNearestSampler = {};
+    m_baseLinearSampler = {};
+    m_baseNoiseSampler = {};
+    m_baseBindGroupLayout = {};
+    m_basePipelineLayout = {};
+    m_baseVertexShader = {};
+    m_baseFragmentShader = {};
+    m_basePipeline = {};
+    m_baseRhiDevice = nullptr;
 }
 
 void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets& targets) {
