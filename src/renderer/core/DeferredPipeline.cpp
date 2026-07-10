@@ -396,16 +396,13 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     }
 
     // Shadow pass
-    if (m_shadowPass && m_currentSettings.shadow.enabled && m_shadowPass->hasShaders() &&
+    if (m_shadowPass && m_currentSettings.shadow.enabled &&
         m_shared->shadowRenderer && ctx.worldView) {
         renderer::debug::ScopedDebugGroup passGroup("Shadow");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Shadow);
-        const bool useMultiDrawIndirect = m_shared->terrain != nullptr
-            ? m_shared->terrain->useMultiDrawIndirect()
-            : true;
         auto shadowOutput = m_shadowPass->execute(
             ctx, m_currentSettings, targets, *ctx.worldView,
-            m_transparentBatch, m_transparentPassPlan, useMultiDrawIndirect);
+            m_transparentBatch, m_transparentPassPlan);
         m_transparentBatch = std::move(shadowOutput.transparentBatch);
         m_transparentPassPlan = shadowOutput.transparentPlan;
     }
@@ -611,9 +608,6 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     auto& worldBuffer = *m_shared->worldRenderBuffer;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
-    Shader* gbufferShader = m_shared->resources->getShader("chunk_gbuffer");
-    if (!gbufferShader) return;
-
     if (!targets.ensureGBufferTextureViews(rhiDevice)) {
         return;
     }
@@ -720,14 +714,12 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     trs.blockParallaxMapsEnabled = settings.blockMaterialMaps.parallaxMapsEnabled;
     trs.blockParallaxDepth = settings.blockMaterialMaps.parallaxDepth;
 
-    const bool useRhiMdi = terrain.useMultiDrawIndirect();
-    if (useRhiMdi &&
-        (m_shared->terrainRhiPipelines == nullptr ||
-         !m_shared->terrainRhiPipelines->prepareGBuffer(
-             commandList,
-             *m_shared->resources,
-             tfd,
-             trs))) {
+    if (m_shared->terrainRhiPipelines == nullptr ||
+        !m_shared->terrainRhiPipelines->prepareGBuffer(
+            commandList,
+            *m_shared->resources,
+            tfd,
+            trs)) {
         return;
     }
 
@@ -740,21 +732,18 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     cutoutEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
     transparentEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
 
-    if (useRhiMdi) {
-        terrain.renderOpaqueChunksAndCollectPasses(
-            *ctx.worldView,
-            cutoutEntries,
-            transparentEntries,
-            true);
-        terrain.syncTransparentBatches();
-        m_transparentBatch = terrain.transparentBatches();
-        m_transparentPassPlan = terrain.transparentPassPlan();
-        m_transparentEntries = transparentEntries;
-        if (!worldBuffer.prepareRhiOpaqueAndCutout(
-                commandList,
-                m_shared->terrainRhiPipelines->metadataLayout())) {
-            return;
-        }
+    terrain.renderOpaqueChunksAndCollectPasses(
+        *ctx.worldView,
+        cutoutEntries,
+        transparentEntries,
+        true);
+    terrain.syncTransparentBatches();
+    m_transparentBatch = terrain.transparentBatches();
+    m_transparentPassPlan = terrain.transparentPassPlan();
+    if (!worldBuffer.prepareRhiOpaqueAndCutout(
+            commandList,
+            m_shared->terrainRhiPipelines->metadataLayout())) {
+        return;
     }
 
     commandList.beginRendering(renderingInfo);
@@ -768,44 +757,14 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     });
     commandList.setScissor(renderingInfo.renderArea);
 
-    if (useRhiMdi) {
-        worldBuffer.recordRhiOpaque(
-            commandList,
-            m_shared->terrainRhiPipelines->gbufferOpaquePipeline(),
-            m_shared->terrainRhiPipelines->gbufferOpaqueBindGroup());
-        worldBuffer.recordRhiCutout(
-            commandList,
-            m_shared->terrainRhiPipelines->gbufferCutoutPipeline(),
-            m_shared->terrainRhiPipelines->gbufferCutoutBindGroup());
-    } else {
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(GL_TRUE);
-        glDisable(GL_BLEND);
-
-        const TextureArray& texArray = m_shared->resources->getTextureArray();
-        const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
-        terrain.bindChunkRenderState(tfd, texArray, *gbufferShader,
-                                     m_deferredFrameActive, settings.debug.viewMode,
-                                     ctx.eyeInWater, m_heldBlockLightValue,
-                                     targets, m_resourceMgr,
-                                     volFogShadersReady, trs);
-        terrain.renderOpaqueChunksAndCollectPasses(
-            *ctx.worldView,
-            cutoutEntries,
-            transparentEntries,
-            true);
-        terrain.syncTransparentBatches();
-        m_transparentBatch = terrain.transparentBatches();
-        m_transparentPassPlan = terrain.transparentPassPlan();
-        m_transparentEntries = transparentEntries;
-        terrain.renderCutoutChunks(cutoutEntries, *gbufferShader);
-
-        glBindVertexArray(0);
-        for (int i = 10; i >= 0; --i) {
-            glActiveTexture(GL_TEXTURE0 + i);
-            glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
-        }
-    }
+    worldBuffer.recordRhiOpaque(
+        commandList,
+        m_shared->terrainRhiPipelines->gbufferOpaquePipeline(),
+        m_shared->terrainRhiPipelines->gbufferOpaqueBindGroup());
+    worldBuffer.recordRhiCutout(
+        commandList,
+        m_shared->terrainRhiPipelines->gbufferCutoutPipeline(),
+        m_shared->terrainRhiPipelines->gbufferCutoutBindGroup());
     worldBuffer.captureSceneFrameStats();
 
     commandList.endRendering();
@@ -814,29 +773,13 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
 
 void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     if (!m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer ||
-        !m_shared->terrain || !m_resourceMgr || !m_transparentPassPlan.hasGeneric()) {
+        !m_shared->terrainRhiPipelines || !m_resourceMgr || !m_transparentPassPlan.hasGeneric()) {
         return;
     }
 
     auto& targets = *m_shared->deferredTargets;
-    auto& terrain = *m_shared->terrain;
     auto& worldBuffer = *m_shared->worldRenderBuffer;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
-    const bool useRhiMdi = terrain.useMultiDrawIndirect();
-    if (useRhiMdi && m_shared->terrainRhiPipelines == nullptr) {
-        return;
-    }
-
-    Shader* shader = nullptr;
-    if (!useRhiMdi) {
-        shader = m_resourceMgr->getShader("transparent_composite");
-        if (shader == nullptr) {
-            shader = m_resourceMgr->getShader("forward_basic_terrain");
-        }
-        if (shader == nullptr) {
-            return;
-        }
-    }
 
     targets.copySceneCompositeToTransparentComposite(rhiDevice);
     targets.copyDepthToTransparentComposite(rhiDevice);
@@ -953,53 +896,25 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
         worldBuffer.addTransparent(entry->range);
     }
 
-    if (useRhiMdi &&
-        (!m_shared->terrainRhiPipelines->prepareTransparent(
-             commandList,
-             *m_resourceMgr,
-             targets,
-             tfd,
-             trs,
-             m_heldBlockLightValue,
-             volFogShadersReady) ||
-         !worldBuffer.prepareRhiTransparent(
-             commandList,
-             m_shared->terrainRhiPipelines->transparentMetadataLayout()))) {
+    if (!m_shared->terrainRhiPipelines->prepareTransparent(
+            commandList,
+            *m_resourceMgr,
+            targets,
+            tfd,
+            trs,
+            m_heldBlockLightValue,
+            volFogShadersReady) ||
+        !worldBuffer.prepareRhiTransparent(
+            commandList,
+            m_shared->terrainRhiPipelines->transparentMetadataLayout())) {
         return;
     }
 
     commandList.beginRendering(renderingInfo);
-    if (useRhiMdi) {
-        worldBuffer.recordRhiTransparent(
-            commandList,
-            m_shared->terrainRhiPipelines->transparentPipeline(),
-            m_shared->terrainRhiPipelines->transparentBindGroup());
-    } else {
-        const TextureArray& texArray = m_resourceMgr->getTextureArray();
-        terrain.bindChunkRenderState(tfd, texArray, *shader,
-                                     true, 0, ctx.eyeInWater, m_heldBlockLightValue,
-                                     targets, m_resourceMgr, volFogShadersReady, trs);
-        shader->setInt("uCompositeInputsEnabled", 1);
-        shader->setInt("uDepthSofteningEnabled", 1);
-        shader->setInt("uForceBaseLod", 1);
-
-        glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle()));
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LEQUAL);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDepthMask(GL_FALSE);
-        glDisable(GL_CULL_FACE);
-        worldBuffer.flushTransparent();
-        glDepthMask(GL_TRUE);
-        glDepthFunc(GL_LESS);
-        glDisable(GL_BLEND);
-        glEnable(GL_CULL_FACE);
-        shader->setInt("uForceBaseLod", 0);
-    }
+    worldBuffer.recordRhiTransparent(
+        commandList,
+        m_shared->terrainRhiPipelines->transparentPipeline(),
+        m_shared->terrainRhiPipelines->transparentBindGroup());
 
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
@@ -1007,14 +922,6 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     targets.copyTransparentCompositeToSceneComposite(rhiDevice);
     targets.copyTransparentCompositeToSceneResolved(rhiDevice);
 
-    if (!useRhiMdi) {
-        glBindVertexArray(0);
-        for (int i = 14; i >= 0; --i) {
-            glActiveTexture(GL_TEXTURE0 + i);
-            glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : (i == 14 ? GL_TEXTURE_3D : GL_TEXTURE_2D), 0);
-        }
-        glActiveTexture(GL_TEXTURE0);
-    }
 }
 
 void DeferredPipeline::updateDeferredHistoryTargets() {
@@ -1100,7 +1007,8 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
 }
 
 void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve) {
-    if (!m_waterCompositePass || !m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer || !ctx.worldView) {
+    if (!m_waterCompositePass || !m_shared || !m_shared->deferredTargets ||
+        !m_shared->worldRenderBuffer) {
         return;
     }
 
@@ -1111,22 +1019,17 @@ void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool pr
                                        m_currentSettings.volumetric.fogStrength > 0.001f)) &&
                                      m_volumetricPass && m_volumetricPass->hasShaders();
 
-    const bool useMultiDrawIndirect = m_shared->terrain != nullptr
-        ? m_shared->terrain->useMultiDrawIndirect()
-        : true;
     ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Water);
     const bool waterRenderedBeforeTemporal = m_waterCompositePass->execute(
-        ctx, m_currentSettings, targets, *ctx.worldView,
+        ctx, m_currentSettings, targets,
         m_deferredFrameActive, preTemporalResolve,
         m_currentSettings.transparent.compositeEnabled,
         m_currentSettings.transparent.waterEffectsEnabled,
         m_currentSettings.weather.surfaceRipplesEnabled,
         volumetricFogActive,
-        useMultiDrawIndirect,
         *m_shared->worldRenderBuffer,
         m_transparentBatch,
-        m_transparentPassPlan,
-        m_transparentEntries);
+        m_transparentPassPlan);
     if (waterRenderedBeforeTemporal) {
         m_waterRenderedBeforeTemporal = true;
     }

@@ -111,7 +111,6 @@ private:
     // Transparent batch state (populated by renderGBufferTerrain, consumed by water/transparent)
     std::vector<DrawBatchEntry> m_transparentBatch;
     TransparentPassPlan m_transparentPassPlan;
-    std::vector<ChunkRenderEntry> m_transparentEntries;
 
     // Private orchestration methods
     void clearDeferredAuxiliaryTargets();

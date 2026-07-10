@@ -12,16 +12,8 @@
 #include "renderer/mesh/TerrainRenderCache.h"
 
 class DeferredRenderTargets;
-class IWorldView;
 class ResourceMgr;
-class Shader;
-class Window;
-class TerrainRenderer;
 class WorldRenderBuffer;
-class TerrainRenderCache;
-
-/// Entry describing a chunk or sub-chunk to render.
-struct ChunkRenderEntry;
 
 /// Water composite pass: renders water surfaces with deferred-compatible shading.
 /// Handles depth softening, volumetric fog, sky capture reflections, and composite targets.
@@ -35,31 +27,25 @@ public:
     /// @param ctx Frame context
     /// @param settings Render settings
     /// @param targets Deferred render targets
-    /// @param world World for frame data queries
     /// @param deferredFrameActive Whether deferred pipeline is active this frame
     /// @param preTemporalResolve Whether rendering before TAA (affects jitter)
     /// @param transparentCompositeEnabled Whether transparent composite is enabled
     /// @param waterEffectsEnabled Whether water effects are enabled
     /// @param rainSurfaceRipplesEnabled Whether rain surface ripples are enabled
     /// @param volumetricFogActive Whether volumetric fog pass is active and has shaders
-    /// @param useMultiDrawIndirect Whether MDI rendering is active
-    /// @param worldRenderBuffer Main-view world render buffer used for the MDI transparent VAO
-    /// @param transparentEntries Non-MDI path: transparent chunk entries for per-VAO draw
+    /// @param worldRenderBuffer Main-view world render buffer used for RHI water commands
     /// @return true if water was rendered before temporal resolve (caller must set m_waterRenderedBeforeTemporal)
     bool execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets, const IWorldView& worldView,
+                 DeferredRenderTargets& targets,
                  bool deferredFrameActive, bool preTemporalResolve,
                  bool transparentCompositeEnabled,
                  bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
                  bool volumetricFogActive,
-                 bool useMultiDrawIndirect,
                  WorldRenderBuffer& worldRenderBuffer,
                  const std::vector<DrawBatchEntry>& transparentBatch,
-                 const TransparentPassPlan& transparentPlan,
-                 const std::vector<ChunkRenderEntry>& transparentEntries);
+                 const TransparentPassPlan& transparentPlan);
 
 private:
-    Shader* m_waterCompositeShader = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
 };
 

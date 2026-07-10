@@ -47,9 +47,6 @@ public:
     void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
     void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
 
-    /// Check if the shadow shader is loaded.
-    [[nodiscard]] bool hasShaders() const { return m_shadowDepthShader != nullptr; }
-
     /// Execute the full CSM shadow pass for all cascades.
     /// Camera data is extracted from FrameContext internally.
     /// @param ctx Frame context (camera, sky, timing)
@@ -58,7 +55,6 @@ public:
     /// @param world World for chunk queries
     /// @param preservedTransparentBatch Transparent batch to save/restore around the pass
     /// @param preservedTransparentPlan Transparent plan to save/restore around the pass
-    /// @param useMultiDrawIndirect Whether MDI rendering is active
     /// @return Updated transparent batch and plan (preserved from input)
     struct ShadowPassOutput {
         std::vector<DrawBatchEntry> transparentBatch;
@@ -67,8 +63,7 @@ public:
     ShadowPassOutput execute(const FrameContext& ctx, const RenderSettings& settings,
                               DeferredRenderTargets& targets, const IWorldView& worldView,
                               const std::vector<DrawBatchEntry>& preservedTransparentBatch,
-                              const TransparentPassPlan& preservedTransparentPlan,
-                              bool useMultiDrawIndirect);
+                              const TransparentPassPlan& preservedTransparentPlan);
 
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
@@ -89,7 +84,6 @@ private:
                                     const glm::mat4& shadowView, const glm::mat4& shadowProjection,
                                     float animationTime, float shaderTime);
 
-    Shader* m_shadowDepthShader = nullptr;
     Shader* m_entityShadowShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     TerrainRenderer* m_terrainRenderer = nullptr;
