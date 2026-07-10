@@ -16,6 +16,11 @@ constexpr uint32_t kInvalidMetadataIndex = 0xFFFFFFFFu;
 constexpr float kPackedPositionScale = 128.0f;
 constexpr float kPackedUvScale = 1024.0f;
 
+template <typename Handle>
+bool sameHandle(const Handle lhs, const Handle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
 uint32_t packFixedUv16(const float value) {
     const float clamped = std::clamp(value, -32768.0f / kPackedUvScale, 32767.0f / kPackedUvScale);
     const int quantized = static_cast<int>(std::lround(clamped * kPackedUvScale));
@@ -492,10 +497,43 @@ void WorldRenderBuffer::setupVertexLayout() {
     glVertexAttribIPointer(14, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, tintAnim)));
 }
 
-void WorldRenderBuffer::init() {
+bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
+    shutdown();
+    m_rhiDevice = &rhiDevice;
     m_opaquePool.init(kInitialPoolVertices);
     m_cutoutPool.init(kInitialCutoutPoolVertices);
     m_transparentPool.init(kInitialTransparentPoolVertices);
+
+    const uint64_t commandBytes = kInitialIndirectCapacity * sizeof(DrawArraysIndirectCommand);
+    const uint64_t metadataBytes = kInitialIndirectCapacity * sizeof(SubChunkDrawMetadata);
+    if (!m_rhiOpaqueVertexBuffer.init(
+            rhiDevice,
+            kInitialPoolVertices * sizeof(PackedBlockVertex),
+            rhiFlag(RhiBufferUsage::Vertex),
+            "WorldRenderBuffer.RhiOpaqueVertices") ||
+        !m_rhiCutoutVertexBuffer.init(
+            rhiDevice,
+            kInitialCutoutPoolVertices * sizeof(PackedBlockVertex),
+            rhiFlag(RhiBufferUsage::Vertex),
+            "WorldRenderBuffer.RhiCutoutVertices") ||
+        !m_rhiOpaqueIndirectBuffer.init(
+            rhiDevice,
+            commandBytes,
+            rhiFlag(RhiBufferUsage::Indirect),
+            "WorldRenderBuffer.RhiOpaqueIndirect") ||
+        !m_rhiCutoutIndirectBuffer.init(
+            rhiDevice,
+            commandBytes,
+            rhiFlag(RhiBufferUsage::Indirect),
+            "WorldRenderBuffer.RhiCutoutIndirect") ||
+        !m_rhiMetadataBuffer.init(
+            rhiDevice,
+            metadataBytes,
+            rhiFlag(RhiBufferUsage::Storage),
+            "WorldRenderBuffer.RhiMetadata")) {
+        shutdown();
+        return false;
+    }
 
     // Create three VAOs (one per pool)
     glGenVertexArrays(1, &m_opaqueVao);
@@ -567,9 +605,23 @@ void WorldRenderBuffer::init() {
     m_cutoutCommands.reserve(kInitialIndirectCapacity);
     m_transparentCommands.reserve(kInitialIndirectCapacity);
     m_waterCommands.reserve(kInitialIndirectCapacity);
+    return true;
 }
 
 void WorldRenderBuffer::shutdown() {
+    if (m_rhiDevice != nullptr && m_rhiMetadataBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_rhiMetadataBindGroup);
+    }
+    m_rhiMetadataBindGroup = {};
+    m_rhiMetadataLayout = {};
+    m_rhiMetadataBoundBuffer = {};
+    m_rhiMetadataBuffer.shutdown();
+    m_rhiCutoutIndirectBuffer.shutdown();
+    m_rhiOpaqueIndirectBuffer.shutdown();
+    m_rhiCutoutVertexBuffer.shutdown();
+    m_rhiOpaqueVertexBuffer.shutdown();
+    m_rhiDevice = nullptr;
+
     m_opaquePool.shutdown();
     m_cutoutPool.shutdown();
     m_transparentPool.shutdown();
@@ -596,6 +648,7 @@ void WorldRenderBuffer::shutdown() {
 }
 
 WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
+    RhiCommandList& commandList,
     const std::vector<BlockVertex>& opaque,
     const std::vector<BlockVertex>& cutout,
     const std::vector<BlockVertex>& cutoutDistance,
@@ -628,7 +681,10 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
         consumeOrigin(transparent);
         consumeOrigin(water);
     }
-    result.metadataIndex = uploadSubChunkMetadata(origin);
+    result.metadataIndex = uploadSubChunkMetadata(commandList, origin);
+    if (result.metadataIndex == kInvalidMetadataIndex) {
+        return {};
+    }
 
     auto makePacked = [&](const std::vector<BlockVertex>& vertices) {
         std::vector<BlockVertex> local = vertices;
@@ -638,33 +694,58 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
 
     if (!opaque.empty()) {
         if (!m_opaquePool.allocate(static_cast<uint32_t>(opaque.size()), result.opaque)) {
+            free(result);
             return {};
         }
         result.opaque.metadataIndex = result.metadataIndex;
-        m_opaquePool.upload(result.opaque, makePacked(opaque));
+        const std::vector<PackedBlockVertex> packed = makePacked(opaque);
+        m_opaquePool.upload(result.opaque, packed);
+        if (!m_rhiOpaqueVertexBuffer.write(
+                commandList,
+                static_cast<uint64_t>(result.opaque.firstVertex) * sizeof(PackedBlockVertex),
+                packed.data(),
+                packed.size() * sizeof(PackedBlockVertex))) {
+            free(result);
+            return {};
+        }
     }
     if (!cutout.empty()) {
         if (!m_cutoutPool.allocate(static_cast<uint32_t>(cutout.size()), result.cutout)) {
-            m_opaquePool.free(result.opaque);
+            free(result);
             return {};
         }
         result.cutout.metadataIndex = result.metadataIndex;
-        m_cutoutPool.upload(result.cutout, makePacked(cutout));
+        const std::vector<PackedBlockVertex> packed = makePacked(cutout);
+        m_cutoutPool.upload(result.cutout, packed);
+        if (!m_rhiCutoutVertexBuffer.write(
+                commandList,
+                static_cast<uint64_t>(result.cutout.firstVertex) * sizeof(PackedBlockVertex),
+                packed.data(),
+                packed.size() * sizeof(PackedBlockVertex))) {
+            free(result);
+            return {};
+        }
     }
     if (!cutoutDistance.empty()) {
         if (!m_cutoutPool.allocate(static_cast<uint32_t>(cutoutDistance.size()), result.cutoutDistance)) {
-            m_opaquePool.free(result.opaque);
-            m_cutoutPool.free(result.cutout);
+            free(result);
             return {};
         }
         result.cutoutDistance.metadataIndex = result.metadataIndex;
-        m_cutoutPool.upload(result.cutoutDistance, makePacked(cutoutDistance));
+        const std::vector<PackedBlockVertex> packed = makePacked(cutoutDistance);
+        m_cutoutPool.upload(result.cutoutDistance, packed);
+        if (!m_rhiCutoutVertexBuffer.write(
+                commandList,
+                static_cast<uint64_t>(result.cutoutDistance.firstVertex) * sizeof(PackedBlockVertex),
+                packed.data(),
+                packed.size() * sizeof(PackedBlockVertex))) {
+            free(result);
+            return {};
+        }
     }
     if (!transparent.empty()) {
         if (!m_transparentPool.allocate(static_cast<uint32_t>(transparent.size()), result.transparent)) {
-            m_opaquePool.free(result.opaque);
-            m_cutoutPool.free(result.cutout);
-            m_cutoutPool.free(result.cutoutDistance);
+            free(result);
             return {};
         }
         result.transparent.metadataIndex = result.metadataIndex;
@@ -672,10 +753,7 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
     }
     if (!water.empty()) {
         if (!m_transparentPool.allocate(static_cast<uint32_t>(water.size()), result.water)) {
-            m_opaquePool.free(result.opaque);
-            m_cutoutPool.free(result.cutout);
-            m_cutoutPool.free(result.cutoutDistance);
-            m_transparentPool.free(result.transparent);
+            free(result);
             return {};
         }
         result.water.metadataIndex = result.metadataIndex;
@@ -699,7 +777,8 @@ void WorldRenderBuffer::free(const WorldGpuMesh& mesh) {
     m_transparentPool.free(mesh.water);
 }
 
-uint32_t WorldRenderBuffer::uploadSubChunkMetadata(const glm::vec3& origin) {
+uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList,
+                                                   const glm::vec3& origin) {
     if (m_subChunkMetadata.size() >= static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
         return kInvalidMetadataIndex;
     }
@@ -715,6 +794,14 @@ uint32_t WorldRenderBuffer::uploadSubChunkMetadata(const glm::vec3& origin) {
     }
     const GLsizeiptr bytes = static_cast<GLsizeiptr>(m_subChunkMetadata.size() * sizeof(SubChunkDrawMetadata));
     glNamedBufferData(m_subChunkMetadataBuffer, bytes, m_subChunkMetadata.data(), GL_DYNAMIC_DRAW);
+    if (!m_rhiMetadataBuffer.write(
+            commandList,
+            static_cast<uint64_t>(index) * sizeof(SubChunkDrawMetadata),
+            &m_subChunkMetadata[index],
+            sizeof(SubChunkDrawMetadata))) {
+        m_freeSubChunkMetadataIndices.push_back(index);
+        return kInvalidMetadataIndex;
+    }
     return index;
 }
 
@@ -738,6 +825,100 @@ void WorldRenderBuffer::beginFrame() {
     m_opaquePool.beginFrame();
     m_cutoutPool.beginFrame();
     m_transparentPool.beginFrame();
+}
+
+bool WorldRenderBuffer::prepareRhiOpaqueAndCutout(
+    RhiCommandList& commandList,
+    const RhiBindGroupLayoutHandle metadataLayout) {
+    if (m_rhiDevice == nullptr || !metadataLayout.isValid()) {
+        return false;
+    }
+    if (!m_opaqueCommands.empty() &&
+        !m_rhiOpaqueIndirectBuffer.write(
+            commandList,
+            0u,
+            m_opaqueCommands.data(),
+            m_opaqueCommands.size() * sizeof(DrawArraysIndirectCommand))) {
+        return false;
+    }
+    if (!m_cutoutCommands.empty() &&
+        !m_rhiCutoutIndirectBuffer.write(
+            commandList,
+            0u,
+            m_cutoutCommands.data(),
+            m_cutoutCommands.size() * sizeof(DrawArraysIndirectCommand))) {
+        return false;
+    }
+    return ensureRhiMetadataBindGroup(metadataLayout);
+}
+
+void WorldRenderBuffer::recordRhiOpaque(RhiCommandList& commandList,
+                                        const RhiPipelineHandle pipeline,
+                                        const RhiBindGroupHandle materialBindGroup) {
+    if (m_opaqueCommands.empty()) {
+        return;
+    }
+    commandList.setGraphicsPipeline(pipeline);
+    commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
+    commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setVertexBuffer(0u, m_rhiOpaqueVertexBuffer.buffer(), 0u);
+    commandList.drawIndirect(
+        m_rhiOpaqueIndirectBuffer.buffer(),
+        0u,
+        static_cast<uint32_t>(m_opaqueCommands.size()),
+        sizeof(DrawArraysIndirectCommand));
+    ++m_glSubmitCount;
+}
+
+void WorldRenderBuffer::recordRhiCutout(RhiCommandList& commandList,
+                                        const RhiPipelineHandle pipeline,
+                                        const RhiBindGroupHandle materialBindGroup) {
+    if (m_cutoutCommands.empty()) {
+        return;
+    }
+    commandList.setGraphicsPipeline(pipeline);
+    commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
+    commandList.setBindGroup(1u, materialBindGroup);
+    commandList.setVertexBuffer(0u, m_rhiCutoutVertexBuffer.buffer(), 0u);
+    commandList.drawIndirect(
+        m_rhiCutoutIndirectBuffer.buffer(),
+        0u,
+        static_cast<uint32_t>(m_cutoutCommands.size()),
+        sizeof(DrawArraysIndirectCommand));
+    ++m_glSubmitCount;
+}
+
+bool WorldRenderBuffer::ensureRhiMetadataBindGroup(
+    const RhiBindGroupLayoutHandle metadataLayout) {
+    const RhiBufferHandle metadataBuffer = m_rhiMetadataBuffer.buffer();
+    if (m_rhiMetadataBindGroup.isValid() &&
+        sameHandle(m_rhiMetadataLayout, metadataLayout) &&
+        sameHandle(m_rhiMetadataBoundBuffer, metadataBuffer)) {
+        return true;
+    }
+    if (m_rhiDevice == nullptr || !metadataBuffer.isValid()) {
+        return false;
+    }
+    if (m_rhiMetadataBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_rhiMetadataBindGroup);
+    }
+
+    RhiBindGroupDesc desc;
+    desc.layout = metadataLayout;
+    RhiBindGroupEntry entry;
+    entry.binding = kTerrainMetadataBinding;
+    entry.resource.buffer.buffer = metadataBuffer;
+    entry.resource.buffer.range = m_rhiMetadataBuffer.capacity();
+    desc.entries.push_back(entry);
+    m_rhiMetadataBindGroup = m_rhiDevice->createBindGroup(desc);
+    if (!m_rhiMetadataBindGroup.isValid()) {
+        m_rhiMetadataLayout = {};
+        m_rhiMetadataBoundBuffer = {};
+        return false;
+    }
+    m_rhiMetadataLayout = metadataLayout;
+    m_rhiMetadataBoundBuffer = metadataBuffer;
+    return true;
 }
 
 WorldRenderBuffer::FrameStatsSnapshot WorldRenderBuffer::makeCurrentFrameStats() const {

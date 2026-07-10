@@ -165,15 +165,18 @@ void ForwardPipeline::renderSky(const FrameContext& ctx) {
 // ============================================================================
 
 void ForwardPipeline::renderTerrain(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_terrainRenderer || !m_resourceMgr || !m_worldRenderBuffer) return;
+    if (!m_shared || !m_shared->rhiDevice || !m_terrainRenderer ||
+        !m_resourceMgr || !m_worldRenderBuffer) return;
 
     auto& terrain = *m_terrainRenderer;
     auto& worldBuffer = *m_worldRenderBuffer;
 
     // Terrain cache maintenance
     if (m_terrainCache) {
+        RhiCommandList& uploadCommandList = m_shared->rhiDevice->beginFrame();
         m_terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        m_terrainCache->drainMeshingResults(*ctx.worldView);
+        m_terrainCache->drainMeshingResults(*ctx.worldView, uploadCommandList);
+        m_shared->rhiDevice->submitFrame(uploadCommandList);
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();

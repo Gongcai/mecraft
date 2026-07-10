@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "renderer/rhi/RhiGrowableBuffer.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "../../world/chunk/SubChunk.h"
 
@@ -152,10 +153,11 @@ public:
     WorldRenderBuffer();
     ~WorldRenderBuffer();
 
-    void init();
+    bool init(RhiDevice& rhiDevice);
     void shutdown();
 
-    WorldGpuMesh uploadSubChunk(const std::vector<BlockVertex>& opaque,
+    WorldGpuMesh uploadSubChunk(RhiCommandList& commandList,
+                                const std::vector<BlockVertex>& opaque,
                                 const std::vector<BlockVertex>& cutout,
                                 const std::vector<BlockVertex>& cutoutDistance,
                                 const std::vector<BlockVertex>& transparent,
@@ -179,6 +181,15 @@ public:
     void flushTransparent();
     void flushWater();
     void bindTransparentVao();
+
+    bool prepareRhiOpaqueAndCutout(RhiCommandList& commandList,
+                                   RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiOpaque(RhiCommandList& commandList,
+                         RhiPipelineHandle pipeline,
+                         RhiBindGroupHandle materialBindGroup);
+    void recordRhiCutout(RhiCommandList& commandList,
+                         RhiPipelineHandle pipeline,
+                         RhiBindGroupHandle materialBindGroup);
 
     void clearWaterCommands();
 
@@ -219,12 +230,23 @@ public:
 
 private:
     static void setupVertexLayout();
-    uint32_t uploadSubChunkMetadata(const glm::vec3& origin);
+    uint32_t uploadSubChunkMetadata(RhiCommandList& commandList, const glm::vec3& origin);
     void bindMetadataBuffer() const;
+    bool ensureRhiMetadataBindGroup(RhiBindGroupLayoutHandle metadataLayout);
 
     VertexPoolAllocator m_opaquePool;
     VertexPoolAllocator m_cutoutPool;
     VertexPoolAllocator m_transparentPool;
+
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiGrowableBuffer m_rhiOpaqueVertexBuffer;
+    RhiGrowableBuffer m_rhiCutoutVertexBuffer;
+    RhiGrowableBuffer m_rhiOpaqueIndirectBuffer;
+    RhiGrowableBuffer m_rhiCutoutIndirectBuffer;
+    RhiGrowableBuffer m_rhiMetadataBuffer;
+    RhiBindGroupHandle m_rhiMetadataBindGroup;
+    RhiBindGroupLayoutHandle m_rhiMetadataLayout;
+    RhiBufferHandle m_rhiMetadataBoundBuffer;
 
     uint32_t m_opaqueVao = 0;
     uint32_t m_cutoutVao = 0;

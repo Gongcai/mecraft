@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <iostream>
 #include <optional>
 #include <string>
 
@@ -392,6 +393,10 @@ bool TerrainRhiPipelineSet::ensureTextureView(const size_t slot,
     desc.layerCount = kRhiRemainingArrayLayers;
     m_gbufferTextureViews[slot] = m_rhiDevice->createTextureView(desc);
     if (!m_gbufferTextureViews[slot].isValid()) {
+        std::cerr << "TerrainRhiPipelineSet: failed to create GBuffer texture view"
+                  << " slot=" << slot
+                  << " texture=" << texture.index << ':' << texture.generation
+                  << " viewType=" << static_cast<uint32_t>(viewType) << '\n';
         m_gbufferViewTextures[slot] = {};
         return false;
     }

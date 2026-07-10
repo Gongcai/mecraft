@@ -646,7 +646,7 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     RhiCommandList& commandList = rhiDevice.beginFrame();
     if (m_shared->terrainCache) {
         m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        m_shared->terrainCache->drainMeshingResults(*ctx.worldView);
+        m_shared->terrainCache->drainMeshingResults(*ctx.worldView, commandList);
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
@@ -720,60 +720,93 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     trs.blockParallaxMapsEnabled = settings.blockMaterialMaps.parallaxMapsEnabled;
     trs.blockParallaxDepth = settings.blockMaterialMaps.parallaxDepth;
 
-    if (m_shared->terrainRhiPipelines == nullptr ||
-        !m_shared->terrainRhiPipelines->prepareGBuffer(
-            commandList,
-            *m_shared->resources,
-            tfd,
-            trs)) {
+    const bool useRhiMdi = terrain.useMultiDrawIndirect();
+    if (useRhiMdi &&
+        (m_shared->terrainRhiPipelines == nullptr ||
+         !m_shared->terrainRhiPipelines->prepareGBuffer(
+             commandList,
+             *m_shared->resources,
+             tfd,
+             trs))) {
         return;
     }
 
-    commandList.beginRendering(renderingInfo);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-
-    const TextureArray& texArray = m_shared->resources->getTextureArray();
-    const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
-    terrain.bindChunkRenderState(tfd, texArray, *gbufferShader,
-                                  m_deferredFrameActive, settings.debug.viewMode,
-                                  ctx.eyeInWater, m_heldBlockLightValue,
-                                  targets, m_resourceMgr,
-                                  volFogShadersReady, trs);
-
-    // Submit meshing jobs
     if (m_shared->terrainCache) {
         m_shared->terrainCache->submitMeshingJobs(*ctx.worldView, ctx.camera.position);
     }
 
-    // Render opaque chunks and collect cutout/transparent entries
     std::vector<ChunkRenderEntry> cutoutEntries;
     std::vector<ChunkRenderEntry> transparentEntries;
     cutoutEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
     transparentEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
-    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, cutoutEntries, transparentEntries, true);
-    terrain.syncTransparentBatches();
 
-    // Save transparent batch for water/transparent passes
-    m_transparentBatch = terrain.transparentBatches();
-    m_transparentPassPlan = terrain.transparentPassPlan();
-    m_transparentEntries = transparentEntries;
-
-    // Flush MDI buffer
-    worldBuffer.flushOpaque();
-
-    // Render cutout chunks
-    terrain.renderCutoutChunks(cutoutEntries, *gbufferShader);
-    worldBuffer.captureSceneFrameStats();
-
-    // Unbind textures
-    glBindVertexArray(0);
-    for (int i = 10; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
+    if (useRhiMdi) {
+        terrain.renderOpaqueChunksAndCollectPasses(
+            *ctx.worldView,
+            cutoutEntries,
+            transparentEntries,
+            true);
+        terrain.syncTransparentBatches();
+        m_transparentBatch = terrain.transparentBatches();
+        m_transparentPassPlan = terrain.transparentPassPlan();
+        m_transparentEntries = transparentEntries;
+        if (!worldBuffer.prepareRhiOpaqueAndCutout(
+                commandList,
+                m_shared->terrainRhiPipelines->metadataLayout())) {
+            return;
+        }
     }
+
+    commandList.beginRendering(renderingInfo);
+    commandList.setViewport({
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, targets.width())),
+        static_cast<float>(std::max(1, targets.height())),
+        0.0f,
+        1.0f
+    });
+    commandList.setScissor(renderingInfo.renderArea);
+
+    if (useRhiMdi) {
+        worldBuffer.recordRhiOpaque(
+            commandList,
+            m_shared->terrainRhiPipelines->gbufferOpaquePipeline(),
+            m_shared->terrainRhiPipelines->gbufferOpaqueBindGroup());
+        worldBuffer.recordRhiCutout(
+            commandList,
+            m_shared->terrainRhiPipelines->gbufferCutoutPipeline(),
+            m_shared->terrainRhiPipelines->gbufferCutoutBindGroup());
+    } else {
+        glEnable(GL_DEPTH_TEST);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+
+        const TextureArray& texArray = m_shared->resources->getTextureArray();
+        const bool volFogShadersReady = m_volumetricPass && m_volumetricPass->hasShaders();
+        terrain.bindChunkRenderState(tfd, texArray, *gbufferShader,
+                                     m_deferredFrameActive, settings.debug.viewMode,
+                                     ctx.eyeInWater, m_heldBlockLightValue,
+                                     targets, m_resourceMgr,
+                                     volFogShadersReady, trs);
+        terrain.renderOpaqueChunksAndCollectPasses(
+            *ctx.worldView,
+            cutoutEntries,
+            transparentEntries,
+            true);
+        terrain.syncTransparentBatches();
+        m_transparentBatch = terrain.transparentBatches();
+        m_transparentPassPlan = terrain.transparentPassPlan();
+        m_transparentEntries = transparentEntries;
+        terrain.renderCutoutChunks(cutoutEntries, *gbufferShader);
+
+        glBindVertexArray(0);
+        for (int i = 10; i >= 0; --i) {
+            glActiveTexture(GL_TEXTURE0 + i);
+            glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
+        }
+    }
+    worldBuffer.captureSceneFrameStats();
 
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);

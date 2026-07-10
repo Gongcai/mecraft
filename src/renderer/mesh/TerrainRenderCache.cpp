@@ -460,7 +460,8 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
 // Meshing result drain
 // ---------------------------------------------------------------------------
 
-void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
+void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
+                                             RhiCommandList& commandList) {
     // Phase 1: Drain all completed results from the service into the deferred buffer.
     // This avoids interleaving tryPopCompleted with budget checks, and lets us
     // process results in order with strict vertex/time budgets.
@@ -583,6 +584,7 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
 
             const glm::vec3 boundsWorldOffset(txOff, tyOff, tzOff);
             WorldGpuMesh gpu = m_worldRenderBuffer->uploadSubChunk(
+                commandList,
                 result.meshData.opaqueVertices,
                 result.meshData.cutoutVertices,
                 result.meshData.cutoutDistanceVertices,
