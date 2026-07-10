@@ -1,61 +1,237 @@
 #include "DebugPass.h"
+
 #include "../core/RenderScene.h"
-#include "../targets/DeferredRenderTargets.h"
-#include "../core/Shader.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../shadow/ShadowRenderer.h"
+#include "../targets/DeferredRenderTargets.h"
 #include "../../resource/ResourceMgr.h"
 
-#include <glad/glad.h>
+#include <algorithm>
+#include <cstddef>
+#include <optional>
 
 #include <glm/glm.hpp>
-#include <algorithm>
 
-static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowRenderer::CASCADE_COUNT;
+namespace {
+constexpr size_t kDebugTextureCount = 19u;
+
+[[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs,
+                                   const RhiTextureViewHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+[[nodiscard]] bool sameTextureViews(
+    const std::array<RhiTextureViewHandle, kDebugTextureCount>& lhs,
+    const std::array<RhiTextureViewHandle, kDebugTextureCount>& rhs) {
+    for (size_t index = 0u; index < lhs.size(); ++index) {
+        if (!sameTextureView(lhs[index], rhs[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool usesMaterialAux(const int mode) {
+    return mode == 26 || mode == 27 || mode == 80;
+}
+
+[[nodiscard]] bool usesShadowNoise(const int mode) {
+    return mode == 21 || mode == 22 || mode == 34 || mode == 35;
+}
+
+[[nodiscard]] bool usesShadowCasterTargets(const int mode) {
+    return mode == 35;
+}
+
+[[nodiscard]] bool usesReflectionHistory(const int mode) {
+    return mode == 28;
+}
+
+[[nodiscard]] bool usesCloudHistory(const int mode) {
+    return mode == 29;
+}
+
+[[nodiscard]] bool usesSceneComposite(const int mode) {
+    return mode == 11 || mode == 78;
+}
+
+[[nodiscard]] bool usesSceneResolved(const int mode) {
+    return mode == 31 || mode == 79;
+}
+
+struct alignas(16) DebugCascadeParams {
+    glm::mat4 viewProj;
+    glm::vec4 splitParams;
+    glm::vec4 depthExtent;
+};
+static_assert(sizeof(DebugCascadeParams) == 96u);
+
+struct alignas(16) DebugParams {
+    glm::mat4 shadowModelView;
+    glm::mat4 shadowProjection;
+    glm::mat4 shadowProjectionInverse;
+    glm::mat4 invViewProj;
+    std::array<DebugCascadeParams, shadow::ShadowRenderer::CASCADE_COUNT> cascades;
+    glm::vec4 cameraNear;
+    glm::vec4 sunDirectionFar;
+    glm::vec4 moonDirectionShadowExtent;
+    glm::vec4 shadowDirectionTexelSize;
+    glm::vec4 sunLightColorShadowMapSize;
+    glm::vec4 skyAmbientColorShadowDistance;
+    glm::vec4 horizonColorConstantBias;
+    glm::vec4 fogColorSlopeBias;
+    glm::vec4 shadowParams;
+    glm::ivec4 flags0;
+    glm::ivec4 flags1;
+};
+static_assert(sizeof(DebugParams) == 816u);
+} // namespace
 
 void DebugPass::init(ResourceMgr& resourceMgr) {
-    m_deferredDebugShader = resourceMgr.getShader("deferred_debug");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void DebugPass::shutdown() {
-    m_deferredDebugShader = nullptr;
+    destroyRhiResources();
     m_noiseTexture = {};
+    m_shadowRenderer = nullptr;
 }
 
 void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                         DeferredRenderTargets& targets,
-                         const int width, const int height) {
-    if (m_deferredDebugShader == nullptr) {
-        return;
-    }
-
+                        DeferredRenderTargets& targets,
+                        const int width, const int height) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !ctx.sceneCaptureColorTexture.isValid()) {
+        !ctx.sceneCaptureColorView.isValid() || m_shadowRenderer == nullptr) {
         return;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-
-    RhiTextureViewDesc outputViewDesc;
-    outputViewDesc.texture = ctx.sceneCaptureColorTexture;
-    outputViewDesc.viewType = RhiTextureViewType::Texture2D;
-    outputViewDesc.format = RhiTextureFormat::Rgba16Float;
-    outputViewDesc.baseMip = 0;
-    outputViewDesc.mipCount = 1;
-    outputViewDesc.baseLayer = 0;
-    outputViewDesc.layerCount = 1;
-
-    const RhiTextureViewHandle outputView = rhiDevice.createTextureView(outputViewDesc);
-    if (!outputView.isValid()) {
+    const int debugViewMode = settings.debug.viewMode;
+    if (!ensureRhiPipeline(rhiDevice) ||
+        !targets.ensureGBufferTextureViews(rhiDevice) ||
+        !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
+        !targets.ensureSsaoFilteredTextureView(rhiDevice) ||
+        !targets.ensureSceneLightingTextureView(rhiDevice) ||
+        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
+        !targets.ensureSceneResolvedTextureView(rhiDevice) ||
+        !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
+        !targets.ensureHalfResTextureView(rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(rhiDevice) ||
+        !targets.ensureVelocityTextureView(rhiDevice) ||
+        !targets.ensureHistorySceneTextureViews(rhiDevice) ||
+        !targets.ensureHistoryDepthTextureViews(rhiDevice) ||
+        !targets.ensureReflectionTextureView(rhiDevice) ||
+        !targets.ensureHistoryReflectionTextureViews(rhiDevice) ||
+        !targets.ensureCloudTextureView(rhiDevice) ||
+        !targets.ensureHistoryCloudTextureViews(rhiDevice) ||
+        !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
+        !targets.ensureSsgiTextureView(rhiDevice) ||
+        !ensureNoiseTextureView(rhiDevice)) {
+        return;
+    }
+    if (usesShadowCasterTargets(debugViewMode) &&
+        !ensureShadowNormalTextureView(rhiDevice, targets.shadowNormalTextureHandle())) {
         return;
     }
 
+    RhiTextureViewHandle binding13 = targets.historySceneTexturePrevViewHandle();
+    if (usesShadowNoise(debugViewMode)) {
+        binding13 = m_noiseTextureView;
+    } else if (usesMaterialAux(debugViewMode)) {
+        binding13 = targets.materialAuxTextureViewHandle();
+    } else if (debugViewMode == 19) {
+        binding13 = targets.historyDepthTexturePrevViewHandle();
+    }
+
+    RhiTextureViewHandle binding14 = targets.reflectionTextureViewHandle();
+    if (usesShadowCasterTargets(debugViewMode)) {
+        binding14 = targets.shadowColorTextureViewHandle();
+    } else if (usesReflectionHistory(debugViewMode)) {
+        binding14 = targets.historyReflectionTexturePrevViewHandle();
+    }
+
+    RhiTextureViewHandle binding15 = targets.cloudTextureViewHandle();
+    if (usesShadowCasterTargets(debugViewMode)) {
+        binding15 = m_shadowNormalTextureView;
+    } else if (usesSceneResolved(debugViewMode)) {
+        binding15 = targets.sceneResolvedTextureViewHandle();
+    } else if (usesSceneComposite(debugViewMode)) {
+        binding15 = targets.sceneCompositeTextureViewHandle();
+    } else if (usesCloudHistory(debugViewMode)) {
+        binding15 = targets.historyCloudTexturePrevViewHandle();
+    }
+
+    const std::array<RhiTextureViewHandle, kDebugTextureCount> views = {
+        targets.albedoTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),
+        targets.voxelLightTextureViewHandle(),
+        targets.materialTextureViewHandle(),
+        targets.depthTextureViewHandle(),
+        targets.shadowDepthTextureViewHandle(),
+        targets.ssaoFilteredTextureViewHandle(),
+        targets.sceneLightingTextureViewHandle(),
+        targets.transparentCompositeTextureViewHandle(),
+        targets.transparentCompositeDepthTextureViewHandle(),
+        targets.halfResTextureViewHandle(),
+        targets.skyCaptureTextureViewHandle(),
+        targets.velocityTextureViewHandle(),
+        binding13,
+        binding14,
+        binding15,
+        targets.csmShadowDepthArrayTextureViewHandle(),
+        targets.temporalCurrentTextureViewHandle(),
+        targets.ssgiTextureViewHandle()
+    };
+    if (!ensureRhiBindGroup(rhiDevice, debugViewMode, views)) {
+        return;
+    }
+
+    DebugParams params{};
+    params.shadowModelView = m_shadowRenderer->modelView();
+    params.shadowProjection = m_shadowRenderer->projection();
+    params.shadowProjectionInverse = m_shadowRenderer->projectionInverse();
+    params.invViewProj = ctx.camera.invViewProj;
+    for (int index = 0; index < shadow::ShadowRenderer::CASCADE_COUNT; ++index) {
+        const shadow::ShadowRenderer::Cascade& cascade = m_shadowRenderer->cascade(index);
+        DebugCascadeParams& cascadeParams = params.cascades[static_cast<size_t>(index)];
+        cascadeParams.viewProj = cascade.viewProj;
+        cascadeParams.splitParams = glm::vec4(cascade.splitNear,
+                                               cascade.splitFar,
+                                               cascade.texelWorldSize,
+                                               index >= 2 ? 0.5f : 1.0f);
+        cascadeParams.depthExtent = glm::vec4(cascade.depthExtent, 0.0f, 0.0f, 0.0f);
+    }
+    params.cameraNear = glm::vec4(ctx.camera.position, ctx.camera.nearPlane);
+    params.sunDirectionFar = glm::vec4(ctx.skyColors.sunDirection, ctx.camera.farPlane);
+    params.moonDirectionShadowExtent = glm::vec4(ctx.skyColors.moonDirection,
+                                                  m_shadowRenderer->shadowExtent());
+    params.shadowDirectionTexelSize = glm::vec4(m_shadowRenderer->lightDirection(),
+                                                 m_shadowRenderer->texelWorldSize());
+    params.sunLightColorShadowMapSize = glm::vec4(
+        ctx.skyColors.sunLightColor,
+        static_cast<float>(settings.shadow.resolution));
+    params.skyAmbientColorShadowDistance = glm::vec4(
+        ctx.skyColors.skyAmbientColor,
+        std::max(64.0f, settings.shadow.distance));
+    params.horizonColorConstantBias = glm::vec4(ctx.skyColors.horizonScatterColor,
+                                                settings.shadow.constantBias);
+    params.fogColorSlopeBias = glm::vec4(ctx.fog.color, settings.shadow.slopeBias);
+    params.shadowParams = glm::vec4(settings.shadow.normalOffset, 0.0f, 0.0f, 0.0f);
+    params.flags0 = glm::ivec4(ctx.moonShadowActive ? 1 : 0,
+                               shadow::ShadowRenderer::CASCADE_COUNT,
+                               debugViewMode,
+                               static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
+    params.flags1 = glm::ivec4(settings.volumetric.freezeBias ? 1 : 0, 0, 0, 0);
+
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = outputView;
+    colorAttachment.view = ctx.sceneCaptureColorView;
     colorAttachment.loadOp = RhiLoadOp::DontCare;
     colorAttachment.storeOp = RhiStoreOp::Store;
 
@@ -71,207 +247,317 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
     commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-
-    m_deferredDebugShader->use();
-    m_deferredDebugShader->setInt("uAlbedoTex", 0);
-    m_deferredDebugShader->setInt("uNormalAoTex", 1);
-    m_deferredDebugShader->setInt("uVoxelLightTex", 2);
-    m_deferredDebugShader->setInt("uMaterialTex", 3);
-    m_deferredDebugShader->setInt("uDepthTex", 4);
-    m_deferredDebugShader->setInt("uShadowMapRaw", 5);
-    m_deferredDebugShader->setInt("uSsaoTex", 6);
-    m_deferredDebugShader->setInt("uSceneLightingTex", 7);
-    m_deferredDebugShader->setInt("uTransparentCompositeTex", 8);
-    m_deferredDebugShader->setInt("uTransparentCompositeDepthTex", 9);
-    m_deferredDebugShader->setInt("uVolumetricTex", 10);
-    m_deferredDebugShader->setInt("uSkyCaptureTex", 11);
-    m_deferredDebugShader->setInt("uVelocityTex", 12);
-    m_deferredDebugShader->setInt("uHistorySceneTex", 13);
-    m_deferredDebugShader->setInt("uHistoryDepthTex", 13);
-    m_deferredDebugShader->setInt("uNoiseTex", 13);
-    m_deferredDebugShader->setInt("uReflectionTex", 14);
-    m_deferredDebugShader->setInt("uCloudTex", 15);
-    m_deferredDebugShader->setInt("uSceneCompositeTex", 15);
-    m_deferredDebugShader->setInt("uSceneResolvedTex", 15);
-    m_deferredDebugShader->setInt("uTemporalCurrentTex", 17);
-    m_deferredDebugShader->setInt("uMaterialAuxTex", 13);
-    m_deferredDebugShader->setInt("uShadowColorTex", 14);
-    m_deferredDebugShader->setInt("uShadowNormalTex", 15);
-    m_deferredDebugShader->setInt("uHistoryReflectionTex", 14);
-    m_deferredDebugShader->setInt("uHistoryCloudTex", 15);
-    m_deferredDebugShader->setInt("uCsmShadowDepthTex", 16);
-    m_deferredDebugShader->setInt("uSsgiTex", 18);
-
-    // Shadow uniforms from ShadowRenderer
-    if (m_shadowRenderer) {
-        m_deferredDebugShader->setMat4("uShadowModelView", m_shadowRenderer->modelView());
-        m_deferredDebugShader->setMat4("uShadowProjection", m_shadowRenderer->projection());
-        m_deferredDebugShader->setMat4("uShadowProjectionInverse", m_shadowRenderer->projectionInverse());
-        m_deferredDebugShader->setFloat("uShadowExtent", m_shadowRenderer->shadowExtent());
-        m_deferredDebugShader->setFloat("uShadowTexelWorldSize", m_shadowRenderer->texelWorldSize());
-
-        const shadow::ShadowRenderer::BiasSettings bias{
-            settings.shadow.constantBias,
-            settings.shadow.slopeBias,
-            settings.shadow.normalOffset
-        };
-        m_shadowRenderer->bindShadowUniforms(*m_deferredDebugShader, ctx.moonShadowActive, bias);
-    } else {
-        m_deferredDebugShader->setMat4("uShadowModelView", glm::mat4(1.0f));
-        m_deferredDebugShader->setMat4("uShadowProjection", glm::mat4(1.0f));
-        m_deferredDebugShader->setMat4("uShadowProjectionInverse", glm::mat4(1.0f));
-        m_deferredDebugShader->setFloat("uShadowExtent", 0.0f);
-        m_deferredDebugShader->setFloat("uShadowTexelWorldSize", 0.0f);
-        m_deferredDebugShader->setInt("uCsmCascadeCount", SHADOW_CASCADE_COUNT);
-    }
-
-    // Shadow settings uniforms
-    m_deferredDebugShader->setFloat("uShadowMapSize", static_cast<float>(settings.shadow.resolution));
-    m_deferredDebugShader->setFloat("uShadowDistance", std::max(64.0f, settings.shadow.distance));
-    m_deferredDebugShader->setFloat("uShadowConstantBias", settings.shadow.constantBias);
-    m_deferredDebugShader->setFloat("uShadowSlopeBias", settings.shadow.slopeBias);
-    m_deferredDebugShader->setFloat("uShadowNormalOffset", settings.shadow.normalOffset);
-
-    // Debug view and frame uniforms
-    m_deferredDebugShader->setInt("uDebugViewMode", settings.debug.viewMode);
-    m_deferredDebugShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
-    m_deferredDebugShader->setInt("uFreezeBias", settings.volumetric.freezeBias ? 1 : 0);
-
-    // Camera/frame data from FrameContext
-    m_deferredDebugShader->setMat4("uInvViewProj", ctx.camera.invViewProj);
-    m_deferredDebugShader->setFloat("uNearPlane", ctx.camera.nearPlane);
-    m_deferredDebugShader->setFloat("uFarPlane", ctx.camera.farPlane);
-    m_deferredDebugShader->setVec3("uCameraPos", ctx.camera.position);
-    m_deferredDebugShader->setVec3("uSunDirection", ctx.skyColors.sunDirection);
-    m_deferredDebugShader->setVec3("uMoonDirection", ctx.skyColors.moonDirection);
-
-    if (m_shadowRenderer) {
-        m_deferredDebugShader->setVec3("uShadowLightDirection", m_shadowRenderer->lightDirection());
-    } else {
-        m_deferredDebugShader->setVec3("uShadowLightDirection", ctx.skyColors.sunDirection);
-    }
-    m_deferredDebugShader->setInt("uShadowLightMode", ctx.moonShadowActive ? 1 : 0);
-
-    // Lighting diagnostic uniforms (for debug view 45)
-    m_deferredDebugShader->setVec3("uSunLightColor", ctx.skyColors.sunLightColor);
-    m_deferredDebugShader->setVec3("uSkyAmbientColor", ctx.skyColors.skyAmbientColor);
-    m_deferredDebugShader->setVec3("uHorizonScatterColor", ctx.skyColors.horizonScatterColor);
-    m_deferredDebugShader->setVec3("uFogColor", ctx.fog.color);
-
-    // Bind all intermediate textures
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.albedoTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.normalAoTextureHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.voxelLightTextureHandle()));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.materialTextureHandle()));
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.shadowDepthTextureHandle()));
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssaoFilteredTextureHandle()));
-    glActiveTexture(GL_TEXTURE7);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.sceneLightingTextureHandle()));
-    glActiveTexture(GL_TEXTURE8);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.transparentCompositeTextureHandle()));
-    glActiveTexture(GL_TEXTURE9);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.transparentCompositeDepthTextureHandle()));
-    glActiveTexture(GL_TEXTURE10);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.halfResTextureHandle()));
-    glActiveTexture(GL_TEXTURE11);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
-    glActiveTexture(GL_TEXTURE12);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.velocityTextureHandle()));
-
-    // Texture unit 13: multiplexed based on debug view mode
-    glActiveTexture(GL_TEXTURE13);
-    const bool materialAuxDebug =
-        settings.debug.viewMode == 26 ||
-        settings.debug.viewMode == 27 ||
-        settings.debug.viewMode == 80;
-    const bool historyDepthDebug = settings.debug.viewMode == 19;
-    const bool shadowCompareDebug =
-        settings.debug.viewMode == 21 ||
-        settings.debug.viewMode == 22 ||
-        settings.debug.viewMode == 34 ||
-        settings.debug.viewMode == 35;
-    const uint32_t noiseTexture = renderer::rhi::gl::textureId(m_noiseTexture);
-    const uint32_t materialAuxTexture = renderer::rhi::gl::textureId(targets.materialAuxTextureHandle());
-    const uint32_t historyDepthTexture = renderer::rhi::gl::textureId(targets.historyDepthTexturePrevHandle());
-    const uint32_t historySceneTexture = renderer::rhi::gl::textureId(targets.historySceneTexturePrevHandle());
-    glBindTexture(GL_TEXTURE_2D,
-                  shadowCompareDebug ? noiseTexture
-                                     : (materialAuxDebug ? materialAuxTexture
-                                                         : (historyDepthDebug ? historyDepthTexture
-                                                                              : historySceneTexture)));
-
-    // Texture unit 14: multiplexed based on debug view mode
-    glActiveTexture(GL_TEXTURE14);
-    const bool shadowCasterDebug = settings.debug.viewMode == 35;
-    const bool reflectionHistoryDebug = settings.debug.viewMode == 28;
-    const uint32_t shadowColorTexture = renderer::rhi::gl::textureId(targets.shadowColorTextureHandle());
-    const uint32_t reflectionTexture = renderer::rhi::gl::textureId(targets.reflectionTextureHandle());
-    const uint32_t historyReflectionTexture =
-        renderer::rhi::gl::textureId(targets.historyReflectionTexturePrevHandle());
-    glBindTexture(GL_TEXTURE_2D,
-                  shadowCasterDebug ? shadowColorTexture
-                                    : (reflectionHistoryDebug ? historyReflectionTexture
-                                                              : reflectionTexture));
-
-    // Texture unit 15: multiplexed based on debug view mode
-    glActiveTexture(GL_TEXTURE15);
-    const bool cloudHistoryDebug = settings.debug.viewMode == 29;
-    const bool sceneCompositeDebug =
-        settings.debug.viewMode == 11 ||
-        settings.debug.viewMode == 78;
-    const bool sceneResolvedDebug =
-        settings.debug.viewMode == 31 ||
-        settings.debug.viewMode == 79;
-    const uint32_t shadowNormalTexture = renderer::rhi::gl::textureId(targets.shadowNormalTextureHandle());
-    const uint32_t sceneCompositeTexture = renderer::rhi::gl::textureId(targets.sceneCompositeTextureHandle());
-    const uint32_t cloudTexture = renderer::rhi::gl::textureId(targets.cloudTextureHandle());
-    const uint32_t historyCloudTexture = renderer::rhi::gl::textureId(targets.historyCloudTexturePrevHandle());
-    glBindTexture(GL_TEXTURE_2D,
-                  shadowCasterDebug ? shadowNormalTexture
-                                    : (sceneResolvedDebug
-                                           ? renderer::rhi::gl::textureId(targets.sceneResolvedTextureHandle())
-                                          : (sceneCompositeDebug ? sceneCompositeTexture
-                                                                 : (cloudHistoryDebug ? historyCloudTexture
-                                                                                      : cloudTexture))));
-
-    glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY,
-                  renderer::rhi::gl::textureId(targets.csmShadowDepthTextureHandle()));
-    glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.temporalCurrentTextureHandle()));
-    glActiveTexture(GL_TEXTURE18);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.ssgiTextureHandle()));
-
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_deferredDebugShader);
-
-    // Cleanup texture bindings
-    glActiveTexture(GL_TEXTURE18);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE17);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE16);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    for (int unit = 15; unit >= 0; --unit) {
-        glActiveTexture(GL_TEXTURE0 + unit);
-        glBindTexture(GL_TEXTURE_2D, 0);
-    }
-    glActiveTexture(GL_TEXTURE0);
+    commandList.setGraphicsPipeline(m_pipeline);
+    commandList.setBindGroup(0u, m_bindGroup);
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
-    rhiDevice.destroyTextureView(outputView);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+}
+
+bool DebugPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        destroyRhiResources();
+    }
+    if (m_pipeline.isValid()) {
+        return true;
+    }
+    m_rhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/deferred_debug.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "Debug.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_vertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "Debug.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiBufferDesc uniformBufferDesc;
+    uniformBufferDesc.debugName = "Debug.Params";
+    uniformBufferDesc.size = sizeof(DebugParams);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_uniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
+    if (!m_uniformBuffer.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.magFilter = RhiFilter::Nearest;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_nearestSampler = rhiDevice.createSampler(samplerDesc);
+
+    samplerDesc.minFilter = RhiFilter::Linear;
+    samplerDesc.magFilter = RhiFilter::Linear;
+    m_linearSampler = rhiDevice.createSampler(samplerDesc);
+
+    samplerDesc.addressU = RhiAddressMode::Repeat;
+    samplerDesc.addressV = RhiAddressMode::Repeat;
+    samplerDesc.addressW = RhiAddressMode::Repeat;
+    m_noiseSampler = rhiDevice.createSampler(samplerDesc);
+    if (!m_nearestSampler.isValid() || !m_linearSampler.isValid() ||
+        !m_noiseSampler.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "Debug.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < kDebugTextureCount; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    bindGroupLayoutDesc.entries.push_back({
+        static_cast<uint32_t>(kDebugTextureCount),
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_bindGroupLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Debug.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_pipelineLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Debug.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_pipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_pipeline.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool DebugPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
+    if (m_noiseTextureView.isValid() &&
+        sameTextureHandle(m_noiseViewTexture, m_noiseTexture)) {
+        return true;
+    }
+    if (m_noiseTextureView.isValid()) {
+        destroyRhiBindGroup();
+        rhiDevice.destroyTextureView(m_noiseTextureView);
+        m_noiseTextureView = {};
+        m_noiseViewTexture = {};
+    }
+    if (!m_noiseTexture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_noiseTexture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_noiseTextureView = rhiDevice.createTextureView(viewDesc);
+    if (!m_noiseTextureView.isValid()) {
+        return false;
+    }
+    m_noiseViewTexture = m_noiseTexture;
+    return true;
+}
+
+bool DebugPass::ensureShadowNormalTextureView(RhiDevice& rhiDevice,
+                                              const RhiTextureHandle texture) {
+    if (m_shadowNormalTextureView.isValid() &&
+        sameTextureHandle(m_shadowNormalViewTexture, texture)) {
+        return true;
+    }
+    if (m_shadowNormalTextureView.isValid()) {
+        destroyRhiBindGroup();
+        rhiDevice.destroyTextureView(m_shadowNormalTextureView);
+        m_shadowNormalTextureView = {};
+        m_shadowNormalViewTexture = {};
+    }
+    if (!texture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba16Float;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_shadowNormalTextureView = rhiDevice.createTextureView(viewDesc);
+    if (!m_shadowNormalTextureView.isValid()) {
+        return false;
+    }
+    m_shadowNormalViewTexture = texture;
+    return true;
+}
+
+bool DebugPass::ensureRhiBindGroup(
+    RhiDevice& rhiDevice,
+    const int debugViewMode,
+    const std::array<RhiTextureViewHandle, 19>& views) {
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_bindGroup.isValid() && m_boundDebugViewMode == debugViewMode &&
+        sameTextureViews(m_boundViews, views)) {
+        return true;
+    }
+    destroyRhiBindGroup();
+
+    std::array<RhiSamplerHandle, kDebugTextureCount> samplers;
+    samplers.fill(m_linearSampler);
+    const size_t nearestBindings[] = {0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u};
+    for (const size_t binding : nearestBindings) {
+        samplers[binding] = m_nearestSampler;
+    }
+    samplers[13] = usesShadowNoise(debugViewMode)
+        ? m_noiseSampler
+        : ((usesMaterialAux(debugViewMode) || debugViewMode == 19)
+               ? m_nearestSampler
+               : m_linearSampler);
+    samplers[14] = usesShadowCasterTargets(debugViewMode)
+        ? m_nearestSampler
+        : m_linearSampler;
+    samplers[15] = usesShadowCasterTargets(debugViewMode)
+        ? m_nearestSampler
+        : m_linearSampler;
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_bindGroupLayout;
+    for (uint32_t binding = 0u; binding < kDebugTextureCount; ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = samplers[binding];
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    RhiBindGroupEntry uniformEntry;
+    uniformEntry.binding = static_cast<uint32_t>(kDebugTextureCount);
+    uniformEntry.resource.buffer.buffer = m_uniformBuffer;
+    uniformEntry.resource.buffer.offset = 0u;
+    uniformEntry.resource.buffer.range = sizeof(DebugParams);
+    bindGroupDesc.entries.push_back(uniformEntry);
+
+    m_bindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_bindGroup.isValid()) {
+        return false;
+    }
+    m_boundViews = views;
+    m_boundDebugViewMode = debugViewMode;
+    return true;
+}
+
+void DebugPass::destroyRhiBindGroup() {
+    if (m_rhiDevice != nullptr && m_bindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_bindGroup);
+    }
+    m_bindGroup = {};
+    m_boundViews = {};
+    m_boundDebugViewMode = -1;
+}
+
+void DebugPass::destroyRhiResources() {
+    destroyRhiBindGroup();
+    if (m_rhiDevice != nullptr) {
+        if (m_noiseTextureView.isValid()) {
+            m_rhiDevice->destroyTextureView(m_noiseTextureView);
+        }
+        if (m_shadowNormalTextureView.isValid()) {
+            m_rhiDevice->destroyTextureView(m_shadowNormalTextureView);
+        }
+        if (m_pipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        }
+        if (m_vertexShader.isValid()) {
+            m_rhiDevice->destroyShader(m_vertexShader);
+        }
+        if (m_fragmentShader.isValid()) {
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        }
+        if (m_pipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        }
+        if (m_bindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+        }
+        if (m_uniformBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_uniformBuffer);
+        }
+        if (m_nearestSampler.isValid()) {
+            m_rhiDevice->destroySampler(m_nearestSampler);
+        }
+        if (m_linearSampler.isValid()) {
+            m_rhiDevice->destroySampler(m_linearSampler);
+        }
+        if (m_noiseSampler.isValid()) {
+            m_rhiDevice->destroySampler(m_noiseSampler);
+        }
+    }
+
+    m_noiseViewTexture = {};
+    m_noiseTextureView = {};
+    m_shadowNormalViewTexture = {};
+    m_shadowNormalTextureView = {};
+    m_uniformBuffer = {};
+    m_nearestSampler = {};
+    m_linearSampler = {};
+    m_noiseSampler = {};
+    m_bindGroupLayout = {};
+    m_pipelineLayout = {};
+    m_vertexShader = {};
+    m_fragmentShader = {};
+    m_pipeline = {};
+    m_rhiDevice = nullptr;
 }

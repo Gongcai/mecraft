@@ -6,11 +6,12 @@
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
 
+#include <array>
 #include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
-class Shader;
+class RhiDevice;
 
 namespace shadow { class ShadowRenderer; }
 
@@ -35,8 +36,32 @@ public:
                  DeferredRenderTargets& targets, int width, int height);
 
 private:
-    Shader* m_deferredDebugShader = nullptr;
+    bool ensureRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureNoiseTextureView(RhiDevice& rhiDevice);
+    bool ensureShadowNormalTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture);
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice, int debugViewMode,
+                            const std::array<RhiTextureViewHandle, 19>& views);
+    void destroyRhiBindGroup();
+    void destroyRhiResources();
+
+    RhiDevice* m_rhiDevice = nullptr;
     RhiTextureHandle m_noiseTexture;
+    RhiTextureHandle m_noiseViewTexture;
+    RhiTextureViewHandle m_noiseTextureView;
+    RhiTextureHandle m_shadowNormalViewTexture;
+    RhiTextureViewHandle m_shadowNormalTextureView;
+    RhiBufferHandle m_uniformBuffer;
+    RhiSamplerHandle m_nearestSampler;
+    RhiSamplerHandle m_linearSampler;
+    RhiSamplerHandle m_noiseSampler;
+    RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiPipelineHandle m_pipeline;
+    RhiBindGroupHandle m_bindGroup;
+    std::array<RhiTextureViewHandle, 19> m_boundViews = {};
+    int m_boundDebugViewMode = -1;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
 };
 
