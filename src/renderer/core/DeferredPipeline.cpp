@@ -643,19 +643,18 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     RhiCommandList& commandList = rhiDevice.beginFrame();
-    commandList.beginRendering(renderingInfo);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-
-    // Terrain cache operations
     if (m_shared->terrainCache) {
         m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
         m_shared->terrainCache->drainMeshingResults(*ctx.worldView);
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
+
+    commandList.beginRendering(renderingInfo);
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
 
     // Build terrain frame data from FrameContext
     TerrainFrameData tfd;
