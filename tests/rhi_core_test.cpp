@@ -8,8 +8,10 @@
 #include <GLFW/glfw3.h>
 
 #include <array>
+#include <cstring>
 #include <cstdint>
 #include <iostream>
+#include <vector>
 
 namespace {
 bool requireTrue(const bool condition, const char* message) {
@@ -1439,16 +1441,18 @@ bool testGlRhiDrawIndirect() {
         uint32_t baseInstance;
     };
     constexpr DrawArraysIndirectCommand kDrawCommand = {3u, 1u, 0u, 0u};
+    constexpr uint64_t kCommandOffset = 65536u;
+    constexpr uint64_t kIndirectBufferSize = kCommandOffset + sizeof(DrawArraysIndirectCommand);
     constexpr uint32_t kWidth = 4u;
     constexpr uint32_t kHeight = 4u;
 
     RhiBufferDesc indirectBufferDesc;
     indirectBufferDesc.debugName = "fullscreen-indirect-command";
-    indirectBufferDesc.size = sizeof(DrawArraysIndirectCommand);
-    indirectBufferDesc.usage = rhiFlag(RhiBufferUsage::Indirect);
+    indirectBufferDesc.size = kIndirectBufferSize;
+    indirectBufferDesc.usage = rhiFlag(RhiBufferUsage::Indirect) |
+                               rhiFlag(RhiBufferUsage::TransferDst);
     indirectBufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
-    const RhiBufferHandle indirectBuffer =
-        device.createBuffer(indirectBufferDesc, &kDrawCommand, sizeof(kDrawCommand));
+    const RhiBufferHandle indirectBuffer = device.createBuffer(indirectBufferDesc, nullptr, 0u);
     if (!requireTrue(indirectBuffer.isValid(), "indirect buffer must be created")) {
         device.shutdown();
         return false;
@@ -1556,10 +1560,13 @@ void main() {
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiCommandList& cmd = device.beginFrame();
+    std::vector<uint8_t> indirectUpload(kIndirectBufferSize, 0u);
+    std::memcpy(indirectUpload.data() + kCommandOffset, &kDrawCommand, sizeof(kDrawCommand));
+    cmd.updateBuffer(indirectBuffer, 0u, indirectUpload.data(), indirectUpload.size());
     cmd.beginRendering(renderingInfo);
     cmd.setViewport({0.0f, 0.0f, static_cast<float>(kWidth), static_cast<float>(kHeight), 0.0f, 1.0f});
     cmd.setGraphicsPipeline(pipeline);
-    cmd.drawIndirect(indirectBuffer, 0u, 1u, 0u);
+    cmd.drawIndirect(indirectBuffer, kCommandOffset, 1u, 0u);
     std::array<uint8_t, 4> pixel{};
     glReadPixels(2, 2, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel.data());
     cmd.endRendering();

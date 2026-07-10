@@ -977,11 +977,18 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
             case RhiBindingType::UniformBuffer: {
                 const GlBufferRecord* buffer =
                     recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
-                if (buffer == nullptr) {
-                    logRhiError("setBindGroup received an invalid uniform buffer");
+                const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
+                    ? entry.resource.buffer.range
+                    : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
+                        ? buffer->desc.size - entry.resource.buffer.offset
+                        : 0u);
+                if (buffer == nullptr ||
+                    (buffer->desc.usage & rhiFlag(RhiBufferUsage::Uniform)) == 0u ||
+                    range == 0u || entry.resource.buffer.offset > buffer->desc.size ||
+                    range > buffer->desc.size - entry.resource.buffer.offset) {
+                    logRhiError("setBindGroup received an invalid uniform buffer binding");
                     return;
                 }
-                const uint64_t range = entry.resource.buffer.range != 0u ? entry.resource.buffer.range : buffer->desc.size;
                 glBindBufferRange(GL_UNIFORM_BUFFER,
                                   entry.binding,
                                   buffer->buffer,
@@ -992,11 +999,18 @@ void GlRhiCommandList::setBindGroup(uint32_t setIndex, RhiBindGroupHandle bindGr
             case RhiBindingType::StorageBuffer: {
                 const GlBufferRecord* buffer =
                     recordForHandle(data.buffers, data.bufferRecords, entry.resource.buffer.buffer);
-                if (buffer == nullptr) {
-                    logRhiError("setBindGroup received an invalid storage buffer");
+                const uint64_t range = buffer != nullptr && entry.resource.buffer.range != 0u
+                    ? entry.resource.buffer.range
+                    : (buffer != nullptr && entry.resource.buffer.offset <= buffer->desc.size
+                        ? buffer->desc.size - entry.resource.buffer.offset
+                        : 0u);
+                if (buffer == nullptr ||
+                    (buffer->desc.usage & rhiFlag(RhiBufferUsage::Storage)) == 0u ||
+                    range == 0u || entry.resource.buffer.offset > buffer->desc.size ||
+                    range > buffer->desc.size - entry.resource.buffer.offset) {
+                    logRhiError("setBindGroup received an invalid storage buffer binding");
                     return;
                 }
-                const uint64_t range = entry.resource.buffer.range != 0u ? entry.resource.buffer.range : buffer->desc.size;
                 glBindBufferRange(GL_SHADER_STORAGE_BUFFER,
                                   entry.binding,
                                   buffer->buffer,
@@ -1065,8 +1079,10 @@ void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, ui
         recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
     const GlBufferRecord* bufferRecord =
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
-    if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr) {
-        logRhiError("setVertexBuffer requires a graphics pipeline and a valid buffer");
+    if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr ||
+        (bufferRecord->desc.usage & rhiFlag(RhiBufferUsage::Vertex)) == 0u ||
+        offset >= bufferRecord->desc.size) {
+        logRhiError("setVertexBuffer requires a graphics pipeline and a valid vertex buffer range");
         return;
     }
 
@@ -1099,8 +1115,11 @@ void GlRhiCommandList::setIndexBuffer(RhiBufferHandle buffer, RhiIndexFormat for
         recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
     const GlBufferRecord* bufferRecord =
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
-    if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr) {
-        logRhiError("setIndexBuffer requires a graphics pipeline and a valid buffer");
+    const uint64_t elementSize = indexElementSize(format);
+    if (pipeline == nullptr || pipeline->compute || bufferRecord == nullptr ||
+        (bufferRecord->desc.usage & rhiFlag(RhiBufferUsage::Index)) == 0u ||
+        offset >= bufferRecord->desc.size || (offset % elementSize) != 0u) {
+        logRhiError("setIndexBuffer requires a graphics pipeline and a valid index buffer range");
         return;
     }
 
@@ -1221,8 +1240,17 @@ void GlRhiCommandList::drawIndirect(RhiBufferHandle indirectBuffer, uint64_t off
         recordForHandle(m_device->m_data->pipelines, m_device->m_data->pipelineRecords, m_graphicsPipeline);
     const GlBufferRecord* buffer =
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, indirectBuffer);
-    if (pipeline == nullptr || pipeline->compute || buffer == nullptr) {
-        logRhiError("drawIndirect requires a graphics pipeline and a valid indirect buffer");
+    constexpr uint64_t kDrawCommandSize = sizeof(uint32_t) * 4u;
+    const uint64_t commandStride = stride == 0u ? kDrawCommandSize : stride;
+    const uint64_t requiredBytes = drawCount == 0u
+        ? 0u
+        : kDrawCommandSize + static_cast<uint64_t>(drawCount - 1u) * commandStride;
+    if (pipeline == nullptr || pipeline->compute || buffer == nullptr ||
+        (buffer->desc.usage & rhiFlag(RhiBufferUsage::Indirect)) == 0u ||
+        drawCount == 0u || commandStride < kDrawCommandSize || (commandStride & 3u) != 0u ||
+        (offset & 3u) != 0u || offset > buffer->desc.size ||
+        requiredBytes > buffer->desc.size - offset) {
+        logRhiError("drawIndirect requires a graphics pipeline and a valid indirect buffer range");
         return;
     }
 
@@ -1264,8 +1292,7 @@ void GlRhiCommandList::updateBuffer(const RhiBufferHandle buffer,
 
     const GlBufferRecord* record =
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, buffer);
-    constexpr size_t kMaxUpdateBytes = 65536u;
-    if (record == nullptr || data == nullptr || size == 0u || size > kMaxUpdateBytes ||
+    if (record == nullptr || data == nullptr || size == 0u ||
         (offset & 3u) != 0u || (size & 3u) != 0u || offset > record->desc.size ||
         size > record->desc.size - offset ||
         (record->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u) {
@@ -1288,7 +1315,10 @@ void GlRhiCommandList::copyBuffer(const RhiBufferCopy& copy) {
     const GlBufferRecord* src = recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.src);
     const GlBufferRecord* dst = recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.dst);
     if (src == nullptr || dst == nullptr || copy.size == 0u ||
-        copy.srcOffset + copy.size > src->desc.size || copy.dstOffset + copy.size > dst->desc.size) {
+        (src->desc.usage & rhiFlag(RhiBufferUsage::TransferSrc)) == 0u ||
+        (dst->desc.usage & rhiFlag(RhiBufferUsage::TransferDst)) == 0u ||
+        copy.srcOffset > src->desc.size || copy.size > src->desc.size - copy.srcOffset ||
+        copy.dstOffset > dst->desc.size || copy.size > dst->desc.size - copy.dstOffset) {
         logRhiError("copyBuffer received invalid buffers or ranges");
         return;
     }
