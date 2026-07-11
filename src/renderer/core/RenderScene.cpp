@@ -370,7 +370,6 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer != nullptr &&
         request.firstPersonInventory != nullptr &&
         request.firstPersonHeldItemMotion != nullptr) {
-        request.firstPersonHeldItemRenderer->setForwardMode(getPipelineMode() == PipelineMode::Forward);
         request.firstPersonHeldItemRenderer->setShadowData(
             FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
         const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());

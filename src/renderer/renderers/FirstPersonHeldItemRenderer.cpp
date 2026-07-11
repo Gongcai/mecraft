@@ -1,13 +1,8 @@
 #include "FirstPersonHeldItemRenderer.h"
 
 #include "../../Diagnostics.h"
-#include "../gl/GlStateGuard.h"
 #include "../mesh/BlockMeshBuilder.h"
 #include "../mesh/ItemModelMesh.h"
-#include "../contracts/MecraftTextureContract.h"
-#include "../core/Shader.h"
-#include "../debug/RenderDebugLabels.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiShaderSourceLoader.h"
@@ -20,16 +15,13 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
 
-#include "engine/platform/Window.h"
 #include "../../Paths.h"
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
@@ -57,23 +49,6 @@ bool prefersBlockMeshForItem(const BlockID renderBlock) {
     }
     const BlockDef& def = BlockRegistry::get(renderBlock);
     return isTorchShape(def) || def.renderShapeName == "model";
-}
-
-uint32_t resolveShadowTexture(const RhiTextureHandle handle, const uint32_t neutralTexture) {
-    const uint32_t texture = renderer::rhi::gl::textureId(handle);
-    return texture != 0 ? texture : neutralTexture;
-}
-
-MecraftTextureContract::ShadowTextureBundle buildShadowTextureBundle(
-    const FirstPersonHeldItemRenderer::ShadowData& shadowData) {
-    return {
-        resolveShadowTexture(shadowData.shadowTexture, MecraftTextureContract::neutralDepthCompare()),
-        resolveShadowTexture(shadowData.shadowDepthRaw, MecraftTextureContract::neutralDepthRaw()),
-        resolveShadowTexture(shadowData.shadowDepthAll, MecraftTextureContract::neutralDepthCompare()),
-        resolveShadowTexture(shadowData.shadowDepthAllRaw, MecraftTextureContract::neutralDepthRaw()),
-        resolveShadowTexture(shadowData.shadowColor0, MecraftTextureContract::neutralColor0()),
-        resolveShadowTexture(shadowData.shadowColor1, MecraftTextureContract::neutralColor1()),
-    };
 }
 
 FaceUvRect pixelRectToUv(const float x0,
@@ -111,63 +86,6 @@ void addSteveQuad(std::vector<FirstPersonHeldItemRenderer::SteveVertex>& vertice
     }
 }
 
-void dumpShadowSamplerStateOnce(const char* label, const Shader& shader) {
-#ifdef MECRAFT_ENABLE_CONSOLE_OUTPUT
-    static std::unordered_set<std::string> dumpedLabels;
-    if (!dumpedLabels.emplace(label).second) {
-        return;
-    }
-
-    const char* names[] = {
-        "uCsmShadowMap",
-        "uCsmShadowDepthRaw",
-        "uCsmShadowDepthAll",
-        "uCsmShadowDepthAllRaw",
-        "uCsmShadowColor0",
-        "uCsmShadowColor1",
-    };
-
-    GLint previousProgram = 0;
-    GLint previousActiveTexture = GL_TEXTURE0;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &previousProgram);
-    glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
-
-    MECRAFT_LOG_STREAM(std::cerr << "[held-item-shadow] " << label << " program=" << shader.ID << '\n');
-    for (const char* name : names) {
-        const GLint loc = glGetUniformLocation(shader.ID, name);
-        if (loc < 0) {
-            MECRAFT_LOG_STREAM(std::cerr << "  " << name << " inactive\n");
-            continue;
-        }
-
-        GLint unit = -1;
-        glGetUniformiv(shader.ID, loc, &unit);
-        GLint binding = 0;
-        GLint compareMode = 0;
-        GLint target = 0;
-        glActiveTexture(GL_TEXTURE0 + unit);
-        glGetIntegerv(GL_TEXTURE_BINDING_2D_ARRAY, &binding);
-        if (binding != 0) {
-            glGetTextureParameteriv(static_cast<GLuint>(binding), GL_TEXTURE_COMPARE_MODE, &compareMode);
-            glGetTextureLevelParameteriv(static_cast<GLuint>(binding), 0, GL_TEXTURE_INTERNAL_FORMAT, &target);
-        }
-        MECRAFT_LOG_STREAM(std::cerr << "  " << name
-                                     << " unit=" << unit
-                                     << " texture=" << binding
-                                     << " internal=0x" << std::hex << target << std::dec
-                                     << " compareMode=0x" << std::hex << compareMode << std::dec
-                                     << '\n');
-    }
-
-    glActiveTexture(static_cast<GLenum>(previousActiveTexture));
-    if (previousProgram != 0) {
-        glUseProgram(static_cast<GLuint>(previousProgram));
-    }
-#else
-    static_cast<void>(label);
-    static_cast<void>(shader);
-#endif
-}
 }
 
 void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
@@ -180,13 +98,6 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiD
     createArmRhiResources();
     createItemRhiResources();
     createBlockRhiResources();
-    m_deferredBlockShader = resourceMgr.getShader("block_item_lit");
-    m_deferredItemShader = resourceMgr.getShader("item_model");
-    m_deferredSteveShader = resourceMgr.getShader("steve");
-    m_blockShader = m_deferredBlockShader;
-    m_itemShader = m_deferredItemShader;
-    m_steveShader = m_deferredSteveShader;
-    MecraftTextureContract::initializeNeutralShadowTextures(rhiDevice);
     m_rightArmMesh = buildRightArmMesh();
     if (!m_rightArmMesh.rhiVertexBuffer.isValid() || m_rightArmMesh.vertexCount == 0u) {
         std::abort();
@@ -196,7 +107,7 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiD
 }
 
 void FirstPersonHeldItemRenderer::shutdown() {
-    if (!m_initialized && m_resourceMgr == nullptr && m_rightArmMesh.vao == 0 &&
+    if (!m_initialized && m_resourceMgr == nullptr && !m_rightArmMesh.rhiVertexBuffer.isValid() &&
         m_blockMeshes.empty() && m_itemMeshes.empty()) {
         return;
     }
@@ -209,19 +120,12 @@ void FirstPersonHeldItemRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_itemMeshes.clear();
-    MecraftTextureContract::destroyNeutralShadowTextures();
     destroyBlockRhiResources();
     destroyItemRhiResources();
     destroyArmRhiResources();
     destroyRhiTextureResources();
     m_resourceMgr = nullptr;
     m_rhiDevice = nullptr;
-    m_blockShader = nullptr;
-    m_itemShader = nullptr;
-    m_steveShader = nullptr;
-    m_deferredBlockShader = nullptr;
-    m_deferredItemShader = nullptr;
-    m_deferredSteveShader = nullptr;
     m_hasPrevSample = false;
     m_prevTimeSeconds = 0.0f;
     m_visibleItemId = 0;
@@ -236,32 +140,6 @@ void FirstPersonHeldItemRenderer::shutdown() {
     m_swingElapsed = 0.0f;
     m_sceneHdrScale = 1.0f;
     m_initialized = false;
-}
-
-void FirstPersonHeldItemRenderer::setForwardMode(bool forward) {
-    if (m_resourceMgr == nullptr) {
-        std::abort();
-    }
-    if (forward) {
-        Shader* fwdBlock = m_resourceMgr->getShader("block_item_forward");
-        Shader* fwdItem = m_resourceMgr->getShader("item_model_forward");
-        Shader* fwdSteve = m_resourceMgr->getShader("steve_forward");
-        if (fwdBlock == nullptr || fwdItem == nullptr || fwdSteve == nullptr) {
-            std::abort();
-        }
-        m_blockShader = fwdBlock;
-        m_itemShader = fwdItem;
-        m_steveShader = fwdSteve;
-    } else {
-        if (m_deferredBlockShader == nullptr || m_deferredItemShader == nullptr ||
-            m_deferredSteveShader == nullptr) {
-            std::abort();
-        }
-        m_blockShader = m_deferredBlockShader;
-        m_itemShader = m_deferredItemShader;
-        m_steveShader = m_deferredSteveShader;
-    }
-    m_forwardMode = forward;
 }
 
 namespace {
@@ -892,88 +770,6 @@ FirstPersonHeldItemRenderer::ShadowData FirstPersonHeldItemRenderer::fromFirstPe
     return shadow;
 }
 
-void FirstPersonHeldItemRenderer::bindShadowUniforms(Shader& shader) const {
-    const uint32_t shadowTexture = renderer::rhi::gl::textureId(m_shadowData.shadowTexture);
-    const uint32_t shadowDepthRaw = renderer::rhi::gl::textureId(m_shadowData.shadowDepthRaw);
-    const uint32_t shadowDepthAll = renderer::rhi::gl::textureId(m_shadowData.shadowDepthAll);
-    const uint32_t shadowDepthAllRaw = renderer::rhi::gl::textureId(m_shadowData.shadowDepthAllRaw);
-    const bool shadowInputsValid =
-        shadowTexture != 0 &&
-        shadowDepthRaw != 0 &&
-        shadowDepthAll != 0 &&
-        shadowDepthAllRaw != 0 &&
-        m_shadowData.cascadeCount > 0;
-
-    // Cascade data
-    shader.setFloat("uShadowDistance", m_shadowData.shadowDistance);
-    shader.setFloat("uShadowConstantBias", m_shadowData.constantBias);
-    shader.setFloat("uShadowSlopeBias", m_shadowData.slopeBias);
-    shader.setFloat("uShadowNormalOffset", m_shadowData.normalOffset);
-    shader.setFloat("uShadowSoftness", m_shadowData.softness);
-    shader.setFloat("uShadowPcssStrength", m_shadowData.pcssStrength);
-    shader.setInt("uSoftShadowsEnabled", m_shadowData.softShadowsEnabled);
-    shader.setInt("uPcssShadowsEnabled", m_shadowData.pcssShadowsEnabled);
-    shader.setInt("uShadowsEnabled", (m_shadowData.shadowsEnabled != 0 && shadowInputsValid) ? 1 : 0);
-    shader.setVec3("uCameraPos", m_shadowData.cameraPos);
-    shader.setVec3("uSunDirection", m_shadowData.sunDirection);
-    shader.setInt("uCsmCascadeCount", m_shadowData.cascadeCount);
-    shader.setFloat("uSkyIntensity", m_shadowData.skyIntensity);
-    shader.setFloat("uAmbientStrength", m_shadowData.ambientStrength);
-
-    // Cascade matrices and split data
-    static const std::string prefix_viewProj[] = {
-        "uCsmCascades[0].viewProj", "uCsmCascades[1].viewProj",
-        "uCsmCascades[2].viewProj", "uCsmCascades[3].viewProj"
-    };
-    static const std::string prefix_splitNear[] = {
-        "uCsmCascades[0].splitNear", "uCsmCascades[1].splitNear",
-        "uCsmCascades[2].splitNear", "uCsmCascades[3].splitNear"
-    };
-    static const std::string prefix_splitFar[] = {
-        "uCsmCascades[0].splitFar", "uCsmCascades[1].splitFar",
-        "uCsmCascades[2].splitFar", "uCsmCascades[3].splitFar"
-    };
-    static const std::string prefix_texelWorldSize[] = {
-        "uCsmCascades[0].texelWorldSize", "uCsmCascades[1].texelWorldSize",
-        "uCsmCascades[2].texelWorldSize", "uCsmCascades[3].texelWorldSize"
-    };
-    static const std::string prefix_resolutionScale[] = {
-        "uCsmCascades[0].resolutionScale", "uCsmCascades[1].resolutionScale",
-        "uCsmCascades[2].resolutionScale", "uCsmCascades[3].resolutionScale"
-    };
-    static const std::string prefix_depthExtent[] = {
-        "uCsmCascades[0].depthExtent", "uCsmCascades[1].depthExtent",
-        "uCsmCascades[2].depthExtent", "uCsmCascades[3].depthExtent"
-    };
-
-    for (int i = 0; i < m_shadowData.cascadeCount && i < 4; ++i) {
-        shader.setMat4(prefix_viewProj[i], m_shadowData.cascadeViewProj[i]);
-        shader.setFloat(prefix_splitNear[i], i == 0 ? 0.0f : m_shadowData.cascadeSplitFar[i - 1]);
-        shader.setFloat(prefix_splitFar[i], m_shadowData.cascadeSplitFar[i]);
-        shader.setFloat(prefix_texelWorldSize[i], m_shadowData.cascadeTexelWorldSize[i]);
-        shader.setFloat(prefix_resolutionScale[i], (i >= 2) ? 0.5f : 1.0f);
-        shader.setFloat(prefix_depthExtent[i], m_shadowData.cascadeDepthExtent[i]);
-    }
-
-    // Sampler unit assignment is handled by MecraftTextureContract::bindShadowSamplers().
-}
-
-void FirstPersonHeldItemRenderer::render(const Window& window,
-                                         const Inventory& inventory,
-                                         const FirstPersonHeldItemMotion& motion,
-                                         const float timeSeconds) {
-    render(window.getWidth(), window.getHeight(), inventory, motion, timeSeconds);
-}
-
-void FirstPersonHeldItemRenderer::render(const int width,
-                                         const int height,
-                                         const Inventory& inventory,
-                                         const FirstPersonHeldItemMotion& motion,
-                                         const float timeSeconds) {
-    prepareFrame(width, height, inventory, motion, timeSeconds);
-    renderPrepared();
-}
-
 void FirstPersonHeldItemRenderer::prepareFrame(const int width,
                                                const int height,
                                                const Inventory& inventory,
@@ -1238,184 +1034,6 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
     commandList.draw(meshIt->second.vertexCount, 1u, 0u, 0u);
 }
 
-void FirstPersonHeldItemRenderer::renderPrepared() {
-    if (m_preparedFrame.kind == PreparedDrawKind::None) {
-        return;
-    }
-    const renderer::gl::ScopedStateSnapshot stateGuard;
-    glViewport(0, 0, m_preparedFrame.width, m_preparedFrame.height);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_ALWAYS);
-    glDepthRange(0.0, 0.08);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    if (m_preparedFrame.kind == PreparedDrawKind::Arm) {
-        drawArm(m_preparedFrame.viewProj, m_preparedFrame.model);
-    } else {
-        drawItem(m_preparedFrame.itemId, m_preparedFrame.view,
-                 m_preparedFrame.viewProj, m_preparedFrame.model);
-    }
-    glBindVertexArray(0);
-}
-
-void FirstPersonHeldItemRenderer::drawArm(const glm::mat4& viewProj,
-                                          const glm::mat4& model) {
-    if (m_resourceMgr == nullptr || m_steveShader == nullptr || m_rightArmMesh.vao == 0 || m_rightArmMesh.vertexCount == 0) {
-        return;
-    }
-
-    const GLuint steveTex =
-        static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle("steve")));
-    if (steveTex == 0) {
-        return;
-    }
-    const GLuint lightmapDayId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapDay()));
-    const GLuint lightmapNightId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapNight()));
-
-    m_steveShader->use();
-    m_steveShader->setMat4("viewProj", viewProj);
-    m_steveShader->setMat4("model", model);
-    m_steveShader->setInt("uTexture", 0);
-    m_steveShader->setInt("uLightmapDay", 1);
-    m_steveShader->setInt("uLightmapNight", 2);
-    m_steveShader->setFloat("uHeldSunlight", m_environmentSunlight);
-    m_steveShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
-    m_steveShader->setFloat("uHeldSceneHdrScale", m_sceneHdrScale);
-    m_steveShader->setFloat("uHurtFlash", 0.0f);
-    bindShadowUniforms(*m_steveShader);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, steveTex);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, lightmapDayId);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, lightmapNightId);
-    // Shadow textures (units 5-10)
-    const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
-    MecraftTextureContract::bindShadowSamplers(m_steveShader->ID, 5, shadowBundle);
-    glBindVertexArray(m_rightArmMesh.vao);
-    {
-        renderer::debug::ScopedDebugGroup group("HeldItem.Arm");
-        dumpShadowSamplerStateOnce("HeldItem.Arm", *m_steveShader);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_rightArmMesh.vertexCount));
-    }
-}
-
-void FirstPersonHeldItemRenderer::drawItem(const ItemID itemId,
-                                           const glm::mat4& view,
-                                           const glm::mat4& viewProj,
-                                           const glm::mat4& model) {
-    if (m_resourceMgr == nullptr || itemId == 0) {
-        return;
-    }
-
-    const ItemDef& itemDef = ItemRegistry::get(itemId);
-    const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
-    const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    const BlockID renderBlock = ItemRegistry::toRenderBlock(itemId);
-    const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
-    const GLuint itemAtlasTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
-    const GLuint texArrayTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
-    const GLuint lightmapDayId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapDay()));
-    const GLuint lightmapNightId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getLightmapNight()));
-    const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
-    const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
-    const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlasTexture != 0 && m_itemShader != nullptr);
-    const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArrayTexture != 0 && m_blockShader != nullptr);
-
-    if (useBlockMesh) {
-        Mesh* mesh = getOrCreateBlockMesh(renderBlock);
-        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
-            return;
-        }
-
-        m_blockShader->use();
-        m_blockShader->setMat4("model", model);
-        m_blockShader->setInt("uUseModel", 1);
-        m_blockShader->setInt("uVertexFormat", 0);
-        m_blockShader->setMat4("view", view);
-        m_blockShader->setMat4("viewProj", viewProj);
-        m_blockShader->setFloat("uWindTime", 0.0f);
-        m_blockShader->setFloat("uWindStrength", 0.0f);
-        m_blockShader->setFloat("uWindSpeed", 0.0f);
-        m_blockShader->setFloat("uWindSpatialFreq", 1.0f);
-        m_blockShader->setInt("texArray", 0);
-        m_blockShader->setInt("uForceBaseLod", 1);
-        m_blockShader->setInt("uGrassColormap", 3);
-        m_blockShader->setInt("uFoliageColormap", 4);
-        m_blockShader->setInt("uFogEnabled", 0);
-        m_blockShader->setInt("uDebugLightMode", 0);
-        m_blockShader->setFloat("uSkyIntensity", 1.0f);
-        m_blockShader->setFloat("uHeldSunlight", m_environmentSunlight);
-        m_blockShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
-        m_blockShader->setFloat("uHeldSceneHdrScale", m_sceneHdrScale);
-        m_blockShader->setFloat("uAnimationTime", 0.0f);
-        m_blockShader->setInt("uLightmapDay", 1);
-        m_blockShader->setInt("uLightmapNight", 2);
-        bindShadowUniforms(*m_blockShader);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, texArrayTexture);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, lightmapDayId);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, lightmapNightId);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, grassColormapId);
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, foliageColormapId);
-        // Shadow textures (units 5-10)
-        const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
-        MecraftTextureContract::bindShadowSamplers(m_blockShader->ID, 5, shadowBundle);
-        glBindVertexArray(mesh->vao);
-        {
-            renderer::debug::ScopedDebugGroup group("HeldItem.Block");
-            dumpShadowSamplerStateOnce("HeldItem.Block", *m_blockShader);
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-        }
-        m_blockShader->setInt("uUseModel", 0);
-        m_blockShader->setInt("uVertexFormat", 1);
-        return;
-    }
-
-    if (!useItemMesh) {
-        return;
-    }
-
-    Mesh* mesh = getOrCreateItemMesh(itemId);
-    if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
-        return;
-    }
-
-    m_itemShader->use();
-    m_itemShader->setMat4("model", model);
-    m_itemShader->setMat4("viewProj", viewProj);
-    m_itemShader->setInt("uAtlas", 0);
-    m_itemShader->setInt("uLightmapDay", 1);
-    m_itemShader->setInt("uLightmapNight", 2);
-    m_itemShader->setFloat("uHeldSunlight", m_environmentSunlight);
-    m_itemShader->setFloat("uHeldBlockLight", m_environmentBlockLight);
-    m_itemShader->setFloat("uHeldSceneHdrScale", m_sceneHdrScale);
-    bindShadowUniforms(*m_itemShader);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, itemAtlasTexture);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, lightmapDayId);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, lightmapNightId);
-    // Shadow textures (units 5-10)
-    const MecraftTextureContract::ShadowTextureBundle shadowBundle = buildShadowTextureBundle(m_shadowData);
-    MecraftTextureContract::bindShadowSamplers(m_itemShader->ID, 5, shadowBundle);
-    glBindVertexArray(mesh->vao);
-    {
-        renderer::debug::ScopedDebugGroup group("HeldItem.Item");
-        dumpShadowSamplerStateOnce("HeldItem.Item", *m_itemShader);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-    }
-}
-
 FirstPersonHeldItemRenderer::Mesh* FirstPersonHeldItemRenderer::getOrCreateBlockMesh(const BlockID blockId) {
     const auto it = m_blockMeshes.find(blockId);
     if (it != m_blockMeshes.end()) {
@@ -1445,13 +1063,9 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
     }
 
     renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
-    mesh.vao = shared.vao;
-    mesh.vbo = shared.vbo;
     mesh.rhiVertexBuffer = shared.rhiVertexBuffer;
     mesh.rhiDevice = shared.rhiDevice;
     mesh.vertexCount = shared.vertexCount;
-    shared.vao = 0;
-    shared.vbo = 0;
     shared.rhiVertexBuffer = {};
     shared.rhiDevice = nullptr;
     shared.vertexCount = 0;
@@ -1478,26 +1092,7 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildItemMesh(con
         return mesh;
     }
 
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(ItemModelVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, shade)));
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, nx)));
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "FirstPerson.ItemMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(ItemModelVertex);
@@ -1539,23 +1134,7 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildRightArmMesh
     addSteveQuad(vertices, {xmin, ymin, zmin}, {xmin, ymin, zmax}, {xmin, ymax, zmax}, {xmin, ymax, zmin}, uv[4], {-1.0f, 0.0f, 0.0f});
     addSteveQuad(vertices, {xmax, ymin, zmax}, {xmax, ymin, zmin}, {xmax, ymax, zmin}, {xmax, ymax, zmax}, uv[5], {1.0f, 0.0f, 0.0f});
 
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(SteveVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex), reinterpret_cast<void*>(offsetof(SteveVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SteveVertex), reinterpret_cast<void*>(offsetof(SteveVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex), reinterpret_cast<void*>(offsetof(SteveVertex, nx)));
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "FirstPerson.ArmMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(SteveVertex);
@@ -1574,14 +1153,6 @@ void FirstPersonHeldItemRenderer::destroyMesh(Mesh& mesh) {
     if (mesh.rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
         mesh.rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
         mesh.rhiVertexBuffer = {};
-    }
-    if (mesh.vbo != 0) {
-        glDeleteBuffers(1, &mesh.vbo);
-        mesh.vbo = 0;
-    }
-    if (mesh.vao != 0) {
-        glDeleteVertexArrays(1, &mesh.vao);
-        mesh.vao = 0;
     }
     mesh.vertexCount = 0;
     mesh.rhiDevice = nullptr;

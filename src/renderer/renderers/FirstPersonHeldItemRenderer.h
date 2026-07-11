@@ -16,8 +16,6 @@ class Inventory;
 class RhiCommandList;
 class RhiDevice;
 class ResourceMgr;
-class Shader;
-class Window;
 
 struct FirstPersonHeldItemMotion {
     bool moving = false;
@@ -92,9 +90,6 @@ public:
 
     void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    /// Switch to forward vanilla shaders (no CSM shadow / held_item_shadow contract).
-    /// Must be called after init(). Reverts to deferred shaders if false.
-    void setForwardMode(bool forward);
     void loadConfig();
     void saveConfig() const;
 
@@ -113,7 +108,6 @@ public:
                       const FirstPersonHeldItemMotion& motion,
                       float timeSeconds);
     void prepareRhiFrame(RhiCommandList& commandList);
-    void renderPrepared();
     void renderPrepared(RhiCommandList& commandList);
 
     // Shadow data from Renderer — must be set before render() each frame.
@@ -148,16 +142,6 @@ public:
     /// Convert FirstPersonShadowData (from FrameOutput) to ShadowData.
     static ShadowData fromFirstPersonShadowData(const FirstPersonShadowData& sd);
 
-    void render(const Window& window,
-                const Inventory& inventory,
-                const FirstPersonHeldItemMotion& motion,
-                float timeSeconds);
-    void render(int width,
-                int height,
-                const Inventory& inventory,
-                const FirstPersonHeldItemMotion& motion,
-                float timeSeconds);
-
 private:
     struct alignas(16) CascadeUniform {
         glm::mat4 viewProj{1.0f};
@@ -178,8 +162,6 @@ private:
     static_assert(sizeof(ShadowUniforms) == 480u);
 
     struct Mesh {
-        uint32_t vao = 0;
-        uint32_t vbo = 0;
         RhiBufferHandle rhiVertexBuffer;
         RhiDevice* rhiDevice = nullptr;
         uint32_t vertexCount = 0;
@@ -201,13 +183,6 @@ private:
     void destroyBlockRhiResources();
     void synchronizeShadowTextureViews();
     void destroyShadowTextureViews();
-
-    void drawArm(const glm::mat4& viewProj, const glm::mat4& model);
-    void bindShadowUniforms(Shader& shader) const;
-    void drawItem(ItemID itemId,
-                  const glm::mat4& view,
-                  const glm::mat4& viewProj,
-                  const glm::mat4& model);
 
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
@@ -243,12 +218,6 @@ private:
     RhiPipelineLayoutHandle m_blockPipelineLayout;
     RhiPipelineHandle m_blockPipeline;
     RhiBindGroupHandle m_blockBindGroup;
-    Shader* m_blockShader = nullptr;
-    Shader* m_itemShader = nullptr;
-    Shader* m_steveShader = nullptr;
-    Shader* m_deferredBlockShader = nullptr;  // Original deferred shader (block_item_lit)
-    Shader* m_deferredItemShader = nullptr;   // Original deferred shader (item_model)
-    Shader* m_deferredSteveShader = nullptr;  // Original deferred shader (steve)
     Mesh m_rightArmMesh;
     std::unordered_map<BlockID, Mesh> m_blockMeshes;
     std::unordered_map<ItemID, Mesh> m_itemMeshes;
@@ -283,7 +252,6 @@ private:
         int height = 0;
     };
     PreparedHeldItemFrame m_preparedFrame;
-    bool m_forwardMode = false;
 };
 
 #endif // MECRAFT_FIRST_PERSON_HELD_ITEM_RENDERER_H
