@@ -1155,6 +1155,69 @@ bool testGlRhiBufferCopyToTexture() {
     return true;
 }
 
+bool testGlRhiBufferCopyToTexture3DRegion() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for 3D texture region copy")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_buffer_copy_3d_region_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for 3D texture region copy")) {
+        return false;
+    }
+
+    constexpr std::array<float, 16> kRegionPixels = {
+        1.0f, 0.0f, 0.0f, 1.0f,
+        0.0f, 1.0f, 0.0f, 1.0f,
+        0.0f, 0.0f, 1.0f, 1.0f,
+        1.0f, 1.0f, 1.0f, 1.0f
+    };
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "copy-3d-region-source";
+    bufferDesc.size = sizeof(kRegionPixels);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc);
+    bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    const RhiBufferHandle buffer = device.createBuffer(
+        bufferDesc, kRegionPixels.data(), sizeof(kRegionPixels));
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "copy-3d-region-target";
+    textureDesc.dimension = RhiTextureDimension::Texture3D;
+    textureDesc.format = RhiTextureFormat::Rgba32Float;
+    textureDesc.width = 4u;
+    textureDesc.height = 4u;
+    textureDesc.depthOrLayers = 4u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+    if (!requireTrue(buffer.isValid() && texture.isValid(),
+                     "3D texture region copy resources must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiBufferTextureCopy copy;
+    copy.srcBuffer = buffer;
+    copy.dstTexture = texture;
+    copy.dstX = 1u;
+    copy.dstY = 1u;
+    copy.dstZ = 2u;
+    copy.width = 2u;
+    copy.height = 2u;
+    copy.depth = 1u;
+    RhiCommandList& commandList = device.beginFrame();
+    commandList.copyBufferToTexture(copy);
+    device.submitFrame(commandList);
+    const bool noError = requireTrue(glGetError() == GL_NO_ERROR,
+                                     "3D texture region copy must not report a GL error");
+
+    device.destroyTexture(texture);
+    device.destroyBuffer(buffer);
+    device.shutdown();
+    return noError;
+}
+
 bool testGlRhiComputeStorageTexture() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for compute dispatch")) {
@@ -2556,6 +2619,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiBufferCopyToTexture()) {
+        return 1;
+    }
+    if (!testGlRhiBufferCopyToTexture3DRegion()) {
         return 1;
     }
     if (!testGlRhiComputeStorageTexture()) {

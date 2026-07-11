@@ -1416,21 +1416,58 @@ void GlRhiCommandList::copyBufferToTexture(const RhiBufferTextureCopy& copy) {
         recordForHandle(m_device->m_data->buffers, m_device->m_data->bufferRecords, copy.srcBuffer);
     GlTextureRecord* dst =
         recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, copy.dstTexture);
-    if (src == nullptr || dst == nullptr || dst->desc.dimension != RhiTextureDimension::Texture2D) {
-        logRhiError("copyBufferToTexture requires a valid source buffer and 2D destination texture");
+    if (m_rendering || src == nullptr || dst == nullptr ||
+        (src->desc.usage & rhiFlag(RhiBufferUsage::TransferSrc)) == 0u ||
+        (dst->desc.usage & rhiFlag(RhiTextureUsage::TransferDst)) == 0u ||
+        copy.mipLevel >= dst->desc.mipLevels || copy.width == 0u || copy.height == 0u || copy.depth == 0u) {
+        logRhiError("copyBufferToTexture received an invalid resource or transfer contract");
+        return;
+    }
+
+    const uint32_t mipWidth = std::max(1u, dst->desc.width >> copy.mipLevel);
+    const uint32_t mipHeight = std::max(1u, dst->desc.height >> copy.mipLevel);
+    const uint32_t mipDepth = dst->desc.dimension == RhiTextureDimension::Texture3D
+        ? std::max(1u, dst->desc.depthOrLayers >> copy.mipLevel)
+        : dst->desc.depthOrLayers;
+    const uint32_t targetZ = dst->desc.dimension == RhiTextureDimension::Texture2D
+        ? copy.dstZ
+        : copy.arrayLayer + copy.dstZ;
+    const bool invalid2D = dst->desc.dimension == RhiTextureDimension::Texture2D &&
+                           (copy.arrayLayer != 0u || targetZ != 0u || copy.depth != 1u);
+    const size_t copySize = static_cast<size_t>(copy.width) * copy.height * copy.depth *
+                            textureFormatSizeBytes(dst->desc.format);
+    if (invalid2D || copy.dstX > mipWidth || copy.width > mipWidth - copy.dstX ||
+        copy.dstY > mipHeight || copy.height > mipHeight - copy.dstY ||
+        targetZ > mipDepth || copy.depth > mipDepth - targetZ ||
+        copy.bufferOffset > src->desc.size || copySize > src->desc.size - copy.bufferOffset) {
+        logRhiError("copyBufferToTexture received an out-of-range copy region");
         return;
     }
 
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, src->buffer);
-    glTextureSubImage2D(dst->texture,
-                        static_cast<GLint>(copy.mipLevel),
-                        0,
-                        0,
-                        static_cast<GLsizei>(copy.width),
-                        static_cast<GLsizei>(copy.height),
-                        dst->format.externalFormat,
-                        dst->format.type,
-                        reinterpret_cast<const void*>(copy.bufferOffset));
+    if (dst->desc.dimension == RhiTextureDimension::Texture2D) {
+        glTextureSubImage2D(dst->texture,
+                            static_cast<GLint>(copy.mipLevel),
+                            static_cast<GLint>(copy.dstX),
+                            static_cast<GLint>(copy.dstY),
+                            static_cast<GLsizei>(copy.width),
+                            static_cast<GLsizei>(copy.height),
+                            dst->format.externalFormat,
+                            dst->format.type,
+                            reinterpret_cast<const void*>(copy.bufferOffset));
+    } else {
+        glTextureSubImage3D(dst->texture,
+                            static_cast<GLint>(copy.mipLevel),
+                            static_cast<GLint>(copy.dstX),
+                            static_cast<GLint>(copy.dstY),
+                            static_cast<GLint>(targetZ),
+                            static_cast<GLsizei>(copy.width),
+                            static_cast<GLsizei>(copy.height),
+                            static_cast<GLsizei>(copy.depth),
+                            dst->format.externalFormat,
+                            dst->format.type,
+                            reinterpret_cast<const void*>(copy.bufferOffset));
+    }
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0u);
 }
 

@@ -110,6 +110,9 @@ struct RhiBufferTextureCopy {
     uint64_t bufferOffset = 0;
     uint32_t mipLevel = 0;
     uint32_t arrayLayer = 0;
+    uint32_t dstX = 0;
+    uint32_t dstY = 0;
+    uint32_t dstZ = 0;
     uint32_t width = 1;
     uint32_t height = 1;
     uint32_t depth = 1;
