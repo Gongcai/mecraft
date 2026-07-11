@@ -22,7 +22,6 @@
 #include "../debug/DebugFrameProfiler.h"
 #endif
 
-#include <glad/glad.h>
 
 // --------------------------------------------------------------------------
 // PIMPL definition — mirrors the old Game::RenderRuntime struct.
@@ -130,7 +129,6 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
         return false;
     }
 
-    glEnable(GL_DEPTH_TEST);
     return true;
 }
 

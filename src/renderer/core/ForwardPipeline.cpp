@@ -17,7 +17,6 @@
 #include "../../world/DayNightSystem.h"
 #include "../../particle/ParticleSystem.h"
 
-#include <glad/glad.h>
 #include <algorithm>
 
 ForwardPipeline::ForwardPipeline() = default;
@@ -149,12 +148,6 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
         1.0f
     });
 
-    glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
     return true;
 }
 
@@ -304,10 +297,6 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
     if (!m_shared || !ctx.cameraPtr || !ctx.windowPtr) {
         return;
     }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
 
     if (m_shared->blockEntityRenderer && m_backbufferCommandList != nullptr) {
         m_shared->blockEntityRenderer->renderForward(*m_backbufferCommandList,

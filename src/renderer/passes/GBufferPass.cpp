@@ -14,7 +14,6 @@
 #include "../../ecs/GameplayRegistry.h"
 #include "../../world/IWorldView.h"
 
-#include <glad/glad.h>
 
 #include <algorithm>
 
@@ -165,12 +164,6 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     if (commandList == nullptr) {
         return;
     }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    // Cross-shaped block drops emit single-sided quads without back-faces
-    glDisable(GL_CULL_FACE);
 
     // Match entity velocity: current rasterization may be jittered, while
     // previous positions target the resolved history grid.

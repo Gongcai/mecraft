@@ -18,8 +18,6 @@
 #include "../../world/World.h"
 #include "../../particle/ParticleSystem.h"
 
-#include <glad/glad.h>
-
 #include <algorithm>
 
 namespace {
@@ -592,9 +590,6 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
 
     rhiDevice.submitFrame(commandList);
 
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
-    glDisable(GL_BLEND);
 }
 
 void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings) {
