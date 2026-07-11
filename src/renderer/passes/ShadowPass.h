@@ -72,8 +72,8 @@ private:
                               const glm::vec3& cameraPos, float splitNear, float splitFar);
 
     /// Render block entity models into the current shadow cascade layer.
-    void renderShadowBlockEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                                   const glm::vec3& cameraPos, float splitNear, float splitFar);
+    void renderShadowBlockEntities(RhiCommandList& commandList,
+                                   const glm::mat4& shadowViewProj);
 
     /// Render dropped items/blocks into the current shadow cascade layer.
     void renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,

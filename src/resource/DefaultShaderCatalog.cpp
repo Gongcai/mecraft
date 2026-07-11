@@ -57,8 +57,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"steve_forward", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve_forward.frag"},
     {"entity_gbuffer", SHADERS_DIR "/entity_gbuffer.vert", SHADERS_DIR "/entity_gbuffer.frag"},
     {"entity_shadow", SHADERS_DIR "/entity_shadow.vert", SHADERS_DIR "/entity_shadow.frag"},
-    {"block_entity_gbuffer", SHADERS_DIR "/block_entity_gbuffer.vert", SHADERS_DIR "/block_entity_gbuffer.frag"},
-    {"block_entity_shadow", SHADERS_DIR "/block_entity_shadow.vert", SHADERS_DIR "/block_entity_shadow.frag"},
     {"drop_gbuffer", SHADERS_DIR "/drop_gbuffer.vert", SHADERS_DIR "/drop_gbuffer.frag"},
     {"item_gbuffer", SHADERS_DIR "/item_gbuffer.vert", SHADERS_DIR "/item_gbuffer.frag"},
     {"item_shadow", SHADERS_DIR "/item_shadow.vert", SHADERS_DIR "/item_shadow.frag"},

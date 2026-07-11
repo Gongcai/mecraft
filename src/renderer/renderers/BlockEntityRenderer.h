@@ -30,14 +30,15 @@ public:
     void beginFrame();
     void prepareFrame(const IWorldView& worldView);
     [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList);
+    [[nodiscard]] bool prepareShadow(RhiCommandList& commandList,
+                                     const glm::vec3& cameraPos,
+                                     float splitNear,
+                                     float splitFar);
 
     void renderToGBuffer(RhiCommandList& commandList,
                          const glm::mat4& viewProj);
-    void renderToShadowMap(const IWorldView& worldView,
-                           const glm::mat4& shadowViewProj,
-                           const glm::vec3& cameraPos,
-                           float splitNear,
-                           float splitFar);
+    void renderToShadowMap(RhiCommandList& commandList,
+                           const glm::mat4& shadowViewProj);
     void renderForward(const IWorldView& worldView,
                        const glm::mat4& viewProj,
                        float skyIntensity);
@@ -70,6 +71,7 @@ private:
         RhiTextureHandle texture;
         RhiTextureViewHandle textureView;
         RhiBindGroupHandle gbufferBindGroup;
+        RhiBindGroupHandle shadowBindGroup;
         bool usesHorizontalFacing = false;
     };
 
@@ -124,23 +126,25 @@ private:
 
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
-    Shader* m_gbufferShader = nullptr;
-    Shader* m_shadowShader = nullptr;
     Shader* m_forwardShader = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
     std::vector<BlockEntityInstance*> m_flatInstances;
-    uint32_t m_instanceVbo = 0;
     RhiGrowableBuffer m_rhiInstanceBuffer;
-    std::size_t m_instanceCapacity = 0;
     std::vector<InstancedDrawData> m_instanceData;
     std::vector<PreparedModelBatch> m_gbufferBatches;
+    std::vector<PreparedModelBatch> m_shadowBatches;
     RhiSamplerHandle m_rhiSampler;
     RhiShaderHandle m_gbufferVertexShader;
     RhiShaderHandle m_gbufferFragmentShader;
     RhiBindGroupLayoutHandle m_gbufferBindGroupLayout;
     RhiPipelineLayoutHandle m_gbufferPipelineLayout;
     RhiPipelineHandle m_gbufferPipeline;
+    RhiShaderHandle m_shadowVertexShader;
+    RhiShaderHandle m_shadowFragmentShader;
+    RhiBindGroupLayoutHandle m_shadowBindGroupLayout;
+    RhiPipelineLayoutHandle m_shadowPipelineLayout;
+    RhiPipelineHandle m_shadowPipeline;
     uint64_t m_cacheSyncSerial = 0;
     uint64_t m_syncedActiveChunkRevision = 0;
     uint64_t m_syncedBlockContentRevision = 0;
@@ -156,8 +160,6 @@ private:
     static glm::mat4 buildModelMatrix(const ModelEntry& entry,
                                       BlockStateId stateId,
                                       const glm::vec3& blockPosition);
-    void configureInstanceAttributes(const Mesh& mesh) const;
-    void ensureInstanceCapacity(std::size_t instanceCount);
     void synchronizeInstanceCache(const IWorldView& worldView);
     void rebuildFlatInstanceList();
     void updateInstanceLightsForFrame();
@@ -165,12 +167,6 @@ private:
                              const SubChunk& subChunk,
                              int scy,
                              SectionCache& cache) const;
-    void drawBlockEntitiesInstanced(const IWorldView& worldView,
-                                    bool useSplitCulling,
-                                    const glm::vec3& cameraPos,
-                                    float splitNear,
-                                    float splitFar);
-
     void drawBlockEntities(const IWorldView& worldView,
                            Shader& shader,
                            int modelLoc,

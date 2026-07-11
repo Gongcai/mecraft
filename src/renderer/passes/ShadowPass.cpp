@@ -86,26 +86,12 @@ void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::ma
 
 }
 
-void ShadowPass::renderShadowBlockEntities(const IWorldView& worldView,
-                                           const glm::mat4& shadowViewProj,
-                                           const glm::vec3& cameraPos,
-                                           const float splitNear,
-                                           const float splitFar) {
-    if (m_blockEntityRenderer == nullptr || m_entityShadowShader == nullptr) {
+void ShadowPass::renderShadowBlockEntities(RhiCommandList& commandList,
+                                           const glm::mat4& shadowViewProj) {
+    if (m_blockEntityRenderer == nullptr) {
         return;
     }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
-    m_entityShadowShader->use();
-    m_entityShadowShader->setInt("uTexture", 0);
-
-    m_blockEntityRenderer->renderToShadowMap(worldView, shadowViewProj, cameraPos, splitNear, splitFar);
-
+    m_blockEntityRenderer->renderToShadowMap(commandList, shadowViewProj);
 }
 
 void ShadowPass::renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
@@ -162,6 +148,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (m_blockEntityRenderer != nullptr) {
+        m_blockEntityRenderer->prepareFrame(worldView);
+    }
 
     // Update shadow cascades via ShadowRenderer.
     m_shadowRenderer->computeLightDirection(toLegacySkyColors(ctx.skyColors));
@@ -339,6 +328,13 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                           "Shadow.Cascade%d.Opaque", cascade);
             commandList.beginDebugLabel(opaqueLabel, glm::vec4(0.70f, 0.78f, 1.0f, 1.0f));
             commandList.insertDebugMarker(cullerLabel, glm::vec4(0.45f, 0.65f, 1.0f, 1.0f));
+            if (m_blockEntityRenderer != nullptr &&
+                !m_blockEntityRenderer->prepareShadow(commandList, ctx.camera.position,
+                                                      cascadeData.splitNear,
+                                                      cascadeData.splitFar)) {
+                commandList.endDebugLabel();
+                return output;
+            }
             TerrainShadowFrameData shadowFrame;
             shadowFrame.modelView = cascadeData.view;
             shadowFrame.projection = cascadeData.projection;
@@ -371,8 +367,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     ctx.shared->terrainRhiPipelines->shadowOpaquePipeline());
             }
             // Block entity shadow: render chest-style entity models into this cascade.
-            renderShadowBlockEntities(worldView, cascadeData.viewProj, ctx.camera.position,
-                                      cascadeData.splitNear, cascadeData.splitFar);
+            renderShadowBlockEntities(commandList, cascadeData.viewProj);
             // Entity shadow: render humanoid/mob depth into this cascade with distance/split culling.
             renderShadowEntities(worldView, cascadeData.viewProj, ctx.camera.position, cascadeData.splitNear, cascadeData.splitFar);
             // Drop shadow: render dropped items/blocks depth into this cascade.
