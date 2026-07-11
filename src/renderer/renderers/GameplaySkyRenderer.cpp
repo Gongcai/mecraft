@@ -211,6 +211,11 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
 
 void GameplaySkyRenderer::shutdown() {
     destroyMeshes();
+    if (m_captureNoiseView.isValid()) {
+        m_rhiDevice->destroyTextureView(m_captureNoiseView);
+        m_captureNoiseView = {};
+        m_captureNoiseTexture = {};
+    }
     if (m_dummySkyCaptureTexture != 0) {
         glDeleteTextures(1, &m_dummySkyCaptureTexture);
         m_dummySkyCaptureTexture = 0;
@@ -219,6 +224,27 @@ void GameplaySkyRenderer::shutdown() {
     m_deferredShader = nullptr;
     m_resourceMgr = nullptr;
     m_rhiDevice = nullptr;
+}
+
+void GameplaySkyRenderer::synchronizeCaptureNoiseView(const RhiTextureHandle noiseTexture) {
+    if (!noiseTexture.isValid()) {
+        std::abort();
+    }
+    if (m_captureNoiseTexture.index == noiseTexture.index &&
+        m_captureNoiseTexture.generation == noiseTexture.generation) {
+        return;
+    }
+    if (m_captureNoiseView.isValid()) {
+        m_rhiDevice->destroyTextureView(m_captureNoiseView);
+    }
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = noiseTexture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    m_captureNoiseView = m_rhiDevice->createTextureView(viewDesc);
+    if (!m_captureNoiseView.isValid()) {
+        std::abort();
+    }
+    m_captureNoiseTexture = noiseTexture;
 }
 
 void GameplaySkyRenderer::setForwardMode(bool forward) {
@@ -254,12 +280,15 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
                                                   const int skyCaptureWidth,
                                                   const int skyCaptureHeight,
                                                   const RhiTextureHandle atmosphereLutTexture,
+                                                  const RhiTextureViewHandle atmosphereLutView,
                                                   const RhiTextureHandle noiseTexture,
                                                   const SkyIlluminanceData& illuminance,
                                                   const CloudySkyCaptureParams& params) {
-    if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
+    if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() ||
+        !atmosphereLutView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
     }
+    synchronizeCaptureNoiseView(noiseTexture);
 
     const renderer::gl::ScopedStateSnapshot stateGuard;
 

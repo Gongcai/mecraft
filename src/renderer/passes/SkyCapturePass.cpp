@@ -128,7 +128,8 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                                         targets.skyCaptureTextureViewHandle(),
                                         targets.skyCaptureWidth(),
                                         targets.skyCaptureHeight(),
-                                        atmosphereLut, noiseTexture,
+                                        atmosphereLut, targets.atmosphereLutTextureViewHandle(),
+                                        noiseTexture,
                                         illum, cloudyParams);
 
     RhiColorAttachment metadataAttachment;

@@ -87,6 +87,7 @@ public:
     void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList,
                                 RhiTextureViewHandle targetView, int skyCaptureWidth,
                                 int skyCaptureHeight, RhiTextureHandle atmosphereLutTexture,
+                                RhiTextureViewHandle atmosphereLutView,
                                 RhiTextureHandle noiseTexture,
                                 const SkyIlluminanceData& illuminance,
                                 const CloudySkyCaptureParams& params);
@@ -109,6 +110,7 @@ private:
     void initCloudMesh();
     void ensureDummySkyCaptureTexture();
     void bindDummySkyCaptureTexture(int32_t unit);
+    void synchronizeCaptureNoiseView(RhiTextureHandle noiseTexture);
     void renderSkyGradient(const Camera& camera, float aspect, const SkyColors& colors, uint32_t skyCaptureTexture);
     void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
     void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
@@ -130,6 +132,8 @@ private:
     RhiBufferHandle m_skyVertexBuffer;
     RhiBufferHandle m_haloVertexBuffer;
     RhiBufferHandle m_cloudVertexBuffer;
+    RhiTextureHandle m_captureNoiseTexture;
+    RhiTextureViewHandle m_captureNoiseView;
     int32_t m_haloVertexCount = 0;
     int32_t m_cloudVertexCount = 0;
     CloudMeshInfo m_cloudMeshInfo{};
