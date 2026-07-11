@@ -1046,63 +1046,19 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     context.backdropBlurWidth = 0;
     context.backdropBlurHeight = 0;
 
-    GLint viewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    const int sourceWidth = std::max(1, viewport[2]);
-    const int sourceHeight = std::max(1, viewport[3]);
-
-    GLint prevViewport[4] = {0, 0, 0, 0};
-    GLint prevProgram = 0;
-    GLint prevVao = 0;
-    GLint prevActiveTexture = GL_TEXTURE0;
-    GLint prevTexture0 = 0;
-    GLboolean prevDepthTest = GL_FALSE;
-    GLboolean prevBlend = GL_FALSE;
-    GLboolean prevDepthMask = GL_TRUE;
-
-    glGetIntegerv(GL_VIEWPORT, prevViewport);
-    glGetIntegerv(GL_CURRENT_PROGRAM, &prevProgram);
-    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &prevVao);
-    glGetIntegerv(GL_ACTIVE_TEXTURE, &prevActiveTexture);
-    glActiveTexture(GL_TEXTURE0);
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &prevTexture0);
-    prevDepthTest = glIsEnabled(GL_DEPTH_TEST);
-    prevBlend = glIsEnabled(GL_BLEND);
-    glGetBooleanv(GL_DEPTH_WRITEMASK, &prevDepthMask);
-
-    auto restoreState = [&]() {
-        glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
-        glUseProgram(static_cast<GLuint>(prevProgram));
-        glBindVertexArray(static_cast<GLuint>(prevVao));
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(prevTexture0));
-        glActiveTexture(static_cast<GLenum>(prevActiveTexture));
-        if (prevDepthTest) {
-            glEnable(GL_DEPTH_TEST);
-        } else {
-            glDisable(GL_DEPTH_TEST);
-        }
-        if (prevBlend) {
-            glEnable(GL_BLEND);
-        } else {
-            glDisable(GL_BLEND);
-        }
-        glDepthMask(prevDepthMask);
-    };
+    const int sourceWidth = std::max(1, context.screenWidth);
+    const int sourceHeight = std::max(1, context.screenHeight);
 
     if (!ensureBackdropBlurTargets(sourceWidth, sourceHeight, rhiDevice)) {
-        restoreState();
         return;
     }
     if (!ensureBackdropBlurBindGroups(rhiDevice)) {
-        restoreState();
         return;
     }
 
     if (!m_backdropSource.isValid() || !m_backdropBlur[0].isValid() ||
         !m_backdropBlur[1].isValid() || !m_backdropBlurView[0].isValid() ||
         !m_backdropBlurView[1].isValid()) {
-        restoreState();
         return;
     }
 
@@ -1112,10 +1068,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     sourceBlit.srcView = rhiDevice.currentSwapchainColorView();
     sourceBlit.dstView = m_backdropSourceView;
     commandList.blitTexture(sourceBlit);
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
 
     auto blurPass = [&](const uint32_t bindGroupIndex,
                         const RhiTextureViewHandle outputView,
@@ -1151,8 +1103,6 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     blurPass(1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
 
     rhiDevice.submitFrame(commandList);
-
-    restoreState();
 
     context.backdropBlur = m_backdropBlur[1];
     context.backdropSourceWidth = sourceWidth;
