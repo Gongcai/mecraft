@@ -726,6 +726,59 @@ bool testGlRhiCubemapInitialData() {
     return true;
 }
 
+bool testGlRhiGenerateMipmaps() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for mipmap generation")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_generate_mipmaps_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for mipmap generation")) {
+        return false;
+    }
+
+    std::array<uint8_t, 128> pixels{};
+    for (size_t index = 0; index < pixels.size(); index += 4u) {
+        pixels[index] = 255u;
+        pixels[index + 3u] = 255u;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "mipmap-array";
+    textureDesc.dimension = RhiTextureDimension::Texture2DArray;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 4u;
+    textureDesc.height = 4u;
+    textureDesc.depthOrLayers = 2u;
+    textureDesc.mipLevels = 3u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+
+    RhiTextureInitialData initialData;
+    initialData.pixels = pixels.data();
+    initialData.sizeBytes = pixels.size();
+    initialData.layerCount = 2u;
+    const RhiTextureHandle texture = device.createTexture(textureDesc, &initialData);
+    if (!requireTrue(texture.isValid(), "texture array for mipmap generation must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiCommandList& commandList = device.beginFrame();
+    commandList.generateMipmaps(texture);
+    device.submitFrame(commandList);
+    if (!requireTrue(glGetError() == GL_NO_ERROR, "RHI mipmap generation must not report a GL error")) {
+        device.destroyTexture(texture);
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyTexture(texture);
+    device.shutdown();
+    return true;
+}
+
 bool testGlRhiRegisteredTextureViewRendering() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for registered texture view rendering")) {
@@ -2505,6 +2558,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiCubemapInitialData()) {
+        return 1;
+    }
+    if (!testGlRhiGenerateMipmaps()) {
         return 1;
     }
     if (!testGlRhiRegisteredTextureViewRendering()) {

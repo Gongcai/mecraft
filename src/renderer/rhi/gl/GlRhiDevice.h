@@ -39,6 +39,7 @@ public:
     void copyBufferToTexture(const RhiBufferTextureCopy& copy) override;
     void copyTexture(const RhiTextureCopy& copy) override;
     void blitTexture(const RhiTextureBlit& blit) override;
+    void generateMipmaps(RhiTextureHandle texture) override;
     void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) override;
 
 private:

@@ -50,6 +50,7 @@ public:
     virtual void copyBufferToTexture(const RhiBufferTextureCopy& copy) = 0;
     virtual void copyTexture(const RhiTextureCopy& copy) = 0;
     virtual void blitTexture(const RhiTextureBlit& blit) = 0;
+    virtual void generateMipmaps(RhiTextureHandle texture) = 0;
 
     virtual void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) = 0;
 };

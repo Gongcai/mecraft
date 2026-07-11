@@ -1614,6 +1614,20 @@ void GlRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
     destroyFramebuffers();
 }
 
+void GlRhiCommandList::generateMipmaps(const RhiTextureHandle texture) {
+    if (m_device == nullptr) {
+        logRhiError("generateMipmaps requires an attached device");
+        return;
+    }
+    const GlTextureRecord* record = recordForHandle(
+        m_device->m_data->textures, m_device->m_data->textureRecords, texture);
+    if (record == nullptr || record->desc.mipLevels <= 1u || record->format.depth) {
+        logRhiError("generateMipmaps requires a valid color texture with multiple mip levels");
+        return;
+    }
+    glGenerateTextureMipmap(record->texture);
+}
+
 void GlRhiCommandList::writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) {
     (void) pool;
     (void) queryIndex;
