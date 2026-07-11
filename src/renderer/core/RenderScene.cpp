@@ -340,15 +340,15 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 static_cast<float>(frameRenderSize.x),
                 static_cast<float>(frameRenderSize.y));
 
-            if (weather.rainStrength > 0.01f) {
-                request.rainRenderer.render(projMat, viewMat,
+            if (weatherCommandList != nullptr && weather.rainStrength > 0.01f) {
+                request.rainRenderer.render(*weatherCommandList, projMat, viewMat,
                                              weather.rainStrength, cameraRainVisibility,
                                              alphaScale, depthTexture,
                                              precipitationScreenSize,
                                              hardwareDepthTest);
             }
-            if (weather.snowStrength > 0.01f) {
-                request.rainRenderer.renderSnow(projMat, viewMat,
+            if (weatherCommandList != nullptr && weather.snowStrength > 0.01f) {
+                request.rainRenderer.renderSnow(*weatherCommandList, projMat, viewMat,
                                                 weather.snowStrength, cameraRainVisibility,
                                                 alphaScale * 0.6f, depthTexture,
                                                 precipitationScreenSize,

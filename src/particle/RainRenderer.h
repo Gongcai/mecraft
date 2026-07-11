@@ -8,6 +8,7 @@
 
 class Shader;
 class ResourceMgr;
+class RhiCommandList;
 
 // Textured precipitation renderer using vanilla rain.png / snow.png atlas.
 // Spawns camera-relative billboard quads in a cylinder, samples streak columns
@@ -24,7 +25,8 @@ public:
                       float dt);
 
     // Render rain around the given camera position.
-    void render(const glm::mat4& projection,
+    void render(RhiCommandList& commandList,
+                const glm::mat4& projection,
                 const glm::mat4& view,
                 float rainStrength,
                 float skyLightAtCamera,
@@ -34,7 +36,8 @@ public:
                 bool hardwareDepthTest = true);
 
     // Render snow around the given camera position.
-    void renderSnow(const glm::mat4& projection,
+    void renderSnow(RhiCommandList& commandList,
+                    const glm::mat4& projection,
                     const glm::mat4& view,
                     float snowStrength,
                     float skyLightAtCamera,

@@ -232,7 +232,8 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     glActiveTexture(GL_TEXTURE0);
 }
 
-void RainRenderer::render(const glm::mat4& projection,
+void RainRenderer::render(RhiCommandList& commandList,
+                           const glm::mat4& projection,
                            const glm::mat4& view,
                            float rainStrength,
                            float skyLightAtCamera,
@@ -240,6 +241,7 @@ void RainRenderer::render(const glm::mat4& projection,
                            const RhiTextureHandle sceneDepthTexture,
                            const glm::vec2& screenSize,
                            bool hardwareDepthTest) {
+    static_cast<void>(commandList);
     renderPrecipitation(projection, view,
                         m_rainTex, m_rainVertices,
                         rainStrength, skyLightAtCamera,
@@ -251,7 +253,8 @@ void RainRenderer::render(const glm::mat4& projection,
                         hardwareDepthTest);
 }
 
-void RainRenderer::renderSnow(const glm::mat4& projection,
+void RainRenderer::renderSnow(RhiCommandList& commandList,
+                               const glm::mat4& projection,
                                const glm::mat4& view,
                                float snowStrength,
                                float skyLightAtCamera,
@@ -259,6 +262,7 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                const RhiTextureHandle sceneDepthTexture,
                                const glm::vec2& screenSize,
                                bool hardwareDepthTest) {
+    static_cast<void>(commandList);
     renderPrecipitation(projection, view,
                         m_snowTex, m_snowVertices,
                         snowStrength, skyLightAtCamera,
