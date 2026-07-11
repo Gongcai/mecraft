@@ -49,8 +49,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"postprocess", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/postprocess.frag"},
     {"ui_color", SHADERS_DIR "/ui_color.vert", SHADERS_DIR "/ui_color.frag"},
     {"ui_glass", SHADERS_DIR "/ui_glass.vert", SHADERS_DIR "/ui_glass.frag"},
-    {"skybox", SHADERS_DIR "/skybox.vert", SHADERS_DIR "/skybox.frag"},
-    {"blur", SHADERS_DIR "/blur.vert", SHADERS_DIR "/blur.frag"},
 };
 
 } // namespace

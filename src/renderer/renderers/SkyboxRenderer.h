@@ -7,13 +7,13 @@
 
 class ResourceMgr;
 class RhiDevice;
-class Shader;
 
 class SkyboxRenderer {
 public:
     void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    void render(float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice);
+    void render(int width, int height, float aspect, float yawDegrees,
+                float pitchDegrees, RhiDevice& rhiDevice);
 
 private:
     void initCubeMesh();
@@ -21,8 +21,6 @@ private:
     bool ensureBlurTargets(RhiDevice& rhiDevice, int width, int height);
     void destroyBlurTargets();
 
-    Shader* m_shader = nullptr;
-    Shader* m_blurShader = nullptr;
     RhiTextureHandle m_cubemapTexture;
     RhiTextureViewHandle m_cubemapView;
     RhiSamplerHandle m_cubemapSampler;
@@ -33,10 +31,15 @@ private:
     RhiPipelineLayoutHandle m_skyboxPipelineLayout;
     RhiPipelineHandle m_skyboxPipeline;
     RhiBindGroupHandle m_skyboxBindGroup;
+    RhiSamplerHandle m_blurSampler;
+    RhiShaderHandle m_blurVertexShader;
+    RhiShaderHandle m_blurFragmentShader;
+    RhiBindGroupLayoutHandle m_blurBindGroupLayout;
+    RhiPipelineLayoutHandle m_blurPipelineLayout;
+    RhiPipelineHandle m_blurPipeline;
+    RhiBindGroupHandle m_sceneBlurBindGroup;
+    RhiBindGroupHandle m_pingBlurBindGroup;
     RhiDevice* m_rhiDevice = nullptr;
-    uint32_t m_cubeVao = 0;
-    uint32_t m_cubeVbo = 0;
-    uint32_t m_fullscreenVao = 0;
 
     // Blur pipeline: scene texture + two ping-pong textures at half resolution
     RhiTextureHandle m_sceneColorHandle;

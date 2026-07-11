@@ -352,7 +352,9 @@ void MainMenuAppState::render(double frameTime) {
     }
     endMenuPass(m_deps.rhiDevice, commandList);
 
-    m_skyboxRenderer.render(m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f, m_deps.rhiDevice);
+    m_skyboxRenderer.render(m_deps.window.getWidth(), m_deps.window.getHeight(),
+                            m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f,
+                            m_deps.rhiDevice);
     UIRenderContext sceneContext =
         m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
 

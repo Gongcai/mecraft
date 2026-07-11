@@ -1,9 +1,6 @@
-#version 330 core
-
-out vec2 vTexCoord;
-
+#version 450 core
+layout(location = 0) out vec2 vTexCoord;
 void main() {
-    // Fullscreen triangle: vertices at (-1,-1), (3,-1), (-1,3)
     float x = -1.0 + float((gl_VertexID & 1) << 2);
     float y = -1.0 + float((gl_VertexID & 2) << 1);
     vTexCoord = vec2(x * 0.5 + 0.5, y * 0.5 + 0.5);

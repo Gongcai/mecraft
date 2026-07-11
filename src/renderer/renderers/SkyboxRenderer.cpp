@@ -3,17 +3,14 @@
 #include "../../Diagnostics.h"
 #include <algorithm>
 #include <cstdlib>
-#include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
-#include "../core/Shader.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
 namespace {
@@ -110,8 +107,6 @@ void beginSkyboxBlurOutput(RhiCommandList& commandList,
 
 void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
-    m_shader = resourceMgr.getShader("skybox");
-    m_blurShader = resourceMgr.getShader("blur");
     m_cubemapTexture = resourceMgr.getCubemap("menu_skybox");
     if (!m_cubemapTexture.isValid()) std::abort();
     RhiTextureViewDesc cubemapViewDesc;
@@ -172,9 +167,53 @@ void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     if (!m_skyboxVertexShader.isValid() || !m_skyboxFragmentShader.isValid() ||
         !m_skyboxBindGroupLayout.isValid() || !m_skyboxPipelineLayout.isValid() ||
         !m_skyboxPipeline.isValid() || !m_skyboxBindGroup.isValid()) std::abort();
+    const auto blurVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/skybox_blur_rhi.vert");
+    const auto blurFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/skybox_blur_rhi.frag");
+    if (!blurVertexSource || !blurFragmentSource) std::abort();
+    RhiShaderDesc blurShaderDesc;
+    blurShaderDesc.debugName = "Skybox.Blur.Vertex";
+    blurShaderDesc.stage = RhiShaderStage::Vertex;
+    blurShaderDesc.source = blurVertexSource->c_str();
+    blurShaderDesc.sourceSize = blurVertexSource->size();
+    m_blurVertexShader = rhiDevice.createShader(blurShaderDesc);
+    blurShaderDesc.debugName = "Skybox.Blur.Fragment";
+    blurShaderDesc.stage = RhiShaderStage::Fragment;
+    blurShaderDesc.source = blurFragmentSource->c_str();
+    blurShaderDesc.sourceSize = blurFragmentSource->size();
+    m_blurFragmentShader = rhiDevice.createShader(blurShaderDesc);
+    RhiSamplerDesc blurSamplerDesc;
+    blurSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    blurSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    m_blurSampler = rhiDevice.createSampler(blurSamplerDesc);
+    RhiBindGroupLayoutDesc blurBindGroupLayoutDesc;
+    blurBindGroupLayoutDesc.debugName = "Skybox.Blur.BindGroupLayout";
+    blurBindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
+                                               rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_blurBindGroupLayout = rhiDevice.createBindGroupLayout(blurBindGroupLayoutDesc);
+    RhiPipelineLayoutDesc blurPipelineLayoutDesc;
+    blurPipelineLayoutDesc.debugName = "Skybox.Blur.PipelineLayout";
+    blurPipelineLayoutDesc.bindGroupLayouts.push_back(m_blurBindGroupLayout);
+    blurPipelineLayoutDesc.pushConstantBytes = sizeof(glm::vec4);
+    blurPipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_blurPipelineLayout = rhiDevice.createPipelineLayout(blurPipelineLayoutDesc);
+    RhiGraphicsPipelineDesc blurPipelineDesc;
+    blurPipelineDesc.debugName = "Skybox.Blur.Pipeline";
+    blurPipelineDesc.vertexShader = m_blurVertexShader;
+    blurPipelineDesc.fragmentShader = m_blurFragmentShader;
+    blurPipelineDesc.layout = m_blurPipelineLayout;
+    blurPipelineDesc.raster.cullMode = RhiCullMode::None;
+    blurPipelineDesc.depthStencil.depthTestEnabled = false;
+    blurPipelineDesc.depthStencil.depthWriteEnabled = false;
+    blurPipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm};
+    blurPipelineDesc.blend.attachments.resize(1u);
+    m_blurPipeline = rhiDevice.createGraphicsPipeline(blurPipelineDesc);
+    if (!m_blurVertexShader.isValid() || !m_blurFragmentShader.isValid() ||
+        !m_blurSampler.isValid() || !m_blurBindGroupLayout.isValid() ||
+        !m_blurPipelineLayout.isValid() || !m_blurPipeline.isValid()) std::abort();
     initCubeMesh();
 
-    glGenVertexArrays(1, &m_fullscreenVao);
 }
 
 void SkyboxRenderer::shutdown() {
@@ -186,16 +225,15 @@ void SkyboxRenderer::shutdown() {
     if (m_skyboxBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_skyboxBindGroupLayout);
     if (m_skyboxFragmentShader.isValid()) m_rhiDevice->destroyShader(m_skyboxFragmentShader);
     if (m_skyboxVertexShader.isValid()) m_rhiDevice->destroyShader(m_skyboxVertexShader);
+    if (m_blurPipeline.isValid()) m_rhiDevice->destroyPipeline(m_blurPipeline);
+    if (m_blurPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_blurPipelineLayout);
+    if (m_blurBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_blurBindGroupLayout);
+    if (m_blurSampler.isValid()) m_rhiDevice->destroySampler(m_blurSampler);
+    if (m_blurFragmentShader.isValid()) m_rhiDevice->destroyShader(m_blurFragmentShader);
+    if (m_blurVertexShader.isValid()) m_rhiDevice->destroyShader(m_blurVertexShader);
     if (m_cubemapSampler.isValid()) m_rhiDevice->destroySampler(m_cubemapSampler);
     if (m_cubemapView.isValid()) m_rhiDevice->destroyTextureView(m_cubemapView);
 
-    if (m_fullscreenVao != 0) {
-        glDeleteVertexArrays(1, &m_fullscreenVao);
-        m_fullscreenVao = 0;
-    }
-
-    m_shader = nullptr;
-    m_blurShader = nullptr;
     m_cubemapTexture = {};
     m_skyboxBindGroup = {};
     m_skyboxPipeline = {};
@@ -203,29 +241,30 @@ void SkyboxRenderer::shutdown() {
     m_skyboxBindGroupLayout = {};
     m_skyboxFragmentShader = {};
     m_skyboxVertexShader = {};
+    m_blurPipeline = {};
+    m_blurPipelineLayout = {};
+    m_blurBindGroupLayout = {};
+    m_blurSampler = {};
+    m_blurFragmentShader = {};
+    m_blurVertexShader = {};
     m_cubemapView = {};
     m_cubemapSampler = {};
     m_rhiDevice = nullptr;
 }
 
-void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice) {
-    if (m_blurShader == nullptr || !m_cubemapTexture.isValid() ||
-        !m_cubeVertexBuffer.isValid() || m_fullscreenVao == 0) {
+void SkyboxRenderer::render(const int width, const int height, const float aspect,
+                            const float yawDegrees, const float pitchDegrees,
+                            RhiDevice& rhiDevice) {
+    if (!m_cubemapTexture.isValid() || !m_cubeVertexBuffer.isValid()) {
         return;
     }
-
-    GLint viewport[4] = {};
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    const int vpWidth = viewport[2];
-    const int vpHeight = viewport[3];
-
-    if (vpWidth <= 0 || vpHeight <= 0) {
+    if (width <= 0 || height <= 0) {
         return;
     }
 
     // Half resolution for blur (matches Minecraft's approach)
-    const int blurW = std::max(1, vpWidth / 2);
-    const int blurH = std::max(1, vpHeight / 2);
+    const int blurW = std::max(1, width / 2);
+    const int blurH = std::max(1, height / 2);
 
     if (!ensureBlurTargets(rhiDevice, blurW, blurH)) {
         return;
@@ -259,37 +298,31 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
     // --- Pass 2: Horizontal blur (scene -> ping) ---
     beginSkyboxBlurOutput(commandList, "SkyboxBlurHorizontal", m_pingColorView, blurW, blurH, false);
 
-    m_blurShader->use();
-    m_blurShader->setInt("uTexture", 0);
-    m_blurShader->setVec2("uDirection", glm::vec2(1.0f / static_cast<float>(blurW), 0.0f));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_sceneColorHandle));
-
-    glBindVertexArray(m_fullscreenVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glBindVertexArray(0);
+    const glm::vec4 horizontalDirection(1.0f / static_cast<float>(blurW), 0.0f, 0.0f, 0.0f);
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(blurW),
+                             static_cast<float>(blurH), 0.0f, 1.0f});
+    commandList.setScissor({0, 0, static_cast<uint32_t>(blurW),
+                            static_cast<uint32_t>(blurH)});
+    commandList.setGraphicsPipeline(m_blurPipeline);
+    commandList.setBindGroup(0u, m_sceneBlurBindGroup);
+    commandList.pushConstants(&horizontalDirection, sizeof(horizontalDirection),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
 
     // --- Pass 3: Vertical blur (ping -> pong) ---
     beginSkyboxBlurOutput(commandList, "SkyboxBlurVertical", m_pongColorView, blurW, blurH, false);
 
-    m_blurShader->setVec2("uDirection", glm::vec2(0.0f, 1.0f / static_cast<float>(blurH)));
-
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_pingColorHandle));
-
-    glBindVertexArray(m_fullscreenVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glBindVertexArray(0);
+    const glm::vec4 verticalDirection(0.0f, 1.0f / static_cast<float>(blurH), 0.0f, 0.0f);
+    commandList.setGraphicsPipeline(m_blurPipeline);
+    commandList.setBindGroup(0u, m_pingBlurBindGroup);
+    commandList.pushConstants(&verticalDirection, sizeof(verticalDirection),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);
 
-    const bool blitted = blitBlurTargetToSwapchain(rhiDevice, m_pongColorHandle, vpWidth, vpHeight);
-
-    glViewport(0, 0, vpWidth, vpHeight);
-
-    glEnable(GL_CULL_FACE);
-    glDepthFunc(GL_LESS);
+    const bool blitted = blitBlurTargetToSwapchain(rhiDevice, m_pongColorHandle, width, height);
     if (!blitted) {
         MECRAFT_LOG_STREAM(std::cerr << "[SkyboxRenderer] Failed to blit menu skybox through RHI\n");
     }
@@ -324,10 +357,23 @@ bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int heig
     m_pingColorView = createBlurTargetView(rhiDevice, m_pingColorHandle);
     m_pongColorView = createBlurTargetView(rhiDevice, m_pongColorHandle);
 
+    const auto createBlurBindGroup = [&](const RhiTextureViewHandle view) {
+        RhiBindGroupDesc desc;
+        desc.layout = m_blurBindGroupLayout;
+        RhiBindGroupEntry entry;
+        entry.binding = 0u;
+        entry.resource.combinedTextureSampler = {view, m_blurSampler};
+        desc.entries.push_back(entry);
+        return rhiDevice.createBindGroup(desc);
+    };
+    m_sceneBlurBindGroup = createBlurBindGroup(m_sceneColorView);
+    m_pingBlurBindGroup = createBlurBindGroup(m_pingColorView);
+
     if (!m_sceneColorHandle.isValid() || !m_pingColorHandle.isValid() ||
         !m_pongColorHandle.isValid() ||
         !m_sceneColorView.isValid() || !m_pingColorView.isValid() ||
-        !m_pongColorView.isValid()) {
+        !m_pongColorView.isValid() || !m_sceneBlurBindGroup.isValid() ||
+        !m_pingBlurBindGroup.isValid()) {
         destroyBlurTargets();
         return false;
     }
@@ -338,6 +384,14 @@ bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int heig
 }
 
 void SkyboxRenderer::destroyBlurTargets() {
+    if (m_rhiDevice != nullptr && m_sceneBlurBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_sceneBlurBindGroup);
+    }
+    if (m_rhiDevice != nullptr && m_pingBlurBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_pingBlurBindGroup);
+    }
+    m_sceneBlurBindGroup = {};
+    m_pingBlurBindGroup = {};
     if (m_rhiDevice != nullptr && m_sceneColorView.isValid()) {
         m_rhiDevice->destroyTextureView(m_sceneColorView);
     }
@@ -372,31 +426,11 @@ void SkyboxRenderer::initCubeMesh() {
         bufferDesc, kCubeVertices, sizeof(kCubeVertices));
     if (!m_cubeVertexBuffer.isValid()) std::abort();
 
-    glGenVertexArrays(1, &m_cubeVao);
-    glGenBuffers(1, &m_cubeVbo);
-
-    glBindVertexArray(m_cubeVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_cubeVbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(kCubeVertices), kCubeVertices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 }
 
 void SkyboxRenderer::destroyCubeMesh() {
     if (m_rhiDevice != nullptr && m_cubeVertexBuffer.isValid()) {
         m_rhiDevice->destroyBuffer(m_cubeVertexBuffer);
         m_cubeVertexBuffer = {};
-    }
-    if (m_cubeVbo != 0) {
-        glDeleteBuffers(1, &m_cubeVbo);
-        m_cubeVbo = 0;
-    }
-    if (m_cubeVao != 0) {
-        glDeleteVertexArrays(1, &m_cubeVao);
-        m_cubeVao = 0;
     }
 }
