@@ -1,12 +1,9 @@
 #include "UIModal.h"
 
-#include <glad/glad.h>
 #include <algorithm>
 
-#include "../core/UIRenderUtils.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/core/Shader.h"
 
 UIModal::UIModal() {
     interactive = true;
@@ -25,7 +22,6 @@ UIModal::~UIModal() {
 
 void UIModal::init(ResourceMgr& resourceMgr) {
     const UIResolvedModalStyle style = fallbackStyle();
-    m_shader = resourceMgr.getShader("ui_color");
 
     // Overlay panel (full screen dim).
     m_overlayPanel.setBackgroundColor({0.0f, 0.0f, 0.0f, 0.0f});
@@ -51,17 +47,6 @@ void UIModal::init(ResourceMgr& resourceMgr) {
     m_overlayAlpha.start(0.0f, 0.0f, 0.3f, EasingType::EaseOut);
     m_panelScale.start(0.8f, 0.8f, 0.3f, EasingType::EaseOut);
 
-    // Mesh for overlay (6 verts).
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(12 * sizeof(float)),
-                 nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-
     UIWidget::init(resourceMgr);
 }
 
@@ -74,9 +59,6 @@ void UIModal::shutdown() {
     }
     m_buttons.clear();
     m_buttonCallbacks.clear();
-    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
-    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
-    m_shader = nullptr;
     UIWidget::shutdown();
 }
 
@@ -149,7 +131,6 @@ void UIModal::updateAnimations(float dt) {
 void UIModal::render(const UIRenderContext& ctx) const {
     if (!visible) return;
 
-    const UIRenderUtils::GLStateGuard guard;
     const UIResolvedModalStyle style = resolveStyle(ctx);
 
     // Update overlay panel color with animated alpha.
