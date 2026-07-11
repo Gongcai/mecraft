@@ -9,6 +9,7 @@ class UIRenderer;
 class RenderResourceHub;
 class RenderScene;
 class FirstPersonHeldItemRenderer;
+class RhiDevice;
 class ThreadPool;
 class Window;
 
@@ -37,7 +38,7 @@ public:
                             GameSession& session,
                             UIRenderer& uiRenderer,
                             ThreadPool& threadPool,
-                            Window& window);
+                            RhiDevice& rhiDevice);
 
     /// Shutdown all renderers in reverse order of initialization.
     void shutdown();

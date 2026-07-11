@@ -8,7 +8,6 @@
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../rhi/RhiDevice.h"
-#include "../rhi/RhiDeviceFactory.h"
 #include "../../particle/ParticleSystem.h"
 #include "../mesh/ChunkMesher.h"
 #include "../../ecs/GameplayRegistry.h"
@@ -74,24 +73,11 @@ RenderResourceHub::~RenderResourceHub() {
     shutdown();
 }
 
-bool RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool, const Window& window) {
+bool RenderResourceHub::init(ResourceMgr& resourceMgr,
+                             ThreadPool& threadPool,
+                             RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
-    m_rhiDevice = renderer::rhi::createDefaultRhiDevice();
-    if (!m_rhiDevice) {
-        MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: failed to create RHI device\n");
-        return false;
-    }
-
-    RhiDeviceDesc rhiDesc;
-    rhiDesc.debugName = "GameplayRenderer";
-    rhiDesc.nativeWindow = window.getHandle();
-    rhiDesc.width = window.getWidth();
-    rhiDesc.height = window.getHeight();
-    if (!m_rhiDevice->init(rhiDesc)) {
-        MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: failed to initialize RHI device\n");
-        m_rhiDevice.reset();
-        return false;
-    }
+    m_rhiDevice = &rhiDevice;
 
     //m_uiShader = resourceMgr.getShader("ui");
     // R8: Overlay initialization removed — handled by BlockInteractionOverlayRenderer
@@ -151,10 +137,7 @@ void RenderResourceHub::shutdown() {
     m_terrainRhiPipelines.shutdown();
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
-    if (m_rhiDevice) {
-        m_rhiDevice->shutdown();
-        m_rhiDevice.reset();
-    }
+    m_rhiDevice = nullptr;
 }
 
 bool RenderResourceHub::resizeRhiSwapchain(const Window& window) {

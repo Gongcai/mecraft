@@ -65,7 +65,7 @@ bool Game::updateLoading(const float deltaTime) {
                                    m_session,
                                    m_deps.uiRenderer,
                                    m_deps.threadPool,
-                                   m_deps.window)) {
+                                   m_deps.rhiDevice)) {
             MECRAFT_LOG_STREAM(std::cerr << "[Game] Render runtime initialization failed\n");
             m_loadPhase = LoadPhase::Failed;
             return false;

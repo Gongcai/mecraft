@@ -39,6 +39,7 @@ void GameplayAppState::onEnter() {
         m_deps.uiRenderer,
         m_deps.localeManager,
         m_deps.threadPool,
+        m_deps.rhiDevice,
         m_deps.enableDebugDashboard
     };
 

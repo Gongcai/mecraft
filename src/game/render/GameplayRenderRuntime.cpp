@@ -58,7 +58,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   GameSession& session,
                                   UIRenderer& uiRenderer,
                                   ThreadPool& threadPool,
-                                  Window& window) {
+                                  RhiDevice& rhiDevice) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& blockEntityRenderer = m_impl->blockEntityRenderer;
@@ -68,7 +68,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& humanoidRenderer = m_impl->humanoidRenderer;
 
     // Core GPU infrastructure
-    if (!renderer.init(resourceMgr, threadPool, window)) {
+    if (!renderer.init(resourceMgr, threadPool, rhiDevice)) {
         return false;
     }
 

@@ -170,6 +170,7 @@ std::unique_ptr<Game> LoadingAppState::createGame() const {
         m_deps.uiRenderer,
         m_deps.localeManager,
         m_deps.threadPool,
+        m_deps.rhiDevice,
         m_deps.enableDebugDashboard
     };
     return std::make_unique<Game>(m_config, deps);

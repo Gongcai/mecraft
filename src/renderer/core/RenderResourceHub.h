@@ -130,7 +130,9 @@ public:
 #endif
 
     ~RenderResourceHub();
-    [[nodiscard]] bool init(ResourceMgr& resourceMgr, ThreadPool& threadPool, const Window& window);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
+                            ThreadPool& threadPool,
+                            RhiDevice& rhiDevice);
     void shutdown();
     [[nodiscard]] bool resizeRhiSwapchain(const Window& window);
     void setMeshingSubmitBudget(int budget);
@@ -190,7 +192,7 @@ private:
     TerrainRhiPipelineSet m_terrainRhiPipelines;
 
     ResourceMgr* m_resourceMgr = nullptr;
-    std::unique_ptr<RhiDevice> m_rhiDevice;
+    RhiDevice* m_rhiDevice = nullptr;
 
     // Services owned by RenderScene and mirrored here for compatibility/debug controls.
     BlockInteractionOverlayRenderer* m_overlayRenderer = nullptr;
