@@ -340,7 +340,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
 
         // Pass 1: Opaque-only → DepthOpaque (shadowtex1)
         {
-            renderer::debug::ScopedDebugGroup opaqueGroup("Opaque");
             if (shadowStatsActive) {
                 debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::Start);
             }
@@ -362,6 +361,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             renderingInfo.depthStencilAttachment = &depthAttachment;
 
             RhiCommandList& commandList = rhiDevice.beginFrame();
+            commandList.beginDebugLabel("Shadow.Opaque", glm::vec4(0.70f, 0.78f, 1.0f, 1.0f));
             commandList.insertDebugMarker(cullerLabel, glm::vec4(0.45f, 0.65f, 1.0f, 1.0f));
             TerrainShadowFrameData shadowFrame;
             shadowFrame.modelView = cascadeData.view;
@@ -377,6 +377,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 !m_worldRenderBuffer->prepareRhiOpaqueAndCutout(
                     commandList,
                     ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
+                commandList.endDebugLabel();
                 return output;
             }
             commandList.beginRendering(renderingInfo);
@@ -408,15 +409,16 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::OpaqueEnd);
             }
             commandList.endRendering();
+            commandList.endDebugLabel();
             rhiDevice.submitFrame(commandList);
         }
 
         // Pass 2: Transparent/all.
         // Copy DepthOpaque -> DepthAll, then draw near water + stained glass casters.
         {
-            renderer::debug::ScopedDebugGroup transparentGroup("Transparent");
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
             RhiCommandList& commandList = rhiDevice.beginFrame();
+            commandList.beginDebugLabel("Shadow.Transparent", glm::vec4(0.55f, 0.85f, 1.0f, 1.0f));
             RhiTextureCopy depthCopy;
             depthCopy.src = targets.csmShadowDepthTextureHandle();
             depthCopy.srcSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
@@ -484,6 +486,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     !m_worldRenderBuffer->prepareRhiTransparent(
                         commandList,
                         ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
+                    commandList.endDebugLabel();
                     return output;
                 }
             }
@@ -497,6 +500,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 stats.transparentRendered = true;
             }
             commandList.endRendering();
+            commandList.endDebugLabel();
             rhiDevice.submitFrame(commandList);
         }
         if (shadowStatsActive) {
