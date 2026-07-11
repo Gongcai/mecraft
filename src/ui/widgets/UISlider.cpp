@@ -2,15 +2,14 @@
 
 #include <algorithm>
 #include <cmath>
-#include <vector>
-
-#include <glad/glad.h>
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
-#include "../core/UIRenderUtils.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
+
+#include <cstdlib>
 
 UISlider::UISlider() {
     interactive = true;
@@ -22,14 +21,61 @@ UISlider::UISlider() {
 UISlider::~UISlider() { shutdown(); }
 
 void UISlider::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "UiSlider.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "UiSlider.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = m_rhiDevice->createShader(shaderDesc);
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "UiSlider.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "UiSlider.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     initMesh();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) std::abort();
     m_handleScaleTween.setImmediate(1.0f);
 }
 
 void UISlider::shutdown() {
     cleanupMesh();
-    m_shader = nullptr;
+    if (m_rhiDevice) {
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+    }
+    m_pipeline = {}; m_pipelineLayout = {}; m_fragmentShader = {}; m_vertexShader = {};
+    m_rhiDevice = nullptr;
 }
 
 void UISlider::setRange(float min, float max) {
@@ -107,32 +153,22 @@ void UISlider::applyStep() {
 }
 
 void UISlider::initMesh() {
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // Largest shape drawn per pass is a capsule or circle.
-    constexpr int kMaxShapeVerts = 160;
-    glBufferData(GL_ARRAY_BUFFER, kMaxShapeVerts * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    constexpr float vertices[] = {0,0, 1,0, 1,1, 0,0, 1,1, 0,1};
+    RhiBufferDesc desc;
+    desc.debugName = "UiSlider.VertexBuffer";
+    desc.size = sizeof(vertices);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
 }
 
 void UISlider::cleanupMesh() {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
-    }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
+    if (m_rhiDevice && m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    m_vertexBuffer = {};
 }
 
 void UISlider::renderSelf(const UIRenderContext& ctx) const {
-    if (!m_shader || m_vao == 0) return;
+    if (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) return;
 
     const UIResolvedSliderStyle resolved = resolveStyle(ctx);
     float trackH = resolved.trackHeight;
@@ -153,49 +189,28 @@ void UISlider::renderSelf(const UIRenderContext& ctx) const {
     float hs = handleSize * handleScale;
     const bool active = m_dragging || m_handleHovered || isFocused();
 
-    const UIRenderUtils::GLStateGuard glState;
-    m_shader->use();
-    m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
-                                                static_cast<float>(ctx.screenHeight)));
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
-    auto drawShape = [&](const std::vector<float>& verts, Color shapeColor) {
-        if (verts.empty()) return;
+    ctx.commandList->setGraphicsPipeline(m_pipeline);
+    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+    auto drawShape = [&](float x, float y, float w, float h, float radius, Color shapeColor) {
         shapeColor[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3]));
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-                        verts.data());
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
+        struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+        const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y),
+                        glm::vec4(w, h, radius, 0),
+                        glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])};
+        ctx.commandList->pushConstants(&push, sizeof(push), rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->draw(6u, 1u, 0u, 0u);
     };
-
-    std::vector<float> verts;
-    verts.reserve(160);
-
-    verts.clear();
-    UIRenderUtils::pushCapsule(verts, tl, cy - trackH * 0.5f, tr, cy + trackH * 0.5f);
-    drawShape(verts, trackCol);
+    drawShape(tl, cy - trackH * 0.5f, tr - tl, trackH, trackH * 0.5f, trackCol);
 
     if (hx > tl + 0.5f) {
-        verts.clear();
-        UIRenderUtils::pushCapsule(verts, tl, cy - trackH * 0.5f, hx, cy + trackH * 0.5f);
-        drawShape(verts, fillCol);
+        drawShape(tl, cy - trackH * 0.5f, hx - tl, trackH, trackH * 0.5f, fillCol);
     }
 
-    verts.clear();
     Color ringCol = fillCol;
     ringCol[3] = active ? 0.46f : 0.26f;
-    UIRenderUtils::pushCircle(verts, hx, cy, hs * 0.5f + (active ? 2.5f : 1.5f));
-    drawShape(verts, ringCol);
-
-    verts.clear();
-    UIRenderUtils::pushCircle(verts, hx, cy, hs * 0.5f);
-    drawShape(verts, handleCol);
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    const float ringR = hs * 0.5f + (active ? 2.5f : 1.5f);
+    drawShape(hx - ringR, cy - ringR, ringR * 2, ringR * 2, ringR, ringCol);
+    drawShape(hx - hs * 0.5f, cy - hs * 0.5f, hs, hs, hs * 0.5f, handleCol);
 }
 
 UIEventResult UISlider::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
