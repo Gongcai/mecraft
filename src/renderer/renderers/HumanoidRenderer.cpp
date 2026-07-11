@@ -171,6 +171,17 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "Humanoid.PartMesh.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(SteveVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyMesh(mesh);
+    }
+
     return mesh;
 }
 
@@ -254,10 +265,25 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "Humanoid.EntityModelPart.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(SteveVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyMesh(mesh);
+    }
+
     return mesh;
 }
 
-void HumanoidRenderer::destroyMesh(PartMesh& mesh) {
+void HumanoidRenderer::destroyMesh(PartMesh& mesh) const {
+    if (m_rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
+        mesh.rhiVertexBuffer = {};
+    }
     if (mesh.vbo != 0) {
         glDeleteBuffers(1, &mesh.vbo);
         mesh.vbo = 0;

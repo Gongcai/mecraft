@@ -69,6 +69,7 @@ private:
     struct PartMesh {
         uint32_t vao = 0;
         uint32_t vbo = 0;
+        RhiBufferHandle rhiVertexBuffer;
         uint32_t vertexCount = 0;
     };
 
@@ -101,7 +102,7 @@ private:
     float m_inventoryPreviewBodyLookY = 0.0f;
     float m_inventoryPreviewLastTime = -1.0f;
 
-    static void destroyMesh(PartMesh& mesh);
+    void destroyMesh(PartMesh& mesh) const;
 
     PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition,
                            float textureWidth,
