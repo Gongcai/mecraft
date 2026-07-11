@@ -235,7 +235,6 @@ private:
                                          uint32_t magFilter,
                                          uint32_t wrap);
 
-    static void generateMipmaps(uint32_t texture);
     bool createGBufferTextures();
     void destroyGBufferTextures();
     bool createSceneTextures();
@@ -244,6 +243,8 @@ private:
     void destroyTransparentCompositeTextures();
     bool createScreenEffectTextures();
     void destroyScreenEffectTextures();
+    bool createAtmosphereTextures();
+    void destroyAtmosphereTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -378,11 +379,9 @@ private:
     RhiTextureHandle m_reflectionTemporalScratchHandle;
     RhiTextureViewHandle m_reflectionTemporalScratchView;
 
-    uint32_t m_cloudTex = 0;
     RhiTextureHandle m_cloudHandle;
     RhiTextureViewHandle m_cloudView;
 
-    uint32_t m_skyCaptureTex = 0;
     RhiTextureHandle m_skyCaptureHandle;
     RhiTextureViewHandle m_skyCaptureView;
 

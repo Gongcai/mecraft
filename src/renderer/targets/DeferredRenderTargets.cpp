@@ -83,6 +83,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createAtmosphereTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -214,10 +218,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
-    m_cloudTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
-    m_skyCaptureTex = createTexture2D(GL_RGBA16F, kSkyCaptureWidth, kSkyCaptureHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
     // History scene ping-pong (RGBA16F color + depth)
     for (int i = 0; i < 2; ++i) {
         m_historySceneTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
@@ -293,8 +293,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
     }
-    renderer::debug::labelTexture(m_cloudTex, "DeferredTargets.CloudTex");
-    renderer::debug::labelTexture(m_skyCaptureTex, "DeferredTargets.SkyCaptureTex");
     for (int i = 0; i < 2; ++i) {
         char texName[48], depthName[48];
         std::snprintf(texName, sizeof(texName), "DeferredTargets.HistorySceneTex[%d]", i);
@@ -559,12 +557,6 @@ uint32_t DeferredRenderTargets::createTexture2DArray(const uint32_t internalForm
     return texture;
 }
 
-void DeferredRenderTargets::generateMipmaps(const uint32_t texture) {
-    if (texture != 0) {
-        glGenerateTextureMipmap(texture);
-    }
-}
-
 bool DeferredRenderTargets::createGBufferTextures() {
     if (m_rhiDevice == nullptr) {
         return false;
@@ -794,21 +786,62 @@ void DeferredRenderTargets::destroyScreenEffectTextures() {
     }
 }
 
+bool DeferredRenderTargets::createAtmosphereTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const uint32_t width,
+                                      const uint32_t height,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.width = width;
+        desc.height = height;
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                     rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) |
+                     rhiFlag(RhiTextureUsage::TransferDst);
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
+    const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
+    if (!createTexture("DeferredTargets.Cloud", halfWidth, halfHeight, m_cloudHandle) ||
+        !createTexture("DeferredTargets.SkyCapture",
+                       static_cast<uint32_t>(kSkyCaptureWidth),
+                       static_cast<uint32_t>(kSkyCaptureHeight),
+                       m_skyCaptureHandle)) {
+        destroyAtmosphereTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroyAtmosphereTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiTextureHandle* textures[] = {&m_cloudHandle, &m_skyCaptureHandle};
+    for (RhiTextureHandle* texture : textures) {
+        if (texture->isValid()) {
+            m_rhiDevice->destroyTexture(*texture);
+            *texture = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
-    m_cloudHandle = renderer::rhi::gl::registerTexture({
-        m_cloudTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        halfWidth,
-        halfHeight,
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
     for (int i = 0; i < 2; ++i) {
         m_historySceneHandle[i] = renderer::rhi::gl::registerTexture({
             m_historySceneTex[i],
@@ -913,18 +946,6 @@ bool DeferredRenderTargets::registerRhiTextures() {
         RhiTextureFormat::R8Unorm,
         static_cast<uint32_t>(m_width),
         static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_skyCaptureHandle = renderer::rhi::gl::registerTexture({
-        m_skyCaptureTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(kSkyCaptureWidth),
-        static_cast<uint32_t>(kSkyCaptureHeight),
         1,
         1,
         1,
@@ -2905,7 +2926,7 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroySceneTextures();
     destroyTransparentCompositeTextures();
     destroyScreenEffectTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_cloudHandle);
+    destroyAtmosphereTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[0]);
     renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[1]);
     renderer::rhi::gl::unregisterTextureAndReset(m_historyDepthHandle[0]);
@@ -2920,7 +2941,6 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     renderer::rhi::gl::unregisterTextureAndReset(m_velocityHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_perObjectVelocityHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_skyCaptureHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthComparisonHandle);
@@ -2968,8 +2988,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssaoTex,
         m_ssaoFilteredTex,
         m_temporalCurrentTex,
-        m_cloudTex,
-        m_skyCaptureTex,
         m_historySceneTex[0], m_historySceneTex[1],
         m_historyDepthTex[0], m_historyDepthTex[1],
         m_historyReflectionTex[0], m_historyReflectionTex[1],
@@ -3010,8 +3028,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoHalfResTex = 0;
     m_ssaoHalfResFilteredTex = 0;
     m_temporalCurrentTex = 0;
-    m_cloudTex = 0;
-    m_skyCaptureTex = 0;
     m_historySceneTex[0] = 0; m_historySceneTex[1] = 0;
     m_historyDepthTex[0] = 0; m_historyDepthTex[1] = 0;
     m_historyReflectionTex[0] = 0; m_historyReflectionTex[1] = 0;
