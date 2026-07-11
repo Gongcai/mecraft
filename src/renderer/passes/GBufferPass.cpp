@@ -132,6 +132,7 @@ void GBufferPass::executeBlockEntities(const IWorldView& worldView, const FrameC
         return;
     }
 
+    blockEntityRenderer->prepareFrame(worldView);
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     RhiCommandList* commandList = beginObjectGBufferRendering(rhiDevice, targets, "GBuffer.BlockEntities", false);
     if (commandList == nullptr) {

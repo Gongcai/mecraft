@@ -207,6 +207,11 @@ void BlockEntityRenderer::beginFrame() {
     m_instanceLightsSyncedThisFrame = false;
 }
 
+void BlockEntityRenderer::prepareFrame(const IWorldView& worldView) {
+    synchronizeInstanceCache(worldView);
+    updateInstanceLightsForFrame();
+}
+
 BlockEntityRenderer::ModelDefinition BlockEntityRenderer::makeChestDefinition() {
     ModelDefinition definition;
     definition.textureKey = "chest";
@@ -464,8 +469,7 @@ void BlockEntityRenderer::drawBlockEntitiesInstanced(const IWorldView& worldView
                                                      const glm::vec3& cameraPos,
                                                      const float splitNear,
                                                      const float splitFar) {
-    synchronizeInstanceCache(worldView);
-    updateInstanceLightsForFrame();
+    static_cast<void>(worldView);
 
     GLuint boundTexture = 0;
     glActiveTexture(GL_TEXTURE0);
@@ -537,8 +541,7 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
                                             const glm::vec3& cameraPos,
                                             const float splitNear,
                                             const float splitFar) {
-    synchronizeInstanceCache(worldView);
-    updateInstanceLightsForFrame();
+    static_cast<void>(worldView);
 
     GLuint boundTexture = 0;
     glActiveTexture(GL_TEXTURE0);

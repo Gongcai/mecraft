@@ -73,6 +73,9 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     if (settings.weather.particlesEnabled && m_shared->particleSystem) {
         m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
     }
+    if (m_shared->blockEntityRenderer != nullptr) {
+        m_shared->blockEntityRenderer->prepareFrame(*ctx.worldView);
+    }
     if (!beginBackbufferFrame(ctx)) {
         m_shared->rhiDevice->submitFrame(commandList);
         m_backbufferCommandList = nullptr;

@@ -25,6 +25,7 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     void beginFrame();
+    void prepareFrame(const IWorldView& worldView);
 
     void renderToGBuffer(const IWorldView& worldView,
                          const glm::mat4& viewProj,
