@@ -55,6 +55,8 @@ void DropRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_itemMeshes.clear();
+    m_preparedDrops.clear();
+    m_previousModelMatrices.clear();
     m_shader = nullptr;
     m_itemShader = nullptr;
     m_deferredShader = nullptr;
@@ -64,6 +66,44 @@ void DropRenderer::shutdown() {
     m_shadowShader = nullptr;
     m_itemShadowShader = nullptr;
     m_resourceMgr = nullptr;
+}
+
+void DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem) {
+    m_preparedDrops.clear();
+    const auto& drops = dropSystem.getDrops();
+    m_preparedDrops.reserve(drops.size());
+    std::unordered_map<std::size_t, glm::mat4> currentModelMatrices;
+    currentModelMatrices.reserve(drops.size());
+
+    for (const DropEntity& drop : drops) {
+        const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
+        const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+        const BlockID renderBlock = ItemRegistry::toRenderBlock(drop.itemId);
+        const bool useItemMesh = !prefersBlockMeshForItem(renderBlock) && itemTileIndex >= 0;
+
+        Mesh* mesh = useItemMesh ? getOrCreateItemMesh(drop.itemId)
+                                 : getOrCreateBlockMesh(renderBlock);
+        if (mesh == nullptr || !mesh->rhiVertexBuffer.isValid() || mesh->vertexCount == 0u) {
+            continue;
+        }
+
+        glm::mat4 model(1.0f);
+        model = glm::translate(model, drop.position);
+        model = glm::rotate(model, drop.yawRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(drop.halfExtents * 2.0f));
+        model = glm::translate(model, glm::vec3(-0.5f));
+        const auto previous = m_previousModelMatrices.find(drop.id);
+        m_preparedDrops.push_back({
+            mesh,
+            model,
+            previous != m_previousModelMatrices.end() ? previous->second : model,
+            queryWorldLight(worldView, drop.position),
+            useItemMesh
+        });
+        currentModelMatrices.emplace(drop.id, model);
+    }
+
+    m_previousModelMatrices = std::move(currentModelMatrices);
 }
 
 void DropRenderer::setForwardMode(bool forward) {

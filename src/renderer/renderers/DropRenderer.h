@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -26,6 +27,7 @@ public:
 	/// Switch to forward vanilla shaders (no CSM shadow / held_item_shadow contract).
 	/// Must be called after init(). Reverts to deferred shaders if false.
 	void setForwardMode(bool forward);
+	void prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem);
 	void render(const DropSystem& dropSystem, const Camera& camera, const Window& window);
 	// GBuffer path: renders drops into the deferred GBuffer (5 MRT).
 	// Caller must have already bound the GBuffer FBO with terrain+entity depth.
@@ -47,6 +49,14 @@ private:
 		RhiBufferHandle rhiVertexBuffer;
 		RhiDevice* rhiDevice = nullptr;
 		uint32_t vertexCount = 0;
+	};
+
+	struct PreparedDrop {
+		const Mesh* mesh = nullptr;
+		glm::mat4 model{1.0f};
+		glm::mat4 previousModel{1.0f};
+		glm::vec2 light{1.0f, 0.0f};
+		bool itemMesh = false;
 	};
 
 	Mesh* getOrCreateBlockMesh(BlockID blockId);
@@ -71,6 +81,7 @@ private:
 	std::unordered_map<ItemID, Mesh> m_itemMeshes;
 	// Per-object velocity: stores previous-frame model matrix per drop (by drop ID).
 	std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
+	std::vector<PreparedDrop> m_preparedDrops;
 };
 
 #endif // MECRAFT_DROPRENDERER_H
