@@ -134,7 +134,8 @@ private:
     void synchronizeCaptureResources(RhiTextureViewHandle atmosphereLutView,
                                      RhiTextureHandle noiseTexture);
     void renderSkyGradient(const Camera& camera, float aspect, const SkyColors& colors, uint32_t skyCaptureTexture);
-    void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight, const SkyColors& colors);
+    void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight,
+                      const SkyColors& colors, RhiCommandList& commandList);
     void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight,
                     const SkyColors& colors, RhiCommandList& commandList);
     [[nodiscard]] glm::mat4 buildSkyView(const Camera& camera) const;
@@ -173,6 +174,10 @@ private:
     RhiShaderHandle m_haloFragmentShader;
     RhiPipelineLayoutHandle m_haloPipelineLayout;
     RhiPipelineHandle m_haloPipeline;
+    RhiShaderHandle m_cloudVertexShader;
+    RhiShaderHandle m_cloudFragmentShader;
+    RhiPipelineLayoutHandle m_cloudPipelineLayout;
+    RhiPipelineHandle m_cloudPipeline;
     RhiTextureViewHandle m_captureAtmosphereLutView;
     int32_t m_haloVertexCount = 0;
     int32_t m_cloudVertexCount = 0;
