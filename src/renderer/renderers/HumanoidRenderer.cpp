@@ -1,12 +1,8 @@
 #include "HumanoidRenderer.h"
-#include "../gl/GlStateGuard.h"
-#include "../core/Shader.h"
-#include "../debug/RenderDebugLabels.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 
 #include <algorithm>
 #include <array>
@@ -17,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
@@ -57,13 +52,6 @@ float hurtFlashForRoot(const entt::registry& reg, const entt::entity root) {
         return 0.0f;
     }
     return std::clamp(hurt->flashSecondsRemaining / hurt->flashDurationSeconds, 0.0f, 1.0f);
-}
-
-void setHurtFlash(Shader& shader, const float value) {
-    const int location = shader.getUniformLocation("uHurtFlash");
-    if (location >= 0) {
-        glUniform1f(location, value);
-    }
 }
 
 glm::mat4 applyMobVisualScale(const glm::mat4& model,
@@ -150,28 +138,6 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
 
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
 
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(SteveVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, nx)));
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Humanoid.PartMesh.VertexBuffer";
@@ -244,28 +210,6 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
 
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
 
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(SteveVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex),
-                          reinterpret_cast<void*>(offsetof(SteveVertex, nx)));
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Humanoid.EntityModelPart.VertexBuffer";
@@ -285,14 +229,6 @@ void HumanoidRenderer::destroyMesh(PartMesh& mesh) const {
     if (m_rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
         m_rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
         mesh.rhiVertexBuffer = {};
-    }
-    if (mesh.vbo != 0) {
-        glDeleteBuffers(1, &mesh.vbo);
-        mesh.vbo = 0;
-    }
-    if (mesh.vao != 0) {
-        glDeleteVertexArrays(1, &mesh.vao);
-        mesh.vao = 0;
     }
     mesh.vertexCount = 0;
 }
@@ -366,7 +302,6 @@ const HumanoidRenderer::TextureResource& HumanoidRenderer::requireTextureResourc
 void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
-    m_shader = resourceMgr.getShader("steve");
     createGBufferRhiResources();
     requireTextureResource("steve");
 
@@ -406,20 +341,6 @@ void HumanoidRenderer::shutdown() {
         destroyMesh(pair.second);
     }
     m_entityModelPartMeshes.clear();
-    if (m_rhiDevice != nullptr && m_neutralShadowDepthView.isValid()) {
-        m_rhiDevice->destroyTextureView(m_neutralShadowDepthView);
-        m_neutralShadowDepthView = {};
-    }
-    renderer::rhi::gl::unregisterTextureAndReset(m_neutralShadowDepthHandle);
-    if (m_neutralShadowDepth != 0) {
-        glDeleteTextures(1, &m_neutralShadowDepth);
-        m_neutralShadowDepth = 0;
-    }
-    if (m_neutralShadowDepthCompare != 0) {
-        glDeleteTextures(1, &m_neutralShadowDepthCompare);
-        m_neutralShadowDepthCompare = 0;
-    }
-    m_shader = nullptr;
     m_rhiDevice = nullptr;
     m_resourceMgr = nullptr;
 }
@@ -651,6 +572,10 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
     pipelineDesc.blend.attachments.resize(1u);
     m_forwardRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "Humanoid.InventoryPreview.Pipeline";
+    pipelineDesc.raster.scissorEnabled = true;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
+    m_inventoryPreviewPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_gbufferRhiVertexShader.isValid() || !m_gbufferRhiFragmentShader.isValid() ||
         !m_gbufferSampler.isValid() || !m_gbufferRhiBindGroupLayout.isValid() ||
         !m_gbufferRhiPipelineLayout.isValid() || !m_gbufferRhiPipeline.isValid() ||
@@ -658,12 +583,13 @@ void HumanoidRenderer::createGBufferRhiResources() {
         !m_shadowRhiBindGroupLayout.isValid() || !m_shadowRhiPipelineLayout.isValid() ||
         !m_shadowRhiPipeline.isValid() || !m_forwardRhiVertexShader.isValid() ||
         !m_forwardRhiFragmentShader.isValid() || !m_forwardRhiPipelineLayout.isValid() ||
-        !m_forwardRhiPipeline.isValid()) {
+        !m_forwardRhiPipeline.isValid() || !m_inventoryPreviewPipeline.isValid()) {
         std::abort();
     }
 }
 
 void HumanoidRenderer::destroyGBufferRhiResources() {
+    if (m_inventoryPreviewPipeline.isValid()) m_rhiDevice->destroyPipeline(m_inventoryPreviewPipeline);
     if (m_forwardRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardRhiPipeline);
     if (m_forwardRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardRhiPipelineLayout);
     if (m_forwardRhiFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardRhiFragmentShader);
@@ -694,6 +620,7 @@ void HumanoidRenderer::destroyGBufferRhiResources() {
     m_forwardRhiPipelineLayout = {};
     m_forwardRhiFragmentShader = {};
     m_forwardRhiVertexShader = {};
+    m_inventoryPreviewPipeline = {};
 }
 
 void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
@@ -762,192 +689,29 @@ void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList,
     }
 }
 
-bool HumanoidRenderer::ensureNeutralShadowTextures() {
-    if (m_neutralShadowDepth != 0 && m_neutralShadowDepthCompare != 0) {
-        return true;
-    }
-
-    if (m_rhiDevice == nullptr) {
-        return false;
-    }
-
-    if (m_neutralShadowDepth == 0) {
-        glCreateTextures(GL_TEXTURE_2D_ARRAY, 1, &m_neutralShadowDepth);
-        glTextureStorage3D(m_neutralShadowDepth, 1, GL_DEPTH_COMPONENT32F, 1, 1, 1);
-        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_neutralShadowDepth, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-
-        m_neutralShadowDepthHandle = renderer::rhi::gl::registerTexture({
-            m_neutralShadowDepth,
-            RhiTextureDimension::Texture2DArray,
-            RhiTextureFormat::Depth32Float,
-            1u,
-            1u,
-            1u,
-            1u,
-            1u,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
-            false
-        });
-        if (!m_neutralShadowDepthHandle.isValid()) {
-            glDeleteTextures(1, &m_neutralShadowDepth);
-            m_neutralShadowDepth = 0;
-            return false;
-        }
-
-        RhiTextureViewDesc depthViewDesc;
-        depthViewDesc.texture = m_neutralShadowDepthHandle;
-        depthViewDesc.viewType = RhiTextureViewType::Texture2DArray;
-        depthViewDesc.format = RhiTextureFormat::Depth32Float;
-        depthViewDesc.baseMip = 0;
-        depthViewDesc.mipCount = 1;
-        depthViewDesc.baseLayer = 0;
-        depthViewDesc.layerCount = 1;
-        m_neutralShadowDepthView = m_rhiDevice->createTextureView(depthViewDesc);
-        if (!m_neutralShadowDepthView.isValid()) {
-            renderer::rhi::gl::unregisterTextureAndReset(m_neutralShadowDepthHandle);
-            glDeleteTextures(1, &m_neutralShadowDepth);
-            m_neutralShadowDepth = 0;
-            return false;
-        }
-
-        RhiDepthStencilAttachment depthAttachment;
-        depthAttachment.view = m_neutralShadowDepthView;
-        depthAttachment.depthLoadOp = RhiLoadOp::Clear;
-        depthAttachment.depthStoreOp = RhiStoreOp::Store;
-        depthAttachment.clearDepth = 1.0f;
-
-        RhiRenderingInfo renderingInfo;
-        renderingInfo.debugName = "Humanoid.NeutralShadowDepthClear";
-        renderingInfo.renderArea = {0, 0, 1u, 1u};
-        renderingInfo.depthStencilAttachment = &depthAttachment;
-
-        RhiCommandList& commandList = m_rhiDevice->beginFrame();
-        commandList.beginRendering(renderingInfo);
-        commandList.endRendering();
-        m_rhiDevice->submitFrame(commandList);
-    }
-
-    if (m_neutralShadowDepthCompare == 0) {
-        glGenTextures(1, &m_neutralShadowDepthCompare);
-        glTextureView(m_neutralShadowDepthCompare,
-                      GL_TEXTURE_2D_ARRAY,
-                      m_neutralShadowDepth,
-                      GL_DEPTH_COMPONENT32F,
-                      0,
-                      1,
-                      0,
-                      1);
-        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-        glTextureParameteri(m_neutralShadowDepthCompare, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-    }
-
-    return m_neutralShadowDepth != 0 && m_neutralShadowDepthCompare != 0;
-}
-
-bool HumanoidRenderer::bindDisabledShadowNeutralTextures(Shader& shader) {
-    if (!ensureNeutralShadowTextures()) {
-        return false;
-    }
-
-    shader.setInt("uShadowsEnabled", 0);
-    shader.setInt("uSoftShadowsEnabled", 0);
-    shader.setInt("uPcssShadowsEnabled", 0);
-    shader.setInt("uCsmCascadeCount", 0);
-    shader.setFloat("uShadowDistance", 0.0f);
-    shader.setFloat("uShadowConstantBias", 0.0f);
-    shader.setFloat("uShadowSlopeBias", 0.0f);
-    shader.setFloat("uShadowNormalOffset", 0.0f);
-    shader.setFloat("uShadowSoftness", 1.0f);
-    shader.setFloat("uShadowPcssStrength", 0.0f);
-    shader.setVec3("uCameraPos", 0.0f, 0.0f, 0.0f);
-    shader.setVec3("uSunDirection", 0.25f, 0.9f, 0.35f);
-    shader.setFloat("uAmbientStrength", 0.35f);
-    shader.setInt("uCsmShadowMap", 5);
-    shader.setInt("uCsmShadowDepthRaw", 6);
-
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_neutralShadowDepthCompare);
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, m_neutralShadowDepth);
-    return true;
-}
-
-void HumanoidRenderer::renderInventoryPreview(const float x,
+ void HumanoidRenderer::renderInventoryPreview(RhiCommandList& commandList,
+                                              const float x,
                                               const float y,
                                               const float width,
                                               const float height,
                                               const float uiScale,
                                               const float pointerX,
                                               const float pointerY,
-                                              const float timeSeconds) {
-    if (m_shader == nullptr || m_resourceMgr == nullptr || uiScale <= 0.0f || width <= 0.0f || height <= 0.0f) {
+                                              const float timeSeconds,
+                                              const int screenWidth,
+                                              const int screenHeight) {
+    if (uiScale <= 0.0f || width <= 0.0f || height <= 0.0f) {
         return;
     }
-
-    const GLuint steveTex =
-        static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGuiTextureHandle("steve")));
-    if (steveTex == 0) {
-        return;
-    }
-
-    const GLint viewportX = static_cast<GLint>(std::lround(x * uiScale));
-    const GLint viewportY = static_cast<GLint>(std::lround(y * uiScale));
-    const GLsizei viewportW = std::max<GLsizei>(1, static_cast<GLsizei>(std::lround(width * uiScale)));
-    const GLsizei viewportH = std::max<GLsizei>(1, static_cast<GLsizei>(std::lround(height * uiScale)));
-
-    const renderer::gl::ScopedStateSnapshot stateGuard;
-
-    glViewport(viewportX, viewportY, viewportW, viewportH);
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(viewportX, viewportY, viewportW, viewportH);
-    glDepthMask(GL_TRUE);
-    if (m_rhiDevice == nullptr ||
-        !m_rhiDevice->currentSwapchainColorView().isValid() ||
-        !m_rhiDevice->currentSwapchainDepthStencilView().isValid()) {
-        return;
-    }
-
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = m_rhiDevice->currentSwapchainColorView();
-    colorAttachment.loadOp = RhiLoadOp::Load;
-    colorAttachment.storeOp = RhiStoreOp::Store;
-
-    RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view = m_rhiDevice->currentSwapchainDepthStencilView();
-    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
-    depthAttachment.depthStoreOp = RhiStoreOp::Store;
-    depthAttachment.clearDepth = 1.0f;
-
-    RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "Humanoid.InventoryPreviewDepthClear";
-    renderingInfo.renderArea = {
-        viewportX,
-        viewportY,
-        static_cast<uint32_t>(viewportW),
-        static_cast<uint32_t>(viewportH)
-    };
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1u;
-    renderingInfo.depthStencilAttachment = &depthAttachment;
-
-    RhiCommandList& commandList = m_rhiDevice->beginFrame();
-    commandList.beginRendering(renderingInfo);
-    commandList.endRendering();
-    m_rhiDevice->submitFrame(commandList);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
+    const int32_t viewportX = static_cast<int32_t>(std::lround(x * uiScale));
+    const int32_t viewportY = static_cast<int32_t>(std::lround(y * uiScale));
+    const uint32_t viewportW = static_cast<uint32_t>(std::max(1l, std::lround(width * uiScale)));
+    const uint32_t viewportH = static_cast<uint32_t>(std::max(1l, std::lround(height * uiScale)));
+    const RhiRect2D previewRect{viewportX, viewportY, viewportW, viewportH};
+    commandList.clearDepthAttachment(1.0f, previewRect);
+    commandList.setViewport({static_cast<float>(viewportX), static_cast<float>(viewportY),
+                             static_cast<float>(viewportW), static_cast<float>(viewportH), 0.0f, 1.0f});
+    commandList.setScissor(previewRect);
 
     const float aspect = static_cast<float>(viewportW) / static_cast<float>(viewportH);
     const glm::mat4 projection = glm::perspective(glm::radians(28.0f), aspect, 0.1f, 20.0f);
@@ -981,36 +745,23 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
         * glm::rotate(glm::mat4(1.0f), bodyPitch, glm::vec3(1.0f, 0.0f, 0.0f));
     const glm::mat4 torso = root * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.125f, 0.0f));
 
-    const int modelLoc = m_shader->getUniformLocation("model");
-    const int viewProjLoc = m_shader->getUniformLocation("viewProj");
-
-    m_shader->use();
-    m_shader->setMat4(viewProjLoc, projection * view);
-    m_shader->setInt("uTexture", 0);
-    setHurtFlash(*m_shader, 0.0f);
-    if (!bindDisabledShadowNeutralTextures(*m_shader)) {
-        return;
-    }
-
-    // Set lighting uniforms for UI preview (full bright, no world light sampling)
-    m_shader->setFloat("uHeldSunlight", 1.0f);
-    m_shader->setFloat("uHeldBlockLight", 0.0f);
-    m_shader->setFloat("uSkyIntensity", 1.0f);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, steveTex);
+    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 lighting; };
+    const TextureResource& steveTexture = requireTextureResource("steve");
+    commandList.setGraphicsPipeline(m_inventoryPreviewPipeline);
+    commandList.setBindGroup(0u, steveTexture.gbufferBindGroup);
+    const glm::mat4 viewProj = projection * view;
 
     const auto drawPart = [&](ecs::StevePartType partType, const glm::mat4& model) {
         PartMesh* mesh = getMeshForPart(partType, ecs::EntitySkinLayoutKind::Steve64x64);
-        if (mesh == nullptr || mesh->vao == 0 || mesh->vertexCount == 0) {
+        if (mesh == nullptr || !mesh->rhiVertexBuffer.isValid() || mesh->vertexCount == 0u) {
             return;
         }
-        m_shader->setMat4(modelLoc, model);
-        glBindVertexArray(mesh->vao);
-        {
-            renderer::debug::ScopedDebugGroup group("UI.InventoryPreview.Steve");
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-        }
+        const PushConstants pushConstants{viewProj, model, glm::vec4(1.0f, 0.0f, 1.0f, 0.0f)};
+        commandList.setVertexBuffer(0u, mesh->rhiVertexBuffer, 0u);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) |
+                                  rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(mesh->vertexCount, 1u, 0u, 0u);
     };
 
     drawPart(ecs::StevePartType::Torso, torso);
@@ -1028,14 +779,12 @@ void HumanoidRenderer::renderInventoryPreview(const float x,
     drawPart(ecs::StevePartType::LeftLeg,
              torso * glm::translate(glm::mat4(1.0f), glm::vec3(0.125f, -0.375f, 0.0f)));
 
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE6);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE5);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    // GL state (including scissor) restored by ScopedStateSnapshot destructor
+    const uint32_t fullWidth = static_cast<uint32_t>(std::max(1l, std::lround(screenWidth * uiScale)));
+    const uint32_t fullHeight = static_cast<uint32_t>(std::max(1l, std::lround(screenHeight * uiScale)));
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(fullWidth),
+                             static_cast<float>(fullHeight), 0.0f, 1.0f});
+    commandList.setScissor({0, 0, fullWidth, fullHeight});
+
 }
 
  glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {

@@ -19,7 +19,6 @@ class Camera;
 class IWorldView;
 class RhiCommandList;
 class RhiDevice;
-class Shader;
 class ResourceMgr;
 class Window;
 class World;
@@ -52,19 +51,20 @@ public:
     void renderPreparedForward(RhiCommandList& commandList,
                                const glm::mat4& viewProj,
                                float skyIntensity);
-    void renderInventoryPreview(float x,
+    void renderInventoryPreview(RhiCommandList& commandList,
+                                float x,
                                 float y,
                                 float width,
                                 float height,
                                 float uiScale,
                                 float pointerX,
                                 float pointerY,
-                                float timeSeconds);
+                                float timeSeconds,
+                                int screenWidth,
+                                int screenHeight);
 
 private:
     struct PartMesh {
-        uint32_t vao = 0;
-        uint32_t vbo = 0;
         RhiBufferHandle rhiVertexBuffer;
         uint32_t vertexCount = 0;
     };
@@ -101,13 +101,8 @@ private:
     };
     std::vector<PreparedPartDraw> m_preparedPartDraws;
 
-    Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
-    uint32_t m_neutralShadowDepth = 0;
-    uint32_t m_neutralShadowDepthCompare = 0;
-    RhiTextureHandle m_neutralShadowDepthHandle;
-    RhiTextureViewHandle m_neutralShadowDepthView;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;
     float m_inventoryPreviewBodyLookX = 0.0f;
@@ -128,6 +123,7 @@ private:
     RhiShaderHandle m_forwardRhiFragmentShader;
     RhiPipelineLayoutHandle m_forwardRhiPipelineLayout;
     RhiPipelineHandle m_forwardRhiPipeline;
+    RhiPipelineHandle m_inventoryPreviewPipeline;
 
     void destroyMesh(PartMesh& mesh) const;
 
@@ -146,8 +142,6 @@ private:
     const TextureResource& requireTextureResource(const std::string& textureKey);
     void createGBufferRhiResources();
     void destroyGBufferRhiResources();
-    [[nodiscard]] bool ensureNeutralShadowTextures();
-    [[nodiscard]] bool bindDisabledShadowNeutralTextures(Shader& shader);
 
     // Per-object velocity: stores previous-frame model matrix per entity part.
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;

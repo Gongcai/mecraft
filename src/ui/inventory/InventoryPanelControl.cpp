@@ -341,7 +341,7 @@ void InventoryPanelControl::renderBackground(const UIRenderContext& context) con
 void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
                                                 const ResolvedPanelRect& panelRect) const
 {
-    if (!context.humanoidRenderer || context.pixelScale() <= 0.0f) {
+    if (!context.humanoidRenderer || context.commandList == nullptr || context.pixelScale() <= 0.0f) {
         return;
     }
     if (!m_layout.showPlayerPreview) {
@@ -355,14 +355,17 @@ void InventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
     const float previewY = static_cast<float>(context.screenHeight) - (previewTopY + previewHeight);
     const float pointerBottomY = static_cast<float>(context.screenHeight) - context.pointerY;
 
-    context.humanoidRenderer->renderInventoryPreview(previewX,
+    context.humanoidRenderer->renderInventoryPreview(*context.commandList,
+                                                     previewX,
                                                      previewY,
                                                      previewWidth,
                                                      previewHeight,
                                                      context.pixelScale(),
                                                      context.pointerX,
                                                      pointerBottomY,
-                                                     context.timeSeconds);
+                                                     context.timeSeconds,
+                                                     context.screenWidth,
+                                                     context.screenHeight);
 }
 
 void InventoryPanelControl::renderDraggedItem(const UIRenderContext& context) const

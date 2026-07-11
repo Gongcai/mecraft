@@ -535,7 +535,8 @@ void CreativeInventoryPanelControl::renderBackground(const UIRenderContext& cont
 void CreativeInventoryPanelControl::renderPlayerPreview(const UIRenderContext& context,
                                                         const ResolvedPanelRect& panelRect) const
 {
-    if (m_tab != CreativeInventoryTab::PlayerInventory || !context.humanoidRenderer || context.pixelScale() <= 0.0f) {
+    if (m_tab != CreativeInventoryTab::PlayerInventory || !context.humanoidRenderer ||
+        context.commandList == nullptr || context.pixelScale() <= 0.0f) {
         return;
     }
 
@@ -546,14 +547,17 @@ void CreativeInventoryPanelControl::renderPlayerPreview(const UIRenderContext& c
     const float previewY = static_cast<float>(context.screenHeight) - (previewTopY + previewHeight);
     const float pointerBottomY = static_cast<float>(context.screenHeight) - context.pointerY;
 
-    context.humanoidRenderer->renderInventoryPreview(previewX,
+    context.humanoidRenderer->renderInventoryPreview(*context.commandList,
+                                                     previewX,
                                                      previewY,
                                                      previewWidth,
                                                      previewHeight,
                                                      context.pixelScale(),
                                                      context.pointerX,
                                                      pointerBottomY,
-                                                     context.timeSeconds);
+                                                     context.timeSeconds,
+                                                     context.screenWidth,
+                                                     context.screenHeight);
 }
 
 void CreativeInventoryPanelControl::renderTabs(const UIRenderContext& context,
