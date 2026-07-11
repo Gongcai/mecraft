@@ -15,6 +15,7 @@
 #include "TextureAtlas.h"
 
 class Shader;
+class RhiDevice;
 
 class ResourceMgr : public IBlockTextureColorProvider {
 public:
@@ -26,8 +27,10 @@ public:
     ResourceMgr(ResourceMgr&&) noexcept;
     ResourceMgr& operator=(ResourceMgr&&) noexcept;
 
-    void init();
+    void init(RhiDevice& rhiDevice);
     void shutdown();
+    [[nodiscard]] RhiDevice& rhiDevice();
+    [[nodiscard]] const RhiDevice& rhiDevice() const;
 
     Shader *loadShader(const std::string &name,
                        const char *vertPath,

@@ -48,7 +48,7 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
         return false;
     }
     m_threadPool.start();
-    if (!app::bootstrapGameResources(m_resourceMgr)) {
+    if (!app::bootstrapGameResources(m_resourceMgr, *m_rhiDevice)) {
         return false;
     }
     
@@ -381,6 +381,7 @@ void GameManager::shutdown() {
         m_appStateMachine.popState();
     }
     m_uiRenderer.shutdown();
+    m_resourceMgr.shutdown();
     m_bgmSystem.shutdown();
     m_audioEngine.shutdown();
     if (m_rhiDevice) {

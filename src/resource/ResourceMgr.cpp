@@ -12,10 +12,13 @@
 #include "ShaderLibrary.h"
 #include "Texture2DLibrary.h"
 #include "UiTextureAtlasLibrary.h"
+#include "renderer/rhi/RhiDevice.h"
 
+#include <cassert>
 #include <memory>
 
 struct ResourceMgr::Impl {
+    RhiDevice* rhiDevice = nullptr;
     ShaderLibrary shaders;
     Texture2DLibrary texture2D;
     BlockTextureLibrary blockTextures;
@@ -35,7 +38,8 @@ ResourceMgr::ResourceMgr(ResourceMgr&&) noexcept = default;
 
 ResourceMgr& ResourceMgr::operator=(ResourceMgr&&) noexcept = default;
 
-void ResourceMgr::init() {
+void ResourceMgr::init(RhiDevice& rhiDevice) {
+    m_impl->rhiDevice = &rhiDevice;
     resource::loadDefaultShaders(m_impl->shaders);
 
     loadCubemap("menu_skybox",
@@ -58,6 +62,17 @@ void ResourceMgr::shutdown() {
     m_impl->cubemaps.shutdown();
 
     m_impl->shaders.clear();
+    m_impl->rhiDevice = nullptr;
+}
+
+RhiDevice& ResourceMgr::rhiDevice() {
+    assert(m_impl->rhiDevice != nullptr);
+    return *m_impl->rhiDevice;
+}
+
+const RhiDevice& ResourceMgr::rhiDevice() const {
+    assert(m_impl->rhiDevice != nullptr);
+    return *m_impl->rhiDevice;
 }
 
 Shader *ResourceMgr::loadShader(const std::string &name, const char *vertPath, const char *fragPath) {

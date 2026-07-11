@@ -2,10 +2,11 @@
 #define MECRAFT_GAME_RESOURCE_BOOTSTRAPPER_H
 
 class ResourceMgr;
+class RhiDevice;
 
 namespace app {
 
-[[nodiscard]] bool bootstrapGameResources(ResourceMgr& resourceMgr);
+[[nodiscard]] bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
 
 } // namespace app
 
