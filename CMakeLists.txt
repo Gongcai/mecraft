@@ -255,7 +255,6 @@ set(SRC_WORLD
 # [渲染与UI]
 set(SRC_RENDERER
         # Debug utilities
-        src/renderer/debug/RenderDebugLabels.cpp
         src/renderer/debug/RenderDebugService.cpp
 
         # Contracts

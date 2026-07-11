@@ -4,7 +4,6 @@
 #include "SettingsMapper.h"
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
-#include "../debug/RenderDebugLabels.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
@@ -271,11 +270,6 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     }
 
     // New pipeline path
-    char frameLabel[64];
-    std::snprintf(frameLabel, sizeof(frameLabel), "Frame %llu %s",
-                  static_cast<unsigned long long>(m_currentContext.frameIndex),
-                  m_activePipeline ? m_activePipeline->name() : "Unknown");
-    renderer::debug::ScopedDebugGroup frameGroup(frameLabel);
     m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
 
     // R5: Render block interaction overlays (outline + break overlay)

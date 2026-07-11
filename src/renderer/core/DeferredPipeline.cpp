@@ -1,7 +1,6 @@
 #include "DeferredPipeline.h"
 #include "RenderScene.h"
 #include "FrameOutput.h"
-#include "../debug/RenderDebugLabels.h"
 #include "../debug/RenderDebugService.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
@@ -352,7 +351,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Sky capture
     if (m_skyCapturePass && m_shared->sky) {
-        renderer::debug::ScopedDebugGroup passGroup("SkyCapture");
         m_skyCapturePass->execute(*ctx.dayNightSystem, *ctx.weatherSystem, *m_shared->rhiDevice,
                                   targets, *m_shared->sky,
                                   *m_resourceMgr, ctx.camera.position.y,
@@ -364,7 +362,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // GBuffer terrain
     {
-        renderer::debug::ScopedDebugGroup passGroup("GBuffer");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::GBuffer);
         renderGBufferTerrain(ctx, m_currentSettings);
 
@@ -389,14 +386,12 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Velocity pass
     if (m_velocityPass) {
-        renderer::debug::ScopedDebugGroup passGroup("Velocity");
         m_velocityPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Shadow pass
     if (m_shadowPass && m_currentSettings.shadow.enabled &&
         m_shared->shadowRenderer && ctx.worldView) {
-        renderer::debug::ScopedDebugGroup passGroup("Shadow");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Shadow);
         auto shadowOutput = m_shadowPass->execute(
             ctx, m_currentSettings, targets, *ctx.worldView,
@@ -407,7 +402,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // SSAO pass
     if (m_ssaoPass) {
-        renderer::debug::ScopedDebugGroup passGroup("SSAO");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Ssao);
         m_ssaoPass->execute(ctx, m_currentSettings, targets);
     }
@@ -417,7 +411,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Deferred lighting
     if (m_lightingPass) {
-        renderer::debug::ScopedDebugGroup passGroup("DeferredLighting");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Lighting);
         m_lightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
         m_lightingPass->execute(ctx, m_currentSettings, targets);
@@ -436,34 +429,29 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // SSGI pass
     if (m_ssgiPass) {
-        renderer::debug::ScopedDebugGroup passGroup("SSGI");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Ssgi);
         m_ssgiPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Reflection pass
     if (m_reflectionPass) {
-        renderer::debug::ScopedDebugGroup passGroup("Reflection");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Reflection);
         m_reflectionPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Cloud pass
     if (m_cloudPass) {
-        renderer::debug::ScopedDebugGroup passGroup("Cloud");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Cloud);
         m_cloudPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Voxel GI clipmap update
     if (m_voxelGiClipmap) {
-        renderer::debug::ScopedDebugGroup passGroup("VoxelGI.Clipmap");
         m_voxelGiClipmap->update(ctx, m_currentSettings.voxelGi, *m_resourceMgr, rhiDevice);
     }
 
     // Scene composite
     if (m_sceneCompositePass) {
-        renderer::debug::ScopedDebugGroup passGroup("SceneComposite");
         m_sceneCompositePass->execute(ctx, m_currentSettings, targets, m_voxelGiClipmap.get());
     }
     targets.copySceneCompositeToTransparentComposite(rhiDevice);
@@ -479,13 +467,11 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Water composite (before TAA)
     if (m_currentSettings.taa.enabled) {
-        renderer::debug::ScopedDebugGroup passGroup("WaterComposite.PreTAA");
         renderWaterCompositePass(ctx, true);
     }
 
     // Generic transparent terrain (glass, stained glass) before temporal resolve.
     {
-        renderer::debug::ScopedDebugGroup passGroup("Transparent.Generic");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Transparent);
         renderGenericTransparentPass(ctx);
     }
@@ -499,26 +485,22 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Volumetric fog
     if (m_volumetricPass) {
-        renderer::debug::ScopedDebugGroup passGroup("Volumetric");
         ScopedGpuTimer timer(ctx.debugService, GpuTimerPass::Volumetric);
         m_volumetricPass->execute(ctx, m_currentSettings, targets, m_hasPreviousFrameData);
     }
 
     // TAA resolve
     if (m_taaPass && m_currentSettings.taa.enabled && m_hasPreviousFrameData) {
-        renderer::debug::ScopedDebugGroup passGroup("TemporalResolve");
         m_taaPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Motion blur
     if (m_motionBlurPass && m_currentSettings.postProcess.motionBlurEnabled && m_hasPreviousFrameData) {
-        renderer::debug::ScopedDebugGroup passGroup("MotionBlur");
         m_motionBlurPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Depth of field
     if (m_dofPass && m_currentSettings.postProcess.dofEnabled) {
-        renderer::debug::ScopedDebugGroup passGroup("DepthOfField");
         m_dofPass->execute(ctx, m_currentSettings, targets);
     }
 
@@ -535,7 +517,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     // Match the legacy split path: if water was not rendered before temporal
     // resolve, composite it over the already-blitted final scene.
     if (!m_waterRenderedBeforeTemporal) {
-        renderer::debug::ScopedDebugGroup passGroup("WaterComposite.PostTAAFallback");
         renderWaterCompositePass(ctx, false);
     }
 
