@@ -5,24 +5,6 @@
 
 namespace renderer::gl {
 
-class ScopedCapabilityDisable {
-public:
-    explicit ScopedCapabilityDisable(uint32_t capability);
-    ~ScopedCapabilityDisable();
-
-    ScopedCapabilityDisable(const ScopedCapabilityDisable&) = delete;
-    ScopedCapabilityDisable& operator=(const ScopedCapabilityDisable&) = delete;
-
-private:
-    uint32_t m_capability = 0;
-    bool m_wasEnabled = false;
-};
-
-class ScopedCullFaceDisable final : public ScopedCapabilityDisable {
-public:
-    ScopedCullFaceDisable();
-};
-
 class ScopedStateSnapshot {
 public:
     ScopedStateSnapshot();

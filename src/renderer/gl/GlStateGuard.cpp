@@ -4,24 +4,6 @@
 
 namespace renderer::gl {
 
-ScopedCapabilityDisable::ScopedCapabilityDisable(const uint32_t capability)
-    : m_capability(capability),
-      m_wasEnabled(glIsEnabled(static_cast<GLenum>(capability)) == GL_TRUE) {
-    glDisable(static_cast<GLenum>(m_capability));
-}
-
-ScopedCapabilityDisable::~ScopedCapabilityDisable() {
-    if (m_wasEnabled) {
-        glEnable(static_cast<GLenum>(m_capability));
-    } else {
-        glDisable(static_cast<GLenum>(m_capability));
-    }
-}
-
-ScopedCullFaceDisable::ScopedCullFaceDisable()
-    : ScopedCapabilityDisable(GL_CULL_FACE) {
-}
-
 ScopedStateSnapshot::ScopedStateSnapshot() {
     glGetIntegerv(GL_VIEWPORT, m_viewport);
     m_depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
