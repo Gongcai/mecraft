@@ -105,6 +105,12 @@ public:
     void setEnvironmentLight(float sunlight, float blockLight);
     void setSceneHdrScale(float scale);
     void prepareFrameResources(const Inventory& inventory);
+    void prepareFrame(int width,
+                      int height,
+                      const Inventory& inventory,
+                      const FirstPersonHeldItemMotion& motion,
+                      float timeSeconds);
+    void renderPrepared();
 
     // Shadow data from Renderer — must be set before render() each frame.
     struct ShadowData {
@@ -201,6 +207,18 @@ private:
     float m_environmentBlockLight = 0.0f;
     float m_sceneHdrScale = 1.0f;
     bool m_initialized = false;
+
+    enum class PreparedDrawKind : uint8_t { None, Arm, Item };
+    struct PreparedHeldItemFrame {
+        PreparedDrawKind kind = PreparedDrawKind::None;
+        glm::mat4 view{1.0f};
+        glm::mat4 viewProj{1.0f};
+        glm::mat4 model{1.0f};
+        ItemID itemId = 0;
+        int width = 0;
+        int height = 0;
+    };
+    PreparedHeldItemFrame m_preparedFrame;
 };
 
 #endif // MECRAFT_FIRST_PERSON_HELD_ITEM_RENDERER_H

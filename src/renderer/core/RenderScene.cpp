@@ -378,14 +378,15 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->setSceneHdrScale(
             computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
         request.firstPersonHeldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
-        RhiCommandList* heldItemCommandList = beginSceneCaptureRendering(
-            *m_shared.rhiDevice, m_currentContext, "SceneCapture.FirstPersonHeldItem");
-        request.firstPersonHeldItemRenderer->render(
+        request.firstPersonHeldItemRenderer->prepareFrame(
             frameRenderSize.x,
             frameRenderSize.y,
             *request.firstPersonInventory,
             *request.firstPersonHeldItemMotion,
             static_cast<float>(Time::getGameTime()));
+        RhiCommandList* heldItemCommandList = beginSceneCaptureRendering(
+            *m_shared.rhiDevice, m_currentContext, "SceneCapture.FirstPersonHeldItem");
+        request.firstPersonHeldItemRenderer->renderPrepared();
         endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList);
     }
 

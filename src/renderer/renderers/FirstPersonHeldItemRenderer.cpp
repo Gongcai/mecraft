@@ -560,7 +560,17 @@ void FirstPersonHeldItemRenderer::render(const int width,
                                          const Inventory& inventory,
                                          const FirstPersonHeldItemMotion& motion,
                                          const float timeSeconds) {
-    if (!m_initialized || m_resourceMgr == nullptr || m_steveShader == nullptr) {
+    prepareFrame(width, height, inventory, motion, timeSeconds);
+    renderPrepared();
+}
+
+void FirstPersonHeldItemRenderer::prepareFrame(const int width,
+                                               const int height,
+                                               const Inventory& inventory,
+                                               const FirstPersonHeldItemMotion& motion,
+                                               const float timeSeconds) {
+    m_preparedFrame = {};
+    if (!m_initialized || m_resourceMgr == nullptr) {
         return;
     }
     if (width <= 0 || height <= 0) {
@@ -617,18 +627,6 @@ void FirstPersonHeldItemRenderer::render(const int width,
         }
     }
 
-    const renderer::gl::ScopedStateSnapshot stateGuard;
-    glViewport(0, 0, width, height);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
-    // View-model geometry is not in world space; keep it in front while still writing scene depth.
-    glDepthFunc(GL_ALWAYS);
-    glDepthRange(0.0, 0.08);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
     const float aspect = static_cast<float>(width) / static_cast<float>(std::max(1, height));
     const glm::mat4 projection = glm::perspective(glm::radians(m_config.fovDegrees), aspect, 0.05f, 10.0f);
     const glm::mat4 view(1.0f);
@@ -659,9 +657,7 @@ void FirstPersonHeldItemRenderer::render(const int width,
         armModel = glm::rotate(armModel, glm::radians(m_config.armYawDegrees - yawLag * m_config.viewLagYawDegrees) + swingSin * glm::radians(m_config.armSwingYawDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
         armModel = glm::rotate(armModel, glm::radians(m_config.armRollDegrees) + bobRoll + swingSinFull * glm::radians(m_config.armSwingRollDegrees), glm::vec3(0.0f, 0.0f, 1.0f));
         armModel = glm::scale(armModel, glm::vec3(m_config.armScale));
-        drawArm(viewProj, armModel);
-
-        glBindVertexArray(0);
+        m_preparedFrame = {PreparedDrawKind::Arm, view, viewProj, armModel, 0, width, height};
         return;
     }
 
@@ -694,8 +690,31 @@ void FirstPersonHeldItemRenderer::render(const int width,
     }
     itemModel = glm::translate(itemModel, glm::vec3(-0.5f, -0.5f, -0.5f));
 
-    drawItem(m_visibleItemId, view, viewProj, itemModel);
+    m_preparedFrame = {
+        PreparedDrawKind::Item, view, viewProj, itemModel, m_visibleItemId, width, height
+    };
+}
 
+void FirstPersonHeldItemRenderer::renderPrepared() {
+    if (m_preparedFrame.kind == PreparedDrawKind::None) {
+        return;
+    }
+    const renderer::gl::ScopedStateSnapshot stateGuard;
+    glViewport(0, 0, m_preparedFrame.width, m_preparedFrame.height);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_ALWAYS);
+    glDepthRange(0.0, 0.08);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    if (m_preparedFrame.kind == PreparedDrawKind::Arm) {
+        drawArm(m_preparedFrame.viewProj, m_preparedFrame.model);
+    } else {
+        drawItem(m_preparedFrame.itemId, m_preparedFrame.view,
+                 m_preparedFrame.viewProj, m_preparedFrame.model);
+    }
     glBindVertexArray(0);
 }
 
