@@ -16,7 +16,6 @@
 #include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 
-#include <glad/glad.h>
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
