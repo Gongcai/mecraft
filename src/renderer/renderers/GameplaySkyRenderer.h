@@ -86,8 +86,7 @@ public:
     void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, uint32_t skyCaptureTexture);
     void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList,
                                 RhiTextureViewHandle targetView, int skyCaptureWidth,
-                                int skyCaptureHeight, RhiTextureHandle atmosphereLutTexture,
-                                RhiTextureViewHandle atmosphereLutView,
+                                int skyCaptureHeight, RhiTextureViewHandle atmosphereLutView,
                                 RhiTextureHandle noiseTexture,
                                 const SkyIlluminanceData& illuminance,
                                 const CloudySkyCaptureParams& params);
@@ -161,6 +160,9 @@ private:
     RhiBindGroupLayoutHandle m_captureBindGroupLayout;
     RhiBindGroupHandle m_captureBindGroup;
     RhiPipelineLayoutHandle m_capturePipelineLayout;
+    RhiShaderHandle m_captureVertexShader;
+    RhiShaderHandle m_captureFragmentShader;
+    RhiPipelineHandle m_capturePipeline;
     RhiTextureViewHandle m_captureAtmosphereLutView;
     int32_t m_haloVertexCount = 0;
     int32_t m_cloudVertexCount = 0;
