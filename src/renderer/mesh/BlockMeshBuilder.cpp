@@ -12,6 +12,7 @@
 #include <glm/glm.hpp>
 
 #include "../../resource/ResourceMgr.h"
+#include "../rhi/RhiDevice.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockModelRegistry.h"
 #include "../../world/block/BlockStateRegistry.h"
@@ -514,17 +515,34 @@ BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, const ResourceMgr& resou
     return uploadBlockCubeMesh(vertices);
 }
 
-BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, const ResourceMgr& resourceMgr) {
+BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, ResourceMgr& resourceMgr) {
     BlockCubeMesh mesh;
     std::vector<BlockVertex> vertices = buildBlockMeshVerticesForState(stateId, resourceMgr);
     if (vertices.empty()) {
         return mesh;
     }
 
-    return uploadBlockCubeMesh(vertices);
+    mesh = uploadBlockCubeMesh(vertices);
+    RhiDevice& rhiDevice = resourceMgr.rhiDevice();
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "BlockStateCubeMesh.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(BlockVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(BlockVertex));
+    mesh.rhiDevice = &rhiDevice;
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyBlockCubeMesh(mesh);
+    }
+    return mesh;
 }
 
 void destroyBlockCubeMesh(BlockCubeMesh& mesh) {
+    if (mesh.rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
+        mesh.rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
+        mesh.rhiVertexBuffer = {};
+    }
     if (mesh.vbo != 0) {
         glDeleteBuffers(1, &mesh.vbo);
         mesh.vbo = 0;
@@ -534,6 +552,7 @@ void destroyBlockCubeMesh(BlockCubeMesh& mesh) {
         mesh.vao = 0;
     }
     mesh.vertexCount = 0;
+    mesh.rhiDevice = nullptr;
 }
 
 } // namespace renderer

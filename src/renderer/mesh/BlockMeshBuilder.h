@@ -7,8 +7,10 @@
 #include "world/chunk/SubChunk.h"  // BlockVertex
 #include "world/block/Block.h"     // BlockID
 #include "world/block/BlockStateRegistry.h"
+#include "renderer/rhi/RhiHandles.h"
 
 class ResourceMgr;
+class RhiDevice;
 
 namespace renderer {
 
@@ -17,9 +19,12 @@ namespace renderer {
 struct BlockCubeMesh {
     uint32_t vao = 0;
     uint32_t vbo = 0;
+    RhiBufferHandle rhiVertexBuffer;
+    RhiDevice* rhiDevice = nullptr;
     uint32_t vertexCount = 0;
 
     [[nodiscard]] bool valid() const { return vao != 0 && vertexCount > 0; }
+    [[nodiscard]] bool rhiValid() const { return rhiVertexBuffer.isValid() && vertexCount > 0; }
 };
 
 /// Build local-space BlockVertex geometry for a block-backed item/entity mesh.
@@ -38,7 +43,7 @@ struct BlockCubeMesh {
 BlockCubeMesh buildBlockCubeMesh(BlockID blockId, const ResourceMgr& resourceMgr);
 
 /// Build and upload a block-backed item/entity mesh for a specific state.
-BlockCubeMesh buildBlockStateCubeMesh(BlockStateId stateId, const ResourceMgr& resourceMgr);
+BlockCubeMesh buildBlockStateCubeMesh(BlockStateId stateId, ResourceMgr& resourceMgr);
 
 /// Upload a caller-built BlockVertex list to a GL mesh with the standard
 /// block vertex layout (matches ChunkMesher / DropRenderer attrib bindings).
