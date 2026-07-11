@@ -2,6 +2,8 @@
 
 #include <glad/glad.h>
 
+#include <algorithm>
+#include <cmath>
 #include <random>
 #include <glm/gtc/random.hpp>
 
@@ -45,6 +47,7 @@ void RainRenderer::shutdown() {
 }
 
 void RainRenderer::prepareFrame(const glm::vec3& cameraPos,
+                                const glm::mat4& view,
                                 const float rainStrength,
                                 const float snowStrength,
                                 float dt) {
@@ -52,10 +55,18 @@ void RainRenderer::prepareFrame(const glm::vec3& cameraPos,
     if (rainStrength > 0.01f) {
         ensureDrops(m_rainDrops, MAX_RAIN_DROPS, cameraPos);
         updateDrops(m_rainDrops, dt, RAIN_FALL_SPEED, cameraPos);
+        buildVertices(m_rainDrops, rainStrength, RAIN_DROP_LENGTH, 0.006f,
+                      true, view, m_rainVertices);
+    } else {
+        m_rainVertices.clear();
     }
     if (snowStrength > 0.01f) {
         ensureDrops(m_snowDrops, MAX_SNOW_DROPS, cameraPos);
         updateDrops(m_snowDrops, dt, SNOW_FALL_SPEED, cameraPos);
+        buildVertices(m_snowDrops, snowStrength, SNOW_DROP_LENGTH, 0.025f,
+                      false, view, m_snowVertices);
+    } else {
+        m_snowVertices.clear();
     }
 }
 
@@ -112,14 +123,55 @@ void RainRenderer::wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& ca
     }
 }
 
+void RainRenderer::buildVertices(const std::vector<PrecipDrop>& drops,
+                                 const float strength,
+                                 const float dropLength,
+                                 const float streakWidth,
+                                 const bool proceduralLines,
+                                 const glm::mat4& view,
+                                 std::vector<float>& vertices) const {
+    const glm::vec3 right(view[0][0], view[1][0], view[2][0]);
+    const float wind = std::sin(m_time * 0.1f) * 0.25f + 0.25f;
+    constexpr float kWindAngle = 3.14159f / 60.0f;
+    const glm::vec3 fallDir = glm::normalize(glm::vec3(
+        -wind * std::cos(kWindAngle),
+        -1.0f,
+        -wind * std::sin(kWindAngle) * 0.3f));
+    const int visibleCount = std::min(static_cast<int>(drops.size()),
+                                      static_cast<int>(drops.size() * strength));
+
+    vertices.clear();
+    vertices.reserve(static_cast<size_t>(visibleCount) * 6u * 5u);
+    for (int i = 0; i < visibleCount; ++i) {
+        const PrecipDrop& drop = drops[static_cast<size_t>(i)];
+        const glm::vec3 top = drop.position;
+        const glm::vec3 bottom = top + fallDir * (dropLength * drop.length);
+        const glm::vec3 rightOffset = right * streakWidth;
+        const glm::vec3 corners[4] = {
+            top - rightOffset,
+            top + rightOffset,
+            bottom + rightOffset,
+            bottom - rightOffset
+        };
+        const float u0 = proceduralLines ? 0.0f : drop.texU;
+        const float u1 = proceduralLines ? 1.0f : drop.texU;
+        const int cornerIndices[6] = {0, 1, 2, 0, 2, 3};
+        const float u[4] = {u0, u1, u1, u0};
+        const float v[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+        for (const int cornerIndex : cornerIndices) {
+            const glm::vec3& position = corners[cornerIndex];
+            vertices.insert(vertices.end(), {position.x, position.y, position.z,
+                                             u[cornerIndex], v[cornerIndex]});
+        }
+    }
+}
+
 void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         const glm::mat4& view,
                                         RhiTextureHandle texture,
-                                        std::vector<PrecipDrop>& drops,
+                                        const std::vector<float>& vertices,
                                         float strength,
                                         float skyLightAtCamera,
-                                        float dropLength,
-                                        float streakWidth,
                                         float alphaScale,
                                         const glm::vec3& color,
                                         bool proceduralLines,
@@ -130,57 +182,6 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     const uint32_t textureId = renderer::rhi::gl::textureId(texture);
     if (!m_shader || textureId == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
     const uint32_t sceneDepthTex = renderer::rhi::gl::textureId(sceneDepthTexture);
-
-    // Camera-facing billboards: extract right/up from view matrix.
-    glm::vec3 right(view[0][0], view[1][0], view[2][0]);
-    glm::vec3 up(view[0][1], view[1][1], view[2][1]);
-
-    // DerivativeMain gbuffers_weather.vsh:19-23 - wind animation.
-    // windPos = dot(worldPos + cameraPosition, vec3(2.0))
-    // wind = fma(sin(windPos + frameTimeCounter * 0.1), 0.25, 0.25)
-    // worldPos.xz -= worldPos.y * wind * vec2(cos(windAngle), sin(windAngle))
-    // Simplified for camera-relative particles: tilt fall direction with time.
-    float windPhase = m_time * 0.1f;
-    float wind = sin(windPhase) * 0.25f + 0.25f;  // oscillates [0, 0.5]
-    const float windAngle = 3.14159f / 60.0f;      // PI/60 = 3 degrees (DerivativeMain)
-    glm::vec3 fallDir = glm::normalize(glm::vec3(
-        -wind * cosf(windAngle),
-        -1.0f,
-        -wind * sinf(windAngle) * 0.3f  // reduced Z component for subtle effect
-    ));
-
-    const int visibleCount = static_cast<int>(drops.size() * strength);
-
-    std::vector<float> vertices;
-    vertices.reserve(visibleCount * 6 * 5);
-
-    for (int i = 0; i < visibleCount && i < static_cast<int>(drops.size()); ++i) {
-        const auto& d = drops[i];
-        glm::vec3 worldPos = d.position;
-
-        float len = dropLength * d.length;
-        glm::vec3 top = worldPos;
-        glm::vec3 bot = worldPos + fallDir * len;
-
-        glm::vec3 rOff = right * streakWidth;
-
-        glm::vec3 v0 = top - rOff;
-        glm::vec3 v1 = top + rOff;
-        glm::vec3 v2 = bot + rOff;
-        glm::vec3 v3 = bot - rOff;
-
-        float u0 = proceduralLines ? 0.0f : d.texU;
-        float u1 = proceduralLines ? 1.0f : d.texU;
-
-        // Triangle 1: v0 v1 v2
-        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u0); vertices.push_back(0.0f);
-        vertices.push_back(v1.x); vertices.push_back(v1.y); vertices.push_back(v1.z); vertices.push_back(u1); vertices.push_back(0.0f);
-        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u1); vertices.push_back(1.0f);
-        // Triangle 2: v0 v2 v3
-        vertices.push_back(v0.x); vertices.push_back(v0.y); vertices.push_back(v0.z); vertices.push_back(u0); vertices.push_back(0.0f);
-        vertices.push_back(v2.x); vertices.push_back(v2.y); vertices.push_back(v2.z); vertices.push_back(u1); vertices.push_back(1.0f);
-        vertices.push_back(v3.x); vertices.push_back(v3.y); vertices.push_back(v3.z); vertices.push_back(u0); vertices.push_back(1.0f);
-    }
 
     if (vertices.empty()) return;
 
@@ -242,10 +243,8 @@ void RainRenderer::render(const glm::mat4& projection,
                            float dt,
                            bool hardwareDepthTest) {
     renderPrecipitation(projection, view,
-                        m_rainTex, m_rainDrops,
+                        m_rainTex, m_rainVertices,
                         rainStrength, skyLightAtCamera,
-                        RAIN_DROP_LENGTH,
-                        0.006f,  // streakWidth: DerivativeMain-like thin rain lines
                         alphaScale,
                         glm::vec3(0.72f, 0.78f, 0.85f), // rain blue-gray
                         true,
@@ -265,10 +264,8 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                float dt,
                                bool hardwareDepthTest) {
     renderPrecipitation(projection, view,
-                        m_snowTex, m_snowDrops,
+                        m_snowTex, m_snowVertices,
                         snowStrength, skyLightAtCamera,
-                        SNOW_DROP_LENGTH,
-                        0.025f,  // streakWidth: snow flakes are shorter
                         alphaScale,
                         glm::vec3(0.92f, 0.95f, 1.0f), // snow white
                         false,

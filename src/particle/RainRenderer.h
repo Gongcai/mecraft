@@ -18,6 +18,7 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     void prepareFrame(const glm::vec3& cameraPos,
+                      const glm::mat4& view,
                       float rainStrength,
                       float snowStrength,
                       float dt);
@@ -55,14 +56,19 @@ private:
     void ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops, const glm::vec3& cameraPos);
     void updateDrops(std::vector<PrecipDrop>& drops, float dt, float baseSpeed, const glm::vec3& cameraPos);
     void wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& cameraPos);
+    void buildVertices(const std::vector<PrecipDrop>& drops,
+                       float strength,
+                       float dropLength,
+                       float streakWidth,
+                       bool proceduralLines,
+                       const glm::mat4& view,
+                       std::vector<float>& vertices) const;
     void renderPrecipitation(const glm::mat4& projection,
                              const glm::mat4& view,
                              RhiTextureHandle texture,
-                             std::vector<PrecipDrop>& drops,
+                             const std::vector<float>& vertices,
                              float strength,
                              float skyLightAtCamera,
-                             float dropLength,
-                             float streakWidth,
                              float alphaScale,
                              const glm::vec3& color,
                              bool proceduralLines,
@@ -80,6 +86,8 @@ private:
 
     std::vector<PrecipDrop> m_rainDrops;
     std::vector<PrecipDrop> m_snowDrops;
+    std::vector<float> m_rainVertices;
+    std::vector<float> m_snowVertices;
 
     static constexpr int MAX_RAIN_DROPS = 4000;
     static constexpr int MAX_SNOW_DROPS = 2500;

@@ -315,7 +315,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (m_settings.weather.rainLinesEnabled) {
             const auto& weather = request.weatherSystem.getDerived();
             const glm::vec3 camPos = request.camera.getPosition();
+            const auto viewMat = request.camera.getViewMatrix();
             request.rainRenderer.prepareFrame(camPos,
+                                              viewMat,
                                               weather.rainStrength,
                                               weather.snowStrength,
                                               request.frameTime);
@@ -327,7 +329,6 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));
             auto projMat = request.camera.getProjectionMatrix(frameAspect);
-            auto viewMat = request.camera.getViewMatrix();
             const float alphaScale = m_settings.weather.rainAlphaScale;
             const bool forwardVanillaActive = isNewPipelineActive() &&
                                                getPipelineMode() == PipelineMode::Forward;
