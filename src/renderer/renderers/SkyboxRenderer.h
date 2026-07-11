@@ -11,7 +11,7 @@ class Shader;
 
 class SkyboxRenderer {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
     void render(float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice);
 
@@ -24,6 +24,10 @@ private:
     Shader* m_shader = nullptr;
     Shader* m_blurShader = nullptr;
     RhiTextureHandle m_cubemapTexture;
+    RhiTextureViewHandle m_cubemapView;
+    RhiSamplerHandle m_cubemapSampler;
+    RhiBufferHandle m_cubeVertexBuffer;
+    RhiDevice* m_rhiDevice = nullptr;
     uint32_t m_cubeVao = 0;
     uint32_t m_cubeVbo = 0;
     uint32_t m_fullscreenVao = 0;

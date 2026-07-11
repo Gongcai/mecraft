@@ -2,6 +2,7 @@
 
 #include "../../Diagnostics.h"
 #include <algorithm>
+#include <cstdlib>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -135,10 +136,22 @@ void beginSkyboxBlurOutput(RhiCommandList& commandList,
 }
 }
 
-void SkyboxRenderer::init(ResourceMgr& resourceMgr) {
+void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     m_shader = resourceMgr.getShader("skybox");
     m_blurShader = resourceMgr.getShader("blur");
     m_cubemapTexture = resourceMgr.getCubemap("menu_skybox");
+    if (!m_cubemapTexture.isValid()) std::abort();
+    RhiTextureViewDesc cubemapViewDesc;
+    cubemapViewDesc.texture = m_cubemapTexture;
+    cubemapViewDesc.viewType = RhiTextureViewType::Cube;
+    m_cubemapView = rhiDevice.createTextureView(cubemapViewDesc);
+    RhiSamplerDesc cubemapSamplerDesc;
+    cubemapSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    cubemapSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    cubemapSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_cubemapSampler = rhiDevice.createSampler(cubemapSamplerDesc);
+    if (!m_cubemapView.isValid() || !m_cubemapSampler.isValid()) std::abort();
     initCubeMesh();
 
     glGenVertexArrays(1, &m_fullscreenVao);
@@ -147,6 +160,8 @@ void SkyboxRenderer::init(ResourceMgr& resourceMgr) {
 void SkyboxRenderer::shutdown() {
     destroyBlurTargets();
     destroyCubeMesh();
+    if (m_cubemapSampler.isValid()) m_rhiDevice->destroySampler(m_cubemapSampler);
+    if (m_cubemapView.isValid()) m_rhiDevice->destroyTextureView(m_cubemapView);
 
     if (m_fullscreenVao != 0) {
         glDeleteVertexArrays(1, &m_fullscreenVao);
@@ -156,6 +171,9 @@ void SkyboxRenderer::shutdown() {
     m_shader = nullptr;
     m_blurShader = nullptr;
     m_cubemapTexture = {};
+    m_cubemapView = {};
+    m_cubemapSampler = {};
+    m_rhiDevice = nullptr;
 }
 
 void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice) {
@@ -320,7 +338,16 @@ void SkyboxRenderer::destroyBlurTargets() {
 }
 
 void SkyboxRenderer::initCubeMesh() {
-    if (m_cubeVao != 0) return;
+    if (m_cubeVertexBuffer.isValid()) return;
+
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "Skybox.Cube.VertexBuffer";
+    bufferDesc.size = sizeof(kCubeVertices);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_cubeVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, kCubeVertices, sizeof(kCubeVertices));
+    if (!m_cubeVertexBuffer.isValid()) std::abort();
 
     glGenVertexArrays(1, &m_cubeVao);
     glGenBuffers(1, &m_cubeVbo);
@@ -337,6 +364,10 @@ void SkyboxRenderer::initCubeMesh() {
 }
 
 void SkyboxRenderer::destroyCubeMesh() {
+    if (m_rhiDevice != nullptr && m_cubeVertexBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_cubeVertexBuffer);
+        m_cubeVertexBuffer = {};
+    }
     if (m_cubeVbo != 0) {
         glDeleteBuffers(1, &m_cubeVbo);
         m_cubeVbo = 0;

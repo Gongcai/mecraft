@@ -122,7 +122,7 @@ void MainMenuAppState::onEnter() {
     m_deps.contextManager.pushContext(InputContextType::UI);
     m_deps.input.captureMouse(false);
 
-    m_skyboxRenderer.init(m_deps.resourceMgr);
+    m_skyboxRenderer.init(m_deps.resourceMgr, m_deps.rhiDevice);
     m_skyboxYaw = 0.0f;
     m_transition.init(m_deps.resourceMgr);
     m_transitioningToGame = false;
