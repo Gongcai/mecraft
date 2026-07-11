@@ -12,8 +12,6 @@ struct ShaderDefinition {
 };
 
 constexpr ShaderDefinition kDefaultShaders[] = {
-    {"block_item_lit", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_lit.frag"},
-    {"block_item_forward", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_forward.frag"},
     {"shadow_depth", SHADERS_DIR "/shadow_depth.vert", SHADERS_DIR "/shadow_depth.frag"},
     {"deferred_lighting", SHADERS_DIR "/deferred_lighting.vert", SHADERS_DIR "/deferred_lighting.frag"},
     {"scene_composite", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/scene_composite.frag"},
@@ -49,10 +47,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"text", SHADERS_DIR "/text.vert", SHADERS_DIR "/text.frag"},
     {"rain", SHADERS_DIR "/rain.vert", SHADERS_DIR "/rain.frag"},
     {"postprocess", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/postprocess.frag"},
-    {"item_model", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model.frag"},
-    {"item_model_forward", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model_forward.frag"},
-    {"steve", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve.frag"},
-    {"steve_forward", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve_forward.frag"},
     {"ui_color", SHADERS_DIR "/ui_color.vert", SHADERS_DIR "/ui_color.frag"},
     {"ui_glass", SHADERS_DIR "/ui_glass.vert", SHADERS_DIR "/ui_glass.frag"},
     {"skybox", SHADERS_DIR "/skybox.vert", SHADERS_DIR "/skybox.frag"},
