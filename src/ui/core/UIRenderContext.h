@@ -15,6 +15,7 @@ class LocaleManager;
 class Inventory;
 class TextRenderer;
 class HumanoidRenderer;
+class RhiCommandList;
 
 struct PlayerStatsData {
     int health = 20;
@@ -51,6 +52,7 @@ struct UIRenderContext {
     const UITheme* theme = nullptr;
     const LocaleManager* localeManager = nullptr;
     RhiTextureHandle backdropBlur;
+    RhiCommandList* commandList = nullptr;
     bool backdropBlurPrepared = false;
     int backdropSourceWidth = 0;
     int backdropSourceHeight = 0;

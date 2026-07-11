@@ -58,6 +58,15 @@ bool beginUiOverlayPass(RenderResourceHub& renderer,
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
+    RhiDepthStencilAttachment depthAttachment;
+    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
+    if (!depthView.isValid()) {
+        return false;
+    }
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList = &rhiDevice.beginFrame();
     commandList->beginRendering(renderingInfo);
@@ -376,6 +385,7 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         if (!beginUiOverlayPass(renderer, window, uiCommandList)) {
             return false;
         }
+        uiContext.commandList = uiCommandList;
 
         hudPresenter->renderPrepared(uiContext, session.stateMachine());
 #ifdef MECRAFT_DEBUG
