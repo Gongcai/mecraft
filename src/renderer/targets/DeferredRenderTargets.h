@@ -252,6 +252,8 @@ private:
     void destroyMotionTextures();
     bool createSsaoTextures();
     void destroySsaoTextures();
+    bool createSsgiTextures();
+    void destroySsgiTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -328,24 +330,17 @@ private:
     RhiTextureHandle m_ssaoTemporalHandle;
     RhiTextureViewHandle m_ssaoTemporalView;
 
-    uint32_t m_ssgiTex = 0;
     RhiTextureHandle m_ssgiHandle;
     RhiTextureViewHandle m_ssgiView;
-    uint32_t m_ssgiHalfResTex = 0;
     RhiTextureHandle m_ssgiHalfResHandle;
     RhiTextureViewHandle m_ssgiHalfResView;
-    uint32_t m_ssgiDenoiseTex[2] = {0, 0};
     RhiTextureHandle m_ssgiDenoiseHandle[2];
     RhiTextureViewHandle m_ssgiDenoiseView[2];
-    uint32_t m_ssgiHistoryTex[2] = {0, 0};
-    uint32_t m_ssgiMomentsHistoryTex[2] = {0, 0};
     RhiTextureHandle m_ssgiHistoryHandle[2];
     RhiTextureHandle m_ssgiMomentsHistoryHandle[2];
     RhiTextureViewHandle m_ssgiHistoryView[2];
     RhiTextureViewHandle m_ssgiMomentsHistoryView[2];
     int m_ssgiHistoryIndex = 0;
-    uint32_t m_ssgiTemporalTex = 0;
-    uint32_t m_ssgiTemporalMomentsTex = 0;
     RhiTextureHandle m_ssgiTemporalHandle;
     RhiTextureHandle m_ssgiTemporalMomentsHandle;
     RhiTextureViewHandle m_ssgiTemporalView;
