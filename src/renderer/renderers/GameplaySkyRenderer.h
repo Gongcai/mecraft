@@ -70,6 +70,11 @@ public:
         float planarCloudAltitude = 7000.0f;
         float weatherWetness = 0.0f;
         float weatherStorm = 0.0f;
+        float skyWetness = 0.0f;
+        float fogWetness = 0.0f;
+        float cloudWetness = 0.0f;
+        float surfaceWetness = 0.0f;
+        float precipitation = 0.0f;
         glm::vec3 cameraPosition = glm::vec3(0.0f);
     };
 

@@ -314,12 +314,11 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
     m_shader->setFloat("uWeatherWetness", params.weatherWetness);
     m_shader->setFloat("uWeatherStorm", params.weatherStorm);
     // Sky radiance occlusion uses the DerivativeMain wetness+storm gate.
-    const float skyWetnessLocal = std::clamp(params.weatherWetness + params.weatherStorm, 0.0f, 1.0f);
-    m_shader->setFloat("uSkyWetness", skyWetnessLocal);
-    m_shader->setFloat("uFogWetness", std::clamp(params.weatherWetness * 0.35f + params.weatherStorm * 0.65f, 0.0f, 1.0f));
-    m_shader->setFloat("uCloudWetness", std::clamp(params.weatherWetness + params.weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
-    m_shader->setFloat("uSurfaceWetness", std::clamp(params.weatherWetness + params.weatherStorm * 0.3f, 0.0f, 1.0f));
-    m_shader->setFloat("uPrecipitation", skyWetnessLocal);
+    m_shader->setFloat("uSkyWetness", params.skyWetness);
+    m_shader->setFloat("uFogWetness", params.fogWetness);
+    m_shader->setFloat("uCloudWetness", params.cloudWetness);
+    m_shader->setFloat("uSurfaceWetness", params.surfaceWetness);
+    m_shader->setFloat("uPrecipitation", params.precipitation);
     m_shader->setInt("uNoiseTex", 2);
     m_shader->setBool("uNoiseEnabled", true);
     m_shader->setFloat("uTime", params.shaderTime);

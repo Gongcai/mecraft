@@ -116,6 +116,11 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
         7000.0f,
         weatherWetness,
         weatherStorm,
+        std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f),
+        std::clamp(weatherWetness * 0.35f + weatherStorm * 0.65f, 0.0f, 1.0f),
+        std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f),
+        std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f),
+        std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f),
         cameraPos
     };
     skyRenderer.renderCloudySkyCapture(skyColors,
