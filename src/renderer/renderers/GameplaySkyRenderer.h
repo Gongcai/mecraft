@@ -77,11 +77,6 @@ public:
                                 float planarCloudAltitude,
                                 float cloudTimeScale, const glm::vec3& cameraPos,
                                 float weatherWetness = 0.0f, float weatherStorm = 0.0f);
-    void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, RhiCommandList& commandList,
-                               RhiTextureViewHandle targetView, int skyCaptureWidth,
-                               float cameraAltitude, RhiTextureHandle atmosphereLutTexture, float moonPhaseFlux,
-                               float weatherWetness = 0.0f, float weatherStorm = 0.0f);
-
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
     [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors,
                                                             float weatherWetness = 0.0f,

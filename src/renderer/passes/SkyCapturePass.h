@@ -2,6 +2,7 @@
 #define MECRAFT_SKY_CAPTURE_PASS_H
 
 #include "RenderPass.h"
+#include "../rhi/RhiHandles.h"
 #include <glm/glm.hpp>
 
 class DeferredRenderTargets;
@@ -35,6 +36,21 @@ public:
                  GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
                  float cameraY, float shaderTime, const glm::vec3& cameraPos,
                  float cloudTimeScale);
+
+private:
+    [[nodiscard]] bool ensureMetadataResources(RhiDevice& rhiDevice,
+                                               RhiTextureViewHandle atmosphereLutView);
+    void destroyMetadataResources();
+
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiSamplerHandle m_metadataSampler;
+    RhiShaderHandle m_metadataVertexShader;
+    RhiShaderHandle m_metadataFragmentShader;
+    RhiBindGroupLayoutHandle m_metadataBindGroupLayout;
+    RhiPipelineLayoutHandle m_metadataPipelineLayout;
+    RhiPipelineHandle m_metadataPipeline;
+    RhiBindGroupHandle m_metadataBindGroup;
+    RhiTextureViewHandle m_boundAtmosphereLutView;
 };
 
 #endif // MECRAFT_SKY_CAPTURE_PASS_H
