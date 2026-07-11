@@ -43,6 +43,7 @@ public:
         float height = 0.0f;
     };
     using DrawRectFn = std::function<void(int, int, int, int, const std::array<float, 4>&)>;
+    using SetClipRectFn = std::function<void(int, int, int, int)>;
     using RenderTextFn = std::function<void(const std::string&, float, float, float, const std::array<float, 4>&, float, float)>;
     using MeasureTextFn = std::function<TextMetricsResult(const std::string&, float)>;
 
@@ -56,6 +57,7 @@ public:
     void render(double nowSec,
                 const RenderParams& params,
                 const DrawRectFn& drawRect,
+                const SetClipRectFn& setClipRect,
                 const RenderTextFn& renderText,
                 const MeasureTextFn& measureText);
 
@@ -72,4 +74,3 @@ private:
     std::deque<Line> m_lines;
     std::size_t m_maxLines = 64;
 };
-

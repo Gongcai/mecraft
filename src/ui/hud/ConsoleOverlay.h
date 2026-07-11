@@ -33,7 +33,8 @@ protected:
     void renderSelf(const UIRenderContext& context) const override;
 
 private:
-    void renderMessages(double nowSec, const TextRenderer& textRenderer, const UITheme* theme = nullptr) const;
+    void renderMessages(double nowSec, const TextRenderer& textRenderer,
+                        const UIRenderContext& context) const;
     void drawOverlayRect(int screenW,
                          int screenH,
                          int rectX,
@@ -53,4 +54,3 @@ private:
     float m_holdSeconds = 5.0f;
     float m_fadeEndSeconds = 8.0f;
 };
-
