@@ -1,6 +1,5 @@
 #include "GameplaySkyRenderer.h"
 
-#include "../gl/GlStateGuard.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -8,14 +7,10 @@
 #include <deque>
 #include <vector>
 
-#include <glad/glad.h>
-
-#include "../core/Shader.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "engine/camera/Camera.h"
 #include "../../Paths.h"
 #include "../../resource/ResourceMgr.h"
@@ -387,11 +382,8 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
         !m_haloPipeline.isValid() || !m_cloudVertexShader.isValid() ||
         !m_cloudFragmentShader.isValid() || !m_cloudPipelineLayout.isValid() ||
         !m_cloudPipeline.isValid()) std::abort();
-    m_deferredShader = resourceMgr.getShader("gameplay_sky");
-    m_shader = m_deferredShader;
     initMeshes();
     initCloudMesh();
-    ensureDummySkyCaptureTexture();
 }
 
 void GameplaySkyRenderer::shutdown() {
@@ -444,12 +436,6 @@ void GameplaySkyRenderer::shutdown() {
     m_captureAtmosphereLutView = {};
     m_captureNoiseView = {};
     m_captureNoiseTexture = {};
-    if (m_dummySkyCaptureTexture != 0) {
-        glDeleteTextures(1, &m_dummySkyCaptureTexture);
-        m_dummySkyCaptureTexture = 0;
-    }
-    m_shader = nullptr;
-    m_deferredShader = nullptr;
     m_resourceMgr = nullptr;
     m_rhiDevice = nullptr;
 }
@@ -504,16 +490,6 @@ void GameplaySkyRenderer::synchronizeCaptureResources(
     if (!m_captureBindGroup.isValid()) std::abort();
     m_captureAtmosphereLutView = atmosphereLutView;
     m_captureNoiseTexture = noiseTexture;
-}
-
-void GameplaySkyRenderer::setForwardMode(bool forward) {
-    if (m_resourceMgr == nullptr) return;
-    if (forward) {
-        Shader* fwd = m_resourceMgr->getShader("gameplay_sky_forward");
-        m_shader = fwd ? fwd : m_deferredShader;
-    } else {
-        m_shader = m_deferredShader;
-    }
 }
 
 void GameplaySkyRenderer::render(const Camera& camera, const float aspect,
@@ -587,8 +563,6 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
     };
     commandList.updateBuffer(m_captureUniformBuffer, 0u,
                              &captureUniforms, sizeof(captureUniforms));
-
-    const renderer::gl::ScopedStateSnapshot stateGuard;
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targetView;
@@ -796,24 +770,13 @@ std::pair<glm::vec2, glm::vec2> GameplaySkyRenderer::getMoonPhaseUv(const int ph
 }
 
 void GameplaySkyRenderer::initMeshes() {
-    if (m_skyVao == 0) {
+    if (!m_skyVertexBuffer.isValid()) {
         constexpr std::array<float, 18> skyVertices = {
             -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
              3.0f, -1.0f, 0.0f, 2.0f, 0.0f, 1.0f,
             -1.0f,  3.0f, 0.0f, 0.0f, 2.0f, 1.0f,
         };
 
-        glGenVertexArrays(1, &m_skyVao);
-        glGenBuffers(1, &m_skyVbo);
-        glBindVertexArray(m_skyVao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_skyVbo);
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(skyVertices.size() * sizeof(float)),
-                     skyVertices.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-        glBindVertexArray(0);
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "GameplaySky.Gradient.VertexBuffer";
         bufferDesc.size = skyVertices.size() * sizeof(float);
@@ -824,7 +787,7 @@ void GameplaySkyRenderer::initMeshes() {
         if (!m_skyVertexBuffer.isValid()) std::abort();
     }
 
-    if (m_haloVao == 0) {
+    if (!m_haloVertexBuffer.isValid()) {
         constexpr int kSegments = 48;
         std::vector<HaloVertex> haloVertices;
         haloVertices.reserve(static_cast<size_t>(kSegments) * 3);
@@ -839,19 +802,6 @@ void GameplaySkyRenderer::initMeshes() {
             haloVertices.push_back({glm::vec3(std::cos(a1), std::sin(a1), 0.0f), glm::vec2(0.0f), edgeColor});
         }
 
-        glGenVertexArrays(1, &m_haloVao);
-        glGenBuffers(1, &m_haloVbo);
-        glBindVertexArray(m_haloVao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_haloVbo);
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(haloVertices.size() * sizeof(HaloVertex)),
-                     haloVertices.data(), GL_STATIC_DRAW);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(HaloVertex), nullptr);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(HaloVertex), reinterpret_cast<void*>(sizeof(glm::vec3)));
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(HaloVertex), reinterpret_cast<void*>(sizeof(glm::vec3) + sizeof(glm::vec2)));
-        glBindVertexArray(0);
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "GameplaySky.Halo.VertexBuffer";
         bufferDesc.size = haloVertices.size() * sizeof(HaloVertex);
@@ -874,50 +824,13 @@ void GameplaySkyRenderer::destroyMeshes() {
     m_cloudVertexBuffer = {};
     m_haloVertexBuffer = {};
     m_skyVertexBuffer = {};
-    auto deleteBuffer = [](uint32_t& vao, uint32_t& vbo) {
-        if (vbo != 0) {
-            glDeleteBuffers(1, &vbo);
-            vbo = 0;
-        }
-        if (vao != 0) {
-            glDeleteVertexArrays(1, &vao);
-            vao = 0;
-        }
-    };
-
-    deleteBuffer(m_skyVao, m_skyVbo);
-    deleteBuffer(m_haloVao, m_haloVbo);
-    deleteBuffer(m_cloudVao, m_cloudVbo);
     m_haloVertexCount = 0;
     m_cloudVertexCount = 0;
     m_cloudMeshInfo = {};
 }
 
-void GameplaySkyRenderer::ensureDummySkyCaptureTexture() {
-    if (m_dummySkyCaptureTexture != 0) {
-        return;
-    }
-
-    constexpr std::array<float, 4> pixel = {0.0f, 0.0f, 0.0f, 1.0f};
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_dummySkyCaptureTexture);
-    glTextureStorage2D(m_dummySkyCaptureTexture, 1, GL_RGBA16F, 1, 1);
-    glTextureSubImage2D(m_dummySkyCaptureTexture, 0, 0, 0, 1, 1,
-                        GL_RGBA, GL_FLOAT, pixel.data());
-    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_dummySkyCaptureTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-}
-
-void GameplaySkyRenderer::bindDummySkyCaptureTexture(const int32_t unit) {
-    ensureDummySkyCaptureTexture();
-    m_shader->setInt("uSkyCaptureTex", unit);
-    glActiveTexture(GL_TEXTURE0 + unit);
-    glBindTexture(GL_TEXTURE_2D, m_dummySkyCaptureTexture);
-}
-
 void GameplaySkyRenderer::initCloudMesh() {
-    if (m_cloudVao != 0) {
+    if (m_cloudVertexBuffer.isValid()) {
         return;
     }
 
@@ -1041,17 +954,6 @@ void GameplaySkyRenderer::initCloudMesh() {
         return;
     }
 
-    glGenVertexArrays(1, &m_cloudVao);
-    glGenBuffers(1, &m_cloudVbo);
-    glBindVertexArray(m_cloudVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_cloudVbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(CloudVertex)),
-                 vertices.data(), GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(CloudVertex), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(CloudVertex), reinterpret_cast<void*>(sizeof(glm::vec3)));
-    glBindVertexArray(0);
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "GameplaySky.Cloud.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(CloudVertex);
@@ -1064,41 +966,6 @@ void GameplaySkyRenderer::initCloudMesh() {
     m_cloudVertexCount = static_cast<int32_t>(vertices.size());
     m_cloudMeshInfo.tileWorldSize = tileWidth;
     m_cloudMeshInfo.valid = true;
-}
-
-void GameplaySkyRenderer::renderSkyGradient(const Camera& camera, const float aspect, const SkyColors& colors, const uint32_t skyCaptureTexture) {
-    m_shader->use();
-    m_shader->setInt("uMode", 0);
-    m_shader->setMat4("uView", buildSkyView(camera));
-    m_shader->setMat4("uProjection", glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f));
-    m_shader->setMat4("uModel", glm::mat4(1.0f));
-    m_shader->setVec3("uSkyTopColor", colors.top);
-    m_shader->setVec3("uSkyHorizonColor", colors.horizon);
-    m_shader->setVec3("uSunDirection", colors.sunDirection);
-    m_shader->setVec3("uMoonDirection", colors.moonDirection);
-    m_shader->setVec3("uSunScatterColor", colors.sunScatter);
-    m_shader->setVec3("uMoonLightColor", colors.moonLightColor);
-    m_shader->setFloat("uHorizonHaze", colors.horizonHaze);
-    m_shader->setFloat("uSunGlare", colors.sunGlare);
-    m_shader->setFloat("uSunVisibility", colors.sunVisibility);
-    m_shader->setFloat("uMoonVisibility", colors.moonVisibility);
-    m_shader->setFloat("uMoonPhaseAngle", colors.moonPhaseAngle);
-    m_shader->setFloat("uNightFactor", colors.nightFactor);
-    m_shader->setVec4("uTintColor", glm::vec4(1.0f));
-    m_shader->setVec2("uUvMin", glm::vec2(0.0f));
-    m_shader->setVec2("uUvMax", glm::vec2(1.0f));
-    m_shader->setInt("uSkyCaptureEnabled", skyCaptureTexture != 0 ? 1 : 0);
-
-    // Keep all gameplay_sky sampler2D uniforms on unit 0 so they never collide
-    // with uAtmosphereLut, which is a sampler3D fixed to unit 1.
-    m_shader->setInt("uSkyCaptureTex", 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, skyCaptureTexture);
-
-    glDisable(GL_BLEND);
-    glBindVertexArray(m_skyVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glBindVertexArray(0);
 }
 
 void GameplaySkyRenderer::renderClouds(const Camera& camera,

@@ -14,7 +14,6 @@ class DayNightSystem;
 class ResourceMgr;
 class RhiDevice;
 class RhiCommandList;
-class Shader;
 
 class GameplaySkyRenderer {
 public:
@@ -80,9 +79,6 @@ public:
 
     void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    /// Switch to forward vanilla shader (no atmosphere LUT / sky capture / DerivativeMain contract).
-    /// Must be called after init(). Reverts to deferred shader if false.
-    void setForwardMode(bool forward);
     void render(const Camera& camera, float aspect, const DayNightSystem& dayNight,
                 RhiCommandList& commandList);
     void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList,
@@ -129,11 +125,8 @@ private:
     void initMeshes();
     void destroyMeshes();
     void initCloudMesh();
-    void ensureDummySkyCaptureTexture();
-    void bindDummySkyCaptureTexture(int32_t unit);
     void synchronizeCaptureResources(RhiTextureViewHandle atmosphereLutView,
                                      RhiTextureHandle noiseTexture);
-    void renderSkyGradient(const Camera& camera, float aspect, const SkyColors& colors, uint32_t skyCaptureTexture);
     void renderClouds(const Camera& camera, float aspect, const DayNightSystem& dayNight,
                       const SkyColors& colors, RhiCommandList& commandList);
     void renderHalo(const Camera& camera, float aspect, const DayNightSystem& dayNight,
@@ -141,18 +134,8 @@ private:
     [[nodiscard]] glm::mat4 buildSkyView(const Camera& camera) const;
     [[nodiscard]] glm::vec3 directionFromAngle(float angleRadians) const;
 
-    Shader* m_shader = nullptr;
-    Shader* m_deferredShader = nullptr;  // Original deferred shader (gameplay_sky)
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
-    uint32_t m_dummySkyCaptureTexture = 0;
-
-    uint32_t m_skyVao = 0;
-    uint32_t m_skyVbo = 0;
-    uint32_t m_haloVao = 0;
-    uint32_t m_haloVbo = 0;
-    uint32_t m_cloudVao = 0;
-    uint32_t m_cloudVbo = 0;
     RhiBufferHandle m_skyVertexBuffer;
     RhiBufferHandle m_haloVertexBuffer;
     RhiBufferHandle m_cloudVertexBuffer;

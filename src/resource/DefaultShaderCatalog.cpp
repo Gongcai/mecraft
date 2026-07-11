@@ -50,8 +50,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"ui_color", SHADERS_DIR "/ui_color.vert", SHADERS_DIR "/ui_color.frag"},
     {"ui_glass", SHADERS_DIR "/ui_glass.vert", SHADERS_DIR "/ui_glass.frag"},
     {"skybox", SHADERS_DIR "/skybox.vert", SHADERS_DIR "/skybox.frag"},
-    {"gameplay_sky", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky.frag"},
-    {"gameplay_sky_forward", SHADERS_DIR "/gameplay_sky.vert", SHADERS_DIR "/gameplay_sky_forward.frag"},
     {"blur", SHADERS_DIR "/blur.vert", SHADERS_DIR "/blur.frag"},
 };
 

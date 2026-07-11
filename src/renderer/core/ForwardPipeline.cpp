@@ -32,7 +32,6 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
     m_resourceMgr = shared.resources;
 
     // Enable forward vanilla shaders on sub-renderers (no deferred/shaderpack contracts)
-    if (shared.sky) shared.sky->setForwardMode(true);
 
     m_initialized = true;
 }
@@ -40,7 +39,6 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
 void ForwardPipeline::shutdown() {
     // Revert sub-renderers to deferred shaders
     if (m_shared) {
-        if (m_shared->sky) m_shared->sky->setForwardMode(false);
     }
 
     m_shared = nullptr;
