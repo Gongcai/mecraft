@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
+class RhiDevice;
+
 namespace resource {
 
 struct IndexedTextureAtlas {
@@ -19,18 +21,22 @@ struct IndexedTextureAtlas {
 
 [[nodiscard]] IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
                                                         int tileSize,
-                                                        const BlockTextureCatalog& catalog);
+                                                        const BlockTextureCatalog& catalog,
+                                                        RhiDevice& rhiDevice);
 
 [[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
                                                          int tileSize,
-                                                         const BlockTextureCatalog& catalog);
+                                                         const BlockTextureCatalog& catalog,
+                                                         RhiDevice& rhiDevice);
 
 [[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
                                                          int tileSize,
-                                                         const BlockTextureCatalog& catalog);
+                                                         const BlockTextureCatalog& catalog,
+                                                         RhiDevice& rhiDevice);
 
 [[nodiscard]] IndexedTextureAtlas buildHudIconAtlas(const std::string& directory,
-                                                    int iconSize);
+                                                    int iconSize,
+                                                    RhiDevice& rhiDevice);
 
 } // namespace resource
 

@@ -5,7 +5,6 @@
 #include "renderer/rhi/gl/GlRhiDevice.h"
 #include "renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "renderer/mesh/WorldRenderBuffer.h"
-#include "resource/RhiTextureResourceUtils.h"
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -242,28 +241,6 @@ bool testGlTextureRegistry() {
     renderer::rhi::gl::unregisterTexture(handle);
     return requireTrue(!renderer::rhi::gl::isTextureRegistered(handle),
                        "unregistered GL texture handle must not stay alive");
-}
-
-bool testResourceTextureRegistration() {
-    TextureAtlas atlas;
-    const uint32_t atlasTextureId = 77;
-    atlas.atlasWidth = 32;
-    atlas.atlasHeight = 16;
-    if (!requireTrue(resource::registerTextureAtlas(atlas, atlasTextureId),
-                     "texture atlas registration must create an RHI texture handle")) {
-        return false;
-    }
-    if (!requireTrue(renderer::rhi::gl::textureId(atlas.texture) == atlasTextureId,
-                     "texture atlas handle must resolve to its native texture id")) {
-        return false;
-    }
-    resource::unregisterTextureAtlas(atlas);
-    if (!requireTrue(!atlas.texture.isValid(),
-                     "texture atlas unregister must clear the RHI texture handle")) {
-        return false;
-    }
-
-    return true;
 }
 
 bool testGlRhiDeviceHandles() {
@@ -2586,9 +2563,6 @@ int main() {
         return 1;
     }
     if (!testGlTextureRegistry()) {
-        return 1;
-    }
-    if (!testResourceTextureRegistration()) {
         return 1;
     }
     if (!testGlRhiDeviceHandles()) {

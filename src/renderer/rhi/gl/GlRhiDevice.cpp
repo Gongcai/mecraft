@@ -1706,6 +1706,7 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.storageImage = true;
     m_capabilities.maxColorAttachments = 8;
     m_capabilities.maxSampledTexturesPerStage = 32;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &m_capabilities.maxSamplerAnisotropy);
 
     m_data->swapchainWidth = static_cast<uint32_t>(desc.width);
     m_data->swapchainHeight = static_cast<uint32_t>(desc.height);

@@ -1,13 +1,9 @@
 #include "BlockTextureLibrary.h"
 
 #include "BlockTextureArrayBuilder.h"
-#include "RhiTextureResourceUtils.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
-#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "renderer/rhi/RhiDevice.h"
-
-#include <glad/glad.h>
 
 #include <cassert>
 #include <cstdlib>
@@ -29,20 +25,14 @@ int validateBlockTextureTileSize(const int configuredTileSize) {
     return configuredTileSize;
 }
 
-[[nodiscard]] GLuint textureId(const TextureAtlas& atlas) {
-    return static_cast<GLuint>(renderer::rhi::gl::textureId(atlas.texture));
-}
+} // namespace
 
-void deleteTextureAtlas(TextureAtlas& atlas) {
-    const GLuint nativeTexture = textureId(atlas);
-    resource::unregisterTextureAtlas(atlas);
-    if (nativeTexture != 0) {
-        glDeleteTextures(1, &nativeTexture);
+void BlockTextureLibrary::deleteTextureAtlas(TextureAtlas& atlas) {
+    if (m_rhiDevice != nullptr && atlas.texture.isValid()) {
+        m_rhiDevice->destroyTexture(atlas.texture);
     }
     atlas = {};
 }
-
-} // namespace
 
 void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
     if (m_rhiDevice != nullptr && textureArray.texture.isValid()) {
@@ -106,11 +96,12 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
 
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
 
-    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, resolvedTileSize, m_catalog);
+    assert(m_rhiDevice != nullptr);
+    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
-    assert(m_rhiDevice != nullptr);
     resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(
         m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
     m_textureArray = textureArrayResult.albedoArray;
@@ -122,8 +113,7 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
     m_hasNormalMaps = textureArrayResult.hasNormalMaps;
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
-    m_sampler.refreshAnisotropySupport();
-    m_sampler.applyToTexture2D(textureId(m_atlas));
+    m_sampler.refreshAnisotropySupport(*m_rhiDevice);
 }
 
 void BlockTextureLibrary::buildAtlas(const std::string& directory, const int tileSize) {
@@ -131,12 +121,13 @@ void BlockTextureLibrary::buildAtlas(const std::string& directory, const int til
 
     m_manifest = resource::buildBlockTextureManifest(directory);
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
-    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(m_manifest, resolvedTileSize, m_catalog);
+    assert(m_rhiDevice != nullptr);
+    resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
-    m_sampler.refreshAnisotropySupport();
-    m_sampler.applyToTexture2D(textureId(m_atlas));
+    m_sampler.refreshAnisotropySupport(*m_rhiDevice);
 }
 
 void BlockTextureLibrary::buildTextureArray(const std::string& directory, const int tileSize) {
@@ -158,7 +149,7 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     m_hasNormalMaps = textureArrayResult.hasNormalMaps;
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
-    m_sampler.refreshAnisotropySupport();
+    m_sampler.refreshAnisotropySupport(*m_rhiDevice);
 }
 
 const TextureAtlas& BlockTextureLibrary::atlas() const {
@@ -247,12 +238,6 @@ int BlockTextureLibrary::arrayLayerToAtlasTile(const int arrayLayer) const {
 
 void BlockTextureLibrary::setAnisotropy(const float anisotropy) {
     m_sampler.setAnisotropy(anisotropy);
-
-    const GLuint atlasTexture = textureId(m_atlas);
-    if (atlasTexture != 0) {
-        m_sampler.applyToTexture2D(atlasTexture);
-    }
-
 }
 
 float BlockTextureLibrary::anisotropy() const {

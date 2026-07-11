@@ -25,6 +25,7 @@ struct RhiCapabilities {
     bool descriptorIndexing = false;
     uint32_t maxColorAttachments = 0;
     uint32_t maxSampledTexturesPerStage = 0;
+    float maxSamplerAnisotropy = 1.0f;
 };
 
 enum class RhiShaderStage : uint32_t {

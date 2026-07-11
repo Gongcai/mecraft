@@ -55,6 +55,7 @@ public:
     [[nodiscard]] float maxAnisotropy() const;
 
 private:
+    void deleteTextureAtlas(TextureAtlas& atlas);
     void deleteTextureArray(TextureArray& textureArray);
 
     TextureAtlas m_atlas;
