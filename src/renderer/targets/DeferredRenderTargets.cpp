@@ -3,8 +3,6 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 
-#include <glad/glad.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
@@ -317,30 +315,6 @@ void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiDevice& rhiDevice) {
         return;
     }
     blitTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHandle);
-}
-
-uint32_t DeferredRenderTargets::createTexture2D(const uint32_t internalFormat,
-                                                const int width,
-                                                const int height,
-                                                const uint32_t format,
-                                                const uint32_t type,
-                                                const uint32_t minFilter,
-                                                const uint32_t magFilter,
-                                                const uint32_t wrap,
-                                                const int levels) {
-    uint32_t texture = 0;
-    (void)format;
-    (void)type;
-    glCreateTextures(GL_TEXTURE_2D, 1, &texture);
-    const GLsizei mipLevels = std::max(1, levels);
-    glTextureStorage2D(texture, mipLevels, internalFormat, width, height);
-    glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, static_cast<GLint>(minFilter));
-    glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, static_cast<GLint>(magFilter));
-    glTextureParameteri(texture, GL_TEXTURE_WRAP_S, static_cast<GLint>(wrap));
-    glTextureParameteri(texture, GL_TEXTURE_WRAP_T, static_cast<GLint>(wrap));
-    glTextureParameteri(texture, GL_TEXTURE_BASE_LEVEL, 0);
-    glTextureParameteri(texture, GL_TEXTURE_MAX_LEVEL, mipLevels - 1);
-    return texture;
 }
 
 bool DeferredRenderTargets::createGBufferTextures() {

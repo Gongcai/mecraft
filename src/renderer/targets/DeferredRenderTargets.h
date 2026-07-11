@@ -216,15 +216,6 @@ private:
     static constexpr int kAtmosphereLutWidth = 256;
     static constexpr int kAtmosphereLutHeight = 128;
     static constexpr int kAtmosphereLutDepth = 33;
-    static uint32_t createTexture2D(uint32_t internalFormat,
-                                    int width,
-                                    int height,
-                                    uint32_t format,
-                                    uint32_t type,
-                                    uint32_t minFilter,
-                                    uint32_t magFilter,
-                                    uint32_t wrap,
-                                    int levels = 1);
     bool createCsmShadowTextures();
     void destroyCsmShadowTextures();
 
