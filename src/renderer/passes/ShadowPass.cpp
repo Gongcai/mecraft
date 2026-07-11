@@ -1,5 +1,4 @@
 #include "ShadowPass.h"
-#include "../debug/RenderDebugLabels.h"
 #include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../shadow/ShadowRenderer.h"
@@ -281,10 +280,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     maxCasterDistance = shadowCuller.getMaxCasterDistance();
 
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
-        char cascadeLabel[32];
-        std::snprintf(cascadeLabel, sizeof(cascadeLabel), "Shadow.CSM.Cascade%d", cascade);
-        renderer::debug::ScopedDebugGroup cascadeGroup(cascadeLabel);
-
         const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
         const bool renderCutoutCasters = cascade < kCutoutShadowCasterCascadeCount;
         const bool renderTransparentCasters = cascade < kTransparentShadowCasterCascadeCount;
@@ -361,7 +356,10 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             renderingInfo.depthStencilAttachment = &depthAttachment;
 
             RhiCommandList& commandList = rhiDevice.beginFrame();
-            commandList.beginDebugLabel("Shadow.Opaque", glm::vec4(0.70f, 0.78f, 1.0f, 1.0f));
+            char opaqueLabel[48];
+            std::snprintf(opaqueLabel, sizeof(opaqueLabel),
+                          "Shadow.Cascade%d.Opaque", cascade);
+            commandList.beginDebugLabel(opaqueLabel, glm::vec4(0.70f, 0.78f, 1.0f, 1.0f));
             commandList.insertDebugMarker(cullerLabel, glm::vec4(0.45f, 0.65f, 1.0f, 1.0f));
             TerrainShadowFrameData shadowFrame;
             shadowFrame.modelView = cascadeData.view;
@@ -418,7 +416,10 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         {
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
             RhiCommandList& commandList = rhiDevice.beginFrame();
-            commandList.beginDebugLabel("Shadow.Transparent", glm::vec4(0.55f, 0.85f, 1.0f, 1.0f));
+            char transparentLabel[48];
+            std::snprintf(transparentLabel, sizeof(transparentLabel),
+                          "Shadow.Cascade%d.Transparent", cascade);
+            commandList.beginDebugLabel(transparentLabel, glm::vec4(0.55f, 0.85f, 1.0f, 1.0f));
             RhiTextureCopy depthCopy;
             depthCopy.src = targets.csmShadowDepthTextureHandle();
             depthCopy.srcSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
