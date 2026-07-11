@@ -2,51 +2,80 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
-#include <glad/glad.h>
-
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
 #include "../font/TextRenderer.h"
-#include "../core/UIRenderUtils.h"
 #include "../core/UIStyle.h"
-#include "../../renderer/core/Shader.h"
 #include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
 #include "../../resource/ResourceMgr.h"
 
 void ConsoleOverlay::init(ResourceMgr& resourceMgr)
 {
-    m_crosshairShader = resourceMgr.getShader("crosshair");
-
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "ConsoleOverlay.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "ConsoleOverlay.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = m_rhiDevice->createShader(shaderDesc);
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "ConsoleOverlay.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "ConsoleOverlay.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    constexpr float vertices[] = {0,0, 1,0, 1,1, 0,0, 1,1, 0,1};
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "ConsoleOverlay.VertexBuffer";
+    bufferDesc.size = sizeof(vertices);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices, sizeof(vertices));
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) std::abort();
 }
 
 void ConsoleOverlay::shutdown()
 {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
+    if (m_rhiDevice != nullptr) {
+        if (m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
     }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
-
-    m_crosshairShader = nullptr;
+    m_vertexBuffer = {}; m_pipeline = {}; m_pipelineLayout = {};
+    m_fragmentShader = {}; m_vertexShader = {}; m_rhiDevice = nullptr;
     m_display.clear();
 }
 
@@ -93,44 +122,27 @@ void ConsoleOverlay::renderSelf(const UIRenderContext& context) const
     renderMessages(static_cast<double>(context.timeSeconds), *textRenderer, context);
 }
 
-void ConsoleOverlay::drawOverlayRect(int screenW,
-                                     int screenH,
+void ConsoleOverlay::drawOverlayRect(const UIRenderContext& context,
                                      int rectX,
                                      int rectY,
                                      int rectW,
                                      int rectH,
                                      const std::array<float, 4>& rectColor) const
 {
-    if (!m_crosshairShader || m_vao == 0 || m_vbo == 0 || rectW <= 0 || rectH <= 0) {
+    if (context.commandList == nullptr || !m_pipeline.isValid() ||
+        !m_vertexBuffer.isValid() || rectW <= 0 || rectH <= 0) {
         return;
     }
-
-    // Bottom-left origin (same as inventory/text/ui_color shaders)
-    const float x0 = static_cast<float>(rectX);
-    const float y0 = static_cast<float>(rectY);
-    const float x1 = static_cast<float>(rectX + rectW);
-    const float y1 = static_cast<float>(rectY + rectH);
-
-    const float rectVerts[] = {
-        x0, y0, 0.0f, 0.0f,
-        x1, y0, 0.0f, 0.0f,
-        x1, y1, 0.0f, 0.0f,
-        x0, y0, 0.0f, 0.0f,
-        x1, y1, 0.0f, 0.0f,
-        x0, y1, 0.0f, 0.0f,
-    };
-
-    m_crosshairShader->use();
-    m_crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
-    m_crosshairShader->setVec2("uOffset", glm::vec2(0.0f, 0.0f));
-    m_crosshairShader->setVec4("uColor", glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3]));
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(rectVerts)), rectVerts, GL_DYNAMIC_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    context.commandList->setGraphicsPipeline(m_pipeline);
+    context.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+    struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+    const PushConstants push{
+        glm::vec4(context.screenWidth, context.screenHeight, rectX, rectY),
+        glm::vec4(rectW, rectH, 0.0f, 0.0f),
+        glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])};
+    context.commandList->pushConstants(&push, sizeof(push),
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    context.commandList->draw(6u, 1u, 0u, 0u);
 }
 
 void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRenderer,
@@ -175,9 +187,8 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
     m_display.render(
         nowSec,
         params,
-        [this, screenW, screenH](int rectX, int rectY, int rectW, int rectH, const std::array<float, 4>& rectColor) {
-            const UIRenderUtils::GLStateGuard glState;
-            drawOverlayRect(screenW, screenH, rectX, rectY, rectW, rectH, rectColor);
+        [this, &context](int rectX, int rectY, int rectW, int rectH, const std::array<float, 4>& rectColor) {
+            drawOverlayRect(context, rectX, rectY, rectW, rectH, rectColor);
         },
         [&context](int clipX, int clipY, int clipW, int clipH) {
             const float uiScale = context.pixelScale();
