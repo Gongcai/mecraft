@@ -15,6 +15,7 @@
 class Camera;
 class IWorldView;
 class ResourceMgr;
+class RhiCommandList;
 class RhiDevice;
 class Window;
 class World;
@@ -28,6 +29,10 @@ public:
 	/// Must be called after init(). Reverts to deferred shaders if false.
 	void setForwardMode(bool forward);
 	void prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem);
+	void renderItemsToGBuffer(RhiCommandList& commandList,
+	                          const glm::mat4& viewProj,
+	                          const glm::mat4& previousViewProj);
+	void finishGBufferFrame();
 	void render(const DropSystem& dropSystem, const Camera& camera, const Window& window);
 	// GBuffer path: renders drops into the deferred GBuffer (5 MRT).
 	// Caller must have already bound the GBuffer FBO with terrain+entity depth.
@@ -64,6 +69,8 @@ private:
 	Mesh* getOrCreateItemMesh(ItemID itemId);
 	Mesh buildItemMesh(ItemID itemId) const;
 	static void destroyMesh(Mesh& mesh);
+	void createItemGBufferRhiResources();
+	void destroyItemGBufferRhiResources();
 	// Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
 	// Falls back to (1.0, 0.0) if chunk is not loaded.
 	static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
@@ -81,7 +88,17 @@ private:
 	std::unordered_map<ItemID, Mesh> m_itemMeshes;
 	// Per-object velocity: stores previous-frame model matrix per drop (by drop ID).
 	std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
+	std::unordered_map<std::size_t, glm::mat4> m_currentModelMatrices;
 	std::vector<PreparedDrop> m_preparedDrops;
+	RhiDevice* m_rhiDevice = nullptr;
+	RhiTextureViewHandle m_itemAtlasView;
+	RhiSamplerHandle m_itemSampler;
+	RhiShaderHandle m_itemGBufferVertexShader;
+	RhiShaderHandle m_itemGBufferFragmentShader;
+	RhiBindGroupLayoutHandle m_itemGBufferBindGroupLayout;
+	RhiPipelineLayoutHandle m_itemGBufferPipelineLayout;
+	RhiPipelineHandle m_itemGBufferPipeline;
+	RhiBindGroupHandle m_itemGBufferBindGroup;
 };
 
 #endif // MECRAFT_DROPRENDERER_H

@@ -3,6 +3,8 @@
 #include "../mesh/ItemModelMesh.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../rhi/RhiDevice.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 
 #include <cstddef>
 #include <utility>
@@ -36,6 +38,7 @@ bool prefersBlockMeshForItem(const BlockID renderBlock) {
 
 void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
+    m_rhiDevice = &resourceMgr.rhiDevice();
     m_deferredShader = resourceMgr.getShader("drop_block");
     m_deferredItemShader = resourceMgr.getShader("item_model");
     m_shader = m_deferredShader;
@@ -44,9 +47,11 @@ void DropRenderer::init(ResourceMgr& resourceMgr) {
     m_itemGBufferShader = resourceMgr.getShader("item_gbuffer");
     m_shadowShader = resourceMgr.getShader("shadow_depth");
     m_itemShadowShader = resourceMgr.getShader("item_shadow");
+    createItemGBufferRhiResources();
 }
 
 void DropRenderer::shutdown() {
+    destroyItemGBufferRhiResources();
     for (auto& pair : m_blockMeshes) {
         destroyMesh(pair.second);
     }
@@ -57,6 +62,7 @@ void DropRenderer::shutdown() {
     m_itemMeshes.clear();
     m_preparedDrops.clear();
     m_previousModelMatrices.clear();
+    m_currentModelMatrices.clear();
     m_shader = nullptr;
     m_itemShader = nullptr;
     m_deferredShader = nullptr;
@@ -66,14 +72,15 @@ void DropRenderer::shutdown() {
     m_shadowShader = nullptr;
     m_itemShadowShader = nullptr;
     m_resourceMgr = nullptr;
+    m_rhiDevice = nullptr;
 }
 
 void DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem) {
     m_preparedDrops.clear();
     const auto& drops = dropSystem.getDrops();
     m_preparedDrops.reserve(drops.size());
-    std::unordered_map<std::size_t, glm::mat4> currentModelMatrices;
-    currentModelMatrices.reserve(drops.size());
+    m_currentModelMatrices.clear();
+    m_currentModelMatrices.reserve(drops.size());
 
     for (const DropEntity& drop : drops) {
         const ItemDef& itemDef = ItemRegistry::get(drop.itemId);
@@ -100,10 +107,40 @@ void DropRenderer::prepareFrame(const IWorldView& worldView, const DropSystem& d
             queryWorldLight(worldView, drop.position),
             useItemMesh
         });
-        currentModelMatrices.emplace(drop.id, model);
+        m_currentModelMatrices.emplace(drop.id, model);
     }
+}
 
-    m_previousModelMatrices = std::move(currentModelMatrices);
+void DropRenderer::finishGBufferFrame() {
+    m_previousModelMatrices = m_currentModelMatrices;
+}
+
+void DropRenderer::renderItemsToGBuffer(RhiCommandList& commandList,
+                                        const glm::mat4& viewProj,
+                                        const glm::mat4& previousViewProj) {
+    struct PushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 previousViewProj;
+        glm::mat4 model;
+        glm::mat4 previousModel;
+        glm::vec4 light;
+    };
+    commandList.setGraphicsPipeline(m_itemGBufferPipeline);
+    commandList.setBindGroup(0u, m_itemGBufferBindGroup);
+    for (const PreparedDrop& drop : m_preparedDrops) {
+        if (!drop.itemMesh) {
+            continue;
+        }
+        const PushConstants pushConstants{
+            viewProj, previousViewProj, drop.model, drop.previousModel,
+            glm::vec4(drop.light, 0.0f, 0.0f)
+        };
+        commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) |
+                                  rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(drop.mesh->vertexCount, 1u, 0u, 0u);
+    }
 }
 
 void DropRenderer::setForwardMode(bool forward) {
@@ -353,12 +390,9 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
     }
 
     const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
     const GLuint texArrayId = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
-    const GLuint itemAtlasId = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
     const bool canRenderBlocks = (m_gbufferShader != nullptr && texArrayId != 0);
-    const bool canRenderItems = (m_itemGBufferShader != nullptr && itemAtlasId != 0);
-    if (!canRenderBlocks && !canRenderItems) {
+    if (!canRenderBlocks) {
         return;
     }
 
@@ -379,18 +413,6 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
         m_gbufferShader->setFloat("uAnimationTime", animationTime);
     }
 
-    // Item drop GBuffer setup
-    int itemModelLoc = -1;
-    int itemPrevModelLoc = -1;
-    if (canRenderItems) {
-        m_itemGBufferShader->use();
-        m_itemGBufferShader->setMat4("viewProj", jitteredViewProj);
-        m_itemGBufferShader->setMat4("prevViewProj", previousViewProj);
-        itemModelLoc = m_itemGBufferShader->getUniformLocation("model");
-        itemPrevModelLoc = m_itemGBufferShader->getUniformLocation("prevModel");
-        m_itemGBufferShader->setInt("uAtlas", 0);
-    }
-
     const GLuint grassColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getGrassColormap()));
     const GLuint foliageColormapId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_resourceMgr->getFoliageColormap()));
 
@@ -409,21 +431,7 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
         // Query world light at drop center position for deferred lighting.
         const glm::vec2 light = queryWorldLight(worldView, drop.position);
 
-        if (!preferBlockMesh && itemTileIndex >= 0 && canRenderItems) {
-            Mesh* mesh = getOrCreateItemMesh(drop.itemId);
-            if (mesh != nullptr && mesh->vao != 0 && mesh->vertexCount > 0) {
-                m_itemGBufferShader->use();
-                auto it = m_previousModelMatrices.find(drop.id);
-                m_itemGBufferShader->setMat4(itemPrevModelLoc, it != m_previousModelMatrices.end() ? it->second : model);
-                m_itemGBufferShader->setMat4(itemModelLoc, model);
-                m_itemGBufferShader->setFloat("uDropSunlight", light.x);
-                m_itemGBufferShader->setFloat("uDropBlockLight", light.y);
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, itemAtlasId);
-                glBindVertexArray(mesh->vao);
-                glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-                m_previousModelMatrices[drop.id] = model;
-            }
+        if (!preferBlockMesh && itemTileIndex >= 0) {
             continue;
         }
 
@@ -450,7 +458,6 @@ void DropRenderer::renderToGBuffer(const IWorldView& worldView, const DropSystem
         glBindTexture(GL_TEXTURE_2D, foliageColormapId);
         glBindVertexArray(mesh->vao);
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
-        m_previousModelMatrices[drop.id] = model;
     }
 
     glBindVertexArray(0);
@@ -583,6 +590,106 @@ void DropRenderer::renderToShadowMap(const IWorldView& worldView, const DropSyst
         m_shadowShader->setInt("uUseModel", 0);
         m_shadowShader->setInt("uVertexFormat", 1);
     }
+}
+
+void DropRenderer::createItemGBufferRhiResources() {
+    const auto vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/item_drop_gbuffer_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/item_drop_gbuffer_rhi.frag");
+    if (!vertexSource || !fragmentSource) {
+        std::abort();
+    }
+    auto createShader = [this](const char* name, const RhiShaderStage stage,
+                               const std::string& source) {
+        RhiShaderDesc desc;
+        desc.debugName = name;
+        desc.stage = stage;
+        desc.source = source.c_str();
+        desc.sourceSize = source.size();
+        return m_rhiDevice->createShader(desc);
+    };
+    m_itemGBufferVertexShader = createShader("Drop.ItemGBuffer.Vertex", RhiShaderStage::Vertex,
+                                              *vertexSource);
+    m_itemGBufferFragmentShader = createShader("Drop.ItemGBuffer.Fragment", RhiShaderStage::Fragment,
+                                                *fragmentSource);
+    RhiTextureViewDesc textureViewDesc;
+    textureViewDesc.texture = m_resourceMgr->getItemTextureAtlas().texture;
+    textureViewDesc.viewType = RhiTextureViewType::Texture2D;
+    m_itemAtlasView = m_rhiDevice->createTextureView(textureViewDesc);
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    m_itemSampler = m_rhiDevice->createSampler(samplerDesc);
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "Drop.ItemGBuffer.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
+                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_itemGBufferBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Drop.ItemGBuffer.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_itemGBufferBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 4u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                            rhiFlag(RhiShaderStage::Fragment);
+    m_itemGBufferPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Drop.ItemGBuffer.Pipeline";
+    pipelineDesc.vertexShader = m_itemGBufferVertexShader;
+    pipelineDesc.fragmentShader = m_itemGBufferFragmentShader;
+    pipelineDesc.layout = m_itemGBufferPipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back(
+        {0u, sizeof(ItemModelVertex), RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
+        {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
+        {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)},
+        {3u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, nx)}
+    };
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rg16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    pipelineDesc.blend.attachments.resize(6u);
+    m_itemGBufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_itemGBufferBindGroupLayout;
+    RhiBindGroupEntry textureEntry;
+    textureEntry.binding = 0u;
+    textureEntry.resource.combinedTextureSampler = {m_itemAtlasView, m_itemSampler};
+    bindGroupDesc.entries.push_back(textureEntry);
+    m_itemGBufferBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
+    if (!m_itemGBufferVertexShader.isValid() || !m_itemGBufferFragmentShader.isValid() ||
+        !m_itemAtlasView.isValid() || !m_itemSampler.isValid() ||
+        !m_itemGBufferBindGroupLayout.isValid() || !m_itemGBufferPipelineLayout.isValid() ||
+        !m_itemGBufferPipeline.isValid() || !m_itemGBufferBindGroup.isValid()) {
+        std::abort();
+    }
+}
+
+void DropRenderer::destroyItemGBufferRhiResources() {
+    if (m_itemGBufferBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_itemGBufferBindGroup);
+    if (m_itemGBufferPipeline.isValid()) m_rhiDevice->destroyPipeline(m_itemGBufferPipeline);
+    if (m_itemGBufferPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_itemGBufferPipelineLayout);
+    if (m_itemGBufferBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_itemGBufferBindGroupLayout);
+    if (m_itemSampler.isValid()) m_rhiDevice->destroySampler(m_itemSampler);
+    if (m_itemAtlasView.isValid()) m_rhiDevice->destroyTextureView(m_itemAtlasView);
+    if (m_itemGBufferFragmentShader.isValid()) m_rhiDevice->destroyShader(m_itemGBufferFragmentShader);
+    if (m_itemGBufferVertexShader.isValid()) m_rhiDevice->destroyShader(m_itemGBufferVertexShader);
+    m_itemGBufferBindGroup = {};
+    m_itemGBufferPipeline = {};
+    m_itemGBufferPipelineLayout = {};
+    m_itemGBufferBindGroupLayout = {};
+    m_itemSampler = {};
+    m_itemAtlasView = {};
+    m_itemGBufferFragmentShader = {};
+    m_itemGBufferVertexShader = {};
 }
 
 glm::vec2 DropRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {

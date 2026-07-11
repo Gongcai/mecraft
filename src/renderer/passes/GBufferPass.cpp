@@ -164,6 +164,7 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    dropRenderer->prepareFrame(worldView, *dropSystem);
     RhiCommandList* commandList = beginObjectGBufferRendering(rhiDevice, targets, "GBuffer.Drops", false);
     if (commandList == nullptr) {
         return;
@@ -179,7 +180,9 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     // previous positions target the resolved history grid.
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
+    dropRenderer->renderItemsToGBuffer(*commandList, viewProj, previousViewProj);
     dropRenderer->renderToGBuffer(worldView, *dropSystem, viewProj, previousViewProj, ctx.animationTime);
+    dropRenderer->finishGBufferFrame();
 
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);
