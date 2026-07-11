@@ -395,7 +395,6 @@ set(SRC_UI
         src/ui/hud/CrosshairControl.cpp
         src/ui/hud/HotbarControl.cpp
         src/ui/hud/HudControl.cpp
-        src/ui/hud/PickableOverlay.cpp
         src/ui/hud/Pickable.cpp
         src/ui/hud/ConsoleOverlay.cpp
         src/ui/hud/CommandInputOverlay.cpp

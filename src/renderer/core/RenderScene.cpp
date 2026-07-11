@@ -12,7 +12,6 @@
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/FirstPersonHeldItemRenderer.h"
-#include <glad/glad.h>
 #include "engine/camera/Camera.h"
 #include "../mesh/TerrainStreamingService.h"
 
