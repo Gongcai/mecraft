@@ -11,7 +11,7 @@ class DeferredRenderTargets {
 public:
     ~DeferredRenderTargets();
 
-    bool init();
+    bool init(RhiDevice& rhiDevice);
     void shutdown();
 
     bool ensureSize(int width, int height, int shadowResolution);
@@ -236,6 +236,8 @@ private:
                                          uint32_t wrap);
 
     static void generateMipmaps(uint32_t texture);
+    bool createGBufferTextures();
+    void destroyGBufferTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -248,12 +250,6 @@ private:
     // 2 RG8      = sky light.r, block light.g
     // 3 RGBA8    = roughness.r, f0.g, emission.b, subsurface.a
     // 4 RGBA8    = DerivativeMain material id.r, wetness mask.g, porosity.b, metalness.a
-    uint32_t m_gAlbedo = 0;
-    uint32_t m_gNormalAo = 0;
-    uint32_t m_gVoxelLight = 0;
-    uint32_t m_gMaterial = 0;
-    uint32_t m_gMaterialAux = 0;
-    uint32_t m_gDepth = 0;
     RhiTextureHandle m_gAlbedoHandle;
     RhiTextureHandle m_gNormalAoHandle;
     RhiTextureHandle m_gVoxelLightHandle;
@@ -266,6 +262,8 @@ private:
     RhiTextureViewHandle m_gMaterialView;
     RhiTextureViewHandle m_gMaterialAuxView;
     RhiTextureViewHandle m_gDepthView;
+
+    RhiDevice* m_rhiDevice = nullptr;
 
     uint32_t m_shadowDepth = 0;
     uint32_t m_shadowDepthComparison = 0; // Zero-copy comparison view for sampler2DShadow

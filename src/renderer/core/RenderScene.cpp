@@ -681,10 +681,6 @@ bool RenderScene::prepareFrameResources(const Window& window) {
     }
 
     DeferredRenderTargets& targets = *m_shared.deferredTargets;
-    if (!targets.init()) {
-        return false;
-    }
-
     const glm::ivec2 internalSize = internalRenderSize(window);
     return targets.ensureSize(internalSize.x, internalSize.y, m_settings.shadow.resolution);
 }

@@ -110,7 +110,9 @@ bool RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool, c
     m_terrainRenderer.setChunkCullingDebugEnabled(m_chunkCullingDebugEnabled);
 #endif
     // Phase 5c: Inject WaterCompositePass dependencies
-    m_deferredTargets.init();
+    if (!m_deferredTargets.init(*m_rhiDevice)) {
+        return false;
+    }
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
     m_gameplaySkyRenderer.init(resourceMgr);

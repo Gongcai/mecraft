@@ -32,7 +32,11 @@ DeferredRenderTargets::~DeferredRenderTargets() {
     shutdown();
 }
 
-bool DeferredRenderTargets::init() {
+bool DeferredRenderTargets::init(RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        shutdown();
+    }
+    m_rhiDevice = &rhiDevice;
     return true;
 }
 
@@ -45,6 +49,7 @@ void DeferredRenderTargets::shutdown() {
     m_height = 0;
     m_shadowResolution = 0;
     m_ready = false;
+    m_rhiDevice = nullptr;
 }
 
 bool DeferredRenderTargets::ensureSize(const int width, const int height, const int shadowResolution) {
@@ -62,12 +67,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_height = targetHeight;
     m_shadowResolution = targetShadow;
 
-    m_gAlbedo = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    m_gNormalAo = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    m_gVoxelLight = createTexture2D(GL_RG8, m_width, m_height, GL_RG, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    m_gMaterial = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    m_gMaterialAux = createTexture2D(GL_RGBA8, m_width, m_height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-    m_gDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
+    if (!createGBufferTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -260,12 +263,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     // Label GL objects for RenderDoc / KHR_debug inspection
-    renderer::debug::labelTexture(m_gAlbedo, "DeferredTargets.GBufferAlbedo");
-    renderer::debug::labelTexture(m_gNormalAo, "DeferredTargets.GBufferNormalAo");
-    renderer::debug::labelTexture(m_gVoxelLight, "DeferredTargets.GBufferVoxelLight");
-    renderer::debug::labelTexture(m_gMaterial, "DeferredTargets.GBufferMaterial");
-    renderer::debug::labelTexture(m_gMaterialAux, "DeferredTargets.GBufferMaterialAux");
-    renderer::debug::labelTexture(m_gDepth, "DeferredTargets.GBufferDepth");
     renderer::debug::labelTexture(m_shadowDepth, "DeferredTargets.ShadowDepth");
     renderer::debug::labelTexture(m_shadowDepthComparison, "DeferredTargets.ShadowDepthComparison");
     renderer::debug::labelTexture(m_shadowColor, "DeferredTargets.ShadowColor");
@@ -582,79 +579,74 @@ void DeferredRenderTargets::generateMipmaps(const uint32_t texture) {
     }
 }
 
+bool DeferredRenderTargets::createGBufferTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = format;
+        desc.width = static_cast<uint32_t>(m_width);
+        desc.height = static_cast<uint32_t>(m_height);
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = usage;
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    const RhiTextureUsageFlags colorUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::ColorAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) |
+        rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureUsageFlags depthUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) |
+        rhiFlag(RhiTextureUsage::TransferDst);
+
+    if (!createTexture("DeferredTargets.GBufferAlbedo", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gAlbedoHandle) ||
+        !createTexture("DeferredTargets.GBufferNormalAo", RhiTextureFormat::Rgba16Float, colorUsage, m_gNormalAoHandle) ||
+        !createTexture("DeferredTargets.GBufferVoxelLight", RhiTextureFormat::Rg8Unorm, colorUsage, m_gVoxelLightHandle) ||
+        !createTexture("DeferredTargets.GBufferMaterial", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialHandle) ||
+        !createTexture("DeferredTargets.GBufferMaterialAux", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialAuxHandle) ||
+        !createTexture("DeferredTargets.GBufferDepth", RhiTextureFormat::Depth32Float, depthUsage, m_gDepthHandle)) {
+        destroyGBufferTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroyGBufferTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiTextureHandle* textures[] = {
+        &m_gAlbedoHandle,
+        &m_gNormalAoHandle,
+        &m_gVoxelLightHandle,
+        &m_gMaterialHandle,
+        &m_gMaterialAuxHandle,
+        &m_gDepthHandle
+    };
+    for (RhiTextureHandle* texture : textures) {
+        if (texture->isValid()) {
+            m_rhiDevice->destroyTexture(*texture);
+            *texture = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
-    m_gAlbedoHandle = renderer::rhi::gl::registerTexture({
-        m_gAlbedo,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_gNormalAoHandle = renderer::rhi::gl::registerTexture({
-        m_gNormalAo,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_gVoxelLightHandle = renderer::rhi::gl::registerTexture({
-        m_gVoxelLight,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rg8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_gMaterialHandle = renderer::rhi::gl::registerTexture({
-        m_gMaterial,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_gMaterialAuxHandle = renderer::rhi::gl::registerTexture({
-        m_gMaterialAux,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_gDepthHandle = renderer::rhi::gl::registerTexture({
-        m_gDepth,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Depth32Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
-        false
-    });
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
     m_sceneLightingHandle = renderer::rhi::gl::registerTexture({
@@ -2857,12 +2849,7 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
 
 void DeferredRenderTargets::unregisterRhiTextures() {
     destroyRhiTextureViews();
-    renderer::rhi::gl::unregisterTextureAndReset(m_gAlbedoHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_gNormalAoHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_gVoxelLightHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_gMaterialHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_gMaterialAuxHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_gDepthHandle);
+    destroyGBufferTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneLightingHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneCompositeHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_sceneResolvedHandle);
@@ -2921,12 +2908,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     unregisterRhiTextures();
 
     const GLuint textures[] = {
-        m_gAlbedo,
-        m_gNormalAo,
-        m_gVoxelLight,
-        m_gMaterial,
-        m_gMaterialAux,
-        m_gDepth,
         m_shadowDepth,
         m_shadowDepthComparison,
         m_shadowColor,
@@ -2975,12 +2956,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
             glDeleteTextures(1, &mutableTexture);
         }
     }
-    m_gAlbedo = 0;
-    m_gNormalAo = 0;
-    m_gVoxelLight = 0;
-    m_gMaterial = 0;
-    m_gMaterialAux = 0;
-    m_gDepth = 0;
     m_shadowDepth = 0;
     m_shadowDepthComparison = 0;
     m_shadowColor = 0;
