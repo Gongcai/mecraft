@@ -17,6 +17,7 @@
 class IWorldView;
 class ResourceMgr;
 class Shader;
+class RhiCommandList;
 class RhiDevice;
 class Chunk;
 class SubChunk;
@@ -28,10 +29,10 @@ public:
     void shutdown();
     void beginFrame();
     void prepareFrame(const IWorldView& worldView);
+    [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList);
 
-    void renderToGBuffer(const IWorldView& worldView,
-                         const glm::mat4& viewProj,
-                         const glm::mat4& previousViewProj);
+    void renderToGBuffer(RhiCommandList& commandList,
+                         const glm::mat4& viewProj);
     void renderToShadowMap(const IWorldView& worldView,
                            const glm::mat4& shadowViewProj,
                            const glm::vec3& cameraPos,
@@ -67,6 +68,8 @@ private:
     struct ModelEntry {
         Mesh mesh;
         RhiTextureHandle texture;
+        RhiTextureViewHandle textureView;
+        RhiBindGroupHandle gbufferBindGroup;
         bool usesHorizontalFacing = false;
     };
 
@@ -87,6 +90,12 @@ private:
     struct InstancedDrawData {
         glm::mat4 modelMatrix{1.0f};
         glm::vec2 light{1.0f, 0.0f};
+    };
+
+    struct PreparedModelBatch {
+        const ModelEntry* model = nullptr;
+        uint64_t instanceOffset = 0u;
+        uint32_t instanceCount = 0u;
     };
 
     struct SectionKey {
@@ -125,6 +134,13 @@ private:
     RhiGrowableBuffer m_rhiInstanceBuffer;
     std::size_t m_instanceCapacity = 0;
     std::vector<InstancedDrawData> m_instanceData;
+    std::vector<PreparedModelBatch> m_gbufferBatches;
+    RhiSamplerHandle m_rhiSampler;
+    RhiShaderHandle m_gbufferVertexShader;
+    RhiShaderHandle m_gbufferFragmentShader;
+    RhiBindGroupLayoutHandle m_gbufferBindGroupLayout;
+    RhiPipelineLayoutHandle m_gbufferPipelineLayout;
+    RhiPipelineHandle m_gbufferPipeline;
     uint64_t m_cacheSyncSerial = 0;
     uint64_t m_syncedActiveChunkRevision = 0;
     uint64_t m_syncedBlockContentRevision = 0;
@@ -134,6 +150,8 @@ private:
 
     void destroyMesh(Mesh& mesh);
     Mesh buildMesh(const ModelDefinition& definition);
+    void createGBufferRhiResources();
+    void destroyGBufferRhiResources();
     static ModelDefinition makeChestDefinition();
     static glm::mat4 buildModelMatrix(const ModelEntry& entry,
                                       BlockStateId stateId,

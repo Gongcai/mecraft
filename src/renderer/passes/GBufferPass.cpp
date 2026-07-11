@@ -132,22 +132,20 @@ void GBufferPass::executeBlockEntities(const IWorldView& worldView, const FrameC
         return;
     }
 
-    blockEntityRenderer->prepareFrame(worldView);
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    blockEntityRenderer->prepareFrame(worldView);
+    RhiCommandList& preparationCommandList = rhiDevice.beginFrame();
+    if (!blockEntityRenderer->prepareGBuffer(preparationCommandList)) {
+        return;
+    }
+    rhiDevice.submitFrame(preparationCommandList);
     RhiCommandList* commandList = beginObjectGBufferRendering(rhiDevice, targets, "GBuffer.BlockEntities", false);
     if (commandList == nullptr) {
         return;
     }
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    const glm::mat4& previousViewProj = ctx.previousViewProj;
-    blockEntityRenderer->renderToGBuffer(worldView, viewProj, previousViewProj);
+    blockEntityRenderer->renderToGBuffer(*commandList, viewProj);
 
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);

@@ -13,7 +13,9 @@
 
 #include "../core/Shader.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
@@ -167,6 +169,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
                                   "BlockEntity.InstanceBuffer")) {
         failBlockEntityRenderer("Failed to create block entity RHI instance buffer");
     }
+    createGBufferRhiResources();
 
     const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
 
@@ -179,6 +182,23 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     ModelEntry entry;
     entry.mesh = buildMesh(chest);
     entry.texture = chestTexture;
+    RhiTextureViewDesc textureViewDesc;
+    textureViewDesc.texture = chestTexture;
+    textureViewDesc.viewType = RhiTextureViewType::Texture2D;
+    entry.textureView = m_rhiDevice->createTextureView(textureViewDesc);
+    if (!entry.textureView.isValid()) {
+        failBlockEntityRenderer("Failed to create block entity texture view");
+    }
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_gbufferBindGroupLayout;
+    RhiBindGroupEntry textureEntry;
+    textureEntry.binding = 0u;
+    textureEntry.resource.combinedTextureSampler = {entry.textureView, m_rhiSampler};
+    bindGroupDesc.entries.push_back(textureEntry);
+    entry.gbufferBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
+    if (!entry.gbufferBindGroup.isValid()) {
+        failBlockEntityRenderer("Failed to create block entity GBuffer bind group");
+    }
     entry.usesHorizontalFacing = chest.usesHorizontalFacing;
     auto [it, inserted] = m_models.emplace(chestBlock, entry);
     static_cast<void>(inserted);
@@ -187,9 +207,16 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
 
 void BlockEntityRenderer::shutdown() {
     for (auto& pair : m_models) {
+        if (pair.second.gbufferBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(pair.second.gbufferBindGroup);
+        }
+        if (pair.second.textureView.isValid()) {
+            m_rhiDevice->destroyTextureView(pair.second.textureView);
+        }
         destroyMesh(pair.second.mesh);
     }
     m_models.clear();
+    destroyGBufferRhiResources();
     m_rhiInstanceBuffer.shutdown();
     m_sectionCaches.clear();
     m_flatInstances.clear();
@@ -202,6 +229,7 @@ void BlockEntityRenderer::shutdown() {
     }
     m_instanceCapacity = 0;
     m_instanceData.clear();
+    m_gbufferBatches.clear();
     m_hasSyncedRevisions = false;
     m_instanceCacheSyncedThisFrame = false;
     m_instanceLightsSyncedThisFrame = false;
@@ -220,6 +248,118 @@ void BlockEntityRenderer::beginFrame() {
 void BlockEntityRenderer::prepareFrame(const IWorldView& worldView) {
     synchronizeInstanceCache(worldView);
     updateInstanceLightsForFrame();
+}
+
+bool BlockEntityRenderer::prepareGBuffer(RhiCommandList& commandList) {
+    m_instanceData.clear();
+    m_gbufferBatches.clear();
+    for (const auto& modelPair : m_models) {
+        const ModelEntry& model = modelPair.second;
+        const uint64_t instanceOffset = m_instanceData.size() * sizeof(InstancedDrawData);
+        for (const BlockEntityInstance* instance : m_flatInstances) {
+            if (instance->model == &model) {
+                m_instanceData.push_back({instance->modelMatrix, instance->light});
+            }
+        }
+        const uint64_t instanceCount =
+            (m_instanceData.size() * sizeof(InstancedDrawData) - instanceOffset) /
+            sizeof(InstancedDrawData);
+        if (instanceCount != 0u) {
+            m_gbufferBatches.push_back({&model, instanceOffset, static_cast<uint32_t>(instanceCount)});
+        }
+    }
+    if (m_instanceData.empty()) {
+        return true;
+    }
+    return m_rhiInstanceBuffer.write(commandList, 0u, m_instanceData.data(),
+                                     m_instanceData.size() * sizeof(InstancedDrawData));
+}
+
+void BlockEntityRenderer::createGBufferRhiResources() {
+    const auto vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_entity_gbuffer_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_entity_gbuffer_rhi.frag");
+    if (!vertexSource || !fragmentSource) {
+        failBlockEntityRenderer("Failed to load block entity RHI shaders");
+    }
+    auto createShader = [this](const char* name, const RhiShaderStage stage,
+                               const std::string& source) {
+        RhiShaderDesc desc;
+        desc.debugName = name;
+        desc.stage = stage;
+        desc.source = source.c_str();
+        desc.sourceSize = source.size();
+        return m_rhiDevice->createShader(desc);
+    };
+    m_gbufferVertexShader = createShader("BlockEntity.GBuffer.Vertex", RhiShaderStage::Vertex,
+                                         *vertexSource);
+    m_gbufferFragmentShader = createShader("BlockEntity.GBuffer.Fragment", RhiShaderStage::Fragment,
+                                           *fragmentSource);
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    m_rhiSampler = m_rhiDevice->createSampler(samplerDesc);
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "BlockEntity.GBuffer.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
+                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_gbufferBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "BlockEntity.GBuffer.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_gbufferBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
+    m_gbufferPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "BlockEntity.GBuffer.Pipeline";
+    pipelineDesc.vertexShader = m_gbufferVertexShader;
+    pipelineDesc.fragmentShader = m_gbufferFragmentShader;
+    pipelineDesc.layout = m_gbufferPipelineLayout;
+    pipelineDesc.vertexInput.bindings = {
+        {0u, sizeof(BlockEntityVertex), RhiVertexInputRate::Vertex},
+        {1u, sizeof(InstancedDrawData), RhiVertexInputRate::Instance}
+    };
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, offsetof(BlockEntityVertex, x)},
+        {1u, 0u, RhiVertexFormat::Float2, offsetof(BlockEntityVertex, u)},
+        {2u, 0u, RhiVertexFormat::Float3, offsetof(BlockEntityVertex, nx)},
+        {3u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix)},
+        {4u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4)},
+        {5u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4) * 2u},
+        {6u, 1u, RhiVertexFormat::Float4, offsetof(InstancedDrawData, modelMatrix) + sizeof(glm::vec4) * 3u},
+        {7u, 1u, RhiVertexFormat::Float2, offsetof(InstancedDrawData, light)}
+    };
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::Rg8Unorm, RhiTextureFormat::Rgba8Unorm, RhiTextureFormat::Rgba8Unorm,
+        RhiTextureFormat::Rg16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    pipelineDesc.blend.attachments.resize(6u);
+    m_gbufferPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    if (!m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() ||
+        !m_rhiSampler.isValid() || !m_gbufferBindGroupLayout.isValid() ||
+        !m_gbufferPipelineLayout.isValid() || !m_gbufferPipeline.isValid()) {
+        failBlockEntityRenderer("Failed to create block entity GBuffer RHI resources");
+    }
+}
+
+void BlockEntityRenderer::destroyGBufferRhiResources() {
+    if (m_gbufferPipeline.isValid()) m_rhiDevice->destroyPipeline(m_gbufferPipeline);
+    if (m_gbufferPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
+    if (m_gbufferBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_gbufferBindGroupLayout);
+    if (m_rhiSampler.isValid()) m_rhiDevice->destroySampler(m_rhiSampler);
+    if (m_gbufferFragmentShader.isValid()) m_rhiDevice->destroyShader(m_gbufferFragmentShader);
+    if (m_gbufferVertexShader.isValid()) m_rhiDevice->destroyShader(m_gbufferVertexShader);
+    m_gbufferPipeline = {};
+    m_gbufferPipelineLayout = {};
+    m_gbufferBindGroupLayout = {};
+    m_rhiSampler = {};
+    m_gbufferFragmentShader = {};
+    m_gbufferVertexShader = {};
 }
 
 BlockEntityRenderer::ModelDefinition BlockEntityRenderer::makeChestDefinition() {
@@ -616,26 +756,17 @@ void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
     }
 }
 
-void BlockEntityRenderer::renderToGBuffer(const IWorldView& worldView,
-                                          const glm::mat4& viewProj,
-                                          const glm::mat4& previousViewProj) {
-    if (m_gbufferShader == nullptr) {
-        return;
+void BlockEntityRenderer::renderToGBuffer(RhiCommandList& commandList,
+                                          const glm::mat4& viewProj) {
+    commandList.setGraphicsPipeline(m_gbufferPipeline);
+    commandList.pushConstants(&viewProj, sizeof(viewProj), rhiFlag(RhiShaderStage::Vertex));
+    commandList.setVertexBuffer(1u, m_rhiInstanceBuffer.buffer(), 0u);
+    for (const PreparedModelBatch& batch : m_gbufferBatches) {
+        commandList.setBindGroup(0u, batch.model->gbufferBindGroup);
+        commandList.setVertexBuffer(0u, batch.model->mesh.rhiVertexBuffer, 0u);
+        commandList.setVertexBuffer(1u, m_rhiInstanceBuffer.buffer(), batch.instanceOffset);
+        commandList.draw(batch.model->mesh.vertexCount, batch.instanceCount, 0u, 0u);
     }
-
-    m_gbufferShader->use();
-    m_gbufferShader->setMat4("viewProj", viewProj);
-    static_cast<void>(previousViewProj);
-    m_gbufferShader->setInt("uTexture", 0);
-    drawBlockEntitiesInstanced(worldView,
-                               false,
-                               glm::vec3(0.0f),
-                               0.0f,
-                               0.0f);
-
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void BlockEntityRenderer::renderToShadowMap(const IWorldView& worldView,
