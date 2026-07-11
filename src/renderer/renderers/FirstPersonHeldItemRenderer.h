@@ -9,6 +9,7 @@
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
 #include "../core/FrameOutput.h"
+#include "../rhi/RhiHandles.h"
 
 class Inventory;
 class RhiDevice;
@@ -150,6 +151,8 @@ private:
     struct Mesh {
         uint32_t vao = 0;
         uint32_t vbo = 0;
+        RhiBufferHandle rhiVertexBuffer;
+        RhiDevice* rhiDevice = nullptr;
         uint32_t vertexCount = 0;
     };
 
@@ -168,6 +171,7 @@ private:
                   const glm::mat4& model);
 
     ResourceMgr* m_resourceMgr = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     Shader* m_blockShader = nullptr;
     Shader* m_itemShader = nullptr;
     Shader* m_steveShader = nullptr;

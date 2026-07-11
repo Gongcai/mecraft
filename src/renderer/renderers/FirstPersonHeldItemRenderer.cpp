@@ -8,6 +8,7 @@
 #include "../core/Shader.h"
 #include "../debug/RenderDebugLabels.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiDevice.h"
 
 #include <algorithm>
 #include <array>
@@ -171,6 +172,7 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiD
         shutdown();
     }
     m_resourceMgr = &resourceMgr;
+    m_rhiDevice = &rhiDevice;
     m_deferredBlockShader = resourceMgr.getShader("block_item_lit");
     m_deferredItemShader = resourceMgr.getShader("item_model");
     m_deferredSteveShader = resourceMgr.getShader("steve");
@@ -198,6 +200,7 @@ void FirstPersonHeldItemRenderer::shutdown() {
     m_itemMeshes.clear();
     MecraftTextureContract::destroyNeutralShadowTextures();
     m_resourceMgr = nullptr;
+    m_rhiDevice = nullptr;
     m_blockShader = nullptr;
     m_itemShader = nullptr;
     m_steveShader = nullptr;
@@ -863,10 +866,17 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildBlockMesh(co
         return mesh;
     }
 
-    const renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
+    renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
     mesh.vao = shared.vao;
     mesh.vbo = shared.vbo;
+    mesh.rhiVertexBuffer = shared.rhiVertexBuffer;
+    mesh.rhiDevice = shared.rhiDevice;
     mesh.vertexCount = shared.vertexCount;
+    shared.vao = 0;
+    shared.vbo = 0;
+    shared.rhiVertexBuffer = {};
+    shared.rhiDevice = nullptr;
+    shared.vertexCount = 0;
     return mesh;
 }
 
@@ -910,6 +920,17 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildItemMesh(con
     glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(ItemModelVertex), reinterpret_cast<void*>(offsetof(ItemModelVertex, nx)));
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "FirstPerson.ItemMesh.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(ItemModelVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
+    mesh.rhiDevice = m_rhiDevice;
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyMesh(mesh);
+    }
     return mesh;
 }
 
@@ -957,10 +978,25 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildRightArmMesh
     glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(SteveVertex), reinterpret_cast<void*>(offsetof(SteveVertex, nx)));
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "FirstPerson.ArmMesh.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(SteveVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
+    mesh.rhiDevice = m_rhiDevice;
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyMesh(mesh);
+    }
     return mesh;
 }
 
 void FirstPersonHeldItemRenderer::destroyMesh(Mesh& mesh) {
+    if (mesh.rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
+        mesh.rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
+        mesh.rhiVertexBuffer = {};
+    }
     if (mesh.vbo != 0) {
         glDeleteBuffers(1, &mesh.vbo);
         mesh.vbo = 0;
@@ -970,4 +1006,5 @@ void FirstPersonHeldItemRenderer::destroyMesh(Mesh& mesh) {
         mesh.vao = 0;
     }
     mesh.vertexCount = 0;
+    mesh.rhiDevice = nullptr;
 }
