@@ -99,6 +99,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createSsaoTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -176,28 +180,9 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
                                              kShadowCascadeCount,
                                              GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     glTextureParameterfv(m_csmShadowColor1, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    m_ssaoTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
-    // SSAO filtered output (bilateral filter resolves into this)
-    m_ssaoFilteredTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
-    // Half-res SSAO: raw and filtered at width/2 x height/2
     const int halfW = std::max(1, m_width / 2);
     const int halfH = std::max(1, m_height / 2);
-    m_ssaoHalfResTex = createTexture2D(GL_R8, halfW, halfH, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
-    m_ssaoHalfResFilteredTex = createTexture2D(GL_R8, halfW, halfH, GL_RED, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
-    // SSAO temporal history ping-pong (R8, matches SSAO format)
-    for (int i = 0; i < 2; ++i) {
-        m_ssaoHistoryTex[i] = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
-                                              GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    }
     m_ssaoHistoryIndex = 0;
-
-    // SSAO temporal resolve output (R8, same format as SSAO)
-    m_ssaoTemporalTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
-                                        GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
 
     m_ssgiHalfResTex = createTexture2D(GL_RGBA16F, halfW, halfH, GL_RGBA, GL_FLOAT,
                                        GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -241,16 +226,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     renderer::debug::labelTexture(m_csmShadowDepthAllComparison, "DeferredTargets.CSMDepthAllComparison");
     renderer::debug::labelTexture(m_csmShadowColor0, "DeferredTargets.CSMColor0");
     renderer::debug::labelTexture(m_csmShadowColor1, "DeferredTargets.CSMColor1");
-    renderer::debug::labelTexture(m_ssaoTex, "DeferredTargets.SSAOTex");
-    renderer::debug::labelTexture(m_ssaoFilteredTex, "DeferredTargets.SSAOFilteredTex");
-    renderer::debug::labelTexture(m_ssaoHalfResTex, "DeferredTargets.SSAOHalfResTex");
-    renderer::debug::labelTexture(m_ssaoHalfResFilteredTex, "DeferredTargets.SSAOHalfResFilteredTex");
-    renderer::debug::labelTexture(m_ssaoTemporalTex, "DeferredTargets.SSAOTemporalTex");
-    for (int i = 0; i < 2; ++i) {
-        char texName[48];
-        std::snprintf(texName, sizeof(texName), "DeferredTargets.SSAOHistoryTex[%d]", i);
-        renderer::debug::labelTexture(m_ssaoHistoryTex[i], texName);
-    }
     renderer::debug::labelTexture(m_ssgiTex, "DeferredTargets.SSGITex");
     renderer::debug::labelTexture(m_ssgiHalfResTex, "DeferredTargets.SSGIHalfResTex");
     renderer::debug::labelTexture(m_ssgiTemporalTex, "DeferredTargets.SSGITemporalTex");
@@ -984,6 +959,81 @@ void DeferredRenderTargets::destroyMotionTextures() {
     }
 }
 
+bool DeferredRenderTargets::createSsaoTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const uint32_t width,
+                                      const uint32_t height,
+                                      const RhiTextureUsageFlags usage,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = RhiTextureFormat::R8Unorm;
+        desc.width = width;
+        desc.height = height;
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = usage;
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    const uint32_t width = static_cast<uint32_t>(m_width);
+    const uint32_t height = static_cast<uint32_t>(m_height);
+    const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
+    const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
+    const RhiTextureUsageFlags attachmentUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureUsageFlags historyUsage =
+        attachmentUsage | rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureUsageFlags temporalUsage =
+        attachmentUsage | rhiFlag(RhiTextureUsage::TransferSrc);
+
+    if (!createTexture("DeferredTargets.SSAOFiltered", width, height,
+                       attachmentUsage, m_ssaoFilteredHandle) ||
+        !createTexture("DeferredTargets.SSAOHalfRes", halfWidth, halfHeight,
+                       attachmentUsage, m_ssaoHalfResHandle) ||
+        !createTexture("DeferredTargets.SSAOHalfResFiltered", halfWidth, halfHeight,
+                       attachmentUsage, m_ssaoHalfResFilteredHandle) ||
+        !createTexture("DeferredTargets.SSAOHistory[0]", width, height,
+                       historyUsage, m_ssaoHistoryHandle[0]) ||
+        !createTexture("DeferredTargets.SSAOHistory[1]", width, height,
+                       historyUsage, m_ssaoHistoryHandle[1]) ||
+        !createTexture("DeferredTargets.SSAOTemporal", width, height,
+                       temporalUsage, m_ssaoTemporalHandle)) {
+        destroySsaoTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroySsaoTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiTextureHandle* textures[] = {
+        &m_ssaoFilteredHandle,
+        &m_ssaoHalfResHandle,
+        &m_ssaoHalfResFilteredHandle,
+        &m_ssaoHistoryHandle[0],
+        &m_ssaoHistoryHandle[1],
+        &m_ssaoTemporalHandle
+    };
+    for (RhiTextureHandle* texture : textures) {
+        if (texture->isValid()) {
+            m_rhiDevice->destroyTexture(*texture);
+            *texture = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
@@ -1029,80 +1079,6 @@ bool DeferredRenderTargets::registerRhiTextures() {
         RhiTextureFormat::Rgba16Float,
         static_cast<uint32_t>(m_shadowResolution),
         static_cast<uint32_t>(m_shadowResolution),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_ssaoHandle = renderer::rhi::gl::registerTexture({
-        m_ssaoTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::R8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_ssaoFilteredHandle = renderer::rhi::gl::registerTexture({
-        m_ssaoFilteredTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::R8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_ssaoHalfResHandle = renderer::rhi::gl::registerTexture({
-        m_ssaoHalfResTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::R8Unorm,
-        halfWidth,
-        halfHeight,
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_ssaoHalfResFilteredHandle = renderer::rhi::gl::registerTexture({
-        m_ssaoHalfResFilteredTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::R8Unorm,
-        halfWidth,
-        halfHeight,
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    for (int i = 0; i < 2; ++i) {
-        m_ssaoHistoryHandle[i] = renderer::rhi::gl::registerTexture({
-            m_ssaoHistoryTex[i],
-            RhiTextureDimension::Texture2D,
-            RhiTextureFormat::R8Unorm,
-            static_cast<uint32_t>(m_width),
-            static_cast<uint32_t>(m_height),
-            1,
-            1,
-            1,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-            false
-        });
-    }
-    m_ssaoTemporalHandle = renderer::rhi::gl::registerTexture({
-        m_ssaoTemporalTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::R8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
         1,
         1,
         1,
@@ -1308,7 +1284,6 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_shadowDepthComparisonHandle.isValid() &&
                             m_shadowColorHandle.isValid() &&
                             m_shadowNormalHandle.isValid() &&
-                            m_ssaoHandle.isValid() &&
                             m_ssaoFilteredHandle.isValid() &&
                             m_ssaoHalfResHandle.isValid() &&
                             m_ssaoHalfResFilteredHandle.isValid() &&
@@ -2965,18 +2940,12 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroySceneHistoryTextures();
     destroyEffectHistoryTextures();
     destroyMotionTextures();
+    destroySsaoTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthComparisonHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowColorHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowNormalHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoFilteredHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHalfResHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHalfResFilteredHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHistoryHandle[0]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoHistoryHandle[1]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_ssaoTemporalHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_ssgiHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_ssgiHalfResHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_ssgiDenoiseHandle[0]);
@@ -3009,11 +2978,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_csmShadowDepthAllComparison,
         m_csmShadowColor0,
         m_csmShadowColor1,
-        m_ssaoTex,
-        m_ssaoFilteredTex,
-        m_ssaoHalfResTex, m_ssaoHalfResFilteredTex,
-        m_ssaoHistoryTex[0], m_ssaoHistoryTex[1],
-        m_ssaoTemporalTex,
         m_ssgiTex,
         m_ssgiHalfResTex,
         m_ssgiDenoiseTex[0], m_ssgiDenoiseTex[1],
@@ -3038,12 +3002,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_csmShadowDepthAllComparison = 0;
     m_csmShadowColor0 = 0;
     m_csmShadowColor1 = 0;
-    m_ssaoTex = 0;
-    m_ssaoFilteredTex = 0;
-    m_ssaoHalfResTex = 0;
-    m_ssaoHalfResFilteredTex = 0;
-    m_ssaoHistoryTex[0] = 0; m_ssaoHistoryTex[1] = 0;
-    m_ssaoTemporalTex = 0;
     m_ssgiTex = 0;
     m_ssgiHalfResTex = 0;
     m_ssgiDenoiseTex[0] = 0; m_ssgiDenoiseTex[1] = 0;

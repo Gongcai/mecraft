@@ -70,7 +70,6 @@ public:
     [[nodiscard]] RhiTextureHandle shadowNormalTextureHandle() const { return m_shadowNormalHandle; }
     [[nodiscard]] RhiTextureViewHandle shadowDepthTextureViewHandle() const { return m_shadowDepthView; }
     [[nodiscard]] RhiTextureViewHandle shadowColorTextureViewHandle() const { return m_shadowColorView; }
-    [[nodiscard]] RhiTextureHandle ssaoTextureHandle() const { return m_ssaoHandle; }
     [[nodiscard]] RhiTextureHandle ssaoFilteredTextureHandle() const { return m_ssaoFilteredHandle; }
     [[nodiscard]] RhiTextureViewHandle ssaoFilteredTextureViewHandle() const { return m_ssaoFilteredView; }
     bool ensureSsaoFilteredTextureView(RhiDevice& rhiDevice);
@@ -251,6 +250,8 @@ private:
     void destroyEffectHistoryTextures();
     bool createMotionTextures();
     void destroyMotionTextures();
+    bool createSsaoTextures();
+    void destroySsaoTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -312,25 +313,18 @@ private:
     RhiTextureViewHandle m_csmShadowColor0View[kShadowCascadeCount];
     RhiTextureViewHandle m_csmShadowColor1View[kShadowCascadeCount];
 
-    uint32_t m_ssaoTex = 0;
-    RhiTextureHandle m_ssaoHandle;
-    uint32_t m_ssaoFilteredTex = 0;
     RhiTextureHandle m_ssaoFilteredHandle;
     RhiTextureViewHandle m_ssaoFilteredView;
     // Half-res SSAO: raw and filtered at width/2 x height/2
-    uint32_t m_ssaoHalfResTex = 0;
     RhiTextureHandle m_ssaoHalfResHandle;
     RhiTextureViewHandle m_ssaoHalfResView;
-    uint32_t m_ssaoHalfResFilteredTex = 0;
     RhiTextureHandle m_ssaoHalfResFilteredHandle;
     RhiTextureViewHandle m_ssaoHalfResFilteredView;
     // SSAO temporal history ping-pong (R8)
-    uint32_t m_ssaoHistoryTex[2] = {0, 0};
     RhiTextureHandle m_ssaoHistoryHandle[2];
     RhiTextureViewHandle m_ssaoHistoryView[2];
     int m_ssaoHistoryIndex = 0;
     // SSAO temporal resolve output (R8) — deferred lighting reads from this
-    uint32_t m_ssaoTemporalTex = 0;
     RhiTextureHandle m_ssaoTemporalHandle;
     RhiTextureViewHandle m_ssaoTemporalView;
 
