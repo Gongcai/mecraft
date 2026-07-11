@@ -32,7 +32,7 @@ public:
     void execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
                  RhiDevice& rhiDevice,
                  DeferredRenderTargets& targets,
-                 GameplaySkyRenderer& skyRenderer, ResourceMgr* resourceMgr,
+                 GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
                  float cameraY, float shaderTime, const glm::vec3& cameraPos,
                  float cloudTimeScale);
 };

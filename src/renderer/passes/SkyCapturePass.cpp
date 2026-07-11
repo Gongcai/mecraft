@@ -20,7 +20,7 @@ void SkyCapturePass::shutdown() {
 void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
                               RhiDevice& rhiDevice,
                               DeferredRenderTargets& targets,
-                              GameplaySkyRenderer& skyRenderer, ResourceMgr* resourceMgr,
+                              GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
                               float cameraY, float shaderTime, const glm::vec3& cameraPos,
                               float cloudTimeScale) {
     if (!targets.ensureSkyCaptureTextureView(rhiDevice)) {
@@ -54,8 +54,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     const float cloudThickness = 1400.0f + cloudWetness * (3000.0f - 1400.0f);
     const float cloudCoverage = std::clamp(1.0f + cloudWetness * 0.2f, 0.0f, 1.5f);
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
-    const RhiTextureHandle noiseTexture =
-        resourceMgr != nullptr ? resourceMgr->getTexture2DHandle("shader_noise2d") : RhiTextureHandle{};
+    const RhiTextureHandle noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 
     // Raw sky radiance (rows 0..257)
     skyRenderer.renderSkyCapture(dayNightSystem,
