@@ -17,6 +17,7 @@ struct MetadataPushConstants {
     glm::vec4 sunDirectionAltitude;
     glm::vec4 cloudDynamicWeatherMoonFlux;
 };
+using RawPushConstants = MetadataPushConstants;
 
 [[nodiscard]] bool sameView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -78,14 +79,27 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     }
     RhiCommandList& commandList = rhiDevice.beginFrame();
 
-    // Raw sky radiance (rows 0..257)
-    skyRenderer.renderSkyCapture(dayNightSystem,
-                                  commandList,
-                                  targets.skyCaptureTextureViewHandle(),
-                                  targets.skyCaptureWidth(),
-                                  targets.skyCaptureHeight(),
-                                  cameraAltitude, atmosphereLut, moonPhaseFlux,
-                                  weatherWetness, weatherStorm);
+    RhiColorAttachment rawAttachment;
+    rawAttachment.view = targets.skyCaptureTextureViewHandle();
+    rawAttachment.loadOp = RhiLoadOp::Load;
+    rawAttachment.storeOp = RhiStoreOp::Store;
+    RhiRenderingInfo rawRendering;
+    rawRendering.debugName = "SkyCapture.Raw";
+    rawRendering.renderArea = {0, 0, static_cast<uint32_t>(targets.skyCaptureWidth()),
+                               static_cast<uint32_t>(std::min(targets.skyCaptureHeight(), 258))};
+    rawRendering.colorAttachments = &rawAttachment;
+    rawRendering.colorAttachmentCount = 1u;
+    commandList.beginRendering(rawRendering);
+    commandList.setGraphicsPipeline(m_rawPipeline);
+    commandList.setBindGroup(0u, m_metadataBindGroup);
+    const RawPushConstants rawPushConstants{
+        glm::vec4(skyColors.sunDirection, cameraAltitude),
+        glm::vec4(std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f), moonPhaseFlux, 0.0f, 0.0f)
+    };
+    commandList.pushConstants(&rawPushConstants, sizeof(rawPushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
 
     // Cloudy sky radiance (rows 258..513)
     skyRenderer.renderCloudySkyCapture(dayNightSystem,
@@ -135,7 +149,8 @@ bool SkyCapturePass::ensureMetadataResources(RhiDevice& rhiDevice,
     if (!m_metadataPipeline.isValid()) {
         const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
         const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/sky_capture_metadata_rhi.frag");
-        if (!vertexSource || !fragmentSource) return false;
+        const auto rawFragmentSource = renderer::rhi::loadShaderSource("assets/shaders/sky_capture_raw_rhi.frag");
+        if (!vertexSource || !fragmentSource || !rawFragmentSource) return false;
         RhiShaderDesc shaderDesc;
         shaderDesc.debugName = "SkyCapture.Metadata.Vertex";
         shaderDesc.stage = RhiShaderStage::Vertex;
@@ -147,6 +162,10 @@ bool SkyCapturePass::ensureMetadataResources(RhiDevice& rhiDevice,
         shaderDesc.source = fragmentSource->c_str();
         shaderDesc.sourceSize = fragmentSource->size();
         m_metadataFragmentShader = rhiDevice.createShader(shaderDesc);
+        shaderDesc.debugName = "SkyCapture.Raw.Fragment";
+        shaderDesc.source = rawFragmentSource->c_str();
+        shaderDesc.sourceSize = rawFragmentSource->size();
+        m_rawFragmentShader = rhiDevice.createShader(shaderDesc);
         RhiSamplerDesc samplerDesc;
         samplerDesc.minFilter = RhiFilter::Linear;
         samplerDesc.magFilter = RhiFilter::Linear;
@@ -174,7 +193,11 @@ bool SkyCapturePass::ensureMetadataResources(RhiDevice& rhiDevice,
         pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
         pipelineDesc.blend.attachments.push_back({});
         m_metadataPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+        pipelineDesc.debugName = "SkyCapture.Raw.Pipeline";
+        pipelineDesc.fragmentShader = m_rawFragmentShader;
+        m_rawPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
         if (!m_metadataVertexShader.isValid() || !m_metadataFragmentShader.isValid() ||
+            !m_rawFragmentShader.isValid() || !m_rawPipeline.isValid() ||
             !m_metadataSampler.isValid() || !m_metadataBindGroupLayout.isValid() ||
             !m_metadataPipelineLayout.isValid() || !m_metadataPipeline.isValid()) {
             destroyMetadataResources();
@@ -197,19 +220,23 @@ bool SkyCapturePass::ensureMetadataResources(RhiDevice& rhiDevice,
 void SkyCapturePass::destroyMetadataResources() {
     if (m_rhiDevice) {
         if (m_metadataBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_metadataBindGroup);
+        if (m_rawPipeline.isValid()) m_rhiDevice->destroyPipeline(m_rawPipeline);
         if (m_metadataPipeline.isValid()) m_rhiDevice->destroyPipeline(m_metadataPipeline);
         if (m_metadataPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_metadataPipelineLayout);
         if (m_metadataBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_metadataBindGroupLayout);
         if (m_metadataSampler.isValid()) m_rhiDevice->destroySampler(m_metadataSampler);
         if (m_metadataFragmentShader.isValid()) m_rhiDevice->destroyShader(m_metadataFragmentShader);
+        if (m_rawFragmentShader.isValid()) m_rhiDevice->destroyShader(m_rawFragmentShader);
         if (m_metadataVertexShader.isValid()) m_rhiDevice->destroyShader(m_metadataVertexShader);
     }
     m_metadataBindGroup = {};
+    m_rawPipeline = {};
     m_metadataPipeline = {};
     m_metadataPipelineLayout = {};
     m_metadataBindGroupLayout = {};
     m_metadataSampler = {};
     m_metadataFragmentShader = {};
+    m_rawFragmentShader = {};
     m_metadataVertexShader = {};
     m_boundAtmosphereLutView = {};
     m_rhiDevice = nullptr;

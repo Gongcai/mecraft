@@ -45,10 +45,12 @@ private:
     RhiDevice* m_rhiDevice = nullptr;
     RhiSamplerHandle m_metadataSampler;
     RhiShaderHandle m_metadataVertexShader;
+    RhiShaderHandle m_rawFragmentShader;
     RhiShaderHandle m_metadataFragmentShader;
     RhiBindGroupLayoutHandle m_metadataBindGroupLayout;
     RhiPipelineLayoutHandle m_metadataPipelineLayout;
     RhiPipelineHandle m_metadataPipeline;
+    RhiPipelineHandle m_rawPipeline;
     RhiBindGroupHandle m_metadataBindGroup;
     RhiTextureViewHandle m_boundAtmosphereLutView;
 };

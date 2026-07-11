@@ -245,92 +245,6 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
     renderClouds(camera, aspect, dayNight, m_lastColors);
 }
 
-void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
-                                           RhiCommandList& commandList,
-                                           const RhiTextureViewHandle targetView,
-                                           const int width,
-                                           const int height,
-                                           const float cameraAltitude,
-                                           const RhiTextureHandle atmosphereLutTexture,
-                                           const float moonPhaseFlux,
-                                           const float weatherWetness,
-                                           const float weatherStorm) {
-    m_lastColors = computeSkyColors(dayNight);
-    if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || width <= 0 || height <= 0) {
-        return;
-    }
-
-    const renderer::gl::ScopedStateSnapshot stateGuard;
-
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = targetView;
-    colorAttachment.loadOp = RhiLoadOp::Load;
-    colorAttachment.storeOp = RhiStoreOp::Store;
-
-    // Raw sky: rows 0..skyCaptureRes.y+1 (258 rows). Matches DerivativeMain Deferred0.glsl.
-    RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "SkyCapture.Raw";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, width)),
-        static_cast<uint32_t>(std::max(1, std::min(height, 258)))
-    };
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1u;
-
-    commandList.beginRendering(renderingInfo);
-
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_BLEND);
-
-    m_shader->use();
-    m_shader->setInt("uMode", 4);
-    m_shader->setMat4("uView", glm::mat4(1.0f));
-    m_shader->setMat4("uProjection", glm::mat4(1.0f));
-    m_shader->setMat4("uModel", glm::mat4(1.0f));
-    m_shader->setVec3("uSkyTopColor", m_lastColors.top);
-    m_shader->setVec3("uSkyHorizonColor", m_lastColors.horizon);
-    m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
-    m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
-    m_shader->setVec3("uSunScatterColor", m_lastColors.sunScatter);
-    m_shader->setVec3("uMoonLightColor", m_lastColors.moonLightColor);
-    m_shader->setFloat("uHorizonHaze", m_lastColors.horizonHaze);
-    m_shader->setFloat("uSunGlare", m_lastColors.sunGlare);
-    m_shader->setFloat("uSunVisibility", m_lastColors.sunVisibility);
-    m_shader->setFloat("uMoonVisibility", m_lastColors.moonVisibility);
-    m_shader->setFloat("uNightFactor", m_lastColors.nightFactor);
-    m_shader->setInt("uIncludeCelestialDisks", 0);
-    m_shader->setInt("uCloudySkyCapture", 0);
-    m_shader->setVec4("uTintColor", glm::vec4(1.0f));
-    m_shader->setVec2("uUvMin", glm::vec2(0.0f));
-    m_shader->setVec2("uUvMax", glm::vec2(1.0f));
-    m_shader->setFloat("uCameraAltitude", cameraAltitude);
-    m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
-    m_shader->setFloat("uWeatherWetness", weatherWetness);
-    m_shader->setFloat("uWeatherStorm", weatherStorm);
-    // Sky radiance occlusion uses the DerivativeMain wetness+storm gate.
-    const float skyWetnessLocal = std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f);
-    m_shader->setFloat("uSkyWetness", skyWetnessLocal);
-    m_shader->setFloat("uFogWetness", std::clamp(weatherWetness * 0.35f + weatherStorm * 0.65f, 0.0f, 1.0f));
-    m_shader->setFloat("uCloudWetness", std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
-    m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
-    m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
-    bindDummySkyCaptureTexture(0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(atmosphereLutTexture));
-    m_shader->setInt("uAtmosphereLut", 1);
-    glActiveTexture(GL_TEXTURE0);
-
-    glBindVertexArray(m_skyVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-    glBindVertexArray(0);
-
-    commandList.endRendering();
-    // GL state restored by ScopedStateSnapshot destructor
-}
-
 void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
                                                   RhiCommandList& commandList,
                                                   const RhiTextureViewHandle targetView,
@@ -353,7 +267,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
                                                   const glm::vec3& cameraPos,
                                                   const float weatherWetness,
                                                   const float weatherStorm) {
-    (void)dayNight; // Uses m_lastColors from preceding renderSkyCapture() call.
+    m_lastColors = computeSkyColors(dayNight);
     if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
     }
