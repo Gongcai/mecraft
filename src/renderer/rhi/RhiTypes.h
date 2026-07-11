@@ -212,7 +212,11 @@ enum class RhiVertexFormat {
     Uint,
     Uint2,
     Uint3,
-    Uint4
+    Uint4,
+    Sint8,
+    Unorm8,
+    Uint8,
+    Uint16
 };
 
 enum class RhiVertexInputRate {

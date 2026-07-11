@@ -263,20 +263,25 @@ struct GlVertexFormatInfo {
     GLint componentCount = 3;
     GLenum type = GL_FLOAT;
     bool integer = false;
+    bool normalized = false;
 };
 
 [[nodiscard]] GlVertexFormatInfo toGlVertexFormat(const RhiVertexFormat format) {
     switch (format) {
-        case RhiVertexFormat::Float: return {1, GL_FLOAT, false};
-        case RhiVertexFormat::Float2: return {2, GL_FLOAT, false};
-        case RhiVertexFormat::Float3: return {3, GL_FLOAT, false};
-        case RhiVertexFormat::Float4: return {4, GL_FLOAT, false};
-        case RhiVertexFormat::Uint: return {1, GL_UNSIGNED_INT, true};
-        case RhiVertexFormat::Uint2: return {2, GL_UNSIGNED_INT, true};
-        case RhiVertexFormat::Uint3: return {3, GL_UNSIGNED_INT, true};
-        case RhiVertexFormat::Uint4: return {4, GL_UNSIGNED_INT, true};
+        case RhiVertexFormat::Float: return {1, GL_FLOAT, false, false};
+        case RhiVertexFormat::Float2: return {2, GL_FLOAT, false, false};
+        case RhiVertexFormat::Float3: return {3, GL_FLOAT, false, false};
+        case RhiVertexFormat::Float4: return {4, GL_FLOAT, false, false};
+        case RhiVertexFormat::Uint: return {1, GL_UNSIGNED_INT, true, false};
+        case RhiVertexFormat::Uint2: return {2, GL_UNSIGNED_INT, true, false};
+        case RhiVertexFormat::Uint3: return {3, GL_UNSIGNED_INT, true, false};
+        case RhiVertexFormat::Uint4: return {4, GL_UNSIGNED_INT, true, false};
+        case RhiVertexFormat::Sint8: return {1, GL_BYTE, true, false};
+        case RhiVertexFormat::Unorm8: return {1, GL_UNSIGNED_BYTE, false, true};
+        case RhiVertexFormat::Uint8: return {1, GL_UNSIGNED_BYTE, true, false};
+        case RhiVertexFormat::Uint16: return {1, GL_UNSIGNED_SHORT, true, false};
     }
-    return {3, GL_FLOAT, false};
+    return {3, GL_FLOAT, false, false};
 }
 
 [[nodiscard]] uint64_t indexElementSize(const RhiIndexFormat format) {
@@ -2152,7 +2157,7 @@ RhiPipelineHandle GlRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
                                       attribute.location,
                                       format.componentCount,
                                       format.type,
-                                      GL_FALSE,
+                                      format.normalized ? GL_TRUE : GL_FALSE,
                                       attribute.offset);
         }
     }
