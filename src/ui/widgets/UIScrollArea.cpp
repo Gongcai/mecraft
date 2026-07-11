@@ -2,16 +2,14 @@
 
 #include <algorithm>
 #include <cmath>
-#include <vector>
+#include <cstdlib>
 
-#include <glad/glad.h>
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../../renderer/core/Shader.h"
 #include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
 #include "../../resource/ResourceMgr.h"
-#include "../core/UIRenderUtils.h"
 
 namespace {
 
@@ -67,15 +65,71 @@ UIScrollArea::UIScrollArea() {
 UIScrollArea::~UIScrollArea() { shutdown(); }
 
 void UIScrollArea::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "UiScrollArea.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "UiScrollArea.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = m_rhiDevice->createShader(shaderDesc);
+
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "UiScrollArea.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "UiScrollArea.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
     initMesh();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) {
+        std::abort();
+    }
     UIWidget::init(resourceMgr);
 }
 
 void UIScrollArea::shutdown() {
     UIWidget::shutdown();
     cleanupMesh();
-    m_shader = nullptr;
+    if (m_rhiDevice != nullptr) {
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+    }
+    m_pipeline = {};
+    m_pipelineLayout = {};
+    m_fragmentShader = {};
+    m_vertexShader = {};
+    m_rhiDevice = nullptr;
 }
 
 void UIScrollArea::setContentHeight(float contentHeight) {
@@ -122,27 +176,23 @@ float UIScrollArea::maxScroll() const {
 }
 
 void UIScrollArea::initMesh() {
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    constexpr int kMaxShapeVerts = 160;
-    glBufferData(GL_ARRAY_BUFFER, kMaxShapeVerts * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    constexpr float vertices[] = {
+        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
+    };
+    RhiBufferDesc desc;
+    desc.debugName = "UiScrollArea.VertexBuffer";
+    desc.size = sizeof(vertices);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
 }
 
 void UIScrollArea::cleanupMesh() {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
+    if (m_rhiDevice != nullptr && m_vertexBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_vertexBuffer);
     }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
+    m_vertexBuffer = {};
 }
 
 void UIScrollArea::render(const UIRenderContext& ctx) const {
@@ -216,7 +266,8 @@ bool UIScrollArea::hitTestDescendantInputClip(float px, float py, const UIRender
 }
 
 void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
-    if (!m_shader || m_vao == 0 || m_contentHeight <= 0.0f) return;
+    if (ctx.commandList == nullptr || !m_pipeline.isValid() ||
+        !m_vertexBuffer.isValid() || m_contentHeight <= 0.0f) return;
 
     const UIResolvedScrollAreaStyle resolved = resolveStyle(ctx, m_thumbHovered || m_draggingScrollbar);
     float sbWidth = resolved.scrollbarWidth;
@@ -241,37 +292,26 @@ void UIScrollArea::renderScrollbar(const UIRenderContext& ctx) const {
     const float thumbH = scrollbarThumbHeight(trackH, m_contentHeight);
     const float thumbY = scrollbarThumbY(trackY, trackH, thumbH, m_scrollOffset, scrollMax);
 
-    const UIRenderUtils::GLStateGuard glState;
-    m_shader->use();
-    m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
-                                                static_cast<float>(ctx.screenHeight)));
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
-    auto drawShape = [&](const std::vector<float>& verts, Color shapeColor) {
-        if (verts.empty()) return;
+    ctx.commandList->setGraphicsPipeline(m_pipeline);
+    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+    auto drawShape = [&](float x, float y, float shapeWidth, float shapeHeight, Color shapeColor) {
         shapeColor[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3]));
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-                        verts.data());
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
+        struct PushConstants {
+            glm::vec4 screenRect;
+            glm::vec4 rectRadius;
+            glm::vec4 color;
+        };
+        const PushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(shapeWidth, shapeHeight, shapeWidth * 0.5f, 0.0f),
+            glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
+        };
+        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->draw(6u, 1u, 0u, 0u);
     };
-
-    std::vector<float> verts;
-    verts.reserve(160);
-
-    verts.clear();
-    UIRenderUtils::pushCapsule(verts, visualTrackX, trackY, visualTrackX + visualTrackW, trackY + trackH);
-    drawShape(verts, trackCol);
-
-    verts.clear();
-    UIRenderUtils::pushCapsule(verts, visualThumbX, thumbY, visualThumbX + visualThumbW, thumbY + thumbH);
-    drawShape(verts, thumbCol);
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    drawShape(visualTrackX, trackY, visualTrackW, trackH, trackCol);
+    drawShape(visualThumbX, thumbY, visualThumbW, thumbH, thumbCol);
 }
 
 bool UIScrollArea::hitTestScrollbarThumb(float px, float py, const UIRenderContext& ctx) const {
