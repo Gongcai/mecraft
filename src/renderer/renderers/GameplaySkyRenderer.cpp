@@ -222,8 +222,12 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
         {2u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u}
     };
     m_captureBindGroupLayout = rhiDevice.createBindGroupLayout(captureLayoutDesc);
+    RhiPipelineLayoutDesc capturePipelineLayoutDesc;
+    capturePipelineLayoutDesc.debugName = "GameplaySky.Capture.PipelineLayout";
+    capturePipelineLayoutDesc.bindGroupLayouts.push_back(m_captureBindGroupLayout);
+    m_capturePipelineLayout = rhiDevice.createPipelineLayout(capturePipelineLayoutDesc);
     if (!m_captureUniformBuffer.isValid() || !m_captureSampler.isValid() ||
-        !m_captureBindGroupLayout.isValid()) std::abort();
+        !m_captureBindGroupLayout.isValid() || !m_capturePipelineLayout.isValid()) std::abort();
     m_deferredShader = resourceMgr.getShader("gameplay_sky");
     m_shader = m_deferredShader;
     initMeshes();
@@ -239,11 +243,13 @@ void GameplaySkyRenderer::shutdown() {
         m_rhiDevice->destroyBuffer(m_captureUniformBuffer);
         m_captureUniformBuffer = {};
     }
-    if (m_captureBindGroupLayout.isValid()) {
-        m_rhiDevice->destroyBindGroupLayout(m_captureBindGroupLayout);
+    if (m_capturePipelineLayout.isValid()) {
+        m_rhiDevice->destroyPipelineLayout(m_capturePipelineLayout);
     }
+    if (m_captureBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_captureBindGroupLayout);
     if (m_captureSampler.isValid()) m_rhiDevice->destroySampler(m_captureSampler);
     m_captureBindGroup = {};
+    m_capturePipelineLayout = {};
     m_captureBindGroupLayout = {};
     m_captureSampler = {};
     m_captureAtmosphereLutView = {};

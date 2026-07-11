@@ -160,6 +160,7 @@ private:
     RhiSamplerHandle m_captureSampler;
     RhiBindGroupLayoutHandle m_captureBindGroupLayout;
     RhiBindGroupHandle m_captureBindGroup;
+    RhiPipelineLayoutHandle m_capturePipelineLayout;
     RhiTextureViewHandle m_captureAtmosphereLutView;
     int32_t m_haloVertexCount = 0;
     int32_t m_cloudVertexCount = 0;
