@@ -1,49 +1,49 @@
 #include "Texture2DLibrary.h"
 
 #include "../Diagnostics.h"
-#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "renderer/rhi/RhiDevice.h"
 #include "../third_party/stb/stb_image.h"
 
-#include <glad/glad.h>
-
+#include <cassert>
 #include <cstdio>
 
 namespace {
 
-[[nodiscard]] RhiTextureHandle registerTexture2D(const uint32_t textureID,
-                                                 const RhiTextureFormat format,
-                                                 const int width,
-                                                 const int height) {
-    return renderer::rhi::gl::registerTexture({
-        textureID,
-        RhiTextureDimension::Texture2D,
-        format,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled),
-        false
-    });
-}
+[[nodiscard]] RhiTextureHandle createTexture2D(RhiDevice& rhiDevice,
+                                               const char* debugName,
+                                               const RhiTextureFormat format,
+                                               const int width,
+                                               const int height,
+                                               const unsigned char* pixels) {
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = debugName;
+    textureDesc.dimension = RhiTextureDimension::Texture2D;
+    textureDesc.format = format;
+    textureDesc.width = static_cast<uint32_t>(width);
+    textureDesc.height = static_cast<uint32_t>(height);
+    textureDesc.depthOrLayers = 1;
+    textureDesc.mipLevels = 1;
+    textureDesc.sampleCount = 1;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
 
-void deleteRegisteredTexture(RhiTextureHandle& texture) {
-    const GLuint textureId = static_cast<GLuint>(renderer::rhi::gl::textureId(texture));
-    renderer::rhi::gl::unregisterTextureAndReset(texture);
-    if (textureId != 0) {
-        glDeleteTextures(1, &textureId);
-    }
+    RhiTextureInitialData initialData;
+    initialData.pixels = pixels;
+    initialData.sizeBytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+    return rhiDevice.createTexture(textureDesc, &initialData);
 }
 
 } // namespace
 
+void Texture2DLibrary::init(RhiDevice& rhiDevice) {
+    assert(m_rhiDevice == nullptr);
+    m_rhiDevice = &rhiDevice;
+}
+
 RhiTextureHandle Texture2DLibrary::load(const std::string& name,
                                         const std::string& path,
                                         const bool srgb,
-                                        const bool repeat,
-                                        const bool linear,
                                         const bool flipVertically) {
+    assert(m_rhiDevice != nullptr);
     const auto existing = m_textures.find(name);
     if (existing != m_textures.end()) {
         return existing->second.texture;
@@ -63,35 +63,16 @@ RhiTextureHandle Texture2DLibrary::load(const std::string& name,
         return {};
     }
 
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, linear ? GL_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8,
-                 width,
-                 height,
-                 0,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
-                 data);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    stbi_image_free(data);
-
     Texture2DInfo info;
-    info.texture = registerTexture2D(textureID,
-                                     srgb ? RhiTextureFormat::Rgba8Srgb : RhiTextureFormat::Rgba8Unorm,
-                                     width,
-                                     height);
+    info.texture = createTexture2D(*m_rhiDevice,
+                                   name.c_str(),
+                                   srgb ? RhiTextureFormat::Rgba8Srgb : RhiTextureFormat::Rgba8Unorm,
+                                   width,
+                                   height,
+                                   data);
+    stbi_image_free(data);
     if (!info.texture.isValid()) {
-        glDeleteTextures(1, &textureID);
-        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to register texture2D RHI handle '%s': %s\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create texture2D RHI resource '%s': %s\n",
                             name.c_str(), path.c_str());
         return {};
     }
@@ -121,6 +102,7 @@ RhiTextureHandle Texture2DLibrary::loadGui(const std::string& name,
                                            int& outWidth,
                                            int& outHeight,
                                            const bool flipVertically) {
+    assert(m_rhiDevice != nullptr);
     const auto existing = m_guiTextures.find(name);
     if (existing != m_guiTextures.end()) {
         outWidth = existing->second.width;
@@ -147,25 +129,16 @@ RhiTextureHandle Texture2DLibrary::loadGui(const std::string& name,
     outWidth = width;
     outHeight = height;
 
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    stbi_image_free(data);
-
     GuiTextureInfo info;
-    info.texture = registerTexture2D(textureID, RhiTextureFormat::Rgba8Unorm, width, height);
+    info.texture = createTexture2D(*m_rhiDevice,
+                                   name.c_str(),
+                                   RhiTextureFormat::Rgba8Unorm,
+                                   width,
+                                   height,
+                                   data);
+    stbi_image_free(data);
     if (!info.texture.isValid()) {
-        glDeleteTextures(1, &textureID);
-        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to register GUI texture RHI handle '%s': %s\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create GUI texture RHI resource '%s': %s\n",
                             name.c_str(), path.c_str());
         outWidth = 0;
         outHeight = 0;
@@ -186,13 +159,15 @@ RhiTextureHandle Texture2DLibrary::getGuiHandle(const std::string& name) const {
 }
 
 void Texture2DLibrary::shutdown() {
+    assert(m_rhiDevice != nullptr);
     for (auto& [_, texInfo] : m_guiTextures) {
-        deleteRegisteredTexture(texInfo.texture);
+        m_rhiDevice->destroyTexture(texInfo.texture);
     }
     m_guiTextures.clear();
 
     for (auto& [_, texInfo] : m_textures) {
-        deleteRegisteredTexture(texInfo.texture);
+        m_rhiDevice->destroyTexture(texInfo.texture);
     }
     m_textures.clear();
+    m_rhiDevice = nullptr;
 }

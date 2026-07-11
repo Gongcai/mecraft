@@ -40,6 +40,7 @@ ResourceMgr& ResourceMgr::operator=(ResourceMgr&&) noexcept = default;
 
 void ResourceMgr::init(RhiDevice& rhiDevice) {
     m_impl->rhiDevice = &rhiDevice;
+    m_impl->texture2D.init(rhiDevice);
     resource::loadDefaultShaders(m_impl->shaders);
 
     loadCubemap("menu_skybox",
@@ -86,10 +87,8 @@ Shader *ResourceMgr::getShader(const std::string &name) {
 RhiTextureHandle ResourceMgr::loadTexture2D(const std::string& name,
                                             const std::string& path,
                                             const bool srgb,
-                                            const bool repeat,
-                                            const bool linear,
                                             const bool flipVertically) {
-    return m_impl->texture2D.load(name, path, srgb, repeat, linear, flipVertically);
+    return m_impl->texture2D.load(name, path, srgb, flipVertically);
 }
 
 RhiTextureHandle ResourceMgr::getTexture2DHandle(const std::string& name) const {

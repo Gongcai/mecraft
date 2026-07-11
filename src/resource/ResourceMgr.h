@@ -41,8 +41,6 @@ public:
     RhiTextureHandle loadTexture2D(const std::string& name,
                                    const std::string& path,
                                    bool srgb = false,
-                                   bool repeat = false,
-                                   bool linear = true,
                                    bool flipVertically = false);
     [[nodiscard]] RhiTextureHandle getTexture2DHandle(const std::string& name) const;
 
