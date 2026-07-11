@@ -197,6 +197,8 @@ private:
     void destroyArmRhiResources();
     void createItemRhiResources();
     void destroyItemRhiResources();
+    void createBlockRhiResources();
+    void destroyBlockRhiResources();
     void synchronizeShadowTextureViews();
     void destroyShadowTextureViews();
 
@@ -235,6 +237,12 @@ private:
     RhiPipelineLayoutHandle m_itemPipelineLayout;
     RhiPipelineHandle m_itemPipeline;
     RhiBindGroupHandle m_itemBindGroup;
+    RhiShaderHandle m_blockVertexShader;
+    RhiShaderHandle m_blockFragmentShader;
+    RhiBindGroupLayoutHandle m_blockBindGroupLayout;
+    RhiPipelineLayoutHandle m_blockPipelineLayout;
+    RhiPipelineHandle m_blockPipeline;
+    RhiBindGroupHandle m_blockBindGroup;
     Shader* m_blockShader = nullptr;
     Shader* m_itemShader = nullptr;
     Shader* m_steveShader = nullptr;
