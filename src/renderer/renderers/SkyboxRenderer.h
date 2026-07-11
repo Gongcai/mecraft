@@ -27,6 +27,12 @@ private:
     RhiTextureViewHandle m_cubemapView;
     RhiSamplerHandle m_cubemapSampler;
     RhiBufferHandle m_cubeVertexBuffer;
+    RhiShaderHandle m_skyboxVertexShader;
+    RhiShaderHandle m_skyboxFragmentShader;
+    RhiBindGroupLayoutHandle m_skyboxBindGroupLayout;
+    RhiPipelineLayoutHandle m_skyboxPipelineLayout;
+    RhiPipelineHandle m_skyboxPipeline;
+    RhiBindGroupHandle m_skyboxBindGroup;
     RhiDevice* m_rhiDevice = nullptr;
     uint32_t m_cubeVao = 0;
     uint32_t m_cubeVbo = 0;

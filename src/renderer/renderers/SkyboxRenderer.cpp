@@ -12,6 +12,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 
@@ -123,6 +124,54 @@ void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     cubemapSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
     m_cubemapSampler = rhiDevice.createSampler(cubemapSamplerDesc);
     if (!m_cubemapView.isValid() || !m_cubemapSampler.isValid()) std::abort();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/skybox_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/skybox_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "Skybox.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_skyboxVertexShader = rhiDevice.createShader(shaderDesc);
+    shaderDesc.debugName = "Skybox.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_skyboxFragmentShader = rhiDevice.createShader(shaderDesc);
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "Skybox.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
+                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_skyboxBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Skybox.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_skyboxBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u;
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
+    m_skyboxPipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Skybox.Pipeline";
+    pipelineDesc.vertexShader = m_skyboxVertexShader;
+    pipelineDesc.fragmentShader = m_skyboxFragmentShader;
+    pipelineDesc.layout = m_skyboxPipelineLayout;
+    pipelineDesc.vertexInput.bindings = {{0u, sizeof(float) * 3u, RhiVertexInputRate::Vertex}};
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, 0u}};
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm};
+    pipelineDesc.blend.attachments.resize(1u);
+    m_skyboxPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_skyboxBindGroupLayout;
+    RhiBindGroupEntry textureEntry;
+    textureEntry.binding = 0u;
+    textureEntry.resource.combinedTextureSampler = {m_cubemapView, m_cubemapSampler};
+    bindGroupDesc.entries.push_back(textureEntry);
+    m_skyboxBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_skyboxVertexShader.isValid() || !m_skyboxFragmentShader.isValid() ||
+        !m_skyboxBindGroupLayout.isValid() || !m_skyboxPipelineLayout.isValid() ||
+        !m_skyboxPipeline.isValid() || !m_skyboxBindGroup.isValid()) std::abort();
     initCubeMesh();
 
     glGenVertexArrays(1, &m_fullscreenVao);
@@ -131,6 +180,12 @@ void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
 void SkyboxRenderer::shutdown() {
     destroyBlurTargets();
     destroyCubeMesh();
+    if (m_skyboxBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_skyboxBindGroup);
+    if (m_skyboxPipeline.isValid()) m_rhiDevice->destroyPipeline(m_skyboxPipeline);
+    if (m_skyboxPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_skyboxPipelineLayout);
+    if (m_skyboxBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_skyboxBindGroupLayout);
+    if (m_skyboxFragmentShader.isValid()) m_rhiDevice->destroyShader(m_skyboxFragmentShader);
+    if (m_skyboxVertexShader.isValid()) m_rhiDevice->destroyShader(m_skyboxVertexShader);
     if (m_cubemapSampler.isValid()) m_rhiDevice->destroySampler(m_cubemapSampler);
     if (m_cubemapView.isValid()) m_rhiDevice->destroyTextureView(m_cubemapView);
 
@@ -142,18 +197,20 @@ void SkyboxRenderer::shutdown() {
     m_shader = nullptr;
     m_blurShader = nullptr;
     m_cubemapTexture = {};
+    m_skyboxBindGroup = {};
+    m_skyboxPipeline = {};
+    m_skyboxPipelineLayout = {};
+    m_skyboxBindGroupLayout = {};
+    m_skyboxFragmentShader = {};
+    m_skyboxVertexShader = {};
     m_cubemapView = {};
     m_cubemapSampler = {};
     m_rhiDevice = nullptr;
 }
 
 void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, RhiDevice& rhiDevice) {
-    if (m_shader == nullptr || m_blurShader == nullptr ||
-        !m_cubemapTexture.isValid() || m_cubeVao == 0 || m_fullscreenVao == 0) {
-        return;
-    }
-    const GLuint cubemapTextureId = static_cast<GLuint>(renderer::rhi::gl::textureId(m_cubemapTexture));
-    if (cubemapTextureId == 0) {
+    if (m_blurShader == nullptr || !m_cubemapTexture.isValid() ||
+        !m_cubeVertexBuffer.isValid() || m_fullscreenVao == 0) {
         return;
     }
 
@@ -185,21 +242,18 @@ void SkyboxRenderer::render(float aspect, float yawDegrees, float pitchDegrees, 
 
     glm::mat4 projection = glm::perspective(glm::radians(70.0f), aspect, 0.1f, 100.0f);
 
-    glDepthFunc(GL_LEQUAL);
-    glDisable(GL_CULL_FACE);
-    glDisable(GL_DEPTH_TEST);
-
-    m_shader->use();
-    m_shader->setMat4("uView", view);
-    m_shader->setMat4("uProjection", projection);
-    m_shader->setInt("uSkybox", 0);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTextureId);
-
-    glBindVertexArray(m_cubeVao);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
+    struct SkyboxPushConstants { glm::mat4 projection; glm::mat4 view; };
+    const SkyboxPushConstants skyboxConstants{projection, view};
+    commandList.setViewport({0.0f, 0.0f, static_cast<float>(blurW),
+                             static_cast<float>(blurH), 0.0f, 1.0f});
+    commandList.setScissor({0, 0, static_cast<uint32_t>(blurW),
+                            static_cast<uint32_t>(blurH)});
+    commandList.setGraphicsPipeline(m_skyboxPipeline);
+    commandList.setBindGroup(0u, m_skyboxBindGroup);
+    commandList.setVertexBuffer(0u, m_cubeVertexBuffer, 0u);
+    commandList.pushConstants(&skyboxConstants, sizeof(skyboxConstants),
+                              rhiFlag(RhiShaderStage::Vertex));
+    commandList.draw(36u, 1u, 0u, 0u);
     commandList.endRendering();
 
     // --- Pass 2: Horizontal blur (scene -> ping) ---
