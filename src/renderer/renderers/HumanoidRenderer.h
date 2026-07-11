@@ -17,6 +17,7 @@
 
 class Camera;
 class IWorldView;
+class RhiCommandList;
 class RhiDevice;
 class Shader;
 class ResourceMgr;
@@ -40,18 +41,11 @@ public:
                       ecs::GameplayRegistry& registry,
                       RenderMode mode = kRenderAll);
     void finishFrame();
+    void renderPreparedToGBuffer(RhiCommandList& commandList,
+                                 const glm::mat4& viewProj,
+                                 const glm::mat4& previousViewProj);
     void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
                 RenderMode mode = kRenderAll);
-    // GBuffer path: renders entities into the deferred GBuffer (5 MRT).
-    // Caller must have already bound the GBuffer FBO with terrain depth.
-    void renderToGBuffer(ecs::GameplayRegistry& registry,
-                         const glm::mat4& jitteredViewProj,
-                         const glm::mat4& previousViewProj,
-                         RenderMode mode = kRenderAll);
-    void renderToGBuffer(const IWorldView& worldView, ecs::GameplayRegistry& registry,
-                         const glm::mat4& jitteredViewProj,
-                         const glm::mat4& previousViewProj,
-                         RenderMode mode = kRenderAll);
     // Shadow path: renders entities into the CSM shadow map.
     // Caller must have already bound the shadow FBO layer.
     void renderToShadowMap(ecs::GameplayRegistry& registry,
@@ -94,6 +88,7 @@ private:
     struct TextureResource {
         RhiTextureHandle texture;
         RhiTextureViewHandle view;
+        RhiBindGroupHandle gbufferBindGroup;
     };
     std::unordered_map<std::string, TextureResource> m_textureResources;
 
@@ -110,7 +105,6 @@ private:
 
     Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
     Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
-    Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
     Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
@@ -123,6 +117,12 @@ private:
     float m_inventoryPreviewBodyLookX = 0.0f;
     float m_inventoryPreviewBodyLookY = 0.0f;
     float m_inventoryPreviewLastTime = -1.0f;
+    RhiSamplerHandle m_gbufferSampler;
+    RhiShaderHandle m_gbufferRhiVertexShader;
+    RhiShaderHandle m_gbufferRhiFragmentShader;
+    RhiBindGroupLayoutHandle m_gbufferRhiBindGroupLayout;
+    RhiPipelineLayoutHandle m_gbufferRhiPipelineLayout;
+    RhiPipelineHandle m_gbufferRhiPipeline;
 
     void destroyMesh(PartMesh& mesh) const;
 
@@ -139,6 +139,8 @@ private:
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
     const TextureResource& requireTextureResource(const std::string& textureKey);
+    void createGBufferRhiResources();
+    void destroyGBufferRhiResources();
     [[nodiscard]] bool ensureNeutralShadowTextures();
     [[nodiscard]] bool bindDisabledShadowNeutralTextures(Shader& shader);
 

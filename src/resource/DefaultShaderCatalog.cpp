@@ -53,7 +53,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"item_model_forward", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model_forward.frag"},
     {"steve", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve.frag"},
     {"steve_forward", SHADERS_DIR "/steve.vert", SHADERS_DIR "/steve_forward.frag"},
-    {"entity_gbuffer", SHADERS_DIR "/entity_gbuffer.vert", SHADERS_DIR "/entity_gbuffer.frag"},
     {"entity_shadow", SHADERS_DIR "/entity_shadow.vert", SHADERS_DIR "/entity_shadow.frag"},
     {"ui_color", SHADERS_DIR "/ui_color.vert", SHADERS_DIR "/ui_color.frag"},
     {"ui_glass", SHADERS_DIR "/ui_glass.vert", SHADERS_DIR "/ui_glass.frag"},

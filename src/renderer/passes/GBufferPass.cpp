@@ -95,26 +95,22 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    const HumanoidRenderer::RenderMode mode = renderLocalPlayerModel
+        ? HumanoidRenderer::kRenderAll
+        : HumanoidRenderer::kRenderMobsOnly;
+    humanoidRenderer->prepareFrame(worldView, *gameplayRegistry, mode);
     RhiCommandList* commandList = beginObjectGBufferRendering(rhiDevice, targets, "GBuffer.Entities", true);
     if (commandList == nullptr) {
         return;
     }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
 
     // Rasterize with the same projection flavor as terrain, but reproject
     // moving objects into the resolved history grid (raw previous view-proj).
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
 
-    const HumanoidRenderer::RenderMode mode = renderLocalPlayerModel
-        ? HumanoidRenderer::kRenderAll
-        : HumanoidRenderer::kRenderMobsOnly;
-    humanoidRenderer->renderToGBuffer(worldView, *gameplayRegistry, viewProj, previousViewProj, mode);
+    humanoidRenderer->renderPreparedToGBuffer(*commandList, viewProj, previousViewProj);
+    humanoidRenderer->finishFrame();
 
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);
