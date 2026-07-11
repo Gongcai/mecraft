@@ -16,6 +16,7 @@ public:
     void bufferBarrier(const RhiBufferBarrier& barrier) override;
     void beginRendering(const RhiRenderingInfo& info) override;
     void endRendering() override;
+    void clearDepthAttachment(float depth, const RhiRect2D& rect) override;
     void setViewport(const RhiViewport& viewport) override;
     void setScissor(const RhiRect2D& rect) override;
     void setGraphicsPipeline(RhiPipelineHandle pipeline) override;

@@ -888,6 +888,19 @@ void GlRhiCommandList::endRendering() {
     m_rendering = false;
 }
 
+void GlRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& rect) {
+    if (!m_rendering) {
+        logRhiError("clearDepthAttachment requires an active rendering scope");
+        return;
+    }
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(rect.x, rect.y,
+              static_cast<GLsizei>(rect.width),
+              static_cast<GLsizei>(rect.height));
+    glDepthMask(GL_TRUE);
+    glClearBufferfv(GL_DEPTH, 0, &depth);
+}
+
 void GlRhiCommandList::setViewport(const RhiViewport& viewport) {
     glViewport(static_cast<GLint>(viewport.x),
                static_cast<GLint>(viewport.y),

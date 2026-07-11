@@ -24,6 +24,7 @@ public:
 
     virtual void beginRendering(const RhiRenderingInfo& info) = 0;
     virtual void endRendering() = 0;
+    virtual void clearDepthAttachment(float depth, const RhiRect2D& rect) = 0;
 
     virtual void setViewport(const RhiViewport& viewport) = 0;
     virtual void setScissor(const RhiRect2D& rect) = 0;
