@@ -326,11 +326,15 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
                                               ctx.animationTime);
     }
 
-    if (m_shared->humanoidRenderer && m_shared->gameplayRegistry) {
+    if (m_shared->humanoidRenderer && m_shared->gameplayRegistry &&
+        m_backbufferCommandList != nullptr) {
         const auto mode = ctx.renderLocalPlayerModel
             ? HumanoidRenderer::kRenderAll
             : HumanoidRenderer::kRenderMobsOnly;
-        m_shared->humanoidRenderer->render(*m_shared->gameplayRegistry, *ctx.cameraPtr, *ctx.windowPtr, mode);
+        m_shared->humanoidRenderer->prepareFrame(*ctx.worldView, *m_shared->gameplayRegistry, mode);
+        m_shared->humanoidRenderer->renderPreparedForward(
+            *m_backbufferCommandList, ctx.camera.viewProj, ctx.skyIntensity);
+        m_shared->humanoidRenderer->finishFrame();
     }
 
     if (settings.weather.particlesEnabled && m_shared->particleSystem) {

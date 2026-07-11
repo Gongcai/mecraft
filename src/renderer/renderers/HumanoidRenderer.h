@@ -49,8 +49,9 @@ public:
                                    const glm::vec3& cameraPos,
                                    float splitNear,
                                    float splitFar);
-    void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
-                RenderMode mode = kRenderAll);
+    void renderPreparedForward(RhiCommandList& commandList,
+                               const glm::mat4& viewProj,
+                               float skyIntensity);
     void renderInventoryPreview(float x,
                                 float y,
                                 float width,
@@ -101,7 +102,6 @@ private:
     std::vector<PreparedPartDraw> m_preparedPartDraws;
 
     Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
-    Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     uint32_t m_neutralShadowDepth = 0;
@@ -124,6 +124,10 @@ private:
     RhiBindGroupLayoutHandle m_shadowRhiBindGroupLayout;
     RhiPipelineLayoutHandle m_shadowRhiPipelineLayout;
     RhiPipelineHandle m_shadowRhiPipeline;
+    RhiShaderHandle m_forwardRhiVertexShader;
+    RhiShaderHandle m_forwardRhiFragmentShader;
+    RhiPipelineLayoutHandle m_forwardRhiPipelineLayout;
+    RhiPipelineHandle m_forwardRhiPipeline;
 
     void destroyMesh(PartMesh& mesh) const;
 

@@ -367,7 +367,6 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
     m_shader = resourceMgr.getShader("steve");
-    m_forwardShader = resourceMgr.getShader("steve_forward");
     createGBufferRhiResources();
     requireTextureResource("steve");
 
@@ -421,7 +420,6 @@ void HumanoidRenderer::shutdown() {
         m_neutralShadowDepthCompare = 0;
     }
     m_shader = nullptr;
-    m_forwardShader = nullptr;
     m_rhiDevice = nullptr;
     m_resourceMgr = nullptr;
 }
@@ -560,7 +558,12 @@ void HumanoidRenderer::createGBufferRhiResources() {
         "assets/shaders/entity_shadow_rhi.vert");
     const auto shadowFragmentSource = renderer::rhi::loadShaderSource(
         "assets/shaders/entity_shadow_rhi.frag");
-    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource) {
+    const auto forwardVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/entity_forward_rhi.vert");
+    const auto forwardFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/entity_forward_rhi.frag");
+    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource ||
+        !forwardVertexSource || !forwardFragmentSource) {
         std::abort();
     }
     auto createShader = [this](const char* name, const RhiShaderStage stage,
@@ -580,6 +583,10 @@ void HumanoidRenderer::createGBufferRhiResources() {
                                            *shadowVertexSource);
     m_shadowRhiFragmentShader = createShader("Humanoid.Shadow.Fragment", RhiShaderStage::Fragment,
                                              *shadowFragmentSource);
+    m_forwardRhiVertexShader = createShader("Humanoid.Forward.Vertex", RhiShaderStage::Vertex,
+                                            *forwardVertexSource);
+    m_forwardRhiFragmentShader = createShader("Humanoid.Forward.Fragment", RhiShaderStage::Fragment,
+                                              *forwardFragmentSource);
     RhiSamplerDesc samplerDesc;
     samplerDesc.addressU = RhiAddressMode::ClampToEdge;
     samplerDesc.addressV = RhiAddressMode::ClampToEdge;
@@ -603,6 +610,12 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u;
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
     m_shadowRhiPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    pipelineLayoutDesc.debugName = "Humanoid.Forward.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts[0] = m_gbufferRhiBindGroupLayout;
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                            rhiFlag(RhiShaderStage::Fragment);
+    m_forwardRhiPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "Humanoid.GBuffer.Pipeline";
     pipelineDesc.vertexShader = m_gbufferRhiVertexShader;
@@ -630,17 +643,31 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.blend.attachments.clear();
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     m_shadowRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "Humanoid.Forward.Pipeline";
+    pipelineDesc.vertexShader = m_forwardRhiVertexShader;
+    pipelineDesc.fragmentShader = m_forwardRhiFragmentShader;
+    pipelineDesc.layout = m_forwardRhiPipelineLayout;
+    pipelineDesc.colorFormats = {m_rhiDevice->swapchainColorFormat()};
+    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
+    pipelineDesc.blend.attachments.resize(1u);
+    m_forwardRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_gbufferRhiVertexShader.isValid() || !m_gbufferRhiFragmentShader.isValid() ||
         !m_gbufferSampler.isValid() || !m_gbufferRhiBindGroupLayout.isValid() ||
         !m_gbufferRhiPipelineLayout.isValid() || !m_gbufferRhiPipeline.isValid() ||
         !m_shadowRhiVertexShader.isValid() || !m_shadowRhiFragmentShader.isValid() ||
         !m_shadowRhiBindGroupLayout.isValid() || !m_shadowRhiPipelineLayout.isValid() ||
-        !m_shadowRhiPipeline.isValid()) {
+        !m_shadowRhiPipeline.isValid() || !m_forwardRhiVertexShader.isValid() ||
+        !m_forwardRhiFragmentShader.isValid() || !m_forwardRhiPipelineLayout.isValid() ||
+        !m_forwardRhiPipeline.isValid()) {
         std::abort();
     }
 }
 
 void HumanoidRenderer::destroyGBufferRhiResources() {
+    if (m_forwardRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardRhiPipeline);
+    if (m_forwardRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardRhiPipelineLayout);
+    if (m_forwardRhiFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardRhiFragmentShader);
+    if (m_forwardRhiVertexShader.isValid()) m_rhiDevice->destroyShader(m_forwardRhiVertexShader);
     if (m_shadowRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowRhiPipeline);
     if (m_shadowRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowRhiPipelineLayout);
     if (m_shadowRhiBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowRhiBindGroupLayout);
@@ -663,6 +690,10 @@ void HumanoidRenderer::destroyGBufferRhiResources() {
     m_shadowRhiBindGroupLayout = {};
     m_shadowRhiFragmentShader = {};
     m_shadowRhiVertexShader = {};
+    m_forwardRhiPipeline = {};
+    m_forwardRhiPipelineLayout = {};
+    m_forwardRhiFragmentShader = {};
+    m_forwardRhiVertexShader = {};
 }
 
 void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
@@ -709,6 +740,24 @@ void HumanoidRenderer::renderPreparedToShadowMap(RhiCommandList& commandList,
         commandList.setVertexBuffer(0u, draw.mesh->rhiVertexBuffer, 0u);
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
                                   rhiFlag(RhiShaderStage::Vertex));
+        commandList.draw(draw.mesh->vertexCount, 1u, 0u, 0u);
+    }
+}
+
+void HumanoidRenderer::renderPreparedForward(RhiCommandList& commandList,
+                                             const glm::mat4& viewProj,
+                                             const float skyIntensity) {
+    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 lighting; };
+    commandList.setGraphicsPipeline(m_forwardRhiPipeline);
+    for (const PreparedPartDraw& draw : m_preparedPartDraws) {
+        const PushConstants pushConstants{
+            viewProj, draw.model, glm::vec4(draw.light, skyIntensity, draw.hurtFlash)
+        };
+        commandList.setBindGroup(0u, draw.texture->gbufferBindGroup);
+        commandList.setVertexBuffer(0u, draw.mesh->rhiVertexBuffer, 0u);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) |
+                                  rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(draw.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
@@ -1432,18 +1481,6 @@ void HumanoidRenderer::drawEntities(const IWorldView& worldView, ecs::GameplayRe
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
     glActiveTexture(GL_TEXTURE0);
-}
-
-void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& camera,
-                               const Window& window, RenderMode mode) {
-    if (m_forwardShader == nullptr || m_resourceMgr == nullptr) return;
-
-    const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
-    const int modelLoc = m_forwardShader->getUniformLocation("model");
-    const int viewProjLoc = m_forwardShader->getUniformLocation("viewProj");
-
-    drawEntities(gameplayReg, *m_forwardShader, modelLoc, viewProjLoc, -1, viewProj, mode);
-    glDisable(GL_CULL_FACE);
 }
 
 glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
