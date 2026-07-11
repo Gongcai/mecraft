@@ -9,29 +9,27 @@
 #include <glm/vec4.hpp>
 
 #include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/RhiCommandList.h"
 #include "../../resource/ResourceMgr.h"
 #include "../core/UIRenderUtils.h"
 
 namespace {
 
-struct ScissorBox {
-    GLint x = 0;
-    GLint y = 0;
-    GLint width = 1;
-    GLint height = 1;
-};
-
-ScissorBox makeScaledScissorBox(float x, float y, float width, float height, const UIRenderContext& ctx) {
-    GLint viewport[4] = {0, 0, ctx.screenWidth, ctx.screenHeight};
-    glGetIntegerv(GL_VIEWPORT, viewport);
-
+RhiRect2D makeScaledScissorBox(float x, float y, float width, float height, const UIRenderContext& ctx) {
     const float uiScale = ctx.pixelScale();
-    return {
-        viewport[0] + static_cast<GLint>(std::floor(x * uiScale)),
-        viewport[1] + static_cast<GLint>(std::floor(y * uiScale)),
-        std::max<GLint>(1, static_cast<GLint>(std::ceil(width * uiScale))),
-        std::max<GLint>(1, static_cast<GLint>(std::ceil(height * uiScale))),
-    };
+    RhiRect2D rect{static_cast<int32_t>(std::floor(x * uiScale)),
+                   static_cast<int32_t>(std::floor(y * uiScale)),
+                   static_cast<uint32_t>(std::max(1.0f, std::ceil(width * uiScale))),
+                   static_cast<uint32_t>(std::max(1.0f, std::ceil(height * uiScale)))};
+    if (!ctx.hasScissor) return rect;
+    const int32_t x0 = std::max(rect.x, ctx.scissor.x);
+    const int32_t y0 = std::max(rect.y, ctx.scissor.y);
+    const int32_t x1 = std::min(rect.x + static_cast<int32_t>(rect.width),
+                                ctx.scissor.x + static_cast<int32_t>(ctx.scissor.width));
+    const int32_t y1 = std::min(rect.y + static_cast<int32_t>(rect.height),
+                                ctx.scissor.y + static_cast<int32_t>(ctx.scissor.height));
+    return {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
+            static_cast<uint32_t>(std::max(0, y1 - y0))};
 }
 
 float scrollbarThumbHeight(float trackHeight, float contentHeight) {
@@ -148,39 +146,32 @@ void UIScrollArea::cleanupMesh() {
 }
 
 void UIScrollArea::render(const UIRenderContext& ctx) const {
-    if (!visible) return;
+    if (!visible || ctx.commandList == nullptr) return;
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
     float aw = width * scaleX;
     float ah = height * scaleY;
 
-    const ScissorBox scissor = makeScaledScissorBox(ax, ay, aw, ah, ctx);
-
-    // Save current scissor state
-    GLboolean wasScissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
-    GLint prevScissor[4];
-    glGetIntegerv(GL_SCISSOR_BOX, prevScissor);
-
-    glScissor(scissor.x, scissor.y, scissor.width, scissor.height);
-    glEnable(GL_SCISSOR_TEST);
-
-    renderSelf(ctx);
+    UIRenderContext clippedContext = ctx;
+    clippedContext.hasScissor = true;
+    clippedContext.scissor = makeScaledScissorBox(ax, ay, aw, ah, ctx);
+    ctx.commandList->setScissor(clippedContext.scissor);
+    renderSelf(clippedContext);
 
     // Render children with Y offset applied. Content is laid out in bottom-left
     // widget coordinates; increasing the scroll offset moves content upward.
     for (const auto& child : getChildren()) {
         const_cast<UIWidget*>(child.get())->anchorOffsetY += m_scrollOffset;
-        child->render(ctx);
+        child->render(clippedContext);
         const_cast<UIWidget*>(child.get())->anchorOffsetY -= m_scrollOffset;
     }
 
-    // Restore scissor
-    if (wasScissorEnabled) {
-        glScissor(prevScissor[0], prevScissor[1], prevScissor[2], prevScissor[3]);
-    } else {
-        glDisable(GL_SCISSOR_TEST);
-    }
+    const RhiRect2D parentScissor = ctx.hasScissor
+        ? ctx.scissor
+        : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * ctx.pixelScale()),
+                    static_cast<uint32_t>(ctx.screenHeight * ctx.pixelScale())};
+    ctx.commandList->setScissor(parentScissor);
 
     // Render scrollbar outside scissor (on top)
     if (m_scrollbarVisible && maxScroll() > 0.0f) {

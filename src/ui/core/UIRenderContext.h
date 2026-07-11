@@ -6,6 +6,7 @@
 #include <glm/vec2.hpp>
 
 #include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiResources.h"
 #include "UITheme.h"
 #include "UIScaleConfig.h"
 #include "../layout/UILayout.h"
@@ -53,6 +54,8 @@ struct UIRenderContext {
     const LocaleManager* localeManager = nullptr;
     RhiTextureHandle backdropBlur;
     RhiCommandList* commandList = nullptr;
+    bool hasScissor = false;
+    RhiRect2D scissor;
     bool backdropBlurPrepared = false;
     int backdropSourceWidth = 0;
     int backdropSourceHeight = 0;
