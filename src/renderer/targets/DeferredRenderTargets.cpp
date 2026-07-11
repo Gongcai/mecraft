@@ -79,6 +79,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createScreenEffectTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -210,14 +214,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
 
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
-    m_halfResTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
-    m_reflectionTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
-    // Reflection temporal scratch: holds a copy of the filtered reflection so
-    // the temporal pass can read it while writing the blended result.
-    m_reflectionTemporalScratchTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
     m_cloudTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
     m_skyCaptureTex = createTexture2D(GL_RGBA16F, kSkyCaptureWidth, kSkyCaptureHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -297,9 +293,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
     }
-    renderer::debug::labelTexture(m_halfResTex, "DeferredTargets.HalfResTex");
-    renderer::debug::labelTexture(m_reflectionTex, "DeferredTargets.ReflectionTex");
-    renderer::debug::labelTexture(m_reflectionTemporalScratchTex, "DeferredTargets.ReflectionTemporalScratchTex");
     renderer::debug::labelTexture(m_cloudTex, "DeferredTargets.CloudTex");
     renderer::debug::labelTexture(m_skyCaptureTex, "DeferredTargets.SkyCaptureTex");
     for (int i = 0; i < 2; ++i) {
@@ -743,45 +736,67 @@ void DeferredRenderTargets::destroyTransparentCompositeTextures() {
     }
 }
 
+bool DeferredRenderTargets::createScreenEffectTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const uint32_t width,
+                                      const uint32_t height,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.width = width;
+        desc.height = height;
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                     rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) |
+                     rhiFlag(RhiTextureUsage::TransferDst);
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    const uint32_t width = static_cast<uint32_t>(m_width);
+    const uint32_t height = static_cast<uint32_t>(m_height);
+    const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
+    const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
+    if (!createTexture("DeferredTargets.HalfRes", halfWidth, halfHeight, m_halfResHandle) ||
+        !createTexture("DeferredTargets.Reflection", width, height, m_reflectionHandle) ||
+        !createTexture("DeferredTargets.ReflectionTemporalScratch", width, height,
+                       m_reflectionTemporalScratchHandle)) {
+        destroyScreenEffectTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroyScreenEffectTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiTextureHandle* textures[] = {
+        &m_halfResHandle,
+        &m_reflectionHandle,
+        &m_reflectionTemporalScratchHandle
+    };
+    for (RhiTextureHandle* texture : textures) {
+        if (texture->isValid()) {
+            m_rhiDevice->destroyTexture(*texture);
+            *texture = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
-    m_halfResHandle = renderer::rhi::gl::registerTexture({
-        m_halfResTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        halfWidth,
-        halfHeight,
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_reflectionHandle = renderer::rhi::gl::registerTexture({
-        m_reflectionTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_reflectionTemporalScratchHandle = renderer::rhi::gl::registerTexture({
-        m_reflectionTemporalScratchTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
     m_cloudHandle = renderer::rhi::gl::registerTexture({
         m_cloudTex,
         RhiTextureDimension::Texture2D,
@@ -2889,9 +2904,7 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyGBufferTextures();
     destroySceneTextures();
     destroyTransparentCompositeTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_halfResHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_reflectionHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_reflectionTemporalScratchHandle);
+    destroyScreenEffectTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_cloudHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[0]);
     renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[1]);
@@ -2955,9 +2968,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssaoTex,
         m_ssaoFilteredTex,
         m_temporalCurrentTex,
-        m_halfResTex,
-        m_reflectionTex,
-        m_reflectionTemporalScratchTex,
         m_cloudTex,
         m_skyCaptureTex,
         m_historySceneTex[0], m_historySceneTex[1],
@@ -3000,9 +3010,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoHalfResTex = 0;
     m_ssaoHalfResFilteredTex = 0;
     m_temporalCurrentTex = 0;
-    m_halfResTex = 0;
-    m_reflectionTex = 0;
-    m_reflectionTemporalScratchTex = 0;
     m_cloudTex = 0;
     m_skyCaptureTex = 0;
     m_historySceneTex[0] = 0; m_historySceneTex[1] = 0;

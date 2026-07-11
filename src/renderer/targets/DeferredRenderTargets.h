@@ -242,6 +242,8 @@ private:
     void destroySceneTextures();
     bool createTransparentCompositeTextures();
     void destroyTransparentCompositeTextures();
+    bool createScreenEffectTextures();
+    void destroyScreenEffectTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -365,17 +367,14 @@ private:
     RhiTextureViewHandle m_transparentCompositeView;
     RhiTextureViewHandle m_transparentCompositeDepthView;
 
-    uint32_t m_halfResTex = 0;
     RhiTextureHandle m_halfResHandle;
     RhiTextureViewHandle m_halfResView;
 
-    uint32_t m_reflectionTex = 0;
     RhiTextureHandle m_reflectionHandle;
     RhiTextureViewHandle m_reflectionView;
 
     // Reflection temporal scratch: holds filtered reflection copy while
     // temporal pass reads it and writes blended result.
-    uint32_t m_reflectionTemporalScratchTex = 0;
     RhiTextureHandle m_reflectionTemporalScratchHandle;
     RhiTextureViewHandle m_reflectionTemporalScratchView;
 
