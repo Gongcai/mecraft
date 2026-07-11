@@ -1,18 +1,18 @@
 #include "UITextInput.h"
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../core/UIRenderUtils.h"
 #include "../core/UITheme.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
 
 namespace {
 
@@ -102,14 +102,70 @@ UITextInput::~UITextInput() {
 }
 
 void UITextInput::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "UiTextInput.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "UiTextInput.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = m_rhiDevice->createShader(shaderDesc);
+
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "UiTextInput.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "UiTextInput.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
     initMesh();
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) {
+        std::abort();
+    }
     UIWidget::init(resourceMgr);
 }
 
 void UITextInput::shutdown() {
     cleanupMesh();
-    m_shader = nullptr;
+    if (m_rhiDevice != nullptr) {
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+    }
+    m_pipeline = {};
+    m_pipelineLayout = {};
+    m_fragmentShader = {};
+    m_vertexShader = {};
+    m_rhiDevice = nullptr;
     UIWidget::shutdown();
 }
 
@@ -201,29 +257,27 @@ void UITextInput::onUpdate(float dt) {
 }
 
 void UITextInput::initMesh() {
-    // Background (6 verts) + border (24 verts) + selection highlight (6 verts) + cursor (6 verts)
-    // = 42 verts * 2 floats = 84 floats.
-    constexpr int totalFloats = 42 * 2;
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(totalFloats * sizeof(float)),
-                 nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
+    constexpr float vertices[] = {
+        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
+    };
+    RhiBufferDesc desc;
+    desc.debugName = "UiTextInput.VertexBuffer";
+    desc.size = sizeof(vertices);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
 }
 
 void UITextInput::cleanupMesh() {
-    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
-    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
+    if (m_rhiDevice != nullptr && m_vertexBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    }
+    m_vertexBuffer = {};
 }
 
 void UITextInput::renderSelf(const UIRenderContext& ctx) const {
-    if (!m_shader) return;
-
-    const UIRenderUtils::GLStateGuard guard;
+    if (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) return;
 
     const UIResolvedTextInputStyle resolved =
         UIStyleResolver::resolveTextInput(resolveBaseStyle(ctx), currentStyleState());
@@ -240,15 +294,49 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
     const float aw = width * scaleX;
     const float ah = height * scaleY;
 
-    // --- Draw background + border ---
-    std::vector<float> verts;
-    verts.reserve(84);
-    UIRenderUtils::pushColorQuad(verts, ax, ay, ax + aw, ay + ah); // bg at 0
-    // Border quads: top, bottom, left, right (offset 6, 12, 18, 24)
-    UIRenderUtils::pushColorQuad(verts, ax, ay + ah - brdWidth, ax + aw, ay + ah);           // top
-    UIRenderUtils::pushColorQuad(verts, ax, ay, ax + aw, ay + brdWidth);                      // bottom
-    UIRenderUtils::pushColorQuad(verts, ax, ay, ax + brdWidth, ay + ah);                      // left
-    UIRenderUtils::pushColorQuad(verts, ax + aw - brdWidth, ay, ax + aw, ay + ah);            // right
+    ctx.commandList->setGraphicsPipeline(m_pipeline);
+    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+    auto drawRect = [&](float x, float y, float rectWidth, float rectHeight, Color color) {
+        color[3] *= alpha;
+        struct PushConstants {
+            glm::vec4 screenRect;
+            glm::vec4 rectRadius;
+            glm::vec4 color;
+        };
+        const PushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
+            glm::vec4(color[0], color[1], color[2], color[3])
+        };
+        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->draw(6u, 1u, 0u, 0u);
+    };
+
+    drawRect(ax, ay, aw, ah, bgCol);
+    drawRect(ax, ay + ah - brdWidth, aw, brdWidth, brdCol);
+    drawRect(ax, ay, aw, brdWidth, brdCol);
+    drawRect(ax, ay, brdWidth, ah, brdCol);
+    drawRect(ax + aw - brdWidth, ay, brdWidth, ah, brdCol);
+
+    const float uiScale = ctx.pixelScale();
+    RhiRect2D contentScissor{
+        static_cast<int32_t>(std::floor((ax + 2.0f) * uiScale)),
+        static_cast<int32_t>(std::floor((ay + 2.0f) * uiScale)),
+        static_cast<uint32_t>(std::max(1.0f, std::ceil((aw - 4.0f) * uiScale))),
+        static_cast<uint32_t>(std::max(1.0f, std::ceil((ah - 4.0f) * uiScale)))
+    };
+    if (ctx.hasScissor) {
+        const int32_t x0 = std::max(contentScissor.x, ctx.scissor.x);
+        const int32_t y0 = std::max(contentScissor.y, ctx.scissor.y);
+        const int32_t x1 = std::min(contentScissor.x + static_cast<int32_t>(contentScissor.width),
+                                    ctx.scissor.x + static_cast<int32_t>(ctx.scissor.width));
+        const int32_t y1 = std::min(contentScissor.y + static_cast<int32_t>(contentScissor.height),
+                                    ctx.scissor.y + static_cast<int32_t>(ctx.scissor.height));
+        contentScissor = {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
+                          static_cast<uint32_t>(std::max(0, y1 - y0))};
+    }
+    ctx.commandList->setScissor(contentScissor);
 
     const int selLo = std::min(m_selStart, m_selEnd);
     const int selHi = std::max(m_selStart, m_selEnd);
@@ -258,69 +346,15 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
         const float selRightPx = measureTextUpTo(utf8CharCountUpTo(m_text, selHi), ctx);
         const float sx0 = ax + kTextPadX + selLeftPx - m_scrollOffset;
         const float sx1 = ax + kTextPadX + selRightPx - m_scrollOffset;
-        UIRenderUtils::pushColorQuad(verts, sx0, ay + 2.0f, sx1, ay + ah - 2.0f); // selection at 30
+        drawRect(sx0, ay + 2.0f, sx1 - sx0, ah - 4.0f, selCol);
     }
     // Cursor (offset 30 or 36)
     if (m_cursorVisible && isFocused()) {
         const float cursorX = ax + kTextPadX + measureTextUpTo(utf8CharCountUpTo(m_text, m_cursorPos), ctx) - m_scrollOffset;
-        UIRenderUtils::pushColorQuad(verts, cursorX, ay + 3.0f, cursorX + 1.5f, ay + ah - 3.0f);
+        drawRect(cursorX, ay + 3.0f, 1.5f, ah - 6.0f, curCol);
     }
 
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
-
-    m_shader->use();
-    m_shader->setVec2("uScreenSize",
-                      glm::vec2(static_cast<float>(ctx.screenWidth),
-                                static_cast<float>(ctx.screenHeight)));
-
-    // Background.
-    m_shader->setVec4("uColor", glm::vec4(bgCol[0], bgCol[1], bgCol[2], bgCol[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    // Border.
-    m_shader->setVec4("uColor", glm::vec4(brdCol[0], brdCol[1], brdCol[2], brdCol[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, 6, 24);
-
-    int nextVert = 30;
-
-    // Selection highlight.
-    if (showSel) {
-        m_shader->setVec4("uColor", glm::vec4(selCol[0], selCol[1], selCol[2], selCol[3] * alpha));
-        glDrawArrays(GL_TRIANGLES, nextVert, 6);
-        nextVert += 6;
-    }
-
-    // Cursor.
-    if (m_cursorVisible && isFocused()) {
-        m_shader->setVec4("uColor", glm::vec4(curCol[0], curCol[1], curCol[2], curCol[3] * alpha));
-        glDrawArrays(GL_TRIANGLES, nextVert, 6);
-    }
-
-    glBindVertexArray(0);
-
-    // --- Render text ---
     if (ctx.textRenderer) {
-        // Set up scissor to clip text within the input box.
-        const GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
-        GLint prevScissor[4] = {};
-        if (scissorWasEnabled) {
-            glGetIntegerv(GL_SCISSOR_BOX, prevScissor);
-        }
-
-        GLint viewport[4] = {0, 0, ctx.screenWidth, ctx.screenHeight};
-        glGetIntegerv(GL_VIEWPORT, viewport);
-
-        glEnable(GL_SCISSOR_TEST);
-        const float uiScale = ctx.pixelScale();
-        const int sx = viewport[0] + static_cast<int>(std::floor((ax + 2.0f) * uiScale));
-        const int sy = viewport[1] + static_cast<int>(std::floor((ay + 2.0f) * uiScale));
-        const int sw = static_cast<int>(std::ceil((aw - 4.0f) * uiScale));
-        const int sh = static_cast<int>(std::ceil((ah - 4.0f) * uiScale));
-        glScissor(sx, sy, std::max(1, sw), std::max(1, sh));
-
         const float textScale = 1.0f;
         if (m_text.empty() && !m_placeholder.empty() && !isFocused()) {
             ctx.textRenderer->render(m_placeholder,
@@ -341,14 +375,13 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
                                      static_cast<float>(ctx.screenHeight));
         }
 
-        if (scissorWasEnabled) {
-            glScissor(prevScissor[0], prevScissor[1],
-                      static_cast<GLsizei>(prevScissor[2]),
-                      static_cast<GLsizei>(prevScissor[3]));
-        } else {
-            glDisable(GL_SCISSOR_TEST);
-        }
     }
+
+    const RhiRect2D parentScissor = ctx.hasScissor
+        ? ctx.scissor
+        : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
+                    static_cast<uint32_t>(ctx.screenHeight * uiScale)};
+    ctx.commandList->setScissor(parentScissor);
 }
 
 UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
