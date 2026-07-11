@@ -76,9 +76,9 @@ private:
                                    const glm::mat4& shadowViewProj);
 
     /// Render dropped items/blocks into the current shadow cascade layer.
-    void renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                            const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                            float animationTime, float shaderTime);
+    void renderShadowDrops(RhiCommandList& commandList,
+                           const glm::mat4& shadowViewProj,
+                           float animationTime);
 
     /// Render falling-block entities into the current shadow cascade layer.
     void renderShadowFallingBlocks(RhiCommandList& commandList,

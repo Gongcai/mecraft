@@ -38,12 +38,9 @@ public:
 	                           float animationTime);
 	void finishGBufferFrame();
 	void render(const DropSystem& dropSystem, const Camera& camera, const Window& window);
-	// Shadow path: renders drops into the CSM shadow map.
-	// Caller must have already bound the shadow FBO layer.
-	void renderToShadowMap(const IWorldView& worldView, const DropSystem& dropSystem,
-	                        const glm::mat4& shadowViewProj,
-	                        const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-	                        float animationTime, float shaderTime);
+	void renderToShadowMap(RhiCommandList& commandList,
+	                       const glm::mat4& shadowViewProj,
+	                       float animationTime);
 
 private:
 	struct Mesh {
@@ -78,8 +75,6 @@ private:
 	Shader* m_itemShader = nullptr;
 	Shader* m_deferredShader = nullptr;     // Original deferred block shader (drop_block)
 	Shader* m_deferredItemShader = nullptr; // Original deferred item shader (item_model)
-	Shader* m_shadowShader = nullptr;      // shadow_depth: block drops → shadow (reused)
-	Shader* m_itemShadowShader = nullptr;  // item_shadow: item drops → shadow
 	std::unordered_map<BlockID, Mesh> m_blockMeshes;
 	std::unordered_map<ItemID, Mesh> m_itemMeshes;
 	// Per-object velocity: stores previous-frame model matrix per drop (by drop ID).
@@ -105,6 +100,16 @@ private:
 	RhiPipelineLayoutHandle m_blockGBufferPipelineLayout;
 	RhiPipelineHandle m_blockGBufferPipeline;
 	RhiBindGroupHandle m_blockGBufferBindGroup;
+	RhiShaderHandle m_itemShadowVertexShader;
+	RhiShaderHandle m_itemShadowFragmentShader;
+	RhiPipelineLayoutHandle m_itemShadowPipelineLayout;
+	RhiPipelineHandle m_itemShadowPipeline;
+	RhiBindGroupHandle m_itemShadowBindGroup;
+	RhiShaderHandle m_blockShadowVertexShader;
+	RhiShaderHandle m_blockShadowFragmentShader;
+	RhiPipelineLayoutHandle m_blockShadowPipelineLayout;
+	RhiPipelineHandle m_blockShadowPipeline;
+	RhiBindGroupHandle m_blockShadowBindGroup;
 };
 
 #endif // MECRAFT_DROPRENDERER_H

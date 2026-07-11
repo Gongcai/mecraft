@@ -94,25 +94,13 @@ void ShadowPass::renderShadowBlockEntities(RhiCommandList& commandList,
     m_blockEntityRenderer->renderToShadowMap(commandList, shadowViewProj);
 }
 
-void ShadowPass::renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                                    const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                                    float animationTime, float shaderTime) {
-    // Render dropped items/blocks into the current shadow cascade layer.
-    // Shadow FBO layer is already bound by the caller (execute).
+void ShadowPass::renderShadowDrops(RhiCommandList& commandList,
+                                   const glm::mat4& shadowViewProj,
+                                   const float animationTime) {
     if (m_dropRenderer == nullptr || m_dropSystem == nullptr) {
         return;
     }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    // Cross-shaped block drops emit single-sided quads — disable culling
-    // so they cast shadows from both sides.
-    glDisable(GL_CULL_FACE);
-
-    m_dropRenderer->renderToShadowMap(worldView, *m_dropSystem, shadowViewProj,
-                                       shadowView, shadowProjection, animationTime, shaderTime);
-
+    m_dropRenderer->renderToShadowMap(commandList, shadowViewProj, animationTime);
 }
 
 void ShadowPass::renderShadowFallingBlocks(RhiCommandList& commandList,
@@ -150,6 +138,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (m_blockEntityRenderer != nullptr) {
         m_blockEntityRenderer->prepareFrame(worldView);
+    }
+    if (m_dropRenderer != nullptr && m_dropSystem != nullptr) {
+        m_dropRenderer->prepareFrame(worldView, *m_dropSystem);
     }
 
     // Update shadow cascades via ShadowRenderer.
@@ -371,8 +362,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             // Entity shadow: render humanoid/mob depth into this cascade with distance/split culling.
             renderShadowEntities(worldView, cascadeData.viewProj, ctx.camera.position, cascadeData.splitNear, cascadeData.splitFar);
             // Drop shadow: render dropped items/blocks depth into this cascade.
-            renderShadowDrops(worldView, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
-                              ctx.animationTime, ctx.shaderTime);
+            renderShadowDrops(commandList, cascadeData.viewProj, ctx.animationTime);
             // Falling-block shadow: render falling sand/gravel depth into this cascade.
             renderShadowFallingBlocks(commandList, cascadeData.viewProj, ctx.animationTime);
             if (shadowStatsActive) {
