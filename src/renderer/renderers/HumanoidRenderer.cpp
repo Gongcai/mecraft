@@ -374,6 +374,8 @@ void HumanoidRenderer::shutdown() {
         }
     }
     m_textureResources.clear();
+    m_preparedPartDraws.clear();
+    m_currentModelMatrices.clear();
     for (auto& layoutMeshes : m_skinLayoutMeshes) {
         for (PartMesh& mesh : layoutMeshes) {
             destroyMesh(mesh);
@@ -400,6 +402,131 @@ void HumanoidRenderer::shutdown() {
     m_forwardShader = nullptr;
     m_rhiDevice = nullptr;
     m_resourceMgr = nullptr;
+}
+
+void HumanoidRenderer::prepareFrame(const IWorldView& worldView,
+                                    ecs::GameplayRegistry& gameplayRegistry,
+                                    const RenderMode mode) {
+    auto& registry = gameplayRegistry.registry();
+    m_preparedPartDraws.clear();
+    m_currentModelMatrices.clear();
+
+    const auto appendPart = [this](const entt::entity partEntity,
+                                   const PartMesh* mesh,
+                                   const TextureResource& texture,
+                                   const glm::mat4& model,
+                                   const glm::vec3& entityCenter,
+                                   const glm::vec2& light,
+                                   const float hurtFlash) {
+        if (mesh == nullptr || !mesh->rhiVertexBuffer.isValid() || mesh->vertexCount == 0u) {
+            return;
+        }
+        const auto previous = m_previousModelMatrices.find(partEntity);
+        m_preparedPartDraws.push_back({
+            mesh,
+            &texture,
+            model,
+            previous != m_previousModelMatrices.end() ? previous->second : model,
+            entityCenter,
+            light,
+            hurtFlash
+        });
+        m_currentModelMatrices[partEntity] = model;
+    };
+
+    const TextureResource& steveTexture = requireTextureResource("steve");
+    auto steveView = registry.view<ecs::SteveTag, ecs::ChildrenComponent>();
+    for (const entt::entity root : steveView) {
+        if (!shouldRenderSteveRoot(registry, root, mode)) {
+            continue;
+        }
+        const auto& rootChildren = steveView.get<ecs::ChildrenComponent>(root);
+        glm::vec3 entityCenter(0.0f);
+        bool hasCenter = false;
+        for (const entt::entity child : rootChildren.children) {
+            if (!registry.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) {
+                continue;
+            }
+            const auto& part = registry.get<ecs::StevePartComponent>(child);
+            if (part.partType == ecs::StevePartType::Torso) {
+                entityCenter = glm::vec3(registry.get<ecs::WorldTransformComponent>(child).worldMatrix[3]);
+                hasCenter = true;
+                break;
+            }
+        }
+        if (!hasCenter) {
+            continue;
+        }
+        const glm::vec2 light = queryWorldLight(worldView, entityCenter);
+        const float hurtFlash = hurtFlashForRoot(registry, root);
+        for (const entt::entity child : rootChildren.children) {
+            if (registry.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(child)) {
+                const auto& part = registry.get<ecs::StevePartComponent>(child);
+                const auto& transform = registry.get<ecs::WorldTransformComponent>(child);
+                appendPart(child,
+                           getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
+                           steveTexture, transform.worldMatrix, entityCenter, light, hurtFlash);
+            }
+            const auto* children = registry.try_get<ecs::ChildrenComponent>(child);
+            if (children == nullptr) {
+                continue;
+            }
+            for (const entt::entity partEntity : children->children) {
+                if (!registry.all_of<ecs::StevePartComponent, ecs::WorldTransformComponent>(partEntity)) {
+                    continue;
+                }
+                const auto& part = registry.get<ecs::StevePartComponent>(partEntity);
+                const auto& transform = registry.get<ecs::WorldTransformComponent>(partEntity);
+                appendPart(partEntity,
+                           getMeshForPart(part.partType, ecs::EntitySkinLayoutKind::Steve64x64),
+                           steveTexture, transform.worldMatrix, entityCenter, light, hurtFlash);
+            }
+        }
+    }
+
+    auto mobView = registry.view<ecs::MobTag, ecs::ChildrenComponent,
+                                 ecs::MobVisualComponent, ecs::TransformComponent>();
+    for (const entt::entity root : mobView) {
+        const auto& visual = mobView.get<ecs::MobVisualComponent>(root);
+        const auto& rootTransform = mobView.get<ecs::TransformComponent>(root);
+        const auto& rootChildren = mobView.get<ecs::ChildrenComponent>(root);
+        const TextureResource& texture = requireTextureResource(visual.textureKey);
+        const glm::vec3 entityCenter = rootTransform.position +
+            glm::vec3(0.0f, rootTransform.eyeHeight * 0.5f, 0.0f);
+        const glm::vec2 light = queryWorldLight(worldView, entityCenter);
+        const float hurtFlash = hurtFlashForRoot(registry, root);
+        const auto* modelComponent = registry.try_get<ecs::EntityModelComponent>(root);
+        std::vector<entt::entity> queue(rootChildren.children.begin(), rootChildren.children.end());
+        for (std::size_t index = 0u; index < queue.size(); ++index) {
+            const entt::entity partEntity = queue[index];
+            if (const auto* children = registry.try_get<ecs::ChildrenComponent>(partEntity)) {
+                queue.insert(queue.end(), children->children.begin(), children->children.end());
+            }
+            const auto* transform = registry.try_get<ecs::WorldTransformComponent>(partEntity);
+            if (transform == nullptr) {
+                continue;
+            }
+            PartMesh* mesh = nullptr;
+            if (modelComponent != nullptr) {
+                const auto* part = registry.try_get<ecs::EntityModelPartComponent>(partEntity);
+                if (part != nullptr) {
+                    mesh = getMeshForEntityModelPart(modelComponent->modelId, part->partName);
+                }
+            } else {
+                const auto* part = registry.try_get<ecs::StevePartComponent>(partEntity);
+                if (part != nullptr) {
+                    mesh = getMeshForPart(part->partType, visual.skinLayout);
+                }
+            }
+            const glm::mat4 model = applyMobVisualScale(
+                transform->worldMatrix, rootTransform.position, visual.scale);
+            appendPart(partEntity, mesh, texture, model, entityCenter, light, hurtFlash);
+        }
+    }
+}
+
+void HumanoidRenderer::finishFrame() {
+    m_previousModelMatrices = m_currentModelMatrices;
 }
 
 bool HumanoidRenderer::ensureNeutralShadowTextures() {
