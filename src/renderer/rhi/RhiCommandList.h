@@ -17,6 +17,7 @@ public:
 
     virtual void beginDebugLabel(const char* name, const glm::vec4& color) = 0;
     virtual void endDebugLabel() = 0;
+    virtual void insertDebugMarker(const char* name, const glm::vec4& color) = 0;
 
     virtual void textureBarrier(const RhiTextureBarrier& barrier) = 0;
     virtual void bufferBarrier(const RhiBufferBarrier& barrier) = 0;

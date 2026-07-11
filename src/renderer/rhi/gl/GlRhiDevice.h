@@ -11,6 +11,7 @@ public:
 
     void beginDebugLabel(const char* name, const glm::vec4& color) override;
     void endDebugLabel() override;
+    void insertDebugMarker(const char* name, const glm::vec4& color) override;
     void textureBarrier(const RhiTextureBarrier& barrier) override;
     void bufferBarrier(const RhiBufferBarrier& barrier) override;
     void beginRendering(const RhiRenderingInfo& info) override;

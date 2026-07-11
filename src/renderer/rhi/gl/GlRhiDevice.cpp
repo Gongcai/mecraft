@@ -673,6 +673,18 @@ void GlRhiCommandList::endDebugLabel() {
     }
 }
 
+void GlRhiCommandList::insertDebugMarker(const char* name, const glm::vec4& color) {
+    (void) color;
+    if (name != nullptr && name[0] != '\0' && GLAD_GL_VERSION_4_3) {
+        glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION,
+                             GL_DEBUG_TYPE_MARKER,
+                             0u,
+                             GL_DEBUG_SEVERITY_NOTIFICATION,
+                             -1,
+                             name);
+    }
+}
+
 void GlRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
     if (m_device == nullptr || !m_device->m_data ||
         recordForHandle(m_device->m_data->textures, m_device->m_data->textureRecords, barrier.texture) == nullptr) {
