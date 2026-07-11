@@ -45,7 +45,6 @@ private:
         Tween<float> alphaTween;
     };
 
-    void initMesh();
     void cleanupMesh();
     [[nodiscard]] UIToastStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedToastStyle resolveStyle(const UIRenderContext& ctx, Type type) const;

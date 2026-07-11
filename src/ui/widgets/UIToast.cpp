@@ -107,10 +107,6 @@ void UIToast::onUpdate(float dt) {
     }
 }
 
-void UIToast::initMesh() {
-    // Already initialized in init().
-}
-
 void UIToast::cleanupMesh() {
     if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
     if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
