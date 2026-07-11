@@ -12,7 +12,6 @@ public:
     [[nodiscard]] float maxAnisotropy() const;
 
     void applyToTexture2D(uint32_t textureID) const;
-    void applyToTexture2DArray(uint32_t textureID) const;
 
 private:
     float m_anisotropy = 1.0f;

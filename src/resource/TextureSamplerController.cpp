@@ -71,17 +71,3 @@ void TextureSamplerController::applyToTexture2D(const uint32_t textureID) const 
     glTexParameterf(GL_TEXTURE_2D, kTextureMaxAnisotropyPName, m_anisotropy);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
-
-void TextureSamplerController::applyToTexture2DArray(const uint32_t textureID) const {
-    if (textureID == 0) {
-        MECRAFT_LOG_FPRINTF(stderr, "[Resource] TextureSamplerController::applyToTexture2DArray requires a valid texture\n");
-        return;
-    }
-    if (!m_anisotropySupported) {
-        return;
-    }
-
-    glBindTexture(GL_TEXTURE_2D_ARRAY, textureID);
-    glTexParameterf(GL_TEXTURE_2D_ARRAY, kTextureMaxAnisotropyPName, m_anisotropy);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-}
