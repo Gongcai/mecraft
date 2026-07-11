@@ -16,7 +16,6 @@
 
 class IWorldView;
 class ResourceMgr;
-class Shader;
 class RhiCommandList;
 class RhiDevice;
 class Chunk;
@@ -30,6 +29,7 @@ public:
     void beginFrame();
     void prepareFrame(const IWorldView& worldView);
     [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList);
+    [[nodiscard]] bool prepareForward(RhiCommandList& commandList);
     [[nodiscard]] bool prepareShadow(RhiCommandList& commandList,
                                      const glm::vec3& cameraPos,
                                      float splitNear,
@@ -39,7 +39,7 @@ public:
                          const glm::mat4& viewProj);
     void renderToShadowMap(RhiCommandList& commandList,
                            const glm::mat4& shadowViewProj);
-    void renderForward(const IWorldView& worldView,
+    void renderForward(RhiCommandList& commandList,
                        const glm::mat4& viewProj,
                        float skyIntensity);
 
@@ -52,8 +52,6 @@ public:
 
 private:
     struct Mesh {
-        uint32_t vao = 0;
-        uint32_t vbo = 0;
         RhiBufferHandle rhiVertexBuffer;
         uint32_t vertexCount = 0;
     };
@@ -126,7 +124,6 @@ private:
 
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
-    Shader* m_forwardShader = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
     std::vector<BlockEntityInstance*> m_flatInstances;
@@ -145,6 +142,10 @@ private:
     RhiBindGroupLayoutHandle m_shadowBindGroupLayout;
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
     RhiPipelineHandle m_shadowPipeline;
+    RhiShaderHandle m_forwardVertexShader;
+    RhiShaderHandle m_forwardFragmentShader;
+    RhiPipelineLayoutHandle m_forwardPipelineLayout;
+    RhiPipelineHandle m_forwardPipeline;
     uint64_t m_cacheSyncSerial = 0;
     uint64_t m_syncedActiveChunkRevision = 0;
     uint64_t m_syncedBlockContentRevision = 0;
@@ -167,16 +168,6 @@ private:
                              const SubChunk& subChunk,
                              int scy,
                              SectionCache& cache) const;
-    void drawBlockEntities(const IWorldView& worldView,
-                           Shader& shader,
-                           int modelLoc,
-                           int prevModelLoc,
-                           int sunlightLoc,
-                           int blockLightLoc,
-                           bool useSplitCulling,
-                           const glm::vec3& cameraPos,
-                           float splitNear,
-                           float splitFar);
 };
 
 #endif // MECRAFT_BLOCK_ENTITY_RENDERER_H

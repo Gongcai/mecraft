@@ -8,11 +8,8 @@
 #include <iostream>
 #include <string>
 
-#include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "../core/Shader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiShaderSourceLoader.h"
@@ -159,7 +156,6 @@ float chestYawRadians(const BlockStateId stateId) {
 void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &resourceMgr.rhiDevice();
-    m_forwardShader = resourceMgr.getShader("steve_forward");
     if (!m_rhiInstanceBuffer.init(*m_rhiDevice,
                                   256u * sizeof(InstancedDrawData),
                                   rhiFlag(RhiBufferUsage::Vertex),
@@ -172,7 +168,7 @@ void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
 
     ModelDefinition chest = makeChestDefinition();
     const RhiTextureHandle chestTexture = resourceMgr.getGuiTextureHandle(chest.textureKey);
-    if (renderer::rhi::gl::textureId(chestTexture) == 0) {
+    if (!chestTexture.isValid()) {
         failBlockEntityRenderer("Chest block entity texture is not loaded");
     }
 
@@ -234,7 +230,6 @@ void BlockEntityRenderer::shutdown() {
     m_instanceLightsSyncedThisFrame = false;
     m_resourceMgr = nullptr;
     m_rhiDevice = nullptr;
-    m_forwardShader = nullptr;
 }
 
 void BlockEntityRenderer::beginFrame() {
@@ -270,6 +265,10 @@ bool BlockEntityRenderer::prepareGBuffer(RhiCommandList& commandList) {
     }
     return m_rhiInstanceBuffer.write(commandList, 0u, m_instanceData.data(),
                                      m_instanceData.size() * sizeof(InstancedDrawData));
+}
+
+bool BlockEntityRenderer::prepareForward(RhiCommandList& commandList) {
+    return prepareGBuffer(commandList);
 }
 
 bool BlockEntityRenderer::prepareShadow(RhiCommandList& commandList,
@@ -320,7 +319,12 @@ void BlockEntityRenderer::createGBufferRhiResources() {
         "assets/shaders/block_entity_shadow_rhi.vert");
     const auto shadowFragmentSource = renderer::rhi::loadShaderSource(
         "assets/shaders/block_entity_shadow_rhi.frag");
-    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource) {
+    const auto forwardVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_entity_forward_rhi.vert");
+    const auto forwardFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_entity_forward_rhi.frag");
+    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource ||
+        !forwardVertexSource || !forwardFragmentSource) {
         failBlockEntityRenderer("Failed to load block entity RHI shaders");
     }
     auto createShader = [this](const char* name, const RhiShaderStage stage,
@@ -340,6 +344,10 @@ void BlockEntityRenderer::createGBufferRhiResources() {
                                         *shadowVertexSource);
     m_shadowFragmentShader = createShader("BlockEntity.Shadow.Fragment", RhiShaderStage::Fragment,
                                           *shadowFragmentSource);
+    m_forwardVertexShader = createShader("BlockEntity.Forward.Vertex", RhiShaderStage::Vertex,
+                                         *forwardVertexSource);
+    m_forwardFragmentShader = createShader("BlockEntity.Forward.Fragment", RhiShaderStage::Fragment,
+                                           *forwardFragmentSource);
     RhiSamplerDesc samplerDesc;
     samplerDesc.addressU = RhiAddressMode::ClampToEdge;
     samplerDesc.addressV = RhiAddressMode::ClampToEdge;
@@ -361,6 +369,12 @@ void BlockEntityRenderer::createGBufferRhiResources() {
     pipelineLayoutDesc.debugName = "BlockEntity.Shadow.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts[0] = m_shadowBindGroupLayout;
     m_shadowPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    pipelineLayoutDesc.debugName = "BlockEntity.Forward.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts[0] = m_gbufferBindGroupLayout;
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                            rhiFlag(RhiShaderStage::Fragment);
+    m_forwardPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
 
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "BlockEntity.GBuffer.Pipeline";
@@ -396,17 +410,31 @@ void BlockEntityRenderer::createGBufferRhiResources() {
     pipelineDesc.colorFormats.clear();
     pipelineDesc.blend.attachments.clear();
     m_shadowPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "BlockEntity.Forward.Pipeline";
+    pipelineDesc.vertexShader = m_forwardVertexShader;
+    pipelineDesc.fragmentShader = m_forwardFragmentShader;
+    pipelineDesc.layout = m_forwardPipelineLayout;
+    pipelineDesc.colorFormats = {m_rhiDevice->swapchainColorFormat()};
+    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
+    pipelineDesc.blend.attachments.resize(1u);
+    m_forwardPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() ||
         !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
         !m_rhiSampler.isValid() || !m_gbufferBindGroupLayout.isValid() ||
         !m_shadowBindGroupLayout.isValid() || !m_gbufferPipelineLayout.isValid() ||
-        !m_shadowPipelineLayout.isValid() || !m_gbufferPipeline.isValid() ||
-        !m_shadowPipeline.isValid()) {
+        !m_shadowPipelineLayout.isValid() || !m_forwardVertexShader.isValid() ||
+        !m_forwardFragmentShader.isValid() || !m_forwardPipelineLayout.isValid() ||
+        !m_gbufferPipeline.isValid() || !m_shadowPipeline.isValid() ||
+        !m_forwardPipeline.isValid()) {
         failBlockEntityRenderer("Failed to create block entity GBuffer RHI resources");
     }
 }
 
 void BlockEntityRenderer::destroyGBufferRhiResources() {
+    if (m_forwardPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardPipeline);
+    if (m_forwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
+    if (m_forwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardFragmentShader);
+    if (m_forwardVertexShader.isValid()) m_rhiDevice->destroyShader(m_forwardVertexShader);
     if (m_shadowPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowPipeline);
     if (m_shadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
     if (m_shadowBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowBindGroupLayout);
@@ -429,6 +457,10 @@ void BlockEntityRenderer::destroyGBufferRhiResources() {
     m_shadowBindGroupLayout = {};
     m_shadowFragmentShader = {};
     m_shadowVertexShader = {};
+    m_forwardPipeline = {};
+    m_forwardPipelineLayout = {};
+    m_forwardFragmentShader = {};
+    m_forwardVertexShader = {};
 }
 
 BlockEntityRenderer::ModelDefinition BlockEntityRenderer::makeChestDefinition() {
@@ -465,28 +497,6 @@ BlockEntityRenderer::Mesh BlockEntityRenderer::buildMesh(const ModelDefinition& 
         failBlockEntityRenderer("Failed to create block entity RHI mesh buffer");
     }
 
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
-
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockEntityVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BlockEntityVertex),
-                          reinterpret_cast<void*>(offsetof(BlockEntityVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockEntityVertex),
-                          reinterpret_cast<void*>(offsetof(BlockEntityVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(BlockEntityVertex),
-                          reinterpret_cast<void*>(offsetof(BlockEntityVertex, nx)));
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
     return mesh;
 }
 
@@ -494,14 +504,6 @@ void BlockEntityRenderer::destroyMesh(Mesh& mesh) {
     if (m_rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
         m_rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
         mesh.rhiVertexBuffer = {};
-    }
-    if (mesh.vbo != 0) {
-        glDeleteBuffers(1, &mesh.vbo);
-        mesh.vbo = 0;
-    }
-    if (mesh.vao != 0) {
-        glDeleteVertexArrays(1, &mesh.vao);
-        mesh.vao = 0;
     }
     mesh.vertexCount = 0;
 }
@@ -645,67 +647,6 @@ void BlockEntityRenderer::synchronizeInstanceCache(const IWorldView& worldView) 
     m_hasSyncedRevisions = true;
 }
 
-void BlockEntityRenderer::drawBlockEntities(const IWorldView& worldView,
-                                            Shader& shader,
-                                            const int modelLoc,
-                                            const int prevModelLoc,
-                                            const int sunlightLoc,
-                                            const int blockLightLoc,
-                                            const bool useSplitCulling,
-                                            const glm::vec3& cameraPos,
-                                            const float splitNear,
-                                            const float splitFar) {
-    static_cast<void>(worldView);
-
-    GLuint boundTexture = 0;
-    glActiveTexture(GL_TEXTURE0);
-
-    const float minSplitDistance = splitNear - 4.0f;
-    const float minSplitDistanceSq = minSplitDistance * minSplitDistance;
-    const float maxSplitDistance = splitFar + 4.0f;
-    const float maxSplitDistanceSq = maxSplitDistance * maxSplitDistance;
-
-    for (const BlockEntityInstance* instance : m_flatInstances) {
-        const ModelEntry* entry = instance->model;
-        if (entry == nullptr) {
-            continue;
-        }
-
-        const Mesh& mesh = entry->mesh;
-        if (mesh.vao == 0 || mesh.vertexCount == 0) {
-            continue;
-        }
-
-        if (useSplitCulling) {
-            const glm::vec3 delta = instance->center - cameraPos;
-            const float distanceSq = glm::dot(delta, delta);
-            if ((minSplitDistance > 0.0f && distanceSq < minSplitDistanceSq) ||
-                distanceSq > maxSplitDistanceSq) {
-                continue;
-            }
-        }
-
-        glUniform1f(sunlightLoc, instance->light.x);
-        if (blockLightLoc >= 0) {
-            glUniform1f(blockLightLoc, instance->light.y);
-        }
-
-        const GLuint texture = static_cast<GLuint>(renderer::rhi::gl::textureId(entry->texture));
-        if (boundTexture != texture) {
-            glBindTexture(GL_TEXTURE_2D, texture);
-            boundTexture = texture;
-        }
-
-        shader.setMat4(modelLoc, instance->modelMatrix);
-        if (prevModelLoc >= 0) {
-            shader.setMat4(prevModelLoc, instance->modelMatrix);
-        }
-
-        glBindVertexArray(mesh.vao);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh.vertexCount));
-    }
-}
-
 void BlockEntityRenderer::renderToGBuffer(RhiCommandList& commandList,
                                           const glm::mat4& viewProj) {
     commandList.setGraphicsPipeline(m_gbufferPipeline);
@@ -731,34 +672,21 @@ void BlockEntityRenderer::renderToShadowMap(RhiCommandList& commandList,
     }
 }
 
-void BlockEntityRenderer::renderForward(const IWorldView& worldView,
+void BlockEntityRenderer::renderForward(RhiCommandList& commandList,
                                         const glm::mat4& viewProj,
                                         const float skyIntensity) {
-    if (m_forwardShader == nullptr) {
-        return;
+    struct ForwardPushConstants {
+        glm::mat4 viewProj;
+        glm::vec4 lighting;
+    };
+    const ForwardPushConstants pushConstants{viewProj, glm::vec4(skyIntensity, 0.0f, 0.0f, 0.0f)};
+    commandList.setGraphicsPipeline(m_forwardPipeline);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    for (const PreparedModelBatch& batch : m_gbufferBatches) {
+        commandList.setBindGroup(0u, batch.model->gbufferBindGroup);
+        commandList.setVertexBuffer(0u, batch.model->mesh.rhiVertexBuffer, 0u);
+        commandList.setVertexBuffer(1u, m_rhiInstanceBuffer.buffer(), batch.instanceOffset);
+        commandList.draw(batch.model->mesh.vertexCount, batch.instanceCount, 0u, 0u);
     }
-
-    m_forwardShader->use();
-    m_forwardShader->setMat4("viewProj", viewProj);
-    m_forwardShader->setInt("uTexture", 0);
-    m_forwardShader->setFloat("uSkyIntensity", skyIntensity);
-    m_forwardShader->setFloat("uHurtFlash", 0.0f);
-
-    const int modelLoc = m_forwardShader->getUniformLocation("model");
-    const int sunlightLoc = m_forwardShader->getUniformLocation("uHeldSunlight");
-    const int blockLightLoc = m_forwardShader->getUniformLocation("uHeldBlockLight");
-    drawBlockEntities(worldView,
-                      *m_forwardShader,
-                      modelLoc,
-                      -1,
-                      sunlightLoc,
-                      blockLightLoc,
-                      false,
-                      glm::vec3(0.0f),
-                      0.0f,
-                      0.0f);
-
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, 0);
 }

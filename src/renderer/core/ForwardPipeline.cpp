@@ -75,6 +75,11 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     }
     if (m_shared->blockEntityRenderer != nullptr) {
         m_shared->blockEntityRenderer->prepareFrame(*ctx.worldView);
+        if (!m_shared->blockEntityRenderer->prepareForward(commandList)) {
+            m_shared->rhiDevice->submitFrame(commandList);
+            m_backbufferCommandList = nullptr;
+            return {};
+        }
     }
     if (!beginBackbufferFrame(ctx)) {
         m_shared->rhiDevice->submitFrame(commandList);
@@ -309,8 +314,10 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
 
-    if (m_shared->blockEntityRenderer) {
-        m_shared->blockEntityRenderer->renderForward(*ctx.worldView, ctx.camera.viewProj, ctx.skyIntensity);
+    if (m_shared->blockEntityRenderer && m_backbufferCommandList != nullptr) {
+        m_shared->blockEntityRenderer->renderForward(*m_backbufferCommandList,
+                                                     ctx.camera.viewProj,
+                                                     ctx.skyIntensity);
     }
 
     if (m_shared->dropRenderer && m_shared->dropSystem) {
