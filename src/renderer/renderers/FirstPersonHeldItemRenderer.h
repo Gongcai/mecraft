@@ -169,6 +169,8 @@ private:
     Mesh buildItemMesh(ItemID itemId) const;
     Mesh buildRightArmMesh() const;
     static void destroyMesh(Mesh& mesh);
+    void createRhiTextureResources();
+    void destroyRhiTextureResources();
 
     void drawArm(const glm::mat4& viewProj, const glm::mat4& model);
     void bindShadowUniforms(Shader& shader) const;
@@ -179,6 +181,15 @@ private:
 
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
+    RhiTextureViewHandle m_steveTextureView;
+    RhiTextureViewHandle m_itemAtlasView;
+    RhiTextureViewHandle m_blockTextureArrayView;
+    RhiTextureViewHandle m_lightmapDayView;
+    RhiTextureViewHandle m_lightmapNightView;
+    RhiTextureViewHandle m_grassColormapView;
+    RhiTextureViewHandle m_foliageColormapView;
+    RhiSamplerHandle m_textureSampler;
+    RhiSamplerHandle m_blockTextureSampler;
     Shader* m_blockShader = nullptr;
     Shader* m_itemShader = nullptr;
     Shader* m_steveShader = nullptr;

@@ -174,6 +174,7 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiD
     }
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
+    createRhiTextureResources();
     m_deferredBlockShader = resourceMgr.getShader("block_item_lit");
     m_deferredItemShader = resourceMgr.getShader("item_model");
     m_deferredSteveShader = resourceMgr.getShader("steve");
@@ -204,6 +205,7 @@ void FirstPersonHeldItemRenderer::shutdown() {
     }
     m_itemMeshes.clear();
     MecraftTextureContract::destroyNeutralShadowTextures();
+    destroyRhiTextureResources();
     m_resourceMgr = nullptr;
     m_rhiDevice = nullptr;
     m_blockShader = nullptr;
@@ -445,6 +447,72 @@ void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& invento
     } else if (renderBlock != 0) {
         getOrCreateBlockMesh(renderBlock);
     }
+}
+
+void FirstPersonHeldItemRenderer::createRhiTextureResources() {
+    const RhiTextureHandle textures[] = {
+        m_resourceMgr->getGuiTextureHandle("steve"),
+        m_resourceMgr->getItemTextureAtlas().texture,
+        m_resourceMgr->getTextureArray().texture,
+        m_resourceMgr->getLightmapDay(),
+        m_resourceMgr->getLightmapNight(),
+        m_resourceMgr->getGrassColormap(),
+        m_resourceMgr->getFoliageColormap()
+    };
+    RhiTextureViewHandle* views[] = {
+        &m_steveTextureView,
+        &m_itemAtlasView,
+        &m_blockTextureArrayView,
+        &m_lightmapDayView,
+        &m_lightmapNightView,
+        &m_grassColormapView,
+        &m_foliageColormapView
+    };
+    for (uint32_t index = 0u; index < 7u; ++index) {
+        if (!textures[index].isValid()) {
+            std::abort();
+        }
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = textures[index];
+        viewDesc.viewType = index == 2u ? RhiTextureViewType::Texture2DArray
+                                       : RhiTextureViewType::Texture2D;
+        *views[index] = m_rhiDevice->createTextureView(viewDesc);
+        if (!views[index]->isValid()) {
+            std::abort();
+        }
+    }
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    m_textureSampler = m_rhiDevice->createSampler(samplerDesc);
+    samplerDesc.addressU = RhiAddressMode::Repeat;
+    samplerDesc.addressV = RhiAddressMode::Repeat;
+    samplerDesc.addressW = RhiAddressMode::Repeat;
+    m_blockTextureSampler = m_rhiDevice->createSampler(samplerDesc);
+    if (!m_textureSampler.isValid() || !m_blockTextureSampler.isValid()) {
+        std::abort();
+    }
+}
+
+void FirstPersonHeldItemRenderer::destroyRhiTextureResources() {
+    if (m_blockTextureSampler.isValid()) m_rhiDevice->destroySampler(m_blockTextureSampler);
+    if (m_textureSampler.isValid()) m_rhiDevice->destroySampler(m_textureSampler);
+    if (m_foliageColormapView.isValid()) m_rhiDevice->destroyTextureView(m_foliageColormapView);
+    if (m_grassColormapView.isValid()) m_rhiDevice->destroyTextureView(m_grassColormapView);
+    if (m_lightmapNightView.isValid()) m_rhiDevice->destroyTextureView(m_lightmapNightView);
+    if (m_lightmapDayView.isValid()) m_rhiDevice->destroyTextureView(m_lightmapDayView);
+    if (m_blockTextureArrayView.isValid()) m_rhiDevice->destroyTextureView(m_blockTextureArrayView);
+    if (m_itemAtlasView.isValid()) m_rhiDevice->destroyTextureView(m_itemAtlasView);
+    if (m_steveTextureView.isValid()) m_rhiDevice->destroyTextureView(m_steveTextureView);
+    m_blockTextureSampler = {};
+    m_textureSampler = {};
+    m_foliageColormapView = {};
+    m_grassColormapView = {};
+    m_lightmapNightView = {};
+    m_lightmapDayView = {};
+    m_blockTextureArrayView = {};
+    m_itemAtlasView = {};
+    m_steveTextureView = {};
 }
 
 void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
