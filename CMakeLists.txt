@@ -284,7 +284,6 @@ set(SRC_RENDERER
 
         # Render targets
         src/renderer/targets/DeferredRenderTargets.cpp
-        src/renderer/targets/ShadowTargets.cpp
 
         # Render passes
         src/renderer/passes/SsaoPass.cpp
