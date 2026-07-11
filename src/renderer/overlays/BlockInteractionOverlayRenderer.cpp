@@ -6,8 +6,11 @@
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/redstone/WireFaceGeometry.h"
 #include "../core/Shader.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 
 #include <array>
+#include <cstdlib>
 
 #include <glad/glad.h>
 
@@ -37,7 +40,8 @@ BlockSelectionBox selectionBoxForTarget(const BlockStateId targetState,
 
 } // namespace
 
-void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr) {
+void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
     m_outlineShader = resourceMgr.getShader("outline");
     m_breakOverlayShader = resourceMgr.getShader("break_overlay");
     initOutlineMesh();
@@ -45,6 +49,15 @@ void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr) {
 }
 
 void BlockInteractionOverlayRenderer::shutdown() {
+    if (m_rhiDevice != nullptr) {
+        if (m_breakOverlayCrossVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_breakOverlayCrossVertexBuffer);
+        if (m_breakOverlayVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_breakOverlayVertexBuffer);
+        if (m_outlineVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_outlineVertexBuffer);
+    }
+    m_breakOverlayCrossVertexBuffer = {};
+    m_breakOverlayVertexBuffer = {};
+    m_outlineVertexBuffer = {};
+    m_rhiDevice = nullptr;
     if (m_outlineVbo != 0) {
         glDeleteBuffers(1, &m_outlineVbo);
         m_outlineVbo = 0;
@@ -102,6 +115,14 @@ void BlockInteractionOverlayRenderer::initOutlineMesh() {
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "BlockOverlay.Outline.VertexBuffer";
+    bufferDesc.size = kOutlineVertices.size() * sizeof(float);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_outlineVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, kOutlineVertices.data(), bufferDesc.size);
+    if (!m_outlineVertexBuffer.isValid()) std::abort();
 }
 
 void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
@@ -154,6 +175,14 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
 
     m_breakOverlayVertexCount = static_cast<GLsizei>(kBreakOverlayVertices.size() / 5);
+    RhiBufferDesc overlayBufferDesc;
+    overlayBufferDesc.debugName = "BlockOverlay.Break.VertexBuffer";
+    overlayBufferDesc.size = kBreakOverlayVertices.size() * sizeof(float);
+    overlayBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    overlayBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_breakOverlayVertexBuffer = m_rhiDevice->createBuffer(
+        overlayBufferDesc, kBreakOverlayVertices.data(), overlayBufferDesc.size);
+    if (!m_breakOverlayVertexBuffer.isValid()) std::abort();
 
     glGenVertexArrays(1, &m_breakOverlayCrossVao);
     glGenBuffers(1, &m_breakOverlayCrossVbo);
@@ -169,6 +198,14 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
 
     m_breakOverlayCrossVertexCount = static_cast<GLsizei>(kBreakOverlayCrossVertices.size() / 5);
+    RhiBufferDesc crossBufferDesc;
+    crossBufferDesc.debugName = "BlockOverlay.BreakCross.VertexBuffer";
+    crossBufferDesc.size = kBreakOverlayCrossVertices.size() * sizeof(float);
+    crossBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    crossBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_breakOverlayCrossVertexBuffer = m_rhiDevice->createBuffer(
+        crossBufferDesc, kBreakOverlayCrossVertices.data(), crossBufferDesc.size);
+    if (!m_breakOverlayCrossVertexBuffer.isValid()) std::abort();
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);

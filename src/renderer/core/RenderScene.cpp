@@ -202,9 +202,6 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
     // Phase R4: Initialize terrain streaming service
     // Note: Thread pool initialization is deferred until setupResources() is called
 
-    // Phase R5: Initialize overlay renderer
-    m_overlayRenderer.init(resourceMgr);
-
     // Phase R6: Initialize debug service
     m_debugService.init();
 
@@ -619,6 +616,8 @@ void RenderScene::setupResources(
     m_shared.overlayRenderer = &m_overlayRenderer;
 
     m_shared.rhiDevice = rhiDevice;
+    if (rhiDevice == nullptr) std::abort();
+    m_overlayRenderer.init(*m_shared.resources, *rhiDevice);
     m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
     m_shared.terrainStreaming = &m_terrainStreamingService;
     m_shared.terrain = terrain;

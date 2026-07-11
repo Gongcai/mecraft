@@ -4,8 +4,10 @@
 #include <cstdint>
 
 #include <glm/glm.hpp>
+#include "../rhi/RhiHandles.h"
 
 class ResourceMgr;
+class RhiDevice;
 class Shader;
 class IWorldView;
 
@@ -27,7 +29,7 @@ struct BlockBreakRenderData {
 /// Extracted from Renderer to reduce its responsibilities.
 class BlockInteractionOverlayRenderer {
 public:
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
 
     /// Render both block outline and break overlay.
@@ -57,6 +59,10 @@ private:
     uint32_t m_breakOverlayCrossVao = 0;
     uint32_t m_breakOverlayCrossVbo = 0;
     int32_t m_breakOverlayCrossVertexCount = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_outlineVertexBuffer;
+    RhiBufferHandle m_breakOverlayVertexBuffer;
+    RhiBufferHandle m_breakOverlayCrossVertexBuffer;
 };
 
 #endif // MECRAFT_BLOCK_INTERACTION_OVERLAY_RENDERER_H
