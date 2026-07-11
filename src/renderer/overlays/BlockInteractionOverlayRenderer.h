@@ -9,7 +9,6 @@
 class ResourceMgr;
 class RhiDevice;
 class RhiCommandList;
-class Shader;
 class IWorldView;
 
 /// Decoupled data transfer structs for block interaction rendering.
@@ -53,16 +52,7 @@ private:
                                  const BlockBreakRenderData& blockBreak,
                                  RhiCommandList& commandList);
 
-    Shader* m_outlineShader = nullptr;
-    Shader* m_breakOverlayShader = nullptr;
-
-    uint32_t m_outlineVao = 0;
-    uint32_t m_outlineVbo = 0;
-    uint32_t m_breakOverlayVao = 0;
-    uint32_t m_breakOverlayVbo = 0;
     int32_t m_breakOverlayVertexCount = 0;
-    uint32_t m_breakOverlayCrossVao = 0;
-    uint32_t m_breakOverlayCrossVbo = 0;
     int32_t m_breakOverlayCrossVertexCount = 0;
     RhiDevice* m_rhiDevice = nullptr;
     RhiBufferHandle m_outlineVertexBuffer;

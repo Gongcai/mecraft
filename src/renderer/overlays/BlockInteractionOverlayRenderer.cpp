@@ -5,7 +5,6 @@
 #include "../../world/block/BlockSelection.h"
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/redstone/WireFaceGeometry.h"
-#include "../core/Shader.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiResources.h"
@@ -13,8 +12,7 @@
 
 #include <array>
 #include <cstdlib>
-
-#include <glad/glad.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace {
 
@@ -44,8 +42,7 @@ BlockSelectionBox selectionBoxForTarget(const BlockStateId targetState,
 
 void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
-    m_outlineShader = resourceMgr.getShader("outline");
-    m_breakOverlayShader = resourceMgr.getShader("break_overlay");
+    static_cast<void>(resourceMgr);
     initOutlineMesh();
     initBreakOverlayMesh();
     const auto vertexSource = renderer::rhi::loadShaderSource(
@@ -164,30 +161,6 @@ void BlockInteractionOverlayRenderer::shutdown() {
     m_breakOverlayVertexBuffer = {};
     m_outlineVertexBuffer = {};
     m_rhiDevice = nullptr;
-    if (m_outlineVbo != 0) {
-        glDeleteBuffers(1, &m_outlineVbo);
-        m_outlineVbo = 0;
-    }
-    if (m_outlineVao != 0) {
-        glDeleteVertexArrays(1, &m_outlineVao);
-        m_outlineVao = 0;
-    }
-    if (m_breakOverlayVbo != 0) {
-        glDeleteBuffers(1, &m_breakOverlayVbo);
-        m_breakOverlayVbo = 0;
-    }
-    if (m_breakOverlayVao != 0) {
-        glDeleteVertexArrays(1, &m_breakOverlayVao);
-        m_breakOverlayVao = 0;
-    }
-    if (m_breakOverlayCrossVbo != 0) {
-        glDeleteBuffers(1, &m_breakOverlayCrossVbo);
-        m_breakOverlayCrossVbo = 0;
-    }
-    if (m_breakOverlayCrossVao != 0) {
-        glDeleteVertexArrays(1, &m_breakOverlayCrossVao);
-        m_breakOverlayCrossVao = 0;
-    }
 }
 
 void BlockInteractionOverlayRenderer::render(const IWorldView& worldView,
@@ -200,7 +173,7 @@ void BlockInteractionOverlayRenderer::render(const IWorldView& worldView,
 }
 
 void BlockInteractionOverlayRenderer::initOutlineMesh() {
-    if (m_outlineVao != 0) {
+    if (m_outlineVertexBuffer.isValid()) {
         return;
     }
 
@@ -210,18 +183,6 @@ void BlockInteractionOverlayRenderer::initOutlineMesh() {
         0,0,0, 0,0,1,  1,0,0, 1,0,1,  1,1,0, 1,1,1,  0,1,0, 0,1,1
     };
 
-    glGenVertexArrays(1, &m_outlineVao);
-    glGenBuffers(1, &m_outlineVbo);
-
-    glBindVertexArray(m_outlineVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_outlineVbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kOutlineVertices.size() * sizeof(float)),
-                 kOutlineVertices.data(), GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "BlockOverlay.Outline.VertexBuffer";
     bufferDesc.size = kOutlineVertices.size() * sizeof(float);
@@ -233,7 +194,7 @@ void BlockInteractionOverlayRenderer::initOutlineMesh() {
 }
 
 void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
-    if (m_breakOverlayVao != 0 && m_breakOverlayCrossVao != 0) {
+    if (m_breakOverlayVertexBuffer.isValid() && m_breakOverlayCrossVertexBuffer.isValid()) {
         return;
     }
 
@@ -268,20 +229,7 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
         0.8536f,0.0f,0.1464f, 0,0,  0.1464f,1.0f,0.8536f, 1,1,  0.8536f,1.0f,0.1464f, 0,1
     };
 
-    glGenVertexArrays(1, &m_breakOverlayVao);
-    glGenBuffers(1, &m_breakOverlayVbo);
-
-    glBindVertexArray(m_breakOverlayVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_breakOverlayVbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kBreakOverlayVertices.size() * sizeof(float)),
-                 kBreakOverlayVertices.data(), GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-
-    m_breakOverlayVertexCount = static_cast<GLsizei>(kBreakOverlayVertices.size() / 5);
+    m_breakOverlayVertexCount = static_cast<int32_t>(kBreakOverlayVertices.size() / 5);
     RhiBufferDesc overlayBufferDesc;
     overlayBufferDesc.debugName = "BlockOverlay.Break.VertexBuffer";
     overlayBufferDesc.size = kBreakOverlayVertices.size() * sizeof(float);
@@ -291,20 +239,7 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
         overlayBufferDesc, kBreakOverlayVertices.data(), overlayBufferDesc.size);
     if (!m_breakOverlayVertexBuffer.isValid()) std::abort();
 
-    glGenVertexArrays(1, &m_breakOverlayCrossVao);
-    glGenBuffers(1, &m_breakOverlayCrossVbo);
-
-    glBindVertexArray(m_breakOverlayCrossVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_breakOverlayCrossVbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kBreakOverlayCrossVertices.size() * sizeof(float)),
-                 kBreakOverlayCrossVertices.data(), GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-
-    m_breakOverlayCrossVertexCount = static_cast<GLsizei>(kBreakOverlayCrossVertices.size() / 5);
+    m_breakOverlayCrossVertexCount = static_cast<int32_t>(kBreakOverlayCrossVertices.size() / 5);
     RhiBufferDesc crossBufferDesc;
     crossBufferDesc.debugName = "BlockOverlay.BreakCross.VertexBuffer";
     crossBufferDesc.size = kBreakOverlayCrossVertices.size() * sizeof(float);
@@ -314,8 +249,6 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
         crossBufferDesc, kBreakOverlayCrossVertices.data(), crossBufferDesc.size);
     if (!m_breakOverlayCrossVertexBuffer.isValid()) std::abort();
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 }
 
 void BlockInteractionOverlayRenderer::renderBlockOutline(const IWorldView& worldView,

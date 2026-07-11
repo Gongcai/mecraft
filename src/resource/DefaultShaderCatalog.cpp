@@ -40,8 +40,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"exposure_resolve", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/exposure_resolve.frag"},
     {"fsr1_easu", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/fsr1_easu.frag"},
     {"fsr1_rcas", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/fsr1_rcas.frag"},
-    {"outline", SHADERS_DIR "/outline.vert", SHADERS_DIR "/outline.frag"},
-    {"break_overlay", SHADERS_DIR "/break_overlay.vert", SHADERS_DIR "/break_overlay.frag"},
     {"crosshair", SHADERS_DIR "/crosshair.vert", SHADERS_DIR "/crosshair.frag"},
     {"inventory", SHADERS_DIR "/inventory.vert", SHADERS_DIR "/inventory.frag"},
     {"text", SHADERS_DIR "/text.vert", SHADERS_DIR "/text.frag"},
