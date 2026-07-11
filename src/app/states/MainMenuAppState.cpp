@@ -362,10 +362,11 @@ void MainMenuAppState::render(double frameTime) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
         return;
     }
+    sceneContext.commandList = commandList;
     m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
 
     if (m_transitioningToGame) {
-        m_transition.render(m_deps.window.getWidth(), m_deps.window.getHeight());
+        m_transition.render(m_deps.window.getWidth(), m_deps.window.getHeight(), *commandList);
     }
 
     endMenuPass(m_deps.rhiDevice, commandList);
