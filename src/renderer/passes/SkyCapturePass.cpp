@@ -2,6 +2,7 @@
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../rhi/RhiDevice.h"
+#include "../rhi/RhiCommandList.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/DayNightSystem.h"
 #include "../../world/WeatherSystem.h"
@@ -61,10 +62,11 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     if (!noiseTexture.isValid()) {
         return;
     }
+    RhiCommandList& commandList = rhiDevice.beginFrame();
 
     // Raw sky radiance (rows 0..257)
     skyRenderer.renderSkyCapture(dayNightSystem,
-                                  rhiDevice,
+                                  commandList,
                                   targets.skyCaptureTextureViewHandle(),
                                   targets.skyCaptureWidth(),
                                   targets.skyCaptureHeight(),
@@ -73,7 +75,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
 
     // Cloudy sky radiance (rows 258..513)
     skyRenderer.renderCloudySkyCapture(dayNightSystem,
-                                        rhiDevice,
+                                        commandList,
                                         targets.skyCaptureTextureViewHandle(),
                                         targets.skyCaptureWidth(),
                                         targets.skyCaptureHeight(),
@@ -90,9 +92,10 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                                         weatherWetness, weatherStorm);
 
     skyRenderer.writeSkyCacheMetadata(illum,
-                                       rhiDevice,
+                                       commandList,
                                        targets.skyCaptureTextureViewHandle(),
                                        targets.skyCaptureWidth(),
                                        cameraAltitude, atmosphereLut, moonPhaseFlux,
                                        weatherWetness, weatherStorm);
+    rhiDevice.submitFrame(commandList);
 }

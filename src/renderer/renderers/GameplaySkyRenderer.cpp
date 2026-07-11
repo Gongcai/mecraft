@@ -246,7 +246,7 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
 }
 
 void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
-                                           RhiDevice& rhiDevice,
+                                           RhiCommandList& commandList,
                                            const RhiTextureViewHandle targetView,
                                            const int width,
                                            const int height,
@@ -279,7 +279,6 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 
     glDisable(GL_DEPTH_TEST);
@@ -329,12 +328,11 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     glBindVertexArray(0);
 
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
     // GL state restored by ScopedStateSnapshot destructor
 }
 
 void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
-                                                  RhiDevice& rhiDevice,
+                                                  RhiCommandList& commandList,
                                                   const RhiTextureViewHandle targetView,
                                                   const int skyCaptureWidth,
                                                   const int skyCaptureHeight,
@@ -379,7 +377,6 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 
     glDisable(GL_DEPTH_TEST);
@@ -452,12 +449,11 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     glActiveTexture(GL_TEXTURE0);
 
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
     // GL state restored by ScopedStateSnapshot destructor
 }
 
 void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illuminance,
-                                                 RhiDevice& rhiDevice,
+                                                 RhiCommandList& commandList,
                                                  const RhiTextureViewHandle targetView,
                                                  const int skyCaptureWidth,
                                                  const float cameraAltitude,
@@ -489,7 +485,6 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
 
     glDisable(GL_DEPTH_TEST);
@@ -530,7 +525,6 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     glBindVertexArray(0);
 
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
     // GL state restored by ScopedStateSnapshot destructor
 }
 
