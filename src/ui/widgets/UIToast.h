@@ -4,13 +4,12 @@
 #include <string>
 #include <vector>
 
-#include <cstdint>
-
+#include "renderer/rhi/RhiHandles.h"
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
-class Shader;
+class RhiDevice;
 
 // Toast notification widget that displays temporary messages at the bottom of the screen.
 // Multiple toasts stack vertically and auto-dismiss after their duration expires.
@@ -49,9 +48,12 @@ private:
     [[nodiscard]] UIToastStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedToastStyle resolveStyle(const UIRenderContext& ctx, Type type) const;
 
-    Shader* m_shader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_vertexBuffer;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineHandle m_pipeline;
 
     std::vector<ToastEntry> m_toasts;
     int m_maxVisible = 5;
