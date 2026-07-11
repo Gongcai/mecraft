@@ -238,6 +238,8 @@ private:
     static void generateMipmaps(uint32_t texture);
     bool createGBufferTextures();
     void destroyGBufferTextures();
+    bool createSceneTextures();
+    void destroySceneTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -344,17 +346,14 @@ private:
     RhiTextureViewHandle m_ssgiTemporalView;
     RhiTextureViewHandle m_ssgiTemporalMomentsView;
 
-    uint32_t m_sceneLightingTex = 0;
     RhiTextureHandle m_sceneLightingHandle;
     RhiTextureViewHandle m_sceneLightingView;
 
     // SceneComposite is the opaque HDR scene after screen-space base effects such as clouds/reflections.
-    uint32_t m_sceneCompositeTex = 0;
     RhiTextureHandle m_sceneCompositeHandle;
     RhiTextureViewHandle m_sceneCompositeView;
 
     // SceneResolved is the current full-world HDR color. It becomes the post input and temporal scene history source.
-    uint32_t m_sceneResolvedTex = 0;
     RhiTextureHandle m_sceneResolvedHandle;
     RhiTextureViewHandle m_sceneResolvedView;
 

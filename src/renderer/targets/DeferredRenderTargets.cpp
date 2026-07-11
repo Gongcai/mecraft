@@ -71,6 +71,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createSceneTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -195,12 +199,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_ssgiTemporalMomentsTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-    m_sceneLightingTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
-    m_sceneCompositeTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
-    m_sceneResolvedTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
     // TemporalCurrent: TAA current-frame scratch buffer. Avoids reading
     // history[current] as TAA input (which conflicts with the "history
     // only written once per frame" invariant).
@@ -299,9 +297,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
     }
-    renderer::debug::labelTexture(m_sceneLightingTex, "DeferredTargets.SceneLightingTex");
-    renderer::debug::labelTexture(m_sceneCompositeTex, "DeferredTargets.SceneCompositeTex");
-    renderer::debug::labelTexture(m_sceneResolvedTex, "DeferredTargets.SceneResolvedTex");
     renderer::debug::labelTexture(m_transparentCompositeTex, "DeferredTargets.TransparentCompositeTex");
     renderer::debug::labelTexture(m_transparentCompositeDepth, "DeferredTargets.TransparentCompositeDepth");
     renderer::debug::labelTexture(m_halfResTex, "DeferredTargets.HalfResTex");
@@ -646,45 +641,59 @@ void DeferredRenderTargets::destroyGBufferTextures() {
     }
 }
 
+bool DeferredRenderTargets::createSceneTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName, RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.width = static_cast<uint32_t>(m_width);
+        desc.height = static_cast<uint32_t>(m_height);
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                     rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) |
+                     rhiFlag(RhiTextureUsage::TransferDst);
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    if (!createTexture("DeferredTargets.SceneLighting", m_sceneLightingHandle) ||
+        !createTexture("DeferredTargets.SceneComposite", m_sceneCompositeHandle) ||
+        !createTexture("DeferredTargets.SceneResolved", m_sceneResolvedHandle)) {
+        destroySceneTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroySceneTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiTextureHandle* textures[] = {
+        &m_sceneLightingHandle,
+        &m_sceneCompositeHandle,
+        &m_sceneResolvedHandle
+    };
+    for (RhiTextureHandle* texture : textures) {
+        if (texture->isValid()) {
+            m_rhiDevice->destroyTexture(*texture);
+            *texture = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
-    m_sceneLightingHandle = renderer::rhi::gl::registerTexture({
-        m_sceneLightingTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_sceneCompositeHandle = renderer::rhi::gl::registerTexture({
-        m_sceneCompositeTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_sceneResolvedHandle = renderer::rhi::gl::registerTexture({
-        m_sceneResolvedTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
     m_transparentCompositeHandle = renderer::rhi::gl::registerTexture({
         m_transparentCompositeTex,
         RhiTextureDimension::Texture2D,
@@ -2850,9 +2859,7 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
 void DeferredRenderTargets::unregisterRhiTextures() {
     destroyRhiTextureViews();
     destroyGBufferTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_sceneLightingHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_sceneCompositeHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_sceneResolvedHandle);
+    destroySceneTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_transparentCompositeHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_transparentCompositeDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_halfResHandle);
@@ -2920,9 +2927,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_csmShadowColor1,
         m_ssaoTex,
         m_ssaoFilteredTex,
-        m_sceneLightingTex,
-        m_sceneCompositeTex,
-        m_sceneResolvedTex,
         m_temporalCurrentTex,
         m_transparentCompositeTex,
         m_transparentCompositeDepth,
@@ -2970,9 +2974,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoFilteredTex = 0;
     m_ssaoHalfResTex = 0;
     m_ssaoHalfResFilteredTex = 0;
-    m_sceneLightingTex = 0;
-    m_sceneCompositeTex = 0;
-    m_sceneResolvedTex = 0;
     m_temporalCurrentTex = 0;
     m_transparentCompositeTex = 0;
     m_transparentCompositeDepth = 0;
