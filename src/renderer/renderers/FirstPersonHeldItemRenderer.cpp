@@ -8,6 +8,7 @@
 #include "../core/Shader.h"
 #include "../debug/RenderDebugLabels.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 
 #include <algorithm>
@@ -500,7 +501,7 @@ void FirstPersonHeldItemRenderer::createRhiTextureResources() {
     m_shadowRawSampler = m_rhiDevice->createSampler(samplerDesc);
     RhiBufferDesc uniformBufferDesc;
     uniformBufferDesc.debugName = "FirstPerson.ShadowUniformBuffer";
-    uniformBufferDesc.size = 512u;
+    uniformBufferDesc.size = sizeof(ShadowUniforms);
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
@@ -836,6 +837,51 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width,
     m_preparedFrame = {
         PreparedDrawKind::Item, view, viewProj, itemModel, m_visibleItemId, width, height
     };
+}
+
+void FirstPersonHeldItemRenderer::prepareRhiFrame(RhiCommandList& commandList) {
+    if (!m_initialized || !m_shadowUniformBuffer.isValid()) {
+        std::abort();
+    }
+
+    ShadowUniforms uniforms;
+    for (std::size_t index = 0u; index < uniforms.cascades.size(); ++index) {
+        const float splitNear = index == 0u ? 0.0f : m_shadowData.cascadeSplitFar[index - 1u];
+        uniforms.cascades[index].viewProj = m_shadowData.cascadeViewProj[index];
+        uniforms.cascades[index].splitNearFarTexelResolution = {
+            splitNear,
+            m_shadowData.cascadeSplitFar[index],
+            m_shadowData.cascadeTexelWorldSize[index],
+            index >= 2u ? 0.5f : 1.0f
+        };
+        uniforms.cascades[index].depthExtentPadding.x = m_shadowData.cascadeDepthExtent[index];
+    }
+    uniforms.cameraPosShadowDistance = {
+        m_shadowData.cameraPos, m_shadowData.shadowDistance
+    };
+    uniforms.sunDirectionConstantBias = {
+        m_shadowData.sunDirection, m_shadowData.constantBias
+    };
+    uniforms.shadowParams = {
+        m_shadowData.slopeBias,
+        m_shadowData.normalOffset,
+        m_shadowData.softness,
+        m_shadowData.pcssStrength
+    };
+    uniforms.shadowFlags = {
+        m_shadowData.cascadeCount,
+        m_shadowData.softShadowsEnabled,
+        m_shadowData.pcssShadowsEnabled,
+        m_shadowData.shadowsEnabled
+    };
+    uniforms.lighting = {
+        m_shadowData.skyIntensity,
+        m_shadowData.ambientStrength,
+        m_environmentSunlight,
+        m_environmentBlockLight
+    };
+    uniforms.hdrScalePadding.x = m_sceneHdrScale;
+    commandList.updateBuffer(m_shadowUniformBuffer, 0u, &uniforms, sizeof(uniforms));
 }
 
 void FirstPersonHeldItemRenderer::renderPrepared() {

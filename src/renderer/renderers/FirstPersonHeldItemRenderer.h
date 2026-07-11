@@ -13,6 +13,7 @@
 #include "../rhi/RhiHandles.h"
 
 class Inventory;
+class RhiCommandList;
 class RhiDevice;
 class ResourceMgr;
 class Shader;
@@ -111,6 +112,7 @@ public:
                       const Inventory& inventory,
                       const FirstPersonHeldItemMotion& motion,
                       float timeSeconds);
+    void prepareRhiFrame(RhiCommandList& commandList);
     void renderPrepared();
 
     // Shadow data from Renderer — must be set before render() each frame.
@@ -156,6 +158,24 @@ public:
                 float timeSeconds);
 
 private:
+    struct alignas(16) CascadeUniform {
+        glm::mat4 viewProj{1.0f};
+        glm::vec4 splitNearFarTexelResolution{0.0f};
+        glm::vec4 depthExtentPadding{0.0f};
+    };
+
+    struct alignas(16) ShadowUniforms {
+        std::array<CascadeUniform, 4> cascades{};
+        glm::vec4 cameraPosShadowDistance{0.0f};
+        glm::vec4 sunDirectionConstantBias{0.0f};
+        glm::vec4 shadowParams{0.0f};
+        glm::ivec4 shadowFlags{0};
+        glm::vec4 lighting{0.0f};
+        glm::vec4 hdrScalePadding{0.0f};
+    };
+    static_assert(sizeof(CascadeUniform) == 96u);
+    static_assert(sizeof(ShadowUniforms) == 480u);
+
     struct Mesh {
         uint32_t vao = 0;
         uint32_t vbo = 0;
