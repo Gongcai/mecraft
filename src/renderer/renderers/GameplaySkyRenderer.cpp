@@ -254,7 +254,6 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
                                                   const RhiTextureHandle noiseTexture,
                                                   const SkyIlluminanceData& illuminance,
                                                   const CloudySkyCaptureParams& params) {
-    m_lastColors = colors;
     if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
     }
@@ -289,17 +288,17 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
     m_shader->setMat4("uView", glm::mat4(1.0f));
     m_shader->setMat4("uProjection", glm::mat4(1.0f));
     m_shader->setMat4("uModel", glm::mat4(1.0f));
-    m_shader->setVec3("uSkyTopColor", m_lastColors.top);
-    m_shader->setVec3("uSkyHorizonColor", m_lastColors.horizon);
-    m_shader->setVec3("uSunDirection", m_lastColors.sunDirection);
-    m_shader->setVec3("uMoonDirection", m_lastColors.moonDirection);
-    m_shader->setVec3("uSunScatterColor", m_lastColors.sunScatter);
-    m_shader->setVec3("uMoonLightColor", m_lastColors.moonLightColor);
-    m_shader->setFloat("uHorizonHaze", m_lastColors.horizonHaze);
-    m_shader->setFloat("uSunGlare", m_lastColors.sunGlare);
-    m_shader->setFloat("uSunVisibility", m_lastColors.sunVisibility);
-    m_shader->setFloat("uMoonVisibility", m_lastColors.moonVisibility);
-    m_shader->setFloat("uNightFactor", m_lastColors.nightFactor);
+    m_shader->setVec3("uSkyTopColor", colors.top);
+    m_shader->setVec3("uSkyHorizonColor", colors.horizon);
+    m_shader->setVec3("uSunDirection", colors.sunDirection);
+    m_shader->setVec3("uMoonDirection", colors.moonDirection);
+    m_shader->setVec3("uSunScatterColor", colors.sunScatter);
+    m_shader->setVec3("uMoonLightColor", colors.moonLightColor);
+    m_shader->setFloat("uHorizonHaze", colors.horizonHaze);
+    m_shader->setFloat("uSunGlare", colors.sunGlare);
+    m_shader->setFloat("uSunVisibility", colors.sunVisibility);
+    m_shader->setFloat("uMoonVisibility", colors.moonVisibility);
+    m_shader->setFloat("uNightFactor", colors.nightFactor);
     m_shader->setInt("uIncludeCelestialDisks", 1);
     m_shader->setInt("uCloudySkyCapture", 1);
     m_shader->setVec3("uDirectIlluminance", illuminance.directIlluminance);
