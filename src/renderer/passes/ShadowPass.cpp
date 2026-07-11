@@ -143,8 +143,8 @@ void ShadowPass::renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
 
-    m_fallingBlockRenderer->renderToShadowMap(*m_gameplayRegistry, shadowViewProj,
-                                               shadowView, shadowProjection, animationTime, shaderTime);
+    m_fallingBlockRenderer->renderToShadowMap(shadowViewProj, shadowView, shadowProjection,
+                                               animationTime, shaderTime);
 
 }
 

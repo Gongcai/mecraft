@@ -199,6 +199,7 @@ void GBufferPass::executeFallingBlocks(const IWorldView& worldView, const FrameC
         return;
     }
 
+    fallingBlockRenderer->prepareFrame(worldView, *gameplayRegistry);
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     RhiCommandList* commandList = beginObjectGBufferRendering(rhiDevice, targets, "GBuffer.FallingBlocks", false);
     if (commandList == nullptr) {
@@ -212,9 +213,8 @@ void GBufferPass::executeFallingBlocks(const IWorldView& worldView, const FrameC
 
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
-    fallingBlockRenderer->renderToGBuffer(worldView, *gameplayRegistry, viewProj, previousViewProj, ctx.animationTime);
+    fallingBlockRenderer->renderToGBuffer(viewProj, previousViewProj, ctx.animationTime);
 
-    glBindVertexArray(0);
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);
 }
