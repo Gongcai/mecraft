@@ -49,8 +49,6 @@ constexpr ShaderDefinition kDefaultShaders[] = {
     {"crosshair", SHADERS_DIR "/crosshair.vert", SHADERS_DIR "/crosshair.frag"},
     {"inventory", SHADERS_DIR "/inventory.vert", SHADERS_DIR "/inventory.frag"},
     {"text", SHADERS_DIR "/text.vert", SHADERS_DIR "/text.frag"},
-    {"particle", SHADERS_DIR "/particle.vert", SHADERS_DIR "/particle.frag"},
-    {"particle_gbuffer", SHADERS_DIR "/particle_gbuffer.vert", SHADERS_DIR "/particle_gbuffer.frag"},
     {"rain", SHADERS_DIR "/rain.vert", SHADERS_DIR "/rain.frag"},
     {"postprocess", SHADERS_DIR "/postprocess.vert", SHADERS_DIR "/postprocess.frag"},
     {"item_model", SHADERS_DIR "/item_model.vert", SHADERS_DIR "/item_model.frag"},

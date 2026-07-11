@@ -1,7 +1,6 @@
 #include "ParticleSystem.h"
 
-#include <glad/glad.h>
-
+#include <optional>
 #include <vector>
 
 #include <glm/common.hpp>
@@ -10,53 +9,39 @@
 #include "../ecs/GameplayRegistry.h"
 #include "../ecs/util/ParticleEventBuffer.h"
 #include "../resource/ResourceMgr.h"
-#include "../renderer/core/Shader.h"
-#include "../renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "../renderer/rhi/RhiCommandList.h"
+#include "../renderer/rhi/RhiDevice.h"
+#include "../renderer/rhi/RhiShaderSourceLoader.h"
+
+namespace {
+struct ParticlePushConstants {
+    glm::mat4 viewProj;
+    glm::vec4 biomeTint;
+    glm::vec4 screenParams;
+};
+
+[[nodiscard]] bool sameTexture(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+} // namespace
 
 void ParticleSystem::bindRegistry(ecs::GameplayRegistry& registry) {
     m_registry = &registry;
 }
 
-void ParticleSystem::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("particle");
-    m_gbufferShader = resourceMgr.getShader("particle_gbuffer");
+bool ParticleSystem::init(ResourceMgr& resourceMgr) {
+    m_rhiDevice = &resourceMgr.rhiDevice();
     m_texArray = &resourceMgr.getTextureArray();
-
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
-    glBufferData(GL_ARRAY_BUFFER, MAX_PARTICLES * 6 * 8 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(5 * sizeof(float)));
-
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(7 * sizeof(float)));
-
-    glBindVertexArray(0);
+    if (!m_texArray->texture.isValid()) {
+        shutdown();
+        return false;
+    }
+    return createRhiResources();
 }
 
 void ParticleSystem::shutdown() {
-    if (m_vbo) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
-    if (m_vao) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
-    }
+    destroyRhiResources();
+    m_texArray = nullptr;
 }
 
 void ParticleSystem::emit(const glm::ivec3& blockPos, const BlockID blockType) {
@@ -72,18 +57,16 @@ void ParticleSystem::update(const float dt) {
     static_cast<void>(dt);
 }
 
-void ParticleSystem::prepareFrame(const glm::mat4& view) {
+void ParticleSystem::prepareFrame(const glm::mat4& view, RhiCommandList& commandList) {
     m_preparedVertexCount = 0u;
-    if (m_registry == nullptr || m_vbo == 0u) {
+    if (m_registry == nullptr || !m_rhiVertexBuffer.isValid()) {
         return;
     }
     if (buildVertices(view, m_vertexBuffer) == 0) {
         return;
     }
-    glNamedBufferSubData(m_vbo,
-                         0,
-                         static_cast<GLsizeiptr>(m_vertexBuffer.size() * sizeof(float)),
-                         m_vertexBuffer.data());
+    commandList.updateBuffer(m_rhiVertexBuffer, 0u,
+                             m_vertexBuffer.data(), m_vertexBuffer.size() * sizeof(float));
     m_preparedVertexCount = static_cast<uint32_t>(m_vertexBuffer.size() / 8u);
 }
 
@@ -138,71 +121,241 @@ int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& ver
     return count;
 }
 
-void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) {
-    if (m_registry == nullptr || m_shader == nullptr || m_texArray == nullptr) {
+void ParticleSystem::render(RhiCommandList& commandList, const glm::mat4& viewProj) {
+    if (m_preparedVertexCount == 0u || !m_forwardPipeline.isValid() ||
+        !m_forwardBindGroup.isValid()) {
         return;
     }
-
-    if (m_preparedVertexCount == 0u) {
-        return;
-    }
-
-    m_shader->use();
-    m_shader->setMat4("viewProj", projection * view);
-    m_shader->setInt("texArray", 0);
-    m_shader->setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(m_texArray->texture));
-
-    glBindVertexArray(m_vao);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_preparedVertexCount));
-
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+    const ParticlePushConstants pushConstants{
+        viewProj,
+        glm::vec4(0.50f, 0.78f, 0.34f, 0.0f),
+        glm::vec4(0.0f)
+    };
+    commandList.setGraphicsPipeline(m_forwardPipeline);
+    commandList.setBindGroup(0u, m_forwardBindGroup);
+    commandList.setVertexBuffer(0u, m_rhiVertexBuffer, 0u);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(m_preparedVertexCount, 1u, 0u, 0u);
 }
 
-void ParticleSystem::renderToSceneResolved(Shader& shader, uint32_t voxelLightTex, uint32_t depthTex,
+void ParticleSystem::renderToSceneResolved(RhiCommandList& commandList,
+                                            const RhiTextureHandle voxelLightTexture,
+                                            const RhiTextureHandle depthTexture,
                                             const glm::mat4& viewProj,
                                             const glm::vec2& screenSize) {
-    if (m_registry == nullptr || m_texArray == nullptr) {
+    if (m_preparedVertexCount == 0u ||
+        !ensureDeferredBindGroup(voxelLightTexture, depthTexture)) {
         return;
     }
+    const ParticlePushConstants pushConstants{
+        viewProj,
+        glm::vec4(0.50f, 0.78f, 0.34f, 0.0f),
+        glm::vec4(screenSize, 0.0f, 0.0f)
+    };
+    commandList.setGraphicsPipeline(m_deferredPipeline);
+    commandList.setBindGroup(0u, m_deferredBindGroup);
+    commandList.setVertexBuffer(0u, m_rhiVertexBuffer, 0u);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(m_preparedVertexCount, 1u, 0u, 0u);
+}
 
-    if (m_preparedVertexCount == 0u) {
-        return;
+bool ParticleSystem::createRhiResources() {
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/particle_rhi.vert");
+    const auto forwardSource = renderer::rhi::loadShaderSource("assets/shaders/particle_rhi.frag");
+    renderer::rhi::RhiShaderSourceOptions options;
+    options.preprocessorDefinitions.push_back("PARTICLE_DEFERRED");
+    const auto deferredSource = renderer::rhi::loadShaderSource("assets/shaders/particle_rhi.frag", options);
+    if (!vertexSource || !forwardSource || !deferredSource) return false;
+
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "Particle.VertexBuffer";
+    bufferDesc.size = VERTEX_BUFFER_BYTES;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    m_rhiVertexBuffer = m_rhiDevice->createBuffer(bufferDesc, nullptr, 0u);
+    RhiTextureViewDesc arrayViewDesc;
+    arrayViewDesc.texture = m_texArray->texture;
+    arrayViewDesc.viewType = RhiTextureViewType::Texture2DArray;
+    m_textureArrayView = m_rhiDevice->createTextureView(arrayViewDesc);
+    RhiSamplerDesc linearDesc;
+    linearDesc.minFilter = RhiFilter::Linear;
+    linearDesc.magFilter = RhiFilter::Linear;
+    linearDesc.mipmapMode = RhiMipmapMode::Linear;
+    linearDesc.addressU = RhiAddressMode::Repeat;
+    linearDesc.addressV = RhiAddressMode::Repeat;
+    m_linearSampler = m_rhiDevice->createSampler(linearDesc);
+    RhiSamplerDesc nearestDesc;
+    nearestDesc.minFilter = RhiFilter::Nearest;
+    nearestDesc.magFilter = RhiFilter::Nearest;
+    nearestDesc.mipmapMode = RhiMipmapMode::Nearest;
+    m_nearestSampler = m_rhiDevice->createSampler(nearestDesc);
+
+    auto createShader = [&](const char* name, RhiShaderStage stage, const std::string& source) {
+        RhiShaderDesc desc;
+        desc.debugName = name;
+        desc.stage = stage;
+        desc.source = source.c_str();
+        desc.sourceSize = source.size();
+        return m_rhiDevice->createShader(desc);
+    };
+    m_vertexShader = createShader("Particle.Vertex", RhiShaderStage::Vertex, *vertexSource);
+    m_forwardFragmentShader = createShader("Particle.ForwardFragment", RhiShaderStage::Fragment, *forwardSource);
+    m_deferredFragmentShader = createShader("Particle.DeferredFragment", RhiShaderStage::Fragment, *deferredSource);
+
+    RhiBindGroupLayoutDesc layoutDesc;
+    layoutDesc.debugName = "Particle.ForwardBindGroupLayout";
+    layoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
+                                  rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_forwardBindGroupLayout = m_rhiDevice->createBindGroupLayout(layoutDesc);
+    layoutDesc.debugName = "Particle.DeferredBindGroupLayout";
+    layoutDesc.entries.push_back({1u, RhiBindingType::CombinedTextureSampler,
+                                  rhiFlag(RhiShaderStage::Fragment), 1u});
+    layoutDesc.entries.push_back({2u, RhiBindingType::CombinedTextureSampler,
+                                  rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_deferredBindGroupLayout = m_rhiDevice->createBindGroupLayout(layoutDesc);
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Particle.ForwardPipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_forwardBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(ParticlePushConstants);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_forwardPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    pipelineLayoutDesc.debugName = "Particle.DeferredPipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts[0] = m_deferredBindGroupLayout;
+    m_deferredPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_forwardFragmentShader;
+    pipelineDesc.layout = m_forwardPipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
+    pipelineDesc.vertexInput.bindings.push_back({0u, 8u * sizeof(float), RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, 0u}, {1u, 0u, RhiVertexFormat::Float2, 3u * sizeof(float)},
+        {2u, 0u, RhiVertexFormat::Float, 5u * sizeof(float)}, {3u, 0u, RhiVertexFormat::Float, 6u * sizeof(float)},
+        {4u, 0u, RhiVertexFormat::Float, 7u * sizeof(float)}};
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    pipelineDesc.debugName = "Particle.ForwardPipeline";
+    m_forwardPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "Particle.DeferredPipeline";
+    pipelineDesc.fragmentShader = m_deferredFragmentShader;
+    pipelineDesc.layout = m_deferredPipelineLayout;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.colorFormats[0] = RhiTextureFormat::Rgba16Float;
+    pipelineDesc.depthFormat = RhiTextureFormat::Undefined;
+    m_deferredPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_forwardBindGroupLayout;
+    RhiBindGroupEntry arrayEntry;
+    arrayEntry.binding = 0u;
+    arrayEntry.resource.combinedTextureSampler = {m_textureArrayView, m_linearSampler};
+    bindGroupDesc.entries.push_back(arrayEntry);
+    m_forwardBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
+    if (!m_rhiVertexBuffer.isValid() || !m_textureArrayView.isValid() || !m_linearSampler.isValid() ||
+        !m_nearestSampler.isValid() || !m_vertexShader.isValid() || !m_forwardFragmentShader.isValid() ||
+        !m_deferredFragmentShader.isValid() || !m_forwardBindGroupLayout.isValid() ||
+        !m_deferredBindGroupLayout.isValid() || !m_forwardPipelineLayout.isValid() ||
+        !m_deferredPipelineLayout.isValid() || !m_forwardPipeline.isValid() ||
+        !m_deferredPipeline.isValid() || !m_forwardBindGroup.isValid()) {
+        destroyRhiResources();
+        return false;
     }
+    return true;
+}
 
-    shader.use();
-    shader.setMat4("viewProj", viewProj);
-    shader.setInt("texArray", 0);
-    shader.setInt("uVoxelLightTex", 1);
-    shader.setInt("uDepthTex", 2);
-    shader.setVec2("uScreenSize", screenSize);
-    shader.setVec3("uBiomeTintColor", glm::vec3(0.50f, 0.78f, 0.34f));
+bool ParticleSystem::ensureDeferredBindGroup(const RhiTextureHandle voxelLightTexture,
+                                             const RhiTextureHandle depthTexture) {
+    if (!voxelLightTexture.isValid() || !depthTexture.isValid()) return false;
+    if (m_deferredBindGroup.isValid() && sameTexture(m_boundVoxelLightTexture, voxelLightTexture) &&
+        sameTexture(m_boundDepthTexture, depthTexture)) return true;
+    destroyDeferredBindGroup();
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = voxelLightTexture;
+    m_voxelLightView = m_rhiDevice->createTextureView(viewDesc);
+    viewDesc.texture = depthTexture;
+    m_depthView = m_rhiDevice->createTextureView(viewDesc);
+    if (!m_voxelLightView.isValid() || !m_depthView.isValid()) {
+        destroyDeferredBindGroup();
+        return false;
+    }
+    RhiBindGroupDesc desc;
+    desc.layout = m_deferredBindGroupLayout;
+    const RhiTextureViewHandle views[] = {m_textureArrayView, m_voxelLightView, m_depthView};
+    const RhiSamplerHandle samplers[] = {m_linearSampler, m_linearSampler, m_nearestSampler};
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler = {views[binding], samplers[binding]};
+        desc.entries.push_back(entry);
+    }
+    m_deferredBindGroup = m_rhiDevice->createBindGroup(desc);
+    if (!m_deferredBindGroup.isValid()) {
+        destroyDeferredBindGroup();
+        return false;
+    }
+    m_boundVoxelLightTexture = voxelLightTexture;
+    m_boundDepthTexture = depthTexture;
+    return true;
+}
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(m_texArray->texture));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, voxelLightTex);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, depthTex);
+void ParticleSystem::destroyDeferredBindGroup() {
+    if (m_rhiDevice) {
+        if (m_deferredBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_deferredBindGroup);
+        if (m_depthView.isValid()) m_rhiDevice->destroyTextureView(m_depthView);
+        if (m_voxelLightView.isValid()) m_rhiDevice->destroyTextureView(m_voxelLightView);
+    }
+    m_deferredBindGroup = {};
+    m_depthView = {};
+    m_voxelLightView = {};
+    m_boundVoxelLightTexture = {};
+    m_boundDepthTexture = {};
+}
 
-    glBindVertexArray(m_vao);
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_preparedVertexCount));
-
-    glBindVertexArray(0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
+void ParticleSystem::destroyRhiResources() {
+    destroyDeferredBindGroup();
+    if (m_rhiDevice) {
+        if (m_forwardBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_forwardBindGroup);
+        if (m_deferredPipeline.isValid()) m_rhiDevice->destroyPipeline(m_deferredPipeline);
+        if (m_forwardPipeline.isValid()) m_rhiDevice->destroyPipeline(m_forwardPipeline);
+        if (m_deferredPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_deferredPipelineLayout);
+        if (m_forwardPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_forwardPipelineLayout);
+        if (m_deferredBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_deferredBindGroupLayout);
+        if (m_forwardBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_forwardBindGroupLayout);
+        if (m_deferredFragmentShader.isValid()) m_rhiDevice->destroyShader(m_deferredFragmentShader);
+        if (m_forwardFragmentShader.isValid()) m_rhiDevice->destroyShader(m_forwardFragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_nearestSampler.isValid()) m_rhiDevice->destroySampler(m_nearestSampler);
+        if (m_linearSampler.isValid()) m_rhiDevice->destroySampler(m_linearSampler);
+        if (m_textureArrayView.isValid()) m_rhiDevice->destroyTextureView(m_textureArrayView);
+        if (m_rhiVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_rhiVertexBuffer);
+    }
+    m_forwardBindGroup = {};
+    m_deferredPipeline = {};
+    m_forwardPipeline = {};
+    m_deferredPipelineLayout = {};
+    m_forwardPipelineLayout = {};
+    m_deferredBindGroupLayout = {};
+    m_forwardBindGroupLayout = {};
+    m_deferredFragmentShader = {};
+    m_forwardFragmentShader = {};
+    m_vertexShader = {};
+    m_nearestSampler = {};
+    m_linearSampler = {};
+    m_textureArrayView = {};
+    m_rhiVertexBuffer = {};
+    m_rhiDevice = nullptr;
 }

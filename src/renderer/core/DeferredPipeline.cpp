@@ -944,9 +944,6 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
     if (!m_shared->deferredTargets) return;
     auto& targets = *m_shared->deferredTargets;
 
-    Shader* particleShader = m_resourceMgr->getShader("particle_gbuffer");
-    if (!particleShader) return;
-
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     if (!targets.ensureSceneCompositeTextureView(rhiDevice)) {
         return;
@@ -969,7 +966,7 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiCommandList& commandList = rhiDevice.beginFrame();
-    m_shared->particleSystem->prepareFrame(ctx.camera.view);
+    m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
     commandList.beginRendering(renderingInfo);
 
     const glm::mat4& viewProj = m_currentSettings.taa.enabled
@@ -979,20 +976,12 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
         static_cast<float>(std::max(1, targets.width())),
         static_cast<float>(std::max(1, targets.height())));
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
     m_shared->particleSystem->renderToSceneResolved(
-        *particleShader,
-        renderer::rhi::gl::textureId(targets.voxelLightTextureHandle()),
-        renderer::rhi::gl::textureId(targets.depthTextureHandle()),
+        commandList,
+        targets.voxelLightTextureHandle(),
+        targets.depthTextureHandle(),
         viewProj,
         screenSize);
-
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
 
     commandList.endRendering();
     rhiDevice.submitFrame(commandList);

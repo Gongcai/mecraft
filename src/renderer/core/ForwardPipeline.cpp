@@ -71,7 +71,7 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
         return {};
     }
     if (settings.weather.particlesEnabled && m_shared->particleSystem) {
-        m_shared->particleSystem->prepareFrame(ctx.camera.view);
+        m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
     }
     if (!beginBackbufferFrame(ctx)) {
         m_shared->rhiDevice->submitFrame(commandList);
@@ -322,7 +322,7 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
     }
 
     if (settings.weather.particlesEnabled && m_shared->particleSystem) {
-        m_shared->particleSystem->render(ctx.camera.projection, ctx.camera.view);
+        m_shared->particleSystem->render(*m_backbufferCommandList, ctx.camera.projection * ctx.camera.view);
     }
 }
 
