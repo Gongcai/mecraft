@@ -206,14 +206,9 @@ void GBufferPass::executeFallingBlocks(const IWorldView& worldView, const FrameC
         return;
     }
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
-
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
-    fallingBlockRenderer->renderToGBuffer(viewProj, previousViewProj, ctx.animationTime);
+    fallingBlockRenderer->renderToGBuffer(*commandList, viewProj, previousViewProj, ctx.animationTime);
 
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);

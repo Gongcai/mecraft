@@ -100,7 +100,9 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     // Entity renderers
     blockEntityRenderer.init(resourceMgr);
     dropRenderer.init(resourceMgr);
-    fallingBlockRenderer.init(resourceMgr);
+    if (!fallingBlockRenderer.init(resourceMgr)) {
+        return false;
+    }
     firstPersonHeldItemRenderer.init(resourceMgr, renderer.rhiDevice());
     humanoidRenderer.init(resourceMgr, renderer.rhiDevice());
 

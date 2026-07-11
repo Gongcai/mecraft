@@ -15,6 +15,8 @@
 class Camera;
 class IWorldView;
 class ResourceMgr;
+class RhiCommandList;
+class RhiDevice;
 class Window;
 
 namespace ecs { class GameplayRegistry; }
@@ -23,18 +25,18 @@ namespace ecs { class GameplayRegistry; }
 /// translated to the entity's interpolated render position.
 ///
 /// Geometry is shared with DropRenderer via renderer::buildBlockCubeMesh.
-/// Lighting/shadow shaders are reused (drop_gbuffer / shadow_depth) — no new
-/// shaders required. Reuses DropEntityIdComponent as the per-object velocity key.
+/// Uses an explicit RHI GBuffer pipeline and the transitional shadow-depth path.
+/// Reuses DropEntityIdComponent as the per-object velocity key.
 class FallingBlockRenderer {
 public:
-    void init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
     void shutdown();
     void prepareFrame(const IWorldView& worldView, const ecs::GameplayRegistry& registry);
 
     // GBuffer path: renders falling blocks into the deferred GBuffer.
     // Caller must have already bound the GBuffer FBO with terrain+entity depth
     // and attached the per-object velocity target.
-    void renderToGBuffer(const glm::mat4& jitteredViewProj,
+    void renderToGBuffer(RhiCommandList& commandList, const glm::mat4& jitteredViewProj,
                          const glm::mat4& previousViewProj,
                          float animationTime);
 
@@ -53,14 +55,26 @@ private:
     };
 
     const renderer::BlockCubeMesh* getOrCreateMesh(BlockStateId stateId);
+    [[nodiscard]] bool createGBufferRhiResources();
+    void destroyGBufferRhiResources();
 
     ResourceMgr* m_resourceMgr = nullptr;
-    Shader* m_gbufferShader = nullptr;   // drop_gbuffer (block path)
+    RhiDevice* m_rhiDevice = nullptr;
     Shader* m_shadowShader = nullptr;    // shadow_depth (block path, uUseModel=1)
     std::unordered_map<BlockStateId, renderer::BlockCubeMesh> m_meshes;
     // Per-object velocity: previous-frame model matrix per entity (by drop ID).
     std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
     std::vector<RenderInstance> m_renderInstances;
+    RhiTextureViewHandle m_textureArrayView;
+    RhiTextureViewHandle m_grassColormapView;
+    RhiTextureViewHandle m_foliageColormapView;
+    RhiSamplerHandle m_sampler;
+    RhiShaderHandle m_gbufferVertexShader;
+    RhiShaderHandle m_gbufferFragmentShader;
+    RhiBindGroupLayoutHandle m_gbufferBindGroupLayout;
+    RhiPipelineLayoutHandle m_gbufferPipelineLayout;
+    RhiPipelineHandle m_gbufferPipeline;
+    RhiBindGroupHandle m_gbufferBindGroup;
 };
 
 #endif // MECRAFT_FALLING_BLOCK_RENDERER_H
