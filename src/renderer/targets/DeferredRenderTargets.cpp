@@ -95,6 +95,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createMotionTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -219,27 +223,7 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     m_ssgiTemporalMomentsTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-    // TemporalCurrent: TAA current-frame scratch buffer. Avoids reading
-    // history[current] as TAA input (which conflicts with the "history
-    // only written once per frame" invariant).
-    m_temporalCurrentTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
     m_currentHistoryIndex = 0;
-
-    // Velocity buffer (RG16F)
-    m_velocityTex = createTexture2D(GL_RG16F, m_width, m_height, GL_RG, GL_FLOAT,
-                                    GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
-    // Per-object velocity (RG16F) — screen-space velocity written by entity/drop
-    // shaders during GBuffer fill. Temporarily attached to GBuffer FBO as
-    // GL_COLOR_ATTACHMENT5 during entity/drop rendering, detached afterward.
-    m_perObjectVelocityTex = createTexture2D(GL_RG16F, m_width, m_height, GL_RG, GL_FLOAT,
-                                             GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
-    // Weather mask (R8) — additive-blended weather particle alpha.
-    // Equivalent to DerivativeMain colortex0.b from gbuffers_weather.
-    m_weatherMaskTex = createTexture2D(GL_R8, m_width, m_height, GL_RED, GL_UNSIGNED_BYTE,
-                                       GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
     if (!registerRhiTextures()) {
         shutdown();
@@ -283,10 +267,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
     }
-    renderer::debug::labelTexture(m_temporalCurrentTex, "DeferredTargets.TemporalCurrentTex");
-    renderer::debug::labelTexture(m_velocityTex, "DeferredTargets.VelocityTex");
-    renderer::debug::labelTexture(m_perObjectVelocityTex, "DeferredTargets.PerObjectVelocity");
-    renderer::debug::labelTexture(m_weatherMaskTex, "DeferredTargets.WeatherMaskTex");
     renderer::debug::labelTexture(m_atmosphereLut3d, "DeferredTargets.AtmosphereLUT");
     m_ready = true;
     return true;
@@ -943,57 +923,70 @@ void DeferredRenderTargets::destroyEffectHistoryTextures() {
     }
 }
 
+bool DeferredRenderTargets::createMotionTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = format;
+        desc.width = static_cast<uint32_t>(m_width);
+        desc.height = static_cast<uint32_t>(m_height);
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = usage;
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    const RhiTextureUsageFlags attachmentUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::ColorAttachment);
+    if (!createTexture("DeferredTargets.TemporalCurrent",
+                       RhiTextureFormat::Rgba16Float,
+                       rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst),
+                       m_temporalCurrentHandle) ||
+        !createTexture("DeferredTargets.Velocity", RhiTextureFormat::Rg16Float,
+                       attachmentUsage, m_velocityHandle) ||
+        !createTexture("DeferredTargets.PerObjectVelocity", RhiTextureFormat::Rg16Float,
+                       attachmentUsage, m_perObjectVelocityHandle) ||
+        !createTexture("DeferredTargets.WeatherMask", RhiTextureFormat::R8Unorm,
+                       attachmentUsage, m_weatherMaskHandle)) {
+        destroyMotionTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroyMotionTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiTextureHandle* textures[] = {
+        &m_temporalCurrentHandle,
+        &m_velocityHandle,
+        &m_perObjectVelocityHandle,
+        &m_weatherMaskHandle
+    };
+    for (RhiTextureHandle* texture : textures) {
+        if (texture->isValid()) {
+            m_rhiDevice->destroyTexture(*texture);
+            *texture = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
-    m_temporalCurrentHandle = renderer::rhi::gl::registerTexture({
-        m_temporalCurrentTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_velocityHandle = renderer::rhi::gl::registerTexture({
-        m_velocityTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rg16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_perObjectVelocityHandle = renderer::rhi::gl::registerTexture({
-        m_perObjectVelocityTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rg16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_weatherMaskHandle = renderer::rhi::gl::registerTexture({
-        m_weatherMaskTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::R8Unorm,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
     m_shadowDepthHandle = renderer::rhi::gl::registerTexture({
         m_shadowDepth,
         RhiTextureDimension::Texture2D,
@@ -2971,10 +2964,7 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyAtmosphereTextures();
     destroySceneHistoryTextures();
     destroyEffectHistoryTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_temporalCurrentHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_velocityHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_perObjectVelocityHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_weatherMaskHandle);
+    destroyMotionTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_atmosphereLutHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthComparisonHandle);
@@ -3021,7 +3011,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_csmShadowColor1,
         m_ssaoTex,
         m_ssaoFilteredTex,
-        m_temporalCurrentTex,
         m_ssaoHalfResTex, m_ssaoHalfResFilteredTex,
         m_ssaoHistoryTex[0], m_ssaoHistoryTex[1],
         m_ssaoTemporalTex,
@@ -3032,9 +3021,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssgiMomentsHistoryTex[0], m_ssgiMomentsHistoryTex[1],
         m_ssgiTemporalTex,
         m_ssgiTemporalMomentsTex,
-        m_velocityTex,
-        m_perObjectVelocityTex,
-        m_weatherMaskTex
     };
     for (const GLuint texture : textures) {
         if (texture != 0) {
@@ -3056,7 +3042,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoFilteredTex = 0;
     m_ssaoHalfResTex = 0;
     m_ssaoHalfResFilteredTex = 0;
-    m_temporalCurrentTex = 0;
     m_ssaoHistoryTex[0] = 0; m_ssaoHistoryTex[1] = 0;
     m_ssaoTemporalTex = 0;
     m_ssgiTex = 0;
@@ -3066,9 +3051,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssgiMomentsHistoryTex[0] = 0; m_ssgiMomentsHistoryTex[1] = 0;
     m_ssgiTemporalTex = 0;
     m_ssgiTemporalMomentsTex = 0;
-    m_velocityTex = 0;
-    m_perObjectVelocityTex = 0;
-    m_weatherMaskTex = 0;
 
     m_currentHistoryIndex = 0;
     m_ssaoHistoryIndex = 0;
