@@ -288,12 +288,62 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     visiblePipelineDesc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
     visiblePipelineDesc.blend.attachments.resize(1u);
     m_visiblePipeline = rhiDevice.createGraphicsPipeline(visiblePipelineDesc);
+    const auto haloVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/gameplay_sky_halo_rhi.vert");
+    const auto haloFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/gameplay_sky_halo_rhi.frag");
+    if (!haloVertexSource || !haloFragmentSource) std::abort();
+    RhiShaderDesc haloShaderDesc;
+    haloShaderDesc.debugName = "GameplaySky.Halo.Vertex";
+    haloShaderDesc.stage = RhiShaderStage::Vertex;
+    haloShaderDesc.source = haloVertexSource->c_str();
+    haloShaderDesc.sourceSize = haloVertexSource->size();
+    m_haloVertexShader = rhiDevice.createShader(haloShaderDesc);
+    haloShaderDesc.debugName = "GameplaySky.Halo.Fragment";
+    haloShaderDesc.stage = RhiShaderStage::Fragment;
+    haloShaderDesc.source = haloFragmentSource->c_str();
+    haloShaderDesc.sourceSize = haloFragmentSource->size();
+    m_haloFragmentShader = rhiDevice.createShader(haloShaderDesc);
+    RhiPipelineLayoutDesc haloLayoutDesc;
+    haloLayoutDesc.debugName = "GameplaySky.Halo.PipelineLayout";
+    haloLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    haloLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                        rhiFlag(RhiShaderStage::Fragment);
+    m_haloPipelineLayout = rhiDevice.createPipelineLayout(haloLayoutDesc);
+    RhiGraphicsPipelineDesc haloPipelineDesc;
+    haloPipelineDesc.debugName = "GameplaySky.Halo.Pipeline";
+    haloPipelineDesc.vertexShader = m_haloVertexShader;
+    haloPipelineDesc.fragmentShader = m_haloFragmentShader;
+    haloPipelineDesc.layout = m_haloPipelineLayout;
+    haloPipelineDesc.vertexInput.bindings = {
+        {0u, sizeof(HaloVertex), RhiVertexInputRate::Vertex}
+    };
+    haloPipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, offsetof(HaloVertex, position)},
+        {1u, 0u, RhiVertexFormat::Float2, offsetof(HaloVertex, uv)},
+        {2u, 0u, RhiVertexFormat::Float4, offsetof(HaloVertex, color)}
+    };
+    haloPipelineDesc.raster.cullMode = RhiCullMode::None;
+    haloPipelineDesc.depthStencil.depthTestEnabled = false;
+    haloPipelineDesc.depthStencil.depthWriteEnabled = false;
+    haloPipelineDesc.colorFormats = {rhiDevice.swapchainColorFormat()};
+    haloPipelineDesc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
+    RhiBlendAttachmentState haloBlend;
+    haloBlend.blendEnabled = true;
+    haloBlend.srcColor = RhiBlendFactor::SrcAlpha;
+    haloBlend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    haloBlend.srcAlpha = RhiBlendFactor::One;
+    haloBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    haloPipelineDesc.blend.attachments.push_back(haloBlend);
+    m_haloPipeline = rhiDevice.createGraphicsPipeline(haloPipelineDesc);
     if (!m_captureUniformBuffer.isValid() || !m_captureSampler.isValid() ||
         !m_captureBindGroupLayout.isValid() || !m_capturePipelineLayout.isValid() ||
         !m_captureVertexShader.isValid() || !m_captureFragmentShader.isValid() ||
         !m_capturePipeline.isValid() || !m_visibleVertexShader.isValid() ||
         !m_visibleFragmentShader.isValid() || !m_visiblePipelineLayout.isValid() ||
-        !m_visiblePipeline.isValid()) std::abort();
+        !m_visiblePipeline.isValid() || !m_haloVertexShader.isValid() ||
+        !m_haloFragmentShader.isValid() || !m_haloPipelineLayout.isValid() ||
+        !m_haloPipeline.isValid()) std::abort();
     m_deferredShader = resourceMgr.getShader("gameplay_sky");
     m_shader = m_deferredShader;
     initMeshes();
@@ -307,6 +357,10 @@ void GameplaySkyRenderer::shutdown() {
     if (m_captureNoiseView.isValid()) m_rhiDevice->destroyTextureView(m_captureNoiseView);
     if (m_capturePipeline.isValid()) m_rhiDevice->destroyPipeline(m_capturePipeline);
     if (m_visiblePipeline.isValid()) m_rhiDevice->destroyPipeline(m_visiblePipeline);
+    if (m_haloPipeline.isValid()) m_rhiDevice->destroyPipeline(m_haloPipeline);
+    if (m_haloPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_haloPipelineLayout);
+    if (m_haloFragmentShader.isValid()) m_rhiDevice->destroyShader(m_haloFragmentShader);
+    if (m_haloVertexShader.isValid()) m_rhiDevice->destroyShader(m_haloVertexShader);
     if (m_visiblePipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_visiblePipelineLayout);
     if (m_visibleFragmentShader.isValid()) m_rhiDevice->destroyShader(m_visibleFragmentShader);
     if (m_visibleVertexShader.isValid()) m_rhiDevice->destroyShader(m_visibleVertexShader);
@@ -324,6 +378,10 @@ void GameplaySkyRenderer::shutdown() {
     m_captureBindGroup = {};
     m_capturePipeline = {};
     m_visiblePipeline = {};
+    m_haloPipeline = {};
+    m_haloPipelineLayout = {};
+    m_haloFragmentShader = {};
+    m_haloVertexShader = {};
     m_visiblePipelineLayout = {};
     m_visibleFragmentShader = {};
     m_visibleVertexShader = {};
@@ -436,7 +494,7 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect,
         rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     const renderer::gl::ScopedStateSnapshot stateGuard;
-    renderHalo(camera, aspect, dayNight, m_lastColors);
+    renderHalo(camera, aspect, dayNight, m_lastColors, commandList);
     renderClouds(camera, aspect, dayNight, m_lastColors);
 }
 
@@ -1055,8 +1113,9 @@ void GameplaySkyRenderer::renderClouds(const Camera& camera,
 void GameplaySkyRenderer::renderHalo(const Camera& camera,
                                      const float aspect,
                                      const DayNightSystem& dayNight,
-                                     const SkyColors& colors) {
-    if (m_haloVao == 0 || colors.haloStrength <= 0.001f) {
+                                     const SkyColors& colors,
+                                     RhiCommandList& commandList) {
+    if (!m_haloVertexBuffer.isValid() || colors.haloStrength <= 0.001f) {
         return;
     }
 
@@ -1071,20 +1130,18 @@ void GameplaySkyRenderer::renderHalo(const Camera& camera,
     model[2] = glm::vec4(direction, 0.0f);
     model[3] = glm::vec4(direction * 12.0f, 1.0f);
 
-    m_shader->use();
-    m_shader->setInt("uMode", 2);
-    m_shader->setMat4("uView", buildSkyView(camera));
-    m_shader->setMat4("uProjection", glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f));
-    m_shader->setMat4("uModel", model);
-    m_shader->setVec4("uTintColor", colors.halo);
-    bindDummySkyCaptureTexture(0);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glBindVertexArray(m_haloVao);
-    glDrawArrays(GL_TRIANGLES, 0, m_haloVertexCount);
-    glBindVertexArray(0);
-    glDisable(GL_BLEND);
+    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 tint; };
+    const PushConstants constants{
+        glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f) *
+            buildSkyView(camera),
+        model,
+        colors.halo
+    };
+    commandList.setGraphicsPipeline(m_haloPipeline);
+    commandList.setVertexBuffer(0u, m_haloVertexBuffer, 0u);
+    commandList.pushConstants(&constants, sizeof(constants),
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(static_cast<uint32_t>(m_haloVertexCount), 1u, 0u, 0u);
 }
 
 glm::mat4 GameplaySkyRenderer::buildSkyView(const Camera& camera) const {
