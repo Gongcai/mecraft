@@ -23,6 +23,7 @@ class DropRenderer;
 class FallingBlockRenderer;
 class DropSystem;
 class WorldRenderBuffer;
+class RhiCommandList;
 
 namespace ecs { class GameplayRegistry; }
 
@@ -80,9 +81,9 @@ private:
                             float animationTime, float shaderTime);
 
     /// Render falling-block entities into the current shadow cascade layer.
-    void renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
-                                    const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                                    float animationTime, float shaderTime);
+    void renderShadowFallingBlocks(RhiCommandList& commandList,
+                                   const glm::mat4& shadowViewProj,
+                                   float animationTime);
 
     Shader* m_entityShadowShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;

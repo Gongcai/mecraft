@@ -129,22 +129,16 @@ void ShadowPass::renderShadowDrops(const IWorldView& worldView, const glm::mat4&
 
 }
 
-void ShadowPass::renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
-                                            const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                                            float animationTime, float shaderTime) {
+void ShadowPass::renderShadowFallingBlocks(RhiCommandList& commandList,
+                                            const glm::mat4& shadowViewProj,
+                                            float animationTime) {
     // Render falling-block entities into the current shadow cascade layer.
     // Shadow FBO layer is already bound by the caller (execute).
     if (m_fallingBlockRenderer == nullptr || m_gameplayRegistry == nullptr) {
         return;
     }
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
-
-    m_fallingBlockRenderer->renderToShadowMap(shadowViewProj, shadowView, shadowProjection,
-                                               animationTime, shaderTime);
+    m_fallingBlockRenderer->renderToShadowMap(commandList, shadowViewProj, animationTime);
 
 }
 
@@ -385,8 +379,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             renderShadowDrops(worldView, cascadeData.viewProj, cascadeData.view, cascadeData.projection,
                               ctx.animationTime, ctx.shaderTime);
             // Falling-block shadow: render falling sand/gravel depth into this cascade.
-            renderShadowFallingBlocks(cascadeData.viewProj, cascadeData.view, cascadeData.projection,
-                                      ctx.animationTime, ctx.shaderTime);
+            renderShadowFallingBlocks(commandList, cascadeData.viewProj, ctx.animationTime);
             if (shadowStatsActive) {
                 debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::OpaqueEnd);
             }

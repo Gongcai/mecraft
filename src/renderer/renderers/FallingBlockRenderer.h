@@ -7,7 +7,6 @@
 
 #include <glm/glm.hpp>
 
-#include "../core/Shader.h"
 #include "../mesh/BlockMeshBuilder.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockStateRegistry.h"
@@ -25,7 +24,7 @@ namespace ecs { class GameplayRegistry; }
 /// translated to the entity's interpolated render position.
 ///
 /// Geometry is shared with DropRenderer via renderer::buildBlockCubeMesh.
-/// Uses an explicit RHI GBuffer pipeline and the transitional shadow-depth path.
+/// Uses explicit RHI GBuffer and shadow-depth pipelines.
 /// Reuses DropEntityIdComponent as the per-object velocity key.
 class FallingBlockRenderer {
 public:
@@ -42,9 +41,8 @@ public:
 
     // Shadow path: renders falling blocks into the CSM shadow map.
     // Caller must have already bound the shadow FBO layer.
-    void renderToShadowMap(const glm::mat4& shadowViewProj,
-                           const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                           float animationTime, float shaderTime);
+    void renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
+                           float animationTime);
 
 private:
     struct RenderInstance {
@@ -60,7 +58,6 @@ private:
 
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
-    Shader* m_shadowShader = nullptr;    // shadow_depth (block path, uUseModel=1)
     std::unordered_map<BlockStateId, renderer::BlockCubeMesh> m_meshes;
     // Per-object velocity: previous-frame model matrix per entity (by drop ID).
     std::unordered_map<std::size_t, glm::mat4> m_previousModelMatrices;
@@ -75,6 +72,12 @@ private:
     RhiPipelineLayoutHandle m_gbufferPipelineLayout;
     RhiPipelineHandle m_gbufferPipeline;
     RhiBindGroupHandle m_gbufferBindGroup;
+    RhiShaderHandle m_shadowVertexShader;
+    RhiShaderHandle m_shadowFragmentShader;
+    RhiBindGroupLayoutHandle m_shadowBindGroupLayout;
+    RhiPipelineLayoutHandle m_shadowPipelineLayout;
+    RhiPipelineHandle m_shadowPipeline;
+    RhiBindGroupHandle m_shadowBindGroup;
 };
 
 #endif // MECRAFT_FALLING_BLOCK_RENDERER_H
