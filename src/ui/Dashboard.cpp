@@ -376,7 +376,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                              ImVec2(0.0f, 55.0f));
         }
 
-        ImGui::Text("Terrain RHI Submissions: %d", render.getGlSubmitCount());
+        ImGui::Text("Terrain RHI Submissions: %d", render.getTerrainRhiSubmitCount());
 
         GpuFrameStats gpuStats = m_displayGpuStats;
         bool gpuTimerEnabled = render.isGpuTimerEnabled();

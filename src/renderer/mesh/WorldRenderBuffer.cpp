@@ -1,13 +1,8 @@
 #include "WorldRenderBuffer.h"
-#include "../debug/RenderDebugLabels.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 
-#include <glad/glad.h>
-
 #include <algorithm>
-#include <cstdio>
-#include <cstring>
 #include <cmath>
 #include <limits>
 
@@ -254,91 +249,6 @@ float VertexRangeAllocator::fragmentationRatio() const {
 }
 
 // ---------------------------------------------------------------------------
-// VertexPoolAllocator
-// ---------------------------------------------------------------------------
-
-VertexPoolAllocator::VertexPoolAllocator() = default;
-
-VertexPoolAllocator::~VertexPoolAllocator() {
-    shutdown();
-}
-
-void VertexPoolAllocator::init(const size_t initialCapacityVertices) {
-    shutdown();
-
-    const size_t bytes = initialCapacityVertices * sizeof(PackedBlockVertex);
-    glCreateBuffers(1, &m_vbo);
-    glNamedBufferStorage(m_vbo, static_cast<GLsizeiptr>(bytes), nullptr, GL_DYNAMIC_STORAGE_BIT);
-    m_ranges.init(initialCapacityVertices);
-}
-
-void VertexPoolAllocator::shutdown() {
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
-    m_ranges.shutdown();
-    m_expandCountThisFrame = 0;
-    m_uploadedBytesThisFrame = 0;
-}
-
-bool VertexPoolAllocator::allocate(const uint32_t vertexCount, GpuMeshRange& outRange) {
-    if (m_ranges.allocate(vertexCount, outRange)) {
-        return true;
-    }
-
-    const size_t currentCapacity = m_ranges.capacityVertices();
-    const size_t newCapacity = std::max<size_t>(
-        currentCapacity + vertexCount,
-        currentCapacity == 0 ? vertexCount : currentCapacity * 2);
-    expand(newCapacity);
-    return m_ranges.allocate(vertexCount, outRange);
-}
-
-void VertexPoolAllocator::free(const GpuMeshRange& range) {
-    m_ranges.free(range);
-}
-
-void VertexPoolAllocator::upload(const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices) {
-    if (vertices.empty()) return;
-    const size_t bytes = vertices.size() * sizeof(PackedBlockVertex);
-    glNamedBufferSubData(m_vbo,
-                         static_cast<GLintptr>(range.firstVertex) * sizeof(PackedBlockVertex),
-                         static_cast<GLsizeiptr>(bytes),
-                         vertices.data());
-    m_uploadedBytesThisFrame += bytes;
-}
-
-void VertexPoolAllocator::expand(const size_t newCapacityVertices) {
-    const size_t oldCapacity = m_ranges.capacityVertices();
-    if (newCapacityVertices <= oldCapacity) return;
-    ++m_expandCountThisFrame;
-
-    GLuint newVbo = 0;
-    glCreateBuffers(1, &newVbo);
-    glNamedBufferStorage(newVbo,
-                         static_cast<GLsizeiptr>(newCapacityVertices * sizeof(PackedBlockVertex)),
-                         nullptr,
-                         GL_DYNAMIC_STORAGE_BIT);
-
-    if (m_vbo != 0 && oldCapacity > 0) {
-        glCopyNamedBufferSubData(m_vbo, newVbo, 0, 0,
-                                 static_cast<GLsizeiptr>(oldCapacity * sizeof(PackedBlockVertex)));
-        glDeleteBuffers(1, &m_vbo);
-    }
-
-    m_vbo = newVbo;
-    m_ranges.grow(newCapacityVertices);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-}
-
-void VertexPoolAllocator::beginFrame() {
-    m_expandCountThisFrame = 0;
-    m_uploadedBytesThisFrame = 0;
-}
-
-// ---------------------------------------------------------------------------
 // RhiVertexPoolAllocator
 // ---------------------------------------------------------------------------
 
@@ -479,48 +389,16 @@ WorldRenderBuffer::~WorldRenderBuffer() {
     shutdown();
 }
 
-void WorldRenderBuffer::setupVertexLayout() {
-    for (GLuint attrib = 0; attrib <= 10; ++attrib) {
-        glDisableVertexAttribArray(attrib);
-    }
-
-    glEnableVertexAttribArray(11);
-    glVertexAttribIPointer(11, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, posPacked)));
-
-    glEnableVertexAttribArray(12);
-    glVertexAttribIPointer(12, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, uvPacked)));
-
-    glEnableVertexAttribArray(13);
-    glVertexAttribIPointer(13, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, lightAoLayer)));
-
-    glEnableVertexAttribArray(14);
-    glVertexAttribIPointer(14, 1, GL_UNSIGNED_INT, sizeof(PackedBlockVertex), reinterpret_cast<void*>(offsetof(PackedBlockVertex, tintAnim)));
-}
-
 bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
     shutdown();
     m_rhiDevice = &rhiDevice;
-    m_opaquePool.init(kInitialPoolVertices);
-    m_cutoutPool.init(kInitialCutoutPoolVertices);
-    m_transparentPool.init(kInitialTransparentPoolVertices);
 
     const uint64_t commandBytes = kInitialIndirectCapacity * sizeof(DrawArraysIndirectCommand);
     const uint64_t metadataBytes = kInitialIndirectCapacity * sizeof(SubChunkDrawMetadata);
-    if (!m_rhiOpaqueVertexBuffer.init(
-            rhiDevice,
-            kInitialPoolVertices * sizeof(PackedBlockVertex),
-            rhiFlag(RhiBufferUsage::Vertex),
-            "WorldRenderBuffer.RhiOpaqueVertices") ||
-        !m_rhiCutoutVertexBuffer.init(
-            rhiDevice,
-            kInitialCutoutPoolVertices * sizeof(PackedBlockVertex),
-            rhiFlag(RhiBufferUsage::Vertex),
-            "WorldRenderBuffer.RhiCutoutVertices") ||
-        !m_rhiTransparentVertexBuffer.init(
-            rhiDevice,
-            kInitialTransparentPoolVertices * sizeof(PackedBlockVertex),
-            rhiFlag(RhiBufferUsage::Vertex),
-            "WorldRenderBuffer.RhiTransparentVertices") ||
+    if (!m_opaquePool.init(rhiDevice, kInitialPoolVertices, "WorldRenderBuffer.OpaqueVertices") ||
+        !m_cutoutPool.init(rhiDevice, kInitialCutoutPoolVertices, "WorldRenderBuffer.CutoutVertices") ||
+        !m_transparentPool.init(
+            rhiDevice, kInitialTransparentPoolVertices, "WorldRenderBuffer.TransparentVertices") ||
         !m_rhiOpaqueIndirectBuffer.init(
             rhiDevice,
             commandBytes,
@@ -549,72 +427,7 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
         shutdown();
         return false;
     }
-
-    // Create three VAOs (one per pool)
-    glGenVertexArrays(1, &m_opaqueVao);
-    glBindVertexArray(m_opaqueVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_opaquePool.vbo());
-    setupVertexLayout();
-    m_opaqueVaoBoundVbo = m_opaquePool.vbo();
-    glBindVertexArray(0);
-
-    glGenVertexArrays(1, &m_cutoutVao);
-    glBindVertexArray(m_cutoutVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_cutoutPool.vbo());
-    setupVertexLayout();
-    m_cutoutVaoBoundVbo = m_cutoutPool.vbo();
-    glBindVertexArray(0);
-
-    glGenVertexArrays(1, &m_transparentVao);
-    glBindVertexArray(m_transparentVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_transparentPool.vbo());
-    setupVertexLayout();
-    m_transparentVaoBoundVbo = m_transparentPool.vbo();
-    glBindVertexArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-    // Create indirect buffers
-    m_opaqueIndirectCapacity = kInitialIndirectCapacity;
-    m_cutoutIndirectCapacity = kInitialIndirectCapacity;
-    m_transparentIndirectCapacity = kInitialIndirectCapacity;
-    m_waterIndirectCapacity = kInitialIndirectCapacity;
-
-    glCreateBuffers(1, &m_opaqueIndirectBuf);
-    glNamedBufferStorage(m_opaqueIndirectBuf,
-                         static_cast<GLsizeiptr>(m_opaqueIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
-                         nullptr,
-                         GL_DYNAMIC_STORAGE_BIT);
-    glCreateBuffers(1, &m_cutoutIndirectBuf);
-    glNamedBufferStorage(m_cutoutIndirectBuf,
-                         static_cast<GLsizeiptr>(m_cutoutIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
-                         nullptr,
-                         GL_DYNAMIC_STORAGE_BIT);
-    glCreateBuffers(1, &m_transparentIndirectBuf);
-    glNamedBufferStorage(m_transparentIndirectBuf,
-                         static_cast<GLsizeiptr>(m_transparentIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
-                         nullptr,
-                         GL_DYNAMIC_STORAGE_BIT);
-    glCreateBuffers(1, &m_waterIndirectBuf);
-    glNamedBufferStorage(m_waterIndirectBuf,
-                         static_cast<GLsizeiptr>(m_waterIndirectCapacity * sizeof(DrawArraysIndirectCommand)),
-                         nullptr,
-                         GL_DYNAMIC_STORAGE_BIT);
-    glCreateBuffers(1, &m_subChunkMetadataBuffer);
     m_subChunkMetadata.reserve(kInitialIndirectCapacity);
-
-    // Label GL objects for RenderDoc / KHR_debug inspection
-    renderer::debug::labelVertexArray(m_opaqueVao, "WorldRenderBuffer.OpaqueVAO");
-    renderer::debug::labelVertexArray(m_cutoutVao, "WorldRenderBuffer.CutoutVAO");
-    renderer::debug::labelVertexArray(m_transparentVao, "WorldRenderBuffer.TransparentVAO");
-    renderer::debug::labelBuffer(m_opaquePool.vbo(), "WorldRenderBuffer.OpaqueVBO");
-    renderer::debug::labelBuffer(m_cutoutPool.vbo(), "WorldRenderBuffer.CutoutVBO");
-    renderer::debug::labelBuffer(m_transparentPool.vbo(), "WorldRenderBuffer.TransparentVBO");
-    renderer::debug::labelBuffer(m_opaqueIndirectBuf, "WorldRenderBuffer.OpaqueIndirect");
-    renderer::debug::labelBuffer(m_cutoutIndirectBuf, "WorldRenderBuffer.CutoutIndirect");
-    renderer::debug::labelBuffer(m_transparentIndirectBuf, "WorldRenderBuffer.TransparentIndirect");
-    renderer::debug::labelBuffer(m_waterIndirectBuf, "WorldRenderBuffer.WaterIndirectBuffer");
-    renderer::debug::labelBuffer(m_subChunkMetadataBuffer, "WorldRenderBuffer.SubChunkMetadata");
 
     m_opaqueCommands.reserve(kInitialIndirectCapacity);
     m_cutoutCommands.reserve(kInitialIndirectCapacity);
@@ -635,34 +448,12 @@ void WorldRenderBuffer::shutdown() {
     m_rhiTransparentIndirectBuffer.shutdown();
     m_rhiCutoutIndirectBuffer.shutdown();
     m_rhiOpaqueIndirectBuffer.shutdown();
-    m_rhiTransparentVertexBuffer.shutdown();
-    m_rhiCutoutVertexBuffer.shutdown();
-    m_rhiOpaqueVertexBuffer.shutdown();
-    m_rhiDevice = nullptr;
-
     m_opaquePool.shutdown();
     m_cutoutPool.shutdown();
     m_transparentPool.shutdown();
-
-    if (m_opaqueVao != 0) { glDeleteVertexArrays(1, &m_opaqueVao); m_opaqueVao = 0; }
-    if (m_cutoutVao != 0) { glDeleteVertexArrays(1, &m_cutoutVao); m_cutoutVao = 0; }
-    if (m_transparentVao != 0) { glDeleteVertexArrays(1, &m_transparentVao); m_transparentVao = 0; }
-    m_opaqueVaoBoundVbo = 0;
-    m_cutoutVaoBoundVbo = 0;
-    m_transparentVaoBoundVbo = 0;
-
-    if (m_opaqueIndirectBuf != 0) { glDeleteBuffers(1, &m_opaqueIndirectBuf); m_opaqueIndirectBuf = 0; }
-    if (m_cutoutIndirectBuf != 0) { glDeleteBuffers(1, &m_cutoutIndirectBuf); m_cutoutIndirectBuf = 0; }
-    if (m_transparentIndirectBuf != 0) { glDeleteBuffers(1, &m_transparentIndirectBuf); m_transparentIndirectBuf = 0; }
-    if (m_waterIndirectBuf != 0) { glDeleteBuffers(1, &m_waterIndirectBuf); m_waterIndirectBuf = 0; }
-    if (m_subChunkMetadataBuffer != 0) { glDeleteBuffers(1, &m_subChunkMetadataBuffer); m_subChunkMetadataBuffer = 0; }
+    m_rhiDevice = nullptr;
     m_subChunkMetadata.clear();
     m_freeSubChunkMetadataIndices.clear();
-
-    m_opaqueIndirectCapacity = 0;
-    m_cutoutIndirectCapacity = 0;
-    m_transparentIndirectCapacity = 0;
-    m_waterIndirectCapacity = 0;
 }
 
 WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
@@ -711,86 +502,67 @@ WorldGpuMesh WorldRenderBuffer::uploadSubChunk(
     };
 
     if (!opaque.empty()) {
-        if (!m_opaquePool.allocate(static_cast<uint32_t>(opaque.size()), result.opaque)) {
+        if (!m_opaquePool.allocate(commandList, static_cast<uint32_t>(opaque.size()), result.opaque)) {
             free(result);
             return {};
         }
         result.opaque.metadataIndex = result.metadataIndex;
         const std::vector<PackedBlockVertex> packed = makePacked(opaque);
-        m_opaquePool.upload(result.opaque, packed);
-        if (!m_rhiOpaqueVertexBuffer.write(
-                commandList,
-                static_cast<uint64_t>(result.opaque.firstVertex) * sizeof(PackedBlockVertex),
-                packed.data(),
-                packed.size() * sizeof(PackedBlockVertex))) {
+        if (!m_opaquePool.upload(commandList, result.opaque, packed)) {
             free(result);
             return {};
         }
     }
     if (!cutout.empty()) {
-        if (!m_cutoutPool.allocate(static_cast<uint32_t>(cutout.size()), result.cutout)) {
+        if (!m_cutoutPool.allocate(commandList, static_cast<uint32_t>(cutout.size()), result.cutout)) {
             free(result);
             return {};
         }
         result.cutout.metadataIndex = result.metadataIndex;
         const std::vector<PackedBlockVertex> packed = makePacked(cutout);
-        m_cutoutPool.upload(result.cutout, packed);
-        if (!m_rhiCutoutVertexBuffer.write(
-                commandList,
-                static_cast<uint64_t>(result.cutout.firstVertex) * sizeof(PackedBlockVertex),
-                packed.data(),
-                packed.size() * sizeof(PackedBlockVertex))) {
+        if (!m_cutoutPool.upload(commandList, result.cutout, packed)) {
             free(result);
             return {};
         }
     }
     if (!cutoutDistance.empty()) {
-        if (!m_cutoutPool.allocate(static_cast<uint32_t>(cutoutDistance.size()), result.cutoutDistance)) {
+        if (!m_cutoutPool.allocate(
+                commandList,
+                static_cast<uint32_t>(cutoutDistance.size()),
+                result.cutoutDistance)) {
             free(result);
             return {};
         }
         result.cutoutDistance.metadataIndex = result.metadataIndex;
         const std::vector<PackedBlockVertex> packed = makePacked(cutoutDistance);
-        m_cutoutPool.upload(result.cutoutDistance, packed);
-        if (!m_rhiCutoutVertexBuffer.write(
-                commandList,
-                static_cast<uint64_t>(result.cutoutDistance.firstVertex) * sizeof(PackedBlockVertex),
-                packed.data(),
-                packed.size() * sizeof(PackedBlockVertex))) {
+        if (!m_cutoutPool.upload(commandList, result.cutoutDistance, packed)) {
             free(result);
             return {};
         }
     }
     if (!transparent.empty()) {
-        if (!m_transparentPool.allocate(static_cast<uint32_t>(transparent.size()), result.transparent)) {
+        if (!m_transparentPool.allocate(
+                commandList,
+                static_cast<uint32_t>(transparent.size()),
+                result.transparent)) {
             free(result);
             return {};
         }
         result.transparent.metadataIndex = result.metadataIndex;
         const std::vector<PackedBlockVertex> packed = makePacked(transparent);
-        m_transparentPool.upload(result.transparent, packed);
-        if (!m_rhiTransparentVertexBuffer.write(
-                commandList,
-                static_cast<uint64_t>(result.transparent.firstVertex) * sizeof(PackedBlockVertex),
-                packed.data(),
-                packed.size() * sizeof(PackedBlockVertex))) {
+        if (!m_transparentPool.upload(commandList, result.transparent, packed)) {
             free(result);
             return {};
         }
     }
     if (!water.empty()) {
-        if (!m_transparentPool.allocate(static_cast<uint32_t>(water.size()), result.water)) {
+        if (!m_transparentPool.allocate(commandList, static_cast<uint32_t>(water.size()), result.water)) {
             free(result);
             return {};
         }
         result.water.metadataIndex = result.metadataIndex;
         const std::vector<PackedBlockVertex> packed = makePacked(water);
-        m_transparentPool.upload(result.water, packed);
-        if (!m_rhiTransparentVertexBuffer.write(
-                commandList,
-                static_cast<uint64_t>(result.water.firstVertex) * sizeof(PackedBlockVertex),
-                packed.data(),
-                packed.size() * sizeof(PackedBlockVertex))) {
+        if (!m_transparentPool.upload(commandList, result.water, packed)) {
             free(result);
             return {};
         }
@@ -828,8 +600,6 @@ uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList,
         index = static_cast<uint32_t>(m_subChunkMetadata.size());
         m_subChunkMetadata.push_back(SubChunkDrawMetadata{glm::vec4(origin, 0.0f)});
     }
-    const GLsizeiptr bytes = static_cast<GLsizeiptr>(m_subChunkMetadata.size() * sizeof(SubChunkDrawMetadata));
-    glNamedBufferData(m_subChunkMetadataBuffer, bytes, m_subChunkMetadata.data(), GL_DYNAMIC_DRAW);
     if (!m_rhiMetadataBuffer.write(
             commandList,
             static_cast<uint64_t>(index) * sizeof(SubChunkDrawMetadata),
@@ -841,16 +611,12 @@ uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList,
     return index;
 }
 
-void WorldRenderBuffer::bindMetadataBuffer() const {
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, kTerrainMetadataBinding, m_subChunkMetadataBuffer);
-}
-
 void WorldRenderBuffer::beginFrame() {
     m_opaqueCommands.clear();
     m_cutoutCommands.clear();
     m_transparentCommands.clear();
     m_waterCommands.clear();
-    m_glSubmitCount = 0;
+    m_rhiSubmitCount = 0;
     m_opaqueLogicalCommandCount = 0;
     m_cutoutLogicalCommandCount = 0;
     m_transparentLogicalCommandCount = 0;
@@ -897,13 +663,13 @@ void WorldRenderBuffer::recordRhiOpaque(RhiCommandList& commandList,
     commandList.setGraphicsPipeline(pipeline);
     commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
     commandList.setBindGroup(1u, materialBindGroup);
-    commandList.setVertexBuffer(0u, m_rhiOpaqueVertexBuffer.buffer(), 0u);
+    commandList.setVertexBuffer(0u, m_opaquePool.buffer(), 0u);
     commandList.drawIndirect(
         m_rhiOpaqueIndirectBuffer.buffer(),
         0u,
         static_cast<uint32_t>(m_opaqueCommands.size()),
         sizeof(DrawArraysIndirectCommand));
-    ++m_glSubmitCount;
+    ++m_rhiSubmitCount;
 }
 
 void WorldRenderBuffer::recordRhiCutout(RhiCommandList& commandList,
@@ -915,13 +681,13 @@ void WorldRenderBuffer::recordRhiCutout(RhiCommandList& commandList,
     commandList.setGraphicsPipeline(pipeline);
     commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
     commandList.setBindGroup(1u, materialBindGroup);
-    commandList.setVertexBuffer(0u, m_rhiCutoutVertexBuffer.buffer(), 0u);
+    commandList.setVertexBuffer(0u, m_cutoutPool.buffer(), 0u);
     commandList.drawIndirect(
         m_rhiCutoutIndirectBuffer.buffer(),
         0u,
         static_cast<uint32_t>(m_cutoutCommands.size()),
         sizeof(DrawArraysIndirectCommand));
-    ++m_glSubmitCount;
+    ++m_rhiSubmitCount;
 }
 
 bool WorldRenderBuffer::prepareRhiTransparent(
@@ -951,13 +717,13 @@ void WorldRenderBuffer::recordRhiTransparent(
     commandList.setGraphicsPipeline(pipeline);
     commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
     commandList.setBindGroup(1u, materialBindGroup);
-    commandList.setVertexBuffer(0u, m_rhiTransparentVertexBuffer.buffer(), 0u);
+    commandList.setVertexBuffer(0u, m_transparentPool.buffer(), 0u);
     commandList.drawIndirect(
         m_rhiTransparentIndirectBuffer.buffer(),
         0u,
         static_cast<uint32_t>(m_transparentCommands.size()),
         sizeof(DrawArraysIndirectCommand));
-    ++m_glSubmitCount;
+    ++m_rhiSubmitCount;
 }
 
 bool WorldRenderBuffer::prepareRhiWater(
@@ -987,13 +753,13 @@ void WorldRenderBuffer::recordRhiWater(
     commandList.setGraphicsPipeline(pipeline);
     commandList.setBindGroup(0u, m_rhiMetadataBindGroup);
     commandList.setBindGroup(1u, materialBindGroup);
-    commandList.setVertexBuffer(0u, m_rhiTransparentVertexBuffer.buffer(), 0u);
+    commandList.setVertexBuffer(0u, m_transparentPool.buffer(), 0u);
     commandList.drawIndirect(
         m_rhiWaterIndirectBuffer.buffer(),
         0u,
         static_cast<uint32_t>(m_waterCommands.size()),
         sizeof(DrawArraysIndirectCommand));
-    ++m_glSubmitCount;
+    ++m_rhiSubmitCount;
 }
 
 bool WorldRenderBuffer::ensureRhiMetadataBindGroup(
@@ -1031,7 +797,7 @@ bool WorldRenderBuffer::ensureRhiMetadataBindGroup(
 
 WorldRenderBuffer::FrameStatsSnapshot WorldRenderBuffer::makeCurrentFrameStats() const {
     FrameStatsSnapshot stats;
-    stats.glSubmitCount = m_glSubmitCount;
+    stats.rhiSubmitCount = m_rhiSubmitCount;
     stats.opaqueCommands = m_opaqueCommands.size();
     stats.cutoutCommands = m_cutoutCommands.size();
     stats.transparentCommands = m_transparentCommands.size();
@@ -1053,7 +819,7 @@ void WorldRenderBuffer::captureSceneFrameStats() {
 void WorldRenderBuffer::mergeSceneWaterFrameStats() {
     // Water is rendered after shadow passes have reused the command lists, so
     // only merge the water counters into the preserved main-scene snapshot.
-    m_sceneFrameStats.glSubmitCount += m_glSubmitCount;
+    m_sceneFrameStats.rhiSubmitCount += m_rhiSubmitCount;
     m_sceneFrameStats.waterCommands = m_waterCommands.size();
     m_sceneFrameStats.waterVertices = m_waterVertexCount;
 }
@@ -1081,8 +847,7 @@ void WorldRenderBuffer::addTransparent(const GpuMeshRange& range) {
 
 void WorldRenderBuffer::addWater(const GpuMeshRange& range) {
     if (range.vertexCount == 0) return;
-    // Water uses the transparent pool VAO/VBO, but has its own command list
-    // so it can be flushed independently for the water composite pass.
+    // Water shares the transparent vertex pool but keeps an independent indirect command stream.
     m_waterCommands.push_back({range.vertexCount, 1, range.firstVertex, range.metadataIndex});
     m_waterVertexCount += range.vertexCount;
 }
@@ -1090,113 +855,4 @@ void WorldRenderBuffer::addWater(const GpuMeshRange& range) {
 void WorldRenderBuffer::clearWaterCommands() {
     m_waterCommands.clear();
     m_waterVertexCount = 0;
-}
-
-void WorldRenderBuffer::flushWater() {
-    if (m_waterCommands.empty()) return;
-    char label[64];
-    std::snprintf(label, sizeof(label), "Water.MDI commands=%zu vertices=%llu",
-                  m_waterCommands.size(),
-                  static_cast<unsigned long long>(m_waterVertexCount));
-    renderer::debug::ScopedDebugGroup group(label);
-    ensureVaoVertexBuffer(m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
-    ensureIndirectCapacity(m_waterCommands, m_waterIndirectBuf, m_waterIndirectCapacity, m_waterCommands.size());
-
-    glNamedBufferSubData(m_waterIndirectBuf, 0,
-                         static_cast<GLsizeiptr>(m_waterCommands.size() * sizeof(DrawArraysIndirectCommand)),
-                         m_waterCommands.data());
-
-    bindMetadataBuffer();
-    glBindVertexArray(m_transparentVao);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_waterIndirectBuf);
-    glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr,
-                              static_cast<GLsizei>(m_waterCommands.size()),
-                              0);
-    glBindVertexArray(0);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-
-    ++m_glSubmitCount;
-}
-
-void WorldRenderBuffer::flushOpaque() {
-    char label[64];
-    std::snprintf(label, sizeof(label), "Terrain.Opaque.MDI commands=%zu vertices=%llu",
-                  m_opaqueCommands.size(),
-                  static_cast<unsigned long long>(m_opaqueVertexCount));
-    renderer::debug::ScopedDebugGroup group(label);
-    flushPass(m_opaqueCommands, m_opaqueIndirectBuf, m_opaqueVao, m_opaquePool.vbo(), m_opaqueVaoBoundVbo);
-}
-
-void WorldRenderBuffer::flushCutout() {
-    char label[64];
-    std::snprintf(label, sizeof(label), "Terrain.Cutout.MDI commands=%zu vertices=%llu",
-                  m_cutoutCommands.size(),
-                  static_cast<unsigned long long>(m_cutoutVertexCount));
-    renderer::debug::ScopedDebugGroup group(label);
-    flushPass(m_cutoutCommands, m_cutoutIndirectBuf, m_cutoutVao, m_cutoutPool.vbo(), m_cutoutVaoBoundVbo);
-}
-
-void WorldRenderBuffer::flushTransparent() {
-    char label[64];
-    std::snprintf(label, sizeof(label), "Terrain.Transparent.MDI commands=%zu vertices=%llu",
-                  m_transparentCommands.size(),
-                  static_cast<unsigned long long>(m_transparentVertexCount));
-    renderer::debug::ScopedDebugGroup group(label);
-    flushPass(m_transparentCommands, m_transparentIndirectBuf, m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
-}
-
-void WorldRenderBuffer::bindTransparentVao() {
-    ensureVaoVertexBuffer(m_transparentVao, m_transparentPool.vbo(), m_transparentVaoBoundVbo);
-    glBindVertexArray(m_transparentVao);
-}
-
-void WorldRenderBuffer::ensureVaoVertexBuffer(const uint32_t vao, const uint32_t vbo, uint32_t& cachedVbo) {
-    if (cachedVbo == vbo) {
-        return;
-    }
-
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    setupVertexLayout();
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    cachedVbo = vbo;
-}
-
-void WorldRenderBuffer::ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
-                                                uint32_t& buf, size_t& capacity, const size_t needed) {
-    if (needed <= capacity) return;
-    capacity = std::max(needed, capacity * 2);
-    if (buf != 0) {
-        glDeleteBuffers(1, &buf);
-    }
-    glCreateBuffers(1, &buf);
-    glNamedBufferStorage(buf,
-                         static_cast<GLsizeiptr>(capacity * sizeof(DrawArraysIndirectCommand)),
-                         nullptr,
-                         GL_DYNAMIC_STORAGE_BIT);
-}
-
-void WorldRenderBuffer::flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                                   uint32_t& indirectBuf, uint32_t vao, uint32_t vbo, uint32_t& cachedVbo) {
-    if (commands.empty()) return;
-
-    ensureIndirectCapacity(commands, indirectBuf,
-                           vao == m_opaqueVao ? m_opaqueIndirectCapacity :
-                           vao == m_cutoutVao ? m_cutoutIndirectCapacity :
-                           m_transparentIndirectCapacity,
-                           commands.size());
-
-    glNamedBufferSubData(indirectBuf, 0,
-                         static_cast<GLsizeiptr>(commands.size() * sizeof(DrawArraysIndirectCommand)),
-                         commands.data());
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuf);
-
-    bindMetadataBuffer();
-    ensureVaoVertexBuffer(vao, vbo, cachedVbo);
-    glBindVertexArray(vao);
-    glMultiDrawArraysIndirect(GL_TRIANGLES, nullptr, static_cast<GLsizei>(commands.size()), 0);
-    glBindVertexArray(0);
-    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, 0);
-
-    ++m_glSubmitCount;
 }

@@ -172,7 +172,7 @@ public:
     [[nodiscard]] size_t getMeshingHistoryCount() const;
 #endif
 
-    [[nodiscard]] int getGlSubmitCount() const;
+    [[nodiscard]] int getTerrainRhiSubmitCount() const;
     [[nodiscard]] float getAtlasAnisotropy() const;
     [[nodiscard]] float getAtlasMaxAnisotropy() const;
 private:

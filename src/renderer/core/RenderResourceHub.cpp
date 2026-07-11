@@ -429,6 +429,6 @@ size_t RenderResourceHub::getMeshingHistoryCount() const {
 }
 #endif
 
-int RenderResourceHub::getGlSubmitCount() const {
-    return m_worldRenderBuffer.sceneFrameStats().glSubmitCount;
+int RenderResourceHub::getTerrainRhiSubmitCount() const {
+    return m_worldRenderBuffer.sceneFrameStats().rhiSubmitCount;
 }
