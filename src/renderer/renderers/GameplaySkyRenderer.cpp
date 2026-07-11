@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <deque>
 #include <vector>
 
@@ -198,8 +199,9 @@ void appendGreedySurface(std::vector<CloudVertex>& vertices,
 }
 }
 
-void GameplaySkyRenderer::init(ResourceMgr& resourceMgr) {
+void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
+    m_rhiDevice = &rhiDevice;
     m_deferredShader = resourceMgr.getShader("gameplay_sky");
     m_shader = m_deferredShader;
     initMeshes();
@@ -216,6 +218,7 @@ void GameplaySkyRenderer::shutdown() {
     m_shader = nullptr;
     m_deferredShader = nullptr;
     m_resourceMgr = nullptr;
+    m_rhiDevice = nullptr;
 }
 
 void GameplaySkyRenderer::setForwardMode(bool forward) {
@@ -547,6 +550,14 @@ void GameplaySkyRenderer::initMeshes() {
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
         glBindVertexArray(0);
+        RhiBufferDesc bufferDesc;
+        bufferDesc.debugName = "GameplaySky.Gradient.VertexBuffer";
+        bufferDesc.size = skyVertices.size() * sizeof(float);
+        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+        bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        m_skyVertexBuffer = m_rhiDevice->createBuffer(
+            bufferDesc, skyVertices.data(), bufferDesc.size);
+        if (!m_skyVertexBuffer.isValid()) std::abort();
     }
 
     if (m_haloVao == 0) {
@@ -577,12 +588,28 @@ void GameplaySkyRenderer::initMeshes() {
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(HaloVertex), reinterpret_cast<void*>(sizeof(glm::vec3) + sizeof(glm::vec2)));
         glBindVertexArray(0);
+        RhiBufferDesc bufferDesc;
+        bufferDesc.debugName = "GameplaySky.Halo.VertexBuffer";
+        bufferDesc.size = haloVertices.size() * sizeof(HaloVertex);
+        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+        bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        m_haloVertexBuffer = m_rhiDevice->createBuffer(
+            bufferDesc, haloVertices.data(), bufferDesc.size);
+        if (!m_haloVertexBuffer.isValid()) std::abort();
         m_haloVertexCount = static_cast<int32_t>(haloVertices.size());
     }
 
 }
 
 void GameplaySkyRenderer::destroyMeshes() {
+    if (m_rhiDevice != nullptr) {
+        if (m_cloudVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_cloudVertexBuffer);
+        if (m_haloVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_haloVertexBuffer);
+        if (m_skyVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_skyVertexBuffer);
+    }
+    m_cloudVertexBuffer = {};
+    m_haloVertexBuffer = {};
+    m_skyVertexBuffer = {};
     auto deleteBuffer = [](uint32_t& vao, uint32_t& vbo) {
         if (vbo != 0) {
             glDeleteBuffers(1, &vbo);
@@ -761,6 +788,14 @@ void GameplaySkyRenderer::initCloudMesh() {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, sizeof(CloudVertex), reinterpret_cast<void*>(sizeof(glm::vec3)));
     glBindVertexArray(0);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "GameplaySky.Cloud.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(CloudVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_cloudVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, vertices.data(), bufferDesc.size);
+    if (!m_cloudVertexBuffer.isValid()) std::abort();
 
     m_cloudVertexCount = static_cast<int32_t>(vertices.size());
     m_cloudMeshInfo.tileWorldSize = tileWidth;

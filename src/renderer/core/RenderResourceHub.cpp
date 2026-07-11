@@ -101,7 +101,7 @@ bool RenderResourceHub::init(ResourceMgr& resourceMgr,
     }
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
-    m_gameplaySkyRenderer.init(resourceMgr);
+    m_gameplaySkyRenderer.init(resourceMgr, *m_rhiDevice);
     if (!m_meshingSubmitBudgetOverridden) {
         const int workerCount = std::max(1, threadPool.numWorkers());
         m_meshingSubmitBudget = 2 + std::max(0, workerCount - 1);

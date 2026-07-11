@@ -78,7 +78,7 @@ public:
         glm::vec3 cameraPosition = glm::vec3(0.0f);
     };
 
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
     /// Switch to forward vanilla shader (no atmosphere LUT / sky capture / DerivativeMain contract).
     /// Must be called after init(). Reverts to deferred shader if false.
@@ -118,6 +118,7 @@ private:
     Shader* m_shader = nullptr;
     Shader* m_deferredShader = nullptr;  // Original deferred shader (gameplay_sky)
     ResourceMgr* m_resourceMgr = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     uint32_t m_dummySkyCaptureTexture = 0;
 
     uint32_t m_skyVao = 0;
@@ -126,6 +127,9 @@ private:
     uint32_t m_haloVbo = 0;
     uint32_t m_cloudVao = 0;
     uint32_t m_cloudVbo = 0;
+    RhiBufferHandle m_skyVertexBuffer;
+    RhiBufferHandle m_haloVertexBuffer;
+    RhiBufferHandle m_cloudVertexBuffer;
     int32_t m_haloVertexCount = 0;
     int32_t m_cloudVertexCount = 0;
     CloudMeshInfo m_cloudMeshInfo{};
