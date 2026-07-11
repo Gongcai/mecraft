@@ -4,13 +4,14 @@
 #include <cmath>
 #include <vector>
 
-#include <glad/glad.h>
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
-#include "../core/UIRenderUtils.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
+
+#include <cstdlib>
 
 namespace {
 void pushThickSegment(std::vector<float>& buf,
@@ -43,8 +44,48 @@ UICheckbox::UICheckbox() {
 UICheckbox::~UICheckbox() { shutdown(); }
 
 void UICheckbox::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto shapeSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    const auto colorSource = renderer::rhi::loadShaderSource("assets/shaders/ui_color_rhi.frag");
+    if (!vertexSource || !shapeSource || !colorSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "UiCheckbox.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str(); shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.debugName = "UiCheckbox.ShapeFragment";
+    shaderDesc.source = shapeSource->c_str(); shaderDesc.sourceSize = shapeSource->size();
+    m_shapeFragmentShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "UiCheckbox.ColorFragment";
+    shaderDesc.source = colorSource->c_str(); shaderDesc.sourceSize = colorSource->size();
+    m_colorFragmentShader = m_rhiDevice->createShader(shaderDesc);
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "UiCheckbox.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+    auto createPipeline = [&](RhiShaderHandle fragment, const char* name) {
+        RhiGraphicsPipelineDesc desc;
+        desc.debugName = name; desc.vertexShader = m_vertexShader; desc.fragmentShader = fragment; desc.layout = m_pipelineLayout;
+        desc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+        desc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+        desc.raster.cullMode = RhiCullMode::None;
+        desc.depthStencil.depthTestEnabled = false; desc.depthStencil.depthWriteEnabled = false;
+        desc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+        RhiBlendAttachmentState blend; blend.blendEnabled = true;
+        blend.srcColor = RhiBlendFactor::SrcAlpha; blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+        blend.srcAlpha = RhiBlendFactor::One; blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+        desc.blend.attachments.push_back(blend);
+        return m_rhiDevice->createGraphicsPipeline(desc);
+    };
+    m_shapePipeline = createPipeline(m_shapeFragmentShader, "UiCheckbox.ShapePipeline");
+    m_colorPipeline = createPipeline(m_colorFragmentShader, "UiCheckbox.ColorPipeline");
     initMesh();
+    if (!m_vertexShader.isValid() || !m_shapeFragmentShader.isValid() || !m_colorFragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_shapePipeline.isValid() || !m_colorPipeline.isValid() ||
+        !m_vertexBuffer.isValid()) std::abort();
     m_label.init(resourceMgr);
     m_label.anchor = Anchor::BottomLeft;
     m_checkScaleTween.setImmediate(m_checked ? 1.0f : 0.0f);
@@ -53,7 +94,15 @@ void UICheckbox::init(ResourceMgr& resourceMgr) {
 void UICheckbox::shutdown() {
     m_label.shutdown();
     cleanupMesh();
-    m_shader = nullptr;
+    if (m_rhiDevice) {
+        if (m_colorPipeline.isValid()) m_rhiDevice->destroyPipeline(m_colorPipeline);
+        if (m_shapePipeline.isValid()) m_rhiDevice->destroyPipeline(m_shapePipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_colorFragmentShader.isValid()) m_rhiDevice->destroyShader(m_colorFragmentShader);
+        if (m_shapeFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shapeFragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+    }
+    m_colorPipeline={}; m_shapePipeline={}; m_pipelineLayout={}; m_colorFragmentShader={}; m_shapeFragmentShader={}; m_vertexShader={}; m_rhiDevice=nullptr;
 }
 
 void UICheckbox::setChecked(bool checked) {
@@ -87,31 +136,21 @@ void UICheckbox::updateAnimations(float dt) {
 }
 
 void UICheckbox::initMesh() {
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // Box (6) + border (24) + check mark strokes (12) = 42 verts * 2 floats
-    glBufferData(GL_ARRAY_BUFFER, 42 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    std::vector<float> vertices{0,0, 1,0, 1,1, 0,0, 1,1, 0,1};
+    pushThickSegment(vertices, 0.25f, 0.52f, 0.42f, 0.34f, 0.14f);
+    pushThickSegment(vertices, 0.42f, 0.34f, 0.76f, 0.70f, 0.14f);
+    RhiBufferDesc desc; desc.debugName="UiCheckbox.VertexBuffer"; desc.size=vertices.size()*sizeof(float);
+    desc.usage=rhiFlag(RhiBufferUsage::Vertex); desc.memoryUsage=RhiMemoryUsage::GpuOnly;
+    m_vertexBuffer=m_rhiDevice->createBuffer(desc, vertices.data(), vertices.size()*sizeof(float));
 }
 
 void UICheckbox::cleanupMesh() {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
-    }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
+    if (m_rhiDevice && m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    m_vertexBuffer={};
 }
 
 void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
-    if (!m_shader || m_vao == 0) return;
+    if (!ctx.commandList || !m_shapePipeline.isValid() || !m_colorPipeline.isValid() || !m_vertexBuffer.isValid()) return;
 
     const UIResolvedCheckboxStyle resolved =
         UIStyleResolver::resolveCheckbox(resolveBaseStyle(ctx), currentStyleState());
@@ -129,89 +168,36 @@ void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
     float bx0 = ax;
     float by0 = cy - boxSize * 0.5f;
     float bx1 = ax + boxSize;
-    float by1 = cy + boxSize * 0.5f;
     float bw = resolved.borderWidth;
 
-    const UIRenderUtils::GLStateGuard glState;
-    m_shader->use();
-    m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
-                                                static_cast<float>(ctx.screenHeight)));
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
-    // Box background
-    {
-        std::array<float, 4> c = boxCol;
-        c[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float verts[] = {
-            bx0, by0,  bx1, by0,  bx1, by1,
-            bx0, by0,  bx1, by1,  bx0, by1,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
-
-    // Box border (4 quads = 24 verts, starting at vertex 6)
-    {
-        std::array<float, 4> c = borderCol;
-        c[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float verts[48];
-        // Top
-        verts[0]  = bx0;       verts[1]  = by1 - bw;  verts[2]  = bx1;       verts[3]  = by1 - bw;
-        verts[4]  = bx1;       verts[5]  = by1;        verts[6]  = bx0;       verts[7]  = by1 - bw;
-        verts[8]  = bx1;       verts[9]  = by1;        verts[10] = bx0;       verts[11] = by1;
-        // Bottom
-        verts[12] = bx0;       verts[13] = by0;        verts[14] = bx1;       verts[15] = by0;
-        verts[16] = bx1;       verts[17] = by0 + bw;   verts[18] = bx0;       verts[19] = by0;
-        verts[20] = bx1;       verts[21] = by0 + bw;   verts[22] = bx0;       verts[23] = by0 + bw;
-        // Left
-        verts[24] = bx0;       verts[25] = by0;        verts[26] = bx0 + bw;  verts[27] = by0;
-        verts[28] = bx0 + bw;  verts[29] = by1;        verts[30] = bx0;       verts[31] = by0;
-        verts[32] = bx0 + bw;  verts[33] = by1;        verts[34] = bx0;       verts[35] = by1;
-        // Right
-        verts[36] = bx1 - bw;  verts[37] = by0;        verts[38] = bx1;       verts[39] = by0;
-        verts[40] = bx1;       verts[41] = by1;        verts[42] = bx1 - bw;  verts[43] = by0;
-        verts[44] = bx1;       verts[45] = by1;        verts[46] = bx1 - bw;  verts[47] = by1;
-        glBufferSubData(GL_ARRAY_BUFFER, 6 * 2 * sizeof(float), sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 6, 24);
-    }
+    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+    auto drawRect = [&](float x, float y, float w, float h, Color color) {
+        color[3] *= alpha;
+        struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+        const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y), glm::vec4(w,h,0,0),
+                        glm::vec4(color[0],color[1],color[2],color[3])};
+        ctx.commandList->pushConstants(&push,sizeof(push),rhiFlag(RhiShaderStage::Vertex)|rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->draw(6u,1u,0u,0u);
+    };
+    ctx.commandList->setGraphicsPipeline(m_shapePipeline);
+    drawRect(bx0,by0,boxSize,boxSize,borderCol);
+    drawRect(bx0+bw,by0+bw,boxSize-2*bw,boxSize-2*bw,boxCol);
 
     // Check mark, scaled from the center.
     if (m_checked) {
         float scale = m_checkScaleTween.value();
         if (scale > 0.01f) {
-            float icx = (bx0 + bx1) * 0.5f;
-            float icy = (by0 + by1) * 0.5f;
-
-            auto sx = [&](float localX) { return icx + (localX - icx) * scale; };
-            auto sy = [&](float localY) { return icy + (localY - icy) * scale; };
-            const float x0 = bx0 + boxSize * 0.25f;
-            const float y0 = by0 + boxSize * 0.52f;
-            const float x1 = bx0 + boxSize * 0.42f;
-            const float y1 = by0 + boxSize * 0.34f;
-            const float x2 = bx0 + boxSize * 0.76f;
-            const float y2 = by0 + boxSize * 0.70f;
-            const float thickness = std::max(2.0f, boxSize * 0.14f) * scale;
-
-            std::array<float, 4> c = checkCol;
-            c[3] *= alpha;
-            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-            std::vector<float> verts;
-            verts.reserve(24);
-            pushThickSegment(verts, sx(x0), sy(y0), sx(x1), sy(y1), thickness);
-            pushThickSegment(verts, sx(x1), sy(y1), sx(x2), sy(y2), thickness);
-            glBufferSubData(GL_ARRAY_BUFFER, 30 * 2 * sizeof(float),
-                            static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-                            verts.data());
-            glDrawArrays(GL_TRIANGLES, 30, static_cast<GLsizei>(verts.size() / 2));
+            Color c=checkCol; c[3]*=alpha;
+            const float scaledSize=boxSize*scale;
+            const float offset=boxSize*(1.0f-scale)*0.5f;
+            struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+            const Push push{glm::vec4(ctx.screenWidth,ctx.screenHeight,bx0+offset,by0+offset),
+                            glm::vec4(scaledSize,scaledSize,0,0),glm::vec4(c[0],c[1],c[2],c[3])};
+            ctx.commandList->setGraphicsPipeline(m_colorPipeline);
+            ctx.commandList->pushConstants(&push,sizeof(push),rhiFlag(RhiShaderStage::Vertex)|rhiFlag(RhiShaderStage::Fragment));
+            ctx.commandList->draw(12u,1u,6u,0u);
         }
     }
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     // Render label text to the right of the box
     float labelX = bx1 + 8.0f;
