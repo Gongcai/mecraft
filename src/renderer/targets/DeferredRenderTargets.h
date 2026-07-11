@@ -255,7 +255,7 @@ private:
     bool createSsgiTextures();
     void destroySsgiTextures();
     bool registerRhiTextures();
-    bool registerAtmosphereLutTexture();
+    void destroyAtmosphereLutTexture();
     void unregisterRhiTextures();
     void destroyRhiTextureViews();
     void destroyFramebuffers();
@@ -416,7 +416,6 @@ private:
     RhiTextureViewHandle m_atmosphereLutView;
 
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)
-    uint32_t m_atmosphereLut3d = 0;
     RhiTextureHandle m_atmosphereLutHandle;
 
     int m_width = 0;

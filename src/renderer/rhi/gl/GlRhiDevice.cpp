@@ -158,6 +158,26 @@ template <typename Handle>
     return false;
 }
 
+[[nodiscard]] size_t textureFormatSizeBytes(const RhiTextureFormat format) {
+    switch (format) {
+        case RhiTextureFormat::R8Unorm: return 1u;
+        case RhiTextureFormat::Rg8Unorm: return 2u;
+        case RhiTextureFormat::Rgba8Unorm:
+        case RhiTextureFormat::Rgba8Srgb:
+        case RhiTextureFormat::R32Float:
+        case RhiTextureFormat::Depth24:
+        case RhiTextureFormat::Depth24Stencil8:
+        case RhiTextureFormat::Depth32Float: return 4u;
+        case RhiTextureFormat::R16Float:
+        case RhiTextureFormat::Depth16: return 2u;
+        case RhiTextureFormat::Rg16Float: return 4u;
+        case RhiTextureFormat::Rgba16Float: return 8u;
+        case RhiTextureFormat::Rgba32Float: return 16u;
+        case RhiTextureFormat::Undefined: return 0u;
+    }
+    return 0u;
+}
+
 [[nodiscard]] GLenum toGlMinFilter(const RhiFilter filter, const RhiMipmapMode mipmapMode) {
     if (filter == RhiFilter::Nearest) {
         return mipmapMode == RhiMipmapMode::Nearest ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST_MIPMAP_LINEAR;
@@ -1831,22 +1851,49 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
     labelGlObject(GL_TEXTURE, texture, desc.debugName);
 
     if (initialData != nullptr) {
-        if (initialData->pixels == nullptr || initialData->sizeBytes == 0u ||
-            initialData->mipLevel >= desc.mipLevels || initialData->arrayLayer != 0u ||
-            desc.dimension != RhiTextureDimension::Texture2D) {
+        if (initialData->pixels == nullptr || initialData->mipLevel >= desc.mipLevels ||
+            initialData->arrayLayer != 0u ||
+            (desc.dimension != RhiTextureDimension::Texture2D &&
+             desc.dimension != RhiTextureDimension::Texture3D)) {
             glDeleteTextures(1, &texture);
             logRhiError("createTexture received invalid initial texture data");
             return {};
         }
-        glTextureSubImage2D(texture,
-                            static_cast<GLint>(initialData->mipLevel),
-                            0,
-                            0,
-                            static_cast<GLsizei>(desc.width),
-                            static_cast<GLsizei>(desc.height),
-                            format.externalFormat,
-                            format.type,
-                            initialData->pixels);
+        const uint32_t mipWidth = std::max(1u, desc.width >> initialData->mipLevel);
+        const uint32_t mipHeight = std::max(1u, desc.height >> initialData->mipLevel);
+        const uint32_t mipDepth = desc.dimension == RhiTextureDimension::Texture3D
+            ? std::max(1u, desc.depthOrLayers >> initialData->mipLevel)
+            : 1u;
+        const size_t expectedSize = static_cast<size_t>(mipWidth) * mipHeight * mipDepth *
+                                    textureFormatSizeBytes(desc.format);
+        if (initialData->sizeBytes != expectedSize) {
+            glDeleteTextures(1, &texture);
+            logRhiError("createTexture received invalid initial texture data");
+            return {};
+        }
+        if (desc.dimension == RhiTextureDimension::Texture2D) {
+            glTextureSubImage2D(texture,
+                                static_cast<GLint>(initialData->mipLevel),
+                                0,
+                                0,
+                                static_cast<GLsizei>(mipWidth),
+                                static_cast<GLsizei>(mipHeight),
+                                format.externalFormat,
+                                format.type,
+                                initialData->pixels);
+        } else {
+            glTextureSubImage3D(texture,
+                                static_cast<GLint>(initialData->mipLevel),
+                                0,
+                                0,
+                                0,
+                                static_cast<GLsizei>(mipWidth),
+                                static_cast<GLsizei>(mipHeight),
+                                static_cast<GLsizei>(mipDepth),
+                                format.externalFormat,
+                                format.type,
+                                initialData->pixels);
+        }
     }
 
     const RhiTextureHandle handle = m_data->textures.allocate();

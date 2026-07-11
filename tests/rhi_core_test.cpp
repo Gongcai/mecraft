@@ -611,6 +611,64 @@ bool testGlRhiBlitToSwapchainBackbuffer() {
     return true;
 }
 
+bool testGlRhiTexture3DInitialData() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for 3D texture upload")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_texture_3d_initial_data_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for 3D texture upload")) {
+        return false;
+    }
+
+    std::array<float, 32> source{};
+    for (size_t index = 0; index < source.size(); ++index) {
+        source[index] = static_cast<float>(index) * 0.25f;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "texture-3d-initial-data";
+    textureDesc.dimension = RhiTextureDimension::Texture3D;
+    textureDesc.format = RhiTextureFormat::Rgba32Float;
+    textureDesc.width = 2u;
+    textureDesc.height = 2u;
+    textureDesc.depthOrLayers = 2u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+
+    RhiTextureInitialData initialData;
+    initialData.pixels = source.data();
+    initialData.sizeBytes = source.size() * sizeof(float);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, &initialData);
+    if (!requireTrue(texture.isValid(), "3D texture with initial data must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.viewType = RhiTextureViewType::Texture3D;
+    viewDesc.format = RhiTextureFormat::Rgba32Float;
+    viewDesc.layerCount = 2u;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+    if (!requireTrue(view.isValid(), "3D texture view must be created after initial data upload") ||
+        !requireTrue(glGetError() == GL_NO_ERROR, "3D texture initial data upload must not report a GL error")) {
+        if (view.isValid()) {
+            device.destroyTextureView(view);
+        }
+        device.destroyTexture(texture);
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyTextureView(view);
+    device.destroyTexture(texture);
+    device.shutdown();
+    return true;
+}
+
 bool testGlRhiRegisteredTextureViewRendering() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for registered texture view rendering")) {
@@ -2384,6 +2442,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiBlitToSwapchainBackbuffer()) {
+        return 1;
+    }
+    if (!testGlRhiTexture3DInitialData()) {
         return 1;
     }
     if (!testGlRhiRegisteredTextureViewRendering()) {
