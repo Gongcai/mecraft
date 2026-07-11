@@ -569,6 +569,17 @@ void destroyBlockCubeMesh(BlockCubeMesh& mesh) {
     mesh.rhiDevice = nullptr;
 }
 
+void releaseBlockCubeMeshGlResources(BlockCubeMesh& mesh) {
+    if (mesh.vbo != 0) {
+        glDeleteBuffers(1, &mesh.vbo);
+        mesh.vbo = 0;
+    }
+    if (mesh.vao != 0) {
+        glDeleteVertexArrays(1, &mesh.vao);
+        mesh.vao = 0;
+    }
+}
+
 void setBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc) {
     pipelineDesc.vertexInput.bindings.push_back({
         0u,

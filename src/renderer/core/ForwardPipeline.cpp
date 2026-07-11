@@ -33,7 +33,6 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
 
     // Enable forward vanilla shaders on sub-renderers (no deferred/shaderpack contracts)
     if (shared.sky) shared.sky->setForwardMode(true);
-    if (shared.dropRenderer) shared.dropRenderer->setForwardMode(true);
 
     m_initialized = true;
 }
@@ -42,7 +41,6 @@ void ForwardPipeline::shutdown() {
     // Revert sub-renderers to deferred shaders
     if (m_shared) {
         if (m_shared->sky) m_shared->sky->setForwardMode(false);
-        if (m_shared->dropRenderer) m_shared->dropRenderer->setForwardMode(false);
     }
 
     m_shared = nullptr;
@@ -320,8 +318,12 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
                                                      ctx.skyIntensity);
     }
 
-    if (m_shared->dropRenderer && m_shared->dropSystem) {
-        m_shared->dropRenderer->render(*m_shared->dropSystem, *ctx.cameraPtr, *ctx.windowPtr);
+    if (m_shared->dropRenderer && m_shared->dropSystem && m_backbufferCommandList != nullptr) {
+        m_shared->dropRenderer->prepareFrame(*ctx.worldView, *m_shared->dropSystem);
+        m_shared->dropRenderer->renderForward(*m_backbufferCommandList,
+                                              ctx.camera.viewProj,
+                                              ctx.skyIntensity,
+                                              ctx.animationTime);
     }
 
     if (m_shared->humanoidRenderer && m_shared->gameplayRegistry) {

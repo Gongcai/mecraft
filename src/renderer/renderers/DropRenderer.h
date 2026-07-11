@@ -7,17 +7,14 @@
 
 #include <glm/glm.hpp>
 
-#include "../core/Shader.h"
 #include "../rhi/RhiHandles.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
 
-class Camera;
 class IWorldView;
 class ResourceMgr;
 class RhiCommandList;
 class RhiDevice;
-class Window;
 class World;
 class DropSystem;
 
@@ -25,9 +22,6 @@ class DropRenderer {
 public:
 	void init(ResourceMgr& resourceMgr);
 	void shutdown();
-	/// Switch to forward vanilla shaders (no CSM shadow / held_item_shadow contract).
-	/// Must be called after init(). Reverts to deferred shaders if false.
-	void setForwardMode(bool forward);
 	void prepareFrame(const IWorldView& worldView, const DropSystem& dropSystem);
 	void renderItemsToGBuffer(RhiCommandList& commandList,
 	                          const glm::mat4& viewProj,
@@ -37,15 +31,16 @@ public:
 	                           const glm::mat4& previousViewProj,
 	                           float animationTime);
 	void finishGBufferFrame();
-	void render(const DropSystem& dropSystem, const Camera& camera, const Window& window);
+	void renderForward(RhiCommandList& commandList,
+	                   const glm::mat4& viewProj,
+	                   float skyIntensity,
+	                   float animationTime);
 	void renderToShadowMap(RhiCommandList& commandList,
 	                       const glm::mat4& shadowViewProj,
 	                       float animationTime);
 
 private:
 	struct Mesh {
-		uint32_t vao = 0;
-		uint32_t vbo = 0;
 		RhiBufferHandle rhiVertexBuffer;
 		RhiDevice* rhiDevice = nullptr;
 		uint32_t vertexCount = 0;
@@ -71,10 +66,6 @@ private:
 	static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
 
 	ResourceMgr* m_resourceMgr = nullptr;
-	Shader* m_shader = nullptr;
-	Shader* m_itemShader = nullptr;
-	Shader* m_deferredShader = nullptr;     // Original deferred block shader (drop_block)
-	Shader* m_deferredItemShader = nullptr; // Original deferred item shader (item_model)
 	std::unordered_map<BlockID, Mesh> m_blockMeshes;
 	std::unordered_map<ItemID, Mesh> m_itemMeshes;
 	// Per-object velocity: stores previous-frame model matrix per drop (by drop ID).
@@ -110,6 +101,14 @@ private:
 	RhiPipelineLayoutHandle m_blockShadowPipelineLayout;
 	RhiPipelineHandle m_blockShadowPipeline;
 	RhiBindGroupHandle m_blockShadowBindGroup;
+	RhiShaderHandle m_itemForwardVertexShader;
+	RhiShaderHandle m_itemForwardFragmentShader;
+	RhiPipelineLayoutHandle m_itemForwardPipelineLayout;
+	RhiPipelineHandle m_itemForwardPipeline;
+	RhiShaderHandle m_blockForwardVertexShader;
+	RhiShaderHandle m_blockForwardFragmentShader;
+	RhiPipelineLayoutHandle m_blockForwardPipelineLayout;
+	RhiPipelineHandle m_blockForwardPipeline;
 };
 
 #endif // MECRAFT_DROPRENDERER_H

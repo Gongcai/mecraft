@@ -52,6 +52,7 @@ BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices);
 
 /// Destroy GL resources owned by `mesh`. Safe to call on a zero-initialized mesh.
 void destroyBlockCubeMesh(BlockCubeMesh& mesh);
+void releaseBlockCubeMeshGlResources(BlockCubeMesh& mesh);
 
 /// Configure the explicit RHI vertex layout for the entity BlockVertex format.
 /// Integer-packed fields remain integer shader inputs except normalized light.
