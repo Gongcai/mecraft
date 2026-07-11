@@ -100,6 +100,27 @@ public:
     [[nodiscard]] static std::pair<glm::vec2, glm::vec2> getMoonPhaseUv(int phaseIndex);
 
 private:
+    struct alignas(16) CaptureUniforms {
+        glm::vec4 skyTopHaze{0.0f};
+        glm::vec4 skyHorizonGlare{0.0f};
+        glm::vec4 sunDirectionVisibility{0.0f};
+        glm::vec4 moonDirectionVisibility{0.0f};
+        glm::vec4 sunScatterNight{0.0f};
+        glm::vec4 moonLightPhaseFlux{0.0f};
+        glm::vec4 directIlluminanceAltitude{0.0f};
+        glm::vec4 skyIlluminanceTime{0.0f};
+        glm::vec4 sunIlluminanceTimeScale{0.0f};
+        glm::vec4 moonIlluminanceCoverage{0.0f};
+        glm::vec4 cloudDynamicWeatherDensity{0.0f};
+        glm::vec4 cloudGeometry{0.0f};
+        glm::vec4 planarClouds{0.0f};
+        glm::vec4 weather{0.0f};
+        glm::vec4 wetness0{0.0f};
+        glm::vec4 wetness1{0.0f};
+        glm::vec4 cameraPosition{0.0f};
+    };
+    static_assert(sizeof(CaptureUniforms) == 272u);
+
     struct CloudMeshInfo {
         float tileWorldSize = 0.0f;
         bool valid = false;
@@ -134,6 +155,7 @@ private:
     RhiBufferHandle m_cloudVertexBuffer;
     RhiTextureHandle m_captureNoiseTexture;
     RhiTextureViewHandle m_captureNoiseView;
+    RhiBufferHandle m_captureUniformBuffer;
     int32_t m_haloVertexCount = 0;
     int32_t m_cloudVertexCount = 0;
     CloudMeshInfo m_cloudMeshInfo{};

@@ -202,6 +202,14 @@ void appendGreedySurface(std::vector<CloudVertex>& vertices,
 void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
+    RhiBufferDesc captureBufferDesc;
+    captureBufferDesc.debugName = "GameplaySky.Capture.UniformBuffer";
+    captureBufferDesc.size = sizeof(CaptureUniforms);
+    captureBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    captureBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_captureUniformBuffer = rhiDevice.createBuffer(captureBufferDesc, nullptr, 0u);
+    if (!m_captureUniformBuffer.isValid()) std::abort();
     m_deferredShader = resourceMgr.getShader("gameplay_sky");
     m_shader = m_deferredShader;
     initMeshes();
@@ -211,6 +219,10 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
 
 void GameplaySkyRenderer::shutdown() {
     destroyMeshes();
+    if (m_captureUniformBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_captureUniformBuffer);
+        m_captureUniformBuffer = {};
+    }
     if (m_captureNoiseView.isValid()) {
         m_rhiDevice->destroyTextureView(m_captureNoiseView);
         m_captureNoiseView = {};
@@ -289,6 +301,31 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
         return;
     }
     synchronizeCaptureNoiseView(noiseTexture);
+
+    const CaptureUniforms captureUniforms{
+        {colors.top, colors.horizonHaze},
+        {colors.horizon, colors.sunGlare},
+        {colors.sunDirection, colors.sunVisibility},
+        {colors.moonDirection, colors.moonVisibility},
+        {colors.sunScatter, colors.nightFactor},
+        {colors.moonLightColor, params.moonPhaseFlux},
+        {illuminance.directIlluminance, params.cameraAltitude},
+        {illuminance.skyIlluminance, params.shaderTime},
+        {illuminance.sunIlluminance, params.cloudTimeScale},
+        {illuminance.moonIlluminance, params.cloudCoverage},
+        {illuminance.cloudDynamicWeather, params.cloudDensity},
+        {params.cloudHeight, params.cloudThickness,
+         params.planarCloudCoverage, params.planarCloudDensity},
+        {params.planarCloudAltitude, params.precipitation, 0.0f, 0.0f},
+        {params.weatherWetness, params.weatherStorm,
+         params.skyWetness, params.fogWetness},
+        {params.cloudWetness, params.surfaceWetness, params.precipitation, 0.0f},
+        {params.cloudCoverage, params.cloudDensity,
+         params.cloudTimeScale, params.shaderTime},
+        {params.cameraPosition, 0.0f}
+    };
+    commandList.updateBuffer(m_captureUniformBuffer, 0u,
+                             &captureUniforms, sizeof(captureUniforms));
 
     const renderer::gl::ScopedStateSnapshot stateGuard;
 
