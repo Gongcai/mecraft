@@ -254,10 +254,46 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     capturePipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
     capturePipelineDesc.blend.attachments.resize(1u);
     m_capturePipeline = rhiDevice.createGraphicsPipeline(capturePipelineDesc);
+    const auto visibleVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/gameplay_sky_visible_rhi.vert");
+    const auto visibleFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/gameplay_sky_visible_rhi.frag");
+    if (!visibleVertexSource || !visibleFragmentSource) std::abort();
+    RhiShaderDesc visibleShaderDesc;
+    visibleShaderDesc.debugName = "GameplaySky.Visible.Vertex";
+    visibleShaderDesc.stage = RhiShaderStage::Vertex;
+    visibleShaderDesc.source = visibleVertexSource->c_str();
+    visibleShaderDesc.sourceSize = visibleVertexSource->size();
+    m_visibleVertexShader = rhiDevice.createShader(visibleShaderDesc);
+    visibleShaderDesc.debugName = "GameplaySky.Visible.Fragment";
+    visibleShaderDesc.stage = RhiShaderStage::Fragment;
+    visibleShaderDesc.source = visibleFragmentSource->c_str();
+    visibleShaderDesc.sourceSize = visibleFragmentSource->size();
+    m_visibleFragmentShader = rhiDevice.createShader(visibleShaderDesc);
+    RhiPipelineLayoutDesc visibleLayoutDesc;
+    visibleLayoutDesc.debugName = "GameplaySky.Visible.PipelineLayout";
+    visibleLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4) * 6u;
+    visibleLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                           rhiFlag(RhiShaderStage::Fragment);
+    m_visiblePipelineLayout = rhiDevice.createPipelineLayout(visibleLayoutDesc);
+    RhiGraphicsPipelineDesc visiblePipelineDesc;
+    visiblePipelineDesc.debugName = "GameplaySky.Visible.Pipeline";
+    visiblePipelineDesc.vertexShader = m_visibleVertexShader;
+    visiblePipelineDesc.fragmentShader = m_visibleFragmentShader;
+    visiblePipelineDesc.layout = m_visiblePipelineLayout;
+    visiblePipelineDesc.raster.cullMode = RhiCullMode::None;
+    visiblePipelineDesc.depthStencil.depthTestEnabled = false;
+    visiblePipelineDesc.depthStencil.depthWriteEnabled = false;
+    visiblePipelineDesc.colorFormats = {rhiDevice.swapchainColorFormat()};
+    visiblePipelineDesc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
+    visiblePipelineDesc.blend.attachments.resize(1u);
+    m_visiblePipeline = rhiDevice.createGraphicsPipeline(visiblePipelineDesc);
     if (!m_captureUniformBuffer.isValid() || !m_captureSampler.isValid() ||
         !m_captureBindGroupLayout.isValid() || !m_capturePipelineLayout.isValid() ||
         !m_captureVertexShader.isValid() || !m_captureFragmentShader.isValid() ||
-        !m_capturePipeline.isValid()) std::abort();
+        !m_capturePipeline.isValid() || !m_visibleVertexShader.isValid() ||
+        !m_visibleFragmentShader.isValid() || !m_visiblePipelineLayout.isValid() ||
+        !m_visiblePipeline.isValid()) std::abort();
     m_deferredShader = resourceMgr.getShader("gameplay_sky");
     m_shader = m_deferredShader;
     initMeshes();
@@ -270,6 +306,10 @@ void GameplaySkyRenderer::shutdown() {
     if (m_captureBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_captureBindGroup);
     if (m_captureNoiseView.isValid()) m_rhiDevice->destroyTextureView(m_captureNoiseView);
     if (m_capturePipeline.isValid()) m_rhiDevice->destroyPipeline(m_capturePipeline);
+    if (m_visiblePipeline.isValid()) m_rhiDevice->destroyPipeline(m_visiblePipeline);
+    if (m_visiblePipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_visiblePipelineLayout);
+    if (m_visibleFragmentShader.isValid()) m_rhiDevice->destroyShader(m_visibleFragmentShader);
+    if (m_visibleVertexShader.isValid()) m_rhiDevice->destroyShader(m_visibleVertexShader);
     if (m_captureFragmentShader.isValid()) m_rhiDevice->destroyShader(m_captureFragmentShader);
     if (m_captureVertexShader.isValid()) m_rhiDevice->destroyShader(m_captureVertexShader);
     if (m_captureUniformBuffer.isValid()) {
@@ -283,6 +323,10 @@ void GameplaySkyRenderer::shutdown() {
     if (m_captureSampler.isValid()) m_rhiDevice->destroySampler(m_captureSampler);
     m_captureBindGroup = {};
     m_capturePipeline = {};
+    m_visiblePipeline = {};
+    m_visiblePipelineLayout = {};
+    m_visibleFragmentShader = {};
+    m_visibleVertexShader = {};
     m_captureFragmentShader = {};
     m_captureVertexShader = {};
     m_capturePipelineLayout = {};
@@ -363,19 +407,35 @@ void GameplaySkyRenderer::setForwardMode(bool forward) {
     }
 }
 
-void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, const uint32_t skyCaptureTexture) {
+void GameplaySkyRenderer::render(const Camera& camera, const float aspect,
+                                 const DayNightSystem& dayNight,
+                                 RhiCommandList& commandList) {
     m_lastColors = computeSkyColors(dayNight);
-    if (m_shader == nullptr || m_skyVao == 0) {
-        return;
-    }
-
+    struct PushConstants {
+        glm::mat4 projection;
+        glm::mat4 view;
+        glm::vec4 skyTopHaze;
+        glm::vec4 skyHorizonGlare;
+        glm::vec4 sunDirectionVisibility;
+        glm::vec4 moonDirectionVisibility;
+        glm::vec4 sunScatterNight;
+        glm::vec4 moonLightPhase;
+    };
+    const PushConstants constants{
+        glm::perspective(glm::radians(camera.getFOV()), aspect, 0.1f, 100.0f),
+        buildSkyView(camera),
+        {m_lastColors.top, m_lastColors.horizonHaze},
+        {m_lastColors.horizon, m_lastColors.sunGlare},
+        {m_lastColors.sunDirection, m_lastColors.sunVisibility},
+        {m_lastColors.moonDirection, m_lastColors.moonVisibility},
+        {m_lastColors.sunScatter, m_lastColors.nightFactor},
+        {m_lastColors.moonLightColor, m_lastColors.moonPhaseAngle}
+    };
+    commandList.setGraphicsPipeline(m_visiblePipeline);
+    commandList.pushConstants(&constants, sizeof(constants),
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
     const renderer::gl::ScopedStateSnapshot stateGuard;
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_CULL_FACE);
-
-    renderSkyGradient(camera, aspect, m_lastColors, skyCaptureTexture);
     renderHalo(camera, aspect, dayNight, m_lastColors);
     renderClouds(camera, aspect, dayNight, m_lastColors);
 }

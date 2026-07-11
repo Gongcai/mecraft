@@ -225,8 +225,7 @@ void ForwardPipeline::renderSky(const FrameContext& ctx) {
         ? static_cast<float>(ctx.frameWidth) / static_cast<float>(ctx.frameHeight)
         : 1.0f;
 
-    // Forward mode: pass 0 for skyCaptureTexture because sky gradient mode doesn't read it.
-    m_skyRenderer->render(*ctx.cameraPtr, aspect, dayNight, 0);
+    m_skyRenderer->render(*ctx.cameraPtr, aspect, dayNight, *m_backbufferCommandList);
 }
 
 // ============================================================================

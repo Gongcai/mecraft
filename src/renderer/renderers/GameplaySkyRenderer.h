@@ -83,7 +83,8 @@ public:
     /// Switch to forward vanilla shader (no atmosphere LUT / sky capture / DerivativeMain contract).
     /// Must be called after init(). Reverts to deferred shader if false.
     void setForwardMode(bool forward);
-    void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, uint32_t skyCaptureTexture);
+    void render(const Camera& camera, float aspect, const DayNightSystem& dayNight,
+                RhiCommandList& commandList);
     void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList,
                                 RhiTextureViewHandle targetView, int skyCaptureWidth,
                                 int skyCaptureHeight, RhiTextureViewHandle atmosphereLutView,
@@ -163,6 +164,10 @@ private:
     RhiShaderHandle m_captureVertexShader;
     RhiShaderHandle m_captureFragmentShader;
     RhiPipelineHandle m_capturePipeline;
+    RhiShaderHandle m_visibleVertexShader;
+    RhiShaderHandle m_visibleFragmentShader;
+    RhiPipelineLayoutHandle m_visiblePipelineLayout;
+    RhiPipelineHandle m_visiblePipeline;
     RhiTextureViewHandle m_captureAtmosphereLutView;
     int32_t m_haloVertexCount = 0;
     int32_t m_cloudVertexCount = 0;
