@@ -104,6 +104,7 @@ public:
     void setContinuousSwing(bool active);
     void setEnvironmentLight(float sunlight, float blockLight);
     void setSceneHdrScale(float scale);
+    void prepareFrameResources(const Inventory& inventory);
 
     // Shadow data from Renderer — must be set before render() each frame.
     struct ShadowData {

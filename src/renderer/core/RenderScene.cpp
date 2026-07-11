@@ -377,6 +377,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->setSceneHdrScale(
             computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
+        request.firstPersonHeldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
         RhiCommandList* heldItemCommandList = beginSceneCaptureRendering(
             *m_shared.rhiDevice, m_currentContext, "SceneCapture.FirstPersonHeldItem");
         request.firstPersonHeldItemRenderer->render(

@@ -14,6 +14,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -180,6 +181,10 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiD
     m_itemShader = m_deferredItemShader;
     m_steveShader = m_deferredSteveShader;
     MecraftTextureContract::initializeNeutralShadowTextures(rhiDevice);
+    m_rightArmMesh = buildRightArmMesh();
+    if (!m_rightArmMesh.rhiVertexBuffer.isValid() || m_rightArmMesh.vertexCount == 0u) {
+        std::abort();
+    }
     loadConfig();
     m_initialized = true;
 }
@@ -424,6 +429,24 @@ void FirstPersonHeldItemRenderer::setSceneHdrScale(const float scale) {
     m_sceneHdrScale = std::clamp(scale, 1.0f, 8.0f);
 }
 
+void FirstPersonHeldItemRenderer::prepareFrameResources(const Inventory& inventory) {
+    if (!m_initialized || m_resourceMgr == nullptr) {
+        return;
+    }
+    const ItemID selectedItem = inventory.getSelectedItem();
+    if (selectedItem == 0) {
+        return;
+    }
+    const ItemDef& itemDef = ItemRegistry::get(selectedItem);
+    const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const BlockID renderBlock = ItemRegistry::toRenderBlock(selectedItem);
+    if (!prefersBlockMeshForItem(renderBlock) && itemTileIndex >= 0) {
+        getOrCreateItemMesh(selectedItem);
+    } else if (renderBlock != 0) {
+        getOrCreateBlockMesh(renderBlock);
+    }
+}
+
 void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
     m_shadowData = data;
 }
@@ -542,13 +565,6 @@ void FirstPersonHeldItemRenderer::render(const int width,
     }
     if (width <= 0 || height <= 0) {
         return;
-    }
-
-    if (m_rightArmMesh.vao == 0) {
-        m_rightArmMesh = buildRightArmMesh();
-        if (m_rightArmMesh.vao == 0 || m_rightArmMesh.vertexCount == 0) {
-            return;
-        }
     }
 
     const ItemID selectedItem = inventory.getSelectedItem();
