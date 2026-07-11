@@ -32,14 +32,12 @@ public:
 	void renderItemsToGBuffer(RhiCommandList& commandList,
 	                          const glm::mat4& viewProj,
 	                          const glm::mat4& previousViewProj);
+	void renderBlocksToGBuffer(RhiCommandList& commandList,
+	                           const glm::mat4& viewProj,
+	                           const glm::mat4& previousViewProj,
+	                           float animationTime);
 	void finishGBufferFrame();
 	void render(const DropSystem& dropSystem, const Camera& camera, const Window& window);
-	// GBuffer path: renders drops into the deferred GBuffer (5 MRT).
-	// Caller must have already bound the GBuffer FBO with terrain+entity depth.
-	void renderToGBuffer(const IWorldView& worldView, const DropSystem& dropSystem,
-	                     const glm::mat4& jitteredViewProj,
-	                     const glm::mat4& previousViewProj,
-	                     float animationTime);
 	// Shadow path: renders drops into the CSM shadow map.
 	// Caller must have already bound the shadow FBO layer.
 	void renderToShadowMap(const IWorldView& worldView, const DropSystem& dropSystem,
@@ -80,8 +78,6 @@ private:
 	Shader* m_itemShader = nullptr;
 	Shader* m_deferredShader = nullptr;     // Original deferred block shader (drop_block)
 	Shader* m_deferredItemShader = nullptr; // Original deferred item shader (item_model)
-	Shader* m_gbufferShader = nullptr;     // drop_gbuffer: block drops → GBuffer
-	Shader* m_itemGBufferShader = nullptr; // item_gbuffer: item drops → GBuffer
 	Shader* m_shadowShader = nullptr;      // shadow_depth: block drops → shadow (reused)
 	Shader* m_itemShadowShader = nullptr;  // item_shadow: item drops → shadow
 	std::unordered_map<BlockID, Mesh> m_blockMeshes;
@@ -99,6 +95,16 @@ private:
 	RhiPipelineLayoutHandle m_itemGBufferPipelineLayout;
 	RhiPipelineHandle m_itemGBufferPipeline;
 	RhiBindGroupHandle m_itemGBufferBindGroup;
+	RhiTextureViewHandle m_blockTextureArrayView;
+	RhiTextureViewHandle m_grassColormapView;
+	RhiTextureViewHandle m_foliageColormapView;
+	RhiSamplerHandle m_blockSampler;
+	RhiShaderHandle m_blockGBufferVertexShader;
+	RhiShaderHandle m_blockGBufferFragmentShader;
+	RhiBindGroupLayoutHandle m_blockGBufferBindGroupLayout;
+	RhiPipelineLayoutHandle m_blockGBufferPipelineLayout;
+	RhiPipelineHandle m_blockGBufferPipeline;
+	RhiBindGroupHandle m_blockGBufferBindGroup;
 };
 
 #endif // MECRAFT_DROPRENDERER_H

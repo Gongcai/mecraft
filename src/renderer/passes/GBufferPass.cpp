@@ -181,7 +181,7 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     const glm::mat4& viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
     dropRenderer->renderItemsToGBuffer(*commandList, viewProj, previousViewProj);
-    dropRenderer->renderToGBuffer(worldView, *dropSystem, viewProj, previousViewProj, ctx.animationTime);
+    dropRenderer->renderBlocksToGBuffer(*commandList, viewProj, previousViewProj, ctx.animationTime);
     dropRenderer->finishGBufferFrame();
 
     commandList->endRendering();
