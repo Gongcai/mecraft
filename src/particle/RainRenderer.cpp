@@ -44,6 +44,21 @@ void RainRenderer::shutdown() {
     m_snowTex = {};
 }
 
+void RainRenderer::prepareFrame(const glm::vec3& cameraPos,
+                                const float rainStrength,
+                                const float snowStrength,
+                                float dt) {
+    dt = std::clamp(dt, 0.001f, 0.1f);
+    if (rainStrength > 0.01f) {
+        ensureDrops(m_rainDrops, MAX_RAIN_DROPS, cameraPos);
+        updateDrops(m_rainDrops, dt, RAIN_FALL_SPEED, cameraPos);
+    }
+    if (snowStrength > 0.01f) {
+        ensureDrops(m_snowDrops, MAX_SNOW_DROPS, cameraPos);
+        updateDrops(m_snowDrops, dt, SNOW_FALL_SPEED, cameraPos);
+    }
+}
+
 void RainRenderer::ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops, const glm::vec3& cameraPos) {
     if (drops.empty()) {
         drops.reserve(maxDrops);
@@ -99,27 +114,22 @@ void RainRenderer::wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& ca
 
 void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         const glm::mat4& view,
-                                        const glm::vec3& cameraPos,
                                         RhiTextureHandle texture,
                                         std::vector<PrecipDrop>& drops,
                                         float strength,
                                         float skyLightAtCamera,
-                                        float baseSpeed,
                                         float dropLength,
                                         float streakWidth,
                                         float alphaScale,
                                         const glm::vec3& color,
                                         bool proceduralLines,
-                                        uint32_t sceneDepthTex,
+                                        const RhiTextureHandle sceneDepthTexture,
                                         const glm::vec2& screenSize,
-                                        float dt,
+                                        float,
                                         bool hardwareDepthTest) {
     const uint32_t textureId = renderer::rhi::gl::textureId(texture);
     if (!m_shader || textureId == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
-
-    // Clamp dt to avoid physics explosion on frame hitches.
-    dt = std::max(0.001f, std::min(dt, 0.1f));
-    updateDrops(drops, dt, baseSpeed, cameraPos);
+    const uint32_t sceneDepthTex = renderer::rhi::gl::textureId(sceneDepthTexture);
 
     // Camera-facing billboards: extract right/up from view matrix.
     glm::vec3 right(view[0][0], view[1][0], view[2][0]);
@@ -224,24 +234,22 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
 
 void RainRenderer::render(const glm::mat4& projection,
                            const glm::mat4& view,
-                           const glm::vec3& cameraPos,
                            float rainStrength,
                            float skyLightAtCamera,
                            float alphaScale,
-                           uint32_t sceneDepthTex,
+                           const RhiTextureHandle sceneDepthTexture,
                            const glm::vec2& screenSize,
                            float dt,
                            bool hardwareDepthTest) {
-    ensureDrops(m_rainDrops, MAX_RAIN_DROPS, cameraPos);
-    renderPrecipitation(projection, view, cameraPos,
+    renderPrecipitation(projection, view,
                         m_rainTex, m_rainDrops,
                         rainStrength, skyLightAtCamera,
-                        RAIN_FALL_SPEED, RAIN_DROP_LENGTH,
+                        RAIN_DROP_LENGTH,
                         0.006f,  // streakWidth: DerivativeMain-like thin rain lines
                         alphaScale,
                         glm::vec3(0.72f, 0.78f, 0.85f), // rain blue-gray
                         true,
-                        sceneDepthTex,
+                        sceneDepthTexture,
                         screenSize,
                         dt,
                         hardwareDepthTest);
@@ -249,24 +257,22 @@ void RainRenderer::render(const glm::mat4& projection,
 
 void RainRenderer::renderSnow(const glm::mat4& projection,
                                const glm::mat4& view,
-                               const glm::vec3& cameraPos,
                                float snowStrength,
                                float skyLightAtCamera,
                                float alphaScale,
-                               uint32_t sceneDepthTex,
+                               const RhiTextureHandle sceneDepthTexture,
                                const glm::vec2& screenSize,
                                float dt,
                                bool hardwareDepthTest) {
-    ensureDrops(m_snowDrops, MAX_SNOW_DROPS, cameraPos);
-    renderPrecipitation(projection, view, cameraPos,
+    renderPrecipitation(projection, view,
                         m_snowTex, m_snowDrops,
                         snowStrength, skyLightAtCamera,
-                        SNOW_FALL_SPEED, SNOW_DROP_LENGTH,
+                        SNOW_DROP_LENGTH,
                         0.025f,  // streakWidth: snow flakes are shorter
                         alphaScale,
                         glm::vec3(0.92f, 0.95f, 1.0f), // snow white
                         false,
-                        sceneDepthTex,
+                        sceneDepthTexture,
                         screenSize,
                         dt,
                         hardwareDepthTest);

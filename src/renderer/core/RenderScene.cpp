@@ -314,12 +314,16 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         cameraRainVisibility = m_currentContext.cameraRainVisibility;
         if (m_settings.weather.rainLinesEnabled) {
             const auto& weather = request.weatherSystem.getDerived();
+            const glm::vec3 camPos = request.camera.getPosition();
+            request.rainRenderer.prepareFrame(camPos,
+                                              weather.rainStrength,
+                                              weather.snowStrength,
+                                              request.frameTime);
             RhiCommandList* weatherCommandList = nullptr;
             if (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f) {
                 weatherCommandList = beginSceneCaptureRendering(
                     *m_shared.rhiDevice, m_currentContext, "SceneCapture.Weather");
             }
-            const glm::vec3 camPos = request.camera.getPosition();
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));
             auto projMat = request.camera.getProjectionMatrix(frameAspect);
@@ -327,25 +331,25 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             const float alphaScale = m_settings.weather.rainAlphaScale;
             const bool forwardVanillaActive = isNewPipelineActive() &&
                                                getPipelineMode() == PipelineMode::Forward;
-            const GLuint depthTex = forwardVanillaActive
-                ? 0
-                : static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.gbufferDepth));
+            const RhiTextureHandle depthTexture = forwardVanillaActive
+                ? RhiTextureHandle{}
+                : m_lastFrameOutput.gbufferDepth;
             const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
             const glm::vec2 precipitationScreenSize(
                 static_cast<float>(frameRenderSize.x),
                 static_cast<float>(frameRenderSize.y));
 
             if (weather.rainStrength > 0.01f) {
-                request.rainRenderer.render(projMat, viewMat, camPos,
+                request.rainRenderer.render(projMat, viewMat,
                                              weather.rainStrength, cameraRainVisibility,
-                                             alphaScale, depthTex,
+                                             alphaScale, depthTexture,
                                              precipitationScreenSize, request.frameTime,
                                              hardwareDepthTest);
             }
             if (weather.snowStrength > 0.01f) {
-                request.rainRenderer.renderSnow(projMat, viewMat, camPos,
+                request.rainRenderer.renderSnow(projMat, viewMat,
                                                 weather.snowStrength, cameraRainVisibility,
-                                                alphaScale * 0.6f, depthTex,
+                                                alphaScale * 0.6f, depthTexture,
                                                 precipitationScreenSize, request.frameTime,
                                                 hardwareDepthTest);
             }

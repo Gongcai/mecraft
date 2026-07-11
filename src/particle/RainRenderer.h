@@ -17,15 +17,18 @@ class RainRenderer {
 public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
+    void prepareFrame(const glm::vec3& cameraPos,
+                      float rainStrength,
+                      float snowStrength,
+                      float dt);
 
     // Render rain around the given camera position.
     void render(const glm::mat4& projection,
                 const glm::mat4& view,
-                const glm::vec3& cameraPos,
                 float rainStrength,
                 float skyLightAtCamera,
                 float alphaScale,
-                uint32_t sceneDepthTex,
+                RhiTextureHandle sceneDepthTexture,
                 const glm::vec2& screenSize,
                 float dt,
                 bool hardwareDepthTest = true);
@@ -33,11 +36,10 @@ public:
     // Render snow around the given camera position.
     void renderSnow(const glm::mat4& projection,
                     const glm::mat4& view,
-                    const glm::vec3& cameraPos,
                     float snowStrength,
                     float skyLightAtCamera,
                     float alphaScale,
-                    uint32_t sceneDepthTex,
+                    RhiTextureHandle sceneDepthTexture,
                     const glm::vec2& screenSize,
                     float dt,
                     bool hardwareDepthTest = true);
@@ -67,18 +69,16 @@ private:
     void wrapDrops(std::vector<PrecipDrop>& drops, const glm::vec3& cameraPos);
     void renderPrecipitation(const glm::mat4& projection,
                              const glm::mat4& view,
-                             const glm::vec3& cameraPos,
                              RhiTextureHandle texture,
                              std::vector<PrecipDrop>& drops,
                              float strength,
                              float skyLightAtCamera,
-                             float baseSpeed,
                              float dropLength,
                              float streakWidth,
                              float alphaScale,
                              const glm::vec3& color,
                              bool proceduralLines,
-                             uint32_t sceneDepthTex,
+                             RhiTextureHandle sceneDepthTexture,
                              const glm::vec2& screenSize,
                              float dt,
                              bool hardwareDepthTest);
