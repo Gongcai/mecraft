@@ -9,16 +9,12 @@ uniform float uPrecipStrength;
 uniform float uPrecipAlphaScale;
 uniform vec2 uScreenSize;
 uniform vec3 uPrecipColor;
-uniform int uMaskPass;
 uniform int uProceduralLines;
 uniform int uDepthFadeEnabled;
 
 void main() {
     float texAlpha = 0.0;
-    if (uMaskPass != 0) {
-        float verticalFade = smoothstep(0.02, 0.20, vUV.y) * (1.0 - smoothstep(0.80, 0.98, vUV.y));
-        texAlpha = verticalFade * min(uPrecipAlphaScale, 1.0);
-    } else if (uProceduralLines != 0) {
+    if (uProceduralLines != 0) {
         float verticalFade = smoothstep(0.00, 0.12, vUV.y) * (1.0 - smoothstep(0.88, 1.00, vUV.y));
         float lineFade = 1.0 - smoothstep(0.18, 0.50, abs(vUV.x - 0.5));
         texAlpha = verticalFade * lineFade * uPrecipAlphaScale * 0.28;

@@ -189,7 +189,6 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
     m_shader->setFloat("uPrecipStrength", strength * skyLightAtCamera);
     m_shader->setFloat("uPrecipAlphaScale", alphaScale);
     m_shader->setVec3("uPrecipColor", color);
-    m_shader->setInt("uMaskPass", 0);
     m_shader->setInt("uProceduralLines", proceduralLines ? 1 : 0);
     m_shader->setInt("uDepthFadeEnabled", sceneDepthTex != 0 ? 1 : 0);
     m_shader->setVec2("uScreenSize", screenSize);
