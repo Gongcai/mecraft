@@ -5,6 +5,7 @@
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
 #include "renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "renderer/rhi/RhiDevice.h"
 
 #include <glad/glad.h>
 
@@ -32,10 +33,6 @@ int validateBlockTextureTileSize(const int configuredTileSize) {
     return static_cast<GLuint>(renderer::rhi::gl::textureId(atlas.texture));
 }
 
-[[nodiscard]] GLuint textureId(const TextureArray& textureArray) {
-    return static_cast<GLuint>(renderer::rhi::gl::textureId(textureArray.texture));
-}
-
 void deleteTextureAtlas(TextureAtlas& atlas) {
     const GLuint nativeTexture = textureId(atlas);
     resource::unregisterTextureAtlas(atlas);
@@ -48,28 +45,17 @@ void deleteTextureAtlas(TextureAtlas& atlas) {
 } // namespace
 
 void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
-    const GLuint nativeTexture = textureId(textureArray);
-    resource::unregisterTextureArray(textureArray);
-    if (nativeTexture != 0) {
-        glDeleteTextures(1, &nativeTexture);
+    if (m_rhiDevice != nullptr && textureArray.texture.isValid()) {
+        m_rhiDevice->destroyTexture(textureArray.texture);
     }
+    textureArray.texture = {};
     textureArray.tileSize = 16;
     textureArray.layerCount = 0;
 }
 
-void BlockTextureLibrary::applySamplerToTextureArrays() {
-    const GLuint albedoTexture = textureId(m_textureArray);
-    if (albedoTexture != 0) {
-        m_sampler.applyToTexture2DArray(albedoTexture);
-    }
-    const GLuint normalTexture = textureId(m_normalTextureArray);
-    if (normalTexture != 0) {
-        m_sampler.applyToTexture2DArray(normalTexture);
-    }
-    const GLuint specularTexture = textureId(m_specularTextureArray);
-    if (specularTexture != 0) {
-        m_sampler.applyToTexture2DArray(specularTexture);
-    }
+void BlockTextureLibrary::init(RhiDevice& rhiDevice) {
+    assert(m_rhiDevice == nullptr);
+    m_rhiDevice = &rhiDevice;
 }
 
 void BlockTextureLibrary::shutdown() {
@@ -87,6 +73,7 @@ void BlockTextureLibrary::shutdown() {
     m_arrayLayerToAtlasTile.clear();
     m_hasNormalMaps = false;
     m_hasSpecularMaps = false;
+    m_rhiDevice = nullptr;
 }
 
 bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath) {
@@ -123,7 +110,9 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
-    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(m_manifest, resolvedTileSize, m_catalog);
+    assert(m_rhiDevice != nullptr);
+    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
     m_specularTextureArray = textureArrayResult.specularArray;
@@ -135,7 +124,6 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
 
     m_sampler.refreshAnisotropySupport();
     m_sampler.applyToTexture2D(textureId(m_atlas));
-    applySamplerToTextureArrays();
 }
 
 void BlockTextureLibrary::buildAtlas(const std::string& directory, const int tileSize) {
@@ -158,7 +146,9 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
 
     m_manifest = resource::buildBlockTextureManifest(directory);
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
-    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(m_manifest, resolvedTileSize, m_catalog);
+    assert(m_rhiDevice != nullptr);
+    resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
     m_specularTextureArray = textureArrayResult.specularArray;
@@ -169,7 +159,6 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     m_hasSpecularMaps = textureArrayResult.hasSpecularMaps;
 
     m_sampler.refreshAnisotropySupport();
-    applySamplerToTextureArrays();
 }
 
 const TextureAtlas& BlockTextureLibrary::atlas() const {
@@ -264,7 +253,6 @@ void BlockTextureLibrary::setAnisotropy(const float anisotropy) {
         m_sampler.applyToTexture2D(atlasTexture);
     }
 
-    applySamplerToTextureArrays();
 }
 
 float BlockTextureLibrary::anisotropy() const {

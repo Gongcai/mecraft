@@ -1,16 +1,16 @@
 #include "BlockTextureArrayBuilder.h"
-#include "RhiTextureResourceUtils.h"
 #include "TextureResampler.h"
+#include "renderer/rhi/RhiDevice.h"
 
 #include "../third_party/stb/stb_image.h"
 
-#include <glad/glad.h>
 #include <glm/vec3.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <iostream>
+#include <cmath>
 #include <optional>
 #include <string>
 #include <utility>
@@ -45,71 +45,48 @@ ResourceTint textureTintColor(const ResourceTextureTint tint) {
 
 class PendingTextureArray {
 public:
-    PendingTextureArray(const int tileSize, const int layerCount) {
-        glGenTextures(1, &m_textureId);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, m_textureId);
-        glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
-                     tileSize, tileSize, layerCount,
-                     0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-        m_texture.tileSize = tileSize;
-        m_texture.layerCount = layerCount;
-        if (!resource::registerTextureArray(m_texture, m_textureId)) {
-            failBlockTextureArrayBuilder("Failed to register block texture array RHI handle");
-        }
-    }
+    PendingTextureArray(const int tileSize, const int layerCount)
+        : m_tileSize(tileSize),
+          m_layerCount(layerCount),
+          m_pixels(static_cast<size_t>(tileSize) * tileSize * layerCount * 4u) {}
 
     PendingTextureArray(const PendingTextureArray&) = delete;
     PendingTextureArray& operator=(const PendingTextureArray&) = delete;
 
-    PendingTextureArray(PendingTextureArray&& other) noexcept
-        : m_texture(other.m_texture),
-          m_textureId(other.m_textureId) {
-        other.m_texture = {};
-        other.m_textureId = 0;
+    void writeLayer(const int layer, const unsigned char* pixels) {
+        const size_t layerSize = static_cast<size_t>(m_tileSize) * m_tileSize * 4u;
+        std::copy_n(pixels, layerSize, m_pixels.data() + static_cast<size_t>(layer) * layerSize);
     }
 
-    PendingTextureArray& operator=(PendingTextureArray&& other) noexcept {
-        if (this != &other) {
-            reset();
-            m_texture = other.m_texture;
-            m_textureId = other.m_textureId;
-            other.m_texture = {};
-            other.m_textureId = 0;
+    [[nodiscard]] TextureArray create(RhiDevice& rhiDevice, const char* debugName) const {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2DArray;
+        desc.format = RhiTextureFormat::Rgba8Unorm;
+        desc.width = static_cast<uint32_t>(m_tileSize);
+        desc.height = static_cast<uint32_t>(m_tileSize);
+        desc.depthOrLayers = static_cast<uint32_t>(m_layerCount);
+        desc.mipLevels = 1u + static_cast<uint32_t>(std::floor(std::log2(static_cast<double>(m_tileSize))));
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled);
+        RhiTextureInitialData initialData;
+        initialData.pixels = m_pixels.data();
+        initialData.sizeBytes = m_pixels.size();
+        initialData.layerCount = static_cast<uint32_t>(m_layerCount);
+
+        TextureArray texture;
+        texture.texture = rhiDevice.createTexture(desc, &initialData);
+        texture.tileSize = m_tileSize;
+        texture.layerCount = m_layerCount;
+        if (!texture.texture.isValid()) {
+            failBlockTextureArrayBuilder("Failed to create block texture array RHI resource");
         }
-        return *this;
-    }
-
-    ~PendingTextureArray() {
-        reset();
-    }
-
-    [[nodiscard]] GLuint id() const {
-        return m_textureId;
-    }
-
-    [[nodiscard]] TextureArray release() {
-        TextureArray released = m_texture;
-        m_texture = {};
-        m_textureId = 0;
-        return released;
+        return texture;
     }
 
 private:
-    void reset() {
-        resource::unregisterTextureArray(m_texture);
-        if (m_textureId != 0) {
-            glDeleteTextures(1, &m_textureId);
-            m_textureId = 0;
-        }
-    }
-
-    TextureArray m_texture;
-    GLuint m_textureId = 0;
+    int m_tileSize = 0;
+    int m_layerCount = 0;
+    std::vector<unsigned char> m_pixels;
 };
 
 struct LoadedImage {
@@ -173,13 +150,12 @@ int computeTextureArrayLayerCount(const resource::BlockTextureManifestEntry& ent
     return animation.frameCount;
 }
 
-void uploadTextureArrayLayer(const GLuint textureId,
+void writeTextureArrayLayer(PendingTextureArray& texture,
                              const int targetLayer,
                              const unsigned char* srcPixels,
                              const int tileSize) {
-    glBindTexture(GL_TEXTURE_2D_ARRAY, textureId);
-    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, targetLayer,
-                    tileSize, tileSize, 1, GL_RGBA, GL_UNSIGNED_BYTE, srcPixels);
+    (void)tileSize;
+    texture.writeLayer(targetLayer, srcPixels);
 }
 
 glm::vec3 computeAlphaWeightedAverageColor(const unsigned char* srcPixels,
@@ -215,7 +191,7 @@ glm::vec3 computeAlphaWeightedAverageColor(const unsigned char* srcPixels,
                      static_cast<float>(blue) * invAlpha);
 }
 
-void uploadConstantLayer(const GLuint textureId,
+void writeConstantLayer(PendingTextureArray& texture,
                          const int targetLayer,
                          const int tileSize,
                          const std::array<unsigned char, 4>& pixel) {
@@ -226,16 +202,16 @@ void uploadConstantLayer(const GLuint textureId,
         pixels[i + 2] = pixel[2];
         pixels[i + 3] = pixel[3];
     }
-    uploadTextureArrayLayer(textureId, targetLayer, pixels.data(), tileSize);
+    writeTextureArrayLayer(texture, targetLayer, pixels.data(), tileSize);
 }
 
-void uploadNeutralMaterialLayers(const GLuint textureId,
+void writeNeutralMaterialLayers(PendingTextureArray& texture,
                                  const int firstLayer,
                                  const int layerCount,
                                  const int tileSize,
                                  const std::array<unsigned char, 4>& pixel) {
     for (int layer = 0; layer < layerCount; ++layer) {
-        uploadConstantLayer(textureId, firstLayer + layer, tileSize, pixel);
+        writeConstantLayer(texture, firstLayer + layer, tileSize, pixel);
     }
 }
 
@@ -289,7 +265,7 @@ void transformNormalMapTile(std::vector<unsigned char>& tilePixels, const bool s
     }
 }
 
-void uploadAlbedoLayers(const GLuint textureId,
+void writeAlbedoLayers(PendingTextureArray& texture,
                         const resource::BlockTextureManifestEntry& entry,
                         const int firstLayer,
                         const int layerCount,
@@ -313,7 +289,7 @@ void uploadAlbedoLayers(const GLuint textureId,
                 image.data + static_cast<size_t>(sourceFrameIndex * image.width * image.width) * 4U;
             const std::vector<unsigned char> tilePixels =
                 makeTextureArrayTilePixels(framePixels, image.width, image.width, image.width, tileSize);
-            uploadTextureArrayLayer(textureId, firstLayer + frame, tilePixels.data(), tileSize);
+            writeTextureArrayLayer(texture, firstLayer + frame, tilePixels.data(), tileSize);
             layerAverageColors[static_cast<size_t>(firstLayer + frame)] =
                 computeAlphaWeightedAverageColor(tilePixels.data(), tileSize, tileSize, tint);
         }
@@ -325,12 +301,12 @@ void uploadAlbedoLayers(const GLuint textureId,
     }
     const std::vector<unsigned char> tilePixels =
         makeTextureArrayTilePixels(image.data, image.width, image.height, image.width, tileSize);
-    uploadTextureArrayLayer(textureId, firstLayer, tilePixels.data(), tileSize);
+    writeTextureArrayLayer(texture, firstLayer, tilePixels.data(), tileSize);
     layerAverageColors[static_cast<size_t>(firstLayer)] =
         computeAlphaWeightedAverageColor(tilePixels.data(), tileSize, tileSize, tint);
 }
 
-void uploadMaterialMapLayers(const GLuint textureId,
+void writeMaterialMapLayers(PendingTextureArray& texture,
                              const std::optional<std::filesystem::path>& mapPath,
                              const int firstLayer,
                              const int layerCount,
@@ -341,7 +317,7 @@ void uploadMaterialMapLayers(const GLuint textureId,
                              const bool neutralizeSourceAlpha,
                              const bool transformNormalMap) {
     if (!mapPath.has_value()) {
-        uploadNeutralMaterialLayers(textureId, firstLayer, layerCount, tileSize, neutralPixel);
+        writeNeutralMaterialLayers(texture, firstLayer, layerCount, tileSize, neutralPixel);
         return;
     }
 
@@ -356,7 +332,7 @@ void uploadMaterialMapLayers(const GLuint textureId,
             setTileAlpha(tilePixels, neutralPixel[3]);
         }
         for (int layer = 0; layer < layerCount; ++layer) {
-            uploadTextureArrayLayer(textureId, firstLayer + layer, tilePixels.data(), tileSize);
+            writeTextureArrayLayer(texture, firstLayer + layer, tilePixels.data(), tileSize);
         }
         return;
     }
@@ -373,7 +349,7 @@ void uploadMaterialMapLayers(const GLuint textureId,
             } else if (neutralizeSourceAlpha && !sourceHasAlpha) {
                 setTileAlpha(tilePixels, neutralPixel[3]);
             }
-            uploadTextureArrayLayer(textureId, firstLayer + frame, tilePixels.data(), tileSize);
+            writeTextureArrayLayer(texture, firstLayer + frame, tilePixels.data(), tileSize);
         }
         return;
     }
@@ -383,25 +359,21 @@ void uploadMaterialMapLayers(const GLuint textureId,
                              mapPath.value().string());
 }
 
-void finalizeTextureArray(const GLuint textureId) {
-    glBindTexture(GL_TEXTURE_2D_ARRAY, textureId);
-    glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
-}
-
 } // namespace
 
 namespace resource {
 
 BlockTextureArraySet buildBlockTextureArraySet(const std::string& directory,
                                                const int tileSize,
-                                               BlockTextureCatalog& catalog) {
-    return buildBlockTextureArraySet(buildBlockTextureManifest(directory), tileSize, catalog);
+                                               BlockTextureCatalog& catalog,
+                                               RhiDevice& rhiDevice) {
+    return buildBlockTextureArraySet(buildBlockTextureManifest(directory), tileSize, catalog, rhiDevice);
 }
 
 BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest,
                                                const int tileSize,
-                                               BlockTextureCatalog& catalog) {
+                                               BlockTextureCatalog& catalog,
+                                               RhiDevice& rhiDevice) {
     if (tileSize <= 0) {
         failBlockTextureArrayBuilder("Block texture array tile size must be positive");
     }
@@ -464,26 +436,18 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
         }
 
         const bool topFrameFirst = catalogEntry != nullptr && catalogEntry->topFrameFirst;
-        uploadAlbedoLayers(albedoArray.id(), entry, currentLayer, layerCount, tileSize, catalogEntry,
-                           result.layerAverageColors);
+        writeAlbedoLayers(albedoArray, entry, currentLayer, layerCount, tileSize, catalogEntry,
+                          result.layerAverageColors);
         if (normalArray.has_value()) {
-            uploadMaterialMapLayers(normalArray->id(), entry.normalPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralNormalPixel, "normal", true, true);
+            writeMaterialMapLayers(*normalArray, entry.normalPath, currentLayer, layerCount, tileSize,
+                                   topFrameFirst, kNeutralNormalPixel, "normal", true, true);
         }
         if (specularArray.has_value()) {
-            uploadMaterialMapLayers(specularArray->id(), entry.specularPath, currentLayer, layerCount, tileSize,
-                                    topFrameFirst, kNeutralSpecularPixel, "specular", false, false);
+            writeMaterialMapLayers(*specularArray, entry.specularPath, currentLayer, layerCount, tileSize,
+                                   topFrameFirst, kNeutralSpecularPixel, "specular", false, false);
         }
 
         currentLayer += layerCount;
-    }
-
-    finalizeTextureArray(albedoArray.id());
-    if (normalArray.has_value()) {
-        finalizeTextureArray(normalArray->id());
-    }
-    if (specularArray.has_value()) {
-        finalizeTextureArray(specularArray->id());
     }
 
     int mapLayer = 0;
@@ -496,13 +460,18 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
         mapLayer += layerCount;
     }
 
-    result.albedoArray = albedoArray.release();
+    result.albedoArray = albedoArray.create(rhiDevice, "BlockTextures.AlbedoArray");
     if (normalArray.has_value()) {
-        result.normalArray = normalArray->release();
+        result.normalArray = normalArray->create(rhiDevice, "BlockTextures.NormalArray");
     }
     if (specularArray.has_value()) {
-        result.specularArray = specularArray->release();
+        result.specularArray = specularArray->create(rhiDevice, "BlockTextures.SpecularArray");
     }
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    commandList.generateMipmaps(result.albedoArray.texture);
+    if (result.normalArray.texture.isValid()) commandList.generateMipmaps(result.normalArray.texture);
+    if (result.specularArray.texture.isValid()) commandList.generateMipmaps(result.specularArray.texture);
+    rhiDevice.submitFrame(commandList);
     return result;
 }
 

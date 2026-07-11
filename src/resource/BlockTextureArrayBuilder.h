@@ -10,6 +10,8 @@
 #include <vector>
 #include <glm/vec3.hpp>
 
+class RhiDevice;
+
 namespace resource {
 
 struct BlockTextureArraySet {
@@ -25,11 +27,13 @@ struct BlockTextureArraySet {
 
 [[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const std::string& directory,
                                                              int tileSize,
-                                                             BlockTextureCatalog& catalog);
+                                                             BlockTextureCatalog& catalog,
+                                                             RhiDevice& rhiDevice);
 
 [[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest,
                                                              int tileSize,
-                                                             BlockTextureCatalog& catalog);
+                                                             BlockTextureCatalog& catalog,
+                                                             RhiDevice& rhiDevice);
 
 } // namespace resource
 

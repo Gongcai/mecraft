@@ -13,12 +13,15 @@
 #include <unordered_set>
 #include <vector>
 
+class RhiDevice;
+
 class BlockTextureLibrary {
 public:
     BlockTextureLibrary() = default;
     BlockTextureLibrary(const BlockTextureLibrary&) = delete;
     BlockTextureLibrary& operator=(const BlockTextureLibrary&) = delete;
 
+    void init(RhiDevice& rhiDevice);
     void shutdown();
 
     [[nodiscard]] bool loadCatalog(const std::string& textureConfigPath);
@@ -53,7 +56,6 @@ public:
 
 private:
     void deleteTextureArray(TextureArray& textureArray);
-    void applySamplerToTextureArrays();
 
     TextureAtlas m_atlas;
     TextureArray m_textureArray;
@@ -68,6 +70,7 @@ private:
     std::unordered_map<int, int> m_arrayLayerToAtlasTile;
     bool m_hasNormalMaps = false;
     bool m_hasSpecularMaps = false;
+    RhiDevice* m_rhiDevice = nullptr;
 };
 
 #endif // MECRAFT_BLOCK_TEXTURE_LIBRARY_H
