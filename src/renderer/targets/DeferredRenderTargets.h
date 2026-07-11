@@ -247,6 +247,8 @@ private:
     void destroyAtmosphereTextures();
     bool createSceneHistoryTextures();
     void destroySceneHistoryTextures();
+    bool createEffectHistoryTextures();
+    void destroyEffectHistoryTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -392,13 +394,10 @@ private:
     RhiTextureHandle m_historyDepthHandle[2];
     RhiTextureViewHandle m_historySceneView[2];
     RhiTextureViewHandle m_historyDepthView[2];
-    uint32_t m_historyReflectionTex[2] = {0, 0};
     RhiTextureHandle m_historyReflectionHandle[2];
     RhiTextureViewHandle m_historyReflectionView[2];
-    uint32_t m_historyCloudTex[2] = {0, 0};
     RhiTextureHandle m_historyCloudHandle[2];
     RhiTextureViewHandle m_historyCloudView[2];
-    uint32_t m_historyVolumetricTex[2] = {0, 0};
     RhiTextureHandle m_historyVolumetricHandle[2];
     RhiTextureViewHandle m_historyVolumetricView[2];
     int m_currentHistoryIndex = 0;

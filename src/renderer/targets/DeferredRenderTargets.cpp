@@ -91,6 +91,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createEffectHistoryTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -220,19 +224,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     // only written once per frame" invariant).
     m_temporalCurrentTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-    const int halfWidth = std::max(1, m_width / 2);
-    const int halfHeight = std::max(1, m_height / 2);
-    // History scene ping-pong (RGBA16F color + depth)
-    for (int i = 0; i < 2; ++i) {
-        m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
-                                                    GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
-        m_historyCloudTex[i] = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT,
-                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-
-        m_historyVolumetricTex[i] = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT,
-                                                    GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    }
     m_currentHistoryIndex = 0;
 
     // Velocity buffer (RG16F)
@@ -291,21 +282,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         renderer::debug::labelTexture(m_ssgiHistoryTex[i], texName);
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
-    }
-    for (int i = 0; i < 2; ++i) {
-        char texName[48];
-        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryReflectionTex[%d]", i);
-        renderer::debug::labelTexture(m_historyReflectionTex[i], texName);
-    }
-    for (int i = 0; i < 2; ++i) {
-        char texName[48];
-        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryCloudTex[%d]", i);
-        renderer::debug::labelTexture(m_historyCloudTex[i], texName);
-    }
-    for (int i = 0; i < 2; ++i) {
-        char texName[48];
-        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistoryVolumetricTex[%d]", i);
-        renderer::debug::labelTexture(m_historyVolumetricTex[i], texName);
     }
     renderer::debug::labelTexture(m_temporalCurrentTex, "DeferredTargets.TemporalCurrentTex");
     renderer::debug::labelTexture(m_velocityTex, "DeferredTargets.VelocityTex");
@@ -897,47 +873,79 @@ void DeferredRenderTargets::destroySceneHistoryTextures() {
     }
 }
 
-bool DeferredRenderTargets::registerRhiTextures() {
+bool DeferredRenderTargets::createEffectHistoryTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const uint32_t width,
+                                      const uint32_t height,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.width = width;
+        desc.height = height;
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                     rhiFlag(RhiTextureUsage::ColorAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) |
+                     rhiFlag(RhiTextureUsage::TransferDst);
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    const uint32_t width = static_cast<uint32_t>(m_width);
+    const uint32_t height = static_cast<uint32_t>(m_height);
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
     for (int i = 0; i < 2; ++i) {
-        m_historyReflectionHandle[i] = renderer::rhi::gl::registerTexture({
-            m_historyReflectionTex[i],
-            RhiTextureDimension::Texture2D,
-            RhiTextureFormat::Rgba16Float,
-            static_cast<uint32_t>(m_width),
-            static_cast<uint32_t>(m_height),
-            1,
-            1,
-            1,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-            false
-        });
-        m_historyCloudHandle[i] = renderer::rhi::gl::registerTexture({
-            m_historyCloudTex[i],
-            RhiTextureDimension::Texture2D,
-            RhiTextureFormat::Rgba16Float,
-            halfWidth,
-            halfHeight,
-            1,
-            1,
-            1,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-            false
-        });
-        m_historyVolumetricHandle[i] = renderer::rhi::gl::registerTexture({
-            m_historyVolumetricTex[i],
-            RhiTextureDimension::Texture2D,
-            RhiTextureFormat::Rgba16Float,
-            halfWidth,
-            halfHeight,
-            1,
-            1,
-            1,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-            false
-        });
+        const char* reflectionName = i == 0
+            ? "DeferredTargets.HistoryReflection[0]"
+            : "DeferredTargets.HistoryReflection[1]";
+        const char* cloudName = i == 0
+            ? "DeferredTargets.HistoryCloud[0]"
+            : "DeferredTargets.HistoryCloud[1]";
+        const char* volumetricName = i == 0
+            ? "DeferredTargets.HistoryVolumetric[0]"
+            : "DeferredTargets.HistoryVolumetric[1]";
+        if (!createTexture(reflectionName, width, height, m_historyReflectionHandle[i]) ||
+            !createTexture(cloudName, halfWidth, halfHeight, m_historyCloudHandle[i]) ||
+            !createTexture(volumetricName, halfWidth, halfHeight, m_historyVolumetricHandle[i])) {
+            destroyEffectHistoryTextures();
+            return false;
+        }
     }
+    return true;
+}
+
+void DeferredRenderTargets::destroyEffectHistoryTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        RhiTextureHandle* textures[] = {
+            &m_historyReflectionHandle[i],
+            &m_historyCloudHandle[i],
+            &m_historyVolumetricHandle[i]
+        };
+        for (RhiTextureHandle* texture : textures) {
+            if (texture->isValid()) {
+                m_rhiDevice->destroyTexture(*texture);
+                *texture = {};
+            }
+        }
+    }
+}
+
+bool DeferredRenderTargets::registerRhiTextures() {
+    const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
+    const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
     m_temporalCurrentHandle = renderer::rhi::gl::registerTexture({
         m_temporalCurrentTex,
         RhiTextureDimension::Texture2D,
@@ -2962,12 +2970,7 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyScreenEffectTextures();
     destroyAtmosphereTextures();
     destroySceneHistoryTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyReflectionHandle[0]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyReflectionHandle[1]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyCloudHandle[0]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyCloudHandle[1]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyVolumetricHandle[0]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyVolumetricHandle[1]);
+    destroyEffectHistoryTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_temporalCurrentHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_velocityHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_perObjectVelocityHandle);
@@ -3019,9 +3022,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssaoTex,
         m_ssaoFilteredTex,
         m_temporalCurrentTex,
-        m_historyReflectionTex[0], m_historyReflectionTex[1],
-        m_historyCloudTex[0], m_historyCloudTex[1],
-        m_historyVolumetricTex[0], m_historyVolumetricTex[1],
         m_ssaoHalfResTex, m_ssaoHalfResFilteredTex,
         m_ssaoHistoryTex[0], m_ssaoHistoryTex[1],
         m_ssaoTemporalTex,
@@ -3057,9 +3057,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoHalfResTex = 0;
     m_ssaoHalfResFilteredTex = 0;
     m_temporalCurrentTex = 0;
-    m_historyReflectionTex[0] = 0; m_historyReflectionTex[1] = 0;
-    m_historyCloudTex[0] = 0; m_historyCloudTex[1] = 0;
-    m_historyVolumetricTex[0] = 0; m_historyVolumetricTex[1] = 0;
     m_ssaoHistoryTex[0] = 0; m_ssaoHistoryTex[1] = 0;
     m_ssaoTemporalTex = 0;
     m_ssgiTex = 0;
