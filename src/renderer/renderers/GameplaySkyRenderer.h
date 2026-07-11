@@ -62,7 +62,7 @@ public:
     /// Must be called after init(). Reverts to deferred shader if false.
     void setForwardMode(bool forward);
     void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, uint32_t skyCaptureTexture);
-    void renderCloudySkyCapture(const DayNightSystem& dayNight, RhiCommandList& commandList,
+    void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList,
                                 RhiTextureViewHandle targetView, int skyCaptureWidth,
                                 int skyCaptureHeight, float cameraAltitude, RhiTextureHandle atmosphereLutTexture,
                                 float moonPhaseFlux, RhiTextureHandle noiseTexture, float shaderTime,

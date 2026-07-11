@@ -102,7 +102,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     commandList.endRendering();
 
     // Cloudy sky radiance (rows 258..513)
-    skyRenderer.renderCloudySkyCapture(dayNightSystem,
+    skyRenderer.renderCloudySkyCapture(skyColors,
                                         commandList,
                                         targets.skyCaptureTextureViewHandle(),
                                         targets.skyCaptureWidth(),

@@ -245,7 +245,7 @@ void GameplaySkyRenderer::render(const Camera& camera, const float aspect, const
     renderClouds(camera, aspect, dayNight, m_lastColors);
 }
 
-void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
+void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
                                                   RhiCommandList& commandList,
                                                   const RhiTextureViewHandle targetView,
                                                   const int skyCaptureWidth,
@@ -267,7 +267,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
                                                   const glm::vec3& cameraPos,
                                                   const float weatherWetness,
                                                   const float weatherStorm) {
-    m_lastColors = computeSkyColors(dayNight);
+    m_lastColors = colors;
     if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
     }
