@@ -283,7 +283,6 @@ set(SRC_RENDERER
         src/renderer/gl/GlStateGuard.cpp
 
         # Render targets
-        src/renderer/targets/CommonFrameTargets.cpp
         src/renderer/targets/DeferredRenderTargets.cpp
         src/renderer/targets/ShadowTargets.cpp
 

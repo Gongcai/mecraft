@@ -35,7 +35,6 @@ class TerrainRenderCache;
 class TerrainStreamingService;
 class TerrainRenderer;
 class TerrainRhiPipelineSet;
-class CommonFrameTargets;
 class DeferredRenderTargets;
 class ShadowTargets;
 class GameplaySkyRenderer;
@@ -70,7 +69,6 @@ struct SharedRenderResources {
     ChunkMeshingService* meshingService = nullptr;
 
     // Render targets
-    CommonFrameTargets* commonTargets = nullptr;
     DeferredRenderTargets* deferredTargets = nullptr;
     ShadowTargets* shadowTargets = nullptr;
 

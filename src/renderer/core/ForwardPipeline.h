@@ -13,7 +13,6 @@ class RhiCommandList;
 class TerrainRenderer;
 class TerrainRenderCache;
 class WorldRenderBuffer;
-class CommonFrameTargets;
 class GameplaySkyRenderer;
 
 /// Forward rendering pipeline - vanilla/basic fallback renderer.
@@ -49,7 +48,6 @@ private:
     TerrainRenderer* m_terrainRenderer = nullptr;
     TerrainRenderCache* m_terrainCache = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
-    CommonFrameTargets* m_commonTargets = nullptr;
     GameplaySkyRenderer* m_skyRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     SharedRenderResources* m_shared = nullptr;
