@@ -68,8 +68,11 @@ public:
 
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
-    void renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                              const glm::vec3& cameraPos, float splitNear, float splitFar);
+    void renderShadowEntities(RhiCommandList& commandList,
+                              const glm::mat4& shadowViewProj,
+                              const glm::vec3& cameraPos,
+                              float splitNear,
+                              float splitFar);
 
     /// Render block entity models into the current shadow cascade layer.
     void renderShadowBlockEntities(RhiCommandList& commandList,
@@ -85,7 +88,6 @@ private:
                                    const glm::mat4& shadowViewProj,
                                    float animationTime);
 
-    Shader* m_entityShadowShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     TerrainRenderer* m_terrainRenderer = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;

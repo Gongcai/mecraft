@@ -54,36 +54,22 @@ using ShadowCascadeData = shadow::ShadowRenderer::Cascade;
 
 void ShadowPass::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
-    m_entityShadowShader = resourceMgr.getShader("entity_shadow");
 }
 
 void ShadowPass::shutdown() {
-    m_entityShadowShader = nullptr;
     m_resourceMgr = nullptr;
 }
 
-void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                                      const glm::vec3& cameraPos, float splitNear, float splitFar) {
-    // Render humanoid/mob entities into the current shadow cascade layer.
-    // Shadow FBO layer is already bound by the caller (execute).
-    if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr ||
-        m_entityShadowShader == nullptr) {
+void ShadowPass::renderShadowEntities(RhiCommandList& commandList,
+                                      const glm::mat4& shadowViewProj,
+                                      const glm::vec3& cameraPos,
+                                      const float splitNear,
+                                      const float splitFar) {
+    if (m_humanoidRenderer == nullptr || m_gameplayRegistry == nullptr) {
         return;
     }
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-
-    m_entityShadowShader->use();
-    m_entityShadowShader->setInt("uTexture", 0);
-
-    m_humanoidRenderer->renderToShadowMap(worldView, *m_gameplayRegistry,
-                                          shadowViewProj, cameraPos, splitNear, splitFar,
-                                          HumanoidRenderer::kRenderAll);
-
+    m_humanoidRenderer->renderPreparedToShadowMap(
+        commandList, shadowViewProj, cameraPos, splitNear, splitFar);
 }
 
 void ShadowPass::renderShadowBlockEntities(RhiCommandList& commandList,
@@ -141,6 +127,10 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     }
     if (m_dropRenderer != nullptr && m_dropSystem != nullptr) {
         m_dropRenderer->prepareFrame(worldView, *m_dropSystem);
+    }
+    if (m_humanoidRenderer != nullptr && m_gameplayRegistry != nullptr) {
+        m_humanoidRenderer->prepareFrame(
+            worldView, *m_gameplayRegistry, HumanoidRenderer::kRenderAll);
     }
 
     // Update shadow cascades via ShadowRenderer.
@@ -360,7 +350,8 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             // Block entity shadow: render chest-style entity models into this cascade.
             renderShadowBlockEntities(commandList, cascadeData.viewProj);
             // Entity shadow: render humanoid/mob depth into this cascade with distance/split culling.
-            renderShadowEntities(worldView, cascadeData.viewProj, ctx.camera.position, cascadeData.splitNear, cascadeData.splitFar);
+            renderShadowEntities(commandList, cascadeData.viewProj, ctx.camera.position,
+                                 cascadeData.splitNear, cascadeData.splitFar);
             // Drop shadow: render dropped items/blocks depth into this cascade.
             renderShadowDrops(commandList, cascadeData.viewProj, ctx.animationTime);
             // Falling-block shadow: render falling sand/gravel depth into this cascade.

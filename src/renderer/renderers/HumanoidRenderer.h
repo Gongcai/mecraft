@@ -44,17 +44,13 @@ public:
     void renderPreparedToGBuffer(RhiCommandList& commandList,
                                  const glm::mat4& viewProj,
                                  const glm::mat4& previousViewProj);
+    void renderPreparedToShadowMap(RhiCommandList& commandList,
+                                   const glm::mat4& shadowViewProj,
+                                   const glm::vec3& cameraPos,
+                                   float splitNear,
+                                   float splitFar);
     void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
                 RenderMode mode = kRenderAll);
-    // Shadow path: renders entities into the CSM shadow map.
-    // Caller must have already bound the shadow FBO layer.
-    void renderToShadowMap(ecs::GameplayRegistry& registry,
-                           const glm::mat4& shadowViewProj,
-                           RenderMode mode = kRenderAll);
-    void renderToShadowMap(const IWorldView& worldView, ecs::GameplayRegistry& registry,
-                           const glm::mat4& shadowViewProj,
-                           const glm::vec3& cameraPos, float splitNear, float splitFar,
-                           RenderMode mode = kRenderAll);
     void renderInventoryPreview(float x,
                                 float y,
                                 float width,
@@ -89,6 +85,7 @@ private:
         RhiTextureHandle texture;
         RhiTextureViewHandle view;
         RhiBindGroupHandle gbufferBindGroup;
+        RhiBindGroupHandle shadowBindGroup;
     };
     std::unordered_map<std::string, TextureResource> m_textureResources;
 
@@ -105,7 +102,6 @@ private:
 
     Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
     Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
-    Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
     uint32_t m_neutralShadowDepth = 0;
@@ -123,6 +119,11 @@ private:
     RhiBindGroupLayoutHandle m_gbufferRhiBindGroupLayout;
     RhiPipelineLayoutHandle m_gbufferRhiPipelineLayout;
     RhiPipelineHandle m_gbufferRhiPipeline;
+    RhiShaderHandle m_shadowRhiVertexShader;
+    RhiShaderHandle m_shadowRhiFragmentShader;
+    RhiBindGroupLayoutHandle m_shadowRhiBindGroupLayout;
+    RhiPipelineLayoutHandle m_shadowRhiPipelineLayout;
+    RhiPipelineHandle m_shadowRhiPipeline;
 
     void destroyMesh(PartMesh& mesh) const;
 

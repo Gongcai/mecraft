@@ -355,6 +355,11 @@ const HumanoidRenderer::TextureResource& HumanoidRenderer::requireTextureResourc
     if (!resource.gbufferBindGroup.isValid()) {
         std::abort();
     }
+    bindGroupDesc.layout = m_shadowRhiBindGroupLayout;
+    resource.shadowBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
+    if (!resource.shadowBindGroup.isValid()) {
+        std::abort();
+    }
     return m_textureResources.emplace(textureKey, resource).first->second;
 }
 
@@ -363,7 +368,6 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
     m_shader = resourceMgr.getShader("steve");
     m_forwardShader = resourceMgr.getShader("steve_forward");
-    m_shadowShader = resourceMgr.getShader("entity_shadow");
     createGBufferRhiResources();
     requireTextureResource("steve");
 
@@ -380,6 +384,9 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
 
 void HumanoidRenderer::shutdown() {
     for (auto& texturePair : m_textureResources) {
+        if (texturePair.second.shadowBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(texturePair.second.shadowBindGroup);
+        }
         if (texturePair.second.gbufferBindGroup.isValid()) {
             m_rhiDevice->destroyBindGroup(texturePair.second.gbufferBindGroup);
         }
@@ -549,7 +556,11 @@ void HumanoidRenderer::createGBufferRhiResources() {
         "assets/shaders/entity_gbuffer_rhi.vert");
     const auto fragmentSource = renderer::rhi::loadShaderSource(
         "assets/shaders/entity_gbuffer_rhi.frag");
-    if (!vertexSource || !fragmentSource) {
+    const auto shadowVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/entity_shadow_rhi.vert");
+    const auto shadowFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/entity_shadow_rhi.frag");
+    if (!vertexSource || !fragmentSource || !shadowVertexSource || !shadowFragmentSource) {
         std::abort();
     }
     auto createShader = [this](const char* name, const RhiShaderStage stage,
@@ -565,6 +576,10 @@ void HumanoidRenderer::createGBufferRhiResources() {
                                              *vertexSource);
     m_gbufferRhiFragmentShader = createShader("Humanoid.GBuffer.Fragment", RhiShaderStage::Fragment,
                                                *fragmentSource);
+    m_shadowRhiVertexShader = createShader("Humanoid.Shadow.Vertex", RhiShaderStage::Vertex,
+                                           *shadowVertexSource);
+    m_shadowRhiFragmentShader = createShader("Humanoid.Shadow.Fragment", RhiShaderStage::Fragment,
+                                             *shadowFragmentSource);
     RhiSamplerDesc samplerDesc;
     samplerDesc.addressU = RhiAddressMode::ClampToEdge;
     samplerDesc.addressV = RhiAddressMode::ClampToEdge;
@@ -574,6 +589,8 @@ void HumanoidRenderer::createGBufferRhiResources() {
     bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
                                            rhiFlag(RhiShaderStage::Fragment), 1u});
     m_gbufferRhiBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
+    bindGroupLayoutDesc.debugName = "Humanoid.Shadow.BindGroupLayout";
+    m_shadowRhiBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "Humanoid.GBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_gbufferRhiBindGroupLayout);
@@ -581,6 +598,11 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
                                             rhiFlag(RhiShaderStage::Fragment);
     m_gbufferRhiPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    pipelineLayoutDesc.debugName = "Humanoid.Shadow.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts[0] = m_shadowRhiBindGroupLayout;
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u;
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
+    m_shadowRhiPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.debugName = "Humanoid.GBuffer.Pipeline";
     pipelineDesc.vertexShader = m_gbufferRhiVertexShader;
@@ -600,14 +622,30 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(6u);
     m_gbufferRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "Humanoid.Shadow.Pipeline";
+    pipelineDesc.vertexShader = m_shadowRhiVertexShader;
+    pipelineDesc.fragmentShader = m_shadowRhiFragmentShader;
+    pipelineDesc.layout = m_shadowRhiPipelineLayout;
+    pipelineDesc.colorFormats.clear();
+    pipelineDesc.blend.attachments.clear();
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    m_shadowRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_gbufferRhiVertexShader.isValid() || !m_gbufferRhiFragmentShader.isValid() ||
         !m_gbufferSampler.isValid() || !m_gbufferRhiBindGroupLayout.isValid() ||
-        !m_gbufferRhiPipelineLayout.isValid() || !m_gbufferRhiPipeline.isValid()) {
+        !m_gbufferRhiPipelineLayout.isValid() || !m_gbufferRhiPipeline.isValid() ||
+        !m_shadowRhiVertexShader.isValid() || !m_shadowRhiFragmentShader.isValid() ||
+        !m_shadowRhiBindGroupLayout.isValid() || !m_shadowRhiPipelineLayout.isValid() ||
+        !m_shadowRhiPipeline.isValid()) {
         std::abort();
     }
 }
 
 void HumanoidRenderer::destroyGBufferRhiResources() {
+    if (m_shadowRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_shadowRhiPipeline);
+    if (m_shadowRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowRhiPipelineLayout);
+    if (m_shadowRhiBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowRhiBindGroupLayout);
+    if (m_shadowRhiFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowRhiFragmentShader);
+    if (m_shadowRhiVertexShader.isValid()) m_rhiDevice->destroyShader(m_shadowRhiVertexShader);
     if (m_gbufferRhiPipeline.isValid()) m_rhiDevice->destroyPipeline(m_gbufferRhiPipeline);
     if (m_gbufferRhiPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_gbufferRhiPipelineLayout);
     if (m_gbufferRhiBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_gbufferRhiBindGroupLayout);
@@ -620,6 +658,11 @@ void HumanoidRenderer::destroyGBufferRhiResources() {
     m_gbufferSampler = {};
     m_gbufferRhiFragmentShader = {};
     m_gbufferRhiVertexShader = {};
+    m_shadowRhiPipeline = {};
+    m_shadowRhiPipelineLayout = {};
+    m_shadowRhiBindGroupLayout = {};
+    m_shadowRhiFragmentShader = {};
+    m_shadowRhiVertexShader = {};
 }
 
 void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
@@ -643,6 +686,29 @@ void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
         commandList.pushConstants(&pushConstants, sizeof(pushConstants),
                                   rhiFlag(RhiShaderStage::Vertex) |
                                   rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(draw.mesh->vertexCount, 1u, 0u, 0u);
+    }
+}
+
+void HumanoidRenderer::renderPreparedToShadowMap(RhiCommandList& commandList,
+                                                 const glm::mat4& shadowViewProj,
+                                                 const glm::vec3& cameraPos,
+                                                 const float splitNear,
+                                                 const float splitFar) {
+    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; };
+    const float minDistance = splitNear - 4.0f;
+    const float maxDistance = splitFar + 4.0f;
+    commandList.setGraphicsPipeline(m_shadowRhiPipeline);
+    for (const PreparedPartDraw& draw : m_preparedPartDraws) {
+        const float distance = glm::length(draw.entityCenter - cameraPos);
+        if ((minDistance > 0.0f && distance < minDistance) || distance > maxDistance) {
+            continue;
+        }
+        const PushConstants pushConstants{shadowViewProj, draw.model};
+        commandList.setBindGroup(0u, draw.texture->shadowBindGroup);
+        commandList.setVertexBuffer(0u, draw.mesh->rhiVertexBuffer, 0u);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex));
         commandList.draw(draw.mesh->vertexCount, 1u, 0u, 0u);
     }
 }
@@ -1378,31 +1444,6 @@ void HumanoidRenderer::render(ecs::GameplayRegistry& gameplayReg, const Camera& 
 
     drawEntities(gameplayReg, *m_forwardShader, modelLoc, viewProjLoc, -1, viewProj, mode);
     glDisable(GL_CULL_FACE);
-}
-
-void HumanoidRenderer::renderToShadowMap(ecs::GameplayRegistry& gameplayReg,
-                                          const glm::mat4& shadowViewProj,
-                                          RenderMode mode) {
-    if (m_shadowShader == nullptr || m_resourceMgr == nullptr) return;
-
-    const int modelLoc = m_shadowShader->getUniformLocation("model");
-    const int viewProjLoc = m_shadowShader->getUniformLocation("viewProj");
-
-    // Shadow FBO is already bound by the caller (Renderer).
-    // Depth test/write enabled, blend disabled — set by caller.
-    drawEntities(gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode);
-}
-
-void HumanoidRenderer::renderToShadowMap(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg,
-                                          const glm::mat4& shadowViewProj,
-                                          const glm::vec3& cameraPos, float splitNear, float splitFar,
-                                          RenderMode mode) {
-    if (m_shadowShader == nullptr || m_resourceMgr == nullptr) return;
-
-    const int modelLoc = m_shadowShader->getUniformLocation("model");
-    const int viewProjLoc = m_shadowShader->getUniformLocation("viewProj");
-
-    drawEntities(worldView, gameplayReg, *m_shadowShader, modelLoc, viewProjLoc, -1, shadowViewProj, mode, cameraPos, splitNear, splitFar);
 }
 
 glm::vec2 HumanoidRenderer::queryWorldLight(const IWorldView& worldView, const glm::vec3& position) {
