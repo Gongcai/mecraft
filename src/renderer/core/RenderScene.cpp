@@ -108,7 +108,7 @@ float computeHeldItemSceneHdrScale(const FrameContext& ctx,
     return std::clamp(scale, 1.0f, 6.5f);
 }
 
-RhiCommandList* beginSceneCaptureRendering(RhiDevice& rhiDevice,
+RhiCommandList* beginSceneCaptureRendering(RhiCommandList& commandList,
                                            const FrameContext& ctx,
                                            const char* debugName) {
     if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
@@ -137,9 +137,15 @@ RhiCommandList* beginSceneCaptureRendering(RhiDevice& rhiDevice,
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
     commandList.beginRendering(renderingInfo);
     return &commandList;
+}
+
+RhiCommandList* beginSceneCaptureRendering(RhiDevice& rhiDevice,
+                                           const FrameContext& ctx,
+                                           const char* debugName) {
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    return beginSceneCaptureRendering(commandList, ctx, debugName);
 }
 
 void endSceneCaptureRendering(RhiDevice& rhiDevice, RhiCommandList* commandList) {
@@ -323,8 +329,10 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                               request.frameTime);
             RhiCommandList* weatherCommandList = nullptr;
             if (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f) {
+                RhiCommandList& commandList = m_shared.rhiDevice->beginFrame();
+                request.rainRenderer.uploadFrame(commandList);
                 weatherCommandList = beginSceneCaptureRendering(
-                    *m_shared.rhiDevice, m_currentContext, "SceneCapture.Weather");
+                    commandList, m_currentContext, "SceneCapture.Weather");
             }
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));

@@ -36,6 +36,7 @@ struct GameplayRenderRuntime::Impl {
     FallingBlockRenderer fallingBlockRenderer;
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
     HumanoidRenderer humanoidRenderer;
+    RainRenderer* rainRenderer = nullptr;
 
 #ifdef MECRAFT_DEBUG
     Dashboard dashboard;
@@ -116,7 +117,11 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
     // Particle and rain systems (owned by session, init requires ResourceMgr)
     session.particleSystem().init(resourceMgr);
-    session.rainRenderer().init(resourceMgr);
+    m_impl->rainRenderer = &session.rainRenderer();
+    if (!m_impl->rainRenderer->init(resourceMgr)) {
+        m_impl->rainRenderer = nullptr;
+        return false;
+    }
 
     glEnable(GL_DEPTH_TEST);
     return true;
@@ -127,6 +132,10 @@ void GameplayRenderRuntime::shutdown() {
 #ifdef MECRAFT_DEBUG
     m_impl->dashboard.shutdown();
 #endif
+    if (m_impl->rainRenderer != nullptr) {
+        m_impl->rainRenderer->shutdown();
+        m_impl->rainRenderer = nullptr;
+    }
     m_impl->humanoidRenderer.shutdown();
     m_impl->firstPersonHeldItemRenderer.shutdown();
     m_impl->fallingBlockRenderer.shutdown();

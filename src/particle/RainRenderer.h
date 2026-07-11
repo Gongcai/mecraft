@@ -6,9 +6,9 @@
 #include <glm/glm.hpp>
 #include "renderer/rhi/RhiHandles.h"
 
-class Shader;
 class ResourceMgr;
 class RhiCommandList;
+class RhiDevice;
 
 // Textured precipitation renderer using vanilla rain.png / snow.png atlas.
 // Spawns camera-relative billboard quads in a cylinder, samples streak columns
@@ -16,13 +16,14 @@ class RhiCommandList;
 // Supports both rain and snow with separate drop pools and physics.
 class RainRenderer {
 public:
-    void init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
     void shutdown();
     void prepareFrame(const glm::vec3& cameraPos,
                       const glm::mat4& view,
                       float rainStrength,
                       float snowStrength,
                       float dt);
+    void uploadFrame(RhiCommandList& commandList);
 
     // Render rain around the given camera position.
     void render(RhiCommandList& commandList,
@@ -64,7 +65,8 @@ private:
                        bool proceduralLines,
                        const glm::mat4& view,
                        std::vector<float>& vertices) const;
-    void renderPrecipitation(const glm::mat4& projection,
+    void renderPrecipitation(RhiCommandList& commandList,
+                             const glm::mat4& projection,
                              const glm::mat4& view,
                              RhiTextureHandle texture,
                              const std::vector<float>& vertices,
@@ -76,12 +78,34 @@ private:
                              RhiTextureHandle sceneDepthTexture,
                              const glm::vec2& screenSize,
                              bool hardwareDepthTest);
+    [[nodiscard]] bool createRhiResources();
+    [[nodiscard]] bool createBindGroups(RhiTextureHandle sceneDepthTexture);
+    void destroyBindGroups();
+    void destroyRhiResources();
 
-    Shader* m_shader = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     RhiTextureHandle m_rainTex;
     RhiTextureHandle m_snowTex;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
+    RhiTextureHandle m_boundSceneDepthTexture;
+    RhiBufferHandle m_vertexBuffer;
+    RhiTextureViewHandle m_rainTextureView;
+    RhiTextureViewHandle m_snowTextureView;
+    RhiTextureViewHandle m_sceneDepthTextureView;
+    RhiSamplerHandle m_precipitationSampler;
+    RhiSamplerHandle m_depthSampler;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiShaderHandle m_depthFragmentShader;
+    RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiBindGroupLayoutHandle m_depthBindGroupLayout;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineLayoutHandle m_depthPipelineLayout;
+    RhiPipelineHandle m_depthTestPipeline;
+    RhiPipelineHandle m_depthSamplePipeline;
+    RhiBindGroupHandle m_rainBindGroup;
+    RhiBindGroupHandle m_snowBindGroup;
+    RhiBindGroupHandle m_rainDepthBindGroup;
+    RhiBindGroupHandle m_snowDepthBindGroup;
     float m_time = 0.0f;  // accumulated time for wind animation
 
     std::vector<PrecipDrop> m_rainDrops;
@@ -91,6 +115,10 @@ private:
 
     static constexpr int MAX_RAIN_DROPS = 4000;
     static constexpr int MAX_SNOW_DROPS = 2500;
+    static constexpr uint64_t RAIN_VERTEX_OFFSET = 0u;
+    static constexpr uint64_t RAIN_VERTEX_BYTES = MAX_RAIN_DROPS * 6u * 5u * sizeof(float);
+    static constexpr uint64_t SNOW_VERTEX_OFFSET = RAIN_VERTEX_BYTES;
+    static constexpr uint64_t SNOW_VERTEX_BYTES = MAX_SNOW_DROPS * 6u * 5u * sizeof(float);
     static constexpr float SPAWN_RADIUS = 24.0f;
     static constexpr float SPAWN_HEIGHT = 20.0f;
     static constexpr float DESPAWN_BELOW = -8.0f;

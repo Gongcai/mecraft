@@ -4,7 +4,9 @@ layout(location = 0) in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
 
 layout(binding = 0) uniform sampler2D uPrecipTexture;
+#ifdef RAIN_SCENE_DEPTH
 layout(binding = 1) uniform sampler2D uSceneDepthTexture;
+#endif
 
 layout(std140, binding = 15) uniform RhiPushConstants {
     mat4 uViewProj;
@@ -27,7 +29,8 @@ void main() {
         discard;
     }
 
-    if (uControls.y != 0) {
+#ifdef RAIN_SCENE_DEPTH
+    {
         ivec2 depthSize = textureSize(uSceneDepthTexture, 0);
         vec2 screenUv = gl_FragCoord.xy / max(uAlphaScreenDepth.yz, vec2(1.0));
         ivec2 depthTexel = ivec2(clamp(screenUv, vec2(0.0), vec2(0.999999)) * vec2(depthSize));
@@ -36,6 +39,7 @@ void main() {
             alpha *= smoothstep(0.00004, 0.0012, sceneDepth - gl_FragCoord.z);
         }
     }
+#endif
     if (alpha < 0.01) {
         discard;
     }
