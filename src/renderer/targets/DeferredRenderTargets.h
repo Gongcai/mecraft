@@ -245,6 +245,8 @@ private:
     void destroyScreenEffectTextures();
     bool createAtmosphereTextures();
     void destroyAtmosphereTextures();
+    bool createSceneHistoryTextures();
+    void destroySceneHistoryTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -386,8 +388,6 @@ private:
     RhiTextureViewHandle m_skyCaptureView;
 
     // History ping-pong for temporal accumulation
-    uint32_t m_historySceneTex[2] = {0, 0};
-    uint32_t m_historyDepthTex[2] = {0, 0};
     RhiTextureHandle m_historySceneHandle[2];
     RhiTextureHandle m_historyDepthHandle[2];
     RhiTextureViewHandle m_historySceneView[2];

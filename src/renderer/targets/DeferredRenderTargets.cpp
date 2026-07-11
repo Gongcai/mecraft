@@ -87,6 +87,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createSceneHistoryTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -220,11 +224,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     const int halfHeight = std::max(1, m_height / 2);
     // History scene ping-pong (RGBA16F color + depth)
     for (int i = 0; i < 2; ++i) {
-        m_historySceneTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
-                                               GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-        m_historyDepthTex[i] = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT,
-                                               GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
         m_historyReflectionTex[i] = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT,
                                                     GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
@@ -292,13 +291,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         renderer::debug::labelTexture(m_ssgiHistoryTex[i], texName);
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
-    }
-    for (int i = 0; i < 2; ++i) {
-        char texName[48], depthName[48];
-        std::snprintf(texName, sizeof(texName), "DeferredTargets.HistorySceneTex[%d]", i);
-        std::snprintf(depthName, sizeof(depthName), "DeferredTargets.HistoryDepthTex[%d]", i);
-        renderer::debug::labelTexture(m_historySceneTex[i], texName);
-        renderer::debug::labelTexture(m_historyDepthTex[i], depthName);
     }
     for (int i = 0; i < 2; ++i) {
         char texName[48];
@@ -839,34 +831,76 @@ void DeferredRenderTargets::destroyAtmosphereTextures() {
     }
 }
 
+bool DeferredRenderTargets::createSceneHistoryTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = format;
+        desc.width = static_cast<uint32_t>(m_width);
+        desc.height = static_cast<uint32_t>(m_height);
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = usage;
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    const RhiTextureUsageFlags colorUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::ColorAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) |
+        rhiFlag(RhiTextureUsage::TransferDst);
+    const RhiTextureUsageFlags depthUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) |
+        rhiFlag(RhiTextureUsage::TransferDst);
+    for (int i = 0; i < 2; ++i) {
+        const char* sceneName = i == 0
+            ? "DeferredTargets.HistoryScene[0]"
+            : "DeferredTargets.HistoryScene[1]";
+        const char* depthName = i == 0
+            ? "DeferredTargets.HistoryDepth[0]"
+            : "DeferredTargets.HistoryDepth[1]";
+        if (!createTexture(sceneName, RhiTextureFormat::Rgba16Float, colorUsage, m_historySceneHandle[i]) ||
+            !createTexture(depthName, RhiTextureFormat::Depth32Float, depthUsage, m_historyDepthHandle[i])) {
+            destroySceneHistoryTextures();
+            return false;
+        }
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroySceneHistoryTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    for (int i = 0; i < 2; ++i) {
+        if (m_historySceneHandle[i].isValid()) {
+            m_rhiDevice->destroyTexture(m_historySceneHandle[i]);
+            m_historySceneHandle[i] = {};
+        }
+        if (m_historyDepthHandle[i].isValid()) {
+            m_rhiDevice->destroyTexture(m_historyDepthHandle[i]);
+            m_historyDepthHandle[i] = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
     for (int i = 0; i < 2; ++i) {
-        m_historySceneHandle[i] = renderer::rhi::gl::registerTexture({
-            m_historySceneTex[i],
-            RhiTextureDimension::Texture2D,
-            RhiTextureFormat::Rgba16Float,
-            static_cast<uint32_t>(m_width),
-            static_cast<uint32_t>(m_height),
-            1,
-            1,
-            1,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-            false
-        });
-        m_historyDepthHandle[i] = renderer::rhi::gl::registerTexture({
-            m_historyDepthTex[i],
-            RhiTextureDimension::Texture2D,
-            RhiTextureFormat::Depth32Float,
-            static_cast<uint32_t>(m_width),
-            static_cast<uint32_t>(m_height),
-            1,
-            1,
-            1,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
-            false
-        });
         m_historyReflectionHandle[i] = renderer::rhi::gl::registerTexture({
             m_historyReflectionTex[i],
             RhiTextureDimension::Texture2D,
@@ -2927,10 +2961,7 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyTransparentCompositeTextures();
     destroyScreenEffectTextures();
     destroyAtmosphereTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[0]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historySceneHandle[1]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyDepthHandle[0]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_historyDepthHandle[1]);
+    destroySceneHistoryTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_historyReflectionHandle[0]);
     renderer::rhi::gl::unregisterTextureAndReset(m_historyReflectionHandle[1]);
     renderer::rhi::gl::unregisterTextureAndReset(m_historyCloudHandle[0]);
@@ -2988,8 +3019,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssaoTex,
         m_ssaoFilteredTex,
         m_temporalCurrentTex,
-        m_historySceneTex[0], m_historySceneTex[1],
-        m_historyDepthTex[0], m_historyDepthTex[1],
         m_historyReflectionTex[0], m_historyReflectionTex[1],
         m_historyCloudTex[0], m_historyCloudTex[1],
         m_historyVolumetricTex[0], m_historyVolumetricTex[1],
@@ -3028,8 +3057,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoHalfResTex = 0;
     m_ssaoHalfResFilteredTex = 0;
     m_temporalCurrentTex = 0;
-    m_historySceneTex[0] = 0; m_historySceneTex[1] = 0;
-    m_historyDepthTex[0] = 0; m_historyDepthTex[1] = 0;
     m_historyReflectionTex[0] = 0; m_historyReflectionTex[1] = 0;
     m_historyCloudTex[0] = 0; m_historyCloudTex[1] = 0;
     m_historyVolumetricTex[0] = 0; m_historyVolumetricTex[1] = 0;
