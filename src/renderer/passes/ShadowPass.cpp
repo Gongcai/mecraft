@@ -316,8 +316,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                       cascadeCullers[cascade].useZCulling ? 1 : 0,
                       shadowCuller.getVisibleCount(),
                       shadowCuller.getCulledCount());
-        renderer::debug::insertEvent(cullerLabel);
-
         ShadowCascadeStats stats;
         stats.boxVisible = cascadeCullers[cascade].visibleCount;
         stats.boxCulled = cascadeCullers[cascade].culledCount;
@@ -364,6 +362,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             renderingInfo.depthStencilAttachment = &depthAttachment;
 
             RhiCommandList& commandList = rhiDevice.beginFrame();
+            commandList.insertDebugMarker(cullerLabel, glm::vec4(0.45f, 0.65f, 1.0f, 1.0f));
             TerrainShadowFrameData shadowFrame;
             shadowFrame.modelView = cascadeData.view;
             shadowFrame.projection = cascadeData.projection;

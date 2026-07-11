@@ -14,9 +14,6 @@ bool labelsEnabled();
 void pushGroup(const char* name);
 void popGroup();
 
-// Insert a one-shot event marker into the debug timeline.
-void insertEvent(const char* name);
-
 // Label native graphics objects with human-readable names (visible in RenderDoc Resource Inspector).
 void labelTexture(uint32_t id, const char* name);
 
