@@ -209,7 +209,21 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
                               rhiFlag(RhiBufferUsage::TransferDst);
     captureBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     m_captureUniformBuffer = rhiDevice.createBuffer(captureBufferDesc, nullptr, 0u);
-    if (!m_captureUniformBuffer.isValid()) std::abort();
+    RhiSamplerDesc captureSamplerDesc;
+    captureSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    captureSamplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    captureSamplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_captureSampler = rhiDevice.createSampler(captureSamplerDesc);
+    RhiBindGroupLayoutDesc captureLayoutDesc;
+    captureLayoutDesc.debugName = "GameplaySky.Capture.BindGroupLayout";
+    captureLayoutDesc.entries = {
+        {0u, RhiBindingType::UniformBuffer, rhiFlag(RhiShaderStage::Fragment), 1u},
+        {1u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u},
+        {2u, RhiBindingType::CombinedTextureSampler, rhiFlag(RhiShaderStage::Fragment), 1u}
+    };
+    m_captureBindGroupLayout = rhiDevice.createBindGroupLayout(captureLayoutDesc);
+    if (!m_captureUniformBuffer.isValid() || !m_captureSampler.isValid() ||
+        !m_captureBindGroupLayout.isValid()) std::abort();
     m_deferredShader = resourceMgr.getShader("gameplay_sky");
     m_shader = m_deferredShader;
     initMeshes();
@@ -219,15 +233,22 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
 
 void GameplaySkyRenderer::shutdown() {
     destroyMeshes();
+    if (m_captureBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_captureBindGroup);
+    if (m_captureNoiseView.isValid()) m_rhiDevice->destroyTextureView(m_captureNoiseView);
     if (m_captureUniformBuffer.isValid()) {
         m_rhiDevice->destroyBuffer(m_captureUniformBuffer);
         m_captureUniformBuffer = {};
     }
-    if (m_captureNoiseView.isValid()) {
-        m_rhiDevice->destroyTextureView(m_captureNoiseView);
-        m_captureNoiseView = {};
-        m_captureNoiseTexture = {};
+    if (m_captureBindGroupLayout.isValid()) {
+        m_rhiDevice->destroyBindGroupLayout(m_captureBindGroupLayout);
     }
+    if (m_captureSampler.isValid()) m_rhiDevice->destroySampler(m_captureSampler);
+    m_captureBindGroup = {};
+    m_captureBindGroupLayout = {};
+    m_captureSampler = {};
+    m_captureAtmosphereLutView = {};
+    m_captureNoiseView = {};
+    m_captureNoiseTexture = {};
     if (m_dummySkyCaptureTexture != 0) {
         glDeleteTextures(1, &m_dummySkyCaptureTexture);
         m_dummySkyCaptureTexture = 0;
@@ -238,24 +259,55 @@ void GameplaySkyRenderer::shutdown() {
     m_rhiDevice = nullptr;
 }
 
-void GameplaySkyRenderer::synchronizeCaptureNoiseView(const RhiTextureHandle noiseTexture) {
-    if (!noiseTexture.isValid()) {
+void GameplaySkyRenderer::synchronizeCaptureResources(
+    const RhiTextureViewHandle atmosphereLutView,
+    const RhiTextureHandle noiseTexture) {
+    if (!atmosphereLutView.isValid() || !noiseTexture.isValid()) {
         std::abort();
     }
-    if (m_captureNoiseTexture.index == noiseTexture.index &&
-        m_captureNoiseTexture.generation == noiseTexture.generation) {
+    const bool atmosphereUnchanged =
+        m_captureAtmosphereLutView.index == atmosphereLutView.index &&
+        m_captureAtmosphereLutView.generation == atmosphereLutView.generation;
+    const bool noiseUnchanged =
+        m_captureNoiseTexture.index == noiseTexture.index &&
+        m_captureNoiseTexture.generation == noiseTexture.generation;
+    if (atmosphereUnchanged && noiseUnchanged && m_captureBindGroup.isValid()) {
         return;
     }
-    if (m_captureNoiseView.isValid()) {
-        m_rhiDevice->destroyTextureView(m_captureNoiseView);
+    if (m_captureBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_captureBindGroup);
+        m_captureBindGroup = {};
     }
-    RhiTextureViewDesc viewDesc;
-    viewDesc.texture = noiseTexture;
-    viewDesc.viewType = RhiTextureViewType::Texture2D;
-    m_captureNoiseView = m_rhiDevice->createTextureView(viewDesc);
+    if (!noiseUnchanged && m_captureNoiseView.isValid()) {
+        m_rhiDevice->destroyTextureView(m_captureNoiseView);
+        m_captureNoiseView = {};
+    }
+    if (!noiseUnchanged) {
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = noiseTexture;
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        m_captureNoiseView = m_rhiDevice->createTextureView(viewDesc);
+    }
     if (!m_captureNoiseView.isValid()) {
         std::abort();
     }
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_captureBindGroupLayout;
+    RhiBindGroupEntry uniformEntry;
+    uniformEntry.binding = 0u;
+    uniformEntry.resource.buffer = {m_captureUniformBuffer, 0u, sizeof(CaptureUniforms)};
+    bindGroupDesc.entries.push_back(uniformEntry);
+    RhiBindGroupEntry atmosphereEntry;
+    atmosphereEntry.binding = 1u;
+    atmosphereEntry.resource.combinedTextureSampler = {atmosphereLutView, m_captureSampler};
+    bindGroupDesc.entries.push_back(atmosphereEntry);
+    RhiBindGroupEntry noiseEntry;
+    noiseEntry.binding = 2u;
+    noiseEntry.resource.combinedTextureSampler = {m_captureNoiseView, m_captureSampler};
+    bindGroupDesc.entries.push_back(noiseEntry);
+    m_captureBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
+    if (!m_captureBindGroup.isValid()) std::abort();
+    m_captureAtmosphereLutView = atmosphereLutView;
     m_captureNoiseTexture = noiseTexture;
 }
 
@@ -300,7 +352,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
         !atmosphereLutView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
     }
-    synchronizeCaptureNoiseView(noiseTexture);
+    synchronizeCaptureResources(atmosphereLutView, noiseTexture);
 
     const CaptureUniforms captureUniforms{
         {colors.top, colors.horizonHaze},
