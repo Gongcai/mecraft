@@ -23,24 +23,6 @@ namespace UIRenderUtils
         buf.push_back(x0); buf.push_back(y1);
     }
 
-    inline void pushCircle(std::vector<float>& buf,
-                           float cx, float cy, float radius,
-                           int segments = 16)
-    {
-        if (radius <= 0.0f || segments < 3) {
-            return;
-        }
-
-        constexpr float kTwoPi = 6.28318530718f;
-        for (int i = 0; i < segments; ++i) {
-            const float a0 = static_cast<float>(i) * kTwoPi / static_cast<float>(segments);
-            const float a1 = static_cast<float>(i + 1) * kTwoPi / static_cast<float>(segments);
-            buf.push_back(cx); buf.push_back(cy);
-            buf.push_back(cx + std::cos(a0) * radius); buf.push_back(cy + std::sin(a0) * radius);
-            buf.push_back(cx + std::cos(a1) * radius); buf.push_back(cy + std::sin(a1) * radius);
-        }
-    }
-
     inline void pushArcFan(std::vector<float>& buf,
                            float cx, float cy, float radius,
                            float startAngle, float endAngle,
