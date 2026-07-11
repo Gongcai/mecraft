@@ -108,34 +108,12 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createShadowTextures()) {
+        shutdown();
+        return false;
+    }
 
-    m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
-                                   GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
     constexpr float kBorderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glTextureParameterfv(m_shadowDepth, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-
-    // DerivativeMain shadowtex1 equivalent: zero-copy view of m_shadowDepth with
-    // hardware depth comparison (sampler2DShadow). Used for PCF via texture() —
-    // replaces manual compareShadowBilinear (~15 instructions/sample → 1 instruction).
-    // BlockerSearch still uses the raw m_shadowDepth via texelFetch (uShadowMapRaw).
-    glGenTextures(1, &m_shadowDepthComparison);
-    glTextureView(m_shadowDepthComparison, GL_TEXTURE_2D,
-                  m_shadowDepth, GL_DEPTH_COMPONENT32F, 0, 1, 0, 1);
-    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_COMPARE_MODE,  GL_COMPARE_REF_TO_TEXTURE);
-    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_COMPARE_FUNC,  GL_LEQUAL);
-    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_MIN_FILTER,    GL_LINEAR);
-    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_MAG_FILTER,    GL_LINEAR);
-    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_WRAP_S,        GL_CLAMP_TO_BORDER);
-    glTextureParameteri(m_shadowDepthComparison, GL_TEXTURE_WRAP_T,        GL_CLAMP_TO_BORDER);
-    glTextureParameterfv(m_shadowDepthComparison, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    // Shadow color: albedo for colored shadows / caustics (RGBA8)
-    m_shadowColor = createTexture2D(GL_RGBA8, m_shadowResolution, m_shadowResolution,
-                                    GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
-    glTextureParameterfv(m_shadowColor, GL_TEXTURE_BORDER_COLOR, kBorderColor);
-    // Shadow normal: encoded normal + skylight/aux, matching DerivativeMain shadowcolor1.
-    m_shadowNormal = createTexture2D(GL_RGBA16F, m_shadowResolution, m_shadowResolution,
-                                     GL_RGBA, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
-    glTextureParameterfv(m_shadowNormal, GL_TEXTURE_BORDER_COLOR, kBorderColor);
     m_csmShadowDepth = createTexture2DArray(GL_DEPTH_COMPONENT32F,
                                             m_shadowResolution,
                                             m_shadowResolution,
@@ -197,10 +175,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     }
 
     // Label GL objects for RenderDoc / KHR_debug inspection
-    renderer::debug::labelTexture(m_shadowDepth, "DeferredTargets.ShadowDepth");
-    renderer::debug::labelTexture(m_shadowDepthComparison, "DeferredTargets.ShadowDepthComparison");
-    renderer::debug::labelTexture(m_shadowColor, "DeferredTargets.ShadowColor");
-    renderer::debug::labelTexture(m_shadowNormal, "DeferredTargets.ShadowNormal");
     renderer::debug::labelTexture(m_csmShadowDepth, "DeferredTargets.CSMDepthArray");
     renderer::debug::labelTexture(m_csmShadowDepthComparison, "DeferredTargets.CSMDepthComparison");
     renderer::debug::labelTexture(m_csmShadowDepthAll, "DeferredTargets.CSMDepthAll");
@@ -1085,55 +1059,66 @@ void DeferredRenderTargets::destroySsgiTextures() {
     }
 }
 
+bool DeferredRenderTargets::createShadowTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    const auto createTexture = [this](const char* debugName,
+                                      const RhiTextureFormat format,
+                                      const RhiTextureUsageFlags usage,
+                                      RhiTextureHandle& handle) {
+        RhiTextureDesc desc;
+        desc.debugName = debugName;
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = format;
+        desc.width = static_cast<uint32_t>(m_shadowResolution);
+        desc.height = static_cast<uint32_t>(m_shadowResolution);
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = 1u;
+        desc.sampleCount = 1u;
+        desc.usage = usage;
+        handle = m_rhiDevice->createTexture(desc, nullptr);
+        return handle.isValid();
+    };
+
+    if (!createTexture("DeferredTargets.ShadowDepth", RhiTextureFormat::Depth32Float,
+                       rhiFlag(RhiTextureUsage::Sampled) |
+                       rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+                       m_shadowDepthHandle) ||
+        !createTexture("DeferredTargets.ShadowColor", RhiTextureFormat::Rgba8Unorm,
+                       rhiFlag(RhiTextureUsage::Sampled) |
+                       rhiFlag(RhiTextureUsage::ColorAttachment),
+                       m_shadowColorHandle) ||
+        !createTexture("DeferredTargets.ShadowNormal", RhiTextureFormat::Rgba16Float,
+                       rhiFlag(RhiTextureUsage::Sampled) |
+                       rhiFlag(RhiTextureUsage::ColorAttachment),
+                       m_shadowNormalHandle)) {
+        destroyShadowTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroyShadowTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    RhiTextureHandle* textures[] = {
+        &m_shadowDepthHandle,
+        &m_shadowColorHandle,
+        &m_shadowNormalHandle
+    };
+    for (RhiTextureHandle* texture : textures) {
+        if (texture->isValid()) {
+            m_rhiDevice->destroyTexture(*texture);
+            *texture = {};
+        }
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
-    m_shadowDepthHandle = renderer::rhi::gl::registerTexture({
-        m_shadowDepth,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Depth32Float,
-        static_cast<uint32_t>(m_shadowResolution),
-        static_cast<uint32_t>(m_shadowResolution),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
-        false
-    });
-    m_shadowDepthComparisonHandle = renderer::rhi::gl::registerTexture({
-        m_shadowDepthComparison,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Depth32Float,
-        static_cast<uint32_t>(m_shadowResolution),
-        static_cast<uint32_t>(m_shadowResolution),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled),
-        true
-    });
-    m_shadowColorHandle = renderer::rhi::gl::registerTexture({
-        m_shadowColor,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba8Unorm,
-        static_cast<uint32_t>(m_shadowResolution),
-        static_cast<uint32_t>(m_shadowResolution),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_shadowNormalHandle = renderer::rhi::gl::registerTexture({
-        m_shadowNormal,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_shadowResolution),
-        static_cast<uint32_t>(m_shadowResolution),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
     m_csmShadowDepthHandle = renderer::rhi::gl::registerTexture({
         m_csmShadowDepth,
         RhiTextureDimension::Texture2DArray,
@@ -1239,7 +1224,6 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_skyCaptureHandle.isValid() &&
                             m_atmosphereLutHandle.isValid() &&
                             m_shadowDepthHandle.isValid() &&
-                            m_shadowDepthComparisonHandle.isValid() &&
                             m_shadowColorHandle.isValid() &&
                             m_shadowNormalHandle.isValid() &&
                             m_ssaoFilteredHandle.isValid() &&
@@ -2880,10 +2864,7 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyMotionTextures();
     destroySsaoTextures();
     destroySsgiTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_shadowDepthComparisonHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_shadowColorHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_shadowNormalHandle);
+    destroyShadowTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthComparisonHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_csmShadowDepthAllHandle);
@@ -2896,10 +2877,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     unregisterRhiTextures();
 
     const GLuint textures[] = {
-        m_shadowDepth,
-        m_shadowDepthComparison,
-        m_shadowColor,
-        m_shadowNormal,
         m_csmShadowDepth,
         m_csmShadowDepthComparison,
         m_csmShadowDepthAll,
@@ -2913,10 +2890,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
             glDeleteTextures(1, &mutableTexture);
         }
     }
-    m_shadowDepth = 0;
-    m_shadowDepthComparison = 0;
-    m_shadowColor = 0;
-    m_shadowNormal = 0;
     m_csmShadowDepth = 0;
     m_csmShadowDepthComparison = 0;
     m_csmShadowDepthAll = 0;

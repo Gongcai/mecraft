@@ -52,7 +52,6 @@ public:
     [[nodiscard]] RhiTextureViewHandle depthTextureViewHandle() const { return m_gDepthView; }
     bool ensureGBufferTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle shadowDepthTextureHandle() const { return m_shadowDepthHandle; }
-    [[nodiscard]] RhiTextureHandle shadowDepthComparisonTextureHandle() const { return m_shadowDepthComparisonHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthComparisonHandle; }
     [[nodiscard]] RhiTextureViewHandle csmShadowDepthTextureViewHandle(int cascadeIndex) const;
@@ -254,6 +253,8 @@ private:
     void destroySsaoTextures();
     bool createSsgiTextures();
     void destroySsgiTextures();
+    bool createShadowTextures();
+    void destroyShadowTextures();
     bool registerRhiTextures();
     void destroyAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -281,12 +282,7 @@ private:
 
     RhiDevice* m_rhiDevice = nullptr;
 
-    uint32_t m_shadowDepth = 0;
-    uint32_t m_shadowDepthComparison = 0; // Zero-copy comparison view for sampler2DShadow
-    uint32_t m_shadowColor = 0;   // RGBA8: albedo color for colored shadows / caustics
-    uint32_t m_shadowNormal = 0;  // RGBA16F: encoded normal.rg, skylight.b, aux/height.a
     RhiTextureHandle m_shadowDepthHandle;
-    RhiTextureHandle m_shadowDepthComparisonHandle;
     RhiTextureHandle m_shadowColorHandle;
     RhiTextureHandle m_shadowNormalHandle;
     RhiTextureViewHandle m_shadowDepthView;
