@@ -344,14 +344,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 request.rainRenderer.render(projMat, viewMat,
                                              weather.rainStrength, cameraRainVisibility,
                                              alphaScale, depthTexture,
-                                             precipitationScreenSize, request.frameTime,
+                                             precipitationScreenSize,
                                              hardwareDepthTest);
             }
             if (weather.snowStrength > 0.01f) {
                 request.rainRenderer.renderSnow(projMat, viewMat,
                                                 weather.snowStrength, cameraRainVisibility,
                                                 alphaScale * 0.6f, depthTexture,
-                                                precipitationScreenSize, request.frameTime,
+                                                precipitationScreenSize,
                                                 hardwareDepthTest);
             }
             endSceneCaptureRendering(*m_shared.rhiDevice, weatherCommandList);

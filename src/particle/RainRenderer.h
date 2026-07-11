@@ -31,7 +31,6 @@ public:
                 float alphaScale,
                 RhiTextureHandle sceneDepthTexture,
                 const glm::vec2& screenSize,
-                float dt,
                 bool hardwareDepthTest = true);
 
     // Render snow around the given camera position.
@@ -42,7 +41,6 @@ public:
                     float alphaScale,
                     RhiTextureHandle sceneDepthTexture,
                     const glm::vec2& screenSize,
-                    float dt,
                     bool hardwareDepthTest = true);
 
 private:
@@ -74,7 +72,6 @@ private:
                              bool proceduralLines,
                              RhiTextureHandle sceneDepthTexture,
                              const glm::vec2& screenSize,
-                             float dt,
                              bool hardwareDepthTest);
 
     Shader* m_shader = nullptr;

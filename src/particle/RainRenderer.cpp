@@ -177,7 +177,6 @@ void RainRenderer::renderPrecipitation(const glm::mat4& projection,
                                         bool proceduralLines,
                                         const RhiTextureHandle sceneDepthTexture,
                                         const glm::vec2& screenSize,
-                                        float,
                                         bool hardwareDepthTest) {
     const uint32_t textureId = renderer::rhi::gl::textureId(texture);
     if (!m_shader || textureId == 0 || strength < 0.01f || skyLightAtCamera < 0.05f) return;
@@ -240,7 +239,6 @@ void RainRenderer::render(const glm::mat4& projection,
                            float alphaScale,
                            const RhiTextureHandle sceneDepthTexture,
                            const glm::vec2& screenSize,
-                           float dt,
                            bool hardwareDepthTest) {
     renderPrecipitation(projection, view,
                         m_rainTex, m_rainVertices,
@@ -250,7 +248,6 @@ void RainRenderer::render(const glm::mat4& projection,
                         true,
                         sceneDepthTexture,
                         screenSize,
-                        dt,
                         hardwareDepthTest);
 }
 
@@ -261,7 +258,6 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                                float alphaScale,
                                const RhiTextureHandle sceneDepthTexture,
                                const glm::vec2& screenSize,
-                               float dt,
                                bool hardwareDepthTest) {
     renderPrecipitation(projection, view,
                         m_snowTex, m_snowVertices,
@@ -271,6 +267,5 @@ void RainRenderer::renderSnow(const glm::mat4& projection,
                         false,
                         sceneDepthTexture,
                         screenSize,
-                        dt,
                         hardwareDepthTest);
 }
