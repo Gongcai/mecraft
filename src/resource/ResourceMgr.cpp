@@ -42,6 +42,7 @@ void ResourceMgr::init(RhiDevice& rhiDevice) {
     m_impl->rhiDevice = &rhiDevice;
     m_impl->texture2D.init(rhiDevice);
     m_impl->cubemaps.init(rhiDevice);
+    m_impl->environmentTextures.init(rhiDevice);
     resource::loadDefaultShaders(m_impl->shaders);
 
     loadCubemap("menu_skybox",
