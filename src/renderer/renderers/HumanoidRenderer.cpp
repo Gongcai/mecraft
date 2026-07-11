@@ -11,6 +11,7 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <string>
 #include <utility>
 #include <vector>
@@ -324,6 +325,28 @@ HumanoidRenderer::PartMesh* HumanoidRenderer::getMeshForEntityModelPart(const st
     return &inserted.first->second;
 }
 
+const HumanoidRenderer::TextureResource& HumanoidRenderer::requireTextureResource(
+    const std::string& textureKey) {
+    const auto existing = m_textureResources.find(textureKey);
+    if (existing != m_textureResources.end()) {
+        return existing->second;
+    }
+
+    TextureResource resource;
+    resource.texture = m_resourceMgr->getGuiTextureHandle(textureKey);
+    if (!resource.texture.isValid()) {
+        std::abort();
+    }
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = resource.texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    resource.view = m_rhiDevice->createTextureView(viewDesc);
+    if (!resource.view.isValid()) {
+        std::abort();
+    }
+    return m_textureResources.emplace(textureKey, resource).first->second;
+}
+
 void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
@@ -331,6 +354,7 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_forwardShader = resourceMgr.getShader("steve_forward");
     m_gbufferShader = resourceMgr.getShader("entity_gbuffer");
     m_shadowShader = resourceMgr.getShader("entity_shadow");
+    requireTextureResource("steve");
 
     const renderer::HumanoidSkinLayoutDefinitions& skinLayouts = renderer::humanoidSkinLayoutDefinitions();
     for (std::size_t layout = 0; layout < skinLayouts.size(); ++layout) {
@@ -344,6 +368,12 @@ void HumanoidRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
 }
 
 void HumanoidRenderer::shutdown() {
+    for (auto& texturePair : m_textureResources) {
+        if (texturePair.second.view.isValid()) {
+            m_rhiDevice->destroyTextureView(texturePair.second.view);
+        }
+    }
+    m_textureResources.clear();
     for (auto& layoutMeshes : m_skinLayoutMeshes) {
         for (PartMesh& mesh : layoutMeshes) {
             destroyMesh(mesh);

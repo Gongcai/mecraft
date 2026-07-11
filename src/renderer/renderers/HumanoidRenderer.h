@@ -86,6 +86,12 @@ private:
     std::array<std::array<PartMesh, renderer::kHumanoidPartTypeCount>, renderer::kHumanoidSkinLayoutCount> m_skinLayoutMeshes{};
     std::unordered_map<std::string, PartMesh> m_entityModelPartMeshes;
 
+    struct TextureResource {
+        RhiTextureHandle texture;
+        RhiTextureViewHandle view;
+    };
+    std::unordered_map<std::string, TextureResource> m_textureResources;
+
     Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
     Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
     Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
@@ -116,6 +122,7 @@ private:
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
+    const TextureResource& requireTextureResource(const std::string& textureKey);
     [[nodiscard]] bool ensureNeutralShadowTextures();
     [[nodiscard]] bool bindDisabledShadowNeutralTextures(Shader& shader);
 
