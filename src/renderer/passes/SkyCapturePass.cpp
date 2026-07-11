@@ -29,6 +29,9 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
 
     const float cameraAltitude = cameraY;
     const RhiTextureHandle atmosphereLut = targets.atmosphereLutTextureHandle();
+    if (!atmosphereLut.isValid()) {
+        return;
+    }
     const int moonPhase = dayNightSystem.getMoonPhaseIndex();
 
     // DerivativeMain MoonFlux: phase factor ranges 0.2 (full moon) to 1.2 (new moon).
@@ -55,6 +58,9 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     const float cloudCoverage = std::clamp(1.0f + cloudWetness * 0.2f, 0.0f, 1.5f);
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
     const RhiTextureHandle noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
+    if (!noiseTexture.isValid()) {
+        return;
+    }
 
     // Raw sky radiance (rows 0..257)
     skyRenderer.renderSkyCapture(dayNightSystem,
