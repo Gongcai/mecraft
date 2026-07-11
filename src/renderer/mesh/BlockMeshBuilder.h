@@ -15,17 +15,14 @@ class RhiDevice;
 
 namespace renderer {
 
-/// Simple owning GL mesh built from a flat BlockVertex list.
-/// Vertex layout matches DropRenderer / GBufferPass expectations.
+/// Owning RHI mesh built from a flat BlockVertex list.
+/// Vertex layout matches the block entity rendering pipelines.
 struct BlockCubeMesh {
-    uint32_t vao = 0;
-    uint32_t vbo = 0;
     RhiBufferHandle rhiVertexBuffer;
     RhiDevice* rhiDevice = nullptr;
     uint32_t vertexCount = 0;
 
-    [[nodiscard]] bool valid() const { return vao != 0 && vertexCount > 0; }
-    [[nodiscard]] bool rhiValid() const { return rhiVertexBuffer.isValid() && vertexCount > 0; }
+    [[nodiscard]] bool valid() const { return rhiVertexBuffer.isValid() && vertexCount > 0; }
 };
 
 /// Build local-space BlockVertex geometry for a block-backed item/entity mesh.
@@ -46,13 +43,8 @@ BlockCubeMesh buildBlockCubeMesh(BlockID blockId, ResourceMgr& resourceMgr);
 /// Build and upload a block-backed item/entity mesh for a specific state.
 BlockCubeMesh buildBlockStateCubeMesh(BlockStateId stateId, ResourceMgr& resourceMgr);
 
-/// Upload a caller-built BlockVertex list to a GL mesh with the standard
-/// block vertex layout (matches ChunkMesher / DropRenderer attrib bindings).
-BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices);
-
-/// Destroy GL resources owned by `mesh`. Safe to call on a zero-initialized mesh.
+/// Destroy RHI resources owned by `mesh`. Safe to call on a zero-initialized mesh.
 void destroyBlockCubeMesh(BlockCubeMesh& mesh);
-void releaseBlockCubeMeshGlResources(BlockCubeMesh& mesh);
 
 /// Configure the explicit RHI vertex layout for the entity BlockVertex format.
 /// Integer-packed fields remain integer shader inputs except normalized light.

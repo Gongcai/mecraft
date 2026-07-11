@@ -139,7 +139,7 @@ void FallingBlockRenderer::renderToGBuffer(RhiCommandList& commandList,
 
     for (const RenderInstance& instance : m_renderInstances) {
         const renderer::BlockCubeMesh* mesh = getOrCreateMesh(instance.stateId);
-        if (mesh == nullptr || !mesh->rhiValid()) {
+        if (mesh == nullptr || !mesh->valid()) {
             continue;
         }
         const FallingBlockPushConstants pushConstants{
@@ -164,7 +164,7 @@ void FallingBlockRenderer::renderToShadowMap(RhiCommandList& commandList,
 
     for (const RenderInstance& instance : m_renderInstances) {
         const renderer::BlockCubeMesh* mesh = getOrCreateMesh(instance.stateId);
-        if (mesh == nullptr || !mesh->rhiValid()) {
+        if (mesh == nullptr || !mesh->valid()) {
             continue;
         }
         const FallingBlockShadowPushConstants pushConstants{

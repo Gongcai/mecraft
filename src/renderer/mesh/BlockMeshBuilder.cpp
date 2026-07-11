@@ -8,8 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include <glad/glad.h>
-
 #include <glm/glm.hpp>
 
 #include "../../resource/ResourceMgr.h"
@@ -384,52 +382,26 @@ void appendModelVertices(std::vector<BlockVertex>& vertices,
 
 } // namespace
 
-BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices) {
+BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices,
+                                  RhiDevice& rhiDevice,
+                                  const char* debugName) {
     BlockCubeMesh mesh;
     if (vertices.empty()) {
         return mesh;
     }
 
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
-    glEnableVertexAttribArray(7);
-    glVertexAttribPointer(7, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFrameCount)));
-    glEnableVertexAttribArray(8);
-    glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
-    glEnableVertexAttribArray(9);
-    glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
-
-    glEnableVertexAttribArray(10);
-    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
-    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
-        glDisableVertexAttribArray(attrib);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = debugName;
+    bufferDesc.size = vertices.size() * sizeof(BlockVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(BlockVertex));
+    mesh.rhiDevice = &rhiDevice;
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyBlockCubeMesh(mesh);
     }
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
     return mesh;
 }
 
@@ -513,20 +485,8 @@ BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, ResourceMgr& resourceMgr
         return mesh;
     }
 
-    mesh = uploadBlockCubeMesh(vertices);
     RhiDevice& rhiDevice = resourceMgr.rhiDevice();
-    RhiBufferDesc bufferDesc;
-    bufferDesc.debugName = "BlockCubeMesh.VertexBuffer";
-    bufferDesc.size = vertices.size() * sizeof(BlockVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
-    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
-    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
-        bufferDesc, vertices.data(), vertices.size() * sizeof(BlockVertex));
-    mesh.rhiDevice = &rhiDevice;
-    if (!mesh.rhiVertexBuffer.isValid()) {
-        destroyBlockCubeMesh(mesh);
-    }
-    return mesh;
+    return uploadBlockCubeMesh(vertices, rhiDevice, "BlockCubeMesh.VertexBuffer");
 }
 
 BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, ResourceMgr& resourceMgr) {
@@ -536,20 +496,8 @@ BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, ResourceMgr& r
         return mesh;
     }
 
-    mesh = uploadBlockCubeMesh(vertices);
     RhiDevice& rhiDevice = resourceMgr.rhiDevice();
-    RhiBufferDesc bufferDesc;
-    bufferDesc.debugName = "BlockStateCubeMesh.VertexBuffer";
-    bufferDesc.size = vertices.size() * sizeof(BlockVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
-    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
-    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
-        bufferDesc, vertices.data(), vertices.size() * sizeof(BlockVertex));
-    mesh.rhiDevice = &rhiDevice;
-    if (!mesh.rhiVertexBuffer.isValid()) {
-        destroyBlockCubeMesh(mesh);
-    }
-    return mesh;
+    return uploadBlockCubeMesh(vertices, rhiDevice, "BlockStateCubeMesh.VertexBuffer");
 }
 
 void destroyBlockCubeMesh(BlockCubeMesh& mesh) {
@@ -557,27 +505,8 @@ void destroyBlockCubeMesh(BlockCubeMesh& mesh) {
         mesh.rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
         mesh.rhiVertexBuffer = {};
     }
-    if (mesh.vbo != 0) {
-        glDeleteBuffers(1, &mesh.vbo);
-        mesh.vbo = 0;
-    }
-    if (mesh.vao != 0) {
-        glDeleteVertexArrays(1, &mesh.vao);
-        mesh.vao = 0;
-    }
     mesh.vertexCount = 0;
     mesh.rhiDevice = nullptr;
-}
-
-void releaseBlockCubeMeshGlResources(BlockCubeMesh& mesh) {
-    if (mesh.vbo != 0) {
-        glDeleteBuffers(1, &mesh.vbo);
-        mesh.vbo = 0;
-    }
-    if (mesh.vao != 0) {
-        glDeleteVertexArrays(1, &mesh.vao);
-        mesh.vao = 0;
-    }
 }
 
 void setBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc) {

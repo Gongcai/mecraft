@@ -246,7 +246,6 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
     mesh.rhiVertexBuffer = shared.rhiVertexBuffer;
     mesh.rhiDevice = shared.rhiDevice;
     mesh.vertexCount = shared.vertexCount;
-    renderer::releaseBlockCubeMeshGlResources(shared);
     shared.rhiVertexBuffer = {};
     shared.rhiDevice = nullptr;
     shared.vertexCount = 0;
