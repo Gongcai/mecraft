@@ -103,7 +103,7 @@ bool RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool, c
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainCache.setChunkMeshingService(&m_meshingService);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
-    m_terrainRenderer.init(resourceMgr);
+    m_terrainRenderer.init();
     m_terrainRenderer.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainRenderer.setTerrainRenderCache(&m_terrainCache);
 #ifdef MECRAFT_DEBUG
