@@ -1,18 +1,18 @@
 #include "VoxelGiClipmap.h"
 
-#include "../debug/RenderDebugLabels.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../rhi/RhiTypes.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../resource/BlockTextureColorProvider.h"
 
-#include <glad/glad.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <string_view>
 
 namespace {
@@ -64,23 +64,49 @@ const std::array<glm::vec3, 6> kFaceNormals = {
     return levels;
 }
 
-[[nodiscard]] RhiTextureHandle registerClipmapTexture(const uint32_t texture,
-                                                      const int resolution,
-                                                      const int mipLevels) {
-    return renderer::rhi::gl::registerTexture({
-        texture,
-        RhiTextureDimension::Texture3D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(resolution),
-        static_cast<uint32_t>(resolution),
-        static_cast<uint32_t>(resolution),
-        static_cast<uint32_t>(mipLevels),
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) |
-            rhiFlag(RhiTextureUsage::TransferSrc) |
-            rhiFlag(RhiTextureUsage::TransferDst),
-        false
-    });
+[[nodiscard]] uint16_t floatToHalf(const float value) {
+    uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    const uint32_t sign = (bits >> 16u) & 0x8000u;
+    const uint32_t exponent = (bits >> 23u) & 0xFFu;
+    const uint32_t mantissa = bits & 0x7FFFFFu;
+
+    if (exponent == 0xFFu) {
+        return static_cast<uint16_t>(sign | (mantissa == 0u ? 0x7C00u : 0x7E00u));
+    }
+
+    const int32_t halfExponent = static_cast<int32_t>(exponent) - 127 + 15;
+    if (halfExponent >= 31) {
+        return static_cast<uint16_t>(sign | 0x7C00u);
+    }
+    if (halfExponent <= 0) {
+        if (halfExponent < -10) {
+            return static_cast<uint16_t>(sign);
+        }
+        const uint32_t normalizedMantissa = mantissa | 0x800000u;
+        const uint32_t shift = static_cast<uint32_t>(14 - halfExponent);
+        uint32_t halfMantissa = normalizedMantissa >> shift;
+        const uint32_t remainder = normalizedMantissa & ((1u << shift) - 1u);
+        const uint32_t halfway = 1u << (shift - 1u);
+        if (remainder > halfway || (remainder == halfway && (halfMantissa & 1u) != 0u)) {
+            ++halfMantissa;
+        }
+        return static_cast<uint16_t>(sign | halfMantissa);
+    }
+
+    uint32_t halfMantissa = mantissa >> 13u;
+    const uint32_t remainder = mantissa & 0x1FFFu;
+    if (remainder > 0x1000u || (remainder == 0x1000u && (halfMantissa & 1u) != 0u)) {
+        ++halfMantissa;
+        if (halfMantissa == 0x400u) {
+            halfMantissa = 0u;
+            if (halfExponent + 1 >= 31) {
+                return static_cast<uint16_t>(sign | 0x7C00u);
+            }
+            return static_cast<uint16_t>(sign | (static_cast<uint32_t>(halfExponent + 1) << 10u));
+        }
+    }
+    return static_cast<uint16_t>(sign | (static_cast<uint32_t>(halfExponent) << 10u) | halfMantissa);
 }
 
 [[nodiscard]] bool containsToken(const std::string_view text, const std::string_view token) {
@@ -181,15 +207,17 @@ VoxelGiClipmap::~VoxelGiClipmap() {
 }
 
 void VoxelGiClipmap::shutdown() {
-    renderer::rhi::gl::unregisterTextureAndReset(m_textureHandle);
-    if (m_texture != 0) {
-        glDeleteTextures(1, &m_texture);
-        m_texture = 0;
+    if (m_rhiDevice != nullptr) {
+        if (m_texture.isValid()) {
+            m_rhiDevice->destroyTexture(m_texture);
+        }
+        if (m_shiftScratchTexture.isValid()) {
+            m_rhiDevice->destroyTexture(m_shiftScratchTexture);
+        }
     }
-    if (m_shiftScratchTexture != 0) {
-        glDeleteTextures(1, &m_shiftScratchTexture);
-        m_shiftScratchTexture = 0;
-    }
+    m_rhiDevice = nullptr;
+    m_texture = {};
+    m_shiftScratchTexture = {};
     m_voxels.clear();
     m_materialAlbedoCache.clear();
     m_materialAlbedoCacheValid.clear();
@@ -209,7 +237,8 @@ void VoxelGiClipmap::shutdown() {
 
 void VoxelGiClipmap::update(const FrameContext& ctx,
                             const VoxelGiSettings& settings,
-                            const IBlockTextureColorProvider& textureColors) {
+                            const IBlockTextureColorProvider& textureColors,
+                            RhiDevice& rhiDevice) {
     if (!settings.enabled || ctx.worldView == nullptr) {
         m_valid = false;
         m_stats = {};
@@ -256,7 +285,11 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
         return;
     }
 
-    allocateTexture(resolution);
+    if (!allocateTexture(resolution, rhiDevice)) {
+        m_valid = false;
+        m_stats = {};
+        return;
+    }
     glm::ivec3 deltaVoxels(0);
     const bool lightingChanged = skyRadianceChanged || sunRadianceChanged || sunDirectionChanged || bounceStrengthChanged;
     const bool canReuseVolume = m_valid && !parametersChanged && originChanged && !worldChanged && !lightingChanged &&
@@ -273,6 +306,8 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
 
     m_originBlock = originBlock;
     m_origin = glm::vec3(originBlock);
+    RhiCommandList& commandList = rhiDevice.beginFrame();
+    bool uploadSucceeded = true;
     if (shiftedVolume) {
         const uint64_t overlapVoxels = overlapVoxelCount(deltaVoxels);
         const uint64_t totalVoxels = static_cast<uint64_t>(m_resolution) *
@@ -284,9 +319,10 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
         m_stats.sampledVoxels = totalVoxels - overlapVoxels;
         m_stats.uploadedVoxels = m_stats.sampledVoxels;
         m_stats.copiedVoxels = overlapVoxels;
-        m_stats.uploadedBoxes = uploadShiftedVolume(deltaVoxels);
+        m_stats.uploadedBoxes = uploadShiftedVolume(deltaVoxels, commandList, rhiDevice);
+        uploadSucceeded = m_stats.uploadedBoxes >= 0;
     } else {
-        uploadFullVolume();
+        uploadSucceeded = uploadFullVolume(commandList, rhiDevice);
         const uint64_t totalVoxels = static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution);
@@ -294,6 +330,12 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
         m_stats.sampledVoxels = totalVoxels;
         m_stats.uploadedVoxels = totalVoxels;
         m_stats.uploadedBoxes = 1;
+    }
+    rhiDevice.submitFrame(commandList);
+    if (!uploadSucceeded) {
+        m_valid = false;
+        m_stats = {};
+        return;
     }
     m_lastActiveChunkRevision = activeRevision;
     m_lastBlockContentRevision = blockRevision;
@@ -309,53 +351,65 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     m_stats.sunRadianceScale = lighting.sunRadianceScale;
 }
 
-void VoxelGiClipmap::allocateTexture(const int resolution) {
-    if (m_texture != 0 && m_textureHandle.isValid() && m_resolution == resolution) {
-        return;
+bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        shutdown();
+    }
+    m_rhiDevice = &rhiDevice;
+    if (m_texture.isValid() && m_shiftScratchTexture.isValid() && m_resolution == resolution) {
+        return true;
     }
 
-    renderer::rhi::gl::unregisterTextureAndReset(m_textureHandle);
-    if (m_texture != 0) {
-        glDeleteTextures(1, &m_texture);
-        m_texture = 0;
+    if (m_texture.isValid()) {
+        rhiDevice.destroyTexture(m_texture);
+        m_texture = {};
     }
-    if (m_shiftScratchTexture != 0) {
-        glDeleteTextures(1, &m_shiftScratchTexture);
-        m_shiftScratchTexture = 0;
+    if (m_shiftScratchTexture.isValid()) {
+        rhiDevice.destroyTexture(m_shiftScratchTexture);
+        m_shiftScratchTexture = {};
     }
 
-    glCreateTextures(GL_TEXTURE_3D, 1, &m_texture);
-    const int levels = mipLevelCount(resolution);
-    glTextureStorage3D(m_texture, levels, GL_RGBA16F, resolution, resolution, resolution);
-    glTextureParameteri(m_texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTextureParameteri(m_texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(m_texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_texture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_texture, GL_TEXTURE_BASE_LEVEL, 0);
-    glTextureParameteri(m_texture, GL_TEXTURE_MAX_LEVEL, levels - 1);
-    renderer::debug::labelTexture(m_texture, "VoxelGI.ClipmapRadiance");
-    m_textureHandle = registerClipmapTexture(m_texture, resolution, levels);
+    const uint32_t usage = rhiFlag(RhiTextureUsage::Sampled) |
+                           rhiFlag(RhiTextureUsage::TransferSrc) |
+                           rhiFlag(RhiTextureUsage::TransferDst);
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "VoxelGI.ClipmapRadiance";
+    textureDesc.dimension = RhiTextureDimension::Texture3D;
+    textureDesc.format = RhiTextureFormat::Rgba16Float;
+    textureDesc.width = static_cast<uint32_t>(resolution);
+    textureDesc.height = static_cast<uint32_t>(resolution);
+    textureDesc.depthOrLayers = static_cast<uint32_t>(resolution);
+    textureDesc.mipLevels = static_cast<uint32_t>(mipLevelCount(resolution));
+    textureDesc.usage = usage;
+    m_texture = rhiDevice.createTexture(textureDesc, nullptr);
+    if (!m_texture.isValid()) {
+        return false;
+    }
 
-    glCreateTextures(GL_TEXTURE_3D, 1, &m_shiftScratchTexture);
-    glTextureStorage3D(m_shiftScratchTexture, 1, GL_RGBA16F, resolution, resolution, resolution);
-    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_shiftScratchTexture, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    renderer::debug::labelTexture(m_shiftScratchTexture, "VoxelGI.ShiftScratch");
+    textureDesc.debugName = "VoxelGI.ShiftScratch";
+    textureDesc.mipLevels = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) | rhiFlag(RhiTextureUsage::TransferDst);
+    m_shiftScratchTexture = rhiDevice.createTexture(textureDesc, nullptr);
+    if (!m_shiftScratchTexture.isValid()) {
+        rhiDevice.destroyTexture(m_texture);
+        m_texture = {};
+        return false;
+    }
+    return true;
 }
 
-void VoxelGiClipmap::uploadFullVolume() {
-    glTextureSubImage3D(m_texture, 0, 0, 0, 0,
-                        m_resolution, m_resolution, m_resolution,
-                        GL_RGBA, GL_FLOAT, m_voxels.data());
-    glGenerateTextureMipmap(m_texture);
+bool VoxelGiClipmap::uploadFullVolume(RhiCommandList& commandList, RhiDevice& rhiDevice) {
+    if (!uploadSubVolume(0, 0, 0, m_resolution, m_resolution, m_resolution, commandList, rhiDevice)) {
+        return false;
+    }
+    commandList.generateMipmaps(m_texture);
+    return true;
 }
 
-int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels) {
-    copyOverlapThroughScratch(deltaVoxels);
+int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels,
+                                        RhiCommandList& commandList,
+                                        RhiDevice& rhiDevice) {
+    copyOverlapThroughScratch(deltaVoxels, commandList);
 
     const auto axisRange = [this](const int delta, int& start, int& end) {
         if (delta > 0) {
@@ -381,23 +435,24 @@ int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels) {
     axisRange(deltaVoxels.z, z0, z1);
 
     int uploadedBoxes = 0;
-    if (x0 > 0 && uploadSubVolume(0, 0, 0, x0, m_resolution, m_resolution)) ++uploadedBoxes;
-    if (x1 < m_resolution && uploadSubVolume(x1, 0, 0, m_resolution - x1, m_resolution, m_resolution)) ++uploadedBoxes;
-    if (y0 > 0 && x1 > x0 && uploadSubVolume(x0, 0, 0, x1 - x0, y0, m_resolution)) ++uploadedBoxes;
-    if (y1 < m_resolution && x1 > x0 &&
-        uploadSubVolume(x0, y1, 0, x1 - x0, m_resolution - y1, m_resolution)) {
-        ++uploadedBoxes;
-    }
-    if (z0 > 0 && x1 > x0 && y1 > y0 && uploadSubVolume(x0, y0, 0, x1 - x0, y1 - y0, z0)) {
-        ++uploadedBoxes;
-    }
-    if (z1 < m_resolution && x1 > x0 && y1 > y0) {
-        if (uploadSubVolume(x0, y0, z1, x1 - x0, y1 - y0, m_resolution - z1)) {
-            ++uploadedBoxes;
+    const auto upload = [&](const int x, const int y, const int z,
+                            const int width, const int height, const int depth) {
+        if (!uploadSubVolume(x, y, z, width, height, depth, commandList, rhiDevice)) {
+            return false;
         }
-    }
+        ++uploadedBoxes;
+        return true;
+    };
+    if (x0 > 0 && !upload(0, 0, 0, x0, m_resolution, m_resolution)) return -1;
+    if (x1 < m_resolution && !upload(x1, 0, 0, m_resolution - x1, m_resolution, m_resolution)) return -1;
+    if (y0 > 0 && x1 > x0 && !upload(x0, 0, 0, x1 - x0, y0, m_resolution)) return -1;
+    if (y1 < m_resolution && x1 > x0 &&
+        !upload(x0, y1, 0, x1 - x0, m_resolution - y1, m_resolution)) return -1;
+    if (z0 > 0 && x1 > x0 && y1 > y0 && !upload(x0, y0, 0, x1 - x0, y1 - y0, z0)) return -1;
+    if (z1 < m_resolution && x1 > x0 && y1 > y0 &&
+        !upload(x0, y0, z1, x1 - x0, y1 - y0, m_resolution - z1)) return -1;
 
-    glGenerateTextureMipmap(m_texture);
+    commandList.generateMipmaps(m_texture);
     return uploadedBoxes;
 }
 
@@ -406,21 +461,55 @@ bool VoxelGiClipmap::uploadSubVolume(const int x,
                                      const int z,
                                      const int width,
                                      const int height,
-                                     const int depth) {
+                                     const int depth,
+                                     RhiCommandList& commandList,
+                                     RhiDevice& rhiDevice) {
     if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
 
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, m_resolution);
-    glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, m_resolution);
-    glTextureSubImage3D(m_texture, 0, x, y, z, width, height, depth,
-                        GL_RGBA, GL_FLOAT, m_voxels.data() + voxelIndex(x, y, z));
-    glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, 0);
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    const size_t voxelCount = static_cast<size_t>(width) * height * depth;
+    std::vector<uint16_t> packedVoxels(voxelCount * 4u);
+    size_t packedIndex = 0u;
+    for (int localZ = 0; localZ < depth; ++localZ) {
+        for (int localY = 0; localY < height; ++localY) {
+            for (int localX = 0; localX < width; ++localX) {
+                const ClipmapVoxel& voxel = m_voxels[voxelIndex(x + localX, y + localY, z + localZ)];
+                packedVoxels[packedIndex++] = floatToHalf(voxel.r);
+                packedVoxels[packedIndex++] = floatToHalf(voxel.g);
+                packedVoxels[packedIndex++] = floatToHalf(voxel.b);
+                packedVoxels[packedIndex++] = floatToHalf(voxel.occupancy);
+            }
+        }
+    }
+
+    RhiBufferDesc stagingDesc;
+    stagingDesc.debugName = "VoxelGI.UploadStaging";
+    stagingDesc.size = packedVoxels.size() * sizeof(uint16_t);
+    stagingDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc);
+    stagingDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    const RhiBufferHandle staging = rhiDevice.createBuffer(
+        stagingDesc, packedVoxels.data(), static_cast<size_t>(stagingDesc.size));
+    if (!staging.isValid()) {
+        return false;
+    }
+
+    RhiBufferTextureCopy copy;
+    copy.srcBuffer = staging;
+    copy.dstTexture = m_texture;
+    copy.dstX = static_cast<uint32_t>(x);
+    copy.dstY = static_cast<uint32_t>(y);
+    copy.dstZ = static_cast<uint32_t>(z);
+    copy.width = static_cast<uint32_t>(width);
+    copy.height = static_cast<uint32_t>(height);
+    copy.depth = static_cast<uint32_t>(depth);
+    commandList.copyBufferToTexture(copy);
+    rhiDevice.destroyBuffer(staging);
     return true;
 }
 
-void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels) {
+void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels,
+                                               RhiCommandList& commandList) {
     const auto axisRange = [this](const int delta, int& srcStart, int& dstStart, int& size) {
         if (delta > 0) {
             srcStart = delta;
@@ -450,12 +539,18 @@ void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels) {
     axisRange(deltaVoxels.y, srcY, dstY, sizeY);
     axisRange(deltaVoxels.z, srcZ, dstZ, sizeZ);
 
-    glCopyImageSubData(m_texture, GL_TEXTURE_3D, 0, srcX, srcY, srcZ,
-                       m_shiftScratchTexture, GL_TEXTURE_3D, 0, dstX, dstY, dstZ,
-                       sizeX, sizeY, sizeZ);
-    glCopyImageSubData(m_shiftScratchTexture, GL_TEXTURE_3D, 0, dstX, dstY, dstZ,
-                       m_texture, GL_TEXTURE_3D, 0, dstX, dstY, dstZ,
-                       sizeX, sizeY, sizeZ);
+    RhiTextureCopy copy;
+    copy.src = m_texture;
+    copy.dst = m_shiftScratchTexture;
+    copy.srcOffset = {static_cast<uint32_t>(srcX), static_cast<uint32_t>(srcY), static_cast<uint32_t>(srcZ)};
+    copy.dstOffset = {static_cast<uint32_t>(dstX), static_cast<uint32_t>(dstY), static_cast<uint32_t>(dstZ)};
+    copy.extent = {static_cast<uint32_t>(sizeX), static_cast<uint32_t>(sizeY), static_cast<uint32_t>(sizeZ)};
+    commandList.copyTexture(copy);
+
+    copy.src = m_shiftScratchTexture;
+    copy.dst = m_texture;
+    copy.srcOffset = copy.dstOffset;
+    commandList.copyTexture(copy);
 }
 
 void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,
