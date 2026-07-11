@@ -153,24 +153,8 @@ private:
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;
     std::unordered_map<entt::entity, glm::mat4> m_currentModelMatrices;
 
-    // Shared entity draw helper — iterates ECS and draws body parts with the given shader.
-    // prevModelLoc: uniform location for previous-frame model matrix (-1 to skip).
-    void drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,
-                      int modelLoc, int viewProjLoc, int prevModelLoc,
-                      const glm::mat4& viewProj, RenderMode mode);
-    // Overload with world light query — sets uEntitySunlight/uEntityBlockLight per entity.
-    void drawEntities(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg, Shader& shader,
-                      int modelLoc, int viewProjLoc, int prevModelLoc,
-                      const glm::mat4& viewProj, RenderMode mode,
-                      const glm::vec3& cameraPos = glm::vec3(0.0f),
-                      float splitNear = 0.0f,
-                      float splitFar = FLT_MAX);
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
     static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
-    void drawGenericMobParts(entt::registry& reg, entt::entity root,
-                             const ecs::MobVisualComponent& visual,
-                             const ecs::TransformComponent& rootTransform,
-                             Shader& shader, int modelLoc, int prevModelLoc);
 };
 
 #endif // MECRAFT_HUMANOID_RENDERER_H
