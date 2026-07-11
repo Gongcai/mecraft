@@ -2960,6 +2960,7 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
     RhiTextureInitialData initialData;
     initialData.pixels = data.data();
     initialData.sizeBytes = kExpectedSize;
+    initialData.layerCount = static_cast<uint32_t>(kAtmosphereLutDepth);
     m_atmosphereLutHandle = m_rhiDevice->createTexture(desc, &initialData);
     if (!m_atmosphereLutHandle.isValid()) {
         MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: failed to create RHI texture\n");

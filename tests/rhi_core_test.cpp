@@ -641,6 +641,7 @@ bool testGlRhiTexture3DInitialData() {
     RhiTextureInitialData initialData;
     initialData.pixels = source.data();
     initialData.sizeBytes = source.size() * sizeof(float);
+    initialData.layerCount = 2u;
     const RhiTextureHandle texture = device.createTexture(textureDesc, &initialData);
     if (!requireTrue(texture.isValid(), "3D texture with initial data must be created")) {
         device.shutdown();
@@ -658,6 +659,62 @@ bool testGlRhiTexture3DInitialData() {
         if (view.isValid()) {
             device.destroyTextureView(view);
         }
+        device.destroyTexture(texture);
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyTextureView(view);
+    device.destroyTexture(texture);
+    device.shutdown();
+    return true;
+}
+
+bool testGlRhiCubemapInitialData() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for cubemap upload")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_cubemap_initial_data_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for cubemap upload")) {
+        return false;
+    }
+
+    std::array<uint8_t, 24> pixels{};
+    for (size_t face = 0; face < 6u; ++face) {
+        pixels[face * 4u] = static_cast<uint8_t>(32u + face * 24u);
+        pixels[face * 4u + 3u] = 255u;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "cubemap-initial-data";
+    textureDesc.dimension = RhiTextureDimension::Cube;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 1u;
+    textureDesc.height = 1u;
+    textureDesc.depthOrLayers = 6u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+
+    RhiTextureInitialData initialData;
+    initialData.pixels = pixels.data();
+    initialData.sizeBytes = pixels.size();
+    initialData.layerCount = 6u;
+    const RhiTextureHandle texture = device.createTexture(textureDesc, &initialData);
+    if (!requireTrue(texture.isValid(), "cubemap with six initial layers must be created") ||
+        !requireTrue(glGetError() == GL_NO_ERROR, "cubemap initial data upload must not report a GL error")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.viewType = RhiTextureViewType::Cube;
+    viewDesc.layerCount = 6u;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+    if (!requireTrue(view.isValid(), "cubemap view must be created after initial data upload")) {
         device.destroyTexture(texture);
         device.shutdown();
         return false;
@@ -2445,6 +2502,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiTexture3DInitialData()) {
+        return 1;
+    }
+    if (!testGlRhiCubemapInitialData()) {
         return 1;
     }
     if (!testGlRhiRegisteredTextureViewRendering()) {

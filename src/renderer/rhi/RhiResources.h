@@ -27,6 +27,7 @@ struct RhiTextureInitialData {
     size_t sizeBytes = 0;
     uint32_t mipLevel = 0;
     uint32_t arrayLayer = 0;
+    uint32_t layerCount = 1;
 };
 
 struct RhiTextureViewDesc {

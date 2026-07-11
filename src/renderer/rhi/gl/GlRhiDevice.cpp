@@ -1882,19 +1882,26 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
 
     if (initialData != nullptr) {
         if (initialData->pixels == nullptr || initialData->mipLevel >= desc.mipLevels ||
-            initialData->arrayLayer != 0u ||
-            (desc.dimension != RhiTextureDimension::Texture2D &&
-             desc.dimension != RhiTextureDimension::Texture3D)) {
+            initialData->layerCount == 0u) {
             glDeleteTextures(1, &texture);
             logRhiError("createTexture received invalid initial texture data");
             return {};
         }
         const uint32_t mipWidth = std::max(1u, desc.width >> initialData->mipLevel);
         const uint32_t mipHeight = std::max(1u, desc.height >> initialData->mipLevel);
-        const uint32_t mipDepth = desc.dimension == RhiTextureDimension::Texture3D
+        const uint32_t availableLayers = desc.dimension == RhiTextureDimension::Texture3D
             ? std::max(1u, desc.depthOrLayers >> initialData->mipLevel)
-            : 1u;
-        const size_t expectedSize = static_cast<size_t>(mipWidth) * mipHeight * mipDepth *
+            : desc.depthOrLayers;
+        if (initialData->arrayLayer >= availableLayers ||
+            initialData->layerCount > availableLayers - initialData->arrayLayer ||
+            (desc.dimension == RhiTextureDimension::Texture2D &&
+             (initialData->arrayLayer != 0u || initialData->layerCount != 1u))) {
+            glDeleteTextures(1, &texture);
+            logRhiError("createTexture received an invalid initial texture layer range");
+            return {};
+        }
+        const size_t expectedSize = static_cast<size_t>(mipWidth) * mipHeight *
+                                    initialData->layerCount *
                                     textureFormatSizeBytes(desc.format);
         if (initialData->sizeBytes != expectedSize) {
             glDeleteTextures(1, &texture);
@@ -1916,10 +1923,10 @@ RhiTextureHandle GlRhiDevice::createTexture(const RhiTextureDesc& desc,
                                 static_cast<GLint>(initialData->mipLevel),
                                 0,
                                 0,
-                                0,
+                                static_cast<GLint>(initialData->arrayLayer),
                                 static_cast<GLsizei>(mipWidth),
                                 static_cast<GLsizei>(mipHeight),
-                                static_cast<GLsizei>(mipDepth),
+                                static_cast<GLsizei>(initialData->layerCount),
                                 format.externalFormat,
                                 format.type,
                                 initialData->pixels);
