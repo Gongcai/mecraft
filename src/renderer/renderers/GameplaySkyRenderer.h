@@ -56,6 +56,23 @@ public:
         float cloudinessFactor = 0.0f;
     };
 
+    struct CloudySkyCaptureParams {
+        float cameraAltitude = 0.0f;
+        float moonPhaseFlux = 0.0f;
+        float shaderTime = 0.0f;
+        float cloudTimeScale = 1.0f;
+        float cloudCoverage = 1.0f;
+        float cloudDensity = 1.0f;
+        float cloudHeight = 1000.0f;
+        float cloudThickness = 1400.0f;
+        float planarCloudCoverage = 0.5f;
+        float planarCloudDensity = 1.0f;
+        float planarCloudAltitude = 7000.0f;
+        float weatherWetness = 0.0f;
+        float weatherStorm = 0.0f;
+        glm::vec3 cameraPosition = glm::vec3(0.0f);
+    };
+
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     /// Switch to forward vanilla shader (no atmosphere LUT / sky capture / DerivativeMain contract).
@@ -64,15 +81,10 @@ public:
     void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, uint32_t skyCaptureTexture);
     void renderCloudySkyCapture(const SkyColors& colors, RhiCommandList& commandList,
                                 RhiTextureViewHandle targetView, int skyCaptureWidth,
-                                int skyCaptureHeight, float cameraAltitude, RhiTextureHandle atmosphereLutTexture,
-                                float moonPhaseFlux, RhiTextureHandle noiseTexture, float shaderTime,
+                                int skyCaptureHeight, RhiTextureHandle atmosphereLutTexture,
+                                RhiTextureHandle noiseTexture,
                                 const SkyIlluminanceData& illuminance,
-                                float cloudCoverage, float cloudDensity,
-                                float cloudHeight, float cloudThickness,
-                                float planarCloudCoverage, float planarCloudDensity,
-                                float planarCloudAltitude,
-                                float cloudTimeScale, const glm::vec3& cameraPos,
-                                float weatherWetness = 0.0f, float weatherStorm = 0.0f);
+                                const CloudySkyCaptureParams& params);
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;
     [[nodiscard]] SkyIlluminanceData computeSkyIlluminance(const SkyColors& colors,
                                                             float weatherWetness = 0.0f,

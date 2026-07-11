@@ -250,23 +250,10 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
                                                   const RhiTextureViewHandle targetView,
                                                   const int skyCaptureWidth,
                                                   const int skyCaptureHeight,
-                                                  const float cameraAltitude,
                                                   const RhiTextureHandle atmosphereLutTexture,
-                                                  const float moonPhaseFlux,
                                                   const RhiTextureHandle noiseTexture,
-                                                  const float shaderTime,
                                                   const SkyIlluminanceData& illuminance,
-                                                  const float cloudCoverage,
-                                                  const float cloudDensity,
-                                                  const float cloudHeight,
-                                                  const float cloudThickness,
-                                                  const float planarCloudCoverage,
-                                                  const float planarCloudDensity,
-                                                  const float planarCloudAltitude,
-                                                  const float cloudTimeScale,
-                                                  const glm::vec3& cameraPos,
-                                                  const float weatherWetness,
-                                                  const float weatherStorm) {
+                                                  const CloudySkyCaptureParams& params) {
     m_lastColors = colors;
     if (m_shader == nullptr || m_skyVao == 0 || !targetView.isValid() || skyCaptureWidth <= 0 || skyCaptureHeight <= 258) {
         return;
@@ -322,29 +309,29 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
     m_shader->setVec4("uTintColor", glm::vec4(1.0f));
     m_shader->setVec2("uUvMin", glm::vec2(0.0f));
     m_shader->setVec2("uUvMax", glm::vec2(1.0f));
-    m_shader->setFloat("uCameraAltitude", cameraAltitude);
-    m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
-    m_shader->setFloat("uWeatherWetness", weatherWetness);
-    m_shader->setFloat("uWeatherStorm", weatherStorm);
+    m_shader->setFloat("uCameraAltitude", params.cameraAltitude);
+    m_shader->setFloat("uMoonPhaseFlux", params.moonPhaseFlux);
+    m_shader->setFloat("uWeatherWetness", params.weatherWetness);
+    m_shader->setFloat("uWeatherStorm", params.weatherStorm);
     // Sky radiance occlusion uses the DerivativeMain wetness+storm gate.
-    const float skyWetnessLocal = std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f);
+    const float skyWetnessLocal = std::clamp(params.weatherWetness + params.weatherStorm, 0.0f, 1.0f);
     m_shader->setFloat("uSkyWetness", skyWetnessLocal);
-    m_shader->setFloat("uFogWetness", std::clamp(weatherWetness * 0.35f + weatherStorm * 0.65f, 0.0f, 1.0f));
-    m_shader->setFloat("uCloudWetness", std::clamp(weatherWetness + weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
-    m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
-    m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
+    m_shader->setFloat("uFogWetness", std::clamp(params.weatherWetness * 0.35f + params.weatherStorm * 0.65f, 0.0f, 1.0f));
+    m_shader->setFloat("uCloudWetness", std::clamp(params.weatherWetness + params.weatherStorm * (4.0f / 3.0f), 0.0f, 1.0f));
+    m_shader->setFloat("uSurfaceWetness", std::clamp(params.weatherWetness + params.weatherStorm * 0.3f, 0.0f, 1.0f));
+    m_shader->setFloat("uPrecipitation", skyWetnessLocal);
     m_shader->setInt("uNoiseTex", 2);
     m_shader->setBool("uNoiseEnabled", true);
-    m_shader->setFloat("uTime", shaderTime);
-    m_shader->setFloat("uCloudTimeScale", cloudTimeScale);
-    m_shader->setFloat("uCloudCoverage", cloudCoverage);
-    m_shader->setFloat("uCloudDensity", cloudDensity);
-    m_shader->setFloat("uCloudHeight", cloudHeight);
-    m_shader->setFloat("uCloudThickness", cloudThickness);
-    m_shader->setFloat("uPlanarCloudCoverage", planarCloudCoverage);
-    m_shader->setFloat("uPlanarCloudDensity", planarCloudDensity);
-    m_shader->setFloat("uPlanarCloudAltitude", planarCloudAltitude);
-    m_shader->setVec3("uCameraPos", cameraPos);
+    m_shader->setFloat("uTime", params.shaderTime);
+    m_shader->setFloat("uCloudTimeScale", params.cloudTimeScale);
+    m_shader->setFloat("uCloudCoverage", params.cloudCoverage);
+    m_shader->setFloat("uCloudDensity", params.cloudDensity);
+    m_shader->setFloat("uCloudHeight", params.cloudHeight);
+    m_shader->setFloat("uCloudThickness", params.cloudThickness);
+    m_shader->setFloat("uPlanarCloudCoverage", params.planarCloudCoverage);
+    m_shader->setFloat("uPlanarCloudDensity", params.planarCloudDensity);
+    m_shader->setFloat("uPlanarCloudAltitude", params.planarCloudAltitude);
+    m_shader->setVec3("uCameraPos", params.cameraPosition);
     m_shader->setVec3("uCloudDynamicWeather", illuminance.cloudDynamicWeather);
     bindDummySkyCaptureTexture(0);
     glActiveTexture(GL_TEXTURE1);

@@ -102,22 +102,29 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     commandList.endRendering();
 
     // Cloudy sky radiance (rows 258..513)
+    const GameplaySkyRenderer::CloudySkyCaptureParams cloudyParams{
+        cameraAltitude,
+        moonPhaseFlux,
+        shaderTime,
+        cloudTimeScale,
+        cloudCoverage,
+        cloudDensity,
+        cloudHeight,
+        cloudThickness,
+        0.5f,
+        1.0f,
+        7000.0f,
+        weatherWetness,
+        weatherStorm,
+        cameraPos
+    };
     skyRenderer.renderCloudySkyCapture(skyColors,
                                         commandList,
                                         targets.skyCaptureTextureViewHandle(),
                                         targets.skyCaptureWidth(),
                                         targets.skyCaptureHeight(),
-                                        cameraAltitude, atmosphereLut, moonPhaseFlux,
-                                        noiseTexture, shaderTime,
-                                        illum,
-                                        cloudCoverage, cloudDensity,
-                                        cloudHeight, cloudThickness,
-                                        0.5f,
-                                        1.0f,
-                                        7000.0f,
-                                        cloudTimeScale,
-                                        cameraPos,
-                                        weatherWetness, weatherStorm);
+                                        atmosphereLut, noiseTexture,
+                                        illum, cloudyParams);
 
     RhiColorAttachment metadataAttachment;
     metadataAttachment.view = targets.skyCaptureTextureViewHandle();
