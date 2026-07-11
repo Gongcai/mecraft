@@ -114,6 +114,7 @@ public:
                       float timeSeconds);
     void prepareRhiFrame(RhiCommandList& commandList);
     void renderPrepared();
+    void renderPrepared(RhiCommandList& commandList);
 
     // Shadow data from Renderer — must be set before render() each frame.
     struct ShadowData {
@@ -192,6 +193,8 @@ private:
     static void destroyMesh(Mesh& mesh);
     void createRhiTextureResources();
     void destroyRhiTextureResources();
+    void createArmRhiResources();
+    void destroyArmRhiResources();
     void synchronizeShadowTextureViews();
     void destroyShadowTextureViews();
 
@@ -218,6 +221,12 @@ private:
     RhiSamplerHandle m_shadowCompareSampler;
     RhiSamplerHandle m_shadowRawSampler;
     RhiBufferHandle m_shadowUniformBuffer;
+    RhiShaderHandle m_armVertexShader;
+    RhiShaderHandle m_armFragmentShader;
+    RhiBindGroupLayoutHandle m_armBindGroupLayout;
+    RhiPipelineLayoutHandle m_armPipelineLayout;
+    RhiPipelineHandle m_armPipeline;
+    RhiBindGroupHandle m_armBindGroup;
     Shader* m_blockShader = nullptr;
     Shader* m_itemShader = nullptr;
     Shader* m_steveShader = nullptr;

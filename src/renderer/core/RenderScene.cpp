@@ -388,7 +388,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer->prepareRhiFrame(commandList);
         RhiCommandList* heldItemCommandList = beginSceneCaptureRendering(
             commandList, m_currentContext, "SceneCapture.FirstPersonHeldItem");
-        request.firstPersonHeldItemRenderer->renderPrepared();
+        request.firstPersonHeldItemRenderer->renderPrepared(commandList);
         endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList);
     }
 
