@@ -2,6 +2,7 @@
 #define MECRAFT_FIRST_PERSON_HELD_ITEM_RENDERER_H
 
 #include <cstdint>
+#include <array>
 #include <unordered_map>
 
 #include <glm/mat4x4.hpp>
@@ -171,6 +172,8 @@ private:
     static void destroyMesh(Mesh& mesh);
     void createRhiTextureResources();
     void destroyRhiTextureResources();
+    void synchronizeShadowTextureViews();
+    void destroyShadowTextureViews();
 
     void drawArm(const glm::mat4& viewProj, const glm::mat4& model);
     void bindShadowUniforms(Shader& shader) const;
@@ -190,6 +193,11 @@ private:
     RhiTextureViewHandle m_foliageColormapView;
     RhiSamplerHandle m_textureSampler;
     RhiSamplerHandle m_blockTextureSampler;
+    std::array<RhiTextureHandle, 6> m_shadowTextureHandles{};
+    std::array<RhiTextureViewHandle, 6> m_shadowTextureViews{};
+    RhiSamplerHandle m_shadowCompareSampler;
+    RhiSamplerHandle m_shadowRawSampler;
+    RhiBufferHandle m_shadowUniformBuffer;
     Shader* m_blockShader = nullptr;
     Shader* m_itemShader = nullptr;
     Shader* m_steveShader = nullptr;

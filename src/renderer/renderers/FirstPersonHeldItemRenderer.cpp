@@ -489,12 +489,83 @@ void FirstPersonHeldItemRenderer::createRhiTextureResources() {
     samplerDesc.addressV = RhiAddressMode::Repeat;
     samplerDesc.addressW = RhiAddressMode::Repeat;
     m_blockTextureSampler = m_rhiDevice->createSampler(samplerDesc);
-    if (!m_textureSampler.isValid() || !m_blockTextureSampler.isValid()) {
+    samplerDesc.addressU = RhiAddressMode::ClampToBorder;
+    samplerDesc.addressV = RhiAddressMode::ClampToBorder;
+    samplerDesc.addressW = RhiAddressMode::ClampToBorder;
+    samplerDesc.borderColor = RhiBorderColor::OpaqueWhite;
+    samplerDesc.compareEnabled = true;
+    samplerDesc.compareOp = RhiCompareOp::LessOrEqual;
+    m_shadowCompareSampler = m_rhiDevice->createSampler(samplerDesc);
+    samplerDesc.compareEnabled = false;
+    m_shadowRawSampler = m_rhiDevice->createSampler(samplerDesc);
+    RhiBufferDesc uniformBufferDesc;
+    uniformBufferDesc.debugName = "FirstPerson.ShadowUniformBuffer";
+    uniformBufferDesc.size = 512u;
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    m_shadowUniformBuffer = m_rhiDevice->createBuffer(uniformBufferDesc, nullptr, 0u);
+    if (!m_textureSampler.isValid() || !m_blockTextureSampler.isValid() ||
+        !m_shadowCompareSampler.isValid() || !m_shadowRawSampler.isValid() ||
+        !m_shadowUniformBuffer.isValid()) {
         std::abort();
     }
 }
 
+void FirstPersonHeldItemRenderer::synchronizeShadowTextureViews() {
+    const std::array<RhiTextureHandle, 6> textures = {
+        m_shadowData.shadowTexture, m_shadowData.shadowDepthRaw,
+        m_shadowData.shadowDepthAll, m_shadowData.shadowDepthAllRaw,
+        m_shadowData.shadowColor0, m_shadowData.shadowColor1
+    };
+    if (m_shadowData.shadowsEnabled == 0) {
+        destroyShadowTextureViews();
+        return;
+    }
+    for (const RhiTextureHandle texture : textures) {
+        if (!texture.isValid()) {
+            std::abort();
+        }
+    }
+    bool unchanged = true;
+    for (std::size_t index = 0u; index < textures.size(); ++index) {
+        unchanged = unchanged &&
+            textures[index].index == m_shadowTextureHandles[index].index &&
+            textures[index].generation == m_shadowTextureHandles[index].generation;
+    }
+    if (unchanged) {
+        return;
+    }
+    destroyShadowTextureViews();
+    m_shadowTextureHandles = textures;
+    for (std::size_t index = 0u; index < textures.size(); ++index) {
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = textures[index];
+        viewDesc.viewType = RhiTextureViewType::Texture2DArray;
+        m_shadowTextureViews[index] = m_rhiDevice->createTextureView(viewDesc);
+        if (!m_shadowTextureViews[index].isValid()) {
+            std::abort();
+        }
+    }
+}
+
+void FirstPersonHeldItemRenderer::destroyShadowTextureViews() {
+    if (m_rhiDevice != nullptr) {
+        for (RhiTextureViewHandle& view : m_shadowTextureViews) {
+            if (view.isValid()) {
+                m_rhiDevice->destroyTextureView(view);
+            }
+            view = {};
+        }
+    }
+    m_shadowTextureHandles = {};
+}
+
 void FirstPersonHeldItemRenderer::destroyRhiTextureResources() {
+    destroyShadowTextureViews();
+    if (m_shadowUniformBuffer.isValid()) m_rhiDevice->destroyBuffer(m_shadowUniformBuffer);
+    if (m_shadowRawSampler.isValid()) m_rhiDevice->destroySampler(m_shadowRawSampler);
+    if (m_shadowCompareSampler.isValid()) m_rhiDevice->destroySampler(m_shadowCompareSampler);
     if (m_blockTextureSampler.isValid()) m_rhiDevice->destroySampler(m_blockTextureSampler);
     if (m_textureSampler.isValid()) m_rhiDevice->destroySampler(m_textureSampler);
     if (m_foliageColormapView.isValid()) m_rhiDevice->destroyTextureView(m_foliageColormapView);
@@ -513,10 +584,14 @@ void FirstPersonHeldItemRenderer::destroyRhiTextureResources() {
     m_blockTextureArrayView = {};
     m_itemAtlasView = {};
     m_steveTextureView = {};
+    m_shadowUniformBuffer = {};
+    m_shadowRawSampler = {};
+    m_shadowCompareSampler = {};
 }
 
 void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
     m_shadowData = data;
+    synchronizeShadowTextureViews();
 }
 
 FirstPersonHeldItemRenderer::ShadowData FirstPersonHeldItemRenderer::fromFirstPersonShadowData(const FirstPersonShadowData& sd) {
