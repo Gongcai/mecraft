@@ -13,6 +13,7 @@
 
 #include "../core/Shader.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiDevice.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 #include "../../world/block/Block.h"
@@ -155,10 +156,17 @@ float chestYawRadians(const BlockStateId stateId) {
 
 void BlockEntityRenderer::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
+    m_rhiDevice = &resourceMgr.rhiDevice();
     m_gbufferShader = resourceMgr.getShader("block_entity_gbuffer");
     m_shadowShader = resourceMgr.getShader("block_entity_shadow");
     m_forwardShader = resourceMgr.getShader("steve_forward");
     glGenBuffers(1, &m_instanceVbo);
+    if (!m_rhiInstanceBuffer.init(*m_rhiDevice,
+                                  256u * sizeof(InstancedDrawData),
+                                  rhiFlag(RhiBufferUsage::Vertex),
+                                  "BlockEntity.InstanceBuffer")) {
+        failBlockEntityRenderer("Failed to create block entity RHI instance buffer");
+    }
 
     const BlockID chestBlock = BlockRegistry::requireIdByName("minecraft:chest");
 
@@ -182,6 +190,7 @@ void BlockEntityRenderer::shutdown() {
         destroyMesh(pair.second.mesh);
     }
     m_models.clear();
+    m_rhiInstanceBuffer.shutdown();
     m_sectionCaches.clear();
     m_flatInstances.clear();
     m_cacheSyncSerial = 0;
@@ -197,6 +206,7 @@ void BlockEntityRenderer::shutdown() {
     m_instanceCacheSyncedThisFrame = false;
     m_instanceLightsSyncedThisFrame = false;
     m_resourceMgr = nullptr;
+    m_rhiDevice = nullptr;
     m_gbufferShader = nullptr;
     m_shadowShader = nullptr;
     m_forwardShader = nullptr;
@@ -235,6 +245,16 @@ BlockEntityRenderer::Mesh BlockEntityRenderer::buildMesh(const ModelDefinition& 
 
     Mesh mesh;
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
+    RhiBufferDesc rhiBufferDesc;
+    rhiBufferDesc.debugName = "BlockEntity.MeshVertexBuffer";
+    rhiBufferDesc.size = vertices.size() * sizeof(BlockEntityVertex);
+    rhiBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    rhiBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
+        rhiBufferDesc, vertices.data(), vertices.size() * sizeof(BlockEntityVertex));
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        failBlockEntityRenderer("Failed to create block entity RHI mesh buffer");
+    }
 
     glGenVertexArrays(1, &mesh.vao);
     glGenBuffers(1, &mesh.vbo);
@@ -262,6 +282,10 @@ BlockEntityRenderer::Mesh BlockEntityRenderer::buildMesh(const ModelDefinition& 
 }
 
 void BlockEntityRenderer::destroyMesh(Mesh& mesh) {
+    if (m_rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
+        mesh.rhiVertexBuffer = {};
+    }
     if (mesh.vbo != 0) {
         glDeleteBuffers(1, &mesh.vbo);
         mesh.vbo = 0;

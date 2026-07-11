@@ -11,11 +11,13 @@
 #include <glm/glm.hpp>
 
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiGrowableBuffer.h"
 #include "../../world/block/BlockStateRegistry.h"
 
 class IWorldView;
 class ResourceMgr;
 class Shader;
+class RhiDevice;
 class Chunk;
 class SubChunk;
 
@@ -50,6 +52,7 @@ private:
     struct Mesh {
         uint32_t vao = 0;
         uint32_t vbo = 0;
+        RhiBufferHandle rhiVertexBuffer;
         uint32_t vertexCount = 0;
     };
 
@@ -111,6 +114,7 @@ private:
     };
 
     ResourceMgr* m_resourceMgr = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     Shader* m_gbufferShader = nullptr;
     Shader* m_shadowShader = nullptr;
     Shader* m_forwardShader = nullptr;
@@ -118,6 +122,7 @@ private:
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
     std::vector<BlockEntityInstance*> m_flatInstances;
     uint32_t m_instanceVbo = 0;
+    RhiGrowableBuffer m_rhiInstanceBuffer;
     std::size_t m_instanceCapacity = 0;
     std::vector<InstancedDrawData> m_instanceData;
     uint64_t m_cacheSyncSerial = 0;
@@ -127,8 +132,8 @@ private:
     bool m_instanceCacheSyncedThisFrame = false;
     bool m_instanceLightsSyncedThisFrame = false;
 
-    static void destroyMesh(Mesh& mesh);
-    static Mesh buildMesh(const ModelDefinition& definition);
+    void destroyMesh(Mesh& mesh);
+    Mesh buildMesh(const ModelDefinition& definition);
     static ModelDefinition makeChestDefinition();
     static glm::mat4 buildModelMatrix(const ModelEntry& entry,
                                       BlockStateId stateId,
