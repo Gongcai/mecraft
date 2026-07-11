@@ -193,10 +193,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     smSettings.shadowResolution = settings.shadow.resolution;
     m_shadowRenderer->updateFromBasis(basis, smSettings);
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-
     const float shadowDist = std::max(64.0f, settings.shadow.distance);
     int visibleTotal = 0;
     int culledTotal = 0;
@@ -283,14 +279,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
         const bool renderCutoutCasters = cascade < kCutoutShadowCasterCascadeCount;
         const bool renderTransparentCasters = cascade < kTransparentShadowCasterCascadeCount;
-
-        // Explicit GL state at cascade start — prevents leaked state from
-        // entity/drop shadow sub-passes in previous cascades.
-        glEnable(GL_DEPTH_TEST);
-        glDepthMask(GL_TRUE);
-        glDisable(GL_BLEND);
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
 
         m_worldRenderBuffer->beginFrame();
         for (const auto& range : m_cascadeOpaqueRanges[cascade]) {
@@ -535,7 +523,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     }
 
     m_worldRenderBuffer->beginFrame();
-    glBindVertexArray(0);
 
     return output;
 }
