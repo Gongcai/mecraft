@@ -19,10 +19,6 @@ void insertEvent(const char* name);
 
 // Label native graphics objects with human-readable names (visible in RenderDoc Resource Inspector).
 void labelTexture(uint32_t id, const char* name);
-void labelBuffer(uint32_t id, const char* name);
-void labelFramebuffer(uint32_t id, const char* name);
-void labelVertexArray(uint32_t id, const char* name);
-void labelProgram(uint32_t id, const char* name);
 
 // RAII scoped debug group — automatically pops on destruction.
 class ScopedDebugGroup {

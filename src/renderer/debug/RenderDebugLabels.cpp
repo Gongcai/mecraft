@@ -66,50 +66,6 @@ void labelTexture(uint32_t id, const char* name) {
 #endif
 }
 
-void labelBuffer(uint32_t id, const char* name) {
-#ifdef MECRAFT_DEBUG
-    if (labelsEnabled() && glObjectLabel && id != 0) {
-        glObjectLabel(GL_BUFFER, id, -1, name);
-    }
-#else
-    (void)id;
-    (void)name;
-#endif
-}
-
-void labelFramebuffer(uint32_t id, const char* name) {
-#ifdef MECRAFT_DEBUG
-    if (labelsEnabled() && glObjectLabel && id != 0) {
-        glObjectLabel(GL_FRAMEBUFFER, id, -1, name);
-    }
-#else
-    (void)id;
-    (void)name;
-#endif
-}
-
-void labelVertexArray(uint32_t id, const char* name) {
-#ifdef MECRAFT_DEBUG
-    if (labelsEnabled() && glObjectLabel && id != 0) {
-        glObjectLabel(GL_VERTEX_ARRAY, id, -1, name);
-    }
-#else
-    (void)id;
-    (void)name;
-#endif
-}
-
-void labelProgram(uint32_t id, const char* name) {
-#ifdef MECRAFT_DEBUG
-    if (labelsEnabled() && glObjectLabel && id != 0) {
-        glObjectLabel(GL_PROGRAM, id, -1, name);
-    }
-#else
-    (void)id;
-    (void)name;
-#endif
-}
-
 ScopedDebugGroup::ScopedDebugGroup(const char* name) {
     pushGroup(name);
 }
