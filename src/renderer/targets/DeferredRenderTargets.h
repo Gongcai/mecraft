@@ -240,6 +240,8 @@ private:
     void destroyGBufferTextures();
     bool createSceneTextures();
     void destroySceneTextures();
+    bool createTransparentCompositeTextures();
+    void destroyTransparentCompositeTextures();
     bool registerRhiTextures();
     bool registerAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -358,8 +360,6 @@ private:
     RhiTextureViewHandle m_sceneResolvedView;
 
     // TransparentComposite is a scratch scene copy used while forward water/generic transparent geometry is blended.
-    uint32_t m_transparentCompositeTex = 0;
-    uint32_t m_transparentCompositeDepth = 0;
     RhiTextureHandle m_transparentCompositeHandle;
     RhiTextureHandle m_transparentCompositeDepthHandle;
     RhiTextureViewHandle m_transparentCompositeView;

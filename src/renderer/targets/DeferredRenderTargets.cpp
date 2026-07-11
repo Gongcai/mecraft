@@ -75,6 +75,10 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
+    if (!createTransparentCompositeTextures()) {
+        shutdown();
+        return false;
+    }
 
     m_shadowDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_shadowResolution, m_shadowResolution,
                                    GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_BORDER);
@@ -204,10 +208,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
     // only written once per frame" invariant).
     m_temporalCurrentTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
 
-    m_transparentCompositeTex = createTexture2D(GL_RGBA16F, m_width, m_height, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
-    // Keep transparent depth separate from the sampled G-buffer depth to avoid feedback while drawing water/transparent materials.
-    m_transparentCompositeDepth = createTexture2D(GL_DEPTH_COMPONENT32F, m_width, m_height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST, GL_NEAREST, GL_CLAMP_TO_EDGE);
-
     const int halfWidth = std::max(1, m_width / 2);
     const int halfHeight = std::max(1, m_height / 2);
     m_halfResTex = createTexture2D(GL_RGBA16F, halfWidth, halfHeight, GL_RGBA, GL_FLOAT, GL_LINEAR, GL_LINEAR, GL_CLAMP_TO_EDGE);
@@ -297,8 +297,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         std::snprintf(texName, sizeof(texName), "DeferredTargets.SSGIMomentsHistoryTex[%d]", i);
         renderer::debug::labelTexture(m_ssgiMomentsHistoryTex[i], texName);
     }
-    renderer::debug::labelTexture(m_transparentCompositeTex, "DeferredTargets.TransparentCompositeTex");
-    renderer::debug::labelTexture(m_transparentCompositeDepth, "DeferredTargets.TransparentCompositeDepth");
     renderer::debug::labelTexture(m_halfResTex, "DeferredTargets.HalfResTex");
     renderer::debug::labelTexture(m_reflectionTex, "DeferredTargets.ReflectionTex");
     renderer::debug::labelTexture(m_reflectionTemporalScratchTex, "DeferredTargets.ReflectionTemporalScratchTex");
@@ -691,33 +689,63 @@ void DeferredRenderTargets::destroySceneTextures() {
     }
 }
 
+bool DeferredRenderTargets::createTransparentCompositeTextures() {
+    if (m_rhiDevice == nullptr) {
+        return false;
+    }
+
+    RhiTextureDesc desc;
+    desc.dimension = RhiTextureDimension::Texture2D;
+    desc.width = static_cast<uint32_t>(m_width);
+    desc.height = static_cast<uint32_t>(m_height);
+    desc.depthOrLayers = 1u;
+    desc.mipLevels = 1u;
+    desc.sampleCount = 1u;
+
+    desc.debugName = "DeferredTargets.TransparentComposite";
+    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                 rhiFlag(RhiTextureUsage::ColorAttachment) |
+                 rhiFlag(RhiTextureUsage::TransferSrc) |
+                 rhiFlag(RhiTextureUsage::TransferDst);
+    m_transparentCompositeHandle = m_rhiDevice->createTexture(desc, nullptr);
+    if (!m_transparentCompositeHandle.isValid()) {
+        return false;
+    }
+
+    // A separate depth attachment prevents feedback while the G-buffer depth is sampled.
+    desc.debugName = "DeferredTargets.TransparentCompositeDepth";
+    desc.format = RhiTextureFormat::Depth32Float;
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                 rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+                 rhiFlag(RhiTextureUsage::TransferSrc) |
+                 rhiFlag(RhiTextureUsage::TransferDst);
+    m_transparentCompositeDepthHandle = m_rhiDevice->createTexture(desc, nullptr);
+    if (!m_transparentCompositeDepthHandle.isValid()) {
+        destroyTransparentCompositeTextures();
+        return false;
+    }
+    return true;
+}
+
+void DeferredRenderTargets::destroyTransparentCompositeTextures() {
+    if (m_rhiDevice == nullptr) {
+        return;
+    }
+
+    if (m_transparentCompositeHandle.isValid()) {
+        m_rhiDevice->destroyTexture(m_transparentCompositeHandle);
+        m_transparentCompositeHandle = {};
+    }
+    if (m_transparentCompositeDepthHandle.isValid()) {
+        m_rhiDevice->destroyTexture(m_transparentCompositeDepthHandle);
+        m_transparentCompositeDepthHandle = {};
+    }
+}
+
 bool DeferredRenderTargets::registerRhiTextures() {
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
-    m_transparentCompositeHandle = renderer::rhi::gl::registerTexture({
-        m_transparentCompositeTex,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba16Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment),
-        false
-    });
-    m_transparentCompositeDepthHandle = renderer::rhi::gl::registerTexture({
-        m_transparentCompositeDepth,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Depth32Float,
-        static_cast<uint32_t>(m_width),
-        static_cast<uint32_t>(m_height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
-        false
-    });
     m_halfResHandle = renderer::rhi::gl::registerTexture({
         m_halfResTex,
         RhiTextureDimension::Texture2D,
@@ -2860,8 +2888,7 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyRhiTextureViews();
     destroyGBufferTextures();
     destroySceneTextures();
-    renderer::rhi::gl::unregisterTextureAndReset(m_transparentCompositeHandle);
-    renderer::rhi::gl::unregisterTextureAndReset(m_transparentCompositeDepthHandle);
+    destroyTransparentCompositeTextures();
     renderer::rhi::gl::unregisterTextureAndReset(m_halfResHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_reflectionHandle);
     renderer::rhi::gl::unregisterTextureAndReset(m_reflectionTemporalScratchHandle);
@@ -2928,8 +2955,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
         m_ssaoTex,
         m_ssaoFilteredTex,
         m_temporalCurrentTex,
-        m_transparentCompositeTex,
-        m_transparentCompositeDepth,
         m_halfResTex,
         m_reflectionTex,
         m_reflectionTemporalScratchTex,
@@ -2975,8 +3000,6 @@ void DeferredRenderTargets::destroyFramebuffers() {
     m_ssaoHalfResTex = 0;
     m_ssaoHalfResFilteredTex = 0;
     m_temporalCurrentTex = 0;
-    m_transparentCompositeTex = 0;
-    m_transparentCompositeDepth = 0;
     m_halfResTex = 0;
     m_reflectionTex = 0;
     m_reflectionTemporalScratchTex = 0;
