@@ -1,6 +1,7 @@
 #include "BlockMeshBuilder.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -553,6 +554,27 @@ void destroyBlockCubeMesh(BlockCubeMesh& mesh) {
     }
     mesh.vertexCount = 0;
     mesh.rhiDevice = nullptr;
+}
+
+void setBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc) {
+    pipelineDesc.vertexInput.bindings.push_back({
+        0u,
+        static_cast<uint32_t>(sizeof(BlockVertex)),
+        RhiVertexInputRate::Vertex
+    });
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, static_cast<uint32_t>(offsetof(BlockVertex, x))},
+        {1u, 0u, RhiVertexFormat::Float2, static_cast<uint32_t>(offsetof(BlockVertex, u))},
+        {2u, 0u, RhiVertexFormat::Sint8, static_cast<uint32_t>(offsetof(BlockVertex, normal))},
+        {3u, 0u, RhiVertexFormat::Unorm8, static_cast<uint32_t>(offsetof(BlockVertex, sunlight))},
+        {4u, 0u, RhiVertexFormat::Unorm8, static_cast<uint32_t>(offsetof(BlockVertex, blockLight))},
+        {5u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, ao))},
+        {6u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, layer))},
+        {7u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, animationFrameCount))},
+        {8u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, animationFps))},
+        {9u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, animated))},
+        {10u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, tintPacked))}
+    };
 }
 
 } // namespace renderer

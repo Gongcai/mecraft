@@ -8,6 +8,7 @@
 #include "world/block/Block.h"     // BlockID
 #include "world/block/BlockStateRegistry.h"
 #include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiPipeline.h"
 
 class ResourceMgr;
 class RhiDevice;
@@ -51,6 +52,10 @@ BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices);
 
 /// Destroy GL resources owned by `mesh`. Safe to call on a zero-initialized mesh.
 void destroyBlockCubeMesh(BlockCubeMesh& mesh);
+
+/// Configure the explicit RHI vertex layout for the entity BlockVertex format.
+/// Integer-packed fields remain integer shader inputs except normalized light.
+void setBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc);
 
 } // namespace renderer
 
