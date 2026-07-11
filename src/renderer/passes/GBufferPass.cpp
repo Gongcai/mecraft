@@ -116,7 +116,6 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
         : HumanoidRenderer::kRenderMobsOnly;
     humanoidRenderer->renderToGBuffer(worldView, *gameplayRegistry, viewProj, previousViewProj, mode);
 
-    glBindVertexArray(0);
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);
 }
@@ -149,7 +148,6 @@ void GBufferPass::executeBlockEntities(const IWorldView& worldView, const FrameC
     const glm::mat4& previousViewProj = ctx.previousViewProj;
     blockEntityRenderer->renderToGBuffer(worldView, viewProj, previousViewProj);
 
-    glBindVertexArray(0);
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);
 }
@@ -184,7 +182,6 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
     const glm::mat4& previousViewProj = ctx.previousViewProj;
     dropRenderer->renderToGBuffer(worldView, *dropSystem, viewProj, previousViewProj, ctx.animationTime);
 
-    glBindVertexArray(0);
     commandList->endRendering();
     rhiDevice.submitFrame(*commandList);
 }
