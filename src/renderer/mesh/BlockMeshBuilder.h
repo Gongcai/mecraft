@@ -41,7 +41,7 @@ struct BlockCubeMesh {
 
 /// Build and upload a block-backed item/entity mesh. Returns an empty mesh
 /// (vertexCount=0) if the block has no renderable geometry.
-BlockCubeMesh buildBlockCubeMesh(BlockID blockId, const ResourceMgr& resourceMgr);
+BlockCubeMesh buildBlockCubeMesh(BlockID blockId, ResourceMgr& resourceMgr);
 
 /// Build and upload a block-backed item/entity mesh for a specific state.
 BlockCubeMesh buildBlockStateCubeMesh(BlockStateId stateId, ResourceMgr& resourceMgr);

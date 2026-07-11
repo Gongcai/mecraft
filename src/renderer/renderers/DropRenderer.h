@@ -7,12 +7,14 @@
 #include <glm/glm.hpp>
 
 #include "../core/Shader.h"
+#include "../rhi/RhiHandles.h"
 #include "../../world/block/Block.h"
 #include "../../item/Item.h"
 
 class Camera;
 class IWorldView;
 class ResourceMgr;
+class RhiDevice;
 class Window;
 class World;
 class DropSystem;
@@ -42,6 +44,8 @@ private:
 	struct Mesh {
 		uint32_t vao = 0;
 		uint32_t vbo = 0;
+		RhiBufferHandle rhiVertexBuffer;
+		RhiDevice* rhiDevice = nullptr;
 		uint32_t vertexCount = 0;
 	};
 

@@ -2,6 +2,7 @@
 #include "../mesh/BlockMeshBuilder.h"
 #include "../mesh/ItemModelMesh.h"
 #include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiDevice.h"
 
 #include <cstddef>
 #include <utility>
@@ -252,6 +253,18 @@ DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "Drop.ItemMesh.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(ItemModelVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    RhiDevice& rhiDevice = m_resourceMgr->rhiDevice();
+    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
+    mesh.rhiDevice = &rhiDevice;
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyMesh(mesh);
+    }
     return mesh;
 }
 
@@ -272,10 +285,17 @@ DropRenderer::Mesh DropRenderer::buildBlockMesh(const BlockID blockId) const {
         return mesh;
     }
 
-    const renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
+    renderer::BlockCubeMesh shared = renderer::buildBlockCubeMesh(blockId, *m_resourceMgr);
     mesh.vao = shared.vao;
     mesh.vbo = shared.vbo;
+    mesh.rhiVertexBuffer = shared.rhiVertexBuffer;
+    mesh.rhiDevice = shared.rhiDevice;
     mesh.vertexCount = shared.vertexCount;
+    shared.vao = 0;
+    shared.vbo = 0;
+    shared.rhiVertexBuffer = {};
+    shared.rhiDevice = nullptr;
+    shared.vertexCount = 0;
     return mesh;
 }
 
@@ -548,6 +568,10 @@ glm::vec2 DropRenderer::queryWorldLight(const IWorldView& worldView, const glm::
 }
 
 void DropRenderer::destroyMesh(Mesh& mesh) {
+    if (mesh.rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
+        mesh.rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
+        mesh.rhiVertexBuffer = {};
+    }
     if (mesh.vbo != 0) {
         glDeleteBuffers(1, &mesh.vbo);
         mesh.vbo = 0;
@@ -557,4 +581,5 @@ void DropRenderer::destroyMesh(Mesh& mesh) {
         mesh.vao = 0;
     }
     mesh.vertexCount = 0;
+    mesh.rhiDevice = nullptr;
 }

@@ -506,14 +506,27 @@ std::vector<BlockVertex> buildBlockMeshVertices(const BlockID blockId, const Res
     return buildBlockMeshVerticesForState(BlockStateRegistry::getDefaultState(blockId), resourceMgr);
 }
 
-BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, const ResourceMgr& resourceMgr) {
+BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, ResourceMgr& resourceMgr) {
     BlockCubeMesh mesh;
     std::vector<BlockVertex> vertices = buildBlockMeshVertices(blockId, resourceMgr);
     if (vertices.empty()) {
         return mesh;
     }
 
-    return uploadBlockCubeMesh(vertices);
+    mesh = uploadBlockCubeMesh(vertices);
+    RhiDevice& rhiDevice = resourceMgr.rhiDevice();
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "BlockCubeMesh.VertexBuffer";
+    bufferDesc.size = vertices.size() * sizeof(BlockVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(BlockVertex));
+    mesh.rhiDevice = &rhiDevice;
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyBlockCubeMesh(mesh);
+    }
+    return mesh;
 }
 
 BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, ResourceMgr& resourceMgr) {
