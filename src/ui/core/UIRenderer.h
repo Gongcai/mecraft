@@ -222,8 +222,6 @@ private:
     mutable RhiPipelineHandle m_backdropBlurPipeline;
     mutable RhiBindGroupHandle m_backdropBlurBindGroup[3];
     mutable RhiDevice* m_backdropRhiViewDevice = nullptr;
-    mutable uint32_t m_backdropSourceTex = 0;
-    mutable uint32_t m_backdropBlurTex[2] = {0, 0};
     mutable int m_backdropSourceWidth = 0;
     mutable int m_backdropSourceHeight = 0;
     mutable int m_backdropBlurWidth = 0;

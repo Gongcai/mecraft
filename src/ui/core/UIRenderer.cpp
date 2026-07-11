@@ -17,7 +17,6 @@
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiResources.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
-#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
 #include "UIRenderUtils.h"
 #include "UIScene.h"
 #include "UIThemePresets.h"
@@ -25,33 +24,6 @@
 
 namespace {
 constexpr int kBackdropBlurDownsample = 4;
-
-void configureLinearClampTexture() {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-}
-
-[[nodiscard]] RhiTextureHandle registerBackdropTexture(const uint32_t textureID,
-                                                       const int width,
-                                                       const int height,
-                                                       const RhiTextureUsageFlags usage) {
-    return renderer::rhi::gl::registerTexture({
-        textureID,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::Rgba8Unorm,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height),
-        1,
-        1,
-        1,
-        usage,
-        false
-    });
-}
 
 }
 
@@ -858,28 +830,22 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
                              blurWidth != m_backdropBlurWidth ||
                              blurHeight != m_backdropBlurHeight;
 
-    if (m_backdropSourceTex == 0) {
-        glGenTextures(1, &m_backdropSourceTex);
-    }
-
     if (m_backdropRhiViewDevice != nullptr && m_backdropRhiViewDevice != &rhiDevice) {
-        destroyBackdropBlurViews();
+        destroyBackdropBlurTargets();
     }
-
-    glBindTexture(GL_TEXTURE_2D, m_backdropSourceTex);
-    configureLinearClampTexture();
     if (sizeChanged) {
-        if (m_backdropSourceView.isValid()) {
-            destroyBackdropBlurViews();
-        }
-        renderer::rhi::gl::unregisterTextureAndReset(m_backdropSource);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, sourceWidth, sourceHeight, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        m_backdropSource = registerBackdropTexture(
-            m_backdropSourceTex,
-            sourceWidth,
-            sourceHeight,
-            rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst));
+        destroyBackdropBlurTargets();
+    }
+    m_backdropRhiViewDevice = &rhiDevice;
+
+    if (!m_backdropSource.isValid()) {
+        RhiTextureDesc desc;
+        desc.debugName = "UiBackdrop.Source";
+        desc.format = RhiTextureFormat::Rgba8Unorm;
+        desc.width = static_cast<uint32_t>(sourceWidth);
+        desc.height = static_cast<uint32_t>(sourceHeight);
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst);
+        m_backdropSource = rhiDevice.createTexture(desc, nullptr);
     }
     if (!m_backdropSourceView.isValid() && m_backdropSource.isValid()) {
         RhiTextureViewDesc desc;
@@ -894,23 +860,14 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
     }
 
     for (int i = 0; i < 2; ++i) {
-        if (m_backdropBlurTex[i] == 0) {
-            glGenTextures(1, &m_backdropBlurTex[i]);
-        }
-        glBindTexture(GL_TEXTURE_2D, m_backdropBlurTex[i]);
-        configureLinearClampTexture();
-        if (sizeChanged) {
-            if (m_backdropBlurView[i].isValid()) {
-                destroyBackdropBlurViews();
-            }
-            renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[i]);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, blurWidth, blurHeight, 0,
-                         GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-            m_backdropBlur[i] = registerBackdropTexture(
-                m_backdropBlurTex[i],
-                blurWidth,
-                blurHeight,
-                rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment));
+        if (!m_backdropBlur[i].isValid()) {
+            RhiTextureDesc desc;
+            desc.debugName = i == 0 ? "UiBackdrop.BlurHorizontal" : "UiBackdrop.BlurVertical";
+            desc.format = RhiTextureFormat::Rgba8Unorm;
+            desc.width = static_cast<uint32_t>(blurWidth);
+            desc.height = static_cast<uint32_t>(blurHeight);
+            desc.usage = rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::ColorAttachment);
+            m_backdropBlur[i] = rhiDevice.createTexture(desc, nullptr);
         }
 
         if (!m_backdropBlurView[i].isValid() && m_backdropBlur[i].isValid()) {
@@ -925,8 +882,6 @@ bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
             m_backdropBlurView[i] = rhiDevice.createTextureView(desc);
         }
     }
-
-    glBindTexture(GL_TEXTURE_2D, 0);
 
     if (!m_backdropSource.isValid() ||
         !m_backdropBlur[0].isValid() ||
@@ -1144,8 +1099,9 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         return;
     }
 
-    if (m_backdropSourceTex == 0 || m_backdropBlurTex[0] == 0 || m_backdropBlurTex[1] == 0 ||
-        !m_backdropBlurView[0].isValid() || !m_backdropBlurView[1].isValid()) {
+    if (!m_backdropSource.isValid() || !m_backdropBlur[0].isValid() ||
+        !m_backdropBlur[1].isValid() || !m_backdropBlurView[0].isValid() ||
+        !m_backdropBlurView[1].isValid()) {
         restoreState();
         return;
     }
@@ -1207,21 +1163,17 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
 
 void UIRenderer::destroyBackdropBlurTargets() const
 {
+    RhiDevice* device = m_backdropRhiViewDevice;
     destroyBackdropBlurPipeline();
     destroyBackdropBlurViews();
-    renderer::rhi::gl::unregisterTextureAndReset(m_backdropSource);
-    renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[0]);
-    renderer::rhi::gl::unregisterTextureAndReset(m_backdropBlur[1]);
-    if (m_backdropSourceTex != 0) {
-        glDeleteTextures(1, &m_backdropSourceTex);
-        m_backdropSourceTex = 0;
+    if (device != nullptr) {
+        if (m_backdropSource.isValid()) device->destroyTexture(m_backdropSource);
+        if (m_backdropBlur[0].isValid()) device->destroyTexture(m_backdropBlur[0]);
+        if (m_backdropBlur[1].isValid()) device->destroyTexture(m_backdropBlur[1]);
     }
-    for (int i = 0; i < 2; ++i) {
-        if (m_backdropBlurTex[i] != 0) {
-            glDeleteTextures(1, &m_backdropBlurTex[i]);
-            m_backdropBlurTex[i] = 0;
-        }
-    }
+    m_backdropSource = {};
+    m_backdropBlur[0] = {};
+    m_backdropBlur[1] = {};
     m_backdropSourceWidth = 0;
     m_backdropSourceHeight = 0;
     m_backdropBlurWidth = 0;
