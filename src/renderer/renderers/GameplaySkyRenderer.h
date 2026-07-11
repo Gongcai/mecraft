@@ -63,12 +63,12 @@ public:
     void render(const Camera& camera, const float aspect, const DayNightSystem& dayNight, uint32_t skyCaptureTexture);
     void renderSkyCapture(const DayNightSystem& dayNight, RhiDevice& rhiDevice, RhiTextureViewHandle targetView,
                           int width, int height,
-                          float cameraAltitude, uint32_t atmosphereLutTexture, float moonPhaseFlux,
+                          float cameraAltitude, RhiTextureHandle atmosphereLutTexture, float moonPhaseFlux,
                           float weatherWetness = 0.0f, float weatherStorm = 0.0f);
     void renderCloudySkyCapture(const DayNightSystem& dayNight, RhiDevice& rhiDevice,
                                 RhiTextureViewHandle targetView, int skyCaptureWidth,
-                                int skyCaptureHeight, float cameraAltitude, uint32_t atmosphereLutTexture,
-                                float moonPhaseFlux, uint32_t noiseTexture, float shaderTime,
+                                int skyCaptureHeight, float cameraAltitude, RhiTextureHandle atmosphereLutTexture,
+                                float moonPhaseFlux, RhiTextureHandle noiseTexture, float shaderTime,
                                 const SkyIlluminanceData& illuminance,
                                 float cloudCoverage, float cloudDensity,
                                 float cloudHeight, float cloudThickness,
@@ -78,7 +78,7 @@ public:
                                 float weatherWetness = 0.0f, float weatherStorm = 0.0f);
     void writeSkyCacheMetadata(const SkyIlluminanceData& illuminance, RhiDevice& rhiDevice,
                                RhiTextureViewHandle targetView, int skyCaptureWidth,
-                               float cameraAltitude, uint32_t atmosphereLutTexture, float moonPhaseFlux,
+                               float cameraAltitude, RhiTextureHandle atmosphereLutTexture, float moonPhaseFlux,
                                float weatherWetness = 0.0f, float weatherStorm = 0.0f);
 
     [[nodiscard]] SkyColors computeSkyColors(const DayNightSystem& dayNight) const;

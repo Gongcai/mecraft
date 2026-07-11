@@ -2,7 +2,6 @@
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../rhi/RhiDevice.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/DayNightSystem.h"
 #include "../../world/WeatherSystem.h"
@@ -29,7 +28,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     }
 
     const float cameraAltitude = cameraY;
-    const uint32_t atmosphereLut = renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle());
+    const RhiTextureHandle atmosphereLut = targets.atmosphereLutTextureHandle();
     const int moonPhase = dayNightSystem.getMoonPhaseIndex();
 
     // DerivativeMain MoonFlux: phase factor ranges 0.2 (full moon) to 1.2 (new moon).
@@ -57,7 +56,6 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
     const RhiTextureHandle noiseTexture =
         resourceMgr != nullptr ? resourceMgr->getTexture2DHandle("shader_noise2d") : RhiTextureHandle{};
-    const uint32_t noiseTextureId = renderer::rhi::gl::textureId(noiseTexture);
 
     // Raw sky radiance (rows 0..257)
     skyRenderer.renderSkyCapture(dayNightSystem,
@@ -75,7 +73,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                                         targets.skyCaptureWidth(),
                                         targets.skyCaptureHeight(),
                                         cameraAltitude, atmosphereLut, moonPhaseFlux,
-                                        noiseTextureId, shaderTime,
+                                        noiseTexture, shaderTime,
                                         illum,
                                         cloudCoverage, cloudDensity,
                                         cloudHeight, cloudThickness,

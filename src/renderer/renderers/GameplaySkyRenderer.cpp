@@ -13,6 +13,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
+#include "../rhi/gl/GlRhiTextureRegistry.h"
 #include "engine/camera/Camera.h"
 #include "../../Paths.h"
 #include "../../resource/ResourceMgr.h"
@@ -250,7 +251,7 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
                                            const int width,
                                            const int height,
                                            const float cameraAltitude,
-                                           const uint32_t atmosphereLutTexture,
+                                           const RhiTextureHandle atmosphereLutTexture,
                                            const float moonPhaseFlux,
                                            const float weatherWetness,
                                            const float weatherStorm) {
@@ -318,9 +319,9 @@ void GameplaySkyRenderer::renderSkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
     m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
     bindDummySkyCaptureTexture(0);
-    if (atmosphereLutTexture != 0) {
+    if (atmosphereLutTexture.isValid()) {
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
+        glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(atmosphereLutTexture));
         m_shader->setInt("uAtmosphereLut", 1);
         glActiveTexture(GL_TEXTURE0);
     }
@@ -340,9 +341,9 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
                                                   const int skyCaptureWidth,
                                                   const int skyCaptureHeight,
                                                   const float cameraAltitude,
-                                                  const uint32_t atmosphereLutTexture,
+                                                  const RhiTextureHandle atmosphereLutTexture,
                                                   const float moonPhaseFlux,
-                                                  const uint32_t noiseTexture,
+                                                  const RhiTextureHandle noiseTexture,
                                                   const float shaderTime,
                                                   const SkyIlluminanceData& illuminance,
                                                   const float cloudCoverage,
@@ -424,7 +425,7 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     m_shader->setFloat("uSurfaceWetness", std::clamp(weatherWetness + weatherStorm * 0.3f, 0.0f, 1.0f));
     m_shader->setFloat("uPrecipitation", std::clamp(weatherWetness + weatherStorm, 0.0f, 1.0f));
     m_shader->setInt("uNoiseTex", 2);
-    m_shader->setBool("uNoiseEnabled", noiseTexture != 0);
+    m_shader->setBool("uNoiseEnabled", noiseTexture.isValid());
     m_shader->setFloat("uTime", shaderTime);
     m_shader->setFloat("uCloudTimeScale", cloudTimeScale);
     m_shader->setFloat("uCloudCoverage", cloudCoverage);
@@ -437,14 +438,14 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const DayNightSystem& dayNight,
     m_shader->setVec3("uCameraPos", cameraPos);
     m_shader->setVec3("uCloudDynamicWeather", illuminance.cloudDynamicWeather);
     bindDummySkyCaptureTexture(0);
-    if (atmosphereLutTexture != 0) {
+    if (atmosphereLutTexture.isValid()) {
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
+        glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(atmosphereLutTexture));
         m_shader->setInt("uAtmosphereLut", 1);
         glActiveTexture(GL_TEXTURE0);
     }
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, noiseTexture);
+    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(noiseTexture));
 
     glBindVertexArray(m_skyVao);
     glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -464,7 +465,7 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
                                                  const RhiTextureViewHandle targetView,
                                                  const int skyCaptureWidth,
                                                  const float cameraAltitude,
-                                                 const uint32_t atmosphereLutTexture,
+                                                 const RhiTextureHandle atmosphereLutTexture,
                                                  const float moonPhaseFlux,
                                                  const float weatherWetness,
                                                  const float weatherStorm) {
@@ -523,9 +524,9 @@ void GameplaySkyRenderer::writeSkyCacheMetadata(const SkyIlluminanceData& illumi
     m_shader->setFloat("uCameraAltitude", cameraAltitude);
     m_shader->setFloat("uMoonPhaseFlux", moonPhaseFlux);
     bindDummySkyCaptureTexture(0);
-    if (atmosphereLutTexture != 0) {
+    if (atmosphereLutTexture.isValid()) {
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_3D, atmosphereLutTexture);
+        glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(atmosphereLutTexture));
         m_shader->setInt("uAtmosphereLut", 1);
         glActiveTexture(GL_TEXTURE0);
     }
