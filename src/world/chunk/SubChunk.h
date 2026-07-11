@@ -142,45 +142,18 @@ static_assert(sizeof(PackedBlockVertex) == 16,
               "PackedBlockVertex must stay 16 bytes");
 
 struct SubChunkMesh {
-  uint32_t vao = 0;
-  uint32_t vbo = 0;
-  uint32_t vertexCount = 0;
-  std::size_t vboCapacity = 0;
-
-  uint32_t transparentVao = 0;
-  uint32_t transparentVbo = 0;
-  uint32_t transparentVertexCount = 0;
-  std::size_t transparentVboCapacity = 0;
-
-  uint32_t cutoutVao = 0;
-  uint32_t cutoutVbo = 0;
-  uint32_t cutoutVertexCount = 0;
-  std::size_t cutoutVboCapacity = 0;
-
-  uint32_t cutoutDistanceVao = 0;
-  uint32_t cutoutDistanceVbo = 0;
-  uint32_t cutoutDistanceVertexCount = 0;
-  std::size_t cutoutDistanceVboCapacity = 0;
-
   bool hasBounds = false;
   glm::vec3 boundsMin = glm::vec3(0.0f);
   glm::vec3 boundsMax = glm::vec3(0.0f);
 
-  // MDI path: GPU ranges in the global buffer pool
   GpuMeshRange opaqueRange;
   GpuMeshRange cutoutRange;
   GpuMeshRange cutoutDistanceRange;
   GpuMeshRange transparentRange;
   GpuMeshRange waterRange;
-  uint32_t waterVertexCount = 0;
   bool inGlobalPool = false;
   uint64_t metadataFingerprint = 0;
 
-  void upload(const std::vector<BlockVertex> &vertices);
-  void uploadCutout(const std::vector<BlockVertex> &cutoutVerts);
-  void
-  uploadCutoutDistance(const std::vector<BlockVertex> &cutoutDistanceVerts);
-  void uploadTransparent(const std::vector<BlockVertex> &transparentVerts);
   [[nodiscard]] uint64_t computeMetadataFingerprint() const;
   void destroy();
 };

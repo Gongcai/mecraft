@@ -81,6 +81,10 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
 
     // 1. Sky background (sun, moon, clouds, gradient)
     renderSky(ctx);
+    if (!beginBackbufferScenePass(ctx)) {
+        endBackbufferFrame();
+        return {};
+    }
 
     // 2. Opaque + cutout terrain
     renderTerrain();
@@ -150,6 +154,49 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     return true;
 }
 
+bool ForwardPipeline::beginBackbufferScenePass(const FrameContext& ctx) {
+    if (m_backbufferCommandList == nullptr ||
+        !ctx.swapchainColorView.isValid() || !ctx.swapchainDepthStencilView.isValid()) {
+        return false;
+    }
+
+    m_backbufferCommandList->endRendering();
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = ctx.swapchainColorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = ctx.swapchainDepthStencilView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "ForwardSceneBackbuffer";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
+        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    m_backbufferCommandList->beginRendering(renderingInfo);
+    m_backbufferCommandList->setViewport({
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, ctx.frameWidth)),
+        static_cast<float>(std::max(1, ctx.frameHeight)),
+        0.0f,
+        1.0f
+    });
+    return true;
+}
+
 void ForwardPipeline::endBackbufferFrame() {
     if (m_backbufferCommandList == nullptr || m_shared == nullptr || m_shared->rhiDevice == nullptr) {
         return;
@@ -189,9 +236,6 @@ bool ForwardPipeline::prepareTerrain(const FrameContext& ctx,
 
     auto& terrain = *m_terrainRenderer;
     auto& worldBuffer = *m_worldRenderBuffer;
-    if (!terrain.useMultiDrawIndirect()) {
-        return false;
-    }
 
     if (m_terrainCache) {
         m_terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
@@ -208,9 +252,7 @@ bool ForwardPipeline::prepareTerrain(const FrameContext& ctx,
         m_terrainCache->submitMeshingJobs(*ctx.worldView, ctx.camera.position);
     }
 
-    std::vector<ChunkRenderEntry> cutoutEntries;
-    std::vector<ChunkRenderEntry> transparentEntries;
-    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, cutoutEntries, transparentEntries, true);
+    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, true);
     terrain.syncTransparentBatches();
 
     m_transparentBatch = terrain.transparentBatches();

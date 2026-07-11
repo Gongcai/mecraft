@@ -34,6 +34,7 @@ public:
 
 private:
     bool beginBackbufferFrame(const FrameContext& ctx);
+    bool beginBackbufferScenePass(const FrameContext& ctx);
     void endBackbufferFrame();
     bool prepareTerrain(const FrameContext& ctx, RhiCommandList& commandList);
     void renderSky(const FrameContext& ctx);

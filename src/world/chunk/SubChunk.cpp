@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <unordered_set>
 
-#include <glad/glad.h>
-
 #include "../fluid/FluidState.h"
 #include "../fluid/FluidRegistry.h"
 
@@ -405,173 +403,6 @@ std::size_t SubChunk::estimatedMemoryBytes() const {
            estimateUnorderedMapBytes(m_fluidCounts);
 }
 
-// --- SubChunkMesh upload/destroy ---
-
-namespace {
-void setupSubChunkVertexLayout() {
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, x)));
-
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
-
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
-
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
-
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
-
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
-
-    glEnableVertexAttribArray(7);
-    glVertexAttribPointer(7, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFrameCount)));
-
-    glEnableVertexAttribArray(8);
-    glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
-
-    glEnableVertexAttribArray(9);
-    glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
-
-    glEnableVertexAttribArray(10);
-    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
-
-    for (uint32_t attrib = 11; attrib <= 14; ++attrib) {
-        glDisableVertexAttribArray(attrib);
-    }
-}
-} // namespace
-
-void SubChunkMesh::upload(const std::vector<BlockVertex>& vertices) {
-    vertexCount = static_cast<uint32_t>(vertices.size());
-
-    if (vao == 0) {
-        glGenVertexArrays(1, &vao);
-    }
-    if (vbo == 0) {
-        glGenBuffers(1, &vbo);
-    }
-
-    const std::size_t dataSize = vertices.size() * sizeof(BlockVertex);
-
-    glBindVertexArray(vao);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-
-    if (dataSize <= vboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
-                        vertices.empty() ? nullptr : vertices.data());
-    } else {
-        vboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vboCapacity), nullptr, GL_STATIC_DRAW);
-        if (!vertices.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), vertices.data());
-        }
-    }
-    setupSubChunkVertexLayout();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
-void SubChunkMesh::uploadCutout(const std::vector<BlockVertex>& cutoutVerts) {
-    cutoutVertexCount = static_cast<uint32_t>(cutoutVerts.size());
-
-    if (cutoutVao == 0) {
-        glGenVertexArrays(1, &cutoutVao);
-    }
-    if (cutoutVbo == 0) {
-        glGenBuffers(1, &cutoutVbo);
-    }
-
-    const std::size_t dataSize = cutoutVerts.size() * sizeof(BlockVertex);
-
-    glBindVertexArray(cutoutVao);
-    glBindBuffer(GL_ARRAY_BUFFER, cutoutVbo);
-
-    if (dataSize <= cutoutVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
-                        cutoutVerts.empty() ? nullptr : cutoutVerts.data());
-    } else {
-        cutoutVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cutoutVboCapacity), nullptr, GL_STATIC_DRAW);
-        if (!cutoutVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), cutoutVerts.data());
-        }
-    }
-    setupSubChunkVertexLayout();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
-void SubChunkMesh::uploadCutoutDistance(const std::vector<BlockVertex>& cutoutDistanceVerts) {
-    cutoutDistanceVertexCount = static_cast<uint32_t>(cutoutDistanceVerts.size());
-
-    if (cutoutDistanceVao == 0) {
-        glGenVertexArrays(1, &cutoutDistanceVao);
-    }
-    if (cutoutDistanceVbo == 0) {
-        glGenBuffers(1, &cutoutDistanceVbo);
-    }
-
-    const std::size_t dataSize = cutoutDistanceVerts.size() * sizeof(BlockVertex);
-
-    glBindVertexArray(cutoutDistanceVao);
-    glBindBuffer(GL_ARRAY_BUFFER, cutoutDistanceVbo);
-
-    if (dataSize <= cutoutDistanceVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
-                        cutoutDistanceVerts.empty() ? nullptr : cutoutDistanceVerts.data());
-    } else {
-        cutoutDistanceVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(cutoutDistanceVboCapacity), nullptr, GL_STATIC_DRAW);
-        if (!cutoutDistanceVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), cutoutDistanceVerts.data());
-        }
-    }
-    setupSubChunkVertexLayout();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
-void SubChunkMesh::uploadTransparent(const std::vector<BlockVertex>& transparentVerts) {
-    transparentVertexCount = static_cast<uint32_t>(transparentVerts.size());
-
-    if (transparentVao == 0) {
-        glGenVertexArrays(1, &transparentVao);
-    }
-    if (transparentVbo == 0) {
-        glGenBuffers(1, &transparentVbo);
-    }
-
-    const std::size_t dataSize = transparentVerts.size() * sizeof(BlockVertex);
-
-    glBindVertexArray(transparentVao);
-    glBindBuffer(GL_ARRAY_BUFFER, transparentVbo);
-
-    if (dataSize <= transparentVboCapacity) {
-        glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize),
-                        transparentVerts.empty() ? nullptr : transparentVerts.data());
-    } else {
-        transparentVboCapacity = dataSize + dataSize / 2;
-        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(transparentVboCapacity), nullptr, GL_STATIC_DRAW);
-        if (!transparentVerts.empty()) {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(dataSize), transparentVerts.data());
-        }
-    }
-    setupSubChunkVertexLayout();
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-}
-
 uint64_t SubChunkMesh::computeMetadataFingerprint() const {
     auto combine = [](uint64_t seed, const uint64_t value) {
         seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
@@ -579,11 +410,11 @@ uint64_t SubChunkMesh::computeMetadataFingerprint() const {
     };
 
     uint64_t hash = 1469598103934665603ULL;
-    hash = combine(hash, vertexCount);
-    hash = combine(hash, cutoutVertexCount);
-    hash = combine(hash, cutoutDistanceVertexCount);
-    hash = combine(hash, transparentVertexCount);
-    hash = combine(hash, waterVertexCount);
+    hash = combine(hash, opaqueRange.vertexCount);
+    hash = combine(hash, cutoutRange.vertexCount);
+    hash = combine(hash, cutoutDistanceRange.vertexCount);
+    hash = combine(hash, transparentRange.vertexCount);
+    hash = combine(hash, waterRange.vertexCount);
     hash = combine(hash, opaqueRange.generation);
     hash = combine(hash, cutoutRange.generation);
     hash = combine(hash, cutoutDistanceRange.generation);
@@ -594,68 +425,14 @@ uint64_t SubChunkMesh::computeMetadataFingerprint() const {
 }
 
 void SubChunkMesh::destroy() {
-    if (inGlobalPool) {
-        // GPU memory is owned by WorldRenderBuffer — just clear the handles.
-        opaqueRange = {};
-        cutoutRange = {};
-        cutoutDistanceRange = {};
-        transparentRange = {};
-        waterRange = {};
-        vertexCount = 0;
-        cutoutVertexCount = 0;
-        cutoutDistanceVertexCount = 0;
-        transparentVertexCount = 0;
-        waterVertexCount = 0;
-        hasBounds = false;
-        inGlobalPool = false;
-        metadataFingerprint = 0;
-        return;
-    }
-    if (vbo != 0) {
-        glDeleteBuffers(1, &vbo);
-        vbo = 0;
-    }
-    if (vao != 0) {
-        glDeleteVertexArrays(1, &vao);
-        vao = 0;
-    }
-    vboCapacity = 0;
-    if (transparentVbo != 0) {
-        glDeleteBuffers(1, &transparentVbo);
-        transparentVbo = 0;
-    }
-    if (transparentVao != 0) {
-        glDeleteVertexArrays(1, &transparentVao);
-        transparentVao = 0;
-    }
-    transparentVboCapacity = 0;
-    if (cutoutVbo != 0) {
-        glDeleteBuffers(1, &cutoutVbo);
-        cutoutVbo = 0;
-    }
-    if (cutoutVao != 0) {
-        glDeleteVertexArrays(1, &cutoutVao);
-        cutoutVao = 0;
-    }
-    cutoutVboCapacity = 0;
-    if (cutoutDistanceVbo != 0) {
-        glDeleteBuffers(1, &cutoutDistanceVbo);
-        cutoutDistanceVbo = 0;
-    }
-    if (cutoutDistanceVao != 0) {
-        glDeleteVertexArrays(1, &cutoutDistanceVao);
-        cutoutDistanceVao = 0;
-    }
-    cutoutDistanceVboCapacity = 0;
-
-    vertexCount = 0;
-    transparentVertexCount = 0;
-    waterVertexCount = 0;
-    cutoutVertexCount = 0;
-    cutoutDistanceVertexCount = 0;
+    opaqueRange = {};
+    cutoutRange = {};
+    cutoutDistanceRange = {};
+    transparentRange = {};
     waterRange = {};
     hasBounds = false;
     boundsMin = glm::vec3(0.0f);
     boundsMax = glm::vec3(0.0f);
+    inGlobalPool = false;
     metadataFingerprint = 0;
 }

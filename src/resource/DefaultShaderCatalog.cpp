@@ -12,14 +12,8 @@ struct ShaderDefinition {
 };
 
 constexpr ShaderDefinition kDefaultShaders[] = {
-    {"chunk", SHADERS_DIR "/chunk.vert", SHADERS_DIR "/chunk.frag"},
-    {"chunk_lit", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/chunk_lit.frag"},
-    {"transparent_composite", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/transparent_composite.frag"},
-    {"water_composite", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/water_composite.frag"},
     {"block_item_lit", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_lit.frag"},
     {"block_item_forward", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/block_item_forward.frag"},
-    {"forward_basic_terrain", SHADERS_DIR "/chunk_lit.vert", SHADERS_DIR "/forward_basic_terrain.frag"},
-    {"chunk_gbuffer", SHADERS_DIR "/chunk_gbuffer.vert", SHADERS_DIR "/chunk_gbuffer.frag"},
     {"shadow_depth", SHADERS_DIR "/shadow_depth.vert", SHADERS_DIR "/shadow_depth.frag"},
     {"deferred_lighting", SHADERS_DIR "/deferred_lighting.vert", SHADERS_DIR "/deferred_lighting.frag"},
     {"scene_composite", SHADERS_DIR "/fullscreen_triangle.vert", SHADERS_DIR "/scene_composite.frag"},

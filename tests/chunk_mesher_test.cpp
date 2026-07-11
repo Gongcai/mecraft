@@ -436,30 +436,22 @@ int main() {
         }
 
         SubChunkMesh staleMesh;
-        staleMesh.vertexCount = 6;
+        staleMesh.opaqueRange.vertexCount = 6;
         staleMesh.hasBounds = true;
+        staleMesh.inGlobalPool = true;
         center.setSubChunkMesh(1, staleMesh);
-        ChunkMeshData staleData;
-        staleData.hasBounds = true;
-        staleData.boundsMin = glm::vec3(0.0f, 16.0f, 0.0f);
-        staleData.boundsMax = glm::vec3(1.0f, 17.0f, 1.0f);
-        staleData.opaqueVertices.push_back({});
-        center.updateColumnAggregateData(1, staleData, true);
         center.markSubChunkDirty(1);
 
         if (!ChunkMesher::shouldSkipSubChunk(center, 1)) {
             return fail("fully occluded dirty solid sub-chunk should become skippable");
         }
 
-        ChunkMeshData emptyData;
         center.setSubChunkMesh(1, SubChunkMesh{});
-        center.updateColumnAggregateData(1, emptyData, true);
         const SubChunkMesh& clearedMesh = center.getSubChunkMesh(1);
         if (center.isSubChunkDirty(1) ||
-            clearedMesh.vertexCount != 0 ||
-            clearedMesh.hasBounds ||
-            center.getColumnMesh().hasBounds) {
-            return fail("skipped dirty sub-chunks should clear stale mesh and aggregate bounds");
+            clearedMesh.opaqueRange.vertexCount != 0 ||
+            clearedMesh.hasBounds) {
+            return fail("skipped dirty sub-chunks should clear stale mesh ranges and bounds");
         }
     }
 

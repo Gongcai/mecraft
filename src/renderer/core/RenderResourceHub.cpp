@@ -45,23 +45,6 @@ struct MeshingCandidate {
     std::shared_ptr<Chunk> neighborNegZ;
 };
 
-void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
-                  const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
-    if (!hasBounds) {
-        minBounds = candidateMin;
-        maxBounds = candidateMax;
-        hasBounds = true;
-        return;
-    }
-
-    minBounds.x = std::min(minBounds.x, candidateMin.x);
-    minBounds.y = std::min(minBounds.y, candidateMin.y);
-    minBounds.z = std::min(minBounds.z, candidateMin.z);
-    maxBounds.x = std::max(maxBounds.x, candidateMax.x);
-    maxBounds.y = std::max(maxBounds.y, candidateMax.y);
-    maxBounds.z = std::max(maxBounds.z, candidateMax.z);
-}
-
 #ifdef MECRAFT_DEBUG
 constexpr FrustumPlane kPlaneFromIndex(const size_t index) {
     return static_cast<FrustumPlane>(index);
@@ -110,17 +93,6 @@ bool RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool, c
         return false;
     }
 
-    m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
-    m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
-    if (m_transparentCompositeShader == nullptr) {
-        m_transparentCompositeShader = m_chunkForwardShader;
-    }
-    m_chunkShader = m_chunkForwardShader;
-    m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
-    m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
-    m_entityShadowShader = resourceMgr.getShader("entity_shadow");
-    m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
-
     //m_uiShader = resourceMgr.getShader("ui");
     // R8: Overlay initialization removed — handled by BlockInteractionOverlayRenderer
     m_terrainRhiPipelines.init(*m_rhiDevice);
@@ -131,11 +103,9 @@ bool RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool, c
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainCache.setChunkMeshingService(&m_meshingService);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
-    m_terrainCache.setUseMultiDrawIndirect(m_useMultiDrawIndirect);
     m_terrainRenderer.init(resourceMgr);
     m_terrainRenderer.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainRenderer.setTerrainRenderCache(&m_terrainCache);
-    m_terrainRenderer.setUseMultiDrawIndirect(m_useMultiDrawIndirect);
 #ifdef MECRAFT_DEBUG
     m_terrainRenderer.setChunkCullingDebugEnabled(m_chunkCullingDebugEnabled);
 #endif
@@ -179,14 +149,6 @@ void RenderResourceHub::shutdown() {
     m_terrainRhiPipelines.shutdown();
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
-    m_chunkShader = nullptr;
-    m_chunkForwardShader = nullptr;
-    m_transparentCompositeShader = nullptr;
-    m_chunkGBufferShader = nullptr;
-    m_shadowDepthShader = nullptr;
-    m_entityShadowShader = nullptr;
-    m_entityGBufferShader = nullptr;
-    m_particleGBufferShader = nullptr;
     if (m_rhiDevice) {
         m_rhiDevice->shutdown();
         m_rhiDevice.reset();
@@ -250,7 +212,6 @@ void RenderResourceHub::setTerrainStreamingService(TerrainStreamingService* svc)
         m_terrainRenderer.setTerrainRenderCache(&svc->terrainCache());
         // Update WorldRenderBuffer reference in the service's cache
         svc->terrainCache().setWorldRenderBuffer(&m_worldRenderBuffer);
-        svc->terrainCache().setUseMultiDrawIndirect(m_useMultiDrawIndirect);
     }
 }
 
@@ -354,7 +315,7 @@ ShadowFrameStats RenderResourceHub::getShadowFrameStats() const {
 RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     RenderWorkStats stats;
     const auto& sceneStats = m_worldRenderBuffer.sceneFrameStats();
-    stats.blockVertexBytes = m_useMultiDrawIndirect ? sizeof(PackedBlockVertex) : sizeof(BlockVertex);
+    stats.blockVertexBytes = sizeof(PackedBlockVertex);
     stats.opaqueCommands = sceneStats.opaqueCommands;
     stats.cutoutCommands = sceneStats.cutoutCommands;
     stats.transparentCommands = sceneStats.transparentCommands + sceneStats.waterCommands;
@@ -468,13 +429,6 @@ size_t RenderResourceHub::getMeshingHistoryCount() const {
 }
 #endif
 
-int RenderResourceHub::getDrawCallCount() const {
-    return m_terrainRenderer.drawCallCount();
-}
-
 int RenderResourceHub::getGlSubmitCount() const {
-    if (m_useMultiDrawIndirect) {
-        return m_worldRenderBuffer.sceneFrameStats().glSubmitCount;
-    }
-    return m_terrainRenderer.drawCallCount();
+    return m_worldRenderBuffer.sceneFrameStats().glSubmitCount;
 }

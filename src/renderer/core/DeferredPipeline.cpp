@@ -727,16 +727,7 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
         m_shared->terrainCache->submitMeshingJobs(*ctx.worldView, ctx.camera.position);
     }
 
-    std::vector<ChunkRenderEntry> cutoutEntries;
-    std::vector<ChunkRenderEntry> transparentEntries;
-    cutoutEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
-    transparentEntries.reserve(ctx.worldView->getActiveChunks().size() * 2);
-
-    terrain.renderOpaqueChunksAndCollectPasses(
-        *ctx.worldView,
-        cutoutEntries,
-        transparentEntries,
-        true);
+    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, true);
     terrain.syncTransparentBatches();
     m_transparentBatch = terrain.transparentBatches();
     m_transparentPassPlan = terrain.transparentPassPlan();

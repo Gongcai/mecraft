@@ -99,9 +99,6 @@ private:
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeOpaqueRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeCutoutRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeTransparentRanges;
-    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeOpaqueEntries;
-    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeCutoutEntries;
-    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeTransparentEntries;
 };
 
 #endif // MECRAFT_SHADOW_PASS_H

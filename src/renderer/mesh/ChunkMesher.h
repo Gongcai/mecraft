@@ -113,9 +113,6 @@ public:
     static ChunkMeshData buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot);
     static void buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot, ChunkMeshData& meshData);
 
-    // Direct mesh generation (for synchronous path)
-    static void generateSubChunkMesh(Chunk& chunk, int scy);
-
     // Check if a sub-chunk should be skipped (air or fully occluded semantic-solid sub-chunk)
     static bool shouldSkipSubChunk(const Chunk& chunk, int scy);
 };
@@ -188,4 +185,3 @@ void buildUnitFaces(ChunkMeshData& meshData,
 
 
 #endif // MECRAFT_CHUNKMESHER_H
-

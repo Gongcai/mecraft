@@ -34,14 +34,6 @@ struct TextureArray;
 
 namespace shadow { class ShadowCasterCuller; }
 
-/// Entry describing a chunk or sub-chunk to render.
-/// Redefined here to avoid circular dependency with Renderer.h.
-struct ChunkRenderEntry {
-    Chunk* chunk = nullptr;
-    int scy = -1;        // -1 = column aggregate, otherwise sub-chunk index
-    bool aggregated = false;
-};
-
 /// Settings subset required by bindChunkRenderState, decoupled from Renderer.
 struct TerrainRenderSettings {
     bool rainWetSurfacesEnabled = true;
@@ -165,22 +157,14 @@ public:
 
     // --- Main rendering methods ---
     /// Traverses chunk columns with hierarchical frustum culling.
-    /// In MDI mode, adds draw ranges to WorldRenderBuffer.
-    /// In non-MDI mode, issues direct draw calls for opaque geometry.
-    /// Collects cutout and transparent entries for later passes.
+    /// Adds visible draw ranges to WorldRenderBuffer and transparent batches.
     void renderOpaqueChunksAndCollectPasses(
         const IWorldView& worldView,
-        std::vector<ChunkRenderEntry>& cutoutEntries,
-        std::vector<ChunkRenderEntry>& transparentEntries,
         bool frustumCull = true,
         float maxCameraDistance = 0.0f,
         shadow::ShadowCasterCuller* shadowCuller = nullptr,
         AabbVisibilityFn extraAabbCuller = nullptr,
         void* extraAabbCullerUserData = nullptr);
-
-    /// Renders cutout chunks (MDI: flushes cutout buffer; non-MDI: draws individual VAOs).
-    void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries,
-                            Shader& chunkShader);
 
     // --- Transparent batch management ---
     void syncTransparentBatches();
@@ -197,16 +181,11 @@ public:
         const std::array<CascadeAabbCuller, 4>& cascadeCullers,
         std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
         std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
-        std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges,
-        std::array<std::vector<ChunkRenderEntry>, 4>& outOpaqueEntries,
-        std::array<std::vector<ChunkRenderEntry>, 4>& outCutoutEntries,
-        std::array<std::vector<ChunkRenderEntry>, 4>& outTransparentEntries
+        std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges
     );
 
     // --- Accessors ---
     [[nodiscard]] const std::vector<ChunkRenderColumnCache>& chunkRenderColumns() const;
-    [[nodiscard]] bool useMultiDrawIndirect() const { return m_useMultiDrawIndirect; }
-    void setUseMultiDrawIndirect(bool v) { m_useMultiDrawIndirect = v; }
     void setChunkCullingDebugEnabled(bool v) { m_chunkCullingDebugEnabled = v; }
 
     // --- Debug counters (per-frame, reset externally) ---
@@ -281,7 +260,6 @@ private:
     std::array<Plane, 6> m_frustumPlanes{};
 
     // --- Configuration ---
-    bool m_useMultiDrawIndirect = true;
     bool m_chunkCullingDebugEnabled = false;
     float m_cutoutRenderDistanceChunks = 4.0f;
     bool m_cutoutDistanceLimitEnabled = true;

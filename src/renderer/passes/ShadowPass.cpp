@@ -261,9 +261,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         m_cascadeOpaqueRanges[cascade].clear();
         m_cascadeCutoutRanges[cascade].clear();
         m_cascadeTransparentRanges[cascade].clear();
-        m_cascadeOpaqueEntries[cascade].clear();
-        m_cascadeCutoutEntries[cascade].clear();
-        m_cascadeTransparentEntries[cascade].clear();
     }
 
     m_terrainRenderer->clearTransparentBatches();
@@ -275,10 +272,7 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
         cascadeCullers,
         m_cascadeOpaqueRanges,
         m_cascadeCutoutRanges,
-        m_cascadeTransparentRanges,
-        m_cascadeOpaqueEntries,
-        m_cascadeCutoutEntries,
-        m_cascadeTransparentEntries
+        m_cascadeTransparentRanges
     );
     m_terrainRenderer->syncTransparentBatches();
 

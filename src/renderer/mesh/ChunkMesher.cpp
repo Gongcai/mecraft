@@ -4283,28 +4283,6 @@ void ChunkMesher::buildSubChunkMeshData(const SubChunkMeshingSnapshot& snapshot,
     meshData.buildTimeMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - startTime).count();
 }
 
-void ChunkMesher::generateSubChunkMesh(Chunk& chunk, const int scy) {
-    const SubChunkMeshingSnapshotPtr snapshot = captureSubChunkSnapshot(chunk, scy);
-    ChunkMeshData meshData = buildSubChunkMeshData(*snapshot);
-
-    // Offset bounds from sub-chunk local to column-local
-    const int yBase = scy * SubChunk::SIZE;
-    if (meshData.hasBounds) {
-        meshData.boundsMin.y += static_cast<float>(yBase);
-        meshData.boundsMax.y += static_cast<float>(yBase);
-    }
-
-    SubChunkMesh mesh;
-    mesh.upload(meshData.opaqueVertices);
-    mesh.uploadCutout(meshData.cutoutVertices);
-    mesh.uploadCutoutDistance(meshData.cutoutDistanceVertices);
-    mesh.uploadTransparent(meshData.transparentVertices);
-    mesh.hasBounds = meshData.hasBounds;
-    mesh.boundsMin = meshData.boundsMin;
-    mesh.boundsMax = meshData.boundsMax;
-    chunk.setSubChunkMesh(scy, mesh);
-}
-
 bool ChunkMesher::shouldSkipSubChunk(const Chunk& chunk, const int scy) {
     const SubChunk* sc = chunk.getSubChunk(scy);
     if (!sc) {

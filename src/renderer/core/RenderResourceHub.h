@@ -172,8 +172,6 @@ public:
     [[nodiscard]] size_t getMeshingHistoryCount() const;
 #endif
 
-    [[nodiscard]] int getDrawCallCount() const;
-    [[nodiscard]] bool isMultiDrawIndirectEnabled() const { return m_useMultiDrawIndirect; }
     [[nodiscard]] int getGlSubmitCount() const;
     [[nodiscard]] float getAtlasAnisotropy() const;
     [[nodiscard]] float getAtlasMaxAnisotropy() const;
@@ -190,19 +188,6 @@ private:
 
     WorldRenderBuffer m_worldRenderBuffer;
     TerrainRhiPipelineSet m_terrainRhiPipelines;
-    bool m_useMultiDrawIndirect = true;
-
-    // Shaders actively used by Renderer rendering methods
-    Shader* m_chunkShader = nullptr;
-    Shader* m_chunkForwardShader = nullptr;
-    Shader* m_transparentCompositeShader = nullptr;
-    Shader* m_chunkGBufferShader = nullptr;
-    Shader* m_particleGBufferShader = nullptr;
-    Shader* m_shadowDepthShader = nullptr;
-
-    // Shaders used only for null-check guards (loaded but operations delegated to passes)
-    Shader* m_entityGBufferShader = nullptr;
-    Shader* m_entityShadowShader = nullptr;
 
     ResourceMgr* m_resourceMgr = nullptr;
     std::unique_ptr<RhiDevice> m_rhiDevice;

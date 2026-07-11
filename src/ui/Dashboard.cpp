@@ -233,10 +233,11 @@ void Dashboard::refreshWorldMetricsIfNeeded(World& world, const double now, cons
             }
             ++metrics.activeSubChunks;
             const SubChunkMesh& mesh = subChunk->getMesh();
-            metrics.totalVertices += mesh.vertexCount;
-            metrics.totalVertices += mesh.cutoutVertexCount;
-            metrics.totalVertices += mesh.cutoutDistanceVertexCount;
-            metrics.totalVertices += mesh.transparentVertexCount;
+            metrics.totalVertices += mesh.opaqueRange.vertexCount;
+            metrics.totalVertices += mesh.cutoutRange.vertexCount;
+            metrics.totalVertices += mesh.cutoutDistanceRange.vertexCount;
+            metrics.totalVertices += mesh.transparentRange.vertexCount;
+            metrics.totalVertices += mesh.waterRange.vertexCount;
             metrics.chunkStorageBytes += subChunk->estimatedMemoryBytes();
         }
     }
@@ -375,11 +376,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                              ImVec2(0.0f, 55.0f));
         }
 
-        if (render.isMultiDrawIndirectEnabled()) {
-            ImGui::Text("GL Submissions: %d (MDI)", render.getGlSubmitCount());
-        } else {
-            ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
-        }
+        ImGui::Text("Terrain RHI Submissions: %d", render.getGlSubmitCount());
 
         GpuFrameStats gpuStats = m_displayGpuStats;
         bool gpuTimerEnabled = render.isGpuTimerEnabled();
@@ -450,7 +447,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         };
 
         const int visibleMdiSubChunks = std::max(0, renderWork.mdiSubChunkTests - renderWork.mdiSubChunksCulled);
-        const char* terrainVertexFormat = render.isMultiDrawIndirectEnabled() ? "PackedBlockVertex" : "BlockVertex";
+        constexpr const char* terrainVertexFormat = "PackedBlockVertex";
 
         ImGui::Separator();
         ImGui::Text("Render Work");
