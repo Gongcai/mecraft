@@ -84,7 +84,6 @@ void ShadowPass::renderShadowEntities(const IWorldView& worldView, const glm::ma
                                           shadowViewProj, cameraPos, splitNear, splitFar,
                                           HumanoidRenderer::kRenderAll);
 
-    glBindVertexArray(0);
 }
 
 void ShadowPass::renderShadowBlockEntities(const IWorldView& worldView,
@@ -107,7 +106,6 @@ void ShadowPass::renderShadowBlockEntities(const IWorldView& worldView,
 
     m_blockEntityRenderer->renderToShadowMap(worldView, shadowViewProj, cameraPos, splitNear, splitFar);
 
-    glBindVertexArray(0);
 }
 
 void ShadowPass::renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
@@ -129,7 +127,6 @@ void ShadowPass::renderShadowDrops(const IWorldView& worldView, const glm::mat4&
     m_dropRenderer->renderToShadowMap(worldView, *m_dropSystem, shadowViewProj,
                                        shadowView, shadowProjection, animationTime, shaderTime);
 
-    glBindVertexArray(0);
 }
 
 void ShadowPass::renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
@@ -149,7 +146,6 @@ void ShadowPass::renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
     m_fallingBlockRenderer->renderToShadowMap(*m_gameplayRegistry, shadowViewProj,
                                                shadowView, shadowProjection, animationTime, shaderTime);
 
-    glBindVertexArray(0);
 }
 
 ShadowPass::ShadowPassOutput ShadowPass::execute(
