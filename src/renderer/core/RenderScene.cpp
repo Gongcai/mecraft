@@ -283,7 +283,9 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
     RhiCommandList* overlayCommandList = beginSceneCaptureRendering(
         *m_shared.rhiDevice, m_currentContext, "SceneCapture.BlockOverlay");
-    m_overlayRenderer.render(worldView, viewProj, target, blockBreak);
+    if (overlayCommandList != nullptr) {
+        m_overlayRenderer.render(worldView, viewProj, target, blockBreak, *overlayCommandList);
+    }
     endSceneCaptureRendering(*m_shared.rhiDevice, overlayCommandList);
 }
 

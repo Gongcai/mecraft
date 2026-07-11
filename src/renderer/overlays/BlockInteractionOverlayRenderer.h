@@ -8,6 +8,7 @@
 
 class ResourceMgr;
 class RhiDevice;
+class RhiCommandList;
 class Shader;
 class IWorldView;
 
@@ -40,12 +41,14 @@ public:
     void render(const IWorldView& worldView,
                 const glm::mat4& viewProj,
                 const BlockTargetRenderData& target,
-                const BlockBreakRenderData& blockBreak);
+                const BlockBreakRenderData& blockBreak,
+                RhiCommandList& commandList);
 
 private:
     void initOutlineMesh();
     void initBreakOverlayMesh();
-    void renderBlockOutline(const IWorldView& worldView, const glm::mat4& viewProj, const BlockTargetRenderData& target);
+    void renderBlockOutline(const IWorldView& worldView, const glm::mat4& viewProj,
+                            const BlockTargetRenderData& target, RhiCommandList& commandList);
     void renderBlockBreakOverlay(const IWorldView& worldView, const glm::mat4& viewProj, const BlockBreakRenderData& blockBreak);
 
     Shader* m_outlineShader = nullptr;
@@ -63,6 +66,10 @@ private:
     RhiBufferHandle m_outlineVertexBuffer;
     RhiBufferHandle m_breakOverlayVertexBuffer;
     RhiBufferHandle m_breakOverlayCrossVertexBuffer;
+    RhiShaderHandle m_outlineVertexShader;
+    RhiShaderHandle m_outlineFragmentShader;
+    RhiPipelineLayoutHandle m_outlinePipelineLayout;
+    RhiPipelineHandle m_outlinePipeline;
 };
 
 #endif // MECRAFT_BLOCK_INTERACTION_OVERLAY_RENDERER_H
