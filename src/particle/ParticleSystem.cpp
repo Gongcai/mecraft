@@ -72,6 +72,21 @@ void ParticleSystem::update(const float dt) {
     static_cast<void>(dt);
 }
 
+void ParticleSystem::prepareFrame(const glm::mat4& view) {
+    m_preparedVertexCount = 0u;
+    if (m_registry == nullptr || m_vbo == 0u) {
+        return;
+    }
+    if (buildVertices(view, m_vertexBuffer) == 0) {
+        return;
+    }
+    glNamedBufferSubData(m_vbo,
+                         0,
+                         static_cast<GLsizeiptr>(m_vertexBuffer.size() * sizeof(float)),
+                         m_vertexBuffer.data());
+    m_preparedVertexCount = static_cast<uint32_t>(m_vertexBuffer.size() / 8u);
+}
+
 int ParticleSystem::buildVertices(const glm::mat4& view, std::vector<float>& vertices) {
     auto particleView = m_registry->view<ecs::ParticleTag, ecs::TransformComponent, ecs::ParticleComponent>();
     if (particleView.begin() == particleView.end()) {
@@ -128,7 +143,7 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
         return;
     }
 
-    if (buildVertices(view, m_vertexBuffer) == 0) {
+    if (m_preparedVertexCount == 0u) {
         return;
     }
 
@@ -141,17 +156,11 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
     glBindTexture(GL_TEXTURE_2D_ARRAY, renderer::rhi::gl::textureId(m_texArray->texture));
 
     glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER,
-                    0,
-                    static_cast<GLsizeiptr>(m_vertexBuffer.size() * sizeof(float)),
-                    m_vertexBuffer.data());
-
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
 
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_vertexBuffer.size() / 8));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_preparedVertexCount));
 
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
@@ -161,13 +170,13 @@ void ParticleSystem::render(const glm::mat4& projection, const glm::mat4& view) 
 }
 
 void ParticleSystem::renderToSceneResolved(Shader& shader, uint32_t voxelLightTex, uint32_t depthTex,
-                                            const glm::mat4& view, const glm::mat4& viewProj,
+                                            const glm::mat4& viewProj,
                                             const glm::vec2& screenSize) {
     if (m_registry == nullptr || m_texArray == nullptr) {
         return;
     }
 
-    if (buildVertices(view, m_vertexBuffer) == 0) {
+    if (m_preparedVertexCount == 0u) {
         return;
     }
 
@@ -187,13 +196,7 @@ void ParticleSystem::renderToSceneResolved(Shader& shader, uint32_t voxelLightTe
     glBindTexture(GL_TEXTURE_2D, depthTex);
 
     glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER,
-                    0,
-                    static_cast<GLsizeiptr>(m_vertexBuffer.size() * sizeof(float)),
-                    m_vertexBuffer.data());
-
-    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_vertexBuffer.size() / 8));
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_preparedVertexCount));
 
     glBindVertexArray(0);
     glActiveTexture(GL_TEXTURE2);

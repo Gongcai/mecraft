@@ -23,13 +23,14 @@ public:
 
     void emit(const glm::ivec3& blockPos, BlockID blockType);
     void update(float dt);
+    void prepareFrame(const glm::mat4& view);
     void render(const glm::mat4& projection, const glm::mat4& view);
     // Render particles into SceneComposite with voxel light and depth from GBuffer.
     // Called by Renderer before volumetric fog composite so particles
     // receive unified fog. The caller must have already bound the target FBO
     // and set up blend/depth-write state.
     void renderToSceneResolved(Shader& shader, uint32_t voxelLightTex, uint32_t depthTex,
-                               const glm::mat4& view, const glm::mat4& viewProj,
+                               const glm::mat4& viewProj,
                                const glm::vec2& screenSize);
 
 private:
@@ -43,6 +44,7 @@ private:
 
     uint32_t m_vao = 0;
     uint32_t m_vbo = 0;
+    uint32_t m_preparedVertexCount = 0;
     std::vector<float> m_vertexBuffer;
 
     static constexpr int MAX_PARTICLES = 1000;

@@ -969,6 +969,7 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiCommandList& commandList = rhiDevice.beginFrame();
+    m_shared->particleSystem->prepareFrame(ctx.camera.view);
     commandList.beginRendering(renderingInfo);
 
     const glm::mat4& viewProj = m_currentSettings.taa.enabled
@@ -987,7 +988,7 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
         *particleShader,
         renderer::rhi::gl::textureId(targets.voxelLightTextureHandle()),
         renderer::rhi::gl::textureId(targets.depthTextureHandle()),
-        ctx.camera.view, viewProj,
+        viewProj,
         screenSize);
 
     glDepthMask(GL_TRUE);
