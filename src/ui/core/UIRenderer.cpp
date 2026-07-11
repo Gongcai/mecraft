@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <optional>
 
-#include <glad/glad.h>
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
@@ -329,7 +328,7 @@ void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
     const bool wasVisible = m_inventoryPanel.visible;
     m_inventoryPanel.setVisible(true);
     m_inventoryPanel.setSlots(slots, count);
-    m_inventoryPanel.render(makeContextFromViewport());
+    m_inventoryPanel.render(makeContextFromSurface());
     m_inventoryPanel.setVisible(wasVisible);
 }
 
@@ -341,10 +340,8 @@ UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
     // Active scene has priority (menu screens overlay gameplay controls)
     if (m_activeScene && m_activeScene->visible) {
         if (m_lastSceneContext.screenWidth <= 0 || m_lastSceneContext.screenHeight <= 0) {
-            GLint viewport[4] = {0, 0, 0, 0};
-            glGetIntegerv(GL_VIEWPORT, viewport);
-            const float vpW = static_cast<float>(std::max(1, viewport[2]));
-            const float vpH = static_cast<float>(std::max(1, viewport[3]));
+            const float vpW = static_cast<float>(m_surfaceWidth);
+            const float vpH = static_cast<float>(m_surfaceHeight);
             m_lastSceneContext.scaleConfig = UIScaleConfig::create(vpW, vpH, m_guiScale);
             m_lastSceneContext.screenWidth = m_lastSceneContext.scaleConfig.virtualWidth;
             m_lastSceneContext.screenHeight = m_lastSceneContext.scaleConfig.virtualHeight;
@@ -613,7 +610,8 @@ UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
                                                  const PlayerStatsData& playerStats,
                                                  const InputSnapshot& inputSnapshot)
 {
-    glViewport(0, 0, std::max(1, window.getWidth()), std::max(1, window.getHeight()));
+    m_surfaceWidth = std::max(1, window.getWidth());
+    m_surfaceHeight = std::max(1, window.getHeight());
 
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
@@ -633,11 +631,6 @@ UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
 
 void UIRenderer::renderPrepared(const UIRenderContext& context)
 {
-    glViewport(0,
-               0,
-               std::max(1, static_cast<int>(static_cast<float>(context.scaleConfig.virtualWidth) * context.pixelScale())),
-               std::max(1, static_cast<int>(static_cast<float>(context.scaleConfig.virtualHeight) * context.pixelScale())));
-
     m_crosshair.render(context);
     renderControls(context);
     m_commandInputRequested = false;
@@ -674,14 +667,11 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     return context;
 }
 
-UIRenderContext UIRenderer::makeContextFromViewport() const
+UIRenderContext UIRenderer::makeContextFromSurface() const
 {
-    GLint viewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, viewport);
-
     UIRenderContext context;
-    const float actualW = static_cast<float>(std::max(1, viewport[2]));
-    const float actualH = static_cast<float>(std::max(1, viewport[3]));
+    const float actualW = static_cast<float>(m_surfaceWidth);
+    const float actualH = static_cast<float>(m_surfaceHeight);
 
     context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
     context.screenWidth = context.scaleConfig.virtualWidth;
@@ -729,7 +719,8 @@ UIRenderContext UIRenderer::prepareSceneContext(const Window& window,
 {
     const int windowW = std::max(1, window.getWidth());
     const int windowH = std::max(1, window.getHeight());
-    glViewport(0, 0, windowW, windowH);
+    m_surfaceWidth = windowW;
+    m_surfaceHeight = windowH;
 
     UIRenderContext context;
     const float actualW = static_cast<float>(windowW);

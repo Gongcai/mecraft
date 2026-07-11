@@ -171,7 +171,7 @@ private:
                                                         const Inventory& inventory,
                                                         const PlayerStatsData& playerStats,
                                                         const InputSnapshot& inputSnapshot) const;
-    [[nodiscard]] UIRenderContext makeContextFromViewport() const;
+    [[nodiscard]] UIRenderContext makeContextFromSurface() const;
     void renderControls(const UIRenderContext& context);
     void renderDeathOverlay(const UIRenderContext& context);
     void prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const;
@@ -203,6 +203,8 @@ private:
     UITheme m_theme;
     const LocaleManager* m_localeManager = nullptr;
     mutable UIRenderContext m_lastSceneContext;
+    int m_surfaceWidth = 1;
+    int m_surfaceHeight = 1;
     bool m_commandInputRequested = false;
 
     // GUI Scale setting
