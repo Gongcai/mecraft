@@ -178,6 +178,7 @@ void FirstPersonHeldItemRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiD
     m_rhiDevice = &rhiDevice;
     createRhiTextureResources();
     createArmRhiResources();
+    createItemRhiResources();
     m_deferredBlockShader = resourceMgr.getShader("block_item_lit");
     m_deferredItemShader = resourceMgr.getShader("item_model");
     m_deferredSteveShader = resourceMgr.getShader("steve");
@@ -208,6 +209,7 @@ void FirstPersonHeldItemRenderer::shutdown() {
     }
     m_itemMeshes.clear();
     MecraftTextureContract::destroyNeutralShadowTextures();
+    destroyItemRhiResources();
     destroyArmRhiResources();
     destroyRhiTextureResources();
     m_resourceMgr = nullptr;
@@ -691,6 +693,85 @@ void FirstPersonHeldItemRenderer::destroyArmRhiResources() {
     m_armVertexShader = {};
 }
 
+void FirstPersonHeldItemRenderer::createItemRhiResources() {
+    const auto vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/held_item_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/held_item_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "FirstPerson.Item.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_itemVertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "FirstPerson.Item.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_itemFragmentShader = m_rhiDevice->createShader(shaderDesc);
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "FirstPerson.Item.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({0u, RhiBindingType::CombinedTextureSampler,
+                                           rhiFlag(RhiShaderStage::Fragment), 1u});
+    m_itemBindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "FirstPerson.Item.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_itemBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                            rhiFlag(RhiShaderStage::Fragment);
+    m_itemPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "FirstPerson.Item.Pipeline";
+    pipelineDesc.vertexShader = m_itemVertexShader;
+    pipelineDesc.fragmentShader = m_itemFragmentShader;
+    pipelineDesc.layout = m_itemPipelineLayout;
+    pipelineDesc.vertexInput.bindings = {{0u, sizeof(ItemModelVertex), RhiVertexInputRate::Vertex}};
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, x)},
+        {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
+        {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)},
+        {3u, 0u, RhiVertexFormat::Float3, offsetof(ItemModelVertex, nx)}
+    };
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Always;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_itemPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_itemBindGroupLayout;
+    RhiBindGroupEntry textureEntry;
+    textureEntry.binding = 0u;
+    textureEntry.resource.combinedTextureSampler = {m_itemAtlasView, m_textureSampler};
+    bindGroupDesc.entries.push_back(textureEntry);
+    m_itemBindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
+    if (!m_itemVertexShader.isValid() || !m_itemFragmentShader.isValid() ||
+        !m_itemBindGroupLayout.isValid() || !m_itemPipelineLayout.isValid() ||
+        !m_itemPipeline.isValid() || !m_itemBindGroup.isValid()) std::abort();
+}
+
+void FirstPersonHeldItemRenderer::destroyItemRhiResources() {
+    if (m_itemBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_itemBindGroup);
+    if (m_itemPipeline.isValid()) m_rhiDevice->destroyPipeline(m_itemPipeline);
+    if (m_itemPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_itemPipelineLayout);
+    if (m_itemBindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_itemBindGroupLayout);
+    if (m_itemFragmentShader.isValid()) m_rhiDevice->destroyShader(m_itemFragmentShader);
+    if (m_itemVertexShader.isValid()) m_rhiDevice->destroyShader(m_itemVertexShader);
+    m_itemBindGroup = {};
+    m_itemPipeline = {};
+    m_itemPipelineLayout = {};
+    m_itemBindGroupLayout = {};
+    m_itemFragmentShader = {};
+    m_itemVertexShader = {};
+}
+
 void FirstPersonHeldItemRenderer::setShadowData(const ShadowData& data) {
     m_shadowData = data;
     synchronizeShadowTextureViews();
@@ -1011,6 +1092,36 @@ void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
         commandList.pushConstants(&constants, sizeof(constants),
             rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(m_rightArmMesh.vertexCount, 1u, 0u, 0u);
+        return;
+    }
+    if (m_preparedFrame.kind == PreparedDrawKind::Item) {
+        const auto meshIt = m_itemMeshes.find(m_preparedFrame.itemId);
+        if (meshIt == m_itemMeshes.end() || !meshIt->second.rhiVertexBuffer.isValid() ||
+            meshIt->second.vertexCount == 0u) {
+            std::abort();
+        }
+        struct PushConstants {
+            glm::mat4 viewProj;
+            glm::mat4 model;
+            glm::vec4 lighting;
+        };
+        const PushConstants constants{
+            m_preparedFrame.viewProj,
+            m_preparedFrame.model,
+            {m_environmentSunlight, m_environmentBlockLight,
+             m_shadowData.skyIntensity, m_sceneHdrScale}
+        };
+        commandList.setViewport({0.0f, 0.0f,
+            static_cast<float>(m_preparedFrame.width),
+            static_cast<float>(m_preparedFrame.height), 0.0f, 0.08f});
+        commandList.setScissor({0, 0, static_cast<uint32_t>(m_preparedFrame.width),
+                                static_cast<uint32_t>(m_preparedFrame.height)});
+        commandList.setGraphicsPipeline(m_itemPipeline);
+        commandList.setBindGroup(0u, m_itemBindGroup);
+        commandList.setVertexBuffer(0u, meshIt->second.rhiVertexBuffer, 0u);
+        commandList.pushConstants(&constants, sizeof(constants),
+            rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(meshIt->second.vertexCount, 1u, 0u, 0u);
         return;
     }
     renderPrepared();
