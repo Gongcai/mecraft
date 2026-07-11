@@ -44,18 +44,6 @@ public:
                     float dt,
                     bool hardwareDepthTest = true);
 
-    // Render weather mask to the currently bound FBO with additive blending.
-    // Equivalent to DerivativeMain gbuffers_weather: writes particle alpha to a single channel.
-    // Caller must bind the weather mask FBO before calling.
-    void renderWeatherMask(const glm::mat4& projection,
-                           const glm::mat4& view,
-                           const glm::vec3& cameraPos,
-                           float rainStrength,
-                           float snowStrength,
-                           float skyLightAtCamera,
-                           float alphaScale,
-                           float dt);
-
 private:
     struct PrecipDrop {
         glm::vec3 position; // world-space position; wrapped around the camera when out of range
