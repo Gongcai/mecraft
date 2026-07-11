@@ -247,7 +247,7 @@ private:
     float m_sceneHdrScale = 1.0f;
     bool m_initialized = false;
 
-    enum class PreparedDrawKind : uint8_t { None, Arm, Item };
+    enum class PreparedDrawKind : uint8_t { None, Arm, Item, Block };
     struct PreparedHeldItemFrame {
         PreparedDrawKind kind = PreparedDrawKind::None;
         glm::mat4 view{1.0f};
@@ -258,6 +258,7 @@ private:
         int height = 0;
     };
     PreparedHeldItemFrame m_preparedFrame;
+    bool m_forwardMode = false;
 };
 
 #endif // MECRAFT_FIRST_PERSON_HELD_ITEM_RENDERER_H

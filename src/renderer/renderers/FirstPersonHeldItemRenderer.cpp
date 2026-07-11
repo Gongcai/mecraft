@@ -232,19 +232,29 @@ void FirstPersonHeldItemRenderer::shutdown() {
 }
 
 void FirstPersonHeldItemRenderer::setForwardMode(bool forward) {
-    if (m_resourceMgr == nullptr) return;
+    if (m_resourceMgr == nullptr) {
+        std::abort();
+    }
     if (forward) {
         Shader* fwdBlock = m_resourceMgr->getShader("block_item_forward");
         Shader* fwdItem = m_resourceMgr->getShader("item_model_forward");
         Shader* fwdSteve = m_resourceMgr->getShader("steve_forward");
-        m_blockShader = fwdBlock ? fwdBlock : m_deferredBlockShader;
-        m_itemShader = fwdItem ? fwdItem : m_deferredItemShader;
-        m_steveShader = fwdSteve ? fwdSteve : m_deferredSteveShader;
+        if (fwdBlock == nullptr || fwdItem == nullptr || fwdSteve == nullptr) {
+            std::abort();
+        }
+        m_blockShader = fwdBlock;
+        m_itemShader = fwdItem;
+        m_steveShader = fwdSteve;
     } else {
+        if (m_deferredBlockShader == nullptr || m_deferredItemShader == nullptr ||
+            m_deferredSteveShader == nullptr) {
+            std::abort();
+        }
         m_blockShader = m_deferredBlockShader;
         m_itemShader = m_deferredItemShader;
         m_steveShader = m_deferredSteveShader;
     }
+    m_forwardMode = forward;
 }
 
 namespace {
@@ -807,14 +817,10 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width,
 
     const ItemDef& itemDef = ItemRegistry::get(m_visibleItemId);
     const int itemTileIndex = m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
-    const TextureAtlas& itemAtlas = m_resourceMgr->getItemTextureAtlas();
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
     const BlockID renderBlock = ItemRegistry::toRenderBlock(m_visibleItemId);
     const bool preferBlockMesh = prefersBlockMeshForItem(renderBlock);
-    const GLuint itemAtlasTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(itemAtlas.texture));
-    const GLuint texArrayTexture = static_cast<GLuint>(renderer::rhi::gl::textureId(texArray.texture));
-    const bool useItemMesh = (!preferBlockMesh && itemTileIndex >= 0 && itemAtlasTexture != 0 && m_itemShader != nullptr);
-    const bool useBlockMesh = (!useItemMesh && renderBlock != 0 && texArrayTexture != 0 && m_blockShader != nullptr);
+    const bool useItemMesh = !preferBlockMesh && itemTileIndex >= 0 && m_itemAtlasView.isValid();
+    const bool useBlockMesh = !useItemMesh && renderBlock != 0 && m_blockTextureArrayView.isValid();
 
     const float pitchDegrees = useBlockMesh ? m_config.blockPitchDegrees : m_config.itemPitchDegrees;
     const float yawDegrees = useBlockMesh ? m_config.blockYawDegrees : m_config.itemYawDegrees;
@@ -834,9 +840,12 @@ void FirstPersonHeldItemRenderer::prepareFrame(const int width,
     }
     itemModel = glm::translate(itemModel, glm::vec3(-0.5f, -0.5f, -0.5f));
 
-    m_preparedFrame = {
-        PreparedDrawKind::Item, view, viewProj, itemModel, m_visibleItemId, width, height
-    };
+    if (!useItemMesh && !useBlockMesh) {
+        return;
+    }
+    const PreparedDrawKind drawKind = useBlockMesh ? PreparedDrawKind::Block
+                                                   : PreparedDrawKind::Item;
+    m_preparedFrame = {drawKind, view, viewProj, itemModel, m_visibleItemId, width, height};
 }
 
 void FirstPersonHeldItemRenderer::prepareRhiFrame(RhiCommandList& commandList) {
