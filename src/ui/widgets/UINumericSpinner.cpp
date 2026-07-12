@@ -180,16 +180,8 @@ void UINumericSpinner::onUpdate(float dt) {
     }
     m_cursorVisible = m_cursorBlinkTimer < (kCursorBlinkRate * 0.5f);
 
-    // Backspace auto-repeat.
-    const bool backspaceActive =
-        glfwGetKey(glfwGetCurrentContext(), GLFW_KEY_BACKSPACE) == GLFW_PRESS;
-    const bool backspacePressed =
-        backspaceActive && !m_backspaceActiveLastFrame;
-    if (backspacePressed && !m_editText.empty()) {
-      m_editText.pop_back();
-      m_backspaceHoldElapsed = 0.0f;
-      m_backspaceRepeatAccum = 0.0f;
-    } else if (backspaceActive && !m_editText.empty()) {
+    // Repeat deletion while the routed UI key state remains held.
+    if (m_backspaceHeld && !m_editText.empty()) {
       m_backspaceHoldElapsed += dt;
       if (m_backspaceHoldElapsed > kBackspaceInitialDelay) {
         m_backspaceRepeatAccum += dt;
@@ -203,10 +195,12 @@ void UINumericSpinner::onUpdate(float dt) {
       m_backspaceHoldElapsed = 0.0f;
       m_backspaceRepeatAccum = 0.0f;
     }
-    m_backspaceActiveLastFrame = backspaceActive;
   } else {
     m_cursorBlinkTimer = 0.0f;
     m_cursorVisible = false;
+    m_backspaceHeld = false;
+    m_backspaceHoldElapsed = 0.0f;
+    m_backspaceRepeatAccum = 0.0f;
   }
 }
 
@@ -397,9 +391,19 @@ UIEventResult UINumericSpinner::onInput(const UIInputEvent &event,
       if (key == GLFW_KEY_ESCAPE) {
         m_editing = false;
         m_editText.clear();
+        m_backspaceHeld = false;
         return UIEventResult::Consumed;
       }
-      // Handled by onUpdate for backspace auto-repeat.
+      if (key == GLFW_KEY_BACKSPACE) {
+        if (!m_backspaceHeld) {
+          if (!m_editText.empty()) {
+            m_editText.pop_back();
+          }
+          m_backspaceHeld = true;
+          m_backspaceHoldElapsed = 0.0f;
+          m_backspaceRepeatAccum = 0.0f;
+        }
+      }
       return UIEventResult::Consumed;
     }
 
@@ -428,6 +432,15 @@ UIEventResult UINumericSpinner::onInput(const UIInputEvent &event,
     }
     break;
   }
+
+  case UIInputEventType::KeyUp:
+    if (event.key == GLFW_KEY_BACKSPACE) {
+      m_backspaceHeld = false;
+      m_backspaceHoldElapsed = 0.0f;
+      m_backspaceRepeatAccum = 0.0f;
+      return isFocused() ? UIEventResult::Consumed : UIEventResult::Ignored;
+    }
+    break;
 
   case UIInputEventType::Command: {
     if (!isFocused())

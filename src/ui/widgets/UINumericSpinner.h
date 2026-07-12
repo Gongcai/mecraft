@@ -80,7 +80,7 @@ private:
   // Backspace auto-repeat state.
   float m_backspaceHoldElapsed = 0.0f;
   float m_backspaceRepeatAccum = 0.0f;
-  bool m_backspaceActiveLastFrame = false;
+  bool m_backspaceHeld = false;
   static constexpr float kBackspaceInitialDelay = 0.28f;
   static constexpr float kBackspaceRepeatInterval = 0.05f;
 
