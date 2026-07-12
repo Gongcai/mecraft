@@ -31,21 +31,21 @@ uniform int uUseModel;
 uniform int uVertexFormat;
 #endif
 
-out vec2 vUV;
-out float vLight;
-out float vSunlight;
-out float vBlockLight;
-out float vAO;
-out float vNormal;
-out float vLayer;
-out float vAnimationFrameCount;
-out float vAnimationFps;
-out float vAnimated;
-out float vFogDist;
-out vec3 vWorldPos;
-flat out float vTintKind;
-flat out float vMaterialKind;
-out vec2 vTintUV;
+layout(location = 0) out vec2 vUV;
+layout(location = 1) out float vLight;
+layout(location = 2) out float vSunlight;
+layout(location = 3) out float vBlockLight;
+layout(location = 4) out float vAO;
+layout(location = 5) out float vNormal;
+layout(location = 6) out float vLayer;
+layout(location = 7) out float vAnimationFrameCount;
+layout(location = 8) out float vAnimationFps;
+layout(location = 9) out float vAnimated;
+layout(location = 10) out float vFogDist;
+layout(location = 11) out vec3 vWorldPos;
+layout(location = 12) flat out float vTintKind;
+layout(location = 13) flat out float vMaterialKind;
+layout(location = 14) out vec2 vTintUV;
 
 void main() {
 #if defined(RHI_TERRAIN_LIT_MDI) || defined(RHI_TERRAIN_WATER_MDI) || defined(RHI_TERRAIN_FORWARD_MDI)

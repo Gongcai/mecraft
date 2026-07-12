@@ -14,8 +14,8 @@
 #include "renderer/rhi/RhiHandles.h"
 #include "TextureAtlas.h"
 
-class Shader;
 class RhiDevice;
+class RhiCommandListPool;
 
 class ResourceMgr : public IBlockTextureColorProvider {
 public:
@@ -27,16 +27,11 @@ public:
     ResourceMgr(ResourceMgr&&) noexcept;
     ResourceMgr& operator=(ResourceMgr&&) noexcept;
 
-    void init(RhiDevice& rhiDevice);
+    void init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool);
     void shutdown();
     [[nodiscard]] RhiDevice& rhiDevice();
     [[nodiscard]] const RhiDevice& rhiDevice() const;
-
-    Shader *loadShader(const std::string &name,
-                       const char *vertPath,
-                       const char *fragPath);
-
-    Shader *getShader(const std::string &name);
+    [[nodiscard]] RhiCommandListPool& commandListPool();
 
     RhiTextureHandle loadTexture2D(const std::string& name,
                                    const std::string& path,

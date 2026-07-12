@@ -10,8 +10,14 @@
 #include "presentation/GameplayHudPresenter.h"
 #include "server/GameServer.h"
 #include "save/SaveManager.h"
-#include <glad/glad.h>
+#include "renderer/rhi/RhiCommandList.h"
+#include "renderer/rhi/RhiDevice.h"
+#include "renderer/rhi/RhiResources.h"
+#include "engine/platform/Window.h"
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
+#include <vector>
 
 #ifdef MECRAFT_DEBUG
 #include "debug/DebugFrameProfiler.h"
@@ -65,7 +71,8 @@ bool Game::updateLoading(const float deltaTime) {
                                    m_session,
                                    m_deps.uiRenderer,
                                    m_deps.threadPool,
-                                   m_deps.rhiDevice)) {
+                                   m_deps.rhiDevice,
+                                   m_deps.commandListPool)) {
             MECRAFT_LOG_STREAM(std::cerr << "[Game] Render runtime initialization failed\n");
             m_loadPhase = LoadPhase::Failed;
             return false;
@@ -83,7 +90,11 @@ bool Game::updateLoading(const float deltaTime) {
 
 #ifdef MECRAFT_DEBUG
         if (m_deps.enableDebugDashboard) {
-            m_renderRuntime->initDebug(m_deps.window);
+            if (!m_renderRuntime->initDebug(m_deps.window, m_deps.rhiDevice)) {
+                MECRAFT_LOG_STREAM(std::cerr << "[Game] Debug dashboard initialization failed\n");
+                m_loadPhase = LoadPhase::Failed;
+                return false;
+            }
             m_hudPresenter->setDashboard(m_renderRuntime->dashboard());
         }
 #endif
@@ -293,11 +304,8 @@ void Game::captureExitScreenshot() {
     auto* sm = server->saveManager();
     if (!sm) return;
 
-    // Read framebuffer dimensions from viewport
-    GLint viewport[4];
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    const int w = viewport[2];
-    const int h = viewport[3];
+    const int w = m_deps.window.getWidth();
+    const int h = m_deps.window.getHeight();
     if (w <= 0 || h <= 0) return;
 
     // Downscale to thumbnail size for reasonable file size
@@ -306,17 +314,91 @@ void Game::captureExitScreenshot() {
     const int readW = std::min(w, THUMB_W * 2);
     const int readH = std::min(h, THUMB_H * 2);
 
-    // Read pixels from framebuffer (bottom-to-top, RGB)
-    std::vector<uint8_t> pixels(readW * readH * 3);
-    glReadPixels(0, 0, readW, readH, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    RhiDevice& rhiDevice = m_deps.rhiDevice;
+    const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainTexture.isValid()) return;
 
-    // Flip vertically (OpenGL origin is bottom-left)
+    constexpr uint32_t kBytesPerPixel = 4u;
+    const uint32_t tightRowBytes = static_cast<uint32_t>(readW) * kBytesPerPixel;
+    const uint32_t rowAlignment = std::max(
+        1u, rhiDevice.capabilities().textureBufferCopyRowPitchAlignment);
+    const uint32_t bytesPerRow =
+        ((tightRowBytes + rowAlignment - 1u) / rowAlignment) * rowAlignment;
+    const uint64_t readbackSize = static_cast<uint64_t>(bytesPerRow) *
+                                  static_cast<uint32_t>(readH);
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "ExitScreenshot.Readback";
+    readbackDesc.size = readbackSize;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    const RhiBufferHandle readbackBuffer =
+        rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
+    if (!readbackBuffer.isValid()) return;
+
+    RhiCommandList* commandListStorage =
+        m_deps.commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"ExitScreenshot.Commands", RhiCommandListType::Graphics})) {
+        rhiDevice.destroyBuffer(readbackBuffer);
+        return;
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::Present,
+        RhiResourceState::TransferSrc
+    });
+    RhiTextureBufferCopy copy;
+    copy.srcTexture = swapchainTexture;
+    copy.dstBuffer = readbackBuffer;
+    copy.bytesPerRow = bytesPerRow;
+    copy.rowsPerImage = static_cast<uint32_t>(readH);
+    copy.width = static_cast<uint32_t>(readW);
+    copy.height = static_cast<uint32_t>(readH);
+    commandList.copyTextureToBuffer(copy);
+    commandList.bufferBarrier({
+        readbackBuffer,
+        RhiResourceState::TransferDst,
+        RhiResourceState::HostRead
+    });
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::TransferSrc,
+        RhiResourceState::Present
+    });
+    if (!commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!rhiDevice.submit({"ExitScreenshot.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
+    rhiDevice.waitIdle();
+
+    const auto* pixels = static_cast<const uint8_t*>(
+        rhiDevice.mapBuffer(readbackBuffer, 0u, readbackSize));
+    if (pixels == nullptr) {
+        rhiDevice.destroyBuffer(readbackBuffer);
+        return;
+    }
+
     std::vector<uint8_t> flipped(readW * readH * 3);
     for (int y = 0; y < readH; ++y) {
-        std::memcpy(flipped.data() + y * readW * 3,
-                    pixels.data() + (readH - 1 - y) * readW * 3,
-                    readW * 3);
+        const uint8_t* sourceRow = pixels +
+            static_cast<uint64_t>(readH - 1 - y) * bytesPerRow;
+        uint8_t* destinationRow = flipped.data() +
+            static_cast<size_t>(y) * static_cast<size_t>(readW) * 3u;
+        for (int x = 0; x < readW; ++x) {
+            destinationRow[x * 3 + 0] = sourceRow[x * 4 + 0];
+            destinationRow[x * 3 + 1] = sourceRow[x * 4 + 1];
+            destinationRow[x * 3 + 2] = sourceRow[x * 4 + 2];
+        }
     }
+    rhiDevice.unmapBuffer(readbackBuffer);
+    rhiDevice.destroyBuffer(readbackBuffer);
 
     sm->saveScreenshot(flipped.data(), readW, readH);
     MECRAFT_LOG_PRINTF("[Save] Captured exit screenshot (%dx%d)\n", readW, readH);

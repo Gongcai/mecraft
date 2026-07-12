@@ -1,241 +1,330 @@
 #include "GlyphAtlas.h"
 
-#include <glad/glad.h>
-
-#include "../../renderer/rhi/RhiTypes.h"
-#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiResources.h"
 
 #include <algorithm>
-#include <cstring>
 #include <cstddef>
+#include <cstring>
+#include <limits>
 
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
 namespace {
 
-[[nodiscard]] RhiTextureHandle registerGlyphAtlasTexture(const GLuint textureID,
-                                                         const int width,
-                                                         const int height) {
-    return renderer::rhi::gl::registerTexture({
-        textureID,
-        RhiTextureDimension::Texture2D,
-        RhiTextureFormat::R8Unorm,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height),
-        1,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled),
-        false
-    });
+bool decodeUtf8Codepoint(const char*& cursor, const char* end, uint32_t& codepoint) {
+    if (cursor >= end) {
+        return false;
+    }
+    const auto first = static_cast<unsigned char>(*cursor);
+    if (first < 0x80u) {
+        codepoint = first;
+        ++cursor;
+        return true;
+    }
+
+    uint32_t value = 0u;
+    uint32_t minimum = 0u;
+    int continuationCount = 0;
+    if ((first & 0xe0u) == 0xc0u) {
+        value = first & 0x1fu;
+        minimum = 0x80u;
+        continuationCount = 1;
+    } else if ((first & 0xf0u) == 0xe0u) {
+        value = first & 0x0fu;
+        minimum = 0x800u;
+        continuationCount = 2;
+    } else if ((first & 0xf8u) == 0xf0u) {
+        value = first & 0x07u;
+        minimum = 0x10000u;
+        continuationCount = 3;
+    } else {
+        return false;
+    }
+    if (end - cursor <= continuationCount) {
+        return false;
+    }
+    for (int index = 1; index <= continuationCount; ++index) {
+        const auto byte = static_cast<unsigned char>(cursor[index]);
+        if ((byte & 0xc0u) != 0x80u) {
+            return false;
+        }
+        value = (value << 6u) | (byte & 0x3fu);
+    }
+    if (value < minimum || value > 0x10ffffu ||
+        (value >= 0xd800u && value <= 0xdfffu)) {
+        return false;
+    }
+    cursor += continuationCount + 1;
+    codepoint = value;
+    return true;
 }
 
 } // namespace
 
-bool GlyphAtlas::init(const char* ttfPath, int pixelHeight)
-{
-    m_pixelHeight = pixelHeight;
+bool GlyphAtlas::init(RhiDevice& rhiDevice, const char* ttfPath, const int pixelHeight) {
+    shutdown();
+    if (ttfPath == nullptr || pixelHeight <= 0) {
+        return false;
+    }
 
     FT_Library library = nullptr;
     if (FT_Init_FreeType(&library) != 0) {
         return false;
     }
-    m_library = library;
-
     FT_Face face = nullptr;
     if (FT_New_Face(library, ttfPath, 0, &face) != 0) {
         FT_Done_FreeType(library);
-        m_library = nullptr;
         return false;
     }
-    m_face = face;
-
-    FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(pixelHeight));
-    m_lineHeight = static_cast<int>((face->size->metrics.height) >> 6);
-    m_descent = -static_cast<int>((face->size->metrics.descender) >> 6);
-
-    m_atlasWidth = 512;
-    m_atlasHeight = 512;
-    m_pixelData.resize(static_cast<size_t>(m_atlasWidth) * static_cast<size_t>(m_atlasHeight), 0);
-    m_cursorX = 0;
-    m_cursorY = 0;
-    m_rowHeight = 0;
-
-    for (uint32_t c = 32; c <= 126; ++c) {
-        rasterizeGlyph(c);
+    if (FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(pixelHeight)) != 0) {
+        FT_Done_Face(face);
+        FT_Done_FreeType(library);
+        return false;
     }
 
-    uploadAtlas();
+    m_rhiDevice = &rhiDevice;
+    m_library = library;
+    m_face = face;
+    m_pixelHeight = pixelHeight;
+    m_lineHeight = static_cast<int>(face->size->metrics.height >> 6);
+    m_descent = -static_cast<int>(face->size->metrics.descender >> 6);
+    m_atlasWidth = 512;
+    m_atlasHeight = 512;
+    m_pixelData.assign(static_cast<size_t>(m_atlasWidth) * static_cast<size_t>(m_atlasHeight), 0u);
     return true;
 }
 
-void GlyphAtlas::shutdown()
-{
-    GLuint textureID = static_cast<GLuint>(renderer::rhi::gl::textureId(m_texture));
-    renderer::rhi::gl::unregisterTextureAndReset(m_texture);
-    if (textureID != 0) {
-        glDeleteTextures(1, &textureID);
+void GlyphAtlas::shutdown() {
+    if (m_rhiDevice != nullptr && m_stagingBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_stagingBuffer);
     }
-    if (m_face) {
+    if (m_rhiDevice != nullptr && m_texture.isValid()) {
+        m_rhiDevice->destroyTexture(m_texture);
+    }
+    m_stagingBuffer = {};
+    m_texture = {};
+    m_textureState = RhiResourceState::Undefined;
+    m_uploadedWidth = 0;
+    m_uploadedHeight = 0;
+    if (m_face != nullptr) {
         FT_Done_Face(static_cast<FT_Face>(m_face));
-        m_face = nullptr;
     }
-    if (m_library) {
+    if (m_library != nullptr) {
         FT_Done_FreeType(static_cast<FT_Library>(m_library));
-        m_library = nullptr;
     }
+    m_rhiDevice = nullptr;
+    m_library = nullptr;
+    m_face = nullptr;
+    m_cursorX = 0;
+    m_cursorY = 0;
+    m_rowHeight = 0;
+    m_dirty = false;
+    m_revision = 0;
     m_glyphs.clear();
     m_pixelData.clear();
 }
 
-const GlyphInfo& GlyphAtlas::getGlyph(uint32_t codepoint) const
-{
-    auto it = m_glyphs.find(codepoint);
-    if (it != m_glyphs.end()) {
-        return it->second;
+bool GlyphAtlas::ensureGlyphs(const std::string_view text) {
+    const char* cursor = text.data();
+    const char* const end = cursor + text.size();
+    while (cursor < end) {
+        if (*cursor == '\n' || *cursor == '\r') {
+            ++cursor;
+            continue;
+        }
+        uint32_t codepoint = 0u;
+        if (!decodeUtf8Codepoint(cursor, end, codepoint)) {
+            return false;
+        }
+        if (m_glyphs.find(codepoint) == m_glyphs.end() && !rasterizeGlyph(codepoint)) {
+            return false;
+        }
     }
-    rasterizeGlyph(codepoint);
-    return m_glyphs[codepoint];
+    return true;
 }
 
-void GlyphAtlas::uploadPending() const
-{
-    if (m_dirty) {
-        uploadAtlas();
-    }
+const GlyphInfo* GlyphAtlas::findGlyph(const uint32_t codepoint) const {
+    const auto it = m_glyphs.find(codepoint);
+    return it == m_glyphs.end() ? nullptr : &it->second;
 }
 
-void GlyphAtlas::rasterizeGlyph(uint32_t codepoint) const
-{
-    auto* face = static_cast<FT_Face>(m_face);
-
+bool GlyphAtlas::rasterizeGlyph(const uint32_t codepoint) {
+    if (m_face == nullptr) {
+        return false;
+    }
+    auto* const face = static_cast<FT_Face>(m_face);
     if (FT_Load_Char(face, static_cast<FT_ULong>(codepoint), FT_LOAD_RENDER) != 0) {
-        GlyphInfo info{};
-        m_glyphs[codepoint] = info;
-        return;
+        return false;
     }
 
     const FT_GlyphSlot slot = face->glyph;
-    const int bmpW = static_cast<int>(slot->bitmap.width);
-    const int bmpH = static_cast<int>(slot->bitmap.rows);
-
-    if (bmpW == 0 || bmpH == 0) {
-        GlyphInfo info{};
-        info.bearingX = static_cast<int>(slot->bitmap_left);
-        info.bearingY = static_cast<int>(slot->bitmap_top);
-        info.advanceX = static_cast<int>(slot->advance.x);
-        m_glyphs[codepoint] = info;
-        return;
+    const int bitmapWidth = static_cast<int>(slot->bitmap.width);
+    const int bitmapHeight = static_cast<int>(slot->bitmap.rows);
+    if (bitmapWidth < 0 || bitmapHeight < 0) {
+        return false;
     }
 
-    if (m_cursorX + bmpW > m_atlasWidth) {
-        m_cursorX = 0;
-        m_cursorY += m_rowHeight + 1;
-        m_rowHeight = 0;
-    }
-    if (m_cursorY + bmpH > m_atlasHeight) {
-        int newW = m_atlasWidth;
-        int newH = m_atlasHeight;
-        while (m_cursorX + bmpW > newW) {
-            newW *= 2;
+    if (bitmapWidth > 0 && bitmapHeight > 0) {
+        if (m_cursorX + bitmapWidth > m_atlasWidth) {
+            m_cursorX = 0;
+            m_cursorY += m_rowHeight + 1;
+            m_rowHeight = 0;
         }
-        while (m_cursorY + bmpH > newH) {
-            newH *= 2;
-        }
-        if (newW != m_atlasWidth || newH != m_atlasHeight) {
-            std::vector<unsigned char> newData(static_cast<size_t>(newW) * static_cast<size_t>(newH), 0);
-            for (int row = 0; row < m_atlasHeight; ++row) {
-                std::memcpy(&newData[static_cast<size_t>(row) * static_cast<size_t>(newW)],
-                            &m_pixelData[static_cast<size_t>(row) * static_cast<size_t>(m_atlasWidth)],
-                            static_cast<size_t>(m_atlasWidth));
-            }
-            m_pixelData = std::move(newData);
-            m_atlasWidth = newW;
-            m_atlasHeight = newH;
+        if (!resizeAtlas(m_cursorX + bitmapWidth, m_cursorY + bitmapHeight)) {
+            return false;
         }
     }
 
-    const float invW = 1.0f / static_cast<float>(m_atlasWidth);
-    const float invH = 1.0f / static_cast<float>(m_atlasHeight);
-
-    GlyphInfo info{};
-    info.uvMinX = static_cast<float>(m_cursorX) * invW;
-    info.uvMinY = static_cast<float>(m_cursorY) * invH;
-    info.uvMaxX = static_cast<float>(m_cursorX + bmpW) * invW;
-    info.uvMaxY = static_cast<float>(m_cursorY + bmpH) * invH;
-    info.bitmapWidth = bmpW;
-    info.bitmapHeight = bmpH;
+    GlyphInfo info;
+    info.atlasX = m_cursorX;
+    info.atlasY = m_cursorY;
+    info.bitmapWidth = bitmapWidth;
+    info.bitmapHeight = bitmapHeight;
     info.bearingX = static_cast<int>(slot->bitmap_left);
     info.bearingY = static_cast<int>(slot->bitmap_top);
     info.advanceX = static_cast<int>(slot->advance.x);
 
-    // Store rows in reverse order: FreeType row 0 (glyph top) → highest atlas row,
-    // so that OpenGL's V=0 (texel row 0) holds the glyph bottom and V=1 holds the glyph top.
-    const unsigned char* src = slot->bitmap.buffer;
-    const int pitch = static_cast<int>(slot->bitmap.pitch);
-    const int rowStride = pitch < 0 ? -pitch : pitch;
-    if (!src || rowStride < bmpW) {
-        m_glyphs[codepoint] = info;
-        return;
-    }
-    const unsigned char* srcTop = pitch < 0
-        ? src + static_cast<std::size_t>(bmpH - 1) * static_cast<std::size_t>(rowStride)
-        : src;
-    for (int row = 0; row < bmpH; ++row) {
-        const int dstRow = m_cursorY + (bmpH - 1 - row);
-        const size_t dstOffset = static_cast<size_t>(dstRow) * static_cast<size_t>(m_atlasWidth) + static_cast<size_t>(m_cursorX);
-        const unsigned char* srcRow = pitch < 0
-            ? srcTop - static_cast<std::size_t>(row) * static_cast<std::size_t>(rowStride)
-            : srcTop + static_cast<std::size_t>(row) * static_cast<std::size_t>(rowStride);
-        std::memcpy(&m_pixelData[dstOffset], srcRow, static_cast<size_t>(bmpW));
+    if (bitmapWidth > 0 && bitmapHeight > 0) {
+        const unsigned char* source = slot->bitmap.buffer;
+        const int pitch = static_cast<int>(slot->bitmap.pitch);
+        const int rowStride = pitch < 0 ? -pitch : pitch;
+        if (source == nullptr || rowStride < bitmapWidth) {
+            return false;
+        }
+        const unsigned char* sourceTop = pitch < 0
+            ? source + static_cast<size_t>(bitmapHeight - 1) * static_cast<size_t>(rowStride)
+            : source;
+        for (int row = 0; row < bitmapHeight; ++row) {
+            const int destinationRow = m_cursorY + bitmapHeight - 1 - row;
+            const size_t destinationOffset =
+                static_cast<size_t>(destinationRow) * static_cast<size_t>(m_atlasWidth) +
+                static_cast<size_t>(m_cursorX);
+            const unsigned char* sourceRow = pitch < 0
+                ? sourceTop - static_cast<size_t>(row) * static_cast<size_t>(rowStride)
+                : sourceTop + static_cast<size_t>(row) * static_cast<size_t>(rowStride);
+            std::memcpy(m_pixelData.data() + destinationOffset, sourceRow,
+                        static_cast<size_t>(bitmapWidth));
+        }
+        m_cursorX += bitmapWidth + 1;
+        m_rowHeight = std::max(m_rowHeight, bitmapHeight);
     }
 
-    m_glyphs[codepoint] = info;
-    m_cursorX += bmpW + 1;
-    m_rowHeight = std::max(m_rowHeight, bmpH);
+    m_glyphs.emplace(codepoint, info);
+    refreshGlyphUvs();
     m_dirty = true;
+    ++m_revision;
+    return true;
 }
 
-void GlyphAtlas::uploadAtlas() const
-{
-    if (m_pixelData.empty() || m_atlasWidth <= 0 || m_atlasHeight <= 0) {
-        return;
+bool GlyphAtlas::resizeAtlas(const int requiredWidth, const int requiredHeight) {
+    int newWidth = m_atlasWidth;
+    int newHeight = m_atlasHeight;
+    while (requiredWidth > newWidth) {
+        if (newWidth > std::numeric_limits<int>::max() / 2) {
+            return false;
+        }
+        newWidth *= 2;
+    }
+    while (requiredHeight > newHeight) {
+        if (newHeight > std::numeric_limits<int>::max() / 2) {
+            return false;
+        }
+        newHeight *= 2;
+    }
+    if (newWidth == m_atlasWidth && newHeight == m_atlasHeight) {
+        return true;
     }
 
-    GLuint textureID = static_cast<GLuint>(renderer::rhi::gl::textureId(m_texture));
-    if (textureID == 0) {
-        glGenTextures(1, &textureID);
+    std::vector<unsigned char> resized(
+        static_cast<size_t>(newWidth) * static_cast<size_t>(newHeight), 0u);
+    for (int row = 0; row < m_atlasHeight; ++row) {
+        std::memcpy(resized.data() + static_cast<size_t>(row) * static_cast<size_t>(newWidth),
+                    m_pixelData.data() + static_cast<size_t>(row) * static_cast<size_t>(m_atlasWidth),
+                    static_cast<size_t>(m_atlasWidth));
+    }
+    m_pixelData = std::move(resized);
+    m_atlasWidth = newWidth;
+    m_atlasHeight = newHeight;
+    refreshGlyphUvs();
+    return true;
+}
+
+void GlyphAtlas::refreshGlyphUvs() {
+    const float inverseWidth = 1.0f / static_cast<float>(m_atlasWidth);
+    const float inverseHeight = 1.0f / static_cast<float>(m_atlasHeight);
+    for (auto& entry : m_glyphs) {
+        GlyphInfo& glyph = entry.second;
+        glyph.uvMinX = static_cast<float>(glyph.atlasX) * inverseWidth;
+        glyph.uvMinY = static_cast<float>(glyph.atlasY) * inverseHeight;
+        glyph.uvMaxX = static_cast<float>(glyph.atlasX + glyph.bitmapWidth) * inverseWidth;
+        glyph.uvMaxY = static_cast<float>(glyph.atlasY + glyph.bitmapHeight) * inverseHeight;
+    }
+}
+
+bool GlyphAtlas::prepareUpload(RhiCommandList& commandList) {
+    if (m_rhiDevice == nullptr || m_pixelData.empty()) {
+        return false;
+    }
+    if (!m_dirty && m_texture.isValid()) {
+        return true;
     }
 
-    GLint previousTexture = 0;
-    GLint previousUnpackAlignment = 4;
-    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTexture);
-    glGetIntegerv(GL_UNPACK_ALIGNMENT, &previousUnpackAlignment);
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, m_atlasWidth, m_atlasHeight, 0,
-                 GL_RED, GL_UNSIGNED_BYTE, m_pixelData.data());
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    GLint swizzle[] = {GL_RED, GL_RED, GL_RED, GL_RED};
-    glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, previousUnpackAlignment);
-    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTexture));
-
-    renderer::rhi::gl::unregisterTextureAndReset(m_texture);
-    RhiTextureHandle textureHandle = registerGlyphAtlasTexture(textureID, m_atlasWidth, m_atlasHeight);
-    if (!textureHandle.isValid()) {
-        glDeleteTextures(1, &textureID);
-        m_dirty = true;
-        return;
+    const bool dimensionsChanged = m_uploadedWidth != m_atlasWidth ||
+                                   m_uploadedHeight != m_atlasHeight;
+    if (m_texture.isValid() && dimensionsChanged) {
+        m_rhiDevice->destroyTexture(m_texture);
+        m_texture = {};
+        m_textureState = RhiResourceState::Undefined;
     }
-    m_texture = textureHandle;
+    const bool requiresTexture = !m_texture.isValid();
+    if (requiresTexture) {
+        RhiTextureDesc textureDesc;
+        textureDesc.debugName = "UiText.GlyphAtlas";
+        textureDesc.format = RhiTextureFormat::R8Unorm;
+        textureDesc.width = static_cast<uint32_t>(m_atlasWidth);
+        textureDesc.height = static_cast<uint32_t>(m_atlasHeight);
+        textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                            rhiFlag(RhiTextureUsage::TransferDst);
+        m_texture = m_rhiDevice->createTexture(textureDesc, nullptr);
+        if (!m_texture.isValid()) {
+            return false;
+        }
+        m_textureState = RhiResourceState::Undefined;
+        m_uploadedWidth = m_atlasWidth;
+        m_uploadedHeight = m_atlasHeight;
+    }
+
+    if (m_stagingBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_stagingBuffer);
+        m_stagingBuffer = {};
+    }
+
+    RhiBufferDesc stagingDesc;
+    stagingDesc.debugName = "UiText.GlyphAtlasStaging";
+    stagingDesc.size = m_pixelData.size();
+    stagingDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
+                        rhiFlag(RhiBufferUsage::TransferDst);
+    stagingDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    stagingDesc.initialState = RhiResourceState::TransferSrc;
+    m_stagingBuffer =
+        m_rhiDevice->createBuffer(stagingDesc, m_pixelData.data(), m_pixelData.size());
+    if (!m_stagingBuffer.isValid()) {
+        return false;
+    }
+
+    commandList.textureBarrier({m_texture, m_textureState, RhiResourceState::TransferDst});
+    RhiBufferTextureCopy copy;
+    copy.srcBuffer = m_stagingBuffer;
+    copy.dstTexture = m_texture;
+    copy.width = static_cast<uint32_t>(m_atlasWidth);
+    copy.height = static_cast<uint32_t>(m_atlasHeight);
+    commandList.copyBufferToTexture(copy);
+    commandList.textureBarrier({m_texture, RhiResourceState::TransferDst,
+                                RhiResourceState::ShaderRead});
+    m_textureState = RhiResourceState::ShaderRead;
     m_dirty = false;
+    return true;
 }

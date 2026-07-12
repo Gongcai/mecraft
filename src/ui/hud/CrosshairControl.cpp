@@ -141,8 +141,10 @@ void CrosshairControl::initMesh()
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Crosshair.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(float);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices.data(), bufferDesc.size);
     if (!m_vertexBuffer.isValid()) std::abort();
 }

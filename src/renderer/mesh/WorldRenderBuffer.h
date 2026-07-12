@@ -83,6 +83,7 @@ private:
 
     RhiDevice* m_rhiDevice = nullptr;
     RhiBufferHandle m_buffer;
+    std::vector<RhiBufferHandle> m_retiredBuffers;
     VertexRangeAllocator m_ranges;
     const char* m_debugName = nullptr;
     size_t m_expandCountThisFrame = 0;
@@ -212,6 +213,7 @@ private:
     RhiGrowableBuffer m_rhiWaterIndirectBuffer;
     RhiGrowableBuffer m_rhiMetadataBuffer;
     RhiBindGroupHandle m_rhiMetadataBindGroup;
+    std::vector<RhiBindGroupHandle> m_retiredMetadataBindGroups;
     RhiBindGroupLayoutHandle m_rhiMetadataLayout;
     RhiBufferHandle m_rhiMetadataBoundBuffer;
 

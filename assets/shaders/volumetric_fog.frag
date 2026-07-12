@@ -6,15 +6,13 @@ layout(location = 0) out vec4 FragColor;
 layout(binding = 0) uniform sampler2D uDepthTex;
 layout(binding = 1) uniform sampler2D uSkyCaptureTex;
 layout(binding = 2) uniform sampler2D uNoiseTex;
-layout(binding = 3) uniform sampler2D uShadowMapRaw;
-layout(binding = 4) uniform sampler2D uShadowColorTex;
-layout(binding = 5) uniform sampler3D uAtmosphereLut;
-layout(binding = 6) uniform sampler2DArrayShadow uCsmShadowMap;
-layout(binding = 7) uniform sampler2DArray uCsmShadowDepthRaw;
-layout(binding = 8) uniform sampler2DArrayShadow uCsmShadowDepthAll;
-layout(binding = 9) uniform sampler2DArray uCsmShadowDepthAllRaw;
-layout(binding = 10) uniform sampler2DArray uCsmShadowColor0;
-layout(binding = 11) uniform sampler2DArray uCsmShadowColor1;
+layout(binding = 3) uniform sampler3D uAtmosphereLut;
+layout(binding = 4) uniform sampler2DArrayShadow uCsmShadowMap;
+layout(binding = 5) uniform sampler2DArray uCsmShadowDepthRaw;
+layout(binding = 6) uniform sampler2DArrayShadow uCsmShadowDepthAll;
+layout(binding = 7) uniform sampler2DArray uCsmShadowDepthAllRaw;
+layout(binding = 8) uniform sampler2DArray uCsmShadowColor0;
+layout(binding = 9) uniform sampler2DArray uCsmShadowColor1;
 
 #define MECRAFT_CSM_CASCADE_COUNT 4
 struct CsmCascade {
@@ -27,7 +25,7 @@ struct CsmCascade {
 };
 #define MECRAFT_SHADOW_CASCADE_TYPE_DEFINED 1
 
-layout(std140, binding = 12) uniform VolumetricFogParams {
+layout(std140, binding = 10) uniform VolumetricFogParams {
     mat4 pInvViewProj;
     mat4 pShadowViewProj;
     mat4 pShadowModelView;

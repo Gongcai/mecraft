@@ -16,7 +16,7 @@
 #include <glm/glm.hpp>
 
 namespace {
-constexpr size_t kDebugTextureCount = 19u;
+constexpr size_t kDebugTextureCount = 21u;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -44,10 +44,6 @@ constexpr size_t kDebugTextureCount = 19u;
 
 [[nodiscard]] bool usesShadowNoise(const int mode) {
     return mode == 21 || mode == 22 || mode == 34 || mode == 35;
-}
-
-[[nodiscard]] bool usesShadowCasterTargets(const int mode) {
-    return mode == 35;
 }
 
 [[nodiscard]] bool usesReflectionHistory(const int mode) {
@@ -136,11 +132,6 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         !ensureNoiseTextureView(rhiDevice)) {
         return;
     }
-    if (usesShadowCasterTargets(debugViewMode) &&
-        !ensureShadowNormalTextureView(rhiDevice, targets.shadowNormalTextureHandle())) {
-        return;
-    }
-
     RhiTextureViewHandle binding13 = targets.historySceneTexturePrevViewHandle();
     if (usesShadowNoise(debugViewMode)) {
         binding13 = m_noiseTextureView;
@@ -151,16 +142,12 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     }
 
     RhiTextureViewHandle binding14 = targets.reflectionTextureViewHandle();
-    if (usesShadowCasterTargets(debugViewMode)) {
-        binding14 = targets.shadowColorTextureViewHandle();
-    } else if (usesReflectionHistory(debugViewMode)) {
+    if (usesReflectionHistory(debugViewMode)) {
         binding14 = targets.historyReflectionTexturePrevViewHandle();
     }
 
     RhiTextureViewHandle binding15 = targets.cloudTextureViewHandle();
-    if (usesShadowCasterTargets(debugViewMode)) {
-        binding15 = m_shadowNormalTextureView;
-    } else if (usesSceneResolved(debugViewMode)) {
+    if (usesSceneResolved(debugViewMode)) {
         binding15 = targets.sceneResolvedTextureViewHandle();
     } else if (usesSceneComposite(debugViewMode)) {
         binding15 = targets.sceneCompositeTextureViewHandle();
@@ -174,7 +161,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         targets.voxelLightTextureViewHandle(),
         targets.materialTextureViewHandle(),
         targets.depthTextureViewHandle(),
-        targets.shadowDepthTextureViewHandle(),
+        targets.csmShadowDepthArrayTextureViewHandle(),
         targets.ssaoFilteredTextureViewHandle(),
         targets.sceneLightingTextureViewHandle(),
         targets.transparentCompositeTextureViewHandle(),
@@ -187,7 +174,9 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         binding15,
         targets.csmShadowDepthArrayTextureViewHandle(),
         targets.temporalCurrentTextureViewHandle(),
-        targets.ssgiTextureViewHandle()
+        targets.ssgiTextureViewHandle(),
+        targets.csmShadowColor0ArrayTextureViewHandle(),
+        targets.csmShadowColor1ArrayTextureViewHandle()
     };
     if (!ensureRhiBindGroup(rhiDevice, debugViewMode, views)) {
         return;
@@ -246,14 +235,37 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
+    targets.transitionTexture(commandList,
+                              ctx.sceneCaptureColorTexture,
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList,
+                              ctx.sceneCaptureColorTexture,
+                              RhiResourceState::ShaderRead);
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool DebugPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
@@ -297,6 +309,7 @@ bool DebugPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_uniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_uniformBuffer.isValid()) {
         destroyRhiResources();
@@ -408,42 +421,10 @@ bool DebugPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool DebugPass::ensureShadowNormalTextureView(RhiDevice& rhiDevice,
-                                              const RhiTextureHandle texture) {
-    if (m_shadowNormalTextureView.isValid() &&
-        sameTextureHandle(m_shadowNormalViewTexture, texture)) {
-        return true;
-    }
-    if (m_shadowNormalTextureView.isValid()) {
-        destroyRhiBindGroup();
-        rhiDevice.destroyTextureView(m_shadowNormalTextureView);
-        m_shadowNormalTextureView = {};
-        m_shadowNormalViewTexture = {};
-    }
-    if (!texture.isValid()) {
-        return false;
-    }
-
-    RhiTextureViewDesc viewDesc;
-    viewDesc.texture = texture;
-    viewDesc.viewType = RhiTextureViewType::Texture2D;
-    viewDesc.format = RhiTextureFormat::Rgba16Float;
-    viewDesc.baseMip = 0u;
-    viewDesc.mipCount = 1u;
-    viewDesc.baseLayer = 0u;
-    viewDesc.layerCount = 1u;
-    m_shadowNormalTextureView = rhiDevice.createTextureView(viewDesc);
-    if (!m_shadowNormalTextureView.isValid()) {
-        return false;
-    }
-    m_shadowNormalViewTexture = texture;
-    return true;
-}
-
 bool DebugPass::ensureRhiBindGroup(
     RhiDevice& rhiDevice,
     const int debugViewMode,
-    const std::array<RhiTextureViewHandle, 19>& views) {
+    const std::array<RhiTextureViewHandle, 21>& views) {
     for (const RhiTextureViewHandle view : views) {
         if (!view.isValid()) {
             return false;
@@ -457,7 +438,9 @@ bool DebugPass::ensureRhiBindGroup(
 
     std::array<RhiSamplerHandle, kDebugTextureCount> samplers;
     samplers.fill(m_linearSampler);
-    const size_t nearestBindings[] = {0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u};
+    const size_t nearestBindings[] = {
+        0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u, 19u, 20u
+    };
     for (const size_t binding : nearestBindings) {
         samplers[binding] = m_nearestSampler;
     }
@@ -466,13 +449,6 @@ bool DebugPass::ensureRhiBindGroup(
         : ((usesMaterialAux(debugViewMode) || debugViewMode == 19)
                ? m_nearestSampler
                : m_linearSampler);
-    samplers[14] = usesShadowCasterTargets(debugViewMode)
-        ? m_nearestSampler
-        : m_linearSampler;
-    samplers[15] = usesShadowCasterTargets(debugViewMode)
-        ? m_nearestSampler
-        : m_linearSampler;
-
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
     for (uint32_t binding = 0u; binding < kDebugTextureCount; ++binding) {
@@ -514,9 +490,6 @@ void DebugPass::destroyRhiResources() {
         if (m_noiseTextureView.isValid()) {
             m_rhiDevice->destroyTextureView(m_noiseTextureView);
         }
-        if (m_shadowNormalTextureView.isValid()) {
-            m_rhiDevice->destroyTextureView(m_shadowNormalTextureView);
-        }
         if (m_pipeline.isValid()) {
             m_rhiDevice->destroyPipeline(m_pipeline);
         }
@@ -548,8 +521,6 @@ void DebugPass::destroyRhiResources() {
 
     m_noiseViewTexture = {};
     m_noiseTextureView = {};
-    m_shadowNormalViewTexture = {};
-    m_shadowNormalTextureView = {};
     m_uniformBuffer = {};
     m_nearestSampler = {};
     m_linearSampler = {};

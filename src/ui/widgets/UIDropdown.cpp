@@ -1,18 +1,44 @@
 #include "UIDropdown.h"
 
 #include <algorithm>
+#include <cmath>
 
-#include <glad/glad.h>
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../../renderer/core/Shader.h"
-#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
-#include "../../resource/ResourceMgr.h"
+#include "../../renderer/rhi/RhiCommandList.h"
 #include "../font/TextRenderer.h"
-#include "../core/UIRenderUtils.h"
 
 namespace {
+struct PanelSolidPushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 rectRadius;
+    glm::vec4 color;
+};
+
+struct PanelGlassPushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 extentOpacity;
+    glm::vec4 tint;
+    glm::vec4 appearance;
+};
+
+static_assert(sizeof(PanelSolidPushConstants) == 48u);
+static_assert(sizeof(PanelGlassPushConstants) == 64u);
+
+[[nodiscard]] RhiRect2D dropdownScissor(const UIRenderContext& context) {
+    if (context.hasScissor) {
+        return context.scissor;
+    }
+    return {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
+    };
+}
+
 Color scaledColor(Color color, float rgbScale, float alphaScale) {
     color[0] = std::clamp(color[0] * rgbScale, 0.0f, 1.0f);
     color[1] = std::clamp(color[1] * rgbScale, 0.0f, 1.0f);
@@ -40,17 +66,13 @@ UIDropdown::UIDropdown() {
 UIDropdown::~UIDropdown() { shutdown(); }
 
 void UIDropdown::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
-    m_glassShader = resourceMgr.getShader("ui_glass");
-    initMesh();
     m_expandTween.setImmediate(0.0f);
     m_hoverColorTween.setImmediate({0.30f, 0.30f, 0.30f, 1.0f});
+    UIWidget::init(resourceMgr);
 }
 
 void UIDropdown::shutdown() {
-    cleanupMesh();
-    m_shader = nullptr;
-    m_glassShader = nullptr;
+    UIWidget::shutdown();
 }
 
 void UIDropdown::setOptions(std::vector<std::string> options) {
@@ -96,54 +118,20 @@ void UIDropdown::updateAnimations(float dt) {
     UIWidget::updateAnimations(dt);
 }
 
-void UIDropdown::initMesh() {
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    // Collapsed: bg (6) + border (24) + arrow (6) = 36
-    // Expanded: panel bg (6) + panel border (24) + per-item: base(8*6) + selected(8*6) + bar(8*6) + sep(8*6) + hover(8*6)
-    // ~320 verts * 2 floats, pre-allocate generously
-    glBufferData(GL_ARRAY_BUFFER, 320 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-}
-
-void UIDropdown::cleanupMesh() {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
-    }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
-}
-
 void UIDropdown::renderSelf(const UIRenderContext& ctx) const {
-    if (!m_shader || m_vao == 0) return;
-
-    const UIRenderUtils::GLStateGuard glState;
-    m_shader->use();
-    m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
-                                                static_cast<float>(ctx.screenHeight)));
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
+    if (ctx.phase == UIRenderPhase::Record &&
+        (ctx.commandList == nullptr ||
+         !ctx.panelQuadVertexBuffer.isValid() ||
+         !ctx.panelSolidPipeline.isValid())) {
+        return;
+    }
     renderCollapsed(ctx);
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void UIDropdown::renderOverlay(const UIRenderContext& ctx) const {
     if (!visible) return;
 
     if (m_expanded || m_expandTween.isRunning()) {
-        const UIRenderUtils::GLStateGuard glState;
         renderExpanded(ctx);
     }
 
@@ -159,6 +147,36 @@ UIEventResult UIDropdown::onOverlayInput(const UIInputEvent& event, const UIRend
 }
 
 void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record) {
+        ctx.commandList->setGraphicsPipeline(ctx.panelSolidPipeline);
+        ctx.commandList->setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+        ctx.commandList->setScissor(dropdownScissor(ctx));
+    }
+
+    auto drawSolidRect = [&](const float x,
+                             const float y,
+                             const float rectWidth,
+                             const float rectHeight,
+                             const Color& rectColor) {
+        if (rectWidth <= 0.0f || rectHeight <= 0.0f || rectColor[3] <= 0.0f) {
+            return;
+        }
+        if (!record) {
+            return;
+        }
+        const PanelSolidPushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth),
+                      static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
+            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])
+        };
+        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                       rhiFlag(RhiShaderStage::Vertex) |
+                                       rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->draw(6u, 1u, 0u, 0u);
+    };
+
     const UIResolvedDropdownStyle resolved = resolveStyle(ctx);
     Color bgCol = resolved.background;
     Color borderCol = resolved.border;
@@ -171,78 +189,38 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
         arrowCol = scaledColor(arrowCol, 1.12f, 1.0f);
     }
 
-    float ax = getAbsoluteX(ctx);
-    float ay = getAbsoluteY(ctx);
-    float aw = width * scaleX;
-    float ah = height * scaleY;
+    const float ax = getAbsoluteX(ctx);
+    const float ay = getAbsoluteY(ctx);
+    const float aw = width * scaleX;
+    const float ah = height * scaleY;
 
-    // Background
-    {
-        std::array<float, 4> c = bgCol;
-        c[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float verts[] = {
-            ax, ay,  ax + aw, ay,  ax + aw, ay + ah,
-            ax, ay,  ax + aw, ay + ah,  ax, ay + ah,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    }
+    bgCol[3] *= alpha;
+    drawSolidRect(ax, ay, aw, ah, bgCol);
 
-    // Border (24 verts starting at vertex 6)
-    {
-        std::array<float, 4> c = borderCol;
-        c[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float bw = 1.0f;
-        float verts[48];
-        verts[0]  = ax;         verts[1]  = ay+ah-bw;  verts[2]  = ax+aw;      verts[3]  = ay+ah-bw;
-        verts[4]  = ax+aw;      verts[5]  = ay+ah;     verts[6]  = ax;         verts[7]  = ay+ah-bw;
-        verts[8]  = ax+aw;      verts[9]  = ay+ah;     verts[10] = ax;         verts[11] = ay+ah;
-        verts[12] = ax;         verts[13] = ay;        verts[14] = ax+aw;      verts[15] = ay;
-        verts[16] = ax+aw;      verts[17] = ay+bw;     verts[18] = ax;         verts[19] = ay;
-        verts[20] = ax+aw;      verts[21] = ay+bw;     verts[22] = ax;         verts[23] = ay+bw;
-        verts[24] = ax;         verts[25] = ay;        verts[26] = ax+bw;      verts[27] = ay;
-        verts[28] = ax+bw;      verts[29] = ay+ah;     verts[30] = ax;         verts[31] = ay;
-        verts[32] = ax+bw;      verts[33] = ay+ah;     verts[34] = ax;         verts[35] = ay+ah;
-        verts[36] = ax+aw-bw;   verts[37] = ay;        verts[38] = ax+aw;      verts[39] = ay;
-        verts[40] = ax+aw;      verts[41] = ay+ah;     verts[42] = ax+aw-bw;   verts[43] = ay;
-        verts[44] = ax+aw;      verts[45] = ay+ah;     verts[46] = ax+aw-bw;   verts[47] = ay+ah;
-        glBufferSubData(GL_ARRAY_BUFFER, 6 * 2 * sizeof(float), sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 6, 24);
-    }
+    borderCol[3] *= alpha;
+    constexpr float borderWidth = 1.0f;
+    drawSolidRect(ax, ay + ah - borderWidth, aw, borderWidth, borderCol);
+    drawSolidRect(ax, ay, aw, borderWidth, borderCol);
+    drawSolidRect(ax, ay + borderWidth, borderWidth,
+                  ah - borderWidth * 2.0f, borderCol);
+    drawSolidRect(ax + aw - borderWidth, ay + borderWidth, borderWidth,
+                  ah - borderWidth * 2.0f, borderCol);
 
-    // Arrow indicator (downward triangle at right side)
-    {
-        Color wellCol = scaledColor(bgCol, active ? 0.78f : 0.88f, 1.0f);
-        wellCol[3] = std::min(1.0f, wellCol[3] * 0.84f);
-        m_shader->setVec4("uColor", glm::vec4(wellCol[0], wellCol[1], wellCol[2], wellCol[3] * alpha));
-        const float wellX = ax + aw - 32.0f;
-        float wellVerts[] = {
-            wellX, ay + 1.0f,  ax + aw - 1.0f, ay + 1.0f,  ax + aw - 1.0f, ay + ah - 1.0f,
-            wellX, ay + 1.0f,  ax + aw - 1.0f, ay + ah - 1.0f,  wellX, ay + ah - 1.0f,
-        };
-        glBufferSubData(GL_ARRAY_BUFFER, 30 * 2 * sizeof(float), sizeof(wellVerts), wellVerts);
-        glDrawArrays(GL_TRIANGLES, 30, 6);
+    Color wellCol = scaledColor(bgCol, active ? 0.78f : 0.88f, 1.0f);
+    wellCol[3] = std::min(1.0f, wellCol[3] * 0.84f);
+    drawSolidRect(ax + aw - 32.0f, ay + 1.0f, 31.0f, ah - 2.0f, wellCol);
 
-        std::array<float, 4> c = arrowCol;
-        c[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float arrowSize = 8.0f;
-        float acx = ax + aw - 16.0f;
-        float acy = ay + ah * 0.5f;
-        float verts[6];
-        if (m_expanded) {
-            verts[0] = acx - arrowSize * 0.5f; verts[1] = acy - arrowSize * 0.3f;
-            verts[2] = acx + arrowSize * 0.5f; verts[3] = acy - arrowSize * 0.3f;
-            verts[4] = acx;                    verts[5] = acy + arrowSize * 0.3f;
-        } else {
-            verts[0] = acx - arrowSize * 0.5f; verts[1] = acy + arrowSize * 0.3f;
-            verts[2] = acx + arrowSize * 0.5f; verts[3] = acy + arrowSize * 0.3f;
-            verts[4] = acx;                    verts[5] = acy - arrowSize * 0.3f;
-        }
-        glBufferSubData(GL_ARRAY_BUFFER, 36 * 2 * sizeof(float), sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 36, 3);
+    arrowCol[3] *= alpha;
+    const float arrowCenterX = ax + aw - 16.0f;
+    const float arrowCenterY = ay + ah * 0.5f;
+    constexpr float rowHeight = 1.2f;
+    for (int row = 0; row < 4; ++row) {
+        const float rowWidth = m_expanded
+            ? 8.0f - static_cast<float>(row) * 2.0f
+            : 2.0f + static_cast<float>(row) * 2.0f;
+        const float rowY = arrowCenterY - 2.4f + static_cast<float>(row) * rowHeight;
+        drawSolidRect(arrowCenterX - rowWidth * 0.5f, rowY,
+                      rowWidth, rowHeight, arrowCol);
     }
 
     // Selected text
@@ -252,22 +230,21 @@ void UIDropdown::renderCollapsed(const UIRenderContext& ctx) const {
             std::array<float, 4> tc = textCol;
             tc[3] *= alpha;
             float textY = ay + (ah - ctx.textRenderer->measureText(text, 2.0f).height) * 0.5f;
-            ctx.textRenderer->render(text, ax + 10.0f, textY, 2.0f, tc,
-                                     static_cast<float>(ctx.screenWidth),
-                                     static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(ctx, text, ax + 10.0f, textY, 2.0f, tc);
         }
     }
 }
 
 void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
-    if (m_options.empty()) return;
-
-    // Re-bind our shader/VAO — renderCollapsed's TextRenderer call clobbers them
-    m_shader->use();
-    m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
-                                                static_cast<float>(ctx.screenHeight)));
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    if (m_options.empty()) {
+        return;
+    }
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record && (ctx.commandList == nullptr ||
+                   !ctx.panelQuadVertexBuffer.isValid() ||
+                   !ctx.panelSolidPipeline.isValid())) {
+        return;
+    }
 
     const UIResolvedDropdownStyle resolved = resolveStyle(ctx);
     const Color bgCol = resolved.background;
@@ -278,9 +255,9 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     const Color accentCol = accentFromSelection(selectedCol);
     const Color textCol = resolved.text;
     const float itemHeight = resolved.itemHeight;
-    const uint32_t backdropBlurTextureId = renderer::rhi::gl::textureId(ctx.backdropBlur);
-    const bool useGlass = m_glassShader &&
-                          backdropBlurTextureId != 0 &&
+    const bool useGlass = ctx.panelGlassPipeline.isValid() &&
+                          ctx.panelGlassBindGroup.isValid() &&
+                          ctx.backdropBlurView.isValid() &&
                           ctx.backdropSourceWidth > 0 &&
                           ctx.backdropSourceHeight > 0 &&
                           ctx.backdropBlurWidth > 0 &&
@@ -292,160 +269,129 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
     itemBgCol[1] = std::min(1.0f, itemBgCol[1] + 0.020f);
     itemBgCol[2] = std::min(1.0f, itemBgCol[2] + 0.016f);
 
-    float ax = getAbsoluteX(ctx);
-    float ay = getAbsoluteY(ctx);
-    float aw = width * scaleX;
-    float ah = height * scaleY;
+    const float ax = getAbsoluteX(ctx);
+    const float ay = getAbsoluteY(ctx);
+    const float aw = width * scaleX;
+    const float ah = height * scaleY;
 
-    int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
-    float panelH = visibleCount * itemHeight;
+    const int visibleCount = std::min(static_cast<int>(m_options.size()), m_maxVisibleItems);
+    const float panelH = visibleCount * itemHeight;
     float panelY = ay - panelH - 2.0f;
 
     if (panelY < 0.0f) {
         panelY = ay + ah + 2.0f;
     }
 
-    float expandAlpha = m_expandTween.isRunning() ? m_expandTween.value() : 1.0f;
-    float panelVerts[] = {
-        ax, panelY,  ax + aw, panelY,  ax + aw, panelY + panelH,
-        ax, panelY,  ax + aw, panelY + panelH,  ax, panelY + panelH,
+    const float expandAlpha = m_expandTween.isRunning() ? m_expandTween.value() : 1.0f;
+    const RhiRect2D scissor = dropdownScissor(ctx);
+
+    if (record && useGlass) {
+        const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
+        const PanelGlassPushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth),
+                      static_cast<float>(ctx.screenHeight), ax, panelY),
+            glm::vec4(aw, panelH, 0.0f,
+                      std::clamp(alpha * expandAlpha * 0.96f, 0.0f, 1.0f)),
+            glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength),
+            glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)
+        };
+        ctx.commandList->setGraphicsPipeline(ctx.panelGlassPipeline);
+        ctx.commandList->setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+        ctx.commandList->setBindGroup(0u, ctx.panelGlassBindGroup);
+        ctx.commandList->setScissor(scissor);
+        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                       rhiFlag(RhiShaderStage::Vertex) |
+                                       rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->draw(6u, 1u, 0u, 0u);
+    }
+
+    if (record) {
+        ctx.commandList->setGraphicsPipeline(ctx.panelSolidPipeline);
+        ctx.commandList->setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+        ctx.commandList->setScissor(scissor);
+    }
+
+    auto drawSolidRect = [&](const float x,
+                             const float y,
+                             const float rectWidth,
+                             const float rectHeight,
+                             const Color& rectColor) {
+        if (rectWidth <= 0.0f || rectHeight <= 0.0f || rectColor[3] <= 0.0f) {
+            return;
+        }
+        if (!record) {
+            return;
+        }
+        const PanelSolidPushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth),
+                      static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
+            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])
+        };
+        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                       rhiFlag(RhiShaderStage::Vertex) |
+                                       rhiFlag(RhiShaderStage::Fragment));
+        ctx.commandList->draw(6u, 1u, 0u, 0u);
     };
 
-    glBufferSubData(GL_ARRAY_BUFFER, 33 * 2 * sizeof(float), sizeof(panelVerts), panelVerts);
+    Color panelColor = bgCol;
+    panelColor[3] *= alpha * expandAlpha * (useGlass ? 0.42f : 1.0f);
+    drawSolidRect(ax, panelY, aw, panelH, panelColor);
 
-    if (useGlass) {
-        const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
-
-        m_glassShader->use();
-        m_glassShader->setVec2("uScreenSize",
-                               glm::vec2(static_cast<float>(ctx.screenWidth),
-                                         static_cast<float>(ctx.screenHeight)));
-        m_glassShader->setVec2("uBackdropSize",
-                               glm::vec2(static_cast<float>(ctx.backdropSourceWidth),
-                                         static_cast<float>(ctx.backdropSourceHeight)));
-        m_glassShader->setVec4("uTint", glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength));
-        m_glassShader->setFloat("uOpacity", std::clamp(alpha * expandAlpha * 0.96f, 0.0f, 1.0f));
-        m_glassShader->setFloat("uSaturation", 0.54f);
-        m_glassShader->setFloat("uDarken", 0.70f);
-        m_glassShader->setInt("uBackdrop", 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, backdropBlurTextureId);
-        glDrawArrays(GL_TRIANGLES, 33, 6);
-
-        m_shader->use();
-        m_shader->setVec2("uScreenSize", glm::vec2(static_cast<float>(ctx.screenWidth),
-                                                    static_cast<float>(ctx.screenHeight)));
-    }
-
-    // Panel background
-    {
-        std::array<float, 4> c = bgCol;
-        c[3] *= alpha * expandAlpha * (useGlass ? 0.42f : 1.0f);
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        glDrawArrays(GL_TRIANGLES, 33, 6);
-    }
-
-    // Panel border
-    {
-        std::array<float, 4> c = borderCol;
-        c[3] *= alpha * expandAlpha;
-        m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-        float bw = 1.0f;
-        float verts[48];
-        verts[0]  = ax;         verts[1]  = panelY+panelH-bw; verts[2]  = ax+aw;      verts[3]  = panelY+panelH-bw;
-        verts[4]  = ax+aw;      verts[5]  = panelY+panelH;    verts[6]  = ax;         verts[7]  = panelY+panelH-bw;
-        verts[8]  = ax+aw;      verts[9]  = panelY+panelH;    verts[10] = ax;         verts[11] = panelY+panelH;
-        verts[12] = ax;         verts[13] = panelY;           verts[14] = ax+aw;      verts[15] = panelY;
-        verts[16] = ax+aw;      verts[17] = panelY+bw;        verts[18] = ax;         verts[19] = panelY;
-        verts[20] = ax+aw;      verts[21] = panelY+bw;        verts[22] = ax;         verts[23] = panelY+bw;
-        verts[24] = ax;         verts[25] = panelY;           verts[26] = ax+bw;      verts[27] = panelY;
-        verts[28] = ax+bw;      verts[29] = panelY+panelH;    verts[30] = ax;         verts[31] = panelY;
-        verts[32] = ax+bw;      verts[33] = panelY+panelH;    verts[34] = ax;         verts[35] = panelY+panelH;
-        verts[36] = ax+aw-bw;   verts[37] = panelY;           verts[38] = ax+aw;      verts[39] = panelY;
-        verts[40] = ax+aw;      verts[41] = panelY+panelH;    verts[42] = ax+aw-bw;   verts[43] = panelY;
-        verts[44] = ax+aw;      verts[45] = panelY+panelH;    verts[46] = ax+aw-bw;   verts[47] = panelY+panelH;
-        glBufferSubData(GL_ARRAY_BUFFER, 39 * 2 * sizeof(float), sizeof(verts), verts);
-        glDrawArrays(GL_TRIANGLES, 39, 24);
-    }
+    Color panelBorder = borderCol;
+    panelBorder[3] *= alpha * expandAlpha;
+    constexpr float borderWidth = 1.0f;
+    drawSolidRect(ax, panelY + panelH - borderWidth, aw, borderWidth, panelBorder);
+    drawSolidRect(ax, panelY, aw, borderWidth, panelBorder);
+    drawSolidRect(ax, panelY + borderWidth, borderWidth,
+                  panelH - borderWidth * 2.0f, panelBorder);
+    drawSolidRect(ax + aw - borderWidth, panelY + borderWidth, borderWidth,
+                  panelH - borderWidth * 2.0f, panelBorder);
 
     // Option items
-    int scrollItems = static_cast<int>(m_scrollOffset / itemHeight);
-    constexpr int kItemBaseOffset = 63;   // per-item base bg
-    constexpr int kItemSelectedOffset = 111; // per-item selected bg
-    constexpr int kItemBarOffset = 159;   // per-item selected left bar
-    constexpr int kItemSepOffset = 207;   // per-item separator
-    constexpr int kItemHoverOffset = 255; // per-item hover highlight
+    const int scrollItems = static_cast<int>(m_scrollOffset / itemHeight);
 
     for (int i = 0; i < visibleCount && (scrollItems + i) < static_cast<int>(m_options.size()); ++i) {
-        int optIdx = scrollItems + i;
-        float itemY = panelY + panelH - (i + 1) * itemHeight;
-        bool isSelected = (optIdx == m_selectedIndex);
-        bool isHovered = (optIdx == m_hoveredOption);
+        const int optIdx = scrollItems + i;
+        const float itemY = panelY + panelH - (i + 1) * itemHeight;
+        const bool isSelected = (optIdx == m_selectedIndex);
+        const bool isHovered = (optIdx == m_hoveredOption);
 
         // 1. Per-item base background
-        {
-            std::array<float, 4> c = itemBgCol;
-            c[3] *= alpha * expandAlpha * (useGlass ? 0.24f : 0.48f);
-            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-            float verts[] = {
-                ax, itemY,  ax + aw, itemY,  ax + aw, itemY + itemHeight,
-                ax, itemY,  ax + aw, itemY + itemHeight,  ax, itemY + itemHeight,
-            };
-            glBufferSubData(GL_ARRAY_BUFFER, (kItemBaseOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
-            glDrawArrays(GL_TRIANGLES, kItemBaseOffset + i * 6, 6);
-        }
+        Color itemBase = itemBgCol;
+        itemBase[3] *= alpha * expandAlpha * (useGlass ? 0.24f : 0.48f);
+        drawSolidRect(ax, itemY, aw, itemHeight, itemBase);
 
         // 2. Selected item background
         if (isSelected) {
-            std::array<float, 4> c = selectedCol;
-            c[3] *= alpha * expandAlpha;
-            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-            float verts[] = {
-                ax + 2.0f, itemY + 1.0f,  ax + aw - 2.0f, itemY + 1.0f,  ax + aw - 2.0f, itemY + itemHeight - 1.0f,
-                ax + 2.0f, itemY + 1.0f,  ax + aw - 2.0f, itemY + itemHeight - 1.0f,  ax + 2.0f, itemY + itemHeight - 1.0f,
-            };
-            glBufferSubData(GL_ARRAY_BUFFER, (kItemSelectedOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
-            glDrawArrays(GL_TRIANGLES, kItemSelectedOffset + i * 6, 6);
+            Color selected = selectedCol;
+            selected[3] *= alpha * expandAlpha;
+            drawSolidRect(ax + 2.0f, itemY + 1.0f,
+                          aw - 4.0f, itemHeight - 2.0f, selected);
         }
 
         // 3. Selected left accent bar
         if (isSelected) {
-            std::array<float, 4> c = accentCol;
-            c[3] *= alpha * expandAlpha;
-            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-            float barW = 2.0f;
-            float verts[] = {
-                ax + 2.0f, itemY + 3.0f,  ax + 2.0f + barW, itemY + 3.0f,  ax + 2.0f + barW, itemY + itemHeight - 3.0f,
-                ax + 2.0f, itemY + 3.0f,  ax + 2.0f + barW, itemY + itemHeight - 3.0f,  ax + 2.0f, itemY + itemHeight - 3.0f,
-            };
-            glBufferSubData(GL_ARRAY_BUFFER, (kItemBarOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
-            glDrawArrays(GL_TRIANGLES, kItemBarOffset + i * 6, 6);
+            Color accent = accentCol;
+            accent[3] *= alpha * expandAlpha;
+            drawSolidRect(ax + 2.0f, itemY + 3.0f,
+                          2.0f, itemHeight - 6.0f, accent);
         }
 
         // 4. Hover highlight (on top of selected bg)
         if (isHovered) {
-            std::array<float, 4> c = m_hoverColorTween.isRunning() ? m_hoverColorTween.value() : hoverCol;
-            c[3] *= alpha * expandAlpha * (useGlass ? 0.84f : 1.0f);
-            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-            float verts[] = {
-                ax + 3.0f, itemY + 1.0f,  ax + aw - 3.0f, itemY + 1.0f,  ax + aw - 3.0f, itemY + itemHeight - 1.0f,
-                ax + 3.0f, itemY + 1.0f,  ax + aw - 3.0f, itemY + itemHeight - 1.0f,  ax + 3.0f, itemY + itemHeight - 1.0f,
-            };
-            glBufferSubData(GL_ARRAY_BUFFER, (kItemHoverOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
-            glDrawArrays(GL_TRIANGLES, kItemHoverOffset + i * 6, 6);
+            Color hover = m_hoverColorTween.isRunning()
+                ? m_hoverColorTween.value() : hoverCol;
+            hover[3] *= alpha * expandAlpha * (useGlass ? 0.84f : 1.0f);
+            drawSolidRect(ax + 3.0f, itemY + 1.0f,
+                          aw - 6.0f, itemHeight - 2.0f, hover);
         }
 
         // 5. Separator line (not after last visible item)
         if (i < visibleCount - 1 && (scrollItems + i + 1) < static_cast<int>(m_options.size())) {
-            std::array<float, 4> c = separatorCol;
-            c[3] *= alpha * expandAlpha * (useGlass ? 0.66f : 1.0f);
-            m_shader->setVec4("uColor", glm::vec4(c[0], c[1], c[2], c[3]));
-            float verts[] = {
-                ax + 8.0f, itemY,  ax + aw - 8.0f, itemY,  ax + aw - 8.0f, itemY + 1.0f,
-                ax + 8.0f, itemY,  ax + aw - 8.0f, itemY + 1.0f,  ax + 8.0f, itemY + 1.0f,
-            };
-            glBufferSubData(GL_ARRAY_BUFFER, (kItemSepOffset + i * 6) * 2 * sizeof(float), sizeof(verts), verts);
-            glDrawArrays(GL_TRIANGLES, kItemSepOffset + i * 6, 6);
+            Color separator = separatorCol;
+            separator[3] *= alpha * expandAlpha * (useGlass ? 0.66f : 1.0f);
+            drawSolidRect(ax + 8.0f, itemY, aw - 16.0f, 1.0f, separator);
         }
     }
 
@@ -463,9 +409,7 @@ void UIDropdown::renderExpanded(const UIRenderContext& ctx) const {
             }
             float textX = isSelected ? ax + 10.0f : ax + 8.0f;
             float textY = itemY + (itemHeight - ctx.textRenderer->measureText(m_options[optIdx], 2.0f).height) * 0.5f;
-            ctx.textRenderer->render(m_options[optIdx], textX, textY, 2.0f, tc,
-                                     static_cast<float>(ctx.screenWidth),
-                                     static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(ctx, m_options[optIdx], textX, textY, 2.0f, tc);
         }
     }
 }

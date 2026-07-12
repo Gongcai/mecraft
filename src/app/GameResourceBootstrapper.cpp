@@ -204,8 +204,10 @@ bool collectRegisteredBlockTextureNames(BlockTextureNameSet& textureNames) {
 
 } // namespace
 
-bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
-    resourceMgr.init(rhiDevice);
+bool bootstrapGameResources(ResourceMgr& resourceMgr,
+                            RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool) {
+    resourceMgr.init(rhiDevice, commandListPool);
     if (!resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH, BLOCK_TEXTURE_PACK_CONFIG_PATH)) {
         return false;
     }

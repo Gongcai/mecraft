@@ -43,9 +43,10 @@ void BlockTextureLibrary::deleteTextureArray(TextureArray& textureArray) {
     textureArray.layerCount = 0;
 }
 
-void BlockTextureLibrary::init(RhiDevice& rhiDevice) {
+void BlockTextureLibrary::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
     assert(m_rhiDevice == nullptr);
     m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
 }
 
 void BlockTextureLibrary::shutdown() {
@@ -64,6 +65,7 @@ void BlockTextureLibrary::shutdown() {
     m_hasNormalMaps = false;
     m_hasSpecularMaps = false;
     m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
 }
 
 bool BlockTextureLibrary::loadCatalog(const std::string& textureConfigPath) {
@@ -98,12 +100,12 @@ void BlockTextureLibrary::buildTextures(const std::string& directory,
 
     assert(m_rhiDevice != nullptr);
     resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
     resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
     m_specularTextureArray = textureArrayResult.specularArray;
@@ -123,7 +125,7 @@ void BlockTextureLibrary::buildAtlas(const std::string& directory, const int til
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
     assert(m_rhiDevice != nullptr);
     resource::IndexedTextureAtlas atlasResult = resource::buildBlockTextureAtlas(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_atlas = atlasResult.atlas;
     m_atlasPixels = std::move(atlasResult.pixels);
 
@@ -139,7 +141,7 @@ void BlockTextureLibrary::buildTextureArray(const std::string& directory, const 
     const int resolvedTileSize = validateBlockTextureTileSize(tileSize);
     assert(m_rhiDevice != nullptr);
     resource::BlockTextureArraySet textureArrayResult = resource::buildBlockTextureArraySet(
-        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice);
+        m_manifest, resolvedTileSize, m_catalog, *m_rhiDevice, *m_commandListPool);
     m_textureArray = textureArrayResult.albedoArray;
     m_normalTextureArray = textureArrayResult.normalArray;
     m_specularTextureArray = textureArrayResult.specularArray;

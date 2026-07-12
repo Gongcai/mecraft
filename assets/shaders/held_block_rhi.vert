@@ -9,7 +9,7 @@ layout(location = 1) out float vAo;
 layout(location = 2) flat out uint vLayer;
 layout(location = 3) flat out uint vTintKind;
 layout(location = 4) out vec2 vTintUv;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
     vec4 uLighting;

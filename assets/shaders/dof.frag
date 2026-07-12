@@ -9,7 +9,7 @@ layout(binding = 0) uniform sampler2D uSceneTex;
 layout(binding = 1) uniform sampler2D uDepthTex;
 layout(binding = 2) uniform sampler2D uNoiseTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uProjection;
     mat4 uInvProjection;
     vec4 uDofParams;

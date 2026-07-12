@@ -1,7 +1,7 @@
 #version 450 core
 layout(location = 0) in vec3 vWorldDir;
 layout(location = 0) out vec4 fragColor;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uProjection;
     mat4 uView;
     vec4 uSkyTopHaze;

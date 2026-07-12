@@ -10,7 +10,6 @@
 #include "../../game/inventory/MachineInventoryStore.h"
 
 class Inventory;
-class Shader;
 
 class DataDrivenContainerPanelControl final : public UIWidget {
 public:
@@ -57,6 +56,7 @@ private:
     void renderBackground(const UIRenderContext& context) const;
     void renderProgressBars(const UIRenderContext& context) const;
     void drawTextureQuad(const UIRenderContext& context,
+                         RhiTextureHandle texture,
                          float x0,
                          float y0,
                          float x1,
@@ -64,7 +64,8 @@ private:
                          float u0,
                          float v0,
                          float u1,
-                         float v1) const;
+                         float v1,
+                         float opacity) const;
     void renderDraggedItem(const UIRenderContext& context) const;
     void renderTooltip(const UIRenderContext& context) const;
 
@@ -78,9 +79,6 @@ private:
     std::vector<int> m_playerSlotMapping;
 
     ResourceMgr* m_resourceMgr = nullptr;
-    Shader* m_inventoryShader = nullptr;
-    unsigned int m_vao = 0;
-    unsigned int m_vbo = 0;
     int m_cachedScreenWidth = 1920;
     int m_cachedScreenHeight = 1080;
     float m_burnFraction = 0.0f;

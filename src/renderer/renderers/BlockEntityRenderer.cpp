@@ -489,8 +489,10 @@ BlockEntityRenderer::Mesh BlockEntityRenderer::buildMesh(const ModelDefinition& 
     RhiBufferDesc rhiBufferDesc;
     rhiBufferDesc.debugName = "BlockEntity.MeshVertexBuffer";
     rhiBufferDesc.size = vertices.size() * sizeof(BlockEntityVertex);
-    rhiBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    rhiBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                          rhiFlag(RhiBufferUsage::TransferDst);
     rhiBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    rhiBufferDesc.initialState = RhiResourceState::VertexBuffer;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         rhiBufferDesc, vertices.data(), vertices.size() * sizeof(BlockEntityVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {

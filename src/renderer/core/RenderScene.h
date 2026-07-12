@@ -19,6 +19,7 @@
 class RenderResourceHub;
 class ResourceMgr;
 class RhiDevice;
+class RhiCommandListPool;
 class IWorldView;
 class World;
 class Camera;
@@ -58,6 +59,7 @@ namespace shadow { class ShadowRenderer; }
 struct SharedRenderResources {
     // RHI
     RhiDevice* rhiDevice = nullptr;
+    RhiCommandListPool* commandListPool = nullptr;
 
     // Terrain
     TerrainRenderCache* terrainCache = nullptr;
@@ -192,6 +194,7 @@ public:
     void setupResources(
         ThreadPool* threadPool,
         RhiDevice* rhiDevice,
+        RhiCommandListPool* commandListPool,
         TerrainRenderer* terrain,
         TerrainRhiPipelineSet* terrainRhiPipelines,
         WorldRenderBuffer* worldRenderBuffer,

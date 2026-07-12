@@ -213,8 +213,10 @@ DropRenderer::Mesh DropRenderer::buildItemMesh(const ItemID itemId) const {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Drop.ItemMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(ItemModelVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     RhiDevice& rhiDevice = m_resourceMgr->rhiDevice();
     mesh.rhiVertexBuffer = rhiDevice.createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));

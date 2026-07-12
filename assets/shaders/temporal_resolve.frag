@@ -16,7 +16,7 @@ layout(binding = 2) uniform sampler2D uVelocityTex;
 layout(binding = 3) uniform sampler2D uDepthTex;
 layout(binding = 4) uniform sampler2D uMaterialAuxTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec4 uScreenSizeJitter;
     vec4 uTemporalParams;
 };

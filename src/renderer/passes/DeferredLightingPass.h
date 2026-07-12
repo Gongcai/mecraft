@@ -18,7 +18,7 @@ namespace shadow { class ShadowRenderer; }
 /// Deferred lighting pass: computes full-scene lighting from GBuffer, shadows, SSAO, and atmosphere.
 class DeferredLightingPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DeferredLighting"; }
 
@@ -33,12 +33,12 @@ public:
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
-    bool ensureExternalTextureViews(RhiDevice& rhiDevice, RhiTextureHandle shadowNormalTexture);
+    bool ensureExternalTextureViews(RhiDevice& rhiDevice);
     bool ensureTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture,
                            RhiTextureFormat format, RhiTextureHandle& viewTexture,
                            RhiTextureViewHandle& textureView);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,
-                            const std::array<RhiTextureViewHandle, 22>& views);
+                            const std::array<RhiTextureViewHandle, 19>& views);
     void destroyRhiBindGroup();
     void destroyExternalTextureViews();
     void destroyRhiResources();
@@ -54,12 +54,10 @@ private:
     RhiTextureHandle m_lightmapNightViewTexture;
     RhiTextureHandle m_noiseViewTexture;
     RhiTextureHandle m_rippleNormalViewTexture;
-    RhiTextureHandle m_shadowNormalViewTexture;
     RhiTextureViewHandle m_lightmapDayTextureView;
     RhiTextureViewHandle m_lightmapNightTextureView;
     RhiTextureViewHandle m_noiseTextureView;
     RhiTextureViewHandle m_rippleNormalTextureView;
-    RhiTextureViewHandle m_shadowNormalTextureView;
     RhiBufferHandle m_uniformBuffer;
     RhiSamplerHandle m_nearestClampSampler;
     RhiSamplerHandle m_linearClampSampler;
@@ -72,7 +70,7 @@ private:
     RhiShaderHandle m_fragmentShader;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 22> m_boundViews = {};
+    std::array<RhiTextureViewHandle, 19> m_boundViews = {};
 };
 
 #endif // MECRAFT_DEFERRED_LIGHTING_PASS_H

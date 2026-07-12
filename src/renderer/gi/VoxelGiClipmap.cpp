@@ -1,6 +1,7 @@
 #include "VoxelGiClipmap.h"
 
 #include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiCommandListPool.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiTypes.h"
@@ -13,6 +14,7 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <cstdlib>
 #include <string_view>
 
 namespace {
@@ -216,8 +218,11 @@ void VoxelGiClipmap::shutdown() {
         }
     }
     m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
     m_texture = {};
     m_shiftScratchTexture = {};
+    m_textureState = RhiResourceState::Undefined;
+    m_shiftScratchTextureState = RhiResourceState::Undefined;
     m_voxels.clear();
     m_materialAlbedoCache.clear();
     m_materialAlbedoCacheValid.clear();
@@ -238,7 +243,14 @@ void VoxelGiClipmap::shutdown() {
 void VoxelGiClipmap::update(const FrameContext& ctx,
                             const VoxelGiSettings& settings,
                             const IBlockTextureColorProvider& textureColors,
-                            RhiDevice& rhiDevice) {
+                            RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool) {
+    if ((m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) ||
+        (m_commandListPool != nullptr && m_commandListPool != &commandListPool)) {
+        shutdown();
+    }
+    m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
     if (!settings.enabled || ctx.worldView == nullptr) {
         m_valid = false;
         m_stats = {};
@@ -306,7 +318,9 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
 
     m_originBlock = originBlock;
     m_origin = glm::vec3(originBlock);
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList& commandList = beginCommandList("VoxelGI.Upload");
+    std::vector<RhiBufferHandle> stagingBuffers;
+    stagingBuffers.reserve(6u);
     bool uploadSucceeded = true;
     if (shiftedVolume) {
         const uint64_t overlapVoxels = overlapVoxelCount(deltaVoxels);
@@ -319,10 +333,11 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
         m_stats.sampledVoxels = totalVoxels - overlapVoxels;
         m_stats.uploadedVoxels = m_stats.sampledVoxels;
         m_stats.copiedVoxels = overlapVoxels;
-        m_stats.uploadedBoxes = uploadShiftedVolume(deltaVoxels, commandList, rhiDevice);
+        m_stats.uploadedBoxes = uploadShiftedVolume(deltaVoxels, commandList, rhiDevice,
+                                                    stagingBuffers);
         uploadSucceeded = m_stats.uploadedBoxes >= 0;
     } else {
-        uploadSucceeded = uploadFullVolume(commandList, rhiDevice);
+        uploadSucceeded = uploadFullVolume(commandList, rhiDevice, stagingBuffers);
         const uint64_t totalVoxels = static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution);
@@ -331,7 +346,10 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
         m_stats.uploadedVoxels = totalVoxels;
         m_stats.uploadedBoxes = 1;
     }
-    rhiDevice.submitFrame(commandList);
+    submitCommandList(commandList, "VoxelGI.Upload");
+    for (const RhiBufferHandle staging : stagingBuffers) {
+        rhiDevice.destroyBuffer(staging);
+    }
     if (!uploadSucceeded) {
         m_valid = false;
         m_stats = {};
@@ -351,6 +369,31 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     m_stats.sunRadianceScale = lighting.sunRadianceScale;
 }
 
+RhiCommandList& VoxelGiClipmap::beginCommandList(const char* const debugName) const {
+    if (m_commandListPool == nullptr) {
+        std::abort();
+    }
+    RhiCommandList* const commandList =
+        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({debugName, RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    return *commandList;
+}
+
+void VoxelGiClipmap::submitCommandList(RhiCommandList& commandList,
+                                       const char* const debugName) const {
+    if (m_rhiDevice == nullptr || !commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* commandLists[] = {&commandList};
+    const RhiSubmitInfo submitInfo{debugName, commandLists, 1u};
+    if (!m_rhiDevice->submit(submitInfo)) {
+        std::abort();
+    }
+}
+
 bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice) {
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         shutdown();
@@ -363,10 +406,12 @@ bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice)
     if (m_texture.isValid()) {
         rhiDevice.destroyTexture(m_texture);
         m_texture = {};
+        m_textureState = RhiResourceState::Undefined;
     }
     if (m_shiftScratchTexture.isValid()) {
         rhiDevice.destroyTexture(m_shiftScratchTexture);
         m_shiftScratchTexture = {};
+        m_shiftScratchTextureState = RhiResourceState::Undefined;
     }
 
     const uint32_t usage = rhiFlag(RhiTextureUsage::Sampled) |
@@ -385,6 +430,7 @@ bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice)
     if (!m_texture.isValid()) {
         return false;
     }
+    m_textureState = RhiResourceState::Undefined;
 
     textureDesc.debugName = "VoxelGI.ShiftScratch";
     textureDesc.mipLevels = 1u;
@@ -393,22 +439,30 @@ bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice)
     if (!m_shiftScratchTexture.isValid()) {
         rhiDevice.destroyTexture(m_texture);
         m_texture = {};
+        m_textureState = RhiResourceState::Undefined;
         return false;
     }
+    m_shiftScratchTextureState = RhiResourceState::Undefined;
     return true;
 }
 
-bool VoxelGiClipmap::uploadFullVolume(RhiCommandList& commandList, RhiDevice& rhiDevice) {
-    if (!uploadSubVolume(0, 0, 0, m_resolution, m_resolution, m_resolution, commandList, rhiDevice)) {
+bool VoxelGiClipmap::uploadFullVolume(RhiCommandList& commandList,
+                                      RhiDevice& rhiDevice,
+                                      std::vector<RhiBufferHandle>& stagingBuffers) {
+    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::TransferDst);
+    if (!uploadSubVolume(0, 0, 0, m_resolution, m_resolution, m_resolution,
+                         commandList, rhiDevice, stagingBuffers)) {
         return false;
     }
     commandList.generateMipmaps(m_texture);
+    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::ShaderRead);
     return true;
 }
 
 int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels,
                                         RhiCommandList& commandList,
-                                        RhiDevice& rhiDevice) {
+                                        RhiDevice& rhiDevice,
+                                        std::vector<RhiBufferHandle>& stagingBuffers) {
     copyOverlapThroughScratch(deltaVoxels, commandList);
 
     const auto axisRange = [this](const int delta, int& start, int& end) {
@@ -437,7 +491,8 @@ int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels,
     int uploadedBoxes = 0;
     const auto upload = [&](const int x, const int y, const int z,
                             const int width, const int height, const int depth) {
-        if (!uploadSubVolume(x, y, z, width, height, depth, commandList, rhiDevice)) {
+        if (!uploadSubVolume(x, y, z, width, height, depth,
+                             commandList, rhiDevice, stagingBuffers)) {
             return false;
         }
         ++uploadedBoxes;
@@ -453,6 +508,7 @@ int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels,
         !upload(x0, y0, z1, x1 - x0, y1 - y0, m_resolution - z1)) return -1;
 
     commandList.generateMipmaps(m_texture);
+    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::ShaderRead);
     return uploadedBoxes;
 }
 
@@ -463,7 +519,8 @@ bool VoxelGiClipmap::uploadSubVolume(const int x,
                                      const int height,
                                      const int depth,
                                      RhiCommandList& commandList,
-                                     RhiDevice& rhiDevice) {
+                                     RhiDevice& rhiDevice,
+                                     std::vector<RhiBufferHandle>& stagingBuffers) {
     if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
@@ -486,17 +543,22 @@ bool VoxelGiClipmap::uploadSubVolume(const int x,
     RhiBufferDesc stagingDesc;
     stagingDesc.debugName = "VoxelGI.UploadStaging";
     stagingDesc.size = packedVoxels.size() * sizeof(uint16_t);
-    stagingDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc);
+    stagingDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
+                        rhiFlag(RhiBufferUsage::TransferDst);
     stagingDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    stagingDesc.initialState = RhiResourceState::TransferSrc;
     const RhiBufferHandle staging = rhiDevice.createBuffer(
         stagingDesc, packedVoxels.data(), static_cast<size_t>(stagingDesc.size));
     if (!staging.isValid()) {
         return false;
     }
+    stagingBuffers.push_back(staging);
 
     RhiBufferTextureCopy copy;
     copy.srcBuffer = staging;
     copy.dstTexture = m_texture;
+    copy.mipLevel = 0u;
+    copy.arrayLayer = 0u;
     copy.dstX = static_cast<uint32_t>(x);
     copy.dstY = static_cast<uint32_t>(y);
     copy.dstZ = static_cast<uint32_t>(z);
@@ -504,7 +566,6 @@ bool VoxelGiClipmap::uploadSubVolume(const int x,
     copy.height = static_cast<uint32_t>(height);
     copy.depth = static_cast<uint32_t>(depth);
     commandList.copyBufferToTexture(copy);
-    rhiDevice.destroyBuffer(staging);
     return true;
 }
 
@@ -539,18 +600,38 @@ void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels,
     axisRange(deltaVoxels.y, srcY, dstY, sizeY);
     axisRange(deltaVoxels.z, srcZ, dstZ, sizeZ);
 
+    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::TransferSrc);
+    transitionTexture(commandList, m_shiftScratchTexture, m_shiftScratchTextureState,
+                      RhiResourceState::TransferDst);
+
     RhiTextureCopy copy;
     copy.src = m_texture;
     copy.dst = m_shiftScratchTexture;
+    copy.srcSubresource = {0u, 0u, 1u};
+    copy.dstSubresource = {0u, 0u, 1u};
     copy.srcOffset = {static_cast<uint32_t>(srcX), static_cast<uint32_t>(srcY), static_cast<uint32_t>(srcZ)};
     copy.dstOffset = {static_cast<uint32_t>(dstX), static_cast<uint32_t>(dstY), static_cast<uint32_t>(dstZ)};
     copy.extent = {static_cast<uint32_t>(sizeX), static_cast<uint32_t>(sizeY), static_cast<uint32_t>(sizeZ)};
     commandList.copyTexture(copy);
 
+    transitionTexture(commandList, m_shiftScratchTexture, m_shiftScratchTextureState,
+                      RhiResourceState::TransferSrc);
+    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::TransferDst);
     copy.src = m_shiftScratchTexture;
     copy.dst = m_texture;
     copy.srcOffset = copy.dstOffset;
     commandList.copyTexture(copy);
+}
+
+void VoxelGiClipmap::transitionTexture(RhiCommandList& commandList,
+                                       const RhiTextureHandle texture,
+                                       RhiResourceState& currentState,
+                                       const RhiResourceState newState) {
+    if (currentState == newState) {
+        return;
+    }
+    commandList.textureBarrier({texture, currentState, newState});
+    currentState = newState;
 }
 
 void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,

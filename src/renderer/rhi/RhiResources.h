@@ -28,6 +28,7 @@ struct RhiTextureInitialData {
     uint32_t mipLevel = 0;
     uint32_t arrayLayer = 0;
     uint32_t layerCount = 1;
+    RhiResourceState finalState = RhiResourceState::Undefined;
 };
 
 struct RhiTextureViewDesc {
@@ -46,6 +47,7 @@ struct RhiBufferDesc {
     uint64_t size = 0;
     RhiBufferUsageFlags usage = 0;
     RhiMemoryUsage memoryUsage = RhiMemoryUsage::GpuOnly;
+    RhiResourceState initialState = RhiResourceState::Undefined;
 };
 
 struct RhiSamplerDesc {
@@ -63,6 +65,7 @@ struct RhiSamplerDesc {
 
 struct RhiQueryPoolDesc {
     const char* debugName = nullptr;
+    RhiQueryType type = RhiQueryType::Timestamp;
     uint32_t queryCount = 1;
 };
 
@@ -93,6 +96,10 @@ struct RhiTextureBarrier {
     RhiTextureHandle texture;
     RhiResourceState oldState = RhiResourceState::Undefined;
     RhiResourceState newState = RhiResourceState::Undefined;
+    uint32_t baseMip = 0u;
+    uint32_t mipCount = kRhiRemainingMipLevels;
+    uint32_t baseLayer = 0u;
+    uint32_t layerCount = kRhiRemainingArrayLayers;
 };
 
 struct RhiBufferBarrier {
@@ -118,6 +125,22 @@ struct RhiBufferTextureCopy {
     uint32_t dstX = 0;
     uint32_t dstY = 0;
     uint32_t dstZ = 0;
+    uint32_t width = 1;
+    uint32_t height = 1;
+    uint32_t depth = 1;
+};
+
+struct RhiTextureBufferCopy {
+    RhiTextureHandle srcTexture;
+    RhiBufferHandle dstBuffer;
+    uint64_t bufferOffset = 0;
+    uint32_t bytesPerRow = 0;
+    uint32_t rowsPerImage = 0;
+    uint32_t mipLevel = 0;
+    uint32_t arrayLayer = 0;
+    uint32_t srcX = 0;
+    uint32_t srcY = 0;
+    uint32_t srcZ = 0;
     uint32_t width = 1;
     uint32_t height = 1;
     uint32_t depth = 1;

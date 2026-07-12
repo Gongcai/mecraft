@@ -59,7 +59,8 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   GameSession& session,
                                   UIRenderer& uiRenderer,
                                   ThreadPool& threadPool,
-                                  RhiDevice& rhiDevice) {
+                                  RhiDevice& rhiDevice,
+                                  RhiCommandListPool& commandListPool) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& blockEntityRenderer = m_impl->blockEntityRenderer;
@@ -69,7 +70,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& humanoidRenderer = m_impl->humanoidRenderer;
 
     // Core GPU infrastructure
-    if (!renderer.init(resourceMgr, threadPool, rhiDevice)) {
+    if (!renderer.init(resourceMgr, threadPool, rhiDevice, commandListPool)) {
         return false;
     }
 
@@ -79,6 +80,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     renderScene.setupResources(
         &threadPool,
         &renderer.rhiDevice(),
+        &renderer.commandListPool(),
         &renderer.getTerrainRenderer(),
         &renderer.getTerrainRhiPipelineSet(),
         &renderer.getWorldRenderBuffer(),
@@ -171,9 +173,12 @@ FirstPersonHeldItemRenderer& GameplayRenderRuntime::firstPersonHeldItemRenderer(
 }
 
 #ifdef MECRAFT_DEBUG
-void GameplayRenderRuntime::initDebug(Window& window) {
-    m_impl->dashboard.init(window);
+bool GameplayRenderRuntime::initDebug(Window& window, RhiDevice& rhiDevice) {
+    if (!m_impl->dashboard.init(window, rhiDevice)) {
+        return false;
+    }
     m_impl->dashboard.setFirstPersonHeldItemRenderer(&m_impl->firstPersonHeldItemRenderer);
+    return true;
 }
 
 void GameplayRenderRuntime::publishDebugStats(const double frameTime) {

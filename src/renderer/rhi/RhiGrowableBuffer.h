@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 class RhiCommandList;
 class RhiDevice;
@@ -33,7 +34,9 @@ public:
 private:
     RhiDevice* m_rhiDevice = nullptr;
     RhiBufferHandle m_buffer;
+    std::vector<RhiBufferHandle> m_retiredBuffers;
     RhiBufferUsageFlags m_usage = 0u;
+    RhiResourceState m_steadyState = RhiResourceState::Undefined;
     uint64_t m_capacity = 0u;
     const char* m_debugName = nullptr;
 };

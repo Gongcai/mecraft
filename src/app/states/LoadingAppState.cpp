@@ -15,7 +15,9 @@
 namespace {
 
 bool beginLoadingPass(RhiDevice& rhiDevice,
+                      RhiCommandListPool& commandListPool,
                       const Window& window,
+                      UIRenderer& uiRenderer,
                       RhiCommandList*& commandList) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
@@ -24,8 +26,7 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
     }
 
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
-    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
-    if (!colorView.isValid() || !depthView.isValid()) {
+    if (!colorView.isValid()) {
         return false;
     }
 
@@ -38,12 +39,6 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
     colorAttachment.clearColor[2] = 0.05f;
     colorAttachment.clearColor[3] = 1.0f;
 
-    RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view = depthView;
-    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
-    depthAttachment.depthStoreOp = RhiStoreOp::Store;
-    depthAttachment.clearDepth = 1.0f;
-
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "LoadingScreen";
     renderingInfo.renderArea = {
@@ -54,9 +49,20 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
-    renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    commandList = &rhiDevice.beginFrame();
+    commandList = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({"LoadingScreen.Commands", RhiCommandListType::Graphics})) {
+        return false;
+    }
+    commandList->textureBarrier({
+        rhiDevice.currentSwapchainColorTexture(),
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
+    if (!uiRenderer.prepareTextFrame(*commandList)) {
+        return false;
+    }
     commandList->beginRendering(renderingInfo);
     return true;
 }
@@ -68,7 +74,18 @@ void endLoadingPass(RhiDevice& rhiDevice,
     }
 
     commandList->endRendering();
-    rhiDevice.submitFrame(*commandList);
+    commandList->textureBarrier({
+        rhiDevice.currentSwapchainColorTexture(),
+        RhiResourceState::RenderTarget,
+        RhiResourceState::Present
+    });
+    if (!commandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {commandList};
+    if (!rhiDevice.submit({"LoadingScreen.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
     commandList = nullptr;
 }
 
@@ -146,15 +163,16 @@ void LoadingAppState::render(const double frameTime) {
         m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
 
     RhiCommandList* commandList = nullptr;
-    if (!beginLoadingPass(m_deps.rhiDevice, m_deps.window, commandList)) {
+    if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool,
+                          m_deps.window, m_deps.uiRenderer, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
         return;
     }
 
+    sceneContext.commandList = commandList;
     m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
     endLoadingPass(m_deps.rhiDevice, commandList);
     m_deps.rhiDevice.present();
-    m_deps.window.swapBuffers();
     m_firstFrameRendered = true;
 }
 
@@ -171,6 +189,7 @@ std::unique_ptr<Game> LoadingAppState::createGame() const {
         m_deps.localeManager,
         m_deps.threadPool,
         m_deps.rhiDevice,
+        m_deps.commandListPool,
         m_deps.enableDebugDashboard
     };
     return std::make_unique<Game>(m_config, deps);

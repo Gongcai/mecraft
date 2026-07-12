@@ -16,7 +16,7 @@ class RhiDevice;
 /// Screen-space global illumination pass: half-res gather, depth-aware upsample, denoise, temporal accumulation.
 class SsgiPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SSGI"; }
 

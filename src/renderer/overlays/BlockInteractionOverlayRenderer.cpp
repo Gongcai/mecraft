@@ -186,8 +186,10 @@ void BlockInteractionOverlayRenderer::initOutlineMesh() {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "BlockOverlay.Outline.VertexBuffer";
     bufferDesc.size = kOutlineVertices.size() * sizeof(float);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_outlineVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, kOutlineVertices.data(), bufferDesc.size);
     if (!m_outlineVertexBuffer.isValid()) std::abort();
@@ -233,8 +235,10 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
     RhiBufferDesc overlayBufferDesc;
     overlayBufferDesc.debugName = "BlockOverlay.Break.VertexBuffer";
     overlayBufferDesc.size = kBreakOverlayVertices.size() * sizeof(float);
-    overlayBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    overlayBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
     overlayBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    overlayBufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_breakOverlayVertexBuffer = m_rhiDevice->createBuffer(
         overlayBufferDesc, kBreakOverlayVertices.data(), overlayBufferDesc.size);
     if (!m_breakOverlayVertexBuffer.isValid()) std::abort();
@@ -243,8 +247,10 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
     RhiBufferDesc crossBufferDesc;
     crossBufferDesc.debugName = "BlockOverlay.BreakCross.VertexBuffer";
     crossBufferDesc.size = kBreakOverlayCrossVertices.size() * sizeof(float);
-    crossBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    crossBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                            rhiFlag(RhiBufferUsage::TransferDst);
     crossBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    crossBufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_breakOverlayCrossVertexBuffer = m_rhiDevice->createBuffer(
         crossBufferDesc, kBreakOverlayCrossVertices.data(), crossBufferDesc.size);
     if (!m_breakOverlayCrossVertexBuffer.isValid()) std::abort();

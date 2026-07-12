@@ -12,7 +12,7 @@ layout(binding = 4) uniform sampler2D uNormalAoTex;
 layout(binding = 5) uniform sampler2D uHistoryDepthTex;
 layout(binding = 6) uniform sampler2D uHistoryMomentsTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec2 uScreenSize;
     float uHistoryWeight;
     float uNear;

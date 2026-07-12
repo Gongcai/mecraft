@@ -5,13 +5,9 @@
 #include <string>
 #include <vector>
 
-#include <cstdint>
-
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
-
-class Shader;
 
 // Right-click context menu that appears at a specified screen position.
 // Items can be regular clickable entries or separators.
@@ -58,12 +54,6 @@ private:
     [[nodiscard]] UIContextMenuStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedContextMenuStyle resolveStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] float menuHeight(const UIResolvedContextMenuStyle& style) const;
-    void cleanupMesh();
-
-    Shader* m_shader = nullptr;
-    Shader* m_glassShader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
 
     std::vector<MenuItem> m_items;
     bool m_menuVisible = false;

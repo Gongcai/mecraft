@@ -16,7 +16,7 @@ layout(location = 4) out float vAnimationFps;
 layout(location = 5) out float vAnimated;
 layout(location = 6) flat out uint vTintKind;
 layout(location = 7) out vec2 vTintUv;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
     vec4 uLightingAnimation;

@@ -675,10 +675,12 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
     desc.format = RhiTextureFormat::Rgba8Unorm;
     desc.width = static_cast<uint32_t>(atlasWidth);
     desc.height = static_cast<uint32_t>(atlasHeight);
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                 rhiFlag(RhiTextureUsage::TransferDst);
     RhiTextureInitialData initialData;
     initialData.pixels = iconAtlasPixels.data();
     initialData.sizeBytes = iconAtlasPixels.size();
+    initialData.finalState = RhiResourceState::ShaderRead;
     atlas.texture = rhiDevice.createTexture(desc, &initialData);
     if (!atlas.texture.isValid()) {
         failBlockIconAtlasBuilder("Failed to create block icon atlas RHI texture");

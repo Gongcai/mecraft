@@ -11,7 +11,7 @@ layout(location = 1) out float vLayer;
 layout(location = 2) out float vAlpha;
 layout(location = 3) out float vBiomeTintFactor;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     vec4 uBiomeTint;
     vec4 uScreenParams;

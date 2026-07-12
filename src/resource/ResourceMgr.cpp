@@ -5,11 +5,9 @@
 #include "ResourceMgr.h"
 #include "BlockTextureLibrary.h"
 #include "CubemapLibrary.h"
-#include "DefaultShaderCatalog.h"
 #include "EntityTexturePreloader.h"
 #include "EnvironmentTextureLibrary.h"
 #include "Paths.h"
-#include "ShaderLibrary.h"
 #include "Texture2DLibrary.h"
 #include "UiTextureAtlasLibrary.h"
 #include "renderer/rhi/RhiDevice.h"
@@ -19,7 +17,7 @@
 
 struct ResourceMgr::Impl {
     RhiDevice* rhiDevice = nullptr;
-    ShaderLibrary shaders;
+    RhiCommandListPool* commandListPool = nullptr;
     Texture2DLibrary texture2D;
     BlockTextureLibrary blockTextures;
     UiTextureAtlasLibrary uiTextures;
@@ -38,15 +36,14 @@ ResourceMgr::ResourceMgr(ResourceMgr&&) noexcept = default;
 
 ResourceMgr& ResourceMgr::operator=(ResourceMgr&&) noexcept = default;
 
-void ResourceMgr::init(RhiDevice& rhiDevice) {
+void ResourceMgr::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
     m_impl->rhiDevice = &rhiDevice;
+    m_impl->commandListPool = &commandListPool;
     m_impl->texture2D.init(rhiDevice);
     m_impl->cubemaps.init(rhiDevice);
     m_impl->environmentTextures.init(rhiDevice);
-    m_impl->blockTextures.init(rhiDevice);
-    m_impl->uiTextures.init(rhiDevice);
-    resource::loadDefaultShaders(m_impl->shaders);
-
+    m_impl->blockTextures.init(rhiDevice, commandListPool);
+    m_impl->uiTextures.init(rhiDevice, commandListPool);
     loadCubemap("menu_skybox",
                 SKYBOX_TEXTURES_DIR "/right.png",
                 SKYBOX_TEXTURES_DIR "/left.png",
@@ -66,8 +63,8 @@ void ResourceMgr::shutdown() {
 
     m_impl->cubemaps.shutdown();
 
-    m_impl->shaders.clear();
     m_impl->rhiDevice = nullptr;
+    m_impl->commandListPool = nullptr;
 }
 
 RhiDevice& ResourceMgr::rhiDevice() {
@@ -80,12 +77,9 @@ const RhiDevice& ResourceMgr::rhiDevice() const {
     return *m_impl->rhiDevice;
 }
 
-Shader *ResourceMgr::loadShader(const std::string &name, const char *vertPath, const char *fragPath) {
-    return m_impl->shaders.load(name, vertPath, fragPath);
-}
-
-Shader *ResourceMgr::getShader(const std::string &name) {
-    return m_impl->shaders.get(name);
+RhiCommandListPool& ResourceMgr::commandListPool() {
+    assert(m_impl->commandListPool != nullptr);
+    return *m_impl->commandListPool;
 }
 
 RhiTextureHandle ResourceMgr::loadTexture2D(const std::string& name,

@@ -127,8 +127,10 @@ void UIProgressBar::initMesh() {
     RhiBufferDesc desc;
     desc.debugName = "UiCapsule.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
     if (!m_vertexBuffer.isValid()) std::abort();
 }
@@ -141,7 +143,9 @@ void UIProgressBar::cleanupMesh() {
 }
 
 void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
-    if (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) return;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record &&
+        (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
 
     const UIResolvedProgressBarStyle resolved = resolveStyle(ctx);
     const Color trackCol = resolved.track;
@@ -156,24 +160,26 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
     const float progressVal = std::clamp(m_progressTween.value(), 0.0f, 1.0f);
     const float fillWidth = aw * progressVal;
 
-    ctx.commandList->setGraphicsPipeline(m_pipeline);
-    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
-    auto drawShape = [&](const float x0, const float y0, const float x1, const float y1, Color shapeColor) {
-        shapeColor[3] *= alpha;
-        struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-        const PushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
-            glm::vec4(x1 - x0, y1 - y0, std::min((x1 - x0) * 0.5f, (y1 - y0) * 0.5f), 0.0f),
-            glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
+    if (record) {
+        ctx.commandList->setGraphicsPipeline(m_pipeline);
+        ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+        auto drawShape = [&](const float x0, const float y0, const float x1, const float y1, Color shapeColor) {
+            shapeColor[3] *= alpha;
+            struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+            const PushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
+                glm::vec4(x1 - x0, y1 - y0, std::min((x1 - x0) * 0.5f, (y1 - y0) * 0.5f), 0.0f),
+                glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
+            };
+            ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                           rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            ctx.commandList->draw(6u, 1u, 0u, 0u);
         };
-        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
-                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
-        ctx.commandList->draw(6u, 1u, 0u, 0u);
-    };
-    drawShape(ax, ay, ax + aw, ay + ah, trackCol);
+        drawShape(ax, ay, ax + aw, ay + ah, trackCol);
 
-    if (fillWidth > 0.5f) {
-        drawShape(ax, ay, ax + fillWidth, ay + ah, fillCol);
+        if (fillWidth > 0.5f) {
+            drawShape(ax, ay, ax + fillWidth, ay + ah, fillCol);
+        }
     }
 
     // Render text overlay.
@@ -188,15 +194,21 @@ void UIProgressBar::renderSelf(const UIRenderContext& ctx) const {
         }
 
         if (!overlayText.empty()) {
-            const float fontPixelHeight = resolved.fontPixelHeight > 0.0f ? resolved.fontPixelHeight : 32.0f;
+            if (resolved.fontPixelHeight <= 0.0f) {
+                std::abort();
+            }
+            const float fontPixelHeight = resolved.fontPixelHeight;
             const float textScale = (ah * resolved.textHeightRatio) / fontPixelHeight;
             const auto metrics = ctx.textRenderer->measureText(overlayText, textScale);
             const float textX = ax + (aw - metrics.width) * 0.5f;
             const float textY = ay + (ah - metrics.height) * 0.5f;
-            ctx.textRenderer->render(overlayText, textX, textY, textScale,
-                                     {textCol[0], textCol[1], textCol[2], textCol[3] * alpha},
-                                     static_cast<float>(ctx.screenWidth),
-                                     static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(
+                ctx,
+                overlayText,
+                textX,
+                textY,
+                textScale,
+                {textCol[0], textCol[1], textCol[2], textCol[3] * alpha});
         }
     }
 }

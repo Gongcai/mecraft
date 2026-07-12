@@ -13,7 +13,7 @@ class RhiDevice;
 /// TAA resolve pass: blends current frame with reprojected history.
 class TemporalResolvePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "TemporalResolve"; }
 

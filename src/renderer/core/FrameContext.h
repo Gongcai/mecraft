@@ -156,6 +156,7 @@ struct FrameContext {
     int frameHeight = 0;
 
     // Current swapchain output target.
+    RhiTextureHandle swapchainColorTexture;
     RhiTextureViewHandle swapchainColorView;
     RhiTextureViewHandle swapchainDepthStencilView;
     RhiTextureFormat swapchainColorFormat = RhiTextureFormat::Undefined;

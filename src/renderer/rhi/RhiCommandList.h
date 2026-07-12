@@ -15,6 +15,10 @@ class RhiCommandList {
 public:
     virtual ~RhiCommandList() = default;
 
+    virtual bool begin(const RhiCommandListDesc& desc) = 0;
+    virtual bool end() = 0;
+    [[nodiscard]] virtual RhiCommandListState state() const = 0;
+
     virtual void beginDebugLabel(const char* name, const glm::vec4& color) = 0;
     virtual void endDebugLabel() = 0;
     virtual void insertDebugMarker(const char* name, const glm::vec4& color) = 0;
@@ -48,10 +52,17 @@ public:
                               const void* data, size_t size) = 0;
     virtual void copyBuffer(const RhiBufferCopy& copy) = 0;
     virtual void copyBufferToTexture(const RhiBufferTextureCopy& copy) = 0;
+    virtual void copyTextureToBuffer(const RhiTextureBufferCopy& copy) = 0;
     virtual void copyTexture(const RhiTextureCopy& copy) = 0;
     virtual void blitTexture(const RhiTextureBlit& blit) = 0;
+    // Generates every lower mip level while preserving TransferDst as the externally tracked state
+    // for all subresources. Explicit backends perform the required per-level transfer transitions
+    // inside this command and restore TransferDst before subsequent recorded commands execute.
     virtual void generateMipmaps(RhiTextureHandle texture) = 0;
 
+    virtual void resetQueryPool(RhiQueryPoolHandle pool,
+                                uint32_t firstQuery,
+                                uint32_t queryCount) = 0;
     virtual void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) = 0;
 };
 

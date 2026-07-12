@@ -400,6 +400,7 @@ void FirstPersonHeldItemRenderer::createRhiTextureResources() {
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_shadowUniformBuffer = m_rhiDevice->createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_textureSampler.isValid() || !m_blockTextureSampler.isValid() ||
         !m_shadowCompareSampler.isValid() || !m_shadowRawSampler.isValid() ||
@@ -942,7 +943,11 @@ void FirstPersonHeldItemRenderer::prepareRhiFrame(RhiCommandList& commandList) {
         m_environmentBlockLight
     };
     uniforms.hdrScalePadding.x = m_sceneHdrScale;
+    commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_shadowUniformBuffer, 0u, &uniforms, sizeof(uniforms));
+    commandList.bufferBarrier({m_shadowUniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
 }
 
 void FirstPersonHeldItemRenderer::renderPrepared(RhiCommandList& commandList) {
@@ -1096,8 +1101,10 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildItemMesh(con
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "FirstPerson.ItemMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(ItemModelVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(ItemModelVertex));
     mesh.rhiDevice = m_rhiDevice;
@@ -1138,8 +1145,10 @@ FirstPersonHeldItemRenderer::Mesh FirstPersonHeldItemRenderer::buildRightArmMesh
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "FirstPerson.ArmMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(SteveVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     mesh.rhiDevice = m_rhiDevice;

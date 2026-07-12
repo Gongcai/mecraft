@@ -4,6 +4,8 @@
 #include "RenderPass.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldDrawBatch.h"
+#include "../rhi/RhiHandles.h"
+#include "../rhi/RhiTypes.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <vector>
@@ -14,7 +16,6 @@
 
 class DeferredRenderTargets;
 class ResourceMgr;
-class Shader;
 class IWorldView;
 class World;
 class BlockEntityRenderer;
@@ -33,7 +34,7 @@ namespace shadow { class ShadowRenderer; }
 /// Handles opaque terrain, cutout, entity, drop, and transparent shadow casting.
 class ShadowPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Shadow"; }
 
@@ -102,6 +103,14 @@ private:
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeOpaqueRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeCutoutRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeTransparentRanges;
+    RhiTextureHandle m_trackedCsmDepthTexture;
+    RhiTextureHandle m_trackedCsmDepthAllTexture;
+    RhiTextureHandle m_trackedCsmColor0Texture;
+    RhiTextureHandle m_trackedCsmColor1Texture;
+    std::array<RhiResourceState, 4> m_csmDepthStates{};
+    std::array<RhiResourceState, 4> m_csmDepthAllStates{};
+    std::array<RhiResourceState, 4> m_csmColor0States{};
+    std::array<RhiResourceState, 4> m_csmColor1States{};
 };
 
 #endif // MECRAFT_SHADOW_PASS_H

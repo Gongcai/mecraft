@@ -1,5 +1,6 @@
 #include "VolumetricPass.h"
 #include "../core/RenderScene.h"
+#include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
@@ -127,7 +128,47 @@ void VolumetricPass::execute(const FrameContext& ctx, const RenderSettings& sett
         if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
             return;
         }
-        targets.copyHistoryVolumetricToHalfRes(*ctx.shared->rhiDevice);
+        RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+        RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+        const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+            ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
+            : GpuTimerSegmentToken{};
+        targets.transitionTexture(commandList,
+                                  targets.historyVolumetricTexturePrevHandle(),
+                                  RhiResourceState::TransferSrc);
+        targets.transitionTexture(commandList,
+                                  targets.halfResTextureHandle(),
+                                  RhiResourceState::TransferDst);
+        targets.transitionTexture(commandList,
+                                  targets.historyVolumetricTextureHandle(),
+                                  RhiResourceState::TransferDst);
+        targets.copyHistoryVolumetricToHalfRes(commandList);
+        targets.transitionTexture(commandList,
+                                  targets.historyVolumetricTexturePrevHandle(),
+                                  RhiResourceState::ShaderRead);
+        targets.transitionTexture(commandList,
+                                  targets.halfResTextureHandle(),
+                                  RhiResourceState::ShaderRead);
+        targets.transitionTexture(commandList,
+                                  targets.historyVolumetricTextureHandle(),
+                                  RhiResourceState::ShaderRead);
+        if (ctx.debugService != nullptr) {
+            ctx.debugService->endGpuTimer(commandList, timerToken);
+        }
+        if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
     }
 
     // Temporal resolve (optional)
@@ -155,12 +196,10 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
         return;
     }
 
-    const std::array<RhiTextureViewHandle, 12> views = {
+    const std::array<RhiTextureViewHandle, 10> views = {
         targets.depthTextureViewHandle(),
         targets.skyCaptureTextureViewHandle(),
         m_fogNoiseTextureView,
-        targets.shadowDepthTextureViewHandle(),
-        targets.shadowColorTextureViewHandle(),
         targets.atmosphereLutTextureViewHandle(),
         targets.csmShadowDepthComparisonArrayTextureViewHandle(),
         targets.csmShadowDepthArrayTextureViewHandle(),
@@ -276,14 +315,43 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
+        : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_fogUniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_fogUniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_fogUniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
+    targets.transitionTexture(commandList,
+                              targets.halfResTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_fogPipeline);
     commandList.setBindGroup(0u, m_fogBindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList,
+                              targets.halfResTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool VolumetricPass::ensureFogNoiseTextureView(RhiDevice& rhiDevice) {
@@ -363,6 +431,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_fogUniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_fogUniformBuffer.isValid()) {
         destroyFogRhiResources();
@@ -415,7 +484,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "VolumetricFog.BindGroupLayout";
-    for (uint32_t binding = 0u; binding < 12u; ++binding) {
+    for (uint32_t binding = 0u; binding < 10u; ++binding) {
         bindGroupLayoutDesc.entries.push_back({
             binding,
             RhiBindingType::CombinedTextureSampler,
@@ -424,7 +493,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
         });
     }
     bindGroupLayoutDesc.entries.push_back({
-        12u,
+        10u,
         RhiBindingType::UniformBuffer,
         rhiFlag(RhiShaderStage::Fragment),
         1u
@@ -466,7 +535,7 @@ bool VolumetricPass::ensureFogRhiPipeline(RhiDevice& rhiDevice) {
 
 bool VolumetricPass::ensureFogBindGroup(
     RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 12>& views) {
+    const std::array<RhiTextureViewHandle, 10>& views) {
     if (!ensureFogRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -481,12 +550,10 @@ bool VolumetricPass::ensureFogBindGroup(
 
     destroyFogBindGroup();
 
-    const RhiSamplerHandle samplers[12] = {
+    const RhiSamplerHandle samplers[10] = {
         m_fogNearestClampSampler,
         m_fogLinearClampSampler,
         m_fogLinearRepeatSampler,
-        m_fogNearestBorderSampler,
-        m_fogNearestBorderSampler,
         m_fogLinearClampSampler,
         m_fogCompareBorderSampler,
         m_fogNearestBorderSampler,
@@ -507,7 +574,7 @@ bool VolumetricPass::ensureFogBindGroup(
     }
 
     RhiBindGroupEntry uniformEntry;
-    uniformEntry.binding = 12u;
+    uniformEntry.binding = 10u;
     uniformEntry.resource.buffer.buffer = m_fogUniformBuffer;
     uniformEntry.resource.buffer.offset = 0u;
     uniformEntry.resource.buffer.range = sizeof(VolumetricFogParams);
@@ -623,7 +690,18 @@ void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSetting
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
+        : GpuTimerSegmentToken{};
+    targets.transitionTexture(commandList,
+                              targets.historyVolumetricTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     const glm::vec4 pushConstants[2] = {
         glm::vec4(static_cast<float>(std::max(1, targets.halfWidth())),
@@ -637,7 +715,21 @@ void VolumetricPass::renderTemporal(const FrameContext& ctx, const RenderSetting
     commandList.pushConstants(pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList,
+                              targets.historyVolumetricTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& settings,
@@ -687,7 +779,18 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Volumetric)
+        : GpuTimerSegmentToken{};
+    targets.transitionTexture(commandList,
+                              targets.sceneResolvedTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
 
     const bool underwaterVolumetricActive = ctx.eyeInWater && settings.volumetric.uwLightEnabled;
@@ -711,7 +814,21 @@ void VolumetricPass::composite(const FrameContext& ctx, const RenderSettings& se
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList,
+                              targets.sceneResolvedTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool VolumetricPass::ensureCompositeRhiPipeline(RhiDevice& rhiDevice) {

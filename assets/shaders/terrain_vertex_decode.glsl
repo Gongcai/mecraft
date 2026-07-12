@@ -12,7 +12,7 @@ struct TerrainVertexDecoded {
     uint tintPacked;
 };
 
-layout(std430, binding = 0) readonly buffer TerrainSubChunkMetadataBuffer {
+layout(std430, set = 0, binding = 0) readonly buffer TerrainSubChunkMetadataBuffer {
     vec4 terrainSubChunkOriginAndFlags[];
 };
 

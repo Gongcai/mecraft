@@ -5,7 +5,7 @@ layout(location = 1) in vec2 aUv;
 
 layout(location = 0) out vec2 vUv;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     vec4 uPrecipColorStrength;
     vec4 uAlphaScreenDepth;

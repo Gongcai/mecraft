@@ -1,6 +1,5 @@
 #include "UIScene.h"
 
-#include "../../renderer/core/Shader.h"
 
 #include <algorithm>
 

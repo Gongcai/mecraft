@@ -1,6 +1,7 @@
 #include "UIRenderer.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <optional>
 
 #include <glm/vec2.hpp>
@@ -11,15 +12,14 @@
 #include "engine/platform/Window.h"
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/core/Shader.h"
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiResources.h"
 #include "../../renderer/rhi/RhiShaderSourceLoader.h"
-#include "UIRenderUtils.h"
 #include "UIScene.h"
 #include "UIThemePresets.h"
 #include "UIScaleConfig.h"
+#include "../../Paths.h"
 
 namespace {
 constexpr int kBackdropBlurDownsample = 4;
@@ -37,12 +37,15 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
 {
     m_resourceMgr = &resourceMgr;
     m_theme = UIThemePresets::dark();
+    initPanelRhiResources(resourceMgr.rhiDevice());
 
     // Crosshair - no scaling (always pixel-perfect)
     m_crosshair.init(resourceMgr);
     m_crosshair.setScaleStrategy(UIScaleStrategy::None);
 
-    m_text.init(resourceMgr);
+    if (!m_text.init(resourceMgr.rhiDevice(), DEFAULT_FONT_PATH)) {
+        std::abort();
+    }
 
     // Hotbar - uniform scaling with GUI scale
     m_hotbar.init(resourceMgr);
@@ -115,6 +118,7 @@ void UIRenderer::init(ResourceMgr& resourceMgr)
     m_lastSceneContext.resourceMgr = m_resourceMgr;
     m_lastSceneContext.humanoidRenderer = m_humanoidRenderer;
     m_lastSceneContext.textRenderer = &m_text;
+    populatePanelRhiContext(m_lastSceneContext);
 }
 
 void UIRenderer::shutdown()
@@ -136,6 +140,7 @@ void UIRenderer::shutdown()
     m_commandInputRequested = false;
     m_lastSceneContext = {};
     destroyBackdropBlurTargets();
+    destroyPanelRhiResources();
     m_resourceMgr = nullptr;
     m_humanoidRenderer = nullptr;
 }
@@ -300,15 +305,9 @@ void UIRenderer::clearConsoleLines()
     m_console.clear();
 }
 
-void UIRenderer::renderText(const std::string& text,
-                            float x,
-                            float y,
-                            float scale,
-                            const std::array<float, 4>& color,
-                            float screenWidth,
-                            float screenHeight)
+bool UIRenderer::prepareTextFrame(RhiCommandList& commandList)
 {
-    m_text.render(text, x, y, scale, color, screenWidth, screenHeight);
+    return m_text.prepareFrame(commandList);
 }
 
 void UIRenderer::renderCommandInputBox(const std::string& text)
@@ -316,20 +315,6 @@ void UIRenderer::renderCommandInputBox(const std::string& text)
     m_commandInput.setText(text);
     m_commandInput.visible =(true);
     m_commandInputRequested = true;
-}
-
-void UIRenderer::renderPickable(const Pickable::SlotInfo* slots, int count,
-                                float mouseX, float mouseY)
-{
-    if (!slots || count <= 0 || !m_resourceMgr) {
-        return;
-    }
-
-    const bool wasVisible = m_inventoryPanel.visible;
-    m_inventoryPanel.setVisible(true);
-    m_inventoryPanel.setSlots(slots, count);
-    m_inventoryPanel.render(makeContextFromSurface());
-    m_inventoryPanel.setVisible(wasVisible);
 }
 
 UIEventResult UIRenderer::routeUIInput(const UIInputEvent& event) const
@@ -594,16 +579,6 @@ void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
     m_inventoryPanel.setCraftingSystem(craftingSystem);
 }
 
-void UIRenderer::render(const Window& window,
-                        RhiDevice& rhiDevice,
-                        const Inventory& inventory,
-                        const PlayerStatsData& playerStats,
-                        const InputSnapshot& inputSnapshot)
-{
-    UIRenderContext context = prepareRenderContext(window, rhiDevice, inventory, playerStats, inputSnapshot);
-    renderPrepared(context);
-}
-
 UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
                                                  RhiDevice& rhiDevice,
                                                  const Inventory& inventory,
@@ -624,6 +599,8 @@ UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
     if (m_activeScene && m_activeScene->visible) {
         prepareBackdropBlur(context, rhiDevice);
     }
+    populatePanelRhiContext(context);
+    collectGameplayText(context);
     m_lastSceneContext = context;
 
     return context;
@@ -631,8 +608,12 @@ UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
 
 void UIRenderer::renderPrepared(const UIRenderContext& context)
 {
+    m_text.beginFrameRecording();
     m_crosshair.render(context);
     renderControls(context);
+    if (!m_text.endFrameRecording()) {
+        std::abort();
+    }
     m_commandInputRequested = false;
 }
 
@@ -664,26 +645,7 @@ UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
     context.draggedItemId = inputSnapshot.draggedItem.itemId;
     context.theme = &m_theme;
     context.localeManager = m_localeManager;
-    return context;
-}
-
-UIRenderContext UIRenderer::makeContextFromSurface() const
-{
-    UIRenderContext context;
-    const float actualW = static_cast<float>(m_surfaceWidth);
-    const float actualH = static_cast<float>(m_surfaceHeight);
-
-    context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
-    context.screenWidth = context.scaleConfig.virtualWidth;
-    context.screenHeight = context.scaleConfig.virtualHeight;
-    context.timeSeconds = static_cast<float>(Time::getRawTime());
-    context.resourceMgr = m_resourceMgr;
-    context.humanoidRenderer = m_humanoidRenderer;
-    context.textRenderer = &m_text;
-    context.commandInputText = &m_commandInput.getText();
-    context.commandInputVisible = m_commandInput.visible;
-    context.theme = &m_theme;
-    context.localeManager = m_localeManager;
+    populatePanelRhiContext(context);
     return context;
 }
 
@@ -703,14 +665,6 @@ UIScene* UIRenderer::getActiveScene() const
 ResourceMgr* UIRenderer::getResourceMgr() const
 {
     return m_resourceMgr;
-}
-
-void UIRenderer::renderSceneOnly(const Window& window,
-                                 RhiDevice& rhiDevice,
-                                 const InputSnapshot& inputSnapshot)
-{
-    UIRenderContext context = prepareSceneContext(window, rhiDevice, inputSnapshot);
-    renderSceneOnlyPrepared(context);
 }
 
 UIRenderContext UIRenderer::prepareSceneContext(const Window& window,
@@ -739,27 +693,53 @@ UIRenderContext UIRenderer::prepareSceneContext(const Window& window,
     context.localeManager = m_localeManager;
     context.pointerX = inputSnapshot.mousePosition.x / context.pixelScale();
     context.pointerY = inputSnapshot.mousePosition.y / context.pixelScale();
-    m_lastSceneContext = context;
-
     if (m_activeScene && m_activeScene->visible) {
         prepareBackdropBlur(context, rhiDevice);
     }
+    populatePanelRhiContext(context);
+    collectSceneText(context);
+    m_lastSceneContext = context;
     return context;
 }
 
 void UIRenderer::renderSceneOnlyPrepared(const UIRenderContext& context)
 {
+    m_text.beginFrameRecording();
     if (m_activeScene && m_activeScene->visible) {
         m_activeScene->setInputContext(context);
         m_activeScene->render(context);
     }
+    if (!m_text.endFrameRecording()) {
+        std::abort();
+    }
+}
+
+void UIRenderer::collectGameplayText(UIRenderContext& context)
+{
+    m_text.beginFrameCollection(static_cast<float>(context.screenWidth),
+                                static_cast<float>(context.screenHeight));
+    context.phase = UIRenderPhase::CollectText;
+    context.commandList = nullptr;
+    renderControls(context);
+    context.phase = UIRenderPhase::Record;
+}
+
+void UIRenderer::collectSceneText(UIRenderContext& context)
+{
+    m_text.beginFrameCollection(static_cast<float>(context.screenWidth),
+                                static_cast<float>(context.screenHeight));
+    context.phase = UIRenderPhase::CollectText;
+    context.commandList = nullptr;
+    if (m_activeScene && m_activeScene->visible) {
+        m_activeScene->setInputContext(context);
+        m_activeScene->render(context);
+    }
+    context.phase = UIRenderPhase::Record;
 }
 
 void UIRenderer::renderControls(const UIRenderContext& context)
 {
     UIRenderContext renderContext = context;
-
-    const UIRenderUtils::UIScopeGuard uiScope;
 
     for (const UIWidget* widget : m_widgetControls) {
         if (!widget || !widget->visible) {
@@ -808,6 +788,319 @@ void UIRenderer::renderDeathOverlay(const UIRenderContext& context)
     m_deathPrompt.width = promptW;
     m_deathPrompt.height = promptH;
     m_deathPrompt.render(context);
+}
+
+void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
+{
+    if (m_panelRhiDevice != nullptr) {
+        if (m_panelRhiDevice != &rhiDevice) {
+            std::abort();
+        }
+        return;
+    }
+    m_panelRhiDevice = &rhiDevice;
+
+    constexpr float vertices[] = {
+        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
+    };
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "UiPanel.SharedQuad";
+    bufferDesc.size = sizeof(vertices);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    m_panelQuadVertexBuffer = rhiDevice.createBuffer(bufferDesc, vertices, sizeof(vertices));
+
+    const std::optional<std::string> solidVertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const std::optional<std::string> solidFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ui_color_rhi.frag");
+    const std::optional<std::string> glassVertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ui_glass_rhi.vert");
+    const std::optional<std::string> glassFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ui_glass_rhi.frag");
+    const std::optional<std::string> imageVertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ui_image_rhi.vert");
+    const std::optional<std::string> imageFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/ui_image_rhi.frag");
+    if (!solidVertexSource || !solidFragmentSource ||
+        !glassVertexSource || !glassFragmentSource ||
+        !imageVertexSource || !imageFragmentSource) {
+        std::abort();
+    }
+
+    auto createShader = [&](const char* debugName,
+                            const RhiShaderStage stage,
+                            const std::string& source) {
+        RhiShaderDesc desc;
+        desc.debugName = debugName;
+        desc.stage = stage;
+        desc.source = source.c_str();
+        desc.sourceSize = source.size();
+        return rhiDevice.createShader(desc);
+    };
+    m_panelSolidVertexShader = createShader(
+        "UiPanel.SolidVertex", RhiShaderStage::Vertex, *solidVertexSource);
+    m_panelSolidFragmentShader = createShader(
+        "UiPanel.SolidFragment", RhiShaderStage::Fragment, *solidFragmentSource);
+    m_panelGlassVertexShader = createShader(
+        "UiPanel.GlassVertex", RhiShaderStage::Vertex, *glassVertexSource);
+    m_panelGlassFragmentShader = createShader(
+        "UiPanel.GlassFragment", RhiShaderStage::Fragment, *glassFragmentSource);
+    m_imageTextureVertexShader = createShader(
+        "UiImage.TextureVertex", RhiShaderStage::Vertex, *imageVertexSource);
+    m_imageTextureFragmentShader = createShader(
+        "UiImage.TextureFragment", RhiShaderStage::Fragment, *imageFragmentSource);
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Linear;
+    samplerDesc.magFilter = RhiFilter::Linear;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_panelGlassSampler = rhiDevice.createSampler(samplerDesc);
+
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.magFilter = RhiFilter::Nearest;
+    m_imageTextureSampler = rhiDevice.createSampler(samplerDesc);
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "UiPanel.GlassBindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({
+        0u, RhiBindingType::CombinedTextureSampler,
+        rhiFlag(RhiShaderStage::Fragment), 1u
+    });
+    m_panelGlassBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+
+    bindGroupLayoutDesc.debugName = "UiImage.TextureBindGroupLayout";
+    m_imageTextureBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+
+    RhiPipelineLayoutDesc solidLayoutDesc;
+    solidLayoutDesc.debugName = "UiPanel.SolidPipelineLayout";
+    solidLayoutDesc.pushConstantBytes = 48u;
+    solidLayoutDesc.pushConstantStages =
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_panelSolidPipelineLayout = rhiDevice.createPipelineLayout(solidLayoutDesc);
+
+    RhiPipelineLayoutDesc glassLayoutDesc;
+    glassLayoutDesc.debugName = "UiPanel.GlassPipelineLayout";
+    glassLayoutDesc.bindGroupLayouts.push_back(m_panelGlassBindGroupLayout);
+    glassLayoutDesc.pushConstantBytes = 64u;
+    glassLayoutDesc.pushConstantStages =
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_panelGlassPipelineLayout = rhiDevice.createPipelineLayout(glassLayoutDesc);
+
+    RhiPipelineLayoutDesc imageLayoutDesc;
+    imageLayoutDesc.debugName = "UiImage.TexturePipelineLayout";
+    imageLayoutDesc.bindGroupLayouts.push_back(m_imageTextureBindGroupLayout);
+    imageLayoutDesc.pushConstantBytes = 64u;
+    imageLayoutDesc.pushConstantStages =
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_imageTexturePipelineLayout = rhiDevice.createPipelineLayout(imageLayoutDesc);
+
+    auto createPipeline = [&](const char* debugName,
+                              const RhiShaderHandle vertexShader,
+                              const RhiShaderHandle fragmentShader,
+                              const RhiPipelineLayoutHandle layout) {
+        RhiGraphicsPipelineDesc desc;
+        desc.debugName = debugName;
+        desc.vertexShader = vertexShader;
+        desc.fragmentShader = fragmentShader;
+        desc.layout = layout;
+        desc.topology = RhiPrimitiveTopology::TriangleList;
+        desc.vertexInput.bindings.push_back(
+            {0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+        desc.vertexInput.attributes.push_back(
+            {0u, 0u, RhiVertexFormat::Float2, 0u});
+        desc.raster.cullMode = RhiCullMode::None;
+        desc.raster.scissorEnabled = true;
+        desc.depthStencil.depthTestEnabled = false;
+        desc.depthStencil.depthWriteEnabled = false;
+        desc.colorFormats.push_back(rhiDevice.swapchainColorFormat());
+        RhiBlendAttachmentState blend;
+        blend.blendEnabled = true;
+        blend.srcColor = RhiBlendFactor::SrcAlpha;
+        blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+        blend.srcAlpha = RhiBlendFactor::One;
+        blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+        desc.blend.attachments.push_back(blend);
+        return rhiDevice.createGraphicsPipeline(desc);
+    };
+    m_panelSolidPipeline = createPipeline(
+        "UiPanel.SolidPipeline", m_panelSolidVertexShader,
+        m_panelSolidFragmentShader, m_panelSolidPipelineLayout);
+    m_panelGlassPipeline = createPipeline(
+        "UiPanel.GlassPipeline", m_panelGlassVertexShader,
+        m_panelGlassFragmentShader, m_panelGlassPipelineLayout);
+    m_imageTexturePipeline = createPipeline(
+        "UiImage.TexturePipeline", m_imageTextureVertexShader,
+        m_imageTextureFragmentShader, m_imageTexturePipelineLayout);
+
+    if (!m_panelQuadVertexBuffer.isValid() ||
+        !m_panelSolidVertexShader.isValid() ||
+        !m_panelSolidFragmentShader.isValid() ||
+        !m_panelGlassVertexShader.isValid() ||
+        !m_panelGlassFragmentShader.isValid() ||
+        !m_imageTextureVertexShader.isValid() ||
+        !m_imageTextureFragmentShader.isValid() ||
+        !m_panelGlassSampler.isValid() ||
+        !m_imageTextureSampler.isValid() ||
+        !m_panelGlassBindGroupLayout.isValid() ||
+        !m_imageTextureBindGroupLayout.isValid() ||
+        !m_panelSolidPipelineLayout.isValid() ||
+        !m_panelGlassPipelineLayout.isValid() ||
+        !m_imageTexturePipelineLayout.isValid() ||
+        !m_panelSolidPipeline.isValid() ||
+        !m_panelGlassPipeline.isValid() ||
+        !m_imageTexturePipeline.isValid()) {
+        std::abort();
+    }
+}
+
+void UIRenderer::destroyPanelRhiResources()
+{
+    destroyPanelGlassBindGroup();
+    destroyImageTextureBindings();
+    if (m_panelRhiDevice != nullptr) {
+        if (m_imageTexturePipeline.isValid()) m_panelRhiDevice->destroyPipeline(m_imageTexturePipeline);
+        if (m_panelGlassPipeline.isValid()) m_panelRhiDevice->destroyPipeline(m_panelGlassPipeline);
+        if (m_panelSolidPipeline.isValid()) m_panelRhiDevice->destroyPipeline(m_panelSolidPipeline);
+        if (m_imageTexturePipelineLayout.isValid()) m_panelRhiDevice->destroyPipelineLayout(m_imageTexturePipelineLayout);
+        if (m_panelGlassPipelineLayout.isValid()) m_panelRhiDevice->destroyPipelineLayout(m_panelGlassPipelineLayout);
+        if (m_panelSolidPipelineLayout.isValid()) m_panelRhiDevice->destroyPipelineLayout(m_panelSolidPipelineLayout);
+        if (m_imageTextureBindGroupLayout.isValid()) m_panelRhiDevice->destroyBindGroupLayout(m_imageTextureBindGroupLayout);
+        if (m_panelGlassBindGroupLayout.isValid()) m_panelRhiDevice->destroyBindGroupLayout(m_panelGlassBindGroupLayout);
+        if (m_imageTextureSampler.isValid()) m_panelRhiDevice->destroySampler(m_imageTextureSampler);
+        if (m_panelGlassSampler.isValid()) m_panelRhiDevice->destroySampler(m_panelGlassSampler);
+        if (m_imageTextureFragmentShader.isValid()) m_panelRhiDevice->destroyShader(m_imageTextureFragmentShader);
+        if (m_imageTextureVertexShader.isValid()) m_panelRhiDevice->destroyShader(m_imageTextureVertexShader);
+        if (m_panelGlassFragmentShader.isValid()) m_panelRhiDevice->destroyShader(m_panelGlassFragmentShader);
+        if (m_panelGlassVertexShader.isValid()) m_panelRhiDevice->destroyShader(m_panelGlassVertexShader);
+        if (m_panelSolidFragmentShader.isValid()) m_panelRhiDevice->destroyShader(m_panelSolidFragmentShader);
+        if (m_panelSolidVertexShader.isValid()) m_panelRhiDevice->destroyShader(m_panelSolidVertexShader);
+        if (m_panelQuadVertexBuffer.isValid()) m_panelRhiDevice->destroyBuffer(m_panelQuadVertexBuffer);
+    }
+    m_imageTexturePipeline = {};
+    m_panelGlassPipeline = {};
+    m_panelSolidPipeline = {};
+    m_imageTexturePipelineLayout = {};
+    m_panelGlassPipelineLayout = {};
+    m_panelSolidPipelineLayout = {};
+    m_imageTextureBindGroupLayout = {};
+    m_panelGlassBindGroupLayout = {};
+    m_imageTextureSampler = {};
+    m_panelGlassSampler = {};
+    m_imageTextureFragmentShader = {};
+    m_imageTextureVertexShader = {};
+    m_panelGlassFragmentShader = {};
+    m_panelGlassVertexShader = {};
+    m_panelSolidFragmentShader = {};
+    m_panelSolidVertexShader = {};
+    m_panelQuadVertexBuffer = {};
+    m_panelRhiDevice = nullptr;
+}
+
+RhiBindGroupHandle UIRenderer::resolveImageBindGroup(const RhiTextureHandle texture) const
+{
+    if (m_panelRhiDevice == nullptr || !texture.isValid() ||
+        !m_imageTextureBindGroupLayout.isValid() ||
+        !m_imageTextureSampler.isValid()) {
+        return {};
+    }
+
+    const uint64_t key = (static_cast<uint64_t>(texture.generation) << 32u) |
+                         static_cast<uint64_t>(texture.index);
+    const auto existing = m_imageTextureBindings.find(key);
+    if (existing != m_imageTextureBindings.end()) {
+        return existing->second.bindGroup;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Undefined;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    const RhiTextureViewHandle view = m_panelRhiDevice->createTextureView(viewDesc);
+    if (!view.isValid()) {
+        return {};
+    }
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_imageTextureBindGroupLayout;
+    RhiBindGroupEntry entry;
+    entry.binding = 0u;
+    entry.resource.combinedTextureSampler.textureView = view;
+    entry.resource.combinedTextureSampler.sampler = m_imageTextureSampler;
+    bindGroupDesc.entries.push_back(entry);
+    const RhiBindGroupHandle bindGroup = m_panelRhiDevice->createBindGroup(bindGroupDesc);
+    if (!bindGroup.isValid()) {
+        m_panelRhiDevice->destroyTextureView(view);
+        return {};
+    }
+
+    m_imageTextureBindings.emplace(key, ImageTextureBinding{view, bindGroup});
+    return bindGroup;
+}
+
+void UIRenderer::destroyImageTextureBindings()
+{
+    if (m_panelRhiDevice != nullptr) {
+        for (const auto& [_, binding] : m_imageTextureBindings) {
+            if (binding.bindGroup.isValid()) {
+                m_panelRhiDevice->destroyBindGroup(binding.bindGroup);
+            }
+            if (binding.view.isValid()) {
+                m_panelRhiDevice->destroyTextureView(binding.view);
+            }
+        }
+    }
+    m_imageTextureBindings.clear();
+}
+
+bool UIRenderer::ensurePanelGlassBindGroup(RhiDevice& rhiDevice) const
+{
+    if (m_panelRhiDevice != &rhiDevice ||
+        !m_panelGlassBindGroupLayout.isValid() ||
+        !m_panelGlassSampler.isValid() ||
+        !m_backdropBlurView[1].isValid()) {
+        return false;
+    }
+    if (m_panelGlassBindGroup.isValid()) {
+        return true;
+    }
+    RhiBindGroupDesc desc;
+    desc.layout = m_panelGlassBindGroupLayout;
+    RhiBindGroupEntry entry;
+    entry.binding = 0u;
+    entry.resource.combinedTextureSampler.textureView = m_backdropBlurView[1];
+    entry.resource.combinedTextureSampler.sampler = m_panelGlassSampler;
+    desc.entries.push_back(entry);
+    m_panelGlassBindGroup = rhiDevice.createBindGroup(desc);
+    return m_panelGlassBindGroup.isValid();
+}
+
+void UIRenderer::destroyPanelGlassBindGroup() const
+{
+    if (m_panelRhiDevice != nullptr && m_panelGlassBindGroup.isValid()) {
+        m_panelRhiDevice->destroyBindGroup(m_panelGlassBindGroup);
+    }
+    m_panelGlassBindGroup = {};
+}
+
+void UIRenderer::populatePanelRhiContext(UIRenderContext& context) const
+{
+    context.panelQuadVertexBuffer = m_panelQuadVertexBuffer;
+    context.panelSolidPipeline = m_panelSolidPipeline;
+    context.panelGlassPipeline = m_panelGlassPipeline;
+    context.panelGlassBindGroup = m_panelGlassBindGroup;
+    context.imageTexturePipeline = m_imageTexturePipeline;
+    context.uiRenderer = this;
 }
 
 bool UIRenderer::ensureBackdropBlurTargets(const int sourceWidth,
@@ -1032,6 +1325,7 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
 {
     context.backdropBlur = {};
     context.backdropBlurView = {};
+    context.panelGlassBindGroup = {};
     context.backdropBlurPrepared = true;
     context.backdropSourceWidth = 0;
     context.backdropSourceHeight = 0;
@@ -1047,6 +1341,9 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     if (!ensureBackdropBlurBindGroups(rhiDevice)) {
         return;
     }
+    if (!ensurePanelGlassBindGroup(rhiDevice)) {
+        return;
+    }
 
     if (!m_backdropSource.isValid() || !m_backdropBlur[0].isValid() ||
         !m_backdropBlur[1].isValid() || !m_backdropBlurView[0].isValid() ||
@@ -1054,16 +1351,56 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainTexture.isValid()) {
+        return;
+    }
+    if (m_resourceMgr == nullptr) {
+        std::abort();
+    }
+    RhiCommandList* commandListStorage =
+        m_resourceMgr->commandListPool().acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin(
+            {"UiBackdropBlur.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::Present,
+        RhiResourceState::TransferSrc
+    });
+    commandList.textureBarrier({
+        m_backdropSource,
+        m_backdropSourceState,
+        RhiResourceState::TransferDst
+    });
+    m_backdropSourceState = RhiResourceState::TransferDst;
 
     RhiTextureBlit sourceBlit;
     sourceBlit.srcView = rhiDevice.currentSwapchainColorView();
     sourceBlit.dstView = m_backdropSourceView;
     commandList.blitTexture(sourceBlit);
+    commandList.textureBarrier({
+        m_backdropSource,
+        m_backdropSourceState,
+        RhiResourceState::ShaderRead
+    });
+    m_backdropSourceState = RhiResourceState::ShaderRead;
 
     auto blurPass = [&](const uint32_t bindGroupIndex,
+                        const uint32_t outputIndex,
                         const RhiTextureViewHandle outputView,
                         const glm::vec2 direction) {
+        commandList.textureBarrier({
+            m_backdropBlur[outputIndex],
+            m_backdropBlurState[outputIndex],
+            RhiResourceState::RenderTarget
+        });
+        m_backdropBlurState[outputIndex] = RhiResourceState::RenderTarget;
+
         RhiColorAttachment colorAttachment;
         colorAttachment.view = outputView;
         colorAttachment.loadOp = RhiLoadOp::DontCare;
@@ -1087,17 +1424,36 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
         commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
         commandList.draw(3u, 1u, 0u, 0u);
         commandList.endRendering();
+        commandList.textureBarrier({
+            m_backdropBlur[outputIndex],
+            m_backdropBlurState[outputIndex],
+            RhiResourceState::ShaderRead
+        });
+        m_backdropBlurState[outputIndex] = RhiResourceState::ShaderRead;
     };
 
-    blurPass(0u, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(sourceWidth), 0.0f));
-    blurPass(1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
-    blurPass(2u, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
-    blurPass(1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+    blurPass(0u, 0u, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(sourceWidth), 0.0f));
+    blurPass(1u, 1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
+    blurPass(2u, 0u, m_backdropBlurView[0], glm::vec2(1.0f / static_cast<float>(m_backdropBlurWidth), 0.0f));
+    blurPass(1u, 1u, m_backdropBlurView[1], glm::vec2(0.0f, 1.0f / static_cast<float>(m_backdropBlurHeight)));
 
-    rhiDevice.submitFrame(commandList);
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::TransferSrc,
+        RhiResourceState::Present
+    });
+
+    if (!commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!rhiDevice.submit({"UiBackdropBlur.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
 
     context.backdropBlur = m_backdropBlur[1];
     context.backdropBlurView = m_backdropBlurView[1];
+    context.panelGlassBindGroup = m_panelGlassBindGroup;
     context.backdropSourceWidth = sourceWidth;
     context.backdropSourceHeight = sourceHeight;
     context.backdropBlurWidth = m_backdropBlurWidth;
@@ -1121,6 +1477,9 @@ void UIRenderer::destroyBackdropBlurTargets() const
     m_backdropSourceHeight = 0;
     m_backdropBlurWidth = 0;
     m_backdropBlurHeight = 0;
+    m_backdropSourceState = RhiResourceState::Undefined;
+    m_backdropBlurState[0] = RhiResourceState::Undefined;
+    m_backdropBlurState[1] = RhiResourceState::Undefined;
 }
 
 void UIRenderer::destroyBackdropBlurBindGroups() const
@@ -1172,6 +1531,7 @@ void UIRenderer::destroyBackdropBlurPipeline() const
 
 void UIRenderer::destroyBackdropBlurViews() const
 {
+    destroyPanelGlassBindGroup();
     destroyBackdropBlurBindGroups();
     if (m_backdropRhiViewDevice != nullptr) {
         if (m_backdropSourceView.isValid()) {

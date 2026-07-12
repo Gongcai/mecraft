@@ -8,7 +8,7 @@ layout(location = 5) in vec4 iModel2;
 layout(location = 6) in vec4 iModel3;
 layout(location = 7) in vec2 iLight;
 layout(location = 0) out vec2 vUv;
-layout(std140, binding = 15) uniform RhiPushConstants { mat4 uViewProj; };
+layout(push_constant) uniform RhiPushConstants { mat4 uViewProj; };
 void main() {
     mat4 model = mat4(iModel0, iModel1, iModel2, iModel3);
     gl_Position = uViewProj * model * vec4(aPosition, 1.0);

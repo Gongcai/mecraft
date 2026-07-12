@@ -71,11 +71,13 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
     textureDesc.width = static_cast<uint32_t>(cubemapWidth);
     textureDesc.height = static_cast<uint32_t>(cubemapHeight);
     textureDesc.depthOrLayers = 6u;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
     RhiTextureInitialData initialData;
     initialData.pixels = pixels.data();
     initialData.sizeBytes = pixels.size();
     initialData.layerCount = 6u;
+    initialData.finalState = RhiResourceState::ShaderRead;
     RhiTextureHandle texture = m_rhiDevice->createTexture(textureDesc, &initialData);
     if (!texture.isValid()) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create cubemap RHI resource '%s'\n",

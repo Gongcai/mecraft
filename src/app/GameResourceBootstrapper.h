@@ -3,10 +3,13 @@
 
 class ResourceMgr;
 class RhiDevice;
+class RhiCommandListPool;
 
 namespace app {
 
-[[nodiscard]] bool bootstrapGameResources(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
+[[nodiscard]] bool bootstrapGameResources(ResourceMgr& resourceMgr,
+                                          RhiDevice& rhiDevice,
+                                          RhiCommandListPool& commandListPool);
 
 } // namespace app
 

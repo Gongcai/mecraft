@@ -1,65 +1,84 @@
 #include "CommandInputOverlay.h"
 
-#include <glad/glad.h>
-
 #include <algorithm>
 #include <cmath>
 #include <utility>
 
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
 #include "../font/TextRenderer.h"
-#include "../core/UIRenderUtils.h"
 #include "../core/UIStyle.h"
-#include "engine/platform/Window.h"
-#include "../../renderer/core/Shader.h"
-#include "../../resource/ResourceMgr.h"
-#include "engine/platform/Time.h"
+#include "../../renderer/rhi/RhiCommandList.h"
 
 namespace {
-void applyOverlayBlendState()
-{
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+struct PanelSolidPushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 rectRadius;
+    glm::vec4 color;
+};
+
+static_assert(sizeof(PanelSolidPushConstants) == 48u);
+
+[[nodiscard]] RhiRect2D fullOverlayScissor(const UIRenderContext& context) {
+    if (context.hasScissor) {
+        return context.scissor;
+    }
+    return {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
+    };
 }
+
+[[nodiscard]] RhiRect2D intersectScissors(const RhiRect2D& lhs, const RhiRect2D& rhs) {
+    const int32_t x0 = std::max(lhs.x, rhs.x);
+    const int32_t y0 = std::max(lhs.y, rhs.y);
+    const int32_t x1 = std::min(lhs.x + static_cast<int32_t>(lhs.width),
+                                rhs.x + static_cast<int32_t>(rhs.width));
+    const int32_t y1 = std::min(lhs.y + static_cast<int32_t>(lhs.height),
+                                rhs.y + static_cast<int32_t>(rhs.height));
+    return {
+        x0,
+        y0,
+        static_cast<uint32_t>(std::max(0, x1 - x0)),
+        static_cast<uint32_t>(std::max(0, y1 - y0))
+    };
 }
+
+[[nodiscard]] RhiRect2D physicalOverlayScissor(const UIRenderContext& context,
+                                               const int x,
+                                               const int y,
+                                               const int width,
+                                               const int height) {
+    const float scale = context.pixelScale();
+    const int32_t x0 = static_cast<int32_t>(std::floor(static_cast<float>(x) * scale));
+    const int32_t y0 = static_cast<int32_t>(std::floor(static_cast<float>(y) * scale));
+    const int32_t x1 = static_cast<int32_t>(std::ceil(static_cast<float>(x + width) * scale));
+    const int32_t y1 = static_cast<int32_t>(std::ceil(static_cast<float>(y + height) * scale));
+    const RhiRect2D physical{
+        x0,
+        y0,
+        static_cast<uint32_t>(std::max(0, x1 - x0)),
+        static_cast<uint32_t>(std::max(0, y1 - y0))
+    };
+    return intersectScissors(physical, fullOverlayScissor(context));
+}
+
+} // namespace
 
 void CommandInputOverlay::init(ResourceMgr& resourceMgr)
 {
-    m_crosshairShader = resourceMgr.getShader("crosshair");
-
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
-
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    UIWidget::init(resourceMgr);
 }
 
 void CommandInputOverlay::shutdown()
 {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
-    }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
-    m_crosshairShader = nullptr;
-    m_textRenderer = nullptr;
     m_text.clear();
+    UIWidget::shutdown();
 }
 
 void CommandInputOverlay::setText(std::string text)
@@ -74,18 +93,11 @@ const std::string& CommandInputOverlay::getText() const
 
 void CommandInputOverlay::renderSelf(const UIRenderContext& context) const
 {
-    const bool show = context.commandInputVisible || visible;
-    if (!show) {
+    if (context.textRenderer == nullptr || context.commandInputText == nullptr) {
         return;
     }
 
-    const TextRenderer* textRenderer = context.textRenderer ? context.textRenderer : m_textRenderer;
-    if (!textRenderer) {
-        return;
-    }
-
-    const std::string* text = context.commandInputText ? context.commandInputText : &m_text;
-    renderBox(*text, *textRenderer, context.theme);
+    renderBox(*context.commandInputText, *context.textRenderer, context);
 }
 
 void CommandInputOverlay::setCaretBlinkPeriodMs(float periodMs)
@@ -155,62 +167,60 @@ CommandInputOverlay::CaretRect CommandInputOverlay::computeCaretRect(const ClipI
     return rect;
 }
 
-void CommandInputOverlay::drawOverlayRect(int screenW,
-                                          int screenH,
+void CommandInputOverlay::drawOverlayRect(const UIRenderContext& context,
                                           int rectX,
                                           int rectY,
                                           int rectW,
                                           int rectH,
                                           const std::array<float, 4>& rectColor) const
 {
-    if (!m_crosshairShader || m_vao == 0 || m_vbo == 0 || rectW <= 0 || rectH <= 0) {
+    if (context.commandList == nullptr ||
+        !context.panelQuadVertexBuffer.isValid() ||
+        !context.panelSolidPipeline.isValid() ||
+        rectW <= 0 || rectH <= 0 || rectColor[3] <= 0.0f) {
         return;
     }
 
-    // Bottom-left origin (same as inventory/text/ui_color shaders)
-    const float x0 = static_cast<float>(rectX);
-    const float y0 = static_cast<float>(rectY);
-    const float x1 = static_cast<float>(rectX + rectW);
-    const float y1 = static_cast<float>(rectY + rectH);
-
-    const float rectVerts[] = {
-        x0, y0, 0.0f, 0.0f,
-        x1, y0, 0.0f, 0.0f,
-        x1, y1, 0.0f, 0.0f,
-        x0, y0, 0.0f, 0.0f,
-        x1, y1, 0.0f, 0.0f,
-        x0, y1, 0.0f, 0.0f,
+    const PanelSolidPushConstants pushConstants{
+        glm::vec4(static_cast<float>(context.screenWidth),
+                  static_cast<float>(context.screenHeight),
+                  static_cast<float>(rectX),
+                  static_cast<float>(rectY)),
+        glm::vec4(static_cast<float>(rectW),
+                  static_cast<float>(rectH),
+                  0.0f,
+                  0.0f),
+        glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])
     };
 
-    m_crosshairShader->use();
-    m_crosshairShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(screenW), static_cast<float>(screenH)));
-    m_crosshairShader->setVec2("uOffset", glm::vec2(0.0f, 0.0f));
-    m_crosshairShader->setVec4("uColor", glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3]));
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(sizeof(rectVerts)), rectVerts, GL_DYNAMIC_DRAW);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    RhiCommandList& commandList = *context.commandList;
+    commandList.setGraphicsPipeline(context.panelSolidPipeline);
+    commandList.setVertexBuffer(0u, context.panelQuadVertexBuffer, 0u);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Vertex) |
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(6u, 1u, 0u, 0u);
 }
 
-void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer& textRenderer, const UITheme* theme) const
+void CommandInputOverlay::renderBox(const std::string& text,
+                                    const TextRenderer& textRenderer,
+                                    const UIRenderContext& context) const
 {
-    if (!m_crosshairShader || m_vao == 0 || m_vbo == 0) {
+    const bool record = context.phase == UIRenderPhase::Record;
+    if (record && (context.commandList == nullptr ||
+                   !context.panelQuadVertexBuffer.isValid() ||
+                   !context.panelSolidPipeline.isValid())) {
         return;
     }
 
-    GLint viewport[4] = {0, 0, 0, 0};
-    glGetIntegerv(GL_VIEWPORT, viewport);
-    const int screenW = viewport[2];
-    const int screenH = viewport[3];
+    const int screenW = context.screenWidth;
+    const int screenH = context.screenHeight;
     if (screenW <= 0 || screenH <= 0) {
         return;
     }
 
     const UIResolvedConsoleStyle style =
-        UIStyleResolver::resolveConsole(UIStyleResolver::consoleStyleFromTheme(theme));
+        UIStyleResolver::resolveConsole(UIStyleResolver::consoleStyleFromTheme(context.theme));
     const int boxW = std::max(style.minBoxWidth,
                               std::min(screenW - style.horizontalMargin * 2,
                                        static_cast<int>(std::round(static_cast<float>(screenW) * style.boxWidthRatio))));
@@ -228,40 +238,32 @@ void CommandInputOverlay::renderBox(const std::string& text, const TextRenderer&
                                           style.textPaddingY,
                                           textRenderer);
 
-    GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
-    GLint previousScissorBox[4] = {0, 0, screenW, screenH};
-    if (scissorWasEnabled) {
-        glGetIntegerv(GL_SCISSOR_BOX, previousScissorBox);
+    const RhiRect2D parentScissor = fullOverlayScissor(context);
+    const RhiRect2D contentScissor = physicalOverlayScissor(
+        context, clipInfo.clipX, clipInfo.clipY, clipInfo.clipW, clipInfo.clipH);
+
+    if (record) {
+        context.commandList->setScissor(parentScissor);
+        drawOverlayRect(context, boxX, boxY, boxW, boxH, style.box);
+        context.commandList->setScissor(contentScissor);
     }
+    UIRenderContext textContext = context;
+    textContext.hasScissor = true;
+    textContext.scissor = contentScissor;
+    textRenderer.draw(textContext,
+                      clipInfo.visibleText,
+                      clipInfo.textX,
+                      clipInfo.textY,
+                      textScale,
+                      style.textNormal);
 
-    applyOverlayBlendState();
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(0, 0, screenW, screenH);
-
-    drawOverlayRect(screenW, screenH, boxX, boxY, boxW, boxH, style.box);
-
-    glScissor(clipInfo.clipX, clipInfo.clipY, clipInfo.clipW, clipInfo.clipH);
-    textRenderer.render(clipInfo.visibleText,
-                        clipInfo.textX,
-                        clipInfo.textY,
-                        textScale,
-                        style.textNormal,
-                        static_cast<float>(screenW),
-                        static_cast<float>(screenH));
-
-    if (isCaretVisible(Time::getRawTime(), m_caretBlinkPeriodMs)) {
+    if (record && isCaretVisible(static_cast<double>(context.timeSeconds), m_caretBlinkPeriodMs)) {
         const CaretRect caret = computeCaretRect(clipInfo, textRenderer, textScale);
-        applyOverlayBlendState();
-        glScissor(clipInfo.clipX, clipInfo.clipY, clipInfo.clipW, clipInfo.clipH);
-        drawOverlayRect(screenW, screenH, caret.x, caret.y, caret.w, caret.h, style.textNormal);
+        context.commandList->setScissor(contentScissor);
+        drawOverlayRect(context, caret.x, caret.y, caret.w, caret.h, style.textNormal);
     }
 
-    if (scissorWasEnabled) {
-        glScissor(previousScissorBox[0], previousScissorBox[1], previousScissorBox[2], previousScissorBox[3]);
-    } else {
-        glDisable(GL_SCISSOR_TEST);
+    if (record) {
+        context.commandList->setScissor(parentScissor);
     }
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
 }

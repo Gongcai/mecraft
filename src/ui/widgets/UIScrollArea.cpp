@@ -183,8 +183,10 @@ void UIScrollArea::initMesh() {
     RhiBufferDesc desc;
     desc.debugName = "UiScrollArea.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
 }
 
@@ -196,7 +198,9 @@ void UIScrollArea::cleanupMesh() {
 }
 
 void UIScrollArea::render(const UIRenderContext& ctx) const {
-    if (!visible || ctx.commandList == nullptr) return;
+    if (!visible) return;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record && ctx.commandList == nullptr) return;
 
     float ax = getAbsoluteX(ctx);
     float ay = getAbsoluteY(ctx);
@@ -206,7 +210,9 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
     UIRenderContext clippedContext = ctx;
     clippedContext.hasScissor = true;
     clippedContext.scissor = makeScaledScissorBox(ax, ay, aw, ah, ctx);
-    ctx.commandList->setScissor(clippedContext.scissor);
+    if (record) {
+        ctx.commandList->setScissor(clippedContext.scissor);
+    }
     renderSelf(clippedContext);
 
     // Render children with Y offset applied. Content is laid out in bottom-left
@@ -221,10 +227,12 @@ void UIScrollArea::render(const UIRenderContext& ctx) const {
         ? ctx.scissor
         : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * ctx.pixelScale()),
                     static_cast<uint32_t>(ctx.screenHeight * ctx.pixelScale())};
-    ctx.commandList->setScissor(parentScissor);
+    if (record) {
+        ctx.commandList->setScissor(parentScissor);
+    }
 
     // Render scrollbar outside scissor (on top)
-    if (m_scrollbarVisible && maxScroll() > 0.0f) {
+    if (record && m_scrollbarVisible && maxScroll() > 0.0f) {
         renderScrollbar(ctx);
     }
 }

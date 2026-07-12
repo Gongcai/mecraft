@@ -204,6 +204,7 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     captureBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     captureBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    captureBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_captureUniformBuffer = rhiDevice.createBuffer(captureBufferDesc, nullptr, 0u);
     RhiSamplerDesc captureSamplerDesc;
     captureSamplerDesc.addressU = RhiAddressMode::ClampToEdge;
@@ -561,8 +562,12 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
          params.cloudTimeScale, params.shaderTime},
         {params.cameraPosition, 0.0f}
     };
+    commandList.bufferBarrier({m_captureUniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_captureUniformBuffer, 0u,
                              &captureUniforms, sizeof(captureUniforms));
+    commandList.bufferBarrier({m_captureUniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targetView;
@@ -589,7 +594,6 @@ void GameplaySkyRenderer::renderCloudySkyCapture(const SkyColors& colors,
     commandList.setBindGroup(0u, m_captureBindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    // GL state restored by ScopedStateSnapshot destructor
 }
 
 GameplaySkyRenderer::SkyColors GameplaySkyRenderer::computeSkyColors(const DayNightSystem& dayNight) const {
@@ -780,8 +784,10 @@ void GameplaySkyRenderer::initMeshes() {
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "GameplaySky.Gradient.VertexBuffer";
         bufferDesc.size = skyVertices.size() * sizeof(float);
-        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                           rhiFlag(RhiBufferUsage::TransferDst);
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        bufferDesc.initialState = RhiResourceState::VertexBuffer;
         m_skyVertexBuffer = m_rhiDevice->createBuffer(
             bufferDesc, skyVertices.data(), bufferDesc.size);
         if (!m_skyVertexBuffer.isValid()) std::abort();
@@ -805,8 +811,10 @@ void GameplaySkyRenderer::initMeshes() {
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "GameplaySky.Halo.VertexBuffer";
         bufferDesc.size = haloVertices.size() * sizeof(HaloVertex);
-        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+        bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                           rhiFlag(RhiBufferUsage::TransferDst);
         bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        bufferDesc.initialState = RhiResourceState::VertexBuffer;
         m_haloVertexBuffer = m_rhiDevice->createBuffer(
             bufferDesc, haloVertices.data(), bufferDesc.size);
         if (!m_haloVertexBuffer.isValid()) std::abort();
@@ -957,8 +965,10 @@ void GameplaySkyRenderer::initCloudMesh() {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "GameplaySky.Cloud.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(CloudVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_cloudVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), bufferDesc.size);
     if (!m_cloudVertexBuffer.isValid()) std::abort();

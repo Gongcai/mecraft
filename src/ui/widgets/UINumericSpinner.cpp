@@ -215,8 +215,10 @@ void UINumericSpinner::initMesh() {
   RhiBufferDesc d;
   d.debugName = "UiNumericSpinner.VertexBuffer";
   d.size = sizeof(vertices);
-  d.usage = rhiFlag(RhiBufferUsage::Vertex);
+  d.usage = rhiFlag(RhiBufferUsage::Vertex) |
+            rhiFlag(RhiBufferUsage::TransferDst);
   d.memoryUsage = RhiMemoryUsage::GpuOnly;
+  d.initialState = RhiResourceState::VertexBuffer;
   m_vertexBuffer = m_rhiDevice->createBuffer(d, vertices, sizeof(vertices));
 }
 
@@ -228,7 +230,9 @@ void UINumericSpinner::cleanupMesh() {
 }
 
 void UINumericSpinner::renderSelf(const UIRenderContext &ctx) const {
-  if (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid())
+  const bool record = ctx.phase == UIRenderPhase::Record;
+  if (record &&
+      (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid()))
     return;
   const UIResolvedNumericSpinnerStyle resolved = resolveStyle(ctx);
 
@@ -243,35 +247,37 @@ void UINumericSpinner::renderSelf(const UIRenderContext &ctx) const {
   const float valueW = aw - 2.0f * resolved.buttonWidth - 2.0f * resolved.gap;
   const float brdW = resolved.borderWidth;
 
-  ctx.commandList->setGraphicsPipeline(m_pipeline);
-  ctx.commandList->setVertexBuffer(0, m_vertexBuffer, 0);
-  auto rect = [&](float x, float y, float w, float h, Color c) {
-    c[3] *= alpha;
-    struct P {
-      glm::vec4 a, b, c;
+  if (record) {
+    ctx.commandList->setGraphicsPipeline(m_pipeline);
+    ctx.commandList->setVertexBuffer(0, m_vertexBuffer, 0);
+    auto rect = [&](float x, float y, float w, float h, Color c) {
+      c[3] *= alpha;
+      struct P {
+        glm::vec4 a, b, c;
+      };
+      P p{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y),
+          glm::vec4(w, h, 0, 0), glm::vec4(c[0], c[1], c[2], c[3])};
+      ctx.commandList->pushConstants(&p, sizeof(p),
+                                     rhiFlag(RhiShaderStage::Vertex) |
+                                         rhiFlag(RhiShaderStage::Fragment));
+      ctx.commandList->draw(6, 1, 0, 0);
     };
-    P p{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y),
-        glm::vec4(w, h, 0, 0), glm::vec4(c[0], c[1], c[2], c[3])};
-    ctx.commandList->pushConstants(&p, sizeof(p),
-                                   rhiFlag(RhiShaderStage::Vertex) |
-                                       rhiFlag(RhiShaderStage::Fragment));
-    ctx.commandList->draw(6, 1, 0, 0);
-  };
-  auto zone = [&](float x, float w, Color bg, Color border) {
-    rect(x, ay, w, ah, border);
-    rect(x + brdW, ay + brdW, w - 2 * brdW, ah - 2 * brdW, bg);
-  };
-  zone(minusX, resolved.buttonWidth, resolved.minusBackground,
-       resolved.minusBorder);
-  zone(valueX, valueW, resolved.valueBackground, resolved.valueBorder);
-  zone(plusX, resolved.buttonWidth, resolved.plusBackground,
-       resolved.plusBorder);
-  if (m_editing && m_cursorVisible && isFocused()) {
-    float cursorX = valueX + resolved.textPadding;
-    if (ctx.textRenderer && !m_editText.empty())
-      cursorX += ctx.textRenderer->measureText(m_editText, 1).width;
-    rect(cursorX, ay + resolved.cursorInset, resolved.cursorWidth,
-         ah - 2 * resolved.cursorInset, resolved.cursor);
+    auto zone = [&](float x, float w, Color bg, Color border) {
+      rect(x, ay, w, ah, border);
+      rect(x + brdW, ay + brdW, w - 2 * brdW, ah - 2 * brdW, bg);
+    };
+    zone(minusX, resolved.buttonWidth, resolved.minusBackground,
+         resolved.minusBorder);
+    zone(valueX, valueW, resolved.valueBackground, resolved.valueBorder);
+    zone(plusX, resolved.buttonWidth, resolved.plusBackground,
+         resolved.plusBorder);
+    if (m_editing && m_cursorVisible && isFocused()) {
+      float cursorX = valueX + resolved.textPadding;
+      if (ctx.textRenderer && !m_editText.empty())
+        cursorX += ctx.textRenderer->measureText(m_editText, 1).width;
+      rect(cursorX, ay + resolved.cursorInset, resolved.cursorWidth,
+           ah - 2 * resolved.cursorInset, resolved.cursor);
+    }
   }
 
   // Render text.
@@ -281,24 +287,26 @@ void UINumericSpinner::renderSelf(const UIRenderContext &ctx) const {
     // Minus sign.
     {
       const auto m = ctx.textRenderer->measureText("-", textScale);
-      ctx.textRenderer->render("-",
-                               minusX + (resolved.buttonWidth - m.width) * 0.5f,
-                               ay + (ah - m.height) * 0.5f, textScale,
-                               {resolved.text[0], resolved.text[1],
-                                resolved.text[2], resolved.text[3] * alpha},
-                               static_cast<float>(ctx.screenWidth),
-                               static_cast<float>(ctx.screenHeight));
+      ctx.textRenderer->draw(
+          ctx,
+          "-",
+          minusX + (resolved.buttonWidth - m.width) * 0.5f,
+          ay + (ah - m.height) * 0.5f,
+          textScale,
+          {resolved.text[0], resolved.text[1], resolved.text[2],
+           resolved.text[3] * alpha});
     }
     // Plus sign.
     {
       const auto m = ctx.textRenderer->measureText("+", textScale);
-      ctx.textRenderer->render("+",
-                               plusX + (resolved.buttonWidth - m.width) * 0.5f,
-                               ay + (ah - m.height) * 0.5f, textScale,
-                               {resolved.text[0], resolved.text[1],
-                                resolved.text[2], resolved.text[3] * alpha},
-                               static_cast<float>(ctx.screenWidth),
-                               static_cast<float>(ctx.screenHeight));
+      ctx.textRenderer->draw(
+          ctx,
+          "+",
+          plusX + (resolved.buttonWidth - m.width) * 0.5f,
+          ay + (ah - m.height) * 0.5f,
+          textScale,
+          {resolved.text[0], resolved.text[1], resolved.text[2],
+           resolved.text[3] * alpha});
     }
     // Value text.
     {
@@ -307,23 +315,31 @@ void UINumericSpinner::renderSelf(const UIRenderContext &ctx) const {
           valStr.empty() ? " " : valStr, textScale);
       // Clip to value area.
       const float uiScale = ctx.pixelScale();
-      ctx.commandList->setScissor(
+      UIRenderContext textContext = ctx;
+      textContext.hasScissor = true;
+      textContext.scissor =
           {static_cast<int>((valueX + 2) * uiScale),
            static_cast<int>(((ctx.screenHeight - ay - ah) + 2) * uiScale),
            static_cast<uint32_t>((valueW - 4) * uiScale),
-           static_cast<uint32_t>((ah - 4) * uiScale)});
+           static_cast<uint32_t>((ah - 4) * uiScale)};
+      if (record) {
+        ctx.commandList->setScissor(textContext.scissor);
+      }
 
-      ctx.textRenderer->render(valStr.empty() ? " " : valStr,
-                               valueX + resolved.textPadding,
-                               ay + (ah - m.height) * 0.5f, textScale,
-                               {resolved.text[0], resolved.text[1],
-                                resolved.text[2], resolved.text[3] * alpha},
-                               static_cast<float>(ctx.screenWidth),
-                               static_cast<float>(ctx.screenHeight));
+      ctx.textRenderer->draw(
+          textContext,
+          valStr.empty() ? " " : valStr,
+          valueX + resolved.textPadding,
+          ay + (ah - m.height) * 0.5f,
+          textScale,
+          {resolved.text[0], resolved.text[1], resolved.text[2],
+           resolved.text[3] * alpha});
 
-      ctx.commandList->setScissor(
-          {0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
-           static_cast<uint32_t>(ctx.screenHeight * uiScale)});
+      if (record) {
+        ctx.commandList->setScissor(
+            {0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
+             static_cast<uint32_t>(ctx.screenHeight * uiScale)});
+      }
     }
   }
 }

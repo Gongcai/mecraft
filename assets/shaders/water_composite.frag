@@ -2,32 +2,32 @@
 #include "gbuffer_contract.glsl"
 
 // Varyings from chunk_lit.vs
-in vec2 vUV;
-in float vLight;
-in float vSunlight;
-in float vBlockLight;
-in float vAO;
-in float vNormal;
-in float vLayer;
-in float vAnimationFrameCount;
-in float vAnimationFps;
-in float vAnimated;
-in float vFogDist;
-in vec3 vWorldPos;
-flat in float vTintKind;
-flat in float vMaterialKind;
-in vec2 vTintUV;
+layout(location = 0) in vec2 vUV;
+layout(location = 1) in float vLight;
+layout(location = 2) in float vSunlight;
+layout(location = 3) in float vBlockLight;
+layout(location = 4) in float vAO;
+layout(location = 5) in float vNormal;
+layout(location = 6) in float vLayer;
+layout(location = 7) in float vAnimationFrameCount;
+layout(location = 8) in float vAnimationFps;
+layout(location = 9) in float vAnimated;
+layout(location = 10) in float vFogDist;
+layout(location = 11) in vec3 vWorldPos;
+layout(location = 12) flat in float vTintKind;
+layout(location = 13) flat in float vMaterialKind;
+layout(location = 14) in vec2 vTintUV;
 
 #ifdef RHI_TERRAIN_WATER_MDI
-layout(binding = 0) uniform sampler2DArray texArray;
-layout(binding = 5) uniform sampler2D uOpaqueDepthTex;
-layout(binding = 6) uniform sampler2D uSkyCaptureTex;
-layout(binding = 7) uniform sampler2D uSceneColorTex;
-layout(binding = 8) uniform sampler2D uNoiseTex;
-layout(binding = 9) uniform sampler2D uReflectionTex;
-layout(binding = 10) uniform sampler3D uAtmosphereLut;
-layout(binding = 11) uniform sampler2D uVolumetricTex;
-layout(binding = 12) uniform sampler2D uRippleNormalTex;
+layout(set = 1, binding = 0) uniform sampler2DArray texArray;
+layout(set = 1, binding = 5) uniform sampler2D uOpaqueDepthTex;
+layout(set = 1, binding = 6) uniform sampler2D uSkyCaptureTex;
+layout(set = 1, binding = 7) uniform sampler2D uSceneColorTex;
+layout(set = 1, binding = 8) uniform sampler2D uNoiseTex;
+layout(set = 1, binding = 9) uniform sampler2D uReflectionTex;
+layout(set = 1, binding = 10) uniform sampler3D uAtmosphereLut;
+layout(set = 1, binding = 11) uniform sampler2D uVolumetricTex;
+layout(set = 1, binding = 12) uniform sampler2D uRippleNormalTex;
 #include "terrain_water_params.glsl"
 #else
 uniform sampler2DArray texArray;
@@ -79,9 +79,12 @@ uniform float uWaterFlowLayerCount;
 #define uWaterViewProj viewProj
 #endif
 
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
 
 #include "lighting_environment.glsl"
+#ifdef RHI_TERRAIN_WATER_MDI
+#define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS
+#endif
 #include "atmosphere_lut.glsl"
 
 const float rPI = 1.0 / 3.14159265359;

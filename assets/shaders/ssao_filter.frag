@@ -7,7 +7,7 @@ layout(binding = 0) uniform sampler2D uSsaoTex;
 layout(binding = 1) uniform sampler2D uDepthTex;
 layout(binding = 2) uniform sampler2D uNormalAoTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec2 uScreenSize;
     float uNear;
     float uPadding0;

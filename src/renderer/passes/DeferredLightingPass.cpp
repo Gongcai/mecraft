@@ -1,6 +1,7 @@
 #include "DeferredLightingPass.h"
 
 #include "../core/RenderScene.h"
+#include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
@@ -16,7 +17,7 @@
 #include <glm/glm.hpp>
 
 namespace {
-constexpr size_t kLightingTextureCount = 22u;
+constexpr size_t kLightingTextureCount = 19u;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -118,7 +119,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
               ? targets.ensureSsaoTemporalTextureView(rhiDevice)
               : targets.ensureSsaoFilteredTextureView(rhiDevice)) ||
         !targets.ensureSkyCaptureTextureView(rhiDevice) ||
-        !ensureExternalTextureViews(rhiDevice, targets.shadowNormalTextureHandle())) {
+        !ensureExternalTextureViews(rhiDevice)) {
         return;
     }
 
@@ -131,14 +132,11 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
         targets.depthTextureViewHandle(),
         m_lightmapDayTextureView,
         m_lightmapNightTextureView,
-        targets.shadowDepthTextureViewHandle(),
         settings.ssao.temporalEnabled
             ? targets.ssaoTemporalTextureViewHandle()
             : targets.ssaoFilteredTextureViewHandle(),
         targets.skyCaptureTextureViewHandle(),
         m_noiseTextureView,
-        targets.shadowColorTextureViewHandle(),
-        m_shadowNormalTextureView,
         targets.atmosphereLutTextureViewHandle(),
         targets.csmShadowDepthComparisonArrayTextureViewHandle(),
         targets.csmShadowDepthArrayTextureViewHandle(),
@@ -286,14 +284,57 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList, targets.albedoTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.voxelLightTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.ssaoFilteredTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.sceneLightingTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Lighting)
+        : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.sceneLightingTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
@@ -337,6 +378,7 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_uniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_uniformBuffer.isValid()) {
         destroyRhiResources();
@@ -389,7 +431,7 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "DeferredLighting.BindGroupLayout";
     for (uint32_t binding = 0u; binding < kLightingTextureCount; ++binding) {
-        const RhiShaderStageFlags visibility = binding == 10u
+        const RhiShaderStageFlags visibility = binding == 9u
             ? rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment)
             : rhiFlag(RhiShaderStage::Fragment);
         bindGroupLayoutDesc.entries.push_back({
@@ -440,9 +482,7 @@ bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool DeferredLightingPass::ensureExternalTextureViews(
-    RhiDevice& rhiDevice,
-    const RhiTextureHandle shadowNormalTexture) {
+bool DeferredLightingPass::ensureExternalTextureViews(RhiDevice& rhiDevice) {
     return ensureTextureView(rhiDevice,
                              m_lightmapDayTexture,
                              RhiTextureFormat::Rgba8Unorm,
@@ -462,12 +502,7 @@ bool DeferredLightingPass::ensureExternalTextureViews(
                              m_rippleNormalTexture,
                              RhiTextureFormat::Rgba8Unorm,
                              m_rippleNormalViewTexture,
-                             m_rippleNormalTextureView) &&
-           ensureTextureView(rhiDevice,
-                             shadowNormalTexture,
-                             RhiTextureFormat::Rgba16Float,
-                             m_shadowNormalViewTexture,
-                             m_shadowNormalTextureView);
+                             m_rippleNormalTextureView);
 }
 
 bool DeferredLightingPass::ensureTextureView(RhiDevice& rhiDevice,
@@ -506,7 +541,7 @@ bool DeferredLightingPass::ensureTextureView(RhiDevice& rhiDevice,
 
 bool DeferredLightingPass::ensureRhiBindGroup(
     RhiDevice& rhiDevice,
-    const std::array<RhiTextureViewHandle, 22>& views) {
+    const std::array<RhiTextureViewHandle, 19>& views) {
     for (const RhiTextureViewHandle view : views) {
         if (!view.isValid()) {
             return false;
@@ -526,12 +561,9 @@ bool DeferredLightingPass::ensureRhiBindGroup(
         m_nearestClampSampler,
         m_linearClampSampler,
         m_linearClampSampler,
-        m_nearestBorderSampler,
         m_linearClampSampler,
         m_linearClampSampler,
         m_linearRepeatSampler,
-        m_nearestBorderSampler,
-        m_nearestBorderSampler,
         m_linearClampSampler,
         m_compareBorderSampler,
         m_nearestBorderSampler,
@@ -581,8 +613,7 @@ void DeferredLightingPass::destroyExternalTextureViews() {
             m_lightmapDayTextureView,
             m_lightmapNightTextureView,
             m_noiseTextureView,
-            m_rippleNormalTextureView,
-            m_shadowNormalTextureView
+            m_rippleNormalTextureView
         };
         for (const RhiTextureViewHandle view : views) {
             if (view.isValid()) {
@@ -594,12 +625,10 @@ void DeferredLightingPass::destroyExternalTextureViews() {
     m_lightmapNightViewTexture = {};
     m_noiseViewTexture = {};
     m_rippleNormalViewTexture = {};
-    m_shadowNormalViewTexture = {};
     m_lightmapDayTextureView = {};
     m_lightmapNightTextureView = {};
     m_noiseTextureView = {};
     m_rippleNormalTextureView = {};
-    m_shadowNormalTextureView = {};
 }
 
 void DeferredLightingPass::destroyRhiResources() {

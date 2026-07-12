@@ -58,10 +58,22 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
         return {};
     }
 
-    RhiCommandList& commandList = m_shared->rhiDevice->beginFrame();
+    RhiCommandList* commandListStorage =
+        m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin(
+            {"ForwardPipeline.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
     m_backbufferCommandList = &commandList;
     if (!prepareTerrain(ctx, commandList)) {
-        m_shared->rhiDevice->submitFrame(commandList);
+        if (!commandList.end()) std::abort();
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!m_shared->rhiDevice->submit(
+                {"ForwardPipeline.PrepareFailure", submittedCommandLists, 1u})) {
+            std::abort();
+        }
         m_backbufferCommandList = nullptr;
         return {};
     }
@@ -71,13 +83,23 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     if (m_shared->blockEntityRenderer != nullptr) {
         m_shared->blockEntityRenderer->prepareFrame(*ctx.worldView);
         if (!m_shared->blockEntityRenderer->prepareForward(commandList)) {
-            m_shared->rhiDevice->submitFrame(commandList);
+            if (!commandList.end()) std::abort();
+            RhiCommandList* submittedCommandLists[] = {&commandList};
+            if (!m_shared->rhiDevice->submit(
+                    {"ForwardPipeline.ObjectPrepareFailure", submittedCommandLists, 1u})) {
+                std::abort();
+            }
             m_backbufferCommandList = nullptr;
             return {};
         }
     }
     if (!beginBackbufferFrame(ctx)) {
-        m_shared->rhiDevice->submitFrame(commandList);
+        if (!commandList.end()) std::abort();
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!m_shared->rhiDevice->submit(
+                {"ForwardPipeline.BeginFailure", submittedCommandLists, 1u})) {
+            std::abort();
+        }
         m_backbufferCommandList = nullptr;
         return {};
     }
@@ -138,6 +160,11 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
+    m_backbufferCommandList->textureBarrier({
+        ctx.swapchainColorTexture,
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
     m_backbufferCommandList->beginRendering(renderingInfo);
     m_backbufferCommandList->setViewport({
         0.0f,
@@ -200,7 +227,21 @@ void ForwardPipeline::endBackbufferFrame() {
     }
 
     m_backbufferCommandList->endRendering();
-    m_shared->rhiDevice->submitFrame(*m_backbufferCommandList);
+    const RhiTextureHandle swapchainTexture =
+        m_shared->rhiDevice->currentSwapchainColorTexture();
+    m_backbufferCommandList->textureBarrier({
+        swapchainTexture,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::Present
+    });
+    if (!m_backbufferCommandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {m_backbufferCommandList};
+    if (!m_shared->rhiDevice->submit(
+            {"ForwardPipeline.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
     m_backbufferCommandList = nullptr;
 }
 

@@ -1,11 +1,14 @@
 #include "Fsr1Pass.h"
 
+#include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiCommandListPool.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
 #include <optional>
 
@@ -19,11 +22,40 @@ Fsr1Pass::~Fsr1Pass() {
     shutdown();
 }
 
-void Fsr1Pass::init(ResourceMgr&) {}
+void Fsr1Pass::init(ResourceMgr&, RhiCommandListPool& commandListPool) {
+    m_commandListPool = &commandListPool;
+}
 
 void Fsr1Pass::shutdown() {
     destroyTargets();
     destroyRhiResources();
+    m_commandListPool = nullptr;
+}
+
+RhiCommandList& Fsr1Pass::beginCommandList(const char* const debugName) const {
+    if (m_commandListPool == nullptr) {
+        std::abort();
+    }
+    RhiCommandList* const commandList =
+        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({debugName, RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    return *commandList;
+}
+
+void Fsr1Pass::submitCommandList(RhiDevice& rhiDevice,
+                                 RhiCommandList& commandList,
+                                 const char* const debugName) const {
+    if (!commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* commandLists[] = {&commandList};
+    const RhiSubmitInfo submitInfo{debugName, commandLists, 1u};
+    if (!rhiDevice.submit(submitInfo)) {
+        std::abort();
+    }
 }
 
 bool Fsr1Pass::execute(RhiDevice& rhiDevice,
@@ -33,7 +65,8 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
                        const int inputHeight,
                        const int outputWidth,
                        const int outputHeight,
-                       const float sharpness) {
+                       const float sharpness,
+                       RenderDebugService& debugService) {
     if (!inputView.isValid() || !swapchainColorView.isValid() ||
         inputWidth <= 0 || inputHeight <= 0 || outputWidth <= 0 || outputHeight <= 0) {
         return false;
@@ -73,7 +106,14 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     easuRenderingInfo.colorAttachments = &easuAttachment;
     easuRenderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& easuCommandList = rhiDevice.beginFrame();
+    RhiCommandList& easuCommandList = beginCommandList("FSR1.EASU.Commands");
+    const GpuTimerSegmentToken easuTimerToken = debugService.beginGpuTimer(
+        easuCommandList, GpuTimerPass::Post);
+    easuCommandList.textureBarrier({
+        m_easuHandle,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::RenderTarget
+    });
     easuCommandList.beginRendering(easuRenderingInfo);
     easuCommandList.setGraphicsPipeline(m_easuPipeline);
     easuCommandList.setBindGroup(0u, m_easuBindGroup);
@@ -86,7 +126,13 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     easuCommandList.pushConstants(easuPushConstants, sizeof(easuPushConstants), rhiFlag(RhiShaderStage::Fragment));
     easuCommandList.draw(3u, 1u, 0u, 0u);
     easuCommandList.endRendering();
-    rhiDevice.submitFrame(easuCommandList);
+    easuCommandList.textureBarrier({
+        m_easuHandle,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::ShaderRead
+    });
+    debugService.endGpuTimer(easuCommandList, easuTimerToken);
+    submitCommandList(rhiDevice, easuCommandList, "FSR1.EASU.Submit");
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = swapchainColorView;
@@ -104,7 +150,18 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList& commandList = beginCommandList("FSR1.RCAS.Commands");
+    const GpuTimerSegmentToken rcasTimerToken = debugService.beginGpuTimer(
+        commandList, GpuTimerPass::Post);
+    const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainTexture.isValid()) {
+        std::abort();
+    }
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_rcasPipeline);
     commandList.setBindGroup(0u, m_rcasBindGroup);
@@ -112,7 +169,13 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     commandList.pushConstants(&rcasPushConstants, sizeof(rcasPushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::Present
+    });
+    debugService.endGpuTimer(commandList, rcasTimerToken);
+    submitCommandList(rhiDevice, commandList, "FSR1.RCAS.Submit");
 
     return true;
 }
@@ -337,6 +400,14 @@ bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int he
         destroyTargets();
         return false;
     }
+
+    RhiCommandList& commandList = beginCommandList("FSR1.TargetInitialization.Commands");
+    commandList.textureBarrier({
+        m_easuHandle,
+        RhiResourceState::Undefined,
+        RhiResourceState::ShaderRead
+    });
+    submitCommandList(rhiDevice, commandList, "FSR1.TargetInitialization.Submit");
 
     return true;
 }

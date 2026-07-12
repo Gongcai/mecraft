@@ -32,22 +32,19 @@ layout(binding = 4) uniform sampler2D uMaterialAuxTex;
 layout(binding = 5) uniform sampler2D uDepthTex;
 layout(binding = 6) uniform sampler2D uLightmapDay;
 layout(binding = 7) uniform sampler2D uLightmapNight;
-layout(binding = 8) uniform sampler2D uShadowMapRaw;
-layout(binding = 9) uniform sampler2D uSsaoTex;
-layout(binding = 10) uniform sampler2D uSkyCaptureTex;
-layout(binding = 11) uniform sampler2D uNoiseTex;
-layout(binding = 12) uniform sampler2D uShadowColorTex;
-layout(binding = 13) uniform sampler2D uShadowNormalTex;
-layout(binding = 14) uniform sampler3D uAtmosphereLut;
-layout(binding = 15) uniform sampler2DArrayShadow uCsmShadowMap;
-layout(binding = 16) uniform sampler2DArray uCsmShadowDepthRaw;
-layout(binding = 17) uniform sampler2DArrayShadow uCsmShadowDepthAll;
-layout(binding = 18) uniform sampler2DArray uCsmShadowDepthAllRaw;
-layout(binding = 19) uniform sampler2DArray uCsmShadowColor0;
-layout(binding = 20) uniform sampler2DArray uCsmShadowColor1;
-layout(binding = 21) uniform sampler2D uRippleNormalTex;
+layout(binding = 8) uniform sampler2D uSsaoTex;
+layout(binding = 9) uniform sampler2D uSkyCaptureTex;
+layout(binding = 10) uniform sampler2D uNoiseTex;
+layout(binding = 11) uniform sampler3D uAtmosphereLut;
+layout(binding = 12) uniform sampler2DArrayShadow uCsmShadowMap;
+layout(binding = 13) uniform sampler2DArray uCsmShadowDepthRaw;
+layout(binding = 14) uniform sampler2DArrayShadow uCsmShadowDepthAll;
+layout(binding = 15) uniform sampler2DArray uCsmShadowDepthAllRaw;
+layout(binding = 16) uniform sampler2DArray uCsmShadowColor0;
+layout(binding = 17) uniform sampler2DArray uCsmShadowColor1;
+layout(binding = 18) uniform sampler2D uRippleNormalTex;
 
-layout(std140, binding = 22) uniform DeferredLightingParams {
+layout(std140, binding = 19) uniform DeferredLightingParams {
     mat4 pViewProj;
     mat4 pInvViewProj;
     mat4 pProjection;
@@ -283,25 +280,6 @@ vec2 projectWorldToUv(vec3 worldPos, out float ndcDepth) {
     ndcDepth = ndc.z * 0.5 + 0.5;
     return ndc.xy * 0.5 + 0.5;
 }
-
-float compareShadowTexelAt(vec3 proj, ivec2 texelCoord, float bias) {
-    ivec2 size = textureSize(uShadowMapRaw, 0);
-    if (texelCoord.x < 0 || texelCoord.y < 0 || texelCoord.x >= size.x || texelCoord.y >= size.y) {
-        return 1.0;
-    }
-    float closest = texelFetch(uShadowMapRaw, texelCoord, 0).r;
-    return (proj.z - bias <= closest) ? 1.0 : 0.0;
-}
-
-float sampleShadowDepthAt(vec3 proj, vec2 offsetTexels) {
-    ivec2 size = textureSize(uShadowMapRaw, 0);
-    vec2 uv = proj.xy + offsetTexels / vec2(size);
-    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
-        return 1.0;
-    }
-    return texture(uShadowMapRaw, uv).r;
-}
-
 
 float noise2D(vec2 uv) {
     return texture(uNoiseTex, uv).r;

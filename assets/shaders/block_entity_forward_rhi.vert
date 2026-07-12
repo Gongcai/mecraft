@@ -10,7 +10,7 @@ layout(location = 7) in vec2 iLight;
 layout(location = 0) out vec2 vUv;
 layout(location = 1) out vec3 vNormal;
 layout(location = 2) out vec2 vLight;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     vec4 uLighting;
 };

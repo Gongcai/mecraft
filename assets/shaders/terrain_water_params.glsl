@@ -1,4 +1,4 @@
-layout(std140, binding = 13) uniform TerrainWaterParams {
+layout(std140, set = 1, binding = 13) uniform TerrainWaterParams {
     mat4 rhiTerrainWaterView;
     mat4 rhiTerrainWaterViewProj;
     mat4 rhiTerrainWaterInvViewProj;
@@ -41,6 +41,7 @@ layout(std140, binding = 13) uniform TerrainWaterParams {
 #define uWaterWaveHeight rhiTerrainWaterWaveParams.x
 #define uWaterWaveSpeed rhiTerrainWaterWaveParams.y
 #define uWaterIOR rhiTerrainWaterWaveParams.z
+#define uMoonPhaseFlux rhiTerrainWaterWaveParams.w
 #define uWaterStillFirstLayer rhiTerrainWaterLayers.x
 #define uWaterStillLayerCount rhiTerrainWaterLayers.y
 #define uWaterFlowFirstLayer rhiTerrainWaterLayers.z

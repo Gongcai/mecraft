@@ -6,6 +6,28 @@
 #include <algorithm>
 #include <limits>
 
+namespace {
+
+[[nodiscard]] bool resolveSteadyState(const RhiBufferUsageFlags usage,
+                                      RhiResourceState& state) {
+    uint32_t stateCount = 0u;
+    const auto select = [&](const RhiBufferUsage bufferUsage,
+                            const RhiResourceState candidate) {
+        if ((usage & rhiFlag(bufferUsage)) != 0u) {
+            state = candidate;
+            ++stateCount;
+        }
+    };
+    select(RhiBufferUsage::Vertex, RhiResourceState::VertexBuffer);
+    select(RhiBufferUsage::Index, RhiResourceState::IndexBuffer);
+    select(RhiBufferUsage::Uniform, RhiResourceState::UniformBuffer);
+    select(RhiBufferUsage::Storage, RhiResourceState::StorageBuffer);
+    select(RhiBufferUsage::Indirect, RhiResourceState::IndirectArgument);
+    return stateCount == 1u;
+}
+
+} // namespace
+
 RhiGrowableBuffer::RhiGrowableBuffer() = default;
 
 RhiGrowableBuffer::~RhiGrowableBuffer() {
@@ -20,6 +42,9 @@ bool RhiGrowableBuffer::init(RhiDevice& rhiDevice,
     if (initialSize == 0u || usage == 0u) {
         return false;
     }
+    if (!resolveSteadyState(usage, m_steadyState)) {
+        return false;
+    }
 
     m_usage = usage |
               rhiFlag(RhiBufferUsage::TransferSrc) |
@@ -29,9 +54,11 @@ bool RhiGrowableBuffer::init(RhiDevice& rhiDevice,
     desc.size = initialSize;
     desc.usage = m_usage;
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = m_steadyState;
     m_buffer = rhiDevice.createBuffer(desc, nullptr, 0u);
     if (!m_buffer.isValid()) {
         m_usage = 0u;
+        m_steadyState = RhiResourceState::Undefined;
         return false;
     }
 
@@ -42,14 +69,21 @@ bool RhiGrowableBuffer::init(RhiDevice& rhiDevice,
 }
 
 void RhiGrowableBuffer::shutdown() {
-    if (m_rhiDevice != nullptr && m_buffer.isValid()) {
-        m_rhiDevice->destroyBuffer(m_buffer);
+    if (m_rhiDevice != nullptr) {
+        if (m_buffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_buffer);
+        }
+        for (const RhiBufferHandle retiredBuffer : m_retiredBuffers) {
+            m_rhiDevice->destroyBuffer(retiredBuffer);
+        }
     }
     m_rhiDevice = nullptr;
     m_buffer = {};
     m_usage = 0u;
+    m_steadyState = RhiResourceState::Undefined;
     m_capacity = 0u;
     m_debugName = nullptr;
+    m_retiredBuffers.clear();
 }
 
 bool RhiGrowableBuffer::ensureCapacity(RhiCommandList& commandList,
@@ -71,17 +105,21 @@ bool RhiGrowableBuffer::ensureCapacity(RhiCommandList& commandList,
     desc.size = newCapacity;
     desc.usage = m_usage;
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = m_steadyState;
     const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
     if (!newBuffer.isValid()) {
         return false;
     }
 
+    commandList.bufferBarrier({m_buffer, m_steadyState, RhiResourceState::TransferSrc});
+    commandList.bufferBarrier({newBuffer, m_steadyState, RhiResourceState::TransferDst});
     RhiBufferCopy copy;
     copy.src = m_buffer;
     copy.dst = newBuffer;
     copy.size = m_capacity;
     commandList.copyBuffer(copy);
-    m_rhiDevice->destroyBuffer(m_buffer);
+    commandList.bufferBarrier({newBuffer, RhiResourceState::TransferDst, m_steadyState});
+    m_retiredBuffers.push_back(m_buffer);
     m_buffer = newBuffer;
     m_capacity = newCapacity;
     return true;
@@ -99,6 +137,8 @@ bool RhiGrowableBuffer::write(RhiCommandList& commandList,
     if (!ensureCapacity(commandList, requiredSize)) {
         return false;
     }
+    commandList.bufferBarrier({m_buffer, m_steadyState, RhiResourceState::TransferDst});
     commandList.updateBuffer(m_buffer, offset, data, size);
+    commandList.bufferBarrier({m_buffer, RhiResourceState::TransferDst, m_steadyState});
     return true;
 }

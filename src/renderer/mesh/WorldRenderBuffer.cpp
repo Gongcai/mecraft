@@ -274,6 +274,7 @@ bool RhiVertexPoolAllocator::init(RhiDevice& rhiDevice,
                  rhiFlag(RhiBufferUsage::TransferSrc) |
                  rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     m_buffer = rhiDevice.createBuffer(desc, nullptr, 0u);
     if (!m_buffer.isValid()) {
         return false;
@@ -286,10 +287,16 @@ bool RhiVertexPoolAllocator::init(RhiDevice& rhiDevice,
 }
 
 void RhiVertexPoolAllocator::shutdown() {
-    if (m_rhiDevice != nullptr && m_buffer.isValid()) {
-        m_rhiDevice->destroyBuffer(m_buffer);
+    if (m_rhiDevice != nullptr) {
+        if (m_buffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_buffer);
+        }
+        for (const RhiBufferHandle retiredBuffer : m_retiredBuffers) {
+            m_rhiDevice->destroyBuffer(retiredBuffer);
+        }
     }
     m_buffer = {};
+    m_retiredBuffers.clear();
     m_rhiDevice = nullptr;
     m_debugName = nullptr;
     m_ranges.shutdown();
@@ -333,11 +340,17 @@ bool RhiVertexPoolAllocator::upload(RhiCommandList& commandList,
         return false;
     }
     const size_t bytes = vertices.size() * sizeof(PackedBlockVertex);
+    commandList.bufferBarrier({m_buffer,
+                               RhiResourceState::VertexBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(
         m_buffer,
         static_cast<uint64_t>(range.firstVertex) * sizeof(PackedBlockVertex),
         vertices.data(),
         bytes);
+    commandList.bufferBarrier({m_buffer,
+                               RhiResourceState::TransferDst,
+                               RhiResourceState::VertexBuffer});
     m_uploadedBytesThisFrame += bytes;
     return true;
 }
@@ -357,17 +370,27 @@ bool RhiVertexPoolAllocator::expand(RhiCommandList& commandList,
                  rhiFlag(RhiBufferUsage::TransferSrc) |
                  rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
     if (!newBuffer.isValid()) {
         return false;
     }
 
+    commandList.bufferBarrier({m_buffer,
+                               RhiResourceState::VertexBuffer,
+                               RhiResourceState::TransferSrc});
+    commandList.bufferBarrier({newBuffer,
+                               RhiResourceState::VertexBuffer,
+                               RhiResourceState::TransferDst});
     RhiBufferCopy copy;
     copy.src = m_buffer;
     copy.dst = newBuffer;
     copy.size = oldCapacityVertices * sizeof(PackedBlockVertex);
     commandList.copyBuffer(copy);
-    m_rhiDevice->destroyBuffer(m_buffer);
+    commandList.bufferBarrier({newBuffer,
+                               RhiResourceState::TransferDst,
+                               RhiResourceState::VertexBuffer});
+    m_retiredBuffers.push_back(m_buffer);
     m_buffer = newBuffer;
     m_ranges.grow(newCapacityVertices);
     ++m_expandCountThisFrame;
@@ -437,10 +460,16 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
 }
 
 void WorldRenderBuffer::shutdown() {
-    if (m_rhiDevice != nullptr && m_rhiMetadataBindGroup.isValid()) {
-        m_rhiDevice->destroyBindGroup(m_rhiMetadataBindGroup);
+    if (m_rhiDevice != nullptr) {
+        if (m_rhiMetadataBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(m_rhiMetadataBindGroup);
+        }
+        for (const RhiBindGroupHandle bindGroup : m_retiredMetadataBindGroups) {
+            m_rhiDevice->destroyBindGroup(bindGroup);
+        }
     }
     m_rhiMetadataBindGroup = {};
+    m_retiredMetadataBindGroups.clear();
     m_rhiMetadataLayout = {};
     m_rhiMetadataBoundBuffer = {};
     m_rhiMetadataBuffer.shutdown();
@@ -612,6 +641,12 @@ uint32_t WorldRenderBuffer::uploadSubChunkMetadata(RhiCommandList& commandList,
 }
 
 void WorldRenderBuffer::beginFrame() {
+    if (m_rhiDevice != nullptr) {
+        for (const RhiBindGroupHandle bindGroup : m_retiredMetadataBindGroups) {
+            m_rhiDevice->destroyBindGroup(bindGroup);
+        }
+    }
+    m_retiredMetadataBindGroups.clear();
     m_opaqueCommands.clear();
     m_cutoutCommands.clear();
     m_transparentCommands.clear();
@@ -774,7 +809,7 @@ bool WorldRenderBuffer::ensureRhiMetadataBindGroup(
         return false;
     }
     if (m_rhiMetadataBindGroup.isValid()) {
-        m_rhiDevice->destroyBindGroup(m_rhiMetadataBindGroup);
+        m_retiredMetadataBindGroups.push_back(m_rhiMetadataBindGroup);
     }
 
     RhiBindGroupDesc desc;

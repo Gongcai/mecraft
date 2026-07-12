@@ -4,7 +4,7 @@ layout(location = 1) in vec2 aUv;
 layout(location = 0) out vec2 vUV;
 layout(location = 1) out vec3 vWorldPos;
 layout(location = 2) out vec3 vLocalPos;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
     vec4 uBlockPosProgress;

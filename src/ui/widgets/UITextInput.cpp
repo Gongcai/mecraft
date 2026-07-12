@@ -264,8 +264,10 @@ void UITextInput::initMesh() {
     RhiBufferDesc desc;
     desc.debugName = "UiTextInput.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
 }
 
@@ -277,7 +279,9 @@ void UITextInput::cleanupMesh() {
 }
 
 void UITextInput::renderSelf(const UIRenderContext& ctx) const {
-    if (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) return;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record &&
+        (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
 
     const UIResolvedTextInputStyle resolved =
         UIStyleResolver::resolveTextInput(resolveBaseStyle(ctx), currentStyleState());
@@ -293,31 +297,6 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
     const float ay = getAbsoluteY(ctx);
     const float aw = width * scaleX;
     const float ah = height * scaleY;
-
-    ctx.commandList->setGraphicsPipeline(m_pipeline);
-    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
-    auto drawRect = [&](float x, float y, float rectWidth, float rectHeight, Color color) {
-        color[3] *= alpha;
-        struct PushConstants {
-            glm::vec4 screenRect;
-            glm::vec4 rectRadius;
-            glm::vec4 color;
-        };
-        const PushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
-            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
-            glm::vec4(color[0], color[1], color[2], color[3])
-        };
-        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
-                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
-        ctx.commandList->draw(6u, 1u, 0u, 0u);
-    };
-
-    drawRect(ax, ay, aw, ah, bgCol);
-    drawRect(ax, ay + ah - brdWidth, aw, brdWidth, brdCol);
-    drawRect(ax, ay, aw, brdWidth, brdCol);
-    drawRect(ax, ay, brdWidth, ah, brdCol);
-    drawRect(ax + aw - brdWidth, ay, brdWidth, ah, brdCol);
 
     const float uiScale = ctx.pixelScale();
     RhiRect2D contentScissor{
@@ -336,52 +315,83 @@ void UITextInput::renderSelf(const UIRenderContext& ctx) const {
         contentScissor = {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
                           static_cast<uint32_t>(std::max(0, y1 - y0))};
     }
-    ctx.commandList->setScissor(contentScissor);
 
-    const int selLo = std::min(m_selStart, m_selEnd);
-    const int selHi = std::max(m_selStart, m_selEnd);
-    const bool showSel = hasSelection();
-    if (showSel) {
-        const float selLeftPx = measureTextUpTo(utf8CharCountUpTo(m_text, selLo), ctx);
-        const float selRightPx = measureTextUpTo(utf8CharCountUpTo(m_text, selHi), ctx);
-        const float sx0 = ax + kTextPadX + selLeftPx - m_scrollOffset;
-        const float sx1 = ax + kTextPadX + selRightPx - m_scrollOffset;
-        drawRect(sx0, ay + 2.0f, sx1 - sx0, ah - 4.0f, selCol);
-    }
-    // Cursor (offset 30 or 36)
-    if (m_cursorVisible && isFocused()) {
-        const float cursorX = ax + kTextPadX + measureTextUpTo(utf8CharCountUpTo(m_text, m_cursorPos), ctx) - m_scrollOffset;
-        drawRect(cursorX, ay + 3.0f, 1.5f, ah - 6.0f, curCol);
+    if (record) {
+        ctx.commandList->setGraphicsPipeline(m_pipeline);
+        ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+        auto drawRect = [&](float x, float y, float rectWidth, float rectHeight, Color color) {
+            color[3] *= alpha;
+            struct PushConstants {
+                glm::vec4 screenRect;
+                glm::vec4 rectRadius;
+                glm::vec4 color;
+            };
+            const PushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x, y),
+                glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
+                glm::vec4(color[0], color[1], color[2], color[3])
+            };
+            ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                           rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            ctx.commandList->draw(6u, 1u, 0u, 0u);
+        };
+
+        drawRect(ax, ay, aw, ah, bgCol);
+        drawRect(ax, ay + ah - brdWidth, aw, brdWidth, brdCol);
+        drawRect(ax, ay, aw, brdWidth, brdCol);
+        drawRect(ax, ay, brdWidth, ah, brdCol);
+        drawRect(ax + aw - brdWidth, ay, brdWidth, ah, brdCol);
+
+        ctx.commandList->setScissor(contentScissor);
+
+        const int selLo = std::min(m_selStart, m_selEnd);
+        const int selHi = std::max(m_selStart, m_selEnd);
+        if (hasSelection()) {
+            const float selLeftPx = measureTextUpTo(utf8CharCountUpTo(m_text, selLo), ctx);
+            const float selRightPx = measureTextUpTo(utf8CharCountUpTo(m_text, selHi), ctx);
+            const float sx0 = ax + kTextPadX + selLeftPx - m_scrollOffset;
+            const float sx1 = ax + kTextPadX + selRightPx - m_scrollOffset;
+            drawRect(sx0, ay + 2.0f, sx1 - sx0, ah - 4.0f, selCol);
+        }
+        if (m_cursorVisible && isFocused()) {
+            const float cursorX = ax + kTextPadX + measureTextUpTo(utf8CharCountUpTo(m_text, m_cursorPos), ctx) - m_scrollOffset;
+            drawRect(cursorX, ay + 3.0f, 1.5f, ah - 6.0f, curCol);
+        }
     }
 
     if (ctx.textRenderer) {
+        UIRenderContext textContext = ctx;
+        textContext.hasScissor = true;
+        textContext.scissor = contentScissor;
         const float textScale = 1.0f;
         if (m_text.empty() && !m_placeholder.empty() && !isFocused()) {
-            ctx.textRenderer->render(m_placeholder,
-                                     ax + kTextPadX,
-                                     ay + (ah - ctx.textRenderer->measureText("A", textScale).height) * 0.5f,
-                                     textScale,
-                                     {phCol[0], phCol[1], phCol[2], phCol[3] * alpha},
-                                     static_cast<float>(ctx.screenWidth),
-                                     static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(
+                textContext,
+                m_placeholder,
+                ax + kTextPadX,
+                ay + (ah - ctx.textRenderer->measureText("A", textScale).height) * 0.5f,
+                textScale,
+                {phCol[0], phCol[1], phCol[2], phCol[3] * alpha});
         } else if (!m_text.empty()) {
             const auto metrics = ctx.textRenderer->measureText(m_text, textScale);
-            ctx.textRenderer->render(m_text,
-                                     ax + kTextPadX - m_scrollOffset,
-                                     ay + (ah - metrics.height) * 0.5f,
-                                     textScale,
-                                     {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
-                                     static_cast<float>(ctx.screenWidth),
-                                     static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(
+                textContext,
+                m_text,
+                ax + kTextPadX - m_scrollOffset,
+                ay + (ah - metrics.height) * 0.5f,
+                textScale,
+                {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
         }
 
     }
 
-    const RhiRect2D parentScissor = ctx.hasScissor
-        ? ctx.scissor
-        : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
-                    static_cast<uint32_t>(ctx.screenHeight * uiScale)};
-    ctx.commandList->setScissor(parentScissor);
+    if (record) {
+        const RhiRect2D parentScissor = ctx.hasScissor
+            ? ctx.scissor
+            : RhiRect2D{0, 0, static_cast<uint32_t>(ctx.screenWidth * uiScale),
+                        static_cast<uint32_t>(ctx.screenHeight * uiScale)};
+        ctx.commandList->setScissor(parentScissor);
+    }
 }
 
 UIEventResult UITextInput::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {

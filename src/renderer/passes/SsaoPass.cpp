@@ -1,7 +1,7 @@
 #include "SsaoPass.h"
 #include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../core/Shader.h"
+#include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
@@ -101,7 +101,21 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.ssaoHalfResTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+        : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
 
     // Half-res: invResolution refers to the half-res viewport for UV computation
@@ -131,7 +145,20 @@ void SsaoPass::renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.ssaoHalfResTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& targets) {
@@ -169,7 +196,23 @@ void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& 
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList, targets.ssaoHalfResTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.ssaoHalfResFilteredTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+        : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
 
     const int halfW = std::max(1, targets.width() / 2);
@@ -184,7 +227,20 @@ void SsaoPass::renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& 
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.ssaoHalfResFilteredTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& ssao, DeferredRenderTargets& targets) {
@@ -225,7 +281,24 @@ void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& s
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    const RhiTextureHandle ssaoHalfResInput = ssao.filterEnabled
+        ? targets.ssaoHalfResFilteredTextureHandle()
+        : targets.ssaoHalfResTextureHandle();
+    targets.transitionTexture(commandList, ssaoHalfResInput,
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.ssaoFilteredTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+        : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
 
     const int halfW = std::max(1, targets.width() / 2);
@@ -240,7 +313,20 @@ void SsaoPass::renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& s
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.ssaoFilteredTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao, DeferredRenderTargets& targets) {
@@ -281,7 +367,25 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList, targets.ssaoFilteredTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.ssaoHistoryTexturePrevHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.velocityTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.ssaoTemporalTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssao)
+        : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_temporalPipeline);
     commandList.setBindGroup(0u, m_temporalBindGroup);
@@ -293,10 +397,52 @@ void SsaoPass::renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& s
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.ssaoTemporalTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 
     // Copy temporal result to history[current] for next frame's reprojection
-    targets.copySsaoTemporalToHistory(rhiDevice);
+    RhiCommandList* copyCommandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (copyCommandListStorage == nullptr ||
+        !copyCommandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& copyCommandList = *copyCommandListStorage;
+    const GpuTimerSegmentToken copyTimerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(copyCommandList, GpuTimerPass::Ssao)
+        : GpuTimerSegmentToken{};
+    targets.transitionTexture(copyCommandList, targets.ssaoTemporalTextureHandle(),
+                              RhiResourceState::TransferSrc);
+    targets.transitionTexture(copyCommandList, targets.ssaoHistoryTextureHandle(),
+                              RhiResourceState::TransferDst);
+    targets.copySsaoTemporalToHistory(copyCommandList);
+    targets.transitionTexture(copyCommandList, targets.ssaoTemporalTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(copyCommandList, targets.ssaoHistoryTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(copyCommandList, copyTimerToken);
+    }
+    if (!copyCommandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&copyCommandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool SsaoPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {

@@ -1,5 +1,6 @@
 #include "ReflectionPass.h"
 #include "../core/RenderScene.h"
+#include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
@@ -120,14 +121,55 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList, targets.sceneLightingTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.skyCaptureTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.voxelLightTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
+        : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_baseUniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_baseUniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_baseUniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_basePipeline);
     commandList.setBindGroup(0u, m_baseBindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
@@ -171,6 +213,7 @@ bool ReflectionPass::ensureBaseRhiPipeline(RhiDevice& rhiDevice) {
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_baseUniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_baseUniformBuffer.isValid()) {
         destroyBaseRhiResources();
@@ -371,7 +414,38 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    targets.copyReflectionToTemporalScratch(rhiDevice);
+    RhiCommandList* copyCommandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (copyCommandListStorage == nullptr ||
+        !copyCommandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& copyCommandList = *copyCommandListStorage;
+    const GpuTimerSegmentToken copyTimerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(copyCommandList, GpuTimerPass::Reflection)
+        : GpuTimerSegmentToken{};
+    targets.transitionTexture(copyCommandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::TransferSrc);
+    targets.transitionTexture(copyCommandList,
+                              targets.reflectionTemporalScratchTextureHandle(),
+                              RhiResourceState::TransferDst);
+    targets.copyReflectionToTemporalScratch(copyCommandList);
+    targets.transitionTexture(copyCommandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(copyCommandList,
+                              targets.reflectionTemporalScratchTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(copyCommandList, copyTimerToken);
+    }
+    if (!copyCommandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&copyCommandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
     const std::array<RhiTextureViewHandle, 5> views = {
         targets.reflectionTemporalScratchTextureViewHandle(),
         targets.depthTextureViewHandle(),
@@ -384,7 +458,28 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList,
+                              targets.reflectionTemporalScratchTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
+        : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_filterPipeline);
     commandList.setBindGroup(0u, m_filterBindGroup);
@@ -415,7 +510,20 @@ void ReflectionPass::renderFilter(const FrameContext& ctx, const ReflectionSetti
                               rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSettings& reflection,
@@ -446,7 +554,38 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     renderingInfo.colorAttachmentCount = 1u;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    targets.copyReflectionToTemporalScratch(rhiDevice);
+    RhiCommandList* copyCommandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (copyCommandListStorage == nullptr ||
+        !copyCommandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& copyCommandList = *copyCommandListStorage;
+    const GpuTimerSegmentToken copyTimerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(copyCommandList, GpuTimerPass::Reflection)
+        : GpuTimerSegmentToken{};
+    targets.transitionTexture(copyCommandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::TransferSrc);
+    targets.transitionTexture(copyCommandList,
+                              targets.reflectionTemporalScratchTextureHandle(),
+                              RhiResourceState::TransferDst);
+    targets.copyReflectionToTemporalScratch(copyCommandList);
+    targets.transitionTexture(copyCommandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(copyCommandList,
+                              targets.reflectionTemporalScratchTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(copyCommandList, copyTimerToken);
+    }
+    if (!copyCommandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&copyCommandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
     const std::array<RhiTextureViewHandle, 7> views = {
         targets.reflectionTemporalScratchTextureViewHandle(),
         targets.historyReflectionTexturePrevViewHandle(),
@@ -461,7 +600,32 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList,
+                              targets.reflectionTemporalScratchTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.historyReflectionTexturePrevHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.velocityTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Reflection)
+        : GpuTimerSegmentToken{};
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_temporalPipeline);
     commandList.setBindGroup(0u, m_temporalBindGroup);
@@ -473,7 +637,20 @@ void ReflectionPass::renderTemporal(const FrameContext& ctx, const ReflectionSet
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.reflectionTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool ReflectionPass::ensureFilterRhiPipeline(RhiDevice& rhiDevice) {

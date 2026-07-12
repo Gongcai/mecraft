@@ -13,6 +13,7 @@
 namespace {
 
 bool beginMenuClearPass(RhiDevice& rhiDevice,
+                        RhiCommandListPool& commandListPool,
                         const Window& window,
                         RhiCommandList*& commandList) {
     const int width = std::max(1, window.getWidth());
@@ -54,13 +55,24 @@ bool beginMenuClearPass(RhiDevice& rhiDevice,
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    commandList = &rhiDevice.beginFrame();
+    commandList = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({"MainMenuClear.Commands", RhiCommandListType::Graphics})) {
+        return false;
+    }
+    commandList->textureBarrier({
+        rhiDevice.currentSwapchainColorTexture(),
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
     commandList->beginRendering(renderingInfo);
     return true;
 }
 
 bool beginMenuOverlayPass(RhiDevice& rhiDevice,
+                          RhiCommandListPool& commandListPool,
                           const Window& window,
+                          UIRenderer& uiRenderer,
                           RhiCommandList*& commandList) {
     const int width = std::max(1, window.getWidth());
     const int height = std::max(1, window.getHeight());
@@ -89,19 +101,45 @@ bool beginMenuOverlayPass(RhiDevice& rhiDevice,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    commandList = &rhiDevice.beginFrame();
+    commandList = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({"MainMenuOverlay.Commands", RhiCommandListType::Graphics})) {
+        return false;
+    }
+    if (!uiRenderer.prepareTextFrame(*commandList)) {
+        return false;
+    }
+    commandList->textureBarrier({
+        rhiDevice.currentSwapchainColorTexture(),
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
     commandList->beginRendering(renderingInfo);
     return true;
 }
 
 void endMenuPass(RhiDevice& rhiDevice,
-                 RhiCommandList*& commandList) {
+                 RhiCommandList*& commandList,
+                 const bool transitionToPresent) {
     if (commandList == nullptr) {
         return;
     }
 
     commandList->endRendering();
-    rhiDevice.submitFrame(*commandList);
+    if (transitionToPresent) {
+        commandList->textureBarrier({
+            rhiDevice.currentSwapchainColorTexture(),
+            RhiResourceState::RenderTarget,
+            RhiResourceState::Present
+        });
+    }
+    if (!commandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {commandList};
+    if (!rhiDevice.submit({"MainMenu.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
     commandList = nullptr;
 }
 
@@ -346,11 +384,12 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
 void MainMenuAppState::render(double frameTime) {
     (void)frameTime;
     RhiCommandList* commandList = nullptr;
-    if (!beginMenuClearPass(m_deps.rhiDevice, m_deps.window, commandList)) {
+    if (!beginMenuClearPass(m_deps.rhiDevice, m_deps.commandListPool,
+                            m_deps.window, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu clear pass\n");
         return;
     }
-    endMenuPass(m_deps.rhiDevice, commandList);
+    endMenuPass(m_deps.rhiDevice, commandList, true);
 
     m_skyboxRenderer.render(m_deps.window.getWidth(), m_deps.window.getHeight(),
                             m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f,
@@ -358,7 +397,8 @@ void MainMenuAppState::render(double frameTime) {
     UIRenderContext sceneContext =
         m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
 
-    if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.window, commandList)) {
+    if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.commandListPool,
+                              m_deps.window, m_deps.uiRenderer, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
         return;
     }
@@ -369,7 +409,6 @@ void MainMenuAppState::render(double frameTime) {
         m_transition.render(m_deps.window.getWidth(), m_deps.window.getHeight(), *commandList);
     }
 
-    endMenuPass(m_deps.rhiDevice, commandList);
+    endMenuPass(m_deps.rhiDevice, commandList, true);
     m_deps.rhiDevice.present();
-    m_deps.window.swapBuffers();
 }

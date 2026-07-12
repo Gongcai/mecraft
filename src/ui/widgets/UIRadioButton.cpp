@@ -143,8 +143,10 @@ void UIRadioButtonGroup::initMesh() {
     RhiBufferDesc desc;
     desc.debugName = "UiRadioButton.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
     if (!m_vertexBuffer.isValid()) std::abort();
 }
@@ -182,8 +184,10 @@ int UIRadioButtonGroup::hitTestOption(float px, float py, const UIRenderContext&
 }
 
 void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
-    if (ctx.commandList == nullptr || !m_pipeline.isValid() ||
-        !m_vertexBuffer.isValid() || m_options.empty()) return;
+    if (m_options.empty()) return;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record && (ctx.commandList == nullptr || !m_pipeline.isValid() ||
+                   !m_vertexBuffer.isValid())) return;
 
     const UIResolvedRadioButtonStyle baseResolved = resolveStyle(ctx, false);
     const float radioSz = baseResolved.radioSize;
@@ -192,46 +196,48 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
     const float ax = getAbsoluteX(ctx);
     const float ay = getAbsoluteY(ctx);
 
-    ctx.commandList->setGraphicsPipeline(m_pipeline);
-    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+    if (record) {
+        ctx.commandList->setGraphicsPipeline(m_pipeline);
+        ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
 
-    for (int i = 0; i < static_cast<int>(m_options.size()); ++i) {
-        const Option& opt = m_options[i];
-        const UIResolvedRadioButtonStyle resolved = resolveStyle(ctx, opt.hovered);
-        const float rowY = ay + static_cast<float>(i) * (rowHeight + m_spacing);
-        const float cy = rowY + rowHeight * 0.5f;
-        const float cx = ax + radioSz * 0.5f;
-        const float outerR = radioSz * 0.5f;
-        const float innerR = outerR * 0.48f * opt.selectTween.value();
+        for (int i = 0; i < static_cast<int>(m_options.size()); ++i) {
+            const Option& opt = m_options[i];
+            const UIResolvedRadioButtonStyle resolved = resolveStyle(ctx, opt.hovered);
+            const float rowY = ay + static_cast<float>(i) * (rowHeight + m_spacing);
+            const float cy = rowY + rowHeight * 0.5f;
+            const float cx = ax + radioSz * 0.5f;
+            const float outerR = radioSz * 0.5f;
+            const float innerR = outerR * 0.48f * opt.selectTween.value();
 
-        auto drawCircle = [&](const float radius, Color circleColor) {
-            const float diameter = radius * 2.0f;
-            circleColor[3] *= alpha;
-            struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-            const PushConstants pushConstants{
-                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight),
-                          cx - radius, cy - radius),
-                glm::vec4(diameter, diameter, radius, 0.0f),
-                glm::vec4(circleColor[0], circleColor[1], circleColor[2], circleColor[3])
+            auto drawCircle = [&](const float radius, Color circleColor) {
+                const float diameter = radius * 2.0f;
+                circleColor[3] *= alpha;
+                struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+                const PushConstants pushConstants{
+                    glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight),
+                              cx - radius, cy - radius),
+                    glm::vec4(diameter, diameter, radius, 0.0f),
+                    glm::vec4(circleColor[0], circleColor[1], circleColor[2], circleColor[3])
+                };
+                ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                               rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                ctx.commandList->draw(6u, 1u, 0u, 0u);
             };
-            ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
-                                           rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
-            ctx.commandList->draw(6u, 1u, 0u, 0u);
-        };
 
-        const Color oc = resolved.outer;
-        drawCircle(outerR, oc);
+            const Color oc = resolved.outer;
+            drawCircle(outerR, oc);
 
-        Color wellCol {
-            std::clamp(oc[0] * 0.34f, 0.0f, 1.0f),
-            std::clamp(oc[1] * 0.34f, 0.0f, 1.0f),
-            std::clamp(oc[2] * 0.34f, 0.0f, 1.0f),
-            opt.hovered ? 0.82f : 0.70f,
-        };
-        drawCircle(outerR * 0.66f, wellCol);
+            Color wellCol {
+                std::clamp(oc[0] * 0.34f, 0.0f, 1.0f),
+                std::clamp(oc[1] * 0.34f, 0.0f, 1.0f),
+                std::clamp(oc[2] * 0.34f, 0.0f, 1.0f),
+                opt.hovered ? 0.82f : 0.70f,
+            };
+            drawCircle(outerR * 0.66f, wellCol);
 
-        if (innerR > 0.5f) {
-            drawCircle(innerR, resolved.inner);
+            if (innerR > 0.5f) {
+                drawCircle(innerR, resolved.inner);
+            }
         }
     }
 
@@ -246,10 +252,13 @@ void UIRadioButtonGroup::renderSelf(const UIRenderContext& ctx) const {
             const float rowY = ay + static_cast<float>(i) * (rowHeight + m_spacing);
             const auto metrics = ctx.textRenderer->measureText(opt.text, textScale);
             const float textY = rowY + (rowHeight - metrics.height) * 0.5f;
-            ctx.textRenderer->render(opt.text, textX, textY, textScale,
-                                     {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
-                                     static_cast<float>(ctx.screenWidth),
-                                     static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(
+                ctx,
+                opt.text,
+                textX,
+                textY,
+                textScale,
+                {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
         }
     }
 }

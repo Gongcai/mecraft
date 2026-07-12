@@ -5,53 +5,44 @@
 #include <cstdlib>
 #include <iostream>
 
-#include <glad/glad.h>
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
 #include "../../item/Item.h"
 #include "../../locale/LocaleManager.h"
 #include "../../player/Inventory.h"
-#include "../../renderer/core/Shader.h"
-#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "../../renderer/rhi/RhiCommandList.h"
 #include "../../resource/ResourceMgr.h"
 #include "../ItemIconPolicy.h"
-#include "../core/UIRenderUtils.h"
+#include "../core/UIRenderer.h"
 
 namespace {
-void addQuad(std::vector<float>& vertices,
-             const float x0,
-             const float y0,
-             const float x1,
-             const float y1,
-             const float u0,
-             const float v0,
-             const float u1,
-             const float v1) {
-    vertices.push_back(x0); vertices.push_back(y0); vertices.push_back(u0); vertices.push_back(v0);
-    vertices.push_back(x1); vertices.push_back(y0); vertices.push_back(u1); vertices.push_back(v0);
-    vertices.push_back(x1); vertices.push_back(y1); vertices.push_back(u1); vertices.push_back(v1);
-    vertices.push_back(x0); vertices.push_back(y0); vertices.push_back(u0); vertices.push_back(v0);
-    vertices.push_back(x1); vertices.push_back(y1); vertices.push_back(u1); vertices.push_back(v1);
-    vertices.push_back(x0); vertices.push_back(y1); vertices.push_back(u0); vertices.push_back(v1);
+struct ImageTexturePushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 extent;
+    glm::vec4 uvRect;
+    glm::vec4 tint;
+};
+
+static_assert(sizeof(ImageTexturePushConstants) == 64u);
+
+[[nodiscard]] RhiRect2D containerScissor(const UIRenderContext& context) {
+    if (context.hasScissor) {
+        return context.scissor;
+    }
+    return {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
+    };
 }
-}
+} // namespace
 
 void DataDrivenContainerPanelControl::init(ResourceMgr& resourceMgr) {
+    UIWidget::init(resourceMgr);
     m_resourceMgr = &resourceMgr;
-    m_inventoryShader = resourceMgr.getShader("inventory");
-
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 6 * 4 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), reinterpret_cast<void*>(2 * sizeof(float)));
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 
     m_containerGrid.init(resourceMgr);
     m_playerGrid.init(resourceMgr);
@@ -59,15 +50,6 @@ void DataDrivenContainerPanelControl::init(ResourceMgr& resourceMgr) {
 }
 
 void DataDrivenContainerPanelControl::shutdown() {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
-    }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
-
     m_tooltip.shutdown();
     m_playerGrid.shutdown();
     m_containerGrid.shutdown();
@@ -77,8 +59,8 @@ void DataDrivenContainerPanelControl::shutdown() {
     m_machine = nullptr;
     m_playerInventory = nullptr;
     m_definition = nullptr;
-    m_inventoryShader = nullptr;
     m_resourceMgr = nullptr;
+    UIWidget::shutdown();
 }
 
 UIEventResult DataDrivenContainerPanelControl::onInput(const UIInputEvent& event, const UIRenderContext& ctx) {
@@ -308,7 +290,7 @@ void DataDrivenContainerPanelControl::appendSlotsForGroup(const ui::ContainerSlo
 }
 
 void DataDrivenContainerPanelControl::renderBackground(const UIRenderContext& context) const {
-    if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
+    if (m_resourceMgr == nullptr) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
@@ -326,14 +308,18 @@ void DataDrivenContainerPanelControl::renderBackground(const UIRenderContext& co
     const float v0 = 1.0f - def.height / def.textureHeight;
     const float v1 = 1.0f;
 
-    drawTextureQuad(context, x0, y0, x1, y1, u0, v0, u1, v1);
+    drawTextureQuad(context,
+                    m_resourceMgr->getGuiTextureHandle(def.backgroundTexture),
+                    x0, y0, x1, y1, u0, v0, u1, v1, 1.0f);
 }
 
 void DataDrivenContainerPanelControl::renderProgressBars(const UIRenderContext& context) const {
-    if (m_definition == nullptr || m_definition->progressBars.empty()) {
+    if (m_definition == nullptr || m_resourceMgr == nullptr || m_definition->progressBars.empty()) {
         return;
     }
     const ui::ContainerUiDef& def = requireDefinition();
+    const RhiTextureHandle backgroundTexture =
+        m_resourceMgr->getGuiTextureHandle(def.backgroundTexture);
     const ResolvedPanelRect panelRect = resolvePanelRect(context.screenWidth, context.screenHeight);
     const float scale = panelRect.scale;
 
@@ -357,6 +343,7 @@ void DataDrivenContainerPanelControl::renderProgressBars(const UIRenderContext& 
             const float dstX0 = panelRect.x + progress.x * scale;
             const float dstY0 = panelRect.y + (progress.y + progress.height - visibleHeight) * scale;
             drawTextureQuad(context,
+                            backgroundTexture,
                             dstX0,
                             dstY0,
                             dstX0 + progress.width * scale,
@@ -364,7 +351,8 @@ void DataDrivenContainerPanelControl::renderProgressBars(const UIRenderContext& 
                             srcX0 / def.textureWidth,
                             1.0f - srcY1 / def.textureHeight,
                             srcX1 / def.textureWidth,
-                            1.0f - srcY0 / def.textureHeight);
+                            1.0f - srcY0 / def.textureHeight,
+                            1.0f);
         } else if (progress.direction == "right") {
             const float visibleWidth = std::round(progress.width * fraction);
             if (visibleWidth <= 0.0f) {
@@ -373,6 +361,7 @@ void DataDrivenContainerPanelControl::renderProgressBars(const UIRenderContext& 
             const float dstX0 = panelRect.x + progress.x * scale;
             const float dstY0 = panelRect.y + progress.y * scale;
             drawTextureQuad(context,
+                            backgroundTexture,
                             dstX0,
                             dstY0,
                             dstX0 + visibleWidth * scale,
@@ -380,12 +369,14 @@ void DataDrivenContainerPanelControl::renderProgressBars(const UIRenderContext& 
                             progress.textureX / def.textureWidth,
                             1.0f - (progress.textureY + progress.height) / def.textureHeight,
                             (progress.textureX + visibleWidth) / def.textureWidth,
-                            1.0f - progress.textureY / def.textureHeight);
+                            1.0f - progress.textureY / def.textureHeight,
+                            1.0f);
         }
     }
 }
 
 void DataDrivenContainerPanelControl::drawTextureQuad(const UIRenderContext& context,
+                                                      const RhiTextureHandle texture,
                                                       const float x0,
                                                       const float y0,
                                                       const float x1,
@@ -393,52 +384,48 @@ void DataDrivenContainerPanelControl::drawTextureQuad(const UIRenderContext& con
                                                       const float u0,
                                                       const float v0,
                                                       const float u1,
-                                                      const float v1) const {
-    if (!m_inventoryShader || !m_resourceMgr || m_vao == 0 || m_vbo == 0) {
-        return;
-    }
-    if (context.screenWidth <= 0 || context.screenHeight <= 0) {
+                                                      const float v1,
+                                                      const float opacity) const {
+    if (context.commandList == nullptr ||
+        context.uiRenderer == nullptr ||
+        !context.panelQuadVertexBuffer.isValid() ||
+        !context.imageTexturePipeline.isValid() ||
+        !texture.isValid() ||
+        context.screenWidth <= 0 ||
+        context.screenHeight <= 0 ||
+        x1 <= x0 ||
+        y1 <= y0 ||
+        opacity <= 0.0f) {
         return;
     }
 
-    const ui::ContainerUiDef& def = requireDefinition();
-    const RhiTextureHandle texture = m_resourceMgr->getGuiTextureHandle(def.backgroundTexture);
-    const uint32_t textureId = renderer::rhi::gl::textureId(texture);
-    if (textureId == 0) {
-        std::cerr << "Container UI texture is not loaded: " << def.backgroundTexture << '\n';
+    const RhiBindGroupHandle bindGroup = context.uiRenderer->resolveImageBindGroup(texture);
+    if (!bindGroup.isValid()) {
         return;
     }
 
-    std::vector<float> vertices;
-    vertices.reserve(24);
     const float bottomY0 = static_cast<float>(context.screenHeight) - y1;
-    const float bottomY1 = static_cast<float>(context.screenHeight) - y0;
-    addQuad(vertices, x0, bottomY0, x1, bottomY1, u0, v0, u1, v1);
+    const ImageTexturePushConstants pushConstants{
+        glm::vec4(static_cast<float>(context.screenWidth),
+                  static_cast<float>(context.screenHeight), x0, bottomY0),
+        glm::vec4(x1 - x0, y1 - y0, 0.0f, 0.0f),
+        glm::vec4(u0, v0, u1, v1),
+        glm::vec4(1.0f, 1.0f, 1.0f, opacity)
+    };
 
-    const UIRenderUtils::GLStateGuard glState;
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    m_inventoryShader->use();
-    m_inventoryShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight)));
-    m_inventoryShader->setVec4("uTintColor", glm::vec4(1.0f));
-    m_inventoryShader->setInt("uAtlas", 0);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, textureId);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    RhiCommandList& commandList = *context.commandList;
+    commandList.setGraphicsPipeline(context.imageTexturePipeline);
+    commandList.setVertexBuffer(0u, context.panelQuadVertexBuffer, 0u);
+    commandList.setBindGroup(0u, bindGroup);
+    commandList.setScissor(containerScissor(context));
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Vertex) |
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(6u, 1u, 0u, 0u);
 }
 
 void DataDrivenContainerPanelControl::renderDraggedItem(const UIRenderContext& context) const {
-    if (!context.hasDraggedItem || context.draggedItemId <= 0 || !m_inventoryShader || !m_resourceMgr) {
+    if (!context.hasDraggedItem || context.draggedItemId <= 0 || m_resourceMgr == nullptr) {
         return;
     }
     if (context.screenWidth <= 0 || context.screenHeight <= 0) {
@@ -447,17 +434,18 @@ void DataDrivenContainerPanelControl::renderDraggedItem(const UIRenderContext& c
 
     const TextureAtlas& itemIconAtlas = m_resourceMgr->getItemIconAtlas();
     const TextureAtlas& itemTextureAtlas = m_resourceMgr->getItemTextureAtlas();
-    const uint32_t itemIconAtlasId = renderer::rhi::gl::textureId(itemIconAtlas.texture);
-    const uint32_t itemTextureAtlasId = renderer::rhi::gl::textureId(itemTextureAtlas.texture);
     const auto draggedItem = static_cast<ItemID>(context.draggedItemId);
     const ItemDef& itemDef = ItemRegistry::get(draggedItem);
 
-    const bool hasItemTextures = itemTextureAtlasId != 0 && itemTextureAtlas.tilesPerRow > 0;
-    const bool hasIcons = itemIconAtlasId != 0 && itemIconAtlas.tilesPerRow > 0;
-    const bool useBakedBlockIcon = hasIcons && ui::shouldUseBakedBlockIcon(itemDef);
-    const int itemTileIndex = (!useBakedBlockIcon && hasItemTextures) ? m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName) : -1;
-    const bool useItemTexture = !useBakedBlockIcon && itemTileIndex >= 0;
-    if (!useBakedBlockIcon && !useItemTexture && !hasIcons) {
+    const bool useBakedBlockIcon = ui::shouldUseBakedBlockIcon(itemDef);
+    const int itemTileIndex = useBakedBlockIcon
+        ? -1
+        : m_resourceMgr->getItemTextureIndex(itemDef.iconTextureName);
+    const TextureAtlas& selectedAtlas = useBakedBlockIcon ? itemIconAtlas : itemTextureAtlas;
+    const int selectedTile = useBakedBlockIcon
+        ? static_cast<int>(itemDef.renderBlock)
+        : itemTileIndex;
+    if (!selectedAtlas.texture.isValid() || selectedAtlas.tilesPerRow <= 0 || selectedTile < 0) {
         return;
     }
 
@@ -477,36 +465,18 @@ void DataDrivenContainerPanelControl::renderDraggedItem(const UIRenderContext& c
     const float topY0 = context.pointerY + kDragCursorOffsetPx;
     const float x1 = x0 + iconSize;
     const float topY1 = topY0 + iconSize;
-    const float y0 = static_cast<float>(context.screenHeight) - topY1;
-    const float y1 = static_cast<float>(context.screenHeight) - topY0;
-
-    const auto uv = useItemTexture
-        ? itemTextureAtlas.getUV(itemTileIndex)
-        : itemIconAtlas.getUV(static_cast<int>(itemDef.renderBlock));
-    std::vector<float> vertices;
-    vertices.reserve(24);
-    addQuad(vertices, x0, y0, x1, y1, uv.first.x, uv.first.y, uv.second.x, uv.second.y);
-
-    const UIRenderUtils::GLStateGuard glState;
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    m_inventoryShader->use();
-    m_inventoryShader->setVec2("uScreenSize", glm::vec2(static_cast<float>(context.screenWidth), static_cast<float>(context.screenHeight)));
-    m_inventoryShader->setVec4("uTintColor", glm::vec4(1.0f, 1.0f, 1.0f, 0.95f));
-    m_inventoryShader->setInt("uAtlas", 0);
-
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, useItemTexture ? itemTextureAtlasId : itemIconAtlasId);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, static_cast<GLsizeiptr>(vertices.size() * sizeof(float)), vertices.data());
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    const auto uv = selectedAtlas.getUV(selectedTile);
+    drawTextureQuad(context,
+                    selectedAtlas.texture,
+                    x0,
+                    topY0,
+                    x1,
+                    topY1,
+                    uv.first.x,
+                    uv.first.y,
+                    uv.second.x,
+                    uv.second.y,
+                    0.95f);
 }
 
 void DataDrivenContainerPanelControl::renderTooltip(const UIRenderContext& context) const {

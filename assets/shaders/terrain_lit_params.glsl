@@ -1,4 +1,4 @@
-layout(std140, binding = 15) uniform TerrainLitParams {
+layout(std140, set = 1, binding = 15) uniform TerrainLitParams {
     mat4 rhiTerrainLitView;
     mat4 rhiTerrainLitViewProj;
     vec4 rhiTerrainLitCameraAnimation;

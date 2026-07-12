@@ -1,68 +1,14 @@
 #version 450 core
-in vec3 vWorldDir;
-in vec2 vUV;
-in vec4 vColor;
+layout(location = 0) in vec3 vWorldDir;
+layout(location = 1) in vec2 vUV;
+layout(location = 2) in vec4 vColor;
 
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
 
-uniform int uMode;
-uniform sampler2D uTexture;
-uniform vec3 uSkyTopColor;
-uniform vec3 uSkyHorizonColor;
-uniform vec3 uSunDirection;
-uniform vec3 uMoonDirection;
-uniform vec3 uSunScatterColor;
-uniform vec3 uMoonLightColor;
-uniform vec4 uTintColor;
-uniform float uHorizonHaze;
-uniform float uSunGlare;
-uniform float uSunVisibility;
-uniform float uMoonVisibility;
-uniform float uMoonPhaseAngle;
-uniform float uNightFactor;
-uniform float uBlackKeyThreshold;
-uniform float uBlackKeySoftness;
-uniform int uIncludeCelestialDisks;
-uniform int uCloudySkyCapture;
 layout(binding = 2) uniform sampler2D uNoiseTex;
-uniform bool uNoiseEnabled;
-uniform float uTime;
-uniform float uCloudTimeScale;
-uniform float uCloudCoverage;
-uniform float uCloudDensity;
-uniform float uCloudHeight;
-uniform float uCloudThickness;
-uniform float uPlanarCloudCoverage;
-uniform float uPlanarCloudDensity;
-uniform float uPlanarCloudAltitude;
-uniform vec3 uCameraPos;
 
-// CPU illuminance uniforms — legacy/fallback only. Mode 5 computes illuminance
-// from atmosphere LUT via atmGetSunAndSkyIrradiance(), not from these uniforms.
-uniform vec3 uDirectIlluminance;
-uniform vec3 uSkyIlluminance;
-uniform vec3 uSunIlluminance;
-uniform vec3 uMoonIlluminance;
-uniform vec3 uCloudDynamicWeather;
-
-// Weather modulation for SkyCapture radiance (mode 4).
-// Metadata mode 5 intentionally stays aligned with DerivativeMain
-// GetSunAndSkyIrradiance(), which is weather-independent.
-uniform float uWeatherWetness;
-uniform float uWeatherStorm;
-uniform float uSkyWetness;
-uniform float uSurfaceWetness;
-uniform float uFogWetness;
-uniform float uCloudWetness;
-uniform float uPrecipitation;
-
-// Atmosphere LUT (modes 4, 5)
+// Atmosphere LUT used by the canonical sky-capture pass.
 layout(binding = 1) uniform sampler3D uAtmosphereLut;
-uniform float uCameraAltitude;
-
-// Sky capture texture for mode 0 visible sky (atmosphere LUT radiance)
-uniform sampler2D uSkyCaptureTex;
-uniform int uSkyCaptureEnabled;
 
 layout(std140, binding = 0) uniform CaptureUniforms {
     vec4 rhiSkyTopHaze;
@@ -84,7 +30,6 @@ layout(std140, binding = 0) uniform CaptureUniforms {
     vec4 rhiCameraPosition;
 };
 
-#define uMode 4
 #define uSkyTopColor rhiSkyTopHaze.xyz
 #define uHorizonHaze rhiSkyTopHaze.w
 #define uSkyHorizonColor rhiSkyHorizonGlare.xyz
@@ -96,6 +41,7 @@ layout(std140, binding = 0) uniform CaptureUniforms {
 #define uSunScatterColor rhiSunScatterNight.xyz
 #define uNightFactor rhiSunScatterNight.w
 #define uMoonLightColor rhiMoonLightPhaseFlux.xyz
+#define uMoonPhaseFlux rhiMoonLightPhaseFlux.w
 #define uDirectIlluminance rhiDirectIlluminanceAltitude.xyz
 #define uCameraAltitude rhiDirectIlluminanceAltitude.w
 #define uSkyIlluminance rhiSkyIlluminanceTime.xyz
@@ -119,9 +65,8 @@ layout(std140, binding = 0) uniform CaptureUniforms {
 #define uCloudWetness rhiWetness0.x
 #define uSurfaceWetness rhiWetness0.y
 #define uCameraPos rhiCameraPosition.xyz
-#define uCloudySkyCapture 1
-#define uIncludeCelestialDisks 1
 #define uNoiseEnabled true
+#define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS 1
 
 #include "atmosphere_lut.glsl"
 #include "render_contract.glsl"
@@ -196,8 +141,6 @@ vec3 renderStars(vec3 worldDir, vec3 sunDir) {
 
     return maxLuminance * falloff * cov * cov * Blackbody(mix(0.0, 1.0, hash.y));
 }
-
-#include "procedural_celestials.glsl"
 
 vec3 evaluateSkyRadiance(vec3 dir) {
     float height = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
@@ -342,112 +285,29 @@ vec3 captureCloudySkybox(vec3 worldDir, vec3 skyRadiance, vec3 sunDir, vec3 moon
 }
 
 void main() {
-    if (uMode == 0) {
-        // Visible sky: prefer SkyCapture (atmosphere LUT) for consistency with deferred.
-        // Fallback to gradient model if SkyCapture texture is not bound (forward path).
-        vec3 dir = normalize(vWorldDir);
-        vec3 sky;
-        if (uSkyCaptureEnabled != 0) {
-            sky = sampleSkyRadiance(uSkyCaptureTex, dir);
-            float solarLobeMask = proceduralSunAngularMask(dir, 0.018, 0.180);
-            float solarCoreMask = proceduralSunAngularMask(dir, 0.000, 0.070);
-            sky *= (1.0 - solarLobeMask * 0.94) * (1.0 - solarCoreMask * 0.92);
-        } else {
-            // Forward fallback: evaluateSkyRadiance() is already in display-referred space,
-            // no additional srgbToLinear needed (was applied in the old path).
-            sky = evaluateSkyRadiance(dir);
-        }
-        // DerivativeMain Atmosphere.glsl:809-835: 3D blackbody stars with sun rotation
-        vec3 stars = renderStars(dir, normalize(uSunDirection))
-                   * clamp(uNightFactor, 0.0, 1.0)
-                   * (1.0 - clamp(uSunVisibility, 0.0, 1.0));
-        sky += stars;
-        sky += renderProceduralMoonDisk(dir);
-        sky += renderProceduralSunDisk(dir);
-        FragColor = vec4(max(sky, vec3(0.0)), 1.0);
-        return;
+    // DerivativeMain-compatible sky capture projection.
+    vec2 uv = clamp(vUV, vec2(0.0), vec2(1.0));
+    float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) /
+                    (1.0 - 4.0 / float(skyCaptureRes.x)));
+    float phi = u * kTwoPi;
+    float theta = uv.y * kPi;
+    float sinTheta = sin(theta);
+    vec3 dir = normalize(vec3(sin(phi) * sinTheta, cos(theta), cos(phi) * sinTheta));
+
+    vec3 sunDir = normalize(uSunDirection);
+    vec3 moonDir = normalize(uMoonDirection);
+
+    vec3 transmittance;
+    vec3 sky = atmGetSkyRadiance(max(uCameraAltitude, 0.0), dir, sunDir, transmittance);
+    sky = captureCloudySkybox(dir, sky, sunDir, moonDir, transmittance);
+
+    float weatherOcclusion = clamp(uSkyWetness, 0.0, 1.0);
+    if (weatherOcclusion > 0.001) {
+        float skyLum = dot(sky, vec3(0.2126, 0.7152, 0.0722));
+        vec3 wetnessGrey = skyLum * vec3(1.026186824, 0.9881671071, 1.015787125);
+        sky = mix(sky, wetnessGrey, weatherOcclusion * 0.7);
+        sky *= 1.0 - weatherOcclusion * 0.6;
     }
 
-    if (uMode == 4) {
-        // DerivativeMain-compatible sky capture projection.
-        // Matches UnprojectSky in DerivativeMain Atmosphere.glsl.
-        vec2 uv = clamp(vUV, vec2(0.0), vec2(1.0));
-        float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) / (1.0 - 4.0 / float(skyCaptureRes.x)));
-        float phi = u * kTwoPi;
-        float theta = uv.y * kPi;
-        float sinTheta = sin(theta);
-        vec3 dir = normalize(vec3(sin(phi) * sinTheta, cos(theta), cos(phi) * sinTheta));
-
-        vec3 sunDir = normalize(uSunDirection);
-        vec3 moonDir = normalize(uMoonDirection);
-
-        vec3 transmittance;
-        vec3 sky = atmGetSkyRadiance(max(uCameraAltitude, 0.0), dir, sunDir, transmittance);
-        if (uCloudySkyCapture != 0) {
-            sky = captureCloudySkybox(dir, sky, sunDir, moonDir, transmittance);
-        } else if (uIncludeCelestialDisks != 0) {
-            // Visible disks are procedural in the final sky passes; SkyCapture keeps only radiance.
-        }
-
-        // DerivativeMain/lib/Atmosphere/Atmosphere.glsl:
-        // rayleigh = mix(rayleigh, GetLuminance(rayleigh) * wetnessGrey, wetness * 0.7);
-        // return (rayleigh + mie) * oneMinus(wetness * 0.6);
-        // Mecraft adaptation: atmosphere LUT returns combined sky radiance here,
-        // so apply the same shaping to combined radiance.
-        float weatherOcclusion = clamp(uSkyWetness, 0.0, 1.0);
-        if (weatherOcclusion > 0.001) {
-            float skyLum = dot(sky, vec3(0.2126, 0.7152, 0.0722));
-            vec3 wetnessGrey = skyLum * vec3(1.026186824, 0.9881671071, 1.015787125);
-            sky = mix(sky, wetnessGrey, weatherOcclusion * 0.7);
-            sky *= 1.0 - weatherOcclusion * 0.6;
-        }
-
-        FragColor = vec4(max(sky, vec3(0.0)), 1.0);
-        return;
-    }
-
-    if (uMode == 5) {
-        // Sky cache metadata texel pass — illuminance computed from atmosphere LUT.
-        // Rendered as a 1x6 viewport at column x=255 of the sky capture FBO.
-        int row = int(gl_FragCoord.y);
-        vec3 camera = vec3(0.0, atmPlanetRadius + max(uCameraAltitude, 0.0), 0.0);
-        vec3 sunDir = normalize(uSunDirection);
-
-        vec3 sunIrr, moonIrr;
-        vec3 skyIrr = atmGetSunAndSkyIrradiance(camera, sunDir, sunIrr, moonIrr);
-
-        vec3 value = vec3(0.0);
-        // DerivativeMain GetSunAndSkyIrradiance() does not apply wetness here.
-        // Rain/overcast direct-light attenuation happens later through cloudShadow
-        // in deferred lighting, while sky radiance wetness is applied in mode 4.
-        if (row == 0) value = sunIrr + moonIrr;   // directIlluminance
-        else if (row == 1) value = skyIrr;         // skyIlluminance
-        else if (row == 2) value = sunIrr;         // sunIlluminance
-        else if (row == 3) value = moonIrr;        // moonIlluminance
-        else if (row == 5) value = uCloudDynamicWeather; // cloudDynamicWeather
-        else discard;
-        FragColor = vec4(value, 1.0);
-        return;
-    }
-
-    if (uMode == 1) {
-        vec4 texel = texture(uTexture, vUV);
-        float brightness = max(max(texel.r, texel.g), texel.b);
-        float keyedAlpha = smoothstep(uBlackKeyThreshold, uBlackKeyThreshold + uBlackKeySoftness, brightness);
-        if (keyedAlpha <= 0.001) {
-            discard;
-        }
-        vec3 unassociatedColor = texel.rgb / max(keyedAlpha, 0.001);
-        unassociatedColor = min(unassociatedColor, vec3(1.0));
-        vec3 color = srgbToLinear(unassociatedColor) * srgbToLinear(uTintColor.rgb);
-        FragColor = vec4(color, texel.a * keyedAlpha * uTintColor.a);
-        return;
-    }
-
-    if (uMode == 3) {
-        FragColor = vec4(srgbToLinear(uTintColor.rgb) * vColor.r, uTintColor.a);
-        return;
-    }
-
-    FragColor = vec4(srgbToLinear(vColor.rgb) * srgbToLinear(uTintColor.rgb), vColor.a * uTintColor.a);
+    FragColor = vec4(max(sky, vec3(0.0)), 1.0);
 }

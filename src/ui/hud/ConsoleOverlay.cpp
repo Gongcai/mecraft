@@ -58,8 +58,10 @@ void ConsoleOverlay::init(ResourceMgr& resourceMgr)
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "ConsoleOverlay.VertexBuffer";
     bufferDesc.size = sizeof(vertices);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices, sizeof(vertices));
     if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
         !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) std::abort();
@@ -148,7 +150,11 @@ void ConsoleOverlay::drawOverlayRect(const UIRenderContext& context,
 void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRenderer,
                                     const UIRenderContext& context) const
 {
-    if (m_display.empty() || context.commandList == nullptr) {
+    if (m_display.empty()) {
+        return;
+    }
+    const bool record = context.phase == UIRenderPhase::Record;
+    if (record && context.commandList == nullptr) {
         return;
     }
 
@@ -184,14 +190,18 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
     params.successTextColor = style.textSuccess;
 
     m_display.setMaxLines(m_maxLines);
+    const float uiScale = context.pixelScale();
+    RhiRect2D textScissor = context.hasScissor
+        ? context.scissor
+        : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
+                    static_cast<uint32_t>(screenH * uiScale)};
     m_display.render(
         nowSec,
         params,
         [this, &context](int rectX, int rectY, int rectW, int rectH, const std::array<float, 4>& rectColor) {
             drawOverlayRect(context, rectX, rectY, rectW, rectH, rectColor);
         },
-        [&context](int clipX, int clipY, int clipW, int clipH) {
-            const float uiScale = context.pixelScale();
+        [&context, record, &textScissor, uiScale](int clipX, int clipY, int clipW, int clipH) {
             RhiRect2D clip{
                 static_cast<int32_t>(std::floor(static_cast<float>(clipX) * uiScale)),
                 static_cast<int32_t>(std::floor(static_cast<float>(clipY) * uiScale)),
@@ -208,32 +218,33 @@ void ConsoleOverlay::renderMessages(double nowSec, const TextRenderer& textRende
                 clip = {x0, y0, static_cast<uint32_t>(std::max(0, x1 - x0)),
                         static_cast<uint32_t>(std::max(0, y1 - y0))};
             }
-            context.commandList->setScissor(clip);
+            textScissor = clip;
+            if (record) {
+                context.commandList->setScissor(clip);
+            }
         },
-        [&textRenderer, screenW, screenH](const std::string& line,
+        [&textRenderer, &context, &textScissor](const std::string& line,
                                           float textX,
                                           float textY,
                                           float scale,
                                           const std::array<float, 4>& textColor,
                                           float,
                                           float) {
-            textRenderer.render(line,
-                                textX,
-                                textY,
-                                scale,
-                                textColor,
-                                static_cast<float>(screenW),
-                                static_cast<float>(screenH));
+            UIRenderContext textContext = context;
+            textContext.hasScissor = true;
+            textContext.scissor = textScissor;
+            textRenderer.draw(textContext, line, textX, textY, scale, textColor);
         },
         [&textRenderer](const std::string& text, float scale) -> ConsoleDisplayBox::TextMetricsResult {
             auto m = textRenderer.measureText(text, scale);
             return {m.width, m.height};
         });
 
-    const float uiScale = context.pixelScale();
-    const RhiRect2D parentScissor = context.hasScissor
-        ? context.scissor
-        : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
-                    static_cast<uint32_t>(screenH * uiScale)};
-    context.commandList->setScissor(parentScissor);
+    if (record) {
+        const RhiRect2D parentScissor = context.hasScissor
+            ? context.scissor
+            : RhiRect2D{0, 0, static_cast<uint32_t>(screenW * uiScale),
+                        static_cast<uint32_t>(screenH * uiScale)};
+        context.commandList->setScissor(parentScissor);
+    }
 }

@@ -1,4 +1,4 @@
-layout(std140, binding = 4) uniform TerrainShadowParams {
+layout(std140, set = 1, binding = 4) uniform TerrainShadowParams {
     mat4 rhiShadowModelView;
     mat4 rhiShadowProjection;
     vec4 rhiShadowLightAnimation;

@@ -11,6 +11,7 @@
 #include <glm/vec3.hpp>
 
 class RhiDevice;
+class RhiCommandListPool;
 
 namespace resource {
 
@@ -28,12 +29,14 @@ struct BlockTextureArraySet {
 [[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const std::string& directory,
                                                              int tileSize,
                                                              BlockTextureCatalog& catalog,
-                                                             RhiDevice& rhiDevice);
+                                                             RhiDevice& rhiDevice,
+                                                             RhiCommandListPool& commandListPool);
 
 [[nodiscard]] BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest,
                                                              int tileSize,
                                                              BlockTextureCatalog& catalog,
-                                                             RhiDevice& rhiDevice);
+                                                             RhiDevice& rhiDevice,
+                                                             RhiCommandListPool& commandListPool);
 
 } // namespace resource
 

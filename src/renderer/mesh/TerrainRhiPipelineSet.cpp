@@ -192,8 +192,16 @@ bool TerrainRhiPipelineSet::prepareGBuffer(RhiCommandList& commandList,
 
     TerrainGBufferParams cutoutParams = baseParams;
     cutoutParams.materialFlags.x = 1;
+    commandList.bufferBarrier({m_gbufferParamsBuffers[0], RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier({m_gbufferParamsBuffers[1], RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_gbufferParamsBuffers[0], 0u, &baseParams, sizeof(baseParams));
     commandList.updateBuffer(m_gbufferParamsBuffers[1], 0u, &cutoutParams, sizeof(cutoutParams));
+    commandList.bufferBarrier({m_gbufferParamsBuffers[0], RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_gbufferParamsBuffers[1], RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     return true;
 }
 
@@ -213,7 +221,11 @@ bool TerrainRhiPipelineSet::prepareShadow(RhiCommandList& commandList,
                                 static_cast<float>(frame.passMode),
                                 0.0f,
                                 0.0f);
+    commandList.bufferBarrier({m_shadowParamsBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_shadowParamsBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_shadowParamsBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     return true;
 }
 
@@ -252,7 +264,9 @@ bool TerrainRhiPipelineSet::prepareTransparent(
     params.horizonScatterColor = glm::vec4(frame.skyLighting.horizonScatterColor, 0.0f);
     params.sunDirection = glm::vec4(frame.skyLighting.sunDirection, 0.0f);
     params.moonDirection = glm::vec4(frame.skyLighting.moonDirection, 0.0f);
-    params.moonLightColor = glm::vec4(frame.skyLighting.moonLightColor, 0.0f);
+    params.moonLightColor = glm::vec4(
+        frame.skyLighting.moonLightColor,
+        frame.skyLighting.moonPhaseFlux);
     params.lightingParams0 = glm::vec4(
         settings.directSunStrength,
         settings.skyAmbientStrength,
@@ -291,7 +305,11 @@ bool TerrainRhiPipelineSet::prepareTransparent(
         settings.volumetricLightEnabled ? 1 : 0,
         volumetricFogActive ? 1 : 0,
         heldBlockLightValue);
+    commandList.bufferBarrier({m_transparentParamsBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_transparentParamsBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_transparentParamsBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     return true;
 }
 
@@ -324,7 +342,7 @@ bool TerrainRhiPipelineSet::prepareWater(
         frame.fogWetness,
         frame.cloudWetness,
         frame.surfaceWetness);
-    params.waveParams = glm::vec4(1.0f, 1.0f, 1.33f, 0.0f);
+    params.waveParams = glm::vec4(1.0f, 1.0f, 1.33f, frame.moonPhaseFlux);
     params.waterLayers = glm::vec4(
         static_cast<float>(still.firstLayer),
         static_cast<float>(std::max(1, still.frameCount)),
@@ -341,7 +359,11 @@ bool TerrainRhiPipelineSet::prepareWater(
         frame.freezeBias ? 1 : 0,
         frame.rainSurfaceRipplesEnabled ? 1 : 0);
     params.controlFlags2 = glm::ivec4(frame.eyeInWater ? 1 : 0, 0, 0, 0);
+    commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_waterParamsBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_waterParamsBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     return true;
 }
 
@@ -370,8 +392,16 @@ bool TerrainRhiPipelineSet::prepareForward(RhiCommandList& commandList,
         0);
     TerrainForwardParams transparentParams = baseParams;
     transparentParams.controlFlags.x = 1;
+    commandList.bufferBarrier({m_forwardParamsBuffers[0], RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
+    commandList.bufferBarrier({m_forwardParamsBuffers[1], RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_forwardParamsBuffers[0], 0u, &baseParams, sizeof(baseParams));
     commandList.updateBuffer(m_forwardParamsBuffers[1], 0u, &transparentParams, sizeof(transparentParams));
+    commandList.bufferBarrier({m_forwardParamsBuffers[0], RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
+    commandList.bufferBarrier({m_forwardParamsBuffers[1], RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     return true;
 }
 
@@ -436,6 +466,7 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    paramsDesc.initialState = RhiResourceState::UniformBuffer;
     for (RhiBufferHandle& buffer : m_gbufferParamsBuffers) {
         buffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     }
@@ -721,6 +752,7 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
     paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    paramsDesc.initialState = RhiResourceState::UniformBuffer;
     for (RhiBufferHandle& buffer : m_forwardParamsBuffers) {
         buffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     }
@@ -1020,6 +1052,7 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
     paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    paramsDesc.initialState = RhiResourceState::UniformBuffer;
     m_waterParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     if (!m_waterParamsBuffer.isValid()) {
         destroyWaterResources();
@@ -1340,6 +1373,7 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    paramsDesc.initialState = RhiResourceState::UniformBuffer;
     m_transparentParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     if (!m_transparentParamsBuffer.isValid()) {
         destroyTransparentResources();
@@ -1677,6 +1711,7 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     paramsDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                        rhiFlag(RhiBufferUsage::TransferDst);
     paramsDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    paramsDesc.initialState = RhiResourceState::UniformBuffer;
     m_shadowParamsBuffer = m_rhiDevice->createBuffer(paramsDesc, nullptr, 0u);
     if (!m_shadowParamsBuffer.isValid()) {
         destroyShadowResources();
@@ -1760,7 +1795,7 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    pipelineDesc.depthFormat = RhiTextureFormat::Depth24;
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.raster.cullMode = RhiCullMode::Back;
     pipelineDesc.debugName = "Terrain.Shadow.OpaquePipeline";
     m_shadowOpaquePipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);

@@ -12,7 +12,7 @@ layout(binding = 1) uniform sampler2D uVoxelLightTexture;
 layout(binding = 2) uniform sampler2D uDepthTexture;
 #endif
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     vec4 uBiomeTint;
     vec4 uScreenParams;

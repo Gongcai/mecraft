@@ -20,8 +20,7 @@ public:
     SsaoPass() = default;
     ~SsaoPass() override = default;
 
-    // RenderPass interface
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SSAO"; }
 

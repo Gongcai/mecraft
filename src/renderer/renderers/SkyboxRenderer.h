@@ -7,6 +7,7 @@
 
 class ResourceMgr;
 class RhiDevice;
+class RhiCommandListPool;
 
 class SkyboxRenderer {
 public:
@@ -40,6 +41,7 @@ private:
     RhiBindGroupHandle m_sceneBlurBindGroup;
     RhiBindGroupHandle m_pingBlurBindGroup;
     RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
 
     // Blur pipeline: scene texture + two ping-pong textures at half resolution
     RhiTextureHandle m_sceneColorHandle;

@@ -5,7 +5,7 @@ layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uExposureDataTex;
 layout(binding = 1) uniform sampler2D uPreviousExposureTex;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec4 pExposure;
     ivec4 pFlags;
 };

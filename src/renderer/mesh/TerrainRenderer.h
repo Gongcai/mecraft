@@ -64,6 +64,7 @@ struct TerrainSkyLightingData {
     glm::vec3 horizonScatterColor = glm::vec3(0.0f);
     float skyIntensity = 1.0f;
     float moonVisibility = 0.0f;
+    float moonPhaseFlux = 0.0f;
     glm::vec3 directIlluminance = glm::vec3(0.0f);
     glm::vec3 skyIlluminance = glm::vec3(0.0f);
     glm::vec3 sunIlluminance = glm::vec3(0.0f);

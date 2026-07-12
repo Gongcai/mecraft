@@ -159,14 +159,37 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
+    targets.transitionTexture(commandList,
+                              targets.sceneCompositeTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(voxelGiEnabled ? m_voxelPipeline : m_basePipeline);
     commandList.setBindGroup(0u, voxelGiEnabled ? m_voxelBindGroup : m_baseBindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList,
+                              targets.sceneCompositeTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool SceneCompositePass::ensureVoxelGiTextureView(
@@ -265,6 +288,7 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_uniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_uniformBuffer.isValid()) {
         destroyRhiResources();

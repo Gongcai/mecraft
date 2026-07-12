@@ -16,7 +16,7 @@ class RhiDevice;
 /// Cloud pass: ray-marched volumetric clouds with temporal reprojection.
 class CloudPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Cloud"; }
 

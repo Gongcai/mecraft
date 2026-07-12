@@ -43,6 +43,7 @@ uint64_t rhiHashBufferDesc(const RhiBufferDesc& desc) {
     rhiHashCombine(hash, desc.size);
     rhiHashCombine(hash, desc.usage);
     rhiHashEnum(hash, desc.memoryUsage);
+    rhiHashEnum(hash, desc.initialState);
     return hash;
 }
 

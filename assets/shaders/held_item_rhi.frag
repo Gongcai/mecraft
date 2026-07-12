@@ -4,7 +4,7 @@ layout(location = 1) in float vShade;
 layout(location = 2) in vec3 vNormal;
 layout(location = 0) out vec4 fragColor;
 layout(binding = 0) uniform sampler2D uAtlas;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
     vec4 uLighting;

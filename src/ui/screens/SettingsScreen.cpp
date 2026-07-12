@@ -12,7 +12,6 @@
 #include "../../locale/LocaleManager.h"
 #include "../../renderer/core/RenderSettings.h"
 #include "../../renderer/core/RenderScene.h"
-#include "../../renderer/core/Shader.h"
 #include "../../world/World.h"
 #include "../../app/AppSettings.h"
 

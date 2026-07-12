@@ -36,6 +36,7 @@ constexpr float kCubeVertices[] = {
 };
 
 bool blitBlurTargetToSwapchain(RhiDevice& rhiDevice,
+                               RhiCommandListPool& commandListPool,
                                const RhiTextureHandle source,
                                const int width,
                                const int height) {
@@ -46,7 +47,8 @@ bool blitBlurTargetToSwapchain(RhiDevice& rhiDevice,
     }
 
     const RhiTextureViewHandle swapchainColorView = rhiDevice.currentSwapchainColorView();
-    if (!swapchainColorView.isValid()) {
+    const RhiTextureHandle swapchainColorTexture = rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainColorView.isValid() || !swapchainColorTexture.isValid()) {
         return false;
     }
 
@@ -54,9 +56,38 @@ bool blitBlurTargetToSwapchain(RhiDevice& rhiDevice,
     blit.src = source;
     blit.dstView = swapchainColorView;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"SkyboxBlit.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    commandList.textureBarrier({
+        source,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::TransferSrc
+    });
+    commandList.textureBarrier({
+        swapchainColorTexture,
+        RhiResourceState::Present,
+        RhiResourceState::TransferDst
+    });
     commandList.blitTexture(blit);
-    rhiDevice.submitFrame(commandList);
+    commandList.textureBarrier({
+        source,
+        RhiResourceState::TransferSrc,
+        RhiResourceState::ShaderRead
+    });
+    commandList.textureBarrier({
+        swapchainColorTexture,
+        RhiResourceState::TransferDst,
+        RhiResourceState::Present
+    });
+    if (!commandList.end()) std::abort();
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!rhiDevice.submit({"SkyboxBlit.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
     return true;
 }
 
@@ -107,6 +138,7 @@ void beginSkyboxBlurOutput(RhiCommandList& commandList,
 
 void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     m_rhiDevice = &rhiDevice;
+    m_commandListPool = &resourceMgr.commandListPool();
     m_cubemapTexture = resourceMgr.getCubemap("menu_skybox");
     if (!m_cubemapTexture.isValid()) std::abort();
     RhiTextureViewDesc cubemapViewDesc;
@@ -250,6 +282,7 @@ void SkyboxRenderer::shutdown() {
     m_cubemapView = {};
     m_cubemapSampler = {};
     m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
 }
 
 void SkyboxRenderer::render(const int width, const int height, const float aspect,
@@ -270,9 +303,21 @@ void SkyboxRenderer::render(const int width, const int height, const float aspec
         return;
     }
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    if (m_commandListPool == nullptr) std::abort();
+    RhiCommandList* commandListStorage =
+        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"Skybox.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
 
-    // --- Pass 1: Render skybox to scene FBO ---
+    // Pass 1 renders the skybox into the scene color attachment.
+    commandList.textureBarrier({
+        m_sceneColorHandle,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::RenderTarget
+    });
     beginSkyboxBlurOutput(commandList, "SkyboxScene", m_sceneColorView, blurW, blurH, true);
 
     glm::mat4 view(1.0f);
@@ -294,8 +339,18 @@ void SkyboxRenderer::render(const int width, const int height, const float aspec
                               rhiFlag(RhiShaderStage::Vertex));
     commandList.draw(36u, 1u, 0u, 0u);
     commandList.endRendering();
+    commandList.textureBarrier({
+        m_sceneColorHandle,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::ShaderRead
+    });
 
     // --- Pass 2: Horizontal blur (scene -> ping) ---
+    commandList.textureBarrier({
+        m_pingColorHandle,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::RenderTarget
+    });
     beginSkyboxBlurOutput(commandList, "SkyboxBlurHorizontal", m_pingColorView, blurW, blurH, false);
 
     const glm::vec4 horizontalDirection(1.0f / static_cast<float>(blurW), 0.0f, 0.0f, 0.0f);
@@ -309,8 +364,18 @@ void SkyboxRenderer::render(const int width, const int height, const float aspec
                               rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
+    commandList.textureBarrier({
+        m_pingColorHandle,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::ShaderRead
+    });
 
     // --- Pass 3: Vertical blur (ping -> pong) ---
+    commandList.textureBarrier({
+        m_pongColorHandle,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::RenderTarget
+    });
     beginSkyboxBlurOutput(commandList, "SkyboxBlurVertical", m_pongColorView, blurW, blurH, false);
 
     const glm::vec4 verticalDirection(0.0f, 1.0f / static_cast<float>(blurH), 0.0f, 0.0f);
@@ -320,9 +385,19 @@ void SkyboxRenderer::render(const int width, const int height, const float aspec
                               rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    commandList.textureBarrier({
+        m_pongColorHandle,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::ShaderRead
+    });
+    if (!commandList.end()) std::abort();
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!rhiDevice.submit({"Skybox.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
 
-    const bool blitted = blitBlurTargetToSwapchain(rhiDevice, m_pongColorHandle, width, height);
+    const bool blitted = blitBlurTargetToSwapchain(
+        rhiDevice, *m_commandListPool, m_pongColorHandle, width, height);
     if (!blitted) {
         MECRAFT_LOG_STREAM(std::cerr << "[SkyboxRenderer] Failed to blit menu skybox through RHI\n");
     }
@@ -378,6 +453,33 @@ bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int heig
         return false;
     }
 
+    if (m_commandListPool == nullptr) std::abort();
+    RhiCommandList* commandListStorage =
+        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin(
+            {"SkyboxTargets.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    const RhiTextureHandle textures[] = {
+        m_sceneColorHandle,
+        m_pingColorHandle,
+        m_pongColorHandle
+    };
+    for (const RhiTextureHandle texture : textures) {
+        commandList.textureBarrier({
+            texture,
+            RhiResourceState::Undefined,
+            RhiResourceState::ShaderRead
+        });
+    }
+    if (!commandList.end()) std::abort();
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!rhiDevice.submit({"SkyboxTargets.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
+
     m_blurWidth = width;
     m_blurHeight = height;
     return true;
@@ -420,8 +522,10 @@ void SkyboxRenderer::initCubeMesh() {
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Skybox.Cube.VertexBuffer";
     bufferDesc.size = sizeof(kCubeVertices);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_cubeVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, kCubeVertices, sizeof(kCubeVertices));
     if (!m_cubeVertexBuffer.isValid()) std::abort();

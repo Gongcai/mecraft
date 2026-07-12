@@ -34,6 +34,7 @@ void SkyCapturePass::shutdown() {
 
 void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
                               RhiDevice& rhiDevice,
+                              RhiCommandListPool& commandListPool,
                               DeferredRenderTargets& targets,
                               GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
                               float cameraY, float shaderTime, const glm::vec3& cameraPos,
@@ -77,7 +78,13 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     if (!noiseTexture.isValid()) {
         return;
     }
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage =
+        commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
 
     RhiColorAttachment rawAttachment;
     rawAttachment.view = targets.skyCaptureTextureViewHandle();
@@ -89,6 +96,9 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                                static_cast<uint32_t>(std::min(targets.skyCaptureHeight(), 258))};
     rawRendering.colorAttachments = &rawAttachment;
     rawRendering.colorAttachmentCount = 1u;
+    targets.transitionTexture(commandList,
+                              targets.skyCaptureTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(rawRendering);
     commandList.setGraphicsPipeline(m_rawPipeline);
     commandList.setBindGroup(0u, m_metadataBindGroup);
@@ -151,7 +161,18 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                               rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList,
+                              targets.skyCaptureTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool SkyCapturePass::ensureMetadataResources(RhiDevice& rhiDevice,

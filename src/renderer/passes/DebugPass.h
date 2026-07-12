@@ -19,7 +19,7 @@ namespace shadow { class ShadowRenderer; }
 /// Displays all intermediate render targets for visual inspection.
 class DebugPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Debug"; }
 
@@ -38,9 +38,8 @@ public:
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
-    bool ensureShadowNormalTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice, int debugViewMode,
-                            const std::array<RhiTextureViewHandle, 19>& views);
+                            const std::array<RhiTextureViewHandle, 21>& views);
     void destroyRhiBindGroup();
     void destroyRhiResources();
 
@@ -48,8 +47,6 @@ private:
     RhiTextureHandle m_noiseTexture;
     RhiTextureHandle m_noiseViewTexture;
     RhiTextureViewHandle m_noiseTextureView;
-    RhiTextureHandle m_shadowNormalViewTexture;
-    RhiTextureViewHandle m_shadowNormalTextureView;
     RhiBufferHandle m_uniformBuffer;
     RhiSamplerHandle m_nearestSampler;
     RhiSamplerHandle m_linearSampler;
@@ -60,7 +57,7 @@ private:
     RhiShaderHandle m_fragmentShader;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 19> m_boundViews = {};
+    std::array<RhiTextureViewHandle, 21> m_boundViews = {};
     int m_boundDebugViewMode = -1;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
 };

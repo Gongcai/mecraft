@@ -142,6 +142,14 @@ find_package(OpenAL CONFIG REQUIRED)
 find_package(Vorbis CONFIG REQUIRED COMPONENTS File)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
+find_package(glslang CONFIG REQUIRED)
+find_package(spirv_cross_core CONFIG REQUIRED)
+find_package(spirv_cross_glsl CONFIG REQUIRED)
+find_package(spirv_cross_hlsl CONFIG REQUIRED)
+find_package(spirv_cross_msl CONFIG REQUIRED)
+find_package(spirv_cross_cpp CONFIG REQUIRED)
+find_package(spirv_cross_reflect CONFIG REQUIRED)
+find_package(spirv_cross_c CONFIG REQUIRED)
 
 
 # [应用层]
@@ -202,11 +210,9 @@ set(SRC_CORE
         src/resource/BlockTextureArrayBuilder.cpp
         src/resource/BlockTextureLibrary.cpp
         src/resource/CubemapLibrary.cpp
-        src/resource/DefaultShaderCatalog.cpp
         src/resource/EnvironmentTextureLibrary.cpp
         src/resource/EntityTexturePreloader.cpp
         src/resource/ResourceMgr.cpp
-        src/resource/ShaderLibrary.cpp
         src/resource/TextureAtlas.cpp
         src/resource/TextureAtlasBuilders.cpp
         src/resource/TextureResampler.cpp
@@ -263,11 +269,10 @@ set(SRC_RENDERER
         src/renderer/rhi/RhiGrowableBuffer.cpp
         src/renderer/rhi/RhiHash.cpp
         src/renderer/rhi/RhiDeviceFactory.cpp
+        src/renderer/rhi/RhiShaderCompiler.cpp
         src/renderer/rhi/RhiShaderSourceLoader.cpp
-        src/renderer/rhi/gl/GlRhiTextureRegistry.cpp
 
         # Core framework
-        src/renderer/core/Shader.cpp
         src/renderer/core/RenderResourceHub.cpp
         src/renderer/core/RenderScene.cpp
         src/renderer/core/DeferredPipeline.cpp
@@ -277,7 +282,6 @@ set(SRC_RENDERER
         src/renderer/gi/VoxelGiClipmap.cpp
 
         # OpenGL helpers
-        src/renderer/gl/GlStateGuard.cpp
 
         # Render targets
         src/renderer/targets/DeferredRenderTargets.cpp
@@ -340,6 +344,7 @@ set(SRC_RENDERER
 if(MECRAFT_RHI_BACKEND_OPENGL)
     list(APPEND SRC_RENDERER
             src/renderer/rhi/gl/GlRhiDevice.cpp
+            src/renderer/rhi/gl/GlRhiShaderCompiler.cpp
     )
 endif()
 
@@ -352,7 +357,6 @@ set(SRC_UI
         src/ui/Dashboard.cpp
         src/ui/core/UIInputAdapter.cpp
         src/ui/core/UIRenderer.cpp
-        src/ui/core/UIRenderUtils.cpp
         src/ui/core/UIScene.cpp
         src/ui/core/ScreenTransition.cpp
         src/ui/core/UIStyle.cpp
@@ -576,7 +580,6 @@ add_library(mecraft_third_party STATIC
         third_party/imgui/imgui_demo.cpp
         third_party/imgui/imgui_draw.cpp
         third_party/imgui/imgui_impl_glfw.cpp
-        third_party/imgui/imgui_impl_opengl3.cpp
         third_party/imgui/imgui_tables.cpp
         third_party/imgui/imgui_widgets.cpp
 )
@@ -624,6 +627,10 @@ target_link_libraries(mecraft_core PUBLIC
         Vorbis::vorbisfile
         Freetype::Freetype
         EnTT::EnTT
+        glslang::glslang
+        glslang::glslang-default-resource-limits
+        glslang::SPIRV
+        spirv-cross-c
 )
 
 # 统一宏定义

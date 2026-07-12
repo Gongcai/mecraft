@@ -142,8 +142,10 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildPartMesh(const renderer::Human
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Humanoid.PartMesh.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(SteveVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {
@@ -214,8 +216,10 @@ HumanoidRenderer::PartMesh HumanoidRenderer::buildEntityModelPartMesh(
     RhiBufferDesc bufferDesc;
     bufferDesc.debugName = "Humanoid.EntityModelPart.VertexBuffer";
     bufferDesc.size = vertices.size() * sizeof(SteveVertex);
-    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     mesh.rhiVertexBuffer = m_rhiDevice->createBuffer(
         bufferDesc, vertices.data(), vertices.size() * sizeof(SteveVertex));
     if (!mesh.rhiVertexBuffer.isValid()) {
@@ -574,6 +578,9 @@ void HumanoidRenderer::createGBufferRhiResources() {
     m_forwardRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "Humanoid.InventoryPreview.Pipeline";
     pipelineDesc.raster.scissorEnabled = true;
+    pipelineDesc.depthFormat = RhiTextureFormat::Undefined;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
     m_inventoryPreviewPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_gbufferRhiVertexShader.isValid() || !m_gbufferRhiFragmentShader.isValid() ||

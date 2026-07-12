@@ -1,26 +1,21 @@
 #include "DeferredRenderTargets.h"
 #include "../../Diagnostics.h"
 #include "../rhi/RhiDevice.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiCommandListPool.h"
 #include "../rhi/RhiResources.h"
 
 #include <algorithm>
 #include <cassert>
+#include <cstdlib>
 #include <cstdio>
 #include <iostream>
 #include <fstream>
 #include <vector>
 
 namespace {
-void blitTexture(RhiDevice& rhiDevice,
-                 const RhiTextureHandle src,
-                 const RhiTextureHandle dst) {
-    RhiTextureBlit blit;
-    blit.src = src;
-    blit.dst = dst;
-
-    RhiCommandList& commandList = rhiDevice.beginFrame();
-    commandList.blitTexture(blit);
-    rhiDevice.submitFrame(commandList);
+[[nodiscard]] uint64_t textureStateKey(const RhiTextureHandle texture) {
+    return (static_cast<uint64_t>(texture.generation) << 32u) | texture.index;
 }
 } // namespace
 
@@ -28,11 +23,13 @@ DeferredRenderTargets::~DeferredRenderTargets() {
     shutdown();
 }
 
-bool DeferredRenderTargets::init(RhiDevice& rhiDevice) {
-    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+bool DeferredRenderTargets::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
+    if ((m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) ||
+        (m_commandListPool != nullptr && m_commandListPool != &commandListPool)) {
         shutdown();
     }
     m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
     return true;
 }
 
@@ -46,7 +43,126 @@ void DeferredRenderTargets::shutdown() {
     m_height = 0;
     m_shadowResolution = 0;
     m_ready = false;
+    m_textureStates.clear();
     m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
+}
+
+RhiCommandList& DeferredRenderTargets::beginCommandList(const char* const debugName) const {
+    if (m_commandListPool == nullptr) {
+        std::abort();
+    }
+    RhiCommandList* const commandList =
+        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({debugName, RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    return *commandList;
+}
+
+void DeferredRenderTargets::submitCommandList(RhiCommandList& commandList,
+                                               const char* const debugName) const {
+    if (m_rhiDevice == nullptr || !commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* commandLists[] = {&commandList};
+    const RhiSubmitInfo submitInfo{debugName, commandLists, 1u};
+    if (!m_rhiDevice->submit(submitInfo)) {
+        std::abort();
+    }
+}
+
+void DeferredRenderTargets::transitionTexture(RhiCommandList& commandList,
+                                              const RhiTextureHandle texture,
+                                              const RhiResourceState newState) const {
+    assert(texture.isValid());
+    const uint64_t key = textureStateKey(texture);
+    const auto stateIt = m_textureStates.find(key);
+    if (stateIt == m_textureStates.end()) {
+        std::abort();
+    }
+    const RhiResourceState oldState = stateIt->second;
+    if (oldState == newState) {
+        return;
+    }
+    commandList.textureBarrier({texture, oldState, newState});
+    m_textureStates[key] = newState;
+}
+
+void DeferredRenderTargets::initializeTextureState(RhiCommandList& commandList,
+                                                   const RhiTextureHandle texture,
+                                                   const RhiResourceState stableState) const {
+    assert(texture.isValid());
+    commandList.textureBarrier({texture, RhiResourceState::Undefined, stableState});
+    m_textureStates[textureStateKey(texture)] = stableState;
+}
+
+void DeferredRenderTargets::setKnownTextureState(const RhiTextureHandle texture,
+                                                 const RhiResourceState state) const {
+    assert(texture.isValid());
+    assert(state != RhiResourceState::Undefined);
+    m_textureStates[textureStateKey(texture)] = state;
+}
+
+void DeferredRenderTargets::blitColorTexture(RhiCommandList& commandList,
+                                             const RhiTextureHandle source,
+                                             const RhiTextureHandle destination) const {
+    assert(source.isValid());
+    assert(destination.isValid());
+    assert(source.index != destination.index || source.generation != destination.generation);
+
+    transitionTexture(commandList, source, RhiResourceState::TransferSrc);
+    transitionTexture(commandList, destination, RhiResourceState::TransferDst);
+
+    RhiTextureBlit blit;
+    blit.src = source;
+    blit.dst = destination;
+    commandList.blitTexture(blit);
+
+    transitionTexture(commandList, source, RhiResourceState::ShaderRead);
+    transitionTexture(commandList, destination, RhiResourceState::ShaderRead);
+}
+
+void DeferredRenderTargets::blitColorTexture(RhiDevice& rhiDevice,
+                                             const RhiTextureHandle source,
+                                             const RhiTextureHandle destination) const {
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.Blit");
+    blitColorTexture(commandList, source, destination);
+    submitCommandList(commandList, "DeferredTargets.Blit");
+}
+
+void DeferredRenderTargets::blitDepthTexture(RhiCommandList& commandList,
+                                             const RhiTextureHandle source,
+                                             const RhiTextureHandle destination) const {
+    assert(source.isValid());
+    assert(destination.isValid());
+    assert(source.index != destination.index || source.generation != destination.generation);
+
+    transitionTexture(commandList, source, RhiResourceState::TransferSrc);
+    transitionTexture(commandList, destination, RhiResourceState::TransferDst);
+
+    RhiTextureBlit blit;
+    blit.src = source;
+    blit.dst = destination;
+    commandList.blitTexture(blit);
+
+    transitionTexture(commandList, source, RhiResourceState::DepthRead);
+    transitionTexture(commandList, destination, RhiResourceState::DepthRead);
+}
+
+void DeferredRenderTargets::blitDepthTexture(RhiDevice& rhiDevice,
+                                             const RhiTextureHandle source,
+                                             const RhiTextureHandle destination) const {
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.DepthBlit");
+    blitDepthTexture(commandList, source, destination);
+    submitCommandList(commandList, "DeferredTargets.DepthBlit");
 }
 
 bool DeferredRenderTargets::ensureSize(const int width, const int height, const int shadowResolution) {
@@ -104,11 +220,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
-    if (!createShadowTextures()) {
-        shutdown();
-        return false;
-    }
-
     if (!createCsmShadowTextures()) {
         shutdown();
         return false;
@@ -124,127 +235,277 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         return false;
     }
 
+    initializePersistentTextureStates();
+
     m_ready = true;
     return true;
+}
+
+void DeferredRenderTargets::initializePersistentTextureStates() {
+    assert(m_rhiDevice != nullptr);
+
+    const RhiTextureHandle colorTextures[] = {
+        m_gAlbedoHandle,
+        m_gNormalAoHandle,
+        m_gVoxelLightHandle,
+        m_gMaterialHandle,
+        m_gMaterialAuxHandle,
+        m_sceneLightingHandle,
+        m_sceneCompositeHandle,
+        m_sceneResolvedHandle,
+        m_transparentCompositeHandle,
+        m_halfResHandle,
+        m_reflectionHandle,
+        m_reflectionTemporalScratchHandle,
+        m_cloudHandle,
+        m_skyCaptureHandle,
+        m_historySceneHandle[0],
+        m_historySceneHandle[1],
+        m_historyReflectionHandle[0],
+        m_historyReflectionHandle[1],
+        m_historyCloudHandle[0],
+        m_historyCloudHandle[1],
+        m_historyVolumetricHandle[0],
+        m_historyVolumetricHandle[1],
+        m_temporalCurrentHandle,
+        m_velocityHandle,
+        m_perObjectVelocityHandle,
+        m_weatherMaskHandle,
+        m_ssaoFilteredHandle,
+        m_ssaoHalfResHandle,
+        m_ssaoHalfResFilteredHandle,
+        m_ssaoHistoryHandle[0],
+        m_ssaoHistoryHandle[1],
+        m_ssaoTemporalHandle,
+        m_ssgiHandle,
+        m_ssgiHalfResHandle,
+        m_ssgiDenoiseHandle[0],
+        m_ssgiDenoiseHandle[1],
+        m_ssgiHistoryHandle[0],
+        m_ssgiHistoryHandle[1],
+        m_ssgiMomentsHistoryHandle[0],
+        m_ssgiMomentsHistoryHandle[1],
+        m_ssgiTemporalHandle,
+        m_ssgiTemporalMomentsHandle,
+        m_csmShadowColor0Handle,
+        m_csmShadowColor1Handle
+    };
+    const RhiTextureHandle depthTextures[] = {
+        m_gDepthHandle,
+        m_transparentCompositeDepthHandle,
+        m_historyDepthHandle[0],
+        m_historyDepthHandle[1],
+        m_csmShadowDepthHandle,
+        m_csmShadowDepthAllHandle
+    };
+
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.InitializeStates");
+    for (const RhiTextureHandle texture : colorTextures) {
+        initializeTextureState(commandList, texture, RhiResourceState::ShaderRead);
+    }
+    for (const RhiTextureHandle texture : depthTextures) {
+        initializeTextureState(commandList, texture, RhiResourceState::DepthRead);
+    }
+    submitCommandList(commandList, "DeferredTargets.InitializeStates");
 }
 
 void DeferredRenderTargets::copyTextureColorToSceneLighting(RhiDevice& rhiDevice, const RhiTextureHandle source) const {
     if (!m_ready || !source.isValid()) {
         return;
     }
-    blitTexture(rhiDevice, source, m_sceneLightingHandle);
+    setKnownTextureState(source, RhiResourceState::ShaderRead);
+    blitColorTexture(rhiDevice, source, m_sceneLightingHandle);
 }
 
 void DeferredRenderTargets::copySceneLightingToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneLightingHandle, m_transparentCompositeHandle);
+    blitColorTexture(rhiDevice, m_sceneLightingHandle, m_transparentCompositeHandle);
 }
 
 void DeferredRenderTargets::copySceneLightingToSceneComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneLightingHandle, m_sceneCompositeHandle);
+    blitColorTexture(rhiDevice, m_sceneLightingHandle, m_sceneCompositeHandle);
 }
 
 void DeferredRenderTargets::copySceneCompositeToSceneResolved(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneCompositeHandle, m_sceneResolvedHandle);
+    blitColorTexture(rhiDevice, m_sceneCompositeHandle, m_sceneResolvedHandle);
 }
 
 void DeferredRenderTargets::copySceneCompositeToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneCompositeHandle, m_transparentCompositeHandle);
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopySceneCompositeToTransparent");
+    copySceneCompositeToTransparentComposite(commandList);
+    submitCommandList(commandList, "DeferredTargets.CopySceneCompositeToTransparent");
+}
+
+void DeferredRenderTargets::copySceneCompositeToTransparentComposite(
+    RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_sceneCompositeHandle, m_transparentCompositeHandle);
 }
 
 void DeferredRenderTargets::copySceneResolvedToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneResolvedHandle, m_transparentCompositeHandle);
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopySceneResolvedToTransparent");
+    copySceneResolvedToTransparentComposite(commandList);
+    submitCommandList(commandList, "DeferredTargets.CopySceneResolvedToTransparent");
+}
+
+void DeferredRenderTargets::copySceneResolvedToTransparentComposite(
+    RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_sceneResolvedHandle, m_transparentCompositeHandle);
 }
 
 void DeferredRenderTargets::copyTransparentCompositeToSceneComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_transparentCompositeHandle, m_sceneCompositeHandle);
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyTransparentToSceneComposite");
+    copyTransparentCompositeToSceneComposite(commandList);
+    submitCommandList(commandList, "DeferredTargets.CopyTransparentToSceneComposite");
+}
+
+void DeferredRenderTargets::copyTransparentCompositeToSceneComposite(
+    RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_transparentCompositeHandle, m_sceneCompositeHandle);
 }
 
 void DeferredRenderTargets::copyTransparentCompositeToSceneResolved(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_transparentCompositeHandle, m_sceneResolvedHandle);
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyTransparentToSceneResolved");
+    copyTransparentCompositeToSceneResolved(commandList);
+    submitCommandList(commandList, "DeferredTargets.CopyTransparentToSceneResolved");
+}
+
+void DeferredRenderTargets::copyTransparentCompositeToSceneResolved(
+    RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_transparentCompositeHandle, m_sceneResolvedHandle);
 }
 
 void DeferredRenderTargets::copyDepthToTransparentComposite(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_gDepthHandle, m_transparentCompositeDepthHandle);
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyDepthToTransparent");
+    copyDepthToTransparentComposite(commandList);
+    submitCommandList(commandList, "DeferredTargets.CopyDepthToTransparent");
+}
+
+void DeferredRenderTargets::copyDepthToTransparentComposite(
+    RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    blitDepthTexture(commandList, m_gDepthHandle, m_transparentCompositeDepthHandle);
 }
 
 void DeferredRenderTargets::copySceneResolvedToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneResolvedHandle, m_historySceneHandle[m_currentHistoryIndex]);
+    blitColorTexture(rhiDevice, m_sceneResolvedHandle, m_historySceneHandle[m_currentHistoryIndex]);
 }
 
 void DeferredRenderTargets::copySceneResolvedToTemporalCurrent(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneResolvedHandle, m_temporalCurrentHandle);
+    blitColorTexture(rhiDevice, m_sceneResolvedHandle, m_temporalCurrentHandle);
 }
 
 void DeferredRenderTargets::copyDepthToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_gDepthHandle, m_historyDepthHandle[m_currentHistoryIndex]);
+    blitDepthTexture(rhiDevice, m_gDepthHandle, m_historyDepthHandle[m_currentHistoryIndex]);
 }
 
 void DeferredRenderTargets::copyReflectionToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_reflectionHandle, m_historyReflectionHandle[m_currentHistoryIndex]);
+    blitColorTexture(rhiDevice, m_reflectionHandle, m_historyReflectionHandle[m_currentHistoryIndex]);
 }
 
 void DeferredRenderTargets::copyReflectionToTemporalScratch(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_reflectionHandle, m_reflectionTemporalScratchHandle);
+    blitColorTexture(rhiDevice, m_reflectionHandle, m_reflectionTemporalScratchHandle);
+}
+
+void DeferredRenderTargets::copyReflectionToTemporalScratch(RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_reflectionHandle, m_reflectionTemporalScratchHandle);
 }
 
 void DeferredRenderTargets::copyCloudToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_cloudHandle, m_historyCloudHandle[m_currentHistoryIndex]);
+    blitColorTexture(rhiDevice, m_cloudHandle, m_historyCloudHandle[m_currentHistoryIndex]);
 }
 
 void DeferredRenderTargets::copyHistoryCloudToCloud(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_historyCloudHandle[1 - m_currentHistoryIndex], m_cloudHandle);
+    blitColorTexture(rhiDevice, m_historyCloudHandle[1 - m_currentHistoryIndex], m_cloudHandle);
+}
+
+void DeferredRenderTargets::copyHistoryCloudToCloud(RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_historyCloudHandle[1 - m_currentHistoryIndex], m_cloudHandle);
 }
 
 void DeferredRenderTargets::copyVolumetricToHistory(RhiDevice& rhiDevice) const {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_halfResHandle, m_historyVolumetricHandle[m_currentHistoryIndex]);
+    blitColorTexture(rhiDevice, m_halfResHandle, m_historyVolumetricHandle[m_currentHistoryIndex]);
 }
 
 void DeferredRenderTargets::copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice) const {
@@ -252,44 +513,85 @@ void DeferredRenderTargets::copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice)
         return;
     }
     const RhiTextureHandle previous = m_historyVolumetricHandle[1 - m_currentHistoryIndex];
-    blitTexture(rhiDevice, previous, m_halfResHandle);
-    blitTexture(rhiDevice, previous, m_historyVolumetricHandle[m_currentHistoryIndex]);
+    blitColorTexture(rhiDevice, previous, m_halfResHandle);
+    blitColorTexture(rhiDevice, previous, m_historyVolumetricHandle[m_currentHistoryIndex]);
+}
+
+void DeferredRenderTargets::copyHistoryVolumetricToHalfRes(RhiCommandList& commandList) const {
+    if (!m_ready) {
+        return;
+    }
+    const RhiTextureHandle previous = m_historyVolumetricHandle[1 - m_currentHistoryIndex];
+    blitColorTexture(commandList, previous, m_halfResHandle);
+    blitColorTexture(commandList, previous, m_historyVolumetricHandle[m_currentHistoryIndex]);
 }
 
 void DeferredRenderTargets::copySceneResolvedToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
     if (!m_ready || !destination.isValid()) {
         return;
     }
-    blitTexture(rhiDevice, m_sceneResolvedHandle, destination);
+    setKnownTextureState(destination, RhiResourceState::ShaderRead);
+    blitColorTexture(rhiDevice, m_sceneResolvedHandle, destination);
 }
 
 void DeferredRenderTargets::copyDepthToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
     if (!m_ready || !destination.isValid()) {
         return;
     }
-    blitTexture(rhiDevice, m_gDepthHandle, destination);
+    setKnownTextureState(destination, RhiResourceState::DepthRead);
+    blitDepthTexture(rhiDevice, m_gDepthHandle, destination);
 }
 
 void DeferredRenderTargets::copyTransparentCompositeToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
     if (!m_ready || !destination.isValid()) {
         return;
     }
-    blitTexture(rhiDevice, m_transparentCompositeHandle, destination);
+    if (m_rhiDevice != &rhiDevice) {
+        std::abort();
+    }
+    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyTransparentToTexture");
+    copyTransparentCompositeToTexture(commandList, destination);
+    submitCommandList(commandList, "DeferredTargets.CopyTransparentToTexture");
+}
+
+void DeferredRenderTargets::copyTransparentCompositeToTexture(
+    RhiCommandList& commandList,
+    const RhiTextureHandle destination) const {
+    if (!m_ready || !destination.isValid()) {
+        return;
+    }
+    setKnownTextureState(destination, RhiResourceState::ShaderRead);
+    blitColorTexture(commandList, m_transparentCompositeHandle, destination);
 }
 
 void DeferredRenderTargets::copySsaoTemporalToHistory(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_ssaoTemporalHandle, m_ssaoHistoryHandle[m_ssaoHistoryIndex]);
+    blitColorTexture(rhiDevice, m_ssaoTemporalHandle, m_ssaoHistoryHandle[m_ssaoHistoryIndex]);
+}
+
+void DeferredRenderTargets::copySsaoTemporalToHistory(RhiCommandList& commandList) {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_ssaoTemporalHandle, m_ssaoHistoryHandle[m_ssaoHistoryIndex]);
 }
 
 void DeferredRenderTargets::copySsgiTemporalToHistory(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHistoryHandle[m_ssgiHistoryIndex]);
-    blitTexture(rhiDevice, m_ssgiTemporalMomentsHandle, m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]);
+    blitColorTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHistoryHandle[m_ssgiHistoryIndex]);
+    blitColorTexture(rhiDevice, m_ssgiTemporalMomentsHandle, m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]);
+}
+
+void DeferredRenderTargets::copySsgiTemporalToHistory(RhiCommandList& commandList) {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_ssgiTemporalHandle, m_ssgiHistoryHandle[m_ssgiHistoryIndex]);
+    blitColorTexture(commandList, m_ssgiTemporalMomentsHandle, m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]);
 }
 
 RhiTextureHandle DeferredRenderTargets::ssgiDenoiseTextureHandle(const int slot) const {
@@ -307,14 +609,29 @@ void DeferredRenderTargets::copySsgiDenoiseToSsgi(RhiDevice& rhiDevice, const in
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_ssgiDenoiseHandle[slot], m_ssgiHandle);
+    blitColorTexture(rhiDevice, m_ssgiDenoiseHandle[slot], m_ssgiHandle);
+}
+
+void DeferredRenderTargets::copySsgiDenoiseToSsgi(RhiCommandList& commandList, const int slot) {
+    assert(slot >= 0 && slot < 2);
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_ssgiDenoiseHandle[slot], m_ssgiHandle);
 }
 
 void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiDevice& rhiDevice) {
     if (!m_ready) {
         return;
     }
-    blitTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHandle);
+    blitColorTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHandle);
+}
+
+void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiCommandList& commandList) {
+    if (!m_ready) {
+        return;
+    }
+    blitColorTexture(commandList, m_ssgiTemporalHandle, m_ssgiHandle);
 }
 
 bool DeferredRenderTargets::createGBufferTextures() {
@@ -958,65 +1275,6 @@ void DeferredRenderTargets::destroySsgiTextures() {
     }
 }
 
-bool DeferredRenderTargets::createShadowTextures() {
-    if (m_rhiDevice == nullptr) {
-        return false;
-    }
-
-    const auto createTexture = [this](const char* debugName,
-                                      const RhiTextureFormat format,
-                                      const RhiTextureUsageFlags usage,
-                                      RhiTextureHandle& handle) {
-        RhiTextureDesc desc;
-        desc.debugName = debugName;
-        desc.dimension = RhiTextureDimension::Texture2D;
-        desc.format = format;
-        desc.width = static_cast<uint32_t>(m_shadowResolution);
-        desc.height = static_cast<uint32_t>(m_shadowResolution);
-        desc.depthOrLayers = 1u;
-        desc.mipLevels = 1u;
-        desc.sampleCount = 1u;
-        desc.usage = usage;
-        handle = m_rhiDevice->createTexture(desc, nullptr);
-        return handle.isValid();
-    };
-
-    if (!createTexture("DeferredTargets.ShadowDepth", RhiTextureFormat::Depth32Float,
-                       rhiFlag(RhiTextureUsage::Sampled) |
-                       rhiFlag(RhiTextureUsage::DepthStencilAttachment),
-                       m_shadowDepthHandle) ||
-        !createTexture("DeferredTargets.ShadowColor", RhiTextureFormat::Rgba8Unorm,
-                       rhiFlag(RhiTextureUsage::Sampled) |
-                       rhiFlag(RhiTextureUsage::ColorAttachment),
-                       m_shadowColorHandle) ||
-        !createTexture("DeferredTargets.ShadowNormal", RhiTextureFormat::Rgba16Float,
-                       rhiFlag(RhiTextureUsage::Sampled) |
-                       rhiFlag(RhiTextureUsage::ColorAttachment),
-                       m_shadowNormalHandle)) {
-        destroyShadowTextures();
-        return false;
-    }
-    return true;
-}
-
-void DeferredRenderTargets::destroyShadowTextures() {
-    if (m_rhiDevice == nullptr) {
-        return;
-    }
-
-    RhiTextureHandle* textures[] = {
-        &m_shadowDepthHandle,
-        &m_shadowColorHandle,
-        &m_shadowNormalHandle
-    };
-    for (RhiTextureHandle* texture : textures) {
-        if (texture->isValid()) {
-            m_rhiDevice->destroyTexture(*texture);
-            *texture = {};
-        }
-    }
-}
-
 bool DeferredRenderTargets::createCsmShadowTextures() {
     if (m_rhiDevice == nullptr) {
         return false;
@@ -1108,9 +1366,6 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_weatherMaskHandle.isValid() &&
                             m_skyCaptureHandle.isValid() &&
                             m_atmosphereLutHandle.isValid() &&
-                            m_shadowDepthHandle.isValid() &&
-                            m_shadowColorHandle.isValid() &&
-                            m_shadowNormalHandle.isValid() &&
                             m_ssaoFilteredHandle.isValid() &&
                             m_ssaoHalfResHandle.isValid() &&
                             m_ssaoHalfResFilteredHandle.isValid() &&
@@ -1269,16 +1524,14 @@ bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
-    if (m_shadowDepthView.isValid() && m_shadowColorView.isValid() &&
-        m_atmosphereLutView.isValid() && m_csmShadowDepthArrayView.isValid() &&
+    if (m_atmosphereLutView.isValid() && m_csmShadowDepthArrayView.isValid() &&
         m_csmShadowDepthComparisonArrayView.isValid() &&
         m_csmShadowDepthAllArrayView.isValid() &&
         m_csmShadowDepthAllComparisonArrayView.isValid() &&
         m_csmShadowColor0ArrayView.isValid() && m_csmShadowColor1ArrayView.isValid()) {
         return true;
     }
-    if (!m_shadowDepthHandle.isValid() || !m_shadowColorHandle.isValid() ||
-        !m_atmosphereLutHandle.isValid() || !m_csmShadowDepthHandle.isValid() ||
+    if (!m_atmosphereLutHandle.isValid() || !m_csmShadowDepthHandle.isValid() ||
         !m_csmShadowDepthAllHandle.isValid() || !m_csmShadowColor0Handle.isValid() ||
         !m_csmShadowColor1Handle.isValid()) {
         return false;
@@ -1286,8 +1539,6 @@ bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice
 
     auto destroyCreatedViews = [&]() {
         RhiTextureViewHandle* views[] = {
-            &m_shadowDepthView,
-            &m_shadowColorView,
             &m_atmosphereLutView,
             &m_csmShadowDepthArrayView,
             &m_csmShadowDepthComparisonArrayView,
@@ -1305,24 +1556,13 @@ bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice
     };
 
     RhiTextureViewDesc viewDesc;
-    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.viewType = RhiTextureViewType::Texture3D;
     viewDesc.baseMip = 0u;
     viewDesc.mipCount = 1u;
     viewDesc.baseLayer = 0u;
-    viewDesc.layerCount = 1u;
-
-    viewDesc.texture = m_shadowDepthHandle;
-    viewDesc.format = RhiTextureFormat::Depth32Float;
-    m_shadowDepthView = rhiDevice.createTextureView(viewDesc);
-
-    viewDesc.texture = m_shadowColorHandle;
-    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
-    m_shadowColorView = rhiDevice.createTextureView(viewDesc);
-
-    viewDesc.texture = m_atmosphereLutHandle;
-    viewDesc.viewType = RhiTextureViewType::Texture3D;
-    viewDesc.format = RhiTextureFormat::Rgba32Float;
     viewDesc.layerCount = static_cast<uint32_t>(kAtmosphereLutDepth);
+    viewDesc.texture = m_atmosphereLutHandle;
+    viewDesc.format = RhiTextureFormat::Rgba32Float;
     m_atmosphereLutView = rhiDevice.createTextureView(viewDesc);
 
     viewDesc.viewType = RhiTextureViewType::Texture2DArray;
@@ -1348,8 +1588,7 @@ bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice
     viewDesc.format = RhiTextureFormat::Rgba16Float;
     m_csmShadowColor1ArrayView = rhiDevice.createTextureView(viewDesc);
 
-    if (!m_shadowDepthView.isValid() || !m_shadowColorView.isValid() ||
-        !m_atmosphereLutView.isValid() || !m_csmShadowDepthArrayView.isValid() ||
+    if (!m_atmosphereLutView.isValid() || !m_csmShadowDepthArrayView.isValid() ||
         !m_csmShadowDepthComparisonArrayView.isValid() ||
         !m_csmShadowDepthAllArrayView.isValid() ||
         !m_csmShadowDepthAllComparisonArrayView.isValid() ||
@@ -2549,8 +2788,6 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         view = {};
     }
     RhiTextureViewHandle* volumetricFogViews[] = {
-        &m_shadowDepthView,
-        &m_shadowColorView,
         &m_atmosphereLutView,
         &m_csmShadowDepthArrayView,
         &m_csmShadowDepthComparisonArrayView,
@@ -2691,8 +2928,6 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_gMaterialView = {};
     m_gMaterialAuxView = {};
     m_gDepthView = {};
-    m_shadowDepthView = {};
-    m_shadowColorView = {};
     m_atmosphereLutView = {};
     m_csmShadowDepthArrayView = {};
     m_csmShadowDepthComparisonArrayView = {};
@@ -2751,11 +2986,11 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyMotionTextures();
     destroySsaoTextures();
     destroySsgiTextures();
-    destroyShadowTextures();
     destroyCsmShadowTextures();
 }
 
 void DeferredRenderTargets::destroyFramebuffers() {
+    m_textureStates.clear();
     unregisterRhiTextures();
 
     m_currentHistoryIndex = 0;
@@ -2816,12 +3051,14 @@ bool DeferredRenderTargets::loadAtmosphereLut(const char* path) {
     desc.depthOrLayers = static_cast<uint32_t>(kAtmosphereLutDepth);
     desc.mipLevels = 1u;
     desc.sampleCount = 1u;
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                 rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData initialData;
     initialData.pixels = data.data();
     initialData.sizeBytes = kExpectedSize;
     initialData.layerCount = static_cast<uint32_t>(kAtmosphereLutDepth);
+    initialData.finalState = RhiResourceState::ShaderRead;
     m_atmosphereLutHandle = m_rhiDevice->createTexture(desc, &initialData);
     if (!m_atmosphereLutHandle.isValid()) {
         MECRAFT_LOG_STREAM(std::cerr << "AtmosphereLUT: failed to create RHI texture\n");

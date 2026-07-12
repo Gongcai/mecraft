@@ -2,7 +2,7 @@
 
 layout(binding = 0) uniform sampler2D uTexture;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec4 uDirection;
 };
 

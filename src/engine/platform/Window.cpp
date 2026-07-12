@@ -64,7 +64,6 @@ bool Window::init(int width, int height, const char *title, bool enableGlDebugOu
         return false;
     }
     glfwMakeContextCurrent(m_window);
-    glfwSetFramebufferSizeCallback(m_window, framebufferSizeCallback);
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         return false;
     }
@@ -115,10 +114,6 @@ bool Window::shouldClose() const {
     return glfwWindowShouldClose(m_window);
 }
 
-void Window::swapBuffers() const {
-    glfwSwapBuffers(m_window);
-}
-
 void Window::pollEvents() {
     glfwPollEvents();
 }
@@ -155,9 +150,4 @@ void Window::setTitle(const std::string &title) const {
 
 GLFWwindow * Window::getHandle() const {
     return m_window;
-}
-
-void Window::framebufferSizeCallback(GLFWwindow *w, int width, int height) {
-    (void) w;
-    glViewport(0, 0, width, height);
 }

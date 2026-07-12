@@ -75,11 +75,12 @@ RenderResourceHub::~RenderResourceHub() {
 
 bool RenderResourceHub::init(ResourceMgr& resourceMgr,
                              ThreadPool& threadPool,
-                             RhiDevice& rhiDevice) {
+                             RhiDevice& rhiDevice,
+                             RhiCommandListPool& commandListPool) {
     m_resourceMgr = &resourceMgr;
     m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
 
-    //m_uiShader = resourceMgr.getShader("ui");
     // R8: Overlay initialization removed — handled by BlockInteractionOverlayRenderer
     m_terrainRhiPipelines.init(*m_rhiDevice);
     if (!m_worldRenderBuffer.init(*m_rhiDevice)) {
@@ -96,7 +97,7 @@ bool RenderResourceHub::init(ResourceMgr& resourceMgr,
     m_terrainRenderer.setChunkCullingDebugEnabled(m_chunkCullingDebugEnabled);
 #endif
     // Phase 5c: Inject WaterCompositePass dependencies
-    if (!m_deferredTargets.init(*m_rhiDevice)) {
+    if (!m_deferredTargets.init(*m_rhiDevice, *m_commandListPool)) {
         return false;
     }
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
@@ -138,6 +139,7 @@ void RenderResourceHub::shutdown() {
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
     m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
 }
 
 bool RenderResourceHub::resizeRhiSwapchain(const Window& window) {
@@ -164,6 +166,11 @@ RhiDevice& RenderResourceHub::rhiDevice() {
 const RhiDevice& RenderResourceHub::rhiDevice() const {
     assert(m_rhiDevice != nullptr);
     return *m_rhiDevice;
+}
+
+RhiCommandListPool& RenderResourceHub::commandListPool() {
+    assert(m_commandListPool != nullptr);
+    return *m_commandListPool;
 }
 
 void RenderResourceHub::setMeshingSubmitBudget(const int budget) {

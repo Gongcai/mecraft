@@ -9,31 +9,31 @@ layout (location = 2) out vec4 GVoxelLight;
 layout (location = 3) out vec4 GMaterial;
 layout (location = 4) out vec4 GMaterialAux;
 
-in vec2 vUV;
-in float vSunlight;
-in float vBlockLight;
-in float vAO;
-in float vNormal;
-in float vLayer;
-in float vAnimationFrameCount;
-in float vAnimationFps;
-in float vAnimated;
-flat in float vTintKind;
-flat in float vMaterialKind;
-in vec2 vTintUV;
-in vec3 vWorldPos;
+layout(location = 0) in vec2 vUV;
+layout(location = 1) in float vSunlight;
+layout(location = 2) in float vBlockLight;
+layout(location = 3) in float vAO;
+layout(location = 4) in float vNormal;
+layout(location = 5) in float vLayer;
+layout(location = 6) in float vAnimationFrameCount;
+layout(location = 7) in float vAnimationFps;
+layout(location = 8) in float vAnimated;
+layout(location = 9) flat in float vTintKind;
+layout(location = 10) flat in float vMaterialKind;
+layout(location = 11) in vec2 vTintUV;
+layout(location = 12) in vec3 vWorldPos;
 
 #ifdef RHI_TERRAIN_MDI
-layout(binding = 0) uniform sampler2DArray texArray;
-layout(binding = 3) uniform sampler2D uGrassColormap;
-layout(binding = 4) uniform sampler2D uFoliageColormap;
-layout(binding = 9) uniform sampler2D uNoiseTex;
-layout(binding = 10) uniform sampler2D uRippleNormalTex;
+layout(set = 1, binding = 0) uniform sampler2DArray texArray;
+layout(set = 1, binding = 3) uniform sampler2D uGrassColormap;
+layout(set = 1, binding = 4) uniform sampler2D uFoliageColormap;
+layout(set = 1, binding = 9) uniform sampler2D uNoiseTex;
+layout(set = 1, binding = 10) uniform sampler2D uRippleNormalTex;
 #ifdef RHI_TERRAIN_NORMAL_MAPS
-layout(binding = 11) uniform sampler2DArray uBlockNormalTex;
+layout(set = 1, binding = 11) uniform sampler2DArray uBlockNormalTex;
 #endif
 #ifdef RHI_TERRAIN_SPECULAR_MAPS
-layout(binding = 12) uniform sampler2DArray uBlockSpecularTex;
+layout(set = 1, binding = 12) uniform sampler2DArray uBlockSpecularTex;
 #endif
 #include "terrain_gbuffer_params.glsl"
 

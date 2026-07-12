@@ -1,31 +1,61 @@
 #include "RenderDebugService.h"
-#include "../../Diagnostics.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 
 #include <algorithm>
-#include <cstdio>
+#include <array>
+#include <cstdlib>
 
-#include <glad/glad.h>
+uint32_t RenderDebugService::gpuTimerQueryIndex(const size_t frameIndex,
+                                                const size_t passIndex,
+                                                const size_t segmentIndex,
+                                                const size_t pointIndex) {
+    return static_cast<uint32_t>(
+        (((frameIndex * GPU_TIMER_PASS_COUNT + passIndex) *
+              GPU_TIMER_MAX_SEGMENTS_PER_PASS +
+          segmentIndex) *
+             GPU_TIMER_POINTS_PER_SEGMENT) +
+        pointIndex);
+}
 
-void RenderDebugService::init() {
+uint32_t RenderDebugService::shadowQueryIndex(const size_t frameIndex,
+                                              const size_t cascadeIndex,
+                                              const size_t pointIndex) {
+    return static_cast<uint32_t>(
+        (frameIndex * SHADOW_TIMER_CASCADE_COUNT + cascadeIndex) *
+            SHADOW_TIMER_POINT_COUNT +
+        pointIndex);
+}
+
+void RenderDebugService::init(RhiDevice& rhiDevice) {
     if (m_gpuTimersInitialized) {
         return;
     }
 
-    m_gpuFrameStats.supported = GLAD_GL_VERSION_3_3 != 0;
-    if (!m_gpuFrameStats.supported) {
-        return;
+    RhiQueryPoolDesc gpuTimerPoolDesc;
+    gpuTimerPoolDesc.debugName = "RenderDebug.PassTimestamps";
+    gpuTimerPoolDesc.queryCount = GPU_TIMER_QUERY_COUNT;
+    m_gpuTimerQueryPool = rhiDevice.createQueryPool(gpuTimerPoolDesc);
+    if (!m_gpuTimerQueryPool.isValid()) {
+        std::abort();
     }
 
-    for (auto& slot : m_gpuTimerQueries) {
-        glGenQueries(static_cast<GLsizei>(slot.size()), slot.data());
+    RhiQueryPoolDesc shadowPoolDesc;
+    shadowPoolDesc.debugName = "RenderDebug.ShadowTimestamps";
+    shadowPoolDesc.queryCount = SHADOW_TIMER_QUERY_COUNT;
+    m_shadowTimestampQueryPool = rhiDevice.createQueryPool(shadowPoolDesc);
+    if (!m_shadowTimestampQueryPool.isValid()) {
+        std::abort();
     }
-    for (auto& frame : m_shadowTimestampQueries) {
-        for (auto& cascade : frame) {
-            glGenQueries(static_cast<GLsizei>(cascade.size()), cascade.data());
+    m_rhiDevice = &rhiDevice;
+    for (auto& counts : m_gpuTimerAllocatedSegmentCounts) {
+        counts.fill(0u);
+    }
+    for (auto& frame : m_gpuTimerSegmentStates) {
+        for (auto& pass : frame) {
+            pass.fill(GpuTimerSegmentState::Unused);
         }
-    }
-    for (auto& issued : m_gpuTimerIssued) {
-        issued.fill(false);
     }
     for (auto& frame : m_shadowTimestampIssued) {
         for (auto& cascade : frame) {
@@ -33,7 +63,8 @@ void RenderDebugService::init() {
         }
     }
     m_shadowFrameIssued.fill(false);
-    m_shadowFrameStats.supported = m_gpuFrameStats.supported;
+    m_gpuFrameStats.supported = true;
+    m_shadowFrameStats.supported = true;
     m_gpuTimersInitialized = true;
 }
 
@@ -41,23 +72,22 @@ void RenderDebugService::shutdown() {
     if (!m_gpuTimersInitialized) {
         return;
     }
-    if (m_gpuTimerActive) {
-        glEndQuery(GL_TIME_ELAPSED);
-        m_gpuTimerActive = false;
+    if (m_rhiDevice != nullptr && m_gpuTimerQueryPool.isValid()) {
+        m_rhiDevice->destroyQueryPool(m_gpuTimerQueryPool);
     }
-
-    for (auto& slot : m_gpuTimerQueries) {
-        glDeleteQueries(static_cast<GLsizei>(slot.size()), slot.data());
-        slot.fill(0);
+    m_gpuTimerQueryPool = {};
+    if (m_rhiDevice != nullptr && m_shadowTimestampQueryPool.isValid()) {
+        m_rhiDevice->destroyQueryPool(m_shadowTimestampQueryPool);
     }
-    for (auto& frame : m_shadowTimestampQueries) {
-        for (auto& cascade : frame) {
-            glDeleteQueries(static_cast<GLsizei>(cascade.size()), cascade.data());
-            cascade.fill(0);
+    m_shadowTimestampQueryPool = {};
+    m_rhiDevice = nullptr;
+    for (auto& counts : m_gpuTimerAllocatedSegmentCounts) {
+        counts.fill(0u);
+    }
+    for (auto& frame : m_gpuTimerSegmentStates) {
+        for (auto& pass : frame) {
+            pass.fill(GpuTimerSegmentState::Unused);
         }
-    }
-    for (auto& issued : m_gpuTimerIssued) {
-        issued.fill(false);
     }
     for (auto& frame : m_shadowTimestampIssued) {
         for (auto& cascade : frame) {
@@ -71,7 +101,7 @@ void RenderDebugService::shutdown() {
     m_shadowFrameActive = false;
 }
 
-void RenderDebugService::beginFrame() {
+void RenderDebugService::beginFrame(RhiCommandList& commandList) {
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled) {
         m_gpuFrameStats.supported = m_gpuTimersInitialized && m_gpuFrameStats.supported;
         m_gpuFrameStats.valid = false;
@@ -84,33 +114,59 @@ void RenderDebugService::beginFrame() {
     m_shadowFrameStats.supported = true;
 
     const size_t readIndex = (m_gpuTimerWriteIndex + 1) % GPU_TIMER_RING_SIZE;
-    bool allIssued = false;
-    for (const bool issued : m_gpuTimerIssued[readIndex]) {
-        allIssued = allIssued || issued;
+    bool anyPassIssued = false;
+    for (const auto& pass : m_gpuTimerSegmentStates[readIndex]) {
+        for (const GpuTimerSegmentState state : pass) {
+            anyPassIssued = anyPassIssued || state == GpuTimerSegmentState::Issued;
+        }
     }
 
-    if (allIssued) {
+    if (anyPassIssued) {
         bool allAvailable = true;
-        for (size_t pass = 0; pass < static_cast<size_t>(GpuTimerPass::Count); ++pass) {
-            if (!m_gpuTimerIssued[readIndex][pass]) {
-                continue;
+        for (size_t pass = 0; pass < GPU_TIMER_PASS_COUNT; ++pass) {
+            for (size_t segment = 0; segment < GPU_TIMER_MAX_SEGMENTS_PER_PASS; ++segment) {
+                if (m_gpuTimerSegmentStates[readIndex][pass][segment] !=
+                    GpuTimerSegmentState::Issued) {
+                    continue;
+                }
+                const uint32_t firstQuery = gpuTimerQueryIndex(readIndex, pass, segment, 0u);
+                if (!m_rhiDevice->areQueryResultsAvailable(
+                        m_gpuTimerQueryPool, firstQuery,
+                        static_cast<uint32_t>(GPU_TIMER_POINTS_PER_SEGMENT))) {
+                    allAvailable = false;
+                    break;
+                }
             }
-            GLint available = GL_FALSE;
-            glGetQueryObjectiv(m_gpuTimerQueries[readIndex][pass], GL_QUERY_RESULT_AVAILABLE, &available);
-            if (available == GL_FALSE) {
-                allAvailable = false;
+            if (!allAvailable) {
                 break;
             }
         }
 
         if (allAvailable) {
-            auto readMs = [&](const GpuTimerPass pass) {
+            const auto readMs = [&](const GpuTimerPass pass) {
                 const size_t passIndex = static_cast<size_t>(pass);
-                if (!m_gpuTimerIssued[readIndex][passIndex]) {
-                    return 0.0;
+                uint64_t elapsedNs = 0u;
+                for (size_t segment = 0; segment < GPU_TIMER_MAX_SEGMENTS_PER_PASS; ++segment) {
+                    if (m_gpuTimerSegmentStates[readIndex][passIndex][segment] !=
+                        GpuTimerSegmentState::Issued) {
+                        continue;
+                    }
+                    std::array<uint64_t, GPU_TIMER_POINTS_PER_SEGMENT> timestamps{};
+                    const uint32_t firstQuery =
+                        gpuTimerQueryIndex(readIndex, passIndex, segment, 0u);
+                    if (!m_rhiDevice->getQueryResults(
+                            m_gpuTimerQueryPool, firstQuery,
+                            static_cast<uint32_t>(GPU_TIMER_POINTS_PER_SEGMENT),
+                            timestamps.data())) {
+                        std::abort();
+                    }
+                    const uint64_t start = timestamps[0];
+                    const uint64_t end = timestamps[1];
+                    if (end < start) {
+                        std::abort();
+                    }
+                    elapsedNs += end - start;
                 }
-                GLuint64 elapsedNs = 0;
-                glGetQueryObjectui64v(m_gpuTimerQueries[readIndex][passIndex], GL_QUERY_RESULT, &elapsedNs);
                 return static_cast<double>(elapsedNs) / 1000000.0;
             };
 
@@ -127,49 +183,45 @@ void RenderDebugService::beginFrame() {
             m_gpuFrameStats.cloudMs = readMs(GpuTimerPass::Cloud);
             m_gpuFrameStats.waterMs = readMs(GpuTimerPass::Water);
             m_gpuFrameStats.postMs = readMs(GpuTimerPass::Post);
-            m_gpuTimerIssued[readIndex].fill(false);
+            m_gpuTimerAllocatedSegmentCounts[readIndex].fill(0u);
+            for (auto& pass : m_gpuTimerSegmentStates[readIndex]) {
+                pass.fill(GpuTimerSegmentState::Unused);
+            }
         }
     }
 
     if (m_shadowFrameIssued[readIndex]) {
-        bool allAvailable = true;
         const ShadowFrameStats& pendingStats = m_shadowFrameSlots[readIndex];
         const int cascadeCount = std::min(static_cast<int>(SHADOW_TIMER_CASCADE_COUNT),
                                           std::max(0, pendingStats.cascadeCount));
-        for (int cascade = 0; cascade < cascadeCount && allAvailable; ++cascade) {
-            for (size_t point = 0; point < SHADOW_TIMER_POINT_COUNT; ++point) {
-                if (!m_shadowTimestampIssued[readIndex][cascade][point]) {
-                    continue;
-                }
-                GLint available = GL_FALSE;
-                glGetQueryObjectiv(m_shadowTimestampQueries[readIndex][cascade][point],
-                                    GL_QUERY_RESULT_AVAILABLE, &available);
-                if (available == GL_FALSE) {
-                    allAvailable = false;
-                    break;
-                }
-            }
-        }
+        const uint32_t firstQuery = shadowQueryIndex(readIndex, 0u, 0u);
+        const uint32_t queryCount = static_cast<uint32_t>(cascadeCount) *
+                                    static_cast<uint32_t>(SHADOW_TIMER_POINT_COUNT);
+        const bool allAvailable = queryCount > 0u &&
+            m_rhiDevice->areQueryResultsAvailable(
+                m_shadowTimestampQueryPool, firstQuery, queryCount);
 
         if (allAvailable) {
+            std::array<uint64_t, SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT>
+                timestamps{};
+            if (!m_rhiDevice->getQueryResults(
+                    m_shadowTimestampQueryPool, firstQuery, queryCount, timestamps.data())) {
+                std::abort();
+            }
             ShadowFrameStats stats = pendingStats;
             stats.supported = true;
             stats.valid = true;
             stats.gpuTotalMs = 0.0;
             for (int cascade = 0; cascade < cascadeCount; ++cascade) {
-                auto readTimestamp = [&](ShadowTimestampPoint point) {
-                    const size_t pointIndex = static_cast<size_t>(point);
-                    if (!m_shadowTimestampIssued[readIndex][cascade][pointIndex]) {
-                        return GLuint64{0};
-                    }
-                    GLuint64 timestamp = 0;
-                    glGetQueryObjectui64v(m_shadowTimestampQueries[readIndex][cascade][pointIndex],
-                                          GL_QUERY_RESULT, &timestamp);
-                    return timestamp;
+                const auto readTimestamp = [&](const ShadowTimestampPoint point) {
+                    const size_t localIndex = static_cast<size_t>(cascade) *
+                                                  SHADOW_TIMER_POINT_COUNT +
+                                              static_cast<size_t>(point);
+                    return timestamps[localIndex];
                 };
-                const GLuint64 start = readTimestamp(ShadowTimestampPoint::Start);
-                const GLuint64 opaqueEnd = readTimestamp(ShadowTimestampPoint::OpaqueEnd);
-                const GLuint64 end = readTimestamp(ShadowTimestampPoint::End);
+                const uint64_t start = readTimestamp(ShadowTimestampPoint::Start);
+                const uint64_t opaqueEnd = readTimestamp(ShadowTimestampPoint::OpaqueEnd);
+                const uint64_t end = readTimestamp(ShadowTimestampPoint::End);
                 ShadowCascadeStats& cascadeStats = stats.cascades[static_cast<size_t>(cascade)];
                 if (start > 0 && opaqueEnd >= start) {
                     cascadeStats.gpuOpaqueMs = static_cast<double>(opaqueEnd - start) / 1000000.0;
@@ -218,10 +270,14 @@ void RenderDebugService::beginFrame() {
     }
 
     bool slotStillPending = false;
-    for (const bool issued : m_gpuTimerIssued[readIndex]) {
-        if (issued) {
-            slotStillPending = true;
-            break;
+    for (const auto& pass : m_gpuTimerSegmentStates[readIndex]) {
+        for (const GpuTimerSegmentState state : pass) {
+            if (state == GpuTimerSegmentState::Recording) {
+                std::abort();
+            }
+            if (state == GpuTimerSegmentState::Issued) {
+                slotStillPending = true;
+            }
         }
     }
     if (m_shadowFrameIssued[readIndex]) {
@@ -232,43 +288,107 @@ void RenderDebugService::beginFrame() {
         return;
     }
 
-    if (m_gpuTimerActive) {
-        glEndQuery(GL_TIME_ELAPSED);
-        m_gpuTimerActive = false;
+    for (const auto& pass : m_gpuTimerSegmentStates[m_gpuTimerWriteIndex]) {
+        for (const GpuTimerSegmentState state : pass) {
+            if (state == GpuTimerSegmentState::Recording) {
+                std::abort();
+            }
+        }
     }
     m_gpuTimerWriteIndex = (m_gpuTimerWriteIndex + 1) % GPU_TIMER_RING_SIZE;
-    m_gpuTimerIssued[m_gpuTimerWriteIndex].fill(false);
+    m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex].fill(0u);
+    for (auto& pass : m_gpuTimerSegmentStates[m_gpuTimerWriteIndex]) {
+        pass.fill(GpuTimerSegmentState::Unused);
+    }
     for (auto& cascade : m_shadowTimestampIssued[m_gpuTimerWriteIndex]) {
         cascade.fill(false);
     }
     m_shadowFrameSlots[m_gpuTimerWriteIndex] = ShadowFrameStats{};
     m_shadowFrameIssued[m_gpuTimerWriteIndex] = false;
     m_shadowFrameActive = false;
+
+    const uint32_t timerSlotFirstQuery = gpuTimerQueryIndex(
+        m_gpuTimerWriteIndex, 0u, 0u, 0u);
+    const uint32_t timerSlotQueryCount = static_cast<uint32_t>(
+        GPU_TIMER_PASS_COUNT * GPU_TIMER_MAX_SEGMENTS_PER_PASS *
+        GPU_TIMER_POINTS_PER_SEGMENT);
+    commandList.resetQueryPool(
+        m_gpuTimerQueryPool, timerSlotFirstQuery, timerSlotQueryCount);
+
+    const uint32_t shadowSlotFirstQuery = shadowQueryIndex(
+        m_gpuTimerWriteIndex, 0u, 0u);
+    const uint32_t shadowSlotQueryCount = static_cast<uint32_t>(
+        SHADOW_TIMER_CASCADE_COUNT * SHADOW_TIMER_POINT_COUNT);
+    commandList.resetQueryPool(
+        m_shadowTimestampQueryPool, shadowSlotFirstQuery, shadowSlotQueryCount);
 }
 
-bool RenderDebugService::beginGpuTimer(const GpuTimerPass pass) {
-    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame || m_gpuTimerActive) {
-        return false;
+GpuTimerSegmentToken RenderDebugService::beginGpuTimer(RhiCommandList& commandList,
+                                                       const GpuTimerPass pass) {
+    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame) {
+        return {};
     }
 
     const size_t passIndex = static_cast<size_t>(pass);
-    if (m_gpuTimerIssued[m_gpuTimerWriteIndex][passIndex]) {
-        return false;
+    if (passIndex >= GPU_TIMER_PASS_COUNT) {
+        std::abort();
     }
-    glBeginQuery(GL_TIME_ELAPSED, m_gpuTimerQueries[m_gpuTimerWriteIndex][passIndex]);
-    m_gpuTimerActive = true;
-    m_activeGpuTimerPass = pass;
-    return true;
+    const size_t segmentIndex =
+        m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex];
+    if (segmentIndex >= GPU_TIMER_MAX_SEGMENTS_PER_PASS) {
+        std::abort();
+    }
+    m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex] =
+        static_cast<uint8_t>(segmentIndex + 1u);
+    const uint32_t firstQuery = gpuTimerQueryIndex(
+        m_gpuTimerWriteIndex, passIndex, segmentIndex, 0u);
+    commandList.writeTimestamp(m_gpuTimerQueryPool, firstQuery);
+    m_gpuTimerSegmentStates[m_gpuTimerWriteIndex][passIndex][segmentIndex] =
+        GpuTimerSegmentState::Recording;
+    return {
+        pass,
+        static_cast<uint8_t>(m_gpuTimerWriteIndex),
+        static_cast<uint8_t>(segmentIndex),
+        true
+    };
 }
 
-void RenderDebugService::endGpuTimer(const GpuTimerPass pass) {
-    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerActive || m_activeGpuTimerPass != pass) {
+void RenderDebugService::endGpuTimer(RhiCommandList& commandList,
+                                     const GpuTimerSegmentToken token) {
+    if (!token.valid) {
         return;
     }
 
-    glEndQuery(GL_TIME_ELAPSED);
-    m_gpuTimerIssued[m_gpuTimerWriteIndex][static_cast<size_t>(pass)] = true;
-    m_gpuTimerActive = false;
+    const size_t passIndex = static_cast<size_t>(token.pass);
+    if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex ||
+        passIndex >= GPU_TIMER_PASS_COUNT ||
+        token.segmentIndex >= GPU_TIMER_MAX_SEGMENTS_PER_PASS ||
+        m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] !=
+            GpuTimerSegmentState::Recording) {
+        std::abort();
+    }
+    const uint32_t endQuery = gpuTimerQueryIndex(
+        token.frameIndex, passIndex, token.segmentIndex, 1u);
+    commandList.writeTimestamp(m_gpuTimerQueryPool, endQuery);
+    m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] =
+        GpuTimerSegmentState::Issued;
+}
+
+void RenderDebugService::cancelGpuTimer(const GpuTimerSegmentToken token) {
+    if (!token.valid) {
+        return;
+    }
+
+    const size_t passIndex = static_cast<size_t>(token.pass);
+    if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex ||
+        passIndex >= GPU_TIMER_PASS_COUNT ||
+        token.segmentIndex >= GPU_TIMER_MAX_SEGMENTS_PER_PASS ||
+        m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] !=
+            GpuTimerSegmentState::Recording) {
+        std::abort();
+    }
+    m_gpuTimerSegmentStates[token.frameIndex][passIndex][token.segmentIndex] =
+        GpuTimerSegmentState::Unused;
 }
 
 bool RenderDebugService::beginShadowFrame(const int cascadeCount, const int shadowResolution) {
@@ -285,7 +405,6 @@ bool RenderDebugService::beginShadowFrame(const int cascadeCount, const int shad
     for (auto& cascade : m_shadowTimestampIssued[m_gpuTimerWriteIndex]) {
         cascade.fill(false);
     }
-    m_shadowFrameIssued[m_gpuTimerWriteIndex] = true;
     m_shadowFrameActive = true;
     return true;
 }
@@ -313,7 +432,8 @@ void RenderDebugService::recordShadowFrameTotals(const int submitted, const int 
     frame.maxCasterDistance = maxCasterDistance;
 }
 
-void RenderDebugService::markShadowTimestamp(const int cascadeIndex,
+void RenderDebugService::markShadowTimestamp(RhiCommandList& commandList,
+                                             const int cascadeIndex,
                                              const ShadowTimestampPoint point) {
     if (!m_shadowFrameActive || cascadeIndex < 0 ||
         cascadeIndex >= static_cast<int>(SHADOW_TIMER_CASCADE_COUNT)) {
@@ -324,12 +444,27 @@ void RenderDebugService::markShadowTimestamp(const int cascadeIndex,
         return;
     }
 
-    glQueryCounter(m_shadowTimestampQueries[m_gpuTimerWriteIndex][static_cast<size_t>(cascadeIndex)][pointIndex],
-                   GL_TIMESTAMP);
+    const uint32_t queryIndex = shadowQueryIndex(
+        m_gpuTimerWriteIndex, static_cast<size_t>(cascadeIndex), pointIndex);
+    commandList.writeTimestamp(m_shadowTimestampQueryPool, queryIndex);
     m_shadowTimestampIssued[m_gpuTimerWriteIndex][static_cast<size_t>(cascadeIndex)][pointIndex] = true;
 }
 
 void RenderDebugService::endShadowFrame() {
+    if (!m_shadowFrameActive) {
+        return;
+    }
+
+    const int cascadeCount = m_shadowFrameSlots[m_gpuTimerWriteIndex].cascadeCount;
+    for (int cascade = 0; cascade < cascadeCount; ++cascade) {
+        for (size_t point = 0; point < SHADOW_TIMER_POINT_COUNT; ++point) {
+            if (!m_shadowTimestampIssued[m_gpuTimerWriteIndex]
+                                        [static_cast<size_t>(cascade)][point]) {
+                std::abort();
+            }
+        }
+    }
+    m_shadowFrameIssued[m_gpuTimerWriteIndex] = true;
     m_shadowFrameActive = false;
 }
 

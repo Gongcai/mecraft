@@ -11,7 +11,7 @@ layout(binding = 2) uniform sampler2D uNormalAoTex;
 layout(binding = 3) uniform sampler2D uMaterialTex;
 layout(binding = 4) uniform sampler2D uMaterialAuxTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uInvViewProj;
     vec4 uScreenFilterParams;
     vec4 uCameraNearPlane;

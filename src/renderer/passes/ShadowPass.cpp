@@ -11,8 +11,6 @@
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
-#include "../core/Shader.h"
-#include "../renderers/GameplaySkyRenderer.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/IWorldView.h"
 
@@ -31,25 +29,48 @@
 
 #include "renderer/core/FrameContext.h"
 
-namespace {
-/// Convert FrameContext::SkyColorsData to GameplaySkyRenderer::SkyColors
-/// for compatibility with ShadowRenderer::computeLightDirection().
-GameplaySkyRenderer::SkyColors toLegacySkyColors(const SkyColorsData& src) {
-    GameplaySkyRenderer::SkyColors dst;
-    dst.sunDirection = src.sunDirection;
-    dst.moonDirection = src.moonDirection;
-    dst.sunLightColor = src.sunLightColor;
-    dst.moonLightColor = src.moonLightColor;
-    dst.skyAmbientColor = src.skyAmbientColor;
-    dst.sunVisibility = src.sunVisibility;
-    dst.moonVisibility = src.moonVisibility;
-    return dst;
-}
-
-} // namespace
-
 static constexpr int SHADOW_CASCADE_COUNT = shadow::ShadowRenderer::CASCADE_COUNT;
 using ShadowCascadeData = shadow::ShadowRenderer::Cascade;
+
+namespace {
+[[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs,
+                                     const RhiTextureHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+void resetCascadeStatesForTexture(const RhiTextureHandle texture,
+                                  RhiTextureHandle& trackedTexture,
+                                  std::array<RhiResourceState, SHADOW_CASCADE_COUNT>& states,
+                                  const RhiResourceState stableState) {
+    if (sameTextureHandle(texture, trackedTexture)) {
+        return;
+    }
+    trackedTexture = texture;
+    states.fill(stableState);
+}
+
+void transitionCascadeLayer(
+    RhiCommandList& commandList,
+    const RhiTextureHandle texture,
+    std::array<RhiResourceState, SHADOW_CASCADE_COUNT>& states,
+    const int cascade,
+    const RhiResourceState newState) {
+    RhiResourceState& oldState = states[static_cast<size_t>(cascade)];
+    if (oldState == newState) {
+        return;
+    }
+    commandList.textureBarrier({
+        texture,
+        oldState,
+        newState,
+        0u,
+        1u,
+        static_cast<uint32_t>(cascade),
+        1u
+    });
+    oldState = newState;
+}
+} // namespace
 
 void ShadowPass::init(ResourceMgr& resourceMgr) {
     m_resourceMgr = &resourceMgr;
@@ -57,6 +78,14 @@ void ShadowPass::init(ResourceMgr& resourceMgr) {
 
 void ShadowPass::shutdown() {
     m_resourceMgr = nullptr;
+    m_trackedCsmDepthTexture = {};
+    m_trackedCsmDepthAllTexture = {};
+    m_trackedCsmColor0Texture = {};
+    m_trackedCsmColor1Texture = {};
+    m_csmDepthStates.fill(RhiResourceState::Undefined);
+    m_csmDepthAllStates.fill(RhiResourceState::Undefined);
+    m_csmColor0States.fill(RhiResourceState::Undefined);
+    m_csmColor1States.fill(RhiResourceState::Undefined);
 }
 
 void ShadowPass::renderShadowEntities(RhiCommandList& commandList,
@@ -92,7 +121,7 @@ void ShadowPass::renderShadowFallingBlocks(RhiCommandList& commandList,
                                             const glm::mat4& shadowViewProj,
                                             float animationTime) {
     // Render falling-block entities into the current shadow cascade layer.
-    // Shadow FBO layer is already bound by the caller (execute).
+    // The caller has already begun rendering for the selected cascade layer.
     if (m_fallingBlockRenderer == nullptr || m_gameplayRegistry == nullptr) {
         return;
     }
@@ -133,7 +162,10 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     }
 
     // Update shadow cascades via ShadowRenderer.
-    m_shadowRenderer->computeLightDirection(toLegacySkyColors(ctx.skyColors));
+    m_shadowRenderer->computeLightDirection(ctx.skyColors.sunDirection,
+                                            ctx.skyColors.sunVisibility,
+                                            ctx.skyColors.moonDirection,
+                                            ctx.skyColors.moonVisibility);
 
     // Build camera basis from FrameContext view matrix
     const glm::mat4& view = ctx.camera.view;
@@ -170,6 +202,22 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             return output;
         }
     }
+    resetCascadeStatesForTexture(targets.csmShadowDepthTextureHandle(),
+                                 m_trackedCsmDepthTexture,
+                                 m_csmDepthStates,
+                                 RhiResourceState::DepthRead);
+    resetCascadeStatesForTexture(targets.csmShadowDepthAllTextureHandle(),
+                                 m_trackedCsmDepthAllTexture,
+                                 m_csmDepthAllStates,
+                                 RhiResourceState::DepthRead);
+    resetCascadeStatesForTexture(targets.csmShadowColor0TextureHandle(),
+                                 m_trackedCsmColor0Texture,
+                                 m_csmColor0States,
+                                 RhiResourceState::ShaderRead);
+    resetCascadeStatesForTexture(targets.csmShadowColor1TextureHandle(),
+                                 m_trackedCsmColor1Texture,
+                                 m_csmColor1States,
+                                 RhiResourceState::ShaderRead);
 
     RenderDebugService* debugService = ctx.debugService;
     const bool shadowStatsActive = debugService != nullptr &&
@@ -282,10 +330,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
 
         // Pass 1: Opaque-only → DepthOpaque (shadowtex1)
         {
-            if (shadowStatsActive) {
-                debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::Start);
-            }
-
             RhiDepthStencilAttachment depthAttachment;
             depthAttachment.view = targets.csmShadowDepthTextureViewHandle(cascade);
             depthAttachment.depthLoadOp = RhiLoadOp::Clear;
@@ -302,7 +346,19 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             };
             renderingInfo.depthStencilAttachment = &depthAttachment;
 
-            RhiCommandList& commandList = rhiDevice.beginFrame();
+            RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+            const GpuTimerSegmentToken gpuTimer = debugService != nullptr
+                ? debugService->beginGpuTimer(commandList, GpuTimerPass::Shadow)
+                : GpuTimerSegmentToken{};
+            if (shadowStatsActive) {
+                debugService->markShadowTimestamp(
+                    commandList, cascade, ShadowTimestampPoint::Start);
+            }
             char opaqueLabel[48];
             std::snprintf(opaqueLabel, sizeof(opaqueLabel),
                           "Shadow.Cascade%d.Opaque", cascade);
@@ -312,6 +368,9 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 !m_blockEntityRenderer->prepareShadow(commandList, ctx.camera.position,
                                                       cascadeData.splitNear,
                                                       cascadeData.splitFar)) {
+                if (debugService != nullptr) {
+                    debugService->cancelGpuTimer(gpuTimer);
+                }
                 commandList.endDebugLabel();
                 return output;
             }
@@ -329,9 +388,17 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 !m_worldRenderBuffer->prepareRhiOpaqueAndCutout(
                     commandList,
                     ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
+                if (debugService != nullptr) {
+                    debugService->cancelGpuTimer(gpuTimer);
+                }
                 commandList.endDebugLabel();
                 return output;
             }
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowDepthTextureHandle(),
+                                   m_csmDepthStates,
+                                   cascade,
+                                   RhiResourceState::DepthWrite);
             commandList.beginRendering(renderingInfo);
 
             m_worldRenderBuffer->recordRhiOpaque(
@@ -356,34 +423,47 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
             // Falling-block shadow: render falling sand/gravel depth into this cascade.
             renderShadowFallingBlocks(commandList, cascadeData.viewProj, ctx.animationTime);
             if (shadowStatsActive) {
-                debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::OpaqueEnd);
+                debugService->markShadowTimestamp(
+                    commandList, cascade, ShadowTimestampPoint::OpaqueEnd);
             }
             commandList.endRendering();
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowDepthTextureHandle(),
+                                   m_csmDepthStates,
+                                   cascade,
+                                   RhiResourceState::DepthRead);
+            if (debugService != nullptr) {
+                debugService->endGpuTimer(commandList, gpuTimer);
+            }
             commandList.endDebugLabel();
-            rhiDevice.submitFrame(commandList);
+            if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
         }
 
         // Pass 2: Transparent/all.
         // Copy DepthOpaque -> DepthAll, then draw near water + stained glass casters.
         {
             // Copy opaque depth to DepthAll as baseline (avoids re-rendering opaque)
-            RhiCommandList& commandList = rhiDevice.beginFrame();
+            RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+            const GpuTimerSegmentToken gpuTimer = debugService != nullptr
+                ? debugService->beginGpuTimer(commandList, GpuTimerPass::Shadow)
+                : GpuTimerSegmentToken{};
             char transparentLabel[48];
             std::snprintf(transparentLabel, sizeof(transparentLabel),
                           "Shadow.Cascade%d.Transparent", cascade);
             commandList.beginDebugLabel(transparentLabel, glm::vec4(0.55f, 0.85f, 1.0f, 1.0f));
-            RhiTextureCopy depthCopy;
-            depthCopy.src = targets.csmShadowDepthTextureHandle();
-            depthCopy.srcSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
-            depthCopy.dst = targets.csmShadowDepthAllTextureHandle();
-            depthCopy.dstSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
-            depthCopy.extent = {
-                static_cast<uint32_t>(std::max(1, cascadeRes)),
-                static_cast<uint32_t>(std::max(1, cascadeRes)),
-                1u
-            };
-            commandList.copyTexture(depthCopy);
-
             RhiColorAttachment colorAttachments[2];
             colorAttachments[0].view = targets.csmShadowColor0TextureViewHandle(cascade);
             colorAttachments[0].loadOp = RhiLoadOp::Clear;
@@ -439,10 +519,54 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                     !m_worldRenderBuffer->prepareRhiTransparent(
                         commandList,
                         ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
+                    if (debugService != nullptr) {
+                        debugService->cancelGpuTimer(gpuTimer);
+                    }
                     commandList.endDebugLabel();
                     return output;
                 }
             }
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowDepthTextureHandle(),
+                                   m_csmDepthStates,
+                                   cascade,
+                                   RhiResourceState::TransferSrc);
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowDepthAllTextureHandle(),
+                                   m_csmDepthAllStates,
+                                   cascade,
+                                   RhiResourceState::TransferDst);
+            RhiTextureCopy depthCopy;
+            depthCopy.src = targets.csmShadowDepthTextureHandle();
+            depthCopy.srcSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
+            depthCopy.dst = targets.csmShadowDepthAllTextureHandle();
+            depthCopy.dstSubresource.baseArrayLayer = static_cast<uint32_t>(cascade);
+            depthCopy.extent = {
+                static_cast<uint32_t>(std::max(1, cascadeRes)),
+                static_cast<uint32_t>(std::max(1, cascadeRes)),
+                1u
+            };
+            commandList.copyTexture(depthCopy);
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowDepthTextureHandle(),
+                                   m_csmDepthStates,
+                                   cascade,
+                                   RhiResourceState::DepthRead);
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowDepthAllTextureHandle(),
+                                   m_csmDepthAllStates,
+                                   cascade,
+                                   RhiResourceState::DepthWrite);
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowColor0TextureHandle(),
+                                   m_csmColor0States,
+                                   cascade,
+                                   RhiResourceState::RenderTarget);
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowColor1TextureHandle(),
+                                   m_csmColor1States,
+                                   cascade,
+                                   RhiResourceState::RenderTarget);
             commandList.beginRendering(renderingInfo);
 
             if (renderTransparentCasters) {
@@ -453,11 +577,38 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
                 stats.transparentRendered = true;
             }
             commandList.endRendering();
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowDepthAllTextureHandle(),
+                                   m_csmDepthAllStates,
+                                   cascade,
+                                   RhiResourceState::DepthRead);
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowColor0TextureHandle(),
+                                   m_csmColor0States,
+                                   cascade,
+                                   RhiResourceState::ShaderRead);
+            transitionCascadeLayer(commandList,
+                                   targets.csmShadowColor1TextureHandle(),
+                                   m_csmColor1States,
+                                   cascade,
+                                   RhiResourceState::ShaderRead);
+            if (shadowStatsActive) {
+                debugService->markShadowTimestamp(
+                    commandList, cascade, ShadowTimestampPoint::End);
+            }
+            if (debugService != nullptr) {
+                debugService->endGpuTimer(commandList, gpuTimer);
+            }
             commandList.endDebugLabel();
-            rhiDevice.submitFrame(commandList);
+            if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
         }
-        if (shadowStatsActive) {
-            debugService->markShadowTimestamp(cascade, ShadowTimestampPoint::End);
+    }
         }
         cascadeStats[static_cast<size_t>(cascade)] = stats;
         if (shadowStatsActive) {
@@ -468,22 +619,6 @@ ShadowPass::ShadowPassOutput ShadowPass::execute(
     if (shadowStatsActive) {
         debugService->recordShadowFrameTotals(visibleTotal, culledTotal, maxCasterDistance);
         debugService->endShadowFrame();
-    }
-
-    // Transitional compatibility for historical debug modes that still inspect
-    // the legacy single-map projection: expose cascade 0 there.
-    if (settings.debug.deferredLightDebugMode > 0 || settings.debug.lightDebugMode > 0) {
-        RhiCommandList& commandList = rhiDevice.beginFrame();
-        RhiTextureCopy debugDepthCopy;
-        debugDepthCopy.src = targets.csmShadowDepthTextureHandle();
-        debugDepthCopy.dst = targets.shadowDepthTextureHandle();
-        debugDepthCopy.extent = {
-            static_cast<uint32_t>(std::max(1, targets.shadowResolution())),
-            static_cast<uint32_t>(std::max(1, targets.shadowResolution())),
-            1u
-        };
-        commandList.copyTexture(debugDepthCopy);
-        rhiDevice.submitFrame(commandList);
     }
 
     m_worldRenderBuffer->beginFrame();

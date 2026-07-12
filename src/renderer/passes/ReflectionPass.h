@@ -16,7 +16,7 @@ class RhiDevice;
 /// Reflection pass: SSR probe, bilateral filter, and temporal reprojection.
 class ReflectionPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Reflection"; }
 

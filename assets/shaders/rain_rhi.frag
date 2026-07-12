@@ -8,7 +8,7 @@ layout(binding = 0) uniform sampler2D uPrecipTexture;
 layout(binding = 1) uniform sampler2D uSceneDepthTexture;
 #endif
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     vec4 uPrecipColorStrength;
     vec4 uAlphaScreenDepth;

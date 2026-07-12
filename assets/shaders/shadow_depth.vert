@@ -31,17 +31,17 @@ uniform int uUseModel;
 uniform int uVertexFormat;
 #endif
 
-out vec2 vUV;
-out float vLayer;
-out float vAnimationFrameCount;
-out float vAnimationFps;
-out float vAnimated;
-out float vNormal;
-out vec3 vWorldPos;
-flat out int vMaterialKind;
-out float vSkylight;
-flat out float vTintKind;
-out vec2 vTintUV;
+layout(location = 0) out vec2 vUV;
+layout(location = 1) out float vLayer;
+layout(location = 2) out float vAnimationFrameCount;
+layout(location = 3) out float vAnimationFps;
+layout(location = 4) out float vAnimated;
+layout(location = 5) out float vNormal;
+layout(location = 6) out vec3 vWorldPos;
+layout(location = 7) flat out int vMaterialKind;
+layout(location = 8) out float vSkylight;
+layout(location = 9) flat out float vTintKind;
+layout(location = 10) out vec2 vTintUV;
 
 void main() {
 #ifdef RHI_TERRAIN_SHADOW_MDI

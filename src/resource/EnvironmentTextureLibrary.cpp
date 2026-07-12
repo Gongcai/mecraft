@@ -34,10 +34,12 @@ RhiTextureHandle EnvironmentTextureLibrary::loadTexture(const std::string& path,
     textureDesc.format = RhiTextureFormat::Rgba8Unorm;
     textureDesc.width = static_cast<uint32_t>(width);
     textureDesc.height = static_cast<uint32_t>(height);
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
     RhiTextureInitialData initialData;
     initialData.pixels = data;
     initialData.sizeBytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+    initialData.finalState = RhiResourceState::ShaderRead;
     RhiTextureHandle texture = m_rhiDevice->createTexture(textureDesc, &initialData);
     stbi_image_free(data);
     if (!texture.isValid()) {

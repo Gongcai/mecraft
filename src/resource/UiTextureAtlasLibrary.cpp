@@ -9,8 +9,9 @@
 #include <cstdio>
 #include <utility>
 
-void UiTextureAtlasLibrary::init(RhiDevice& rhiDevice) {
+void UiTextureAtlasLibrary::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
     m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
 }
 
 void UiTextureAtlasLibrary::deleteTextureAtlas(TextureAtlas& atlas) {
@@ -29,6 +30,7 @@ void UiTextureAtlasLibrary::shutdown() {
     m_itemTextureIndices.clear();
     m_hudIconIndices.clear();
     m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
 }
 
 void UiTextureAtlasLibrary::buildBlockIconAtlas(const int iconSize, const BlockTextureLibrary& blockTextures) {
@@ -57,7 +59,7 @@ void UiTextureAtlasLibrary::buildItemTextureAtlas(const std::string& directory,
     deleteTextureAtlas(m_itemTextureAtlas);
 
     resource::IndexedTextureAtlas atlas = resource::buildItemTextureAtlas(
-        directory, tileSize, catalog, *m_rhiDevice);
+        directory, tileSize, catalog, *m_rhiDevice, *m_commandListPool);
     m_itemTextureAtlas = atlas.atlas;
     m_itemTexturePixels = std::move(atlas.pixels);
     m_itemTextureIndices = std::move(atlas.indices);
@@ -83,7 +85,8 @@ void UiTextureAtlasLibrary::buildHudIconAtlas(const std::string& directory, cons
     assert(m_rhiDevice != nullptr);
     deleteTextureAtlas(m_hudIconAtlas);
 
-    resource::IndexedTextureAtlas atlas = resource::buildHudIconAtlas(directory, iconSize, *m_rhiDevice);
+    resource::IndexedTextureAtlas atlas = resource::buildHudIconAtlas(
+        directory, iconSize, *m_rhiDevice, *m_commandListPool);
     m_hudIconAtlas = atlas.atlas;
     m_hudIconIndices = std::move(atlas.indices);
 }

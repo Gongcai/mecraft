@@ -8,6 +8,7 @@
 #include "../engine/platform/Time.h"
 #include "../renderer/rhi/RhiDevice.h"
 #include "../renderer/rhi/RhiDeviceFactory.h"
+#include "../renderer/rhi/RhiCommandListPool.h"
 #include "../save/SaveManager.h"
 #include "../net/ENetTransport.h"
 #include <algorithm>
@@ -48,7 +49,7 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
         return false;
     }
     m_threadPool.start();
-    if (!app::bootstrapGameResources(m_resourceMgr, *m_rhiDevice)) {
+    if (!app::bootstrapGameResources(m_resourceMgr, *m_rhiDevice, *m_commandListPool)) {
         return false;
     }
     
@@ -99,6 +100,16 @@ bool GameManager::initRhiDevice() {
         m_rhiDevice.reset();
         return false;
     }
+    RhiCommandListPoolDesc poolDesc;
+    poolDesc.debugName = "App.GraphicsCommandListPool";
+    poolDesc.initialCommandListCapacity = 16u;
+    m_commandListPool = m_rhiDevice->createCommandListPool(poolDesc);
+    if (!m_commandListPool) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to create app command-list pool\n");
+        m_rhiDevice->shutdown();
+        m_rhiDevice.reset();
+        return false;
+    }
     return true;
 }
 
@@ -129,6 +140,7 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
         m_localeManager,
         m_threadPool,
         *m_rhiDevice,
+        *m_commandListPool,
         m_launchOptions.enableDebugDashboard,
         [this]() { activateInputReplayForScope(AppLaunchOptions::InputReplayScope::Gameplay); },
         [this]() {
@@ -385,6 +397,8 @@ void GameManager::shutdown() {
     m_bgmSystem.shutdown();
     m_audioEngine.shutdown();
     if (m_rhiDevice) {
+        m_rhiDevice->waitIdle();
+        m_commandListPool.reset();
         m_rhiDevice->shutdown();
         m_rhiDevice.reset();
     }

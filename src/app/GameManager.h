@@ -22,6 +22,7 @@
 #include "../thread/ThreadPool.h"
 
 class RhiDevice;
+class RhiCommandListPool;
 
 class GameManager {
 public:
@@ -67,6 +68,7 @@ private:
     LocaleManager m_localeManager;
     ThreadPool m_threadPool;
     std::unique_ptr<RhiDevice> m_rhiDevice;
+    std::unique_ptr<RhiCommandListPool> m_commandListPool;
 
     AppStateMachine m_appStateMachine;
     AppLaunchOptions m_launchOptions{};

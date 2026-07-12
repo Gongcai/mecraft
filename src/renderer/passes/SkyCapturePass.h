@@ -11,11 +11,12 @@ class ResourceMgr;
 class DayNightSystem;
 class WeatherSystem;
 class RhiDevice;
+class RhiCommandListPool;
 
 /// Sky capture pass: renders equirectangular sky radiance and cloud data for IBL and lighting.
 class SkyCapturePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SkyCapture"; }
 
@@ -32,6 +33,7 @@ public:
     /// @param cloudTimeScale Cloud time scale from settings
     void execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
                  RhiDevice& rhiDevice,
+                 RhiCommandListPool& commandListPool,
                  DeferredRenderTargets& targets,
                  GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
                  float cameraY, float shaderTime, const glm::vec3& cameraPos,

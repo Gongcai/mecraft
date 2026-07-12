@@ -13,7 +13,7 @@ class RhiDevice;
 /// Motion blur pass: velocity-based per-pixel blur.
 class MotionBlurPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "MotionBlur"; }
 

@@ -33,14 +33,14 @@ public:
     void prepareFrame(const IWorldView& worldView, const ecs::GameplayRegistry& registry);
 
     // GBuffer path: renders falling blocks into the deferred GBuffer.
-    // Caller must have already bound the GBuffer FBO with terrain+entity depth
+    // The caller must provide an active GBuffer rendering scope with terrain and entity depth.
     // and attached the per-object velocity target.
     void renderToGBuffer(RhiCommandList& commandList, const glm::mat4& jitteredViewProj,
                          const glm::mat4& previousViewProj,
                          float animationTime);
 
     // Shadow path: renders falling blocks into the CSM shadow map.
-    // Caller must have already bound the shadow FBO layer.
+    // The caller must provide an active shadow rendering scope for the target cascade layer.
     void renderToShadowMap(RhiCommandList& commandList, const glm::mat4& shadowViewProj,
                            float animationTime);
 

@@ -1,5 +1,6 @@
 #include "CloudPass.h"
 #include "../core/RenderScene.h"
+#include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
@@ -82,7 +83,37 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
             return;
         }
-        targets.copyHistoryCloudToCloud(*ctx.shared->rhiDevice);
+        RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+        RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+        const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+            ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
+            : GpuTimerSegmentToken{};
+        targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
+                                  RhiResourceState::TransferSrc);
+        targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                                  RhiResourceState::TransferDst);
+        targets.copyHistoryCloudToCloud(commandList);
+        targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
+                                  RhiResourceState::ShaderRead);
+        targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                                  RhiResourceState::ShaderRead);
+        if (ctx.debugService != nullptr) {
+            ctx.debugService->endGpuTimer(commandList, timerToken);
+        }
+        if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
         return;
     }
 
@@ -156,14 +187,47 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.skyCaptureTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
+        : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 
     m_lastCameraPos = ctx.camera.position;
     m_lastWeatherSignal = ctx.weather.wetness + ctx.weather.storm +
@@ -248,6 +312,7 @@ bool CloudPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                               rhiFlag(RhiBufferUsage::TransferDst);
     uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
     m_uniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
     if (!m_uniformBuffer.isValid()) {
         destroyRhiResources();

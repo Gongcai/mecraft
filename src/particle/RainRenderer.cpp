@@ -72,6 +72,11 @@ void RainRenderer::uploadFrame(RhiCommandList& commandList) {
     if (!m_vertexBuffer.isValid()) {
         return;
     }
+    if (m_rainVertices.empty() && m_snowVertices.empty()) {
+        return;
+    }
+    commandList.bufferBarrier({m_vertexBuffer, RhiResourceState::VertexBuffer,
+                               RhiResourceState::TransferDst});
     if (!m_rainVertices.empty()) {
         commandList.updateBuffer(m_vertexBuffer, RAIN_VERTEX_OFFSET,
                                  m_rainVertices.data(), m_rainVertices.size() * sizeof(float));
@@ -80,6 +85,8 @@ void RainRenderer::uploadFrame(RhiCommandList& commandList) {
         commandList.updateBuffer(m_vertexBuffer, SNOW_VERTEX_OFFSET,
                                  m_snowVertices.data(), m_snowVertices.size() * sizeof(float));
     }
+    commandList.bufferBarrier({m_vertexBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::VertexBuffer});
 }
 
 void RainRenderer::ensureDrops(std::vector<PrecipDrop>& drops, int maxDrops, const glm::vec3& cameraPos) {
@@ -283,6 +290,7 @@ bool RainRenderer::createRhiResources() {
     bufferDesc.size = RAIN_VERTEX_BYTES + SNOW_VERTEX_BYTES;
     bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, nullptr, 0u);
 
     RhiTextureViewDesc viewDesc;

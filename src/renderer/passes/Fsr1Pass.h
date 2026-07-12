@@ -9,12 +9,15 @@
 
 class ResourceMgr;
 class RhiDevice;
+class RhiCommandList;
+class RhiCommandListPool;
+class RenderDebugService;
 
 class Fsr1Pass : public RenderPass {
 public:
     ~Fsr1Pass() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr, RhiCommandListPool& commandListPool);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "FSR1"; }
 
@@ -25,9 +28,14 @@ public:
                  int inputHeight,
                  int outputWidth,
                  int outputHeight,
-                 float sharpness);
+                 float sharpness,
+                 RenderDebugService& debugService);
 
 private:
+    [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
+    void submitCommandList(RhiDevice& rhiDevice,
+                           RhiCommandList& commandList,
+                           const char* debugName) const;
     bool ensureTargets(RhiDevice& rhiDevice, int width, int height);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureEasuBindGroup(RhiDevice& rhiDevice, RhiTextureViewHandle inputView);
@@ -49,6 +57,7 @@ private:
     static glm::vec4 populateRcasConstants(float sharpness);
 
     RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
     RhiSamplerHandle m_sampler;
     RhiBindGroupLayoutHandle m_bindGroupLayout;
     RhiPipelineLayoutHandle m_pipelineLayout;

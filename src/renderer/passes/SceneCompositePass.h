@@ -16,7 +16,7 @@ class VoxelGiClipmap;
 /// Scene composite pass: combines lighting, reflections, clouds, and atmosphere into final HDR scene.
 class SceneCompositePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SceneComposite"; }
 

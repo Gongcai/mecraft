@@ -11,10 +11,16 @@ struct UILayout {
     float offsetX = 0.0f;
     float offsetY = 0.0f;
 
-    // Resolves to bottom-left-origin pixel position (OpenGL convention).
-    // screenW/screenH = viewport dimensions.
-    // controlW/controlH = size of the control being placed.
+    /// Resolves the horizontal position in bottom-left-origin framebuffer pixels.
+    /// @param screenW Framebuffer width in pixels.
+    /// @param controlW Control width in pixels.
+    /// @return Horizontal position in framebuffer pixels.
     [[nodiscard]] float resolveX(float screenW, float controlW) const;
+
+    /// Resolves the vertical position in bottom-left-origin framebuffer pixels.
+    /// @param screenH Framebuffer height in pixels.
+    /// @param controlH Control height in pixels.
+    /// @return Vertical position in framebuffer pixels.
     [[nodiscard]] float resolveY(float screenH, float controlH) const;
 };
 

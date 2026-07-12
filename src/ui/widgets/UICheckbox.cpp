@@ -140,7 +140,10 @@ void UICheckbox::initMesh() {
     pushThickSegment(vertices, 0.25f, 0.52f, 0.42f, 0.34f, 0.14f);
     pushThickSegment(vertices, 0.42f, 0.34f, 0.76f, 0.70f, 0.14f);
     RhiBufferDesc desc; desc.debugName="UiCheckbox.VertexBuffer"; desc.size=vertices.size()*sizeof(float);
-    desc.usage=rhiFlag(RhiBufferUsage::Vertex); desc.memoryUsage=RhiMemoryUsage::GpuOnly;
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer=m_rhiDevice->createBuffer(desc, vertices.data(), vertices.size()*sizeof(float));
 }
 
@@ -150,7 +153,9 @@ void UICheckbox::cleanupMesh() {
 }
 
 void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
-    if (!ctx.commandList || !m_shapePipeline.isValid() || !m_colorPipeline.isValid() || !m_vertexBuffer.isValid()) return;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record && (!ctx.commandList || !m_shapePipeline.isValid() ||
+                   !m_colorPipeline.isValid() || !m_vertexBuffer.isValid())) return;
 
     const UIResolvedCheckboxStyle resolved =
         UIStyleResolver::resolveCheckbox(resolveBaseStyle(ctx), currentStyleState());
@@ -170,32 +175,34 @@ void UICheckbox::renderSelf(const UIRenderContext& ctx) const {
     float bx1 = ax + boxSize;
     float bw = resolved.borderWidth;
 
-    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
-    auto drawRect = [&](float x, float y, float w, float h, Color color) {
-        color[3] *= alpha;
-        struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-        const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y), glm::vec4(w,h,0,0),
-                        glm::vec4(color[0],color[1],color[2],color[3])};
-        ctx.commandList->pushConstants(&push,sizeof(push),rhiFlag(RhiShaderStage::Vertex)|rhiFlag(RhiShaderStage::Fragment));
-        ctx.commandList->draw(6u,1u,0u,0u);
-    };
-    ctx.commandList->setGraphicsPipeline(m_shapePipeline);
-    drawRect(bx0,by0,boxSize,boxSize,borderCol);
-    drawRect(bx0+bw,by0+bw,boxSize-2*bw,boxSize-2*bw,boxCol);
+    if (record) {
+        ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+        auto drawRect = [&](float x, float y, float w, float h, Color color) {
+            color[3] *= alpha;
+            struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+            const Push push{glm::vec4(ctx.screenWidth, ctx.screenHeight, x, y), glm::vec4(w,h,0,0),
+                            glm::vec4(color[0],color[1],color[2],color[3])};
+            ctx.commandList->pushConstants(&push,sizeof(push),rhiFlag(RhiShaderStage::Vertex)|rhiFlag(RhiShaderStage::Fragment));
+            ctx.commandList->draw(6u,1u,0u,0u);
+        };
+        ctx.commandList->setGraphicsPipeline(m_shapePipeline);
+        drawRect(bx0,by0,boxSize,boxSize,borderCol);
+        drawRect(bx0+bw,by0+bw,boxSize-2*bw,boxSize-2*bw,boxCol);
 
     // Check mark, scaled from the center.
-    if (m_checked) {
-        float scale = m_checkScaleTween.value();
-        if (scale > 0.01f) {
-            Color c=checkCol; c[3]*=alpha;
-            const float scaledSize=boxSize*scale;
-            const float offset=boxSize*(1.0f-scale)*0.5f;
-            struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-            const Push push{glm::vec4(ctx.screenWidth,ctx.screenHeight,bx0+offset,by0+offset),
-                            glm::vec4(scaledSize,scaledSize,0,0),glm::vec4(c[0],c[1],c[2],c[3])};
-            ctx.commandList->setGraphicsPipeline(m_colorPipeline);
-            ctx.commandList->pushConstants(&push,sizeof(push),rhiFlag(RhiShaderStage::Vertex)|rhiFlag(RhiShaderStage::Fragment));
-            ctx.commandList->draw(12u,1u,6u,0u);
+        if (m_checked) {
+            float scale = m_checkScaleTween.value();
+            if (scale > 0.01f) {
+                Color c=checkCol; c[3]*=alpha;
+                const float scaledSize=boxSize*scale;
+                const float offset=boxSize*(1.0f-scale)*0.5f;
+                struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+                const Push push{glm::vec4(ctx.screenWidth,ctx.screenHeight,bx0+offset,by0+offset),
+                                glm::vec4(scaledSize,scaledSize,0,0),glm::vec4(c[0],c[1],c[2],c[3])};
+                ctx.commandList->setGraphicsPipeline(m_colorPipeline);
+                ctx.commandList->pushConstants(&push,sizeof(push),rhiFlag(RhiShaderStage::Vertex)|rhiFlag(RhiShaderStage::Fragment));
+                ctx.commandList->draw(12u,1u,6u,0u);
+            }
         }
     }
 

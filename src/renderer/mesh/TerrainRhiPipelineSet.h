@@ -39,6 +39,7 @@ struct TerrainWaterFrameData {
     glm::vec3 skyAmbientColor = glm::vec3(0.0f);
     float skyIntensity = 1.0f;
     float moonVisibility = 0.0f;
+    float moonPhaseFlux = 0.0f;
     float weatherWetness = 0.0f;
     float skyWetness = 0.0f;
     float fogWetness = 0.0f;

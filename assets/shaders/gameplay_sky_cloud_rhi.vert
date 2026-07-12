@@ -2,7 +2,7 @@
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in float aShade;
 layout(location = 0) out float vShade;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
     vec4 uTint;

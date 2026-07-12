@@ -2,16 +2,20 @@
 #define MECRAFT_DEFERRED_RENDER_TARGETS_H
 
 #include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiTypes.h"
 
 #include <cstdint>
+#include <unordered_map>
 
 class RhiDevice;
+class RhiCommandList;
+class RhiCommandListPool;
 
 class DeferredRenderTargets {
 public:
     ~DeferredRenderTargets();
 
-    bool init(RhiDevice& rhiDevice);
+    bool init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool);
     void shutdown();
 
     bool ensureSize(int width, int height, int shadowResolution);
@@ -21,22 +25,32 @@ public:
     void copySceneLightingToSceneComposite(RhiDevice& rhiDevice) const;
     void copySceneCompositeToSceneResolved(RhiDevice& rhiDevice) const;
     void copySceneCompositeToTransparentComposite(RhiDevice& rhiDevice) const;
+    void copySceneCompositeToTransparentComposite(RhiCommandList& commandList) const;
     void copySceneResolvedToTransparentComposite(RhiDevice& rhiDevice) const;
+    void copySceneResolvedToTransparentComposite(RhiCommandList& commandList) const;
     void copyTransparentCompositeToSceneComposite(RhiDevice& rhiDevice) const;
+    void copyTransparentCompositeToSceneComposite(RhiCommandList& commandList) const;
     void copyTransparentCompositeToSceneResolved(RhiDevice& rhiDevice) const;
+    void copyTransparentCompositeToSceneResolved(RhiCommandList& commandList) const;
     void copyDepthToTransparentComposite(RhiDevice& rhiDevice) const;
+    void copyDepthToTransparentComposite(RhiCommandList& commandList) const;
     void copySceneResolvedToHistory(RhiDevice& rhiDevice) const;
     void copySceneResolvedToTemporalCurrent(RhiDevice& rhiDevice) const;
     void copyDepthToHistory(RhiDevice& rhiDevice) const;
     void copyReflectionToHistory(RhiDevice& rhiDevice) const;
     void copyReflectionToTemporalScratch(RhiDevice& rhiDevice) const;
+    void copyReflectionToTemporalScratch(RhiCommandList& commandList) const;
     void copyCloudToHistory(RhiDevice& rhiDevice) const;
     void copyHistoryCloudToCloud(RhiDevice& rhiDevice) const;
+    void copyHistoryCloudToCloud(RhiCommandList& commandList) const;
     void copyVolumetricToHistory(RhiDevice& rhiDevice) const;
     void copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice) const;
+    void copyHistoryVolumetricToHalfRes(RhiCommandList& commandList) const;
     void copySceneResolvedToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
     void copyDepthToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
     void copyTransparentCompositeToTexture(RhiDevice& rhiDevice, RhiTextureHandle destination) const;
+    void copyTransparentCompositeToTexture(RhiCommandList& commandList,
+                                           RhiTextureHandle destination) const;
 
     [[nodiscard]] RhiTextureHandle albedoTextureHandle() const { return m_gAlbedoHandle; }
     [[nodiscard]] RhiTextureHandle normalAoTextureHandle() const { return m_gNormalAoHandle; }
@@ -51,7 +65,6 @@ public:
     [[nodiscard]] RhiTextureViewHandle materialAuxTextureViewHandle() const { return m_gMaterialAuxView; }
     [[nodiscard]] RhiTextureViewHandle depthTextureViewHandle() const { return m_gDepthView; }
     bool ensureGBufferTextureViews(RhiDevice& rhiDevice);
-    [[nodiscard]] RhiTextureHandle shadowDepthTextureHandle() const { return m_shadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureHandle csmShadowDepthComparisonTextureHandle() const { return m_csmShadowDepthHandle; }
     [[nodiscard]] RhiTextureViewHandle csmShadowDepthTextureViewHandle(int cascadeIndex) const;
@@ -65,10 +78,6 @@ public:
     [[nodiscard]] RhiTextureViewHandle csmShadowColor0TextureViewHandle(int cascadeIndex) const;
     [[nodiscard]] RhiTextureViewHandle csmShadowColor1TextureViewHandle(int cascadeIndex) const;
     bool ensureCsmShadowTransparentTextureViews(RhiDevice& rhiDevice, int cascadeIndex);
-    [[nodiscard]] RhiTextureHandle shadowColorTextureHandle() const { return m_shadowColorHandle; }
-    [[nodiscard]] RhiTextureHandle shadowNormalTextureHandle() const { return m_shadowNormalHandle; }
-    [[nodiscard]] RhiTextureViewHandle shadowDepthTextureViewHandle() const { return m_shadowDepthView; }
-    [[nodiscard]] RhiTextureViewHandle shadowColorTextureViewHandle() const { return m_shadowColorView; }
     [[nodiscard]] RhiTextureHandle ssaoFilteredTextureHandle() const { return m_ssaoFilteredHandle; }
     [[nodiscard]] RhiTextureViewHandle ssaoFilteredTextureViewHandle() const { return m_ssaoFilteredView; }
     bool ensureSsaoFilteredTextureView(RhiDevice& rhiDevice);
@@ -89,6 +98,7 @@ public:
     bool ensureSsaoHistoryTextureViews(RhiDevice& rhiDevice);
     void swapSsaoHistory() { m_ssaoHistoryIndex = 1 - m_ssaoHistoryIndex; }
     void copySsaoTemporalToHistory(RhiDevice& rhiDevice);
+    void copySsaoTemporalToHistory(RhiCommandList& commandList);
     [[nodiscard]] RhiTextureHandle ssgiTextureHandle() const { return m_ssgiHandle; }
     [[nodiscard]] RhiTextureViewHandle ssgiTextureViewHandle() const { return m_ssgiView; }
     bool ensureSsgiTextureView(RhiDevice& rhiDevice);
@@ -112,8 +122,11 @@ public:
     bool ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, int slot);
     void swapSsgiHistory() { m_ssgiHistoryIndex = 1 - m_ssgiHistoryIndex; }
     void copySsgiDenoiseToSsgi(RhiDevice& rhiDevice, int slot);
+    void copySsgiDenoiseToSsgi(RhiCommandList& commandList, int slot);
     void copySsgiTemporalToSsgi(RhiDevice& rhiDevice);
+    void copySsgiTemporalToSsgi(RhiCommandList& commandList);
     void copySsgiTemporalToHistory(RhiDevice& rhiDevice);
+    void copySsgiTemporalToHistory(RhiCommandList& commandList);
     [[nodiscard]] RhiTextureHandle sceneLightingTextureHandle() const { return m_sceneLightingHandle; }
     [[nodiscard]] RhiTextureViewHandle sceneLightingTextureViewHandle() const { return m_sceneLightingView; }
     bool ensureSceneLightingTextureView(RhiDevice& rhiDevice);
@@ -203,6 +216,10 @@ public:
     // Consumes the flag — second call returns false until next rebuild.
     [[nodiscard]] bool consumeRebuiltFlag() { bool v = m_rebuiltSinceCheck; m_rebuiltSinceCheck = false; return v; }
 
+    void transitionTexture(RhiCommandList& commandList,
+                           RhiTextureHandle texture,
+                           RhiResourceState newState) const;
+
 private:
     static constexpr int kShadowCascadeCount = 4;
     // Sky capture: 256x514 equirectangular map (matches DerivativeMain colortex5).
@@ -218,6 +235,26 @@ private:
     static constexpr int kAtmosphereLutDepth = 33;
     bool createCsmShadowTextures();
     void destroyCsmShadowTextures();
+    void initializePersistentTextureStates();
+    void initializeTextureState(RhiCommandList& commandList,
+                                RhiTextureHandle texture,
+                                RhiResourceState stableState) const;
+    void setKnownTextureState(RhiTextureHandle texture,
+                              RhiResourceState state) const;
+    void blitColorTexture(RhiCommandList& commandList,
+                          RhiTextureHandle source,
+                          RhiTextureHandle destination) const;
+    void blitColorTexture(RhiDevice& rhiDevice,
+                          RhiTextureHandle source,
+                          RhiTextureHandle destination) const;
+    void blitDepthTexture(RhiCommandList& commandList,
+                          RhiTextureHandle source,
+                          RhiTextureHandle destination) const;
+    void blitDepthTexture(RhiDevice& rhiDevice,
+                          RhiTextureHandle source,
+                          RhiTextureHandle destination) const;
+    [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
+    void submitCommandList(RhiCommandList& commandList, const char* debugName) const;
 
     bool createGBufferTextures();
     void destroyGBufferTextures();
@@ -239,8 +276,6 @@ private:
     void destroySsaoTextures();
     bool createSsgiTextures();
     void destroySsgiTextures();
-    bool createShadowTextures();
-    void destroyShadowTextures();
     bool registerRhiTextures();
     void destroyAtmosphereLutTexture();
     void unregisterRhiTextures();
@@ -267,12 +302,8 @@ private:
     RhiTextureViewHandle m_gDepthView;
 
     RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
 
-    RhiTextureHandle m_shadowDepthHandle;
-    RhiTextureHandle m_shadowColorHandle;
-    RhiTextureHandle m_shadowNormalHandle;
-    RhiTextureViewHandle m_shadowDepthView;
-    RhiTextureViewHandle m_shadowColorView;
     RhiTextureHandle m_csmShadowDepthHandle;
     RhiTextureViewHandle m_csmShadowDepthView[kShadowCascadeCount];
     RhiTextureViewHandle m_csmShadowDepthArrayView;
@@ -396,6 +427,7 @@ private:
     int m_height = 0;
     int m_shadowResolution = 0;
     bool m_ready = false;
+    mutable std::unordered_map<uint64_t, RhiResourceState> m_textureStates;
 };
 
 #endif // MECRAFT_DEFERRED_RENDER_TARGETS_H

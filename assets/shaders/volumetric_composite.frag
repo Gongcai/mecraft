@@ -7,7 +7,7 @@ layout(binding = 0) uniform sampler2D uSceneTex;
 layout(binding = 1) uniform sampler2D uVolumetricTex;
 layout(binding = 2) uniform sampler2D uDepthTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec4 uDepthParams;
     ivec4 uCompositeFlags;
 };

@@ -6,7 +6,7 @@ layout(location = 0) out vec4 FragColor;
 layout(binding = 0) uniform sampler2D uSsgiHalfResTex;
 layout(binding = 1) uniform sampler2D uDepthTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec2 uHalfResSize;
     float uNear;
     float uPadding0;

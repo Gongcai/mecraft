@@ -12,7 +12,9 @@
 
 class ResourceMgr;
 class RhiCommandList;
+class RhiCommandListPool;
 class RhiDevice;
+class RenderDebugService;
 class Window;
 
 /// Per-frame post-process effects configuration.
@@ -72,7 +74,7 @@ class PostProcessPass : public RenderPass {
 public:
     ~PostProcessPass() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr, RhiCommandListPool& commandListPool);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "PostProcess"; }
 
@@ -85,23 +87,27 @@ public:
                                RhiTextureFormat swapchainColorFormat,
                                const Window& window,
                                float frameTime,
-                               RhiTextureHandle gbufferDepthTexture);
+                               RhiTextureHandle gbufferDepthTexture,
+                               RenderDebugService& debugService);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
     [[nodiscard]] RhiTextureHandle compositeToTexture(RhiDevice& rhiDevice,
                                                       const Window& window,
                                                       float frameTime,
-                                                      RhiTextureHandle gbufferDepthTexture);
+                                                      RhiTextureHandle gbufferDepthTexture,
+                                                      RenderDebugService& debugService);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
     void blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice,
                                       RhiTextureViewHandle swapchainColorView,
-                                      const Window& window);
+                                      const Window& window,
+                                      RenderDebugService& debugService);
 
     /// Blit the internal composited LDR texture to the back buffer.
     void blitCompositeToBackbuffer(RhiDevice& rhiDevice,
                                    RhiTextureViewHandle swapchainColorView,
-                                   const Window& window);
+                                   const Window& window,
+                                   RenderDebugService& debugService);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -128,6 +134,10 @@ private:
     static constexpr int kAutoExposureLod = 6;
     static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
     struct PostProcessCompositeParams;
+    [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
+    void submitCommandList(RhiDevice& rhiDevice,
+                           RhiCommandList& commandList,
+                           const char* debugName) const;
     bool ensureRenderTargets(RhiDevice& rhiDevice, int width, int height);
     bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
@@ -141,11 +151,19 @@ private:
     void destroyTargetBindGroups();
     void destroyCompositeBindGroups();
     void destroyRhiResources();
-    bool updateAutoExposure(RhiDevice& rhiDevice, float frameTime, float& resolvedExposure);
-    bool initializeExposureState(RhiDevice& rhiDevice, float manualExposure);
+    bool updateAutoExposure(RhiDevice& rhiDevice,
+                            float frameTime,
+                            float& resolvedExposure,
+                            RenderDebugService& debugService);
+    bool initializeExposureState(RhiDevice& rhiDevice,
+                                 float manualExposure,
+                                 RenderDebugService& debugService);
 
     /// Apply bloom extraction and blur passes.
-    bool renderBloom(RhiDevice& rhiDevice, int maxMipCount, bool& bloomReady);
+    bool renderBloom(RhiDevice& rhiDevice,
+                     int maxMipCount,
+                     bool& bloomReady,
+                     RenderDebugService& debugService);
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
     void renderComposite(RhiCommandList& commandList,
@@ -177,6 +195,7 @@ private:
                   "Post-process UBO layout must match the std140 shader block.");
 
     RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
     RhiTextureHandle m_noiseTexture;
     RhiTextureHandle m_noiseViewTexture;
     RhiTextureViewHandle m_noiseTextureView;

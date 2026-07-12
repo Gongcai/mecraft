@@ -76,9 +76,28 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    targets.copySceneResolvedToHistory(rhiDevice);
-
-    RhiCommandList& commandList = rhiDevice.beginFrame();
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList,
+                              targets.sceneResolvedTextureHandle(),
+                              RhiResourceState::TransferSrc);
+    targets.transitionTexture(commandList,
+                              targets.historySceneTextureHandle(),
+                              RhiResourceState::TransferDst);
+    RhiTextureBlit historyCopy;
+    historyCopy.src = targets.sceneResolvedTextureHandle();
+    historyCopy.dst = targets.historySceneTextureHandle();
+    commandList.blitTexture(historyCopy);
+    targets.transitionTexture(commandList,
+                              targets.historySceneTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList,
+                              targets.sceneResolvedTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup[targets.currentHistoryIndex()]);
@@ -98,7 +117,18 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    rhiDevice.submitFrame(commandList);
+    targets.transitionTexture(commandList,
+                              targets.sceneResolvedTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
 }
 
 bool DepthOfFieldPass::ensureRhiPipeline(RhiDevice& rhiDevice) {

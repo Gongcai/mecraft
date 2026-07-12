@@ -15,7 +15,7 @@ layout(binding = 2) uniform sampler2D uVelocityTex;
 layout(binding = 3) uniform sampler2D uDepthTex;
 layout(binding = 4) uniform sampler2D uHistoryDepthTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec4 uTemporalParams0;
     vec4 uTemporalParams1;
 };

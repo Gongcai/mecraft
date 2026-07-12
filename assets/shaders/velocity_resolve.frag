@@ -6,7 +6,7 @@ layout(location = 0) out vec2 FragVelocity;
 layout(binding = 0) uniform sampler2D uDepthTex;
 layout(binding = 1) uniform sampler2D uPerObjectVelocityTex;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uInvViewProj;
     mat4 uPreviousViewProj;
     vec4 uScreenParams;

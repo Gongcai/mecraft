@@ -1,74 +1,103 @@
 #pragma once
 
+#include "GlyphAtlas.h"
+#include "../../renderer/rhi/RhiHandles.h"
+#include "../../renderer/rhi/RhiTypes.h"
+
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
-#include <cstdint>
 
-#include "GlyphAtlas.h"
+class RhiCommandList;
+class RhiDevice;
+struct UIRenderContext;
 
-class ResourceMgr;
-class Shader;
-
-class TextRenderer
-{
+class TextRenderer {
 public:
     struct TextMetrics {
         float width = 0.0f;
         float height = 0.0f;
     };
 
-    void init(ResourceMgr& resourceMgr);
+    bool init(RhiDevice& rhiDevice, const char* fontPath);
     void shutdown();
 
-    // Single-shot render (backward compatible).
-    void render(const std::string& text,
-                float x,
-                float y,
-                float scale,
-                const std::array<float, 4>& color,
-                float screenWidth,
-                float screenHeight) const;
+    // Starts the CPU collection phase for one UI pass.
+    void beginFrameCollection(float screenWidth, float screenHeight);
 
-    // Batch API: accumulate multiple text draws into one GL draw call.
-    void beginBatch(float screenWidth, float screenHeight) const;
-    void batchRender(const std::string& text,
-                     float x,
-                     float y,
-                     float scale,
-                     const std::array<float, 4>& color) const;
-    void endBatch() const;
+    // Collects a text request or records its prepared draw according to context.phase.
+    void draw(const UIRenderContext& context,
+              const std::string& text,
+              float x,
+              float y,
+              float scale,
+              const std::array<float, 4>& color) const;
 
-    // Text measurement using per-glyph metrics from FreeType.
+    // Freezes the atlas, uploads resources, and builds immutable draw ranges.
+    bool prepareFrame(RhiCommandList& commandList);
+    void beginFrameRecording();
+    [[nodiscard]] bool endFrameRecording() const;
+
     [[nodiscard]] TextMetrics measureText(const std::string& text, float scale) const;
-
-    [[nodiscard]] const GlyphAtlas& getAtlas() const { return m_atlas; }
+    [[nodiscard]] const GlyphAtlas& atlas() const { return m_atlas; }
 
 private:
-    void initMesh();
-    void cleanupMesh();
-    void generateQuads(const std::string& text,
-                       float x,
-                       float y,
-                       float scale,
-                       const std::array<float, 4>& color,
-                       std::vector<float>& outVertices) const;
-    static void appendVertex(std::vector<float>& outVertices,
-                             float x,
-                             float y,
-                             float u,
-                             float v,
-                             const std::array<float, 4>& color);
+    struct Vertex {
+        float x = 0.0f;
+        float y = 0.0f;
+        float u = 0.0f;
+        float v = 0.0f;
+        float r = 1.0f;
+        float g = 1.0f;
+        float b = 1.0f;
+        float a = 1.0f;
+    };
 
-    Shader* m_textShader = nullptr;
-    GlyphAtlas m_atlas;
+    struct DrawRequest {
+        std::string text;
+        float x = 0.0f;
+        float y = 0.0f;
+        float scale = 1.0f;
+        std::array<float, 4> color{1.0f, 1.0f, 1.0f, 1.0f};
+        RhiRect2D scissor;
+        uint32_t firstVertex = 0;
+        uint32_t vertexCount = 0;
+    };
 
-    uint32_t m_textVao = 0;
-    uint32_t m_textVbo = 0;
+    bool createPipelineResources();
+    bool ensureVertexCapacity(uint64_t requiredBytes);
+    bool rebuildAtlasBinding();
+    bool generateRequestVertices(DrawRequest& request);
+    void recordPreparedRequest(const UIRenderContext& context,
+                               const std::string& text,
+                               float x,
+                               float y,
+                               float scale,
+                               const std::array<float, 4>& color) const;
+    [[nodiscard]] static RhiRect2D resolveScissor(const UIRenderContext& context);
 
-    // Batch state (mutable for const batch methods).
-    mutable bool m_batchActive = false;
-    mutable float m_batchScreenWidth = 0.0f;
-    mutable float m_batchScreenHeight = 0.0f;
-    mutable std::vector<float> m_batchVertices;
+    RhiDevice* m_rhiDevice = nullptr;
+    mutable GlyphAtlas m_atlas;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineHandle m_pipeline;
+    RhiSamplerHandle m_sampler;
+    RhiTextureViewHandle m_atlasView;
+    RhiBindGroupHandle m_atlasBindGroup;
+    RhiTextureHandle m_boundAtlasTexture;
+    RhiBufferHandle m_vertexBuffer;
+    uint64_t m_vertexCapacity = 0;
+    RhiResourceState m_vertexBufferState = RhiResourceState::VertexBuffer;
+    float m_screenWidth = 1.0f;
+    float m_screenHeight = 1.0f;
+    mutable std::vector<DrawRequest> m_requests;
+    std::vector<Vertex> m_vertices;
+    mutable size_t m_recordIndex = 0;
+    bool m_collecting = false;
+    bool m_prepared = false;
+    mutable bool m_recording = false;
 };

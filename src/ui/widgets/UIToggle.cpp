@@ -133,8 +133,10 @@ void UIToggle::initMesh() {
     RhiBufferDesc desc;
     desc.debugName = "UiToggle.VertexBuffer";
     desc.size = sizeof(vertices);
-    desc.usage = rhiFlag(RhiBufferUsage::Vertex);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
     desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
     m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
     if (!m_vertexBuffer.isValid()) std::abort();
 }
@@ -145,7 +147,9 @@ void UIToggle::cleanupMesh() {
 }
 
 void UIToggle::renderSelf(const UIRenderContext& ctx) const {
-    if (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) return;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record &&
+        (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
 
     const UIResolvedToggleStyle resolved =
         UIStyleResolver::resolveToggle(resolveBaseStyle(ctx), currentStyleState());
@@ -180,28 +184,30 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
         trackCol[3] = std::clamp(trackCol[3] * 1.08f, 0.0f, 1.0f);
     }
 
-    ctx.commandList->setGraphicsPipeline(m_pipeline);
-    ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
-    auto drawShape = [&](const float x0, const float y0, const float shapeW,
-                         const float shapeH, const float radius, Color shapeColor) {
-        shapeColor[3] *= alpha;
-        struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
-        const PushConstants pushConstants{
-            glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
-            glm::vec4(shapeW, shapeH, radius, 0.0f),
-            glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
+    if (record) {
+        ctx.commandList->setGraphicsPipeline(m_pipeline);
+        ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+        auto drawShape = [&](const float x0, const float y0, const float shapeW,
+                             const float shapeH, const float radius, Color shapeColor) {
+            shapeColor[3] *= alpha;
+            struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+            const PushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
+                glm::vec4(shapeW, shapeH, radius, 0.0f),
+                glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
+            };
+            ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                           rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            ctx.commandList->draw(6u, 1u, 0u, 0u);
         };
-        ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
-                                       rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
-        ctx.commandList->draw(6u, 1u, 0u, 0u);
-    };
-    drawShape(ax, ay, toggleW, toggleH, trackRadius, trackCol);
-    Color knobShadow {0.0f, 0.0f, 0.0f, active ? 0.30f : 0.20f};
-    const float shadowRadius = knobRadius + 1.5f;
-    drawShape(knobCx - shadowRadius, knobCy - 1.0f - shadowRadius,
-              shadowRadius * 2.0f, shadowRadius * 2.0f, shadowRadius, knobShadow);
-    drawShape(knobCx - knobRadius, knobCy - knobRadius,
-              knobRadius * 2.0f, knobRadius * 2.0f, knobRadius, knobCol);
+        drawShape(ax, ay, toggleW, toggleH, trackRadius, trackCol);
+        Color knobShadow {0.0f, 0.0f, 0.0f, active ? 0.30f : 0.20f};
+        const float shadowRadius = knobRadius + 1.5f;
+        drawShape(knobCx - shadowRadius, knobCy - 1.0f - shadowRadius,
+                  shadowRadius * 2.0f, shadowRadius * 2.0f, shadowRadius, knobShadow);
+        drawShape(knobCx - knobRadius, knobCy - knobRadius,
+                  knobRadius * 2.0f, knobRadius * 2.0f, knobRadius, knobCol);
+    }
 
     // Render label to the right.
     const float labelGap = 8.0f;

@@ -19,7 +19,7 @@ layout(location = 4) out vec2 vTintUv;
 layout(location = 5) out vec3 vWorldPosition;
 layout(location = 6) out vec2 vVelocity;
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uPreviousViewProj;
     mat4 uModel;

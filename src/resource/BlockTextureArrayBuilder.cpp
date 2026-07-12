@@ -1,5 +1,6 @@
 #include "BlockTextureArrayBuilder.h"
 #include "TextureResampler.h"
+#include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 
 #include "../third_party/stb/stb_image.h"
@@ -67,11 +68,14 @@ public:
         desc.height = static_cast<uint32_t>(m_tileSize);
         desc.depthOrLayers = static_cast<uint32_t>(m_layerCount);
         desc.mipLevels = 1u + static_cast<uint32_t>(std::floor(std::log2(static_cast<double>(m_tileSize))));
-        desc.usage = rhiFlag(RhiTextureUsage::Sampled);
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) |
+                     rhiFlag(RhiTextureUsage::TransferDst);
         RhiTextureInitialData initialData;
         initialData.pixels = m_pixels.data();
         initialData.sizeBytes = m_pixels.size();
         initialData.layerCount = static_cast<uint32_t>(m_layerCount);
+        initialData.finalState = RhiResourceState::TransferDst;
 
         TextureArray texture;
         texture.texture = rhiDevice.createTexture(desc, &initialData);
@@ -366,14 +370,17 @@ namespace resource {
 BlockTextureArraySet buildBlockTextureArraySet(const std::string& directory,
                                                const int tileSize,
                                                BlockTextureCatalog& catalog,
-                                               RhiDevice& rhiDevice) {
-    return buildBlockTextureArraySet(buildBlockTextureManifest(directory), tileSize, catalog, rhiDevice);
+                                               RhiDevice& rhiDevice,
+                                               RhiCommandListPool& commandListPool) {
+    return buildBlockTextureArraySet(
+        buildBlockTextureManifest(directory), tileSize, catalog, rhiDevice, commandListPool);
 }
 
 BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manifest,
                                                const int tileSize,
                                                BlockTextureCatalog& catalog,
-                                               RhiDevice& rhiDevice) {
+                                               RhiDevice& rhiDevice,
+                                               RhiCommandListPool& commandListPool) {
     if (tileSize <= 0) {
         failBlockTextureArrayBuilder("Block texture array tile size must be positive");
     }
@@ -467,11 +474,41 @@ BlockTextureArraySet buildBlockTextureArraySet(const BlockTextureManifest& manif
     if (specularArray.has_value()) {
         result.specularArray = specularArray->create(rhiDevice, "BlockTextures.SpecularArray");
     }
-    RhiCommandList& commandList = rhiDevice.beginFrame();
-    commandList.generateMipmaps(result.albedoArray.texture);
-    if (result.normalArray.texture.isValid()) commandList.generateMipmaps(result.normalArray.texture);
-    if (result.specularArray.texture.isValid()) commandList.generateMipmaps(result.specularArray.texture);
-    rhiDevice.submitFrame(commandList);
+    RhiCommandList* commandListStorage = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin(
+            {"BlockTextureArrays.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    const auto prepareTexture = [&commandList](const RhiTextureHandle texture,
+                                               const bool hasMipChain) {
+        if (!hasMipChain) {
+            commandList.textureBarrier({texture,
+                                        RhiResourceState::TransferDst,
+                                        RhiResourceState::ShaderRead});
+            return;
+        }
+        commandList.generateMipmaps(texture);
+        commandList.textureBarrier({texture,
+                                    RhiResourceState::TransferDst,
+                                    RhiResourceState::ShaderRead});
+    };
+    const bool hasMipChain = tileSize > 1;
+    prepareTexture(result.albedoArray.texture, hasMipChain);
+    if (result.normalArray.texture.isValid()) {
+        prepareTexture(result.normalArray.texture, hasMipChain);
+    }
+    if (result.specularArray.texture.isValid()) {
+        prepareTexture(result.specularArray.texture, hasMipChain);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!rhiDevice.submit({"BlockTextureArrays.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
     return result;
 }
 

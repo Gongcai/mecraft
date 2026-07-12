@@ -65,8 +65,12 @@ void ParticleSystem::prepareFrame(const glm::mat4& view, RhiCommandList& command
     if (buildVertices(view, m_vertexBuffer) == 0) {
         return;
     }
+    commandList.bufferBarrier({m_rhiVertexBuffer, RhiResourceState::VertexBuffer,
+                               RhiResourceState::TransferDst});
     commandList.updateBuffer(m_rhiVertexBuffer, 0u,
                              m_vertexBuffer.data(), m_vertexBuffer.size() * sizeof(float));
+    commandList.bufferBarrier({m_rhiVertexBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::VertexBuffer});
     m_preparedVertexCount = static_cast<uint32_t>(m_vertexBuffer.size() / 8u);
 }
 
@@ -174,6 +178,7 @@ bool ParticleSystem::createRhiResources() {
     bufferDesc.size = VERTEX_BUFFER_BYTES;
     bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) | rhiFlag(RhiBufferUsage::TransferDst);
     bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
     m_rhiVertexBuffer = m_rhiDevice->createBuffer(bufferDesc, nullptr, 0u);
     RhiTextureViewDesc arrayViewDesc;
     arrayViewDesc.texture = m_texArray->texture;

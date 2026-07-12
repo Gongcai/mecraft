@@ -2,7 +2,7 @@
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec4 vAnimationData;
 layout(binding = 0) uniform sampler2DArray uTextureArray;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
     vec4 uAnimationTime;

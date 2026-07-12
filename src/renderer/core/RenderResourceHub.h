@@ -15,7 +15,6 @@
 #include "../passes/GBufferPass.h"
 #include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
-#include "Shader.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../mesh/TerrainStreamingService.h"
@@ -40,6 +39,7 @@ class HumanoidRenderer;
 class DropRenderer;
 class ParticleSystem;
 class DropSystem;
+class RhiCommandListPool;
 
 namespace ecs { class GameplayRegistry; }
 namespace shadow { class ShadowCasterCuller; }
@@ -132,7 +132,8 @@ public:
     ~RenderResourceHub();
     [[nodiscard]] bool init(ResourceMgr& resourceMgr,
                             ThreadPool& threadPool,
-                            RhiDevice& rhiDevice);
+                            RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool);
     void shutdown();
     [[nodiscard]] bool resizeRhiSwapchain(const Window& window);
     void setMeshingSubmitBudget(int budget);
@@ -149,6 +150,7 @@ public:
     [[nodiscard]] WorldRenderBuffer& getWorldRenderBuffer() { return m_worldRenderBuffer; }
     [[nodiscard]] RhiDevice& rhiDevice();
     [[nodiscard]] const RhiDevice& rhiDevice() const;
+    [[nodiscard]] RhiCommandListPool& commandListPool();
     void setTerrainStreamingService(TerrainStreamingService* svc);
     void setOverlayRenderer(BlockInteractionOverlayRenderer* renderer) { m_overlayRenderer = renderer; }
     void setDebugService(RenderDebugService* svc) { m_debugService = svc; }
@@ -193,6 +195,7 @@ private:
 
     ResourceMgr* m_resourceMgr = nullptr;
     RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
 
     // Services owned by RenderScene and mirrored here for compatibility/debug controls.
     BlockInteractionOverlayRenderer* m_overlayRenderer = nullptr;

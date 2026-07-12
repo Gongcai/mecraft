@@ -22,7 +22,7 @@ layout(binding = 1) uniform sampler2D uNormalAoTex;
 layout(binding = 2) uniform sampler2D uVoxelLightTex;
 layout(binding = 3) uniform sampler2D uMaterialTex;
 layout(binding = 4) uniform sampler2D uDepthTex;
-layout(binding = 5) uniform sampler2D uShadowMapRaw;
+layout(binding = 5) uniform sampler2DArray uShadowMapRaw;
 layout(binding = 6) uniform sampler2D uSsaoTex;
 layout(binding = 7) uniform sampler2D uSceneLightingTex;
 layout(binding = 8) uniform sampler2D uTransparentCompositeTex;
@@ -35,18 +35,18 @@ layout(binding = 13) uniform sampler2D uHistoryDepthTex;
 layout(binding = 13) uniform sampler2D uNoiseTex;
 layout(binding = 13) uniform sampler2D uMaterialAuxTex;
 layout(binding = 14) uniform sampler2D uReflectionTex;
-layout(binding = 14) uniform sampler2D uShadowColorTex;
 layout(binding = 14) uniform sampler2D uHistoryReflectionTex;
 layout(binding = 15) uniform sampler2D uCloudTex;
 layout(binding = 15) uniform sampler2D uSceneCompositeTex;
 layout(binding = 15) uniform sampler2D uSceneResolvedTex;
-layout(binding = 15) uniform sampler2D uShadowNormalTex;
 layout(binding = 15) uniform sampler2D uHistoryCloudTex;
 layout(binding = 16) uniform sampler2DArray uCsmShadowDepthTex;
 layout(binding = 17) uniform sampler2D uTemporalCurrentTex;
 layout(binding = 18) uniform sampler2D uSsgiTex;
+layout(binding = 19) uniform sampler2DArray uCsmShadowColor0Tex;
+layout(binding = 20) uniform sampler2DArray uCsmShadowColor1Tex;
 
-layout(std140, binding = 19) uniform DebugParams {
+layout(std140, binding = 21) uniform DebugParams {
     mat4 pShadowModelView;
     mat4 pShadowProjection;
     mat4 pShadowProjectionInverse;
@@ -249,7 +249,7 @@ void main() {
         return;
     }
     if (uDebugViewMode == 8) {
-        FragColor = vec4(vec3(texture(uShadowMapRaw, vTexCoord).r), 1.0);
+        FragColor = vec4(vec3(texture(uShadowMapRaw, vec3(vTexCoord, 0.0)).r), 1.0);
         return;
     }
     if (uDebugViewMode == 9) {
@@ -349,7 +349,7 @@ void main() {
             return;
         }
 
-        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float shadowDepth = texture(uShadowMapRaw, vec3(shadowUv.xy, 0.0)).r;
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
         float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;
         float margin = (shadowDepth - (shadowUv.z - bias)) * uShadowDistance * 2.0;
@@ -502,7 +502,7 @@ void main() {
             return;
         }
 
-        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float shadowDepth = texture(uShadowMapRaw, vec3(shadowUv.xy, 0.0)).r;
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
         float margin = shadowUv.z - bias - shadowDepth;
         // Green = lit (margin <= 0), Red = shadowed (margin > 0)
@@ -542,10 +542,10 @@ void main() {
         }
 
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
-        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float shadowDepth = texture(uShadowMapRaw, vec3(shadowUv.xy, 0.0)).r;
         float shadowed = (shadowUv.z - bias > shadowDepth) ? 1.0 : 0.0;
-        vec4 casterColor = texture(uShadowColorTex, shadowUv.xy);
-        vec4 casterNormal = texture(uShadowNormalTex, shadowUv.xy);
+        vec4 casterColor = texture(uCsmShadowColor0Tex, vec3(shadowUv.xy, 0.0));
+        vec4 casterNormal = texture(uCsmShadowColor1Tex, vec3(shadowUv.xy, 0.0));
         float cleared = step(0.995, casterColor.r) * step(0.995, casterColor.g) *
                         step(0.995, casterColor.b) * step(0.995, casterColor.a);
         vec3 normalPreview = vec3(casterNormal.rg, casterNormal.b);

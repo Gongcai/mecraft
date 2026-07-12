@@ -3,6 +3,8 @@
 #include "../states/GameStateMachine.h"
 #include "../../engine/input/InputManager.h"
 
+#include <cstdlib>
+
 namespace {
 PlayerStatsData toPlayerStatsData(const GameplayPresentationSnapshot& snap) {
     PlayerStatsData playerStats;
@@ -36,6 +38,11 @@ UIRenderContext GameplayHudPresenter::prepareRenderContext(const GameplayPresent
         m_input.snapshot());
 }
 
+bool GameplayHudPresenter::prepareTextFrame(RhiCommandList& commandList)
+{
+    return m_uiRenderer.prepareTextFrame(commandList);
+}
+
 void GameplayHudPresenter::renderPrepared(const UIRenderContext& context,
                                           GameStateMachine& stateMachine) {
     m_uiRenderer.renderPrepared(context);
@@ -50,19 +57,29 @@ void GameplayHudPresenter::renderPrepared(const UIRenderContext& context,
 #include "../../renderer/passes/PostProcessPass.h"
 #include "../../ui/Dashboard.h"
 
-void GameplayHudPresenter::renderDashboard(ecs::GameplayRegistry& reg,
-                                             World& world,
-                                             const Camera& camera,
-                                             RenderResourceHub& renderer,
-                                             RenderScene& renderScene,
-                                             PostProcessPass& postProcess,
-                                             Dashboard::FrameProfilerStats& profilerStats,
-                                             const std::function<void(int)>& renderDistanceSetter) {
+bool GameplayHudPresenter::prepareDashboard(
+    RhiCommandList& commandList,
+    ecs::GameplayRegistry& reg,
+    World& world,
+    const Camera& camera,
+    RenderResourceHub& renderer,
+    RenderScene& renderScene,
+    PostProcessPass& postProcess,
+    Dashboard::FrameProfilerStats& profilerStats,
+    const std::function<void(int)>& renderDistanceSetter) {
     if (!m_dashboard) {
-        return;
+        return false;
     }
     Camera mutableCamera = camera;
-    m_dashboard->render(reg, world, mutableCamera, renderer, renderScene,
-                        postProcess, m_uiRenderer, profilerStats, renderDistanceSetter);
+    return m_dashboard->prepareFrame(commandList, reg, world, mutableCamera, renderer,
+                                     renderScene, postProcess, m_uiRenderer,
+                                     profilerStats, renderDistanceSetter);
+}
+
+void GameplayHudPresenter::recordDashboard(RhiCommandList& commandList) const {
+    if (!m_dashboard) {
+        std::abort();
+    }
+    m_dashboard->recordDraws(commandList);
 }
 #endif

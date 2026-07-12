@@ -13,7 +13,7 @@ class RhiDevice;
 /// Screen-space velocity pass: reprojects depth to compute per-pixel velocity.
 class VelocityPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Velocity"; }
 

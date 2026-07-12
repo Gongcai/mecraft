@@ -24,11 +24,13 @@ namespace {
     textureDesc.depthOrLayers = 1;
     textureDesc.mipLevels = 1;
     textureDesc.sampleCount = 1;
-    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
 
     RhiTextureInitialData initialData;
     initialData.pixels = pixels;
     initialData.sizeBytes = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+    initialData.finalState = RhiResourceState::ShaderRead;
     return rhiDevice.createTexture(textureDesc, &initialData);
 }
 

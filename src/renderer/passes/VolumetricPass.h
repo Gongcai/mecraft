@@ -18,7 +18,7 @@ namespace shadow { class ShadowRenderer; }
 /// Volumetric fog pass: ray-marched fog with temporal reprojection and scene composite.
 class VolumetricPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Volumetric"; }
 
@@ -62,7 +62,7 @@ private:
     void destroyTemporalRhiResources();
     bool ensureFogRhiPipeline(RhiDevice& rhiDevice);
     bool ensureFogBindGroup(RhiDevice& rhiDevice,
-                            const std::array<RhiTextureViewHandle, 12>& views);
+                            const std::array<RhiTextureViewHandle, 10>& views);
     bool ensureFogNoiseTextureView(RhiDevice& rhiDevice);
     void destroyFogBindGroup();
     void destroyFogRhiResources();
@@ -87,7 +87,7 @@ private:
     RhiShaderHandle m_fogFragmentShader;
     RhiPipelineHandle m_fogPipeline;
     RhiBindGroupHandle m_fogBindGroup;
-    std::array<RhiTextureViewHandle, 12> m_fogBoundViews = {};
+    std::array<RhiTextureViewHandle, 10> m_fogBoundViews = {};
 
     RhiDevice* m_compositeRhiDevice = nullptr;
     RhiSamplerHandle m_compositeNearestSampler;

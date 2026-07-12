@@ -1,4 +1,4 @@
-layout(std140, binding = 5) uniform TerrainForwardParams {
+layout(std140, set = 1, binding = 5) uniform TerrainForwardParams {
     mat4 rhiTerrainForwardView;
     mat4 rhiTerrainForwardViewProj;
     vec4 rhiTerrainForwardAnimationSky;

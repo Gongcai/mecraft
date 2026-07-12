@@ -15,6 +15,7 @@ class BgmSystem;
 class UIRenderer;
 class LocaleManager;
 class RhiDevice;
+class RhiCommandListPool;
 class ThreadPool;
 
 /// Configuration for a gameplay session (seed, render distance, etc.)
@@ -49,6 +50,7 @@ struct GameSessionDependencies {
     LocaleManager& localeManager;
     ThreadPool& threadPool;
     RhiDevice& rhiDevice;
+    RhiCommandListPool& commandListPool;
     bool enableDebugDashboard = true;
 };
 

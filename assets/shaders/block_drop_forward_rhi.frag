@@ -11,7 +11,7 @@ layout(location = 0) out vec4 fragColor;
 layout(binding = 0) uniform sampler2DArray uTextureArray;
 layout(binding = 1) uniform sampler2D uGrassColormap;
 layout(binding = 2) uniform sampler2D uFoliageColormap;
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     mat4 uModel;
     vec4 uLightingAnimation;

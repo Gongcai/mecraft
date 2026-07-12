@@ -42,18 +42,15 @@ void UIText::renderSelf(const UIRenderContext& ctx) const {
     if (m_shadowEnabled) {
         std::array<float, 4> shadow = resolved.shadow;
         shadow[3] *= alpha;
-        ctx.textRenderer->render(m_text,
-                                 ax + resolved.shadowOffsetX,
-                                 ay + resolved.shadowOffsetY,
-                                 resolved.textScale,
-                                 shadow,
-                                 static_cast<float>(ctx.screenWidth),
-                                 static_cast<float>(ctx.screenHeight));
+        ctx.textRenderer->draw(ctx,
+                               m_text,
+                               ax + resolved.shadowOffsetX,
+                               ay + resolved.shadowOffsetY,
+                               resolved.textScale,
+                               shadow);
     }
 
-    ctx.textRenderer->render(m_text, ax, ay, resolved.textScale, col,
-                             static_cast<float>(ctx.screenWidth),
-                             static_cast<float>(ctx.screenHeight));
+    ctx.textRenderer->draw(ctx, m_text, ax, ay, resolved.textScale, col);
 }
 
 UITextStyle UIText::resolveBaseStyle(const UIRenderContext& ctx) const {

@@ -16,7 +16,6 @@ public:
     void destroy();
 
     [[nodiscard]] bool shouldClose() const;
-    void swapBuffers() const;
     void pollEvents();
 
     [[nodiscard]] int getWidth() const;
@@ -29,8 +28,6 @@ public:
 private:
     GLFWwindow* m_window = nullptr;
     int m_width{}, m_height{};
-
-    static void framebufferSizeCallback(GLFWwindow* w, int width, int height);
 };
 
 

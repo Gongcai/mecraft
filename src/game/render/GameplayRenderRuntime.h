@@ -10,6 +10,7 @@ class RenderResourceHub;
 class RenderScene;
 class FirstPersonHeldItemRenderer;
 class RhiDevice;
+class RhiCommandListPool;
 class ThreadPool;
 class Window;
 
@@ -38,7 +39,8 @@ public:
                             GameSession& session,
                             UIRenderer& uiRenderer,
                             ThreadPool& threadPool,
-                            RhiDevice& rhiDevice);
+                            RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool);
 
     /// Shutdown all renderers in reverse order of initialization.
     void shutdown();
@@ -49,7 +51,7 @@ public:
     [[nodiscard]] FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer();
 
 #ifdef MECRAFT_DEBUG
-    void initDebug(Window& window);
+    [[nodiscard]] bool initDebug(Window& window, RhiDevice& rhiDevice);
     void publishDebugStats(double frameTime);
     [[nodiscard]] Dashboard* dashboard();
     [[nodiscard]] DebugFrameProfiler* profiler();
