@@ -107,7 +107,7 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     // 1. Sky background (sun, moon, clouds, gradient)
     renderSky(ctx);
     if (!beginBackbufferScenePass(ctx)) {
-        endBackbufferFrame();
+        endBackbufferFrame(ctx);
         return {};
     }
 
@@ -120,7 +120,7 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
     // 4. Transparent terrain (water, glass, etc.)
     renderTransparent();
 
-    endBackbufferFrame();
+    endBackbufferFrame(ctx);
 
     // 5. Build and return frame output
     return buildFrameOutput(ctx);
@@ -129,12 +129,13 @@ FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSe
 bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
         m_backbufferCommandList == nullptr ||
-        !ctx.swapchainColorView.isValid() || !ctx.swapchainDepthStencilView.isValid()) {
+        !ctx.sceneCaptureColorTexture.isValid() || !ctx.sceneCaptureDepthTexture.isValid() ||
+        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
     }
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = ctx.swapchainColorView;
+    colorAttachment.view = ctx.sceneCaptureColorView;
     colorAttachment.loadOp = RhiLoadOp::Clear;
     colorAttachment.storeOp = RhiStoreOp::Store;
     colorAttachment.clearColor[0] = 0.0f;
@@ -143,7 +144,7 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     colorAttachment.clearColor[3] = 1.0f;
 
     RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view = ctx.swapchainDepthStencilView;
+    depthAttachment.view = ctx.sceneCaptureDepthView;
     depthAttachment.depthLoadOp = RhiLoadOp::Clear;
     depthAttachment.depthStoreOp = RhiStoreOp::Store;
     depthAttachment.clearDepth = 1.0f;
@@ -161,9 +162,14 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     m_backbufferCommandList->textureBarrier({
-        ctx.swapchainColorTexture,
-        RhiResourceState::Present,
+        ctx.sceneCaptureColorTexture,
+        RhiResourceState::ShaderRead,
         RhiResourceState::RenderTarget
+    });
+    m_backbufferCommandList->textureBarrier({
+        ctx.sceneCaptureDepthTexture,
+        RhiResourceState::DepthRead,
+        RhiResourceState::DepthWrite
     });
     m_backbufferCommandList->beginRendering(renderingInfo);
     m_backbufferCommandList->setViewport({
@@ -180,19 +186,19 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
 
 bool ForwardPipeline::beginBackbufferScenePass(const FrameContext& ctx) {
     if (m_backbufferCommandList == nullptr ||
-        !ctx.swapchainColorView.isValid() || !ctx.swapchainDepthStencilView.isValid()) {
+        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
         return false;
     }
 
     m_backbufferCommandList->endRendering();
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = ctx.swapchainColorView;
+    colorAttachment.view = ctx.sceneCaptureColorView;
     colorAttachment.loadOp = RhiLoadOp::Load;
     colorAttachment.storeOp = RhiStoreOp::Store;
 
     RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view = ctx.swapchainDepthStencilView;
+    depthAttachment.view = ctx.sceneCaptureDepthView;
     depthAttachment.depthLoadOp = RhiLoadOp::Clear;
     depthAttachment.depthStoreOp = RhiStoreOp::Store;
     depthAttachment.clearDepth = 1.0f;
@@ -221,18 +227,21 @@ bool ForwardPipeline::beginBackbufferScenePass(const FrameContext& ctx) {
     return true;
 }
 
-void ForwardPipeline::endBackbufferFrame() {
+void ForwardPipeline::endBackbufferFrame(const FrameContext& ctx) {
     if (m_backbufferCommandList == nullptr || m_shared == nullptr || m_shared->rhiDevice == nullptr) {
         return;
     }
 
     m_backbufferCommandList->endRendering();
-    const RhiTextureHandle swapchainTexture =
-        m_shared->rhiDevice->currentSwapchainColorTexture();
     m_backbufferCommandList->textureBarrier({
-        swapchainTexture,
+        ctx.sceneCaptureColorTexture,
         RhiResourceState::RenderTarget,
-        RhiResourceState::Present
+        RhiResourceState::ShaderRead
+    });
+    m_backbufferCommandList->textureBarrier({
+        ctx.sceneCaptureDepthTexture,
+        RhiResourceState::DepthWrite,
+        RhiResourceState::DepthRead
     });
     if (!m_backbufferCommandList->end()) {
         std::abort();

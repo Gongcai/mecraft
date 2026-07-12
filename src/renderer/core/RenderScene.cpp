@@ -341,8 +341,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const glm::ivec2 frameRenderSize = skipPostProcess
         ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
         : internalRenderSize(request.window);
-    if (!skipPostProcess &&
-        !m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice,
+    if (!m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice,
                                              frameRenderSize.x,
                                              frameRenderSize.y)) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to begin post-process scene capture\n");
@@ -446,7 +445,12 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList, m_currentContext);
     }
 
-    if (!skipPostProcess) {
+    if (skipPostProcess) {
+        m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
+                                                       m_currentContext.swapchainColorView,
+                                                       request.window,
+                                                       m_debugService);
+    } else {
         PostProcessEffects effects = buildPostProcessEffects(
             request.worldView, request.camera, request.window,
             cameraRainVisibility, request.screenRollRadians,

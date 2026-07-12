@@ -831,8 +831,8 @@ bool TerrainRhiPipelineSet::ensureForwardPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm};
-    pipelineDesc.depthFormat = RhiTextureFormat::Depth24;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.debugName = "Terrain.Forward.OpaquePipeline";
     m_forwardOpaquePipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);

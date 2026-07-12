@@ -572,8 +572,8 @@ void HumanoidRenderer::createGBufferRhiResources() {
     pipelineDesc.vertexShader = m_forwardRhiVertexShader;
     pipelineDesc.fragmentShader = m_forwardRhiFragmentShader;
     pipelineDesc.layout = m_forwardRhiPipelineLayout;
-    pipelineDesc.colorFormats = {m_rhiDevice->swapchainColorFormat()};
-    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(1u);
     m_forwardRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "Humanoid.InventoryPreview.Pipeline";

@@ -280,8 +280,8 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     visiblePipelineDesc.raster.cullMode = RhiCullMode::None;
     visiblePipelineDesc.depthStencil.depthTestEnabled = false;
     visiblePipelineDesc.depthStencil.depthWriteEnabled = false;
-    visiblePipelineDesc.colorFormats = {rhiDevice.swapchainColorFormat()};
-    visiblePipelineDesc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
+    visiblePipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    visiblePipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     visiblePipelineDesc.blend.attachments.resize(1u);
     m_visiblePipeline = rhiDevice.createGraphicsPipeline(visiblePipelineDesc);
     const auto haloVertexSource = renderer::rhi::loadShaderSource(
@@ -322,8 +322,8 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     haloPipelineDesc.raster.cullMode = RhiCullMode::None;
     haloPipelineDesc.depthStencil.depthTestEnabled = false;
     haloPipelineDesc.depthStencil.depthWriteEnabled = false;
-    haloPipelineDesc.colorFormats = {rhiDevice.swapchainColorFormat()};
-    haloPipelineDesc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
+    haloPipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    haloPipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     RhiBlendAttachmentState haloBlend;
     haloBlend.blendEnabled = true;
     haloBlend.srcColor = RhiBlendFactor::SrcAlpha;
@@ -369,8 +369,8 @@ void GameplaySkyRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     cloudPipelineDesc.depthStencil.depthTestEnabled = true;
     cloudPipelineDesc.depthStencil.depthWriteEnabled = true;
     cloudPipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    cloudPipelineDesc.colorFormats = {rhiDevice.swapchainColorFormat()};
-    cloudPipelineDesc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
+    cloudPipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    cloudPipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     cloudPipelineDesc.blend.attachments.resize(1u);
     m_cloudPipeline = rhiDevice.createGraphicsPipeline(cloudPipelineDesc);
     if (!m_captureUniformBuffer.isValid() || !m_captureSampler.isValid() ||

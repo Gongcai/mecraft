@@ -477,8 +477,8 @@ void DropRenderer::createItemGBufferRhiResources() {
         {1u, 0u, RhiVertexFormat::Float2, offsetof(ItemModelVertex, u)},
         {2u, 0u, RhiVertexFormat::Float, offsetof(ItemModelVertex, shade)}
     };
-    pipelineDesc.colorFormats = {m_rhiDevice->swapchainColorFormat()};
-    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.blend.attachments.resize(1u);
     m_itemForwardPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "Drop.BlockForward.Pipeline";

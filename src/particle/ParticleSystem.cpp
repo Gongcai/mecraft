@@ -239,8 +239,8 @@ bool ParticleSystem::createRhiResources() {
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = false;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
-    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     pipelineDesc.vertexInput.bindings.push_back({0u, 8u * sizeof(float), RhiVertexInputRate::Vertex});
     pipelineDesc.vertexInput.attributes = {
         {0u, 0u, RhiVertexFormat::Float3, 0u}, {1u, 0u, RhiVertexFormat::Float2, 3u * sizeof(float)},
