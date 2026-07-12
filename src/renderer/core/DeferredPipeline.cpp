@@ -304,6 +304,24 @@ void DeferredPipeline::shutdown() {
     if (m_voxelGiClipmap) {
         m_voxelGiClipmap->shutdown();
     }
+    if (m_debugPass) m_debugPass->shutdown();
+    if (m_dofPass) m_dofPass->shutdown();
+    if (m_motionBlurPass) m_motionBlurPass->shutdown();
+    if (m_taaPass) m_taaPass->shutdown();
+    if (m_volumetricPass) m_volumetricPass->shutdown();
+    if (m_sceneCompositePass) m_sceneCompositePass->shutdown();
+    if (m_cloudPass) m_cloudPass->shutdown();
+    if (m_reflectionPass) m_reflectionPass->shutdown();
+    if (m_lightingPass) m_lightingPass->shutdown();
+    if (m_ssgiPass) m_ssgiPass->shutdown();
+    if (m_ssaoPass) m_ssaoPass->shutdown();
+    if (m_velocityPass) m_velocityPass->shutdown();
+    if (m_waterCompositePass) m_waterCompositePass->shutdown();
+    if (m_shadowPass) m_shadowPass->shutdown();
+    if (m_gbufferPass) m_gbufferPass->shutdown();
+    if (m_skyCapturePass) m_skyCapturePass->shutdown();
+
+    m_debugPass.reset();
     m_dofPass.reset();
     m_motionBlurPass.reset();
     m_taaPass.reset();
@@ -319,8 +337,10 @@ void DeferredPipeline::shutdown() {
     m_waterCompositePass.reset();
     m_gbufferPass.reset();
     m_skyCapturePass.reset();
-    m_debugPass.reset();
     m_voxelGiClipmap.reset();
+    m_resourceMgr = nullptr;
+    m_shadowRenderer = nullptr;
+    m_shared = nullptr;
 }
 
 void DeferredPipeline::invalidateHistory() {
