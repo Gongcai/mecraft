@@ -513,6 +513,9 @@ void HumanoidRenderer::createGBufferRhiResources() {
     m_forwardRhiFragmentShader = createShader("Humanoid.Forward.Fragment", RhiShaderStage::Fragment,
                                               *forwardFragmentSource);
     RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Nearest;
+    samplerDesc.magFilter = RhiFilter::Nearest;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
     samplerDesc.addressU = RhiAddressMode::ClampToEdge;
     samplerDesc.addressV = RhiAddressMode::ClampToEdge;
     m_gbufferSampler = m_rhiDevice->createSampler(samplerDesc);
