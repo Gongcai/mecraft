@@ -53,6 +53,7 @@ struct UIRenderContext {
     const UITheme* theme = nullptr;
     const LocaleManager* localeManager = nullptr;
     RhiTextureHandle backdropBlur;
+    RhiTextureViewHandle backdropBlurView;
     RhiCommandList* commandList = nullptr;
     bool hasScissor = false;
     RhiRect2D scissor;

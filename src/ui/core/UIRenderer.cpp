@@ -1031,6 +1031,7 @@ bool UIRenderer::ensureBackdropBlurBindGroups(RhiDevice& rhiDevice) const
 void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const
 {
     context.backdropBlur = {};
+    context.backdropBlurView = {};
     context.backdropBlurPrepared = true;
     context.backdropSourceWidth = 0;
     context.backdropSourceHeight = 0;
@@ -1096,6 +1097,7 @@ void UIRenderer::prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDev
     rhiDevice.submitFrame(commandList);
 
     context.backdropBlur = m_backdropBlur[1];
+    context.backdropBlurView = m_backdropBlurView[1];
     context.backdropSourceWidth = sourceWidth;
     context.backdropSourceHeight = sourceHeight;
     context.backdropBlurWidth = m_backdropBlurWidth;
