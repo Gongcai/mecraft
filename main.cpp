@@ -24,8 +24,8 @@ void printUsage() {
         << "  --benchmark-report <file>          Write gameplay replay frame timing summary as JSON.\n"
         << "  --benchmark-save-root <path>       Save root for benchmark worlds.\n"
         << "  --benchmark-no-save                Disable saving for benchmark gameplay.\n"
-        << "  --gl-debug-output                  Enable OpenGL debug callback output.\n"
-        << "  --no-gl-debug-output               Disable OpenGL debug callback output.\n"
+        << "  --rhi-debug-output                 Enable graphics backend debug output.\n"
+        << "  --no-rhi-debug-output              Disable graphics backend debug output.\n"
         << "  --no-exit-on-replay-end            Keep app open when replay frames are exhausted.\n";
 }
 
@@ -65,7 +65,7 @@ bool requireValue(int argc, char** argv, int& index, const char* name, const cha
 bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::string& error) {
     options = AppLaunchOptions{};
     bool inputScopeSet = false;
-    bool glDebugOutputSet = false;
+    bool rhiDebugOutputSet = false;
 
     for (int index = 1; index < argc; ++index) {
         const std::string arg = argv[index];
@@ -151,12 +151,12 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
             options.benchmarkSaveRoot = value;
         } else if (arg == "--benchmark-no-save") {
             options.benchmarkEnableSaving = false;
-        } else if (arg == "--gl-debug-output") {
-            options.enableGlDebugOutput = true;
-            glDebugOutputSet = true;
-        } else if (arg == "--no-gl-debug-output") {
-            options.enableGlDebugOutput = false;
-            glDebugOutputSet = true;
+        } else if (arg == "--rhi-debug-output") {
+            options.enableRhiDebugOutput = true;
+            rhiDebugOutputSet = true;
+        } else if (arg == "--no-rhi-debug-output") {
+            options.enableRhiDebugOutput = false;
+            rhiDebugOutputSet = true;
         } else if (arg == "--no-exit-on-replay-end") {
             options.exitWhenPlaybackEnds = false;
         } else {
@@ -178,8 +178,8 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
     }
     if (options.autoStartGameplay) {
         options.enableDebugDashboard = false;
-        if (!glDebugOutputSet) {
-            options.enableGlDebugOutput = false;
+        if (!rhiDebugOutputSet) {
+            options.enableRhiDebugOutput = false;
         }
     }
     return true;

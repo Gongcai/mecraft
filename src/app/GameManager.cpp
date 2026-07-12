@@ -95,7 +95,7 @@ bool GameManager::initRhiDevice() {
     desc.nativeWindow = m_window.getHandle();
     desc.width = m_window.getWidth();
     desc.height = m_window.getHeight();
-    desc.enableDebugOutput = m_launchOptions.enableGlDebugOutput;
+    desc.enableDebugOutput = m_launchOptions.enableRhiDebugOutput;
     if (!m_rhiDevice->init(desc)) {
         MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to initialize app RHI device\n");
         m_rhiDevice.reset();
