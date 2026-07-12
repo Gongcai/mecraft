@@ -10,6 +10,7 @@
 #include <GLFW/glfw3.h>
 
 #include <array>
+#include <cmath>
 #include <condition_variable>
 #include <cstdlib>
 #include <cstring>
@@ -1874,6 +1875,140 @@ bool readCenterPixel(GlRhiDevice& device,
                  GL_UNSIGNED_BYTE,
                  outPixel.data());
     return true;
+}
+
+bool testGlRhiDepthLoadClearIgnoresPreviousWriteMask() {
+    GlTestContext context;
+    if (!requireTrue(context.init(),
+                     "OpenGL test context must initialize for depth load clear")) {
+        return false;
+    }
+
+    GlRhiDevice device;
+    std::unique_ptr<RhiCommandListPool> commandPool;
+    RhiDeviceDesc deviceDesc = makeDeviceDesc();
+    deviceDesc.debugName = "rhi_depth_load_clear_test";
+    if (!requireTrue(device.init(deviceDesc),
+                     "OpenGL RHI device must initialize for depth load clear")) {
+        return false;
+    }
+
+    constexpr char kVertexShader[] = R"glsl(
+#version 450 core
+void main() {
+    const vec2 positions[3] = vec2[3](
+        vec2(-1.0, -1.0),
+        vec2( 3.0, -1.0),
+        vec2(-1.0,  3.0));
+    gl_Position = vec4(positions[gl_VertexIndex], 0.5, 1.0);
+}
+)glsl";
+    constexpr char kFragmentShader[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec4 outColor;
+void main() {
+    outColor = vec4(1.0);
+}
+)glsl";
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = kVertexShader;
+    shaderDesc.sourceSize = sizeof(kVertexShader) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(shaderDesc);
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = kFragmentShader;
+    shaderDesc.sourceSize = sizeof(kFragmentShader) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(shaderDesc);
+    const RhiPipelineLayoutHandle pipelineLayout =
+        device.createPipelineLayout(RhiPipelineLayoutDesc{});
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = pipelineLayout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+
+    RhiTextureDesc colorDesc;
+    colorDesc.format = RhiTextureFormat::Rgba8Unorm;
+    colorDesc.width = 4u;
+    colorDesc.height = 4u;
+    colorDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureHandle colorTexture = device.createTexture(colorDesc, nullptr);
+    RhiTextureViewDesc colorViewDesc;
+    colorViewDesc.texture = colorTexture;
+    const RhiTextureViewHandle colorView = device.createTextureView(colorViewDesc);
+
+    RhiTextureDesc depthDesc;
+    depthDesc.format = RhiTextureFormat::Depth32Float;
+    depthDesc.width = 4u;
+    depthDesc.height = 4u;
+    depthDesc.usage = rhiFlag(RhiTextureUsage::DepthStencilAttachment);
+    const RhiTextureHandle depthTexture = device.createTexture(depthDesc, nullptr);
+    RhiTextureViewDesc depthViewDesc;
+    depthViewDesc.texture = depthTexture;
+    const RhiTextureViewHandle depthView = device.createTextureView(depthViewDesc);
+
+    if (!requireTrue(vertexShader.isValid() && fragmentShader.isValid() &&
+                     pipelineLayout.isValid() && pipeline.isValid() &&
+                     colorTexture.isValid() && colorView.isValid() &&
+                     depthTexture.isValid() && depthView.isValid(),
+                     "depth load clear resources must be created")) {
+        device.shutdown();
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = colorView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 0.0f;
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.renderArea = {0, 0, 4u, 4u};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    RhiCommandList& maskCommands = beginTestCommands(device, commandPool);
+    maskCommands.textureBarrier({colorTexture, RhiResourceState::Undefined,
+                                 RhiResourceState::RenderTarget});
+    maskCommands.textureBarrier({depthTexture, RhiResourceState::Undefined,
+                                 RhiResourceState::DepthWrite});
+    maskCommands.beginRendering(renderingInfo);
+    maskCommands.setGraphicsPipeline(pipeline);
+    maskCommands.endRendering();
+    submitTestCommands(device, commandPool, maskCommands);
+
+    depthAttachment.clearDepth = 0.75f;
+    RhiCommandList& clearCommands = beginTestCommands(device, commandPool);
+    clearCommands.beginRendering(renderingInfo);
+    clearCommands.endRendering();
+    submitTestCommands(device, commandPool, clearCommands);
+
+    float depth = 0.0f;
+    glReadPixels(2, 2, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &depth);
+    const bool passed = requireTrue(std::abs(depth - 0.75f) <= 0.0001f,
+                                    "depth load clear must ignore the previous pipeline write mask");
+
+    device.destroyTextureView(depthView);
+    device.destroyTexture(depthTexture);
+    device.destroyTextureView(colorView);
+    device.destroyTexture(colorTexture);
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(pipelineLayout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.shutdown();
+    return passed;
 }
 
 bool testGlRhiBufferCopyToTexture() {
@@ -4790,6 +4925,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiFullscreenTriangle()) {
+        return 1;
+    }
+    if (!testGlRhiDepthLoadClearIgnoresPreviousWriteMask()) {
         return 1;
     }
     if (!testGlRhiBufferCopyToTexture()) {

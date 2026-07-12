@@ -844,6 +844,7 @@ struct GlRhiDeviceData {
     uint32_t uniformBufferOffsetAlignment = 1u;
     uint32_t storageBufferOffsetAlignment = 1u;
     GLuint currentFramebuffer = 0u;
+    bool depthWriteMaskEnabled = true;
     std::vector<GLenum> currentStoreDiscardAttachments;
 };
 
@@ -2516,10 +2517,19 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         const GlTextureViewRecord* viewRecord =
             recordForHandle(data.textureViews, data.textureViewRecords, depthView);
         if (attachment->depthLoadOp == RhiLoadOp::Clear) {
+            const bool restoreDepthWriteMask = !data.depthWriteMaskEnabled;
+            if (restoreDepthWriteMask) {
+                glDepthMask(GL_TRUE);
+                data.depthWriteMaskEnabled = true;
+            }
             if (viewRecord->format.stencil) {
                 clearFramebufferDepthStencil(framebuffer, attachment->clearDepth, attachment->clearStencil);
             } else {
                 clearFramebufferDepth(framebuffer, attachment->clearDepth);
+            }
+            if (restoreDepthWriteMask) {
+                glDepthMask(GL_FALSE);
+                data.depthWriteMaskEnabled = false;
             }
         }
         if (attachment->depthStoreOp == RhiStoreOp::DontCare) {
@@ -2577,8 +2587,17 @@ void GlRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& 
     glScissor(rect.x, rect.y,
               static_cast<GLsizei>(rect.width),
               static_cast<GLsizei>(rect.height));
-    glDepthMask(GL_TRUE);
+    auto& data = *m_device->m_data;
+    const bool restoreDepthWriteMask = !data.depthWriteMaskEnabled;
+    if (restoreDepthWriteMask) {
+        glDepthMask(GL_TRUE);
+        data.depthWriteMaskEnabled = true;
+    }
     glClearBufferfv(GL_DEPTH, 0, &depth);
+    if (restoreDepthWriteMask) {
+        glDepthMask(GL_FALSE);
+        data.depthWriteMaskEnabled = false;
+    }
 }
 
 void GlRhiCommandList::setViewport(const RhiViewport& viewport) {
@@ -2694,7 +2713,8 @@ void GlRhiCommandList::setGraphicsPipeline(RhiPipelineHandle pipeline) {
         } else {
             glDisable(GL_DEPTH_TEST);
         }
-        glDepthMask(desc.depthStencil.depthWriteEnabled ? GL_TRUE : GL_FALSE);
+        data.depthWriteMaskEnabled = desc.depthStencil.depthWriteEnabled;
+        glDepthMask(data.depthWriteMaskEnabled ? GL_TRUE : GL_FALSE);
 
         if (desc.raster.cullMode == RhiCullMode::None) {
             glDisable(GL_CULL_FACE);
