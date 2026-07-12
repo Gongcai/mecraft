@@ -50,7 +50,8 @@ bool beginUiOverlayRendering(RenderResourceHub& renderer,
                              RhiCommandList& commandList) {
     RhiDevice& rhiDevice = renderer.rhiDevice();
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
-    if (!colorView.isValid()) {
+    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
+    if (!colorView.isValid() || !depthView.isValid()) {
         return false;
     }
 
@@ -58,6 +59,11 @@ bool beginUiOverlayRendering(RenderResourceHub& renderer,
     colorAttachment.view = colorView;
     colorAttachment.loadOp = RhiLoadOp::Load;
     colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "UiOverlay";
@@ -69,6 +75,7 @@ bool beginUiOverlayRendering(RenderResourceHub& renderer,
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList.textureBarrier({
         rhiDevice.currentSwapchainColorTexture(),

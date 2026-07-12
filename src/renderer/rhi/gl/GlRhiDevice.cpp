@@ -1546,6 +1546,7 @@ bool GlRhiCommandList::begin(const RhiCommandListDesc& desc) {
     m_commandStream.clear();
     m_resourceReferences->clear();
     m_recordingRendering = false;
+    m_recordingHasDepthAttachment = false;
     m_recordingValid = true;
     m_recordingDebugLabelDepth = 0u;
     m_state = RhiCommandListState::Recording;
@@ -1563,6 +1564,7 @@ bool GlRhiCommandList::end() {
         m_commandStream.clear();
         m_resourceReferences->clear();
         m_recordingRendering = false;
+        m_recordingHasDepthAttachment = false;
         m_recordingDebugLabelDepth = 0u;
         m_state = RhiCommandListState::Initial;
         m_acquired = false;
@@ -1597,6 +1599,7 @@ void GlRhiCommandList::resetForPoolReuse() {
     m_commandStream.clear();
     m_resourceReferences->clear();
     m_recordingRendering = false;
+    m_recordingHasDepthAttachment = false;
     m_recordingValid = true;
     m_recordingDebugLabelDepth = 0u;
     m_replaying = false;
@@ -2292,6 +2295,11 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
             (void) rejectRecordedCommand("beginRendering requires color attachment storage");
             return;
         }
+        if (info.depthStencilAttachment != nullptr &&
+            !info.depthStencilAttachment->view.isValid()) {
+            (void) rejectRecordedCommand("beginRendering requires a valid depth attachment view");
+            return;
+        }
         if (!beginRecordedCommand(CommandType::BeginRendering)) return;
         appendValue(info.renderArea);
         appendValue(static_cast<uint64_t>(info.colorAttachmentCount));
@@ -2310,6 +2318,7 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
             referenceResource(info.depthStencilAttachment->view);
         }
         m_recordingRendering = true;
+        m_recordingHasDepthAttachment = info.depthStencilAttachment != nullptr;
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
@@ -2549,6 +2558,7 @@ void GlRhiCommandList::endRendering() {
         }
         if (!beginRecordedCommand(CommandType::EndRendering)) return;
         m_recordingRendering = false;
+        m_recordingHasDepthAttachment = false;
         return;
     }
     if (m_device == nullptr || !m_device->m_data) {
@@ -2573,6 +2583,10 @@ void GlRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& 
             (void) rejectRecordedCommand("clearDepthAttachment requires an active rendering scope");
             return;
         }
+        if (!m_recordingHasDepthAttachment) {
+            (void) rejectRecordedCommand("clearDepthAttachment requires a depth attachment");
+            return;
+        }
         if (!beginRecordedCommand(CommandType::ClearDepthAttachment)) return;
         appendValue(depth);
         appendValue(rect);
@@ -2580,6 +2594,10 @@ void GlRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& 
     }
     if (!m_rendering) {
         (void) rejectReplayCommand("clearDepthAttachment requires an active rendering scope");
+        return;
+    }
+    if (m_renderingDepthFormat == RhiTextureFormat::Undefined) {
+        (void) rejectReplayCommand("clearDepthAttachment requires a depth attachment");
         return;
     }
     if (m_validationOnly) return;
@@ -3156,8 +3174,15 @@ bool GlRhiCommandList::validateGraphicsDrawState(const bool indexed) const {
         logRhiError("graphics draw requires a bound graphics pipeline");
         return false;
     }
+    const bool pipelineUsesDepth =
+        pipeline->graphicsDesc.depthStencil.depthTestEnabled ||
+        pipeline->graphicsDesc.depthStencil.depthWriteEnabled;
+    const bool depthFormatMatches =
+        pipeline->graphicsDesc.depthFormat == m_renderingDepthFormat ||
+        (!pipelineUsesDepth &&
+         pipeline->graphicsDesc.depthFormat == RhiTextureFormat::Undefined);
     if (pipeline->graphicsDesc.colorFormats != m_renderingColorFormats ||
-        pipeline->graphicsDesc.depthFormat != m_renderingDepthFormat) {
+        !depthFormatMatches) {
         std::cerr << "GlRhiDevice: graphics draw pipeline attachment formats do not match the rendering scope"
                   << " pipeline=[" << rhiDebugName(pipeline->graphicsDesc.debugName) << ']'
                   << " pipelineColors=";

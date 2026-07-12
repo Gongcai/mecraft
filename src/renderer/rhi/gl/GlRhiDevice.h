@@ -167,6 +167,7 @@ private:
     RhiTextureFormat m_renderingDepthFormat = RhiTextureFormat::Undefined;
     bool m_rendering = false;
     bool m_recordingRendering = false;
+    bool m_recordingHasDepthAttachment = false;
     bool m_recordingValid = true;
     uint32_t m_recordingDebugLabelDepth = 0u;
     bool m_replaying = false;

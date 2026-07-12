@@ -578,9 +578,10 @@ void HumanoidRenderer::createGBufferRhiResources() {
     m_forwardRhiPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     pipelineDesc.debugName = "Humanoid.InventoryPreview.Pipeline";
     pipelineDesc.raster.scissorEnabled = true;
-    pipelineDesc.depthFormat = RhiTextureFormat::Undefined;
-    pipelineDesc.depthStencil.depthTestEnabled = false;
-    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats = {m_rhiDevice->swapchainColorFormat()};
+    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
     m_inventoryPreviewPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_gbufferRhiVertexShader.isValid() || !m_gbufferRhiFragmentShader.isValid() ||
