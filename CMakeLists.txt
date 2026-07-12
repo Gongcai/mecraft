@@ -635,12 +635,16 @@ target_link_libraries(mecraft_core PUBLIC
         spirv-cross-c
 )
 
-# 统一宏定义
-target_compile_definitions(mecraft_core PUBLIC
-        GLFW_INCLUDE_NONE
+# RHI backend selection is an implementation detail of the device factory.
+target_compile_definitions(mecraft_core PRIVATE
         "MECRAFT_DEFAULT_RHI_BACKEND=\"${MECRAFT_DEFAULT_RHI_BACKEND}\""
         $<$<BOOL:${MECRAFT_RHI_BACKEND_OPENGL}>:MECRAFT_RHI_BACKEND_OPENGL>
         $<$<BOOL:${MECRAFT_RHI_BACKEND_VULKAN}>:MECRAFT_RHI_BACKEND_VULKAN>
+)
+
+# Shared compile definitions required by public project headers and consumers.
+target_compile_definitions(mecraft_core PUBLIC
+        GLFW_INCLUDE_NONE
         "MECRAFT_ASSETS_DIR=\"${MECRAFT_ASSETS_DIR_COMPILE}\""
         $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
         $<$<CONFIG:RelWithDebInfo>:MECRAFT_ENABLE_CONSOLE_OUTPUT>
