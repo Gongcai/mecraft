@@ -574,7 +574,6 @@ endif()
 # 4. 第三方源码库
 # ===========================================================================
 add_library(mecraft_third_party STATIC
-        third_party/glad/glad.c
         third_party/enet/enet_impl.cpp
         third_party/imgui/imgui.cpp
         third_party/imgui/imgui_demo.cpp
@@ -604,6 +603,9 @@ mecraft_apply_msvc_defaults(mecraft_third_party)
 # ===========================================================================
 add_library(mecraft_core ${CORE_SOURCES})
 target_compile_features(mecraft_core PUBLIC cxx_std_17)
+if(MECRAFT_RHI_BACKEND_OPENGL)
+    target_sources(mecraft_core PRIVATE third_party/glad/glad.c)
+endif()
 set_target_properties(mecraft_core PROPERTIES
         WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
@@ -750,7 +752,9 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
     add_mecraft_test(sleeping_state_test tests/sleeping_state_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
-    add_mecraft_test(rhi_core_test tests/rhi_core_test.cpp)
+    if(MECRAFT_RHI_BACKEND_OPENGL)
+        add_mecraft_test(rhi_core_test tests/rhi_core_test.cpp)
+    endif()
 
     add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
     add_mecraft_test(drop_system_test tests/drop_system_test.cpp)
