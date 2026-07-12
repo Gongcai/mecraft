@@ -372,6 +372,10 @@ void FirstPersonHeldItemRenderer::createRhiTextureResources() {
         viewDesc.texture = textures[index];
         viewDesc.viewType = index == 2u ? RhiTextureViewType::Texture2DArray
                                        : RhiTextureViewType::Texture2D;
+        if (viewDesc.viewType == RhiTextureViewType::Texture2DArray) {
+            viewDesc.mipCount = kRhiRemainingMipLevels;
+            viewDesc.layerCount = kRhiRemainingArrayLayers;
+        }
         *views[index] = m_rhiDevice->createTextureView(viewDesc);
         if (!views[index]->isValid()) {
             std::abort();
@@ -439,6 +443,8 @@ void FirstPersonHeldItemRenderer::synchronizeShadowTextureViews() {
         RhiTextureViewDesc viewDesc;
         viewDesc.texture = textures[index];
         viewDesc.viewType = RhiTextureViewType::Texture2DArray;
+        viewDesc.mipCount = kRhiRemainingMipLevels;
+        viewDesc.layerCount = kRhiRemainingArrayLayers;
         m_shadowTextureViews[index] = m_rhiDevice->createTextureView(viewDesc);
         if (!m_shadowTextureViews[index].isValid()) {
             std::abort();

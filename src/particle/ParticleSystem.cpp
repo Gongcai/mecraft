@@ -183,6 +183,8 @@ bool ParticleSystem::createRhiResources() {
     RhiTextureViewDesc arrayViewDesc;
     arrayViewDesc.texture = m_texArray->texture;
     arrayViewDesc.viewType = RhiTextureViewType::Texture2DArray;
+    arrayViewDesc.mipCount = kRhiRemainingMipLevels;
+    arrayViewDesc.layerCount = kRhiRemainingArrayLayers;
     m_textureArrayView = m_rhiDevice->createTextureView(arrayViewDesc);
     RhiSamplerDesc linearDesc;
     linearDesc.minFilter = RhiFilter::Linear;

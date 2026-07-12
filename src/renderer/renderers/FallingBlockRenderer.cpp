@@ -190,6 +190,10 @@ bool FallingBlockRenderer::createGBufferRhiResources() {
         RhiTextureViewDesc desc;
         desc.texture = textures[i];
         desc.viewType = i == 0u ? RhiTextureViewType::Texture2DArray : RhiTextureViewType::Texture2D;
+        if (desc.viewType == RhiTextureViewType::Texture2DArray) {
+            desc.mipCount = kRhiRemainingMipLevels;
+            desc.layerCount = kRhiRemainingArrayLayers;
+        }
         *views[i] = m_rhiDevice->createTextureView(desc);
     }
     RhiSamplerDesc samplerDesc;

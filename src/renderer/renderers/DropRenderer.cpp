@@ -374,6 +374,10 @@ void DropRenderer::createItemGBufferRhiResources() {
         viewDesc.texture = blockTextures[index];
         viewDesc.viewType = index == 0u ? RhiTextureViewType::Texture2DArray
                                        : RhiTextureViewType::Texture2D;
+        if (viewDesc.viewType == RhiTextureViewType::Texture2DArray) {
+            viewDesc.mipCount = kRhiRemainingMipLevels;
+            viewDesc.layerCount = kRhiRemainingArrayLayers;
+        }
         *blockViews[index] = m_rhiDevice->createTextureView(viewDesc);
     }
 
