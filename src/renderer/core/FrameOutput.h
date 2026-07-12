@@ -29,7 +29,7 @@ struct FirstPersonShadowData {
     int cascadeCount = 4;
     int softShadowsEnabled = 1;
     int pcssShadowsEnabled = 1;
-    int shadowsEnabled = 1;
+    int shadowsEnabled = 0;
     float skyIntensity = 1.0f;
 };
 
