@@ -237,10 +237,12 @@ void Game::shutdown() {
         (void)renderFrame(0.0f);
     }
 
-    // Session must shut down before the app-owned thread pool is stopped
-    // because GameServer flushes pending saves through that pool.
-    m_session.shutdown();
+    // Render runtime holds non-owning references to session-owned render systems,
+    // so it must release GPU resources before the session destroys those systems.
     m_renderRuntime->shutdown();
+    // Session still shuts down before the app-owned thread pool because GameServer
+    // flushes pending saves through that pool.
+    m_session.shutdown();
     m_initialized = false;
     m_loadPhase = LoadPhase::NotStarted;
 }
