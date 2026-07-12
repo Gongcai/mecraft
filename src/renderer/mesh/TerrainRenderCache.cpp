@@ -550,7 +550,7 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
         bakeWorldOffset(result.meshData.transparentVertices);
         bakeWorldOffset(result.meshData.waterVertices);
 
-        const glm::vec3 boundsWorldOffset(txOff, tyOff, tzOff);
+        const glm::vec3 boundsWorldOffset(txOff, tyOff + scyYOff, tzOff);
         WorldGpuMesh gpu = m_worldRenderBuffer->uploadSubChunk(
             commandList,
             result.meshData.opaqueVertices,

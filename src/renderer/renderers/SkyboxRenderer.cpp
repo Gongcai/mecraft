@@ -144,6 +144,7 @@ void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
     RhiTextureViewDesc cubemapViewDesc;
     cubemapViewDesc.texture = m_cubemapTexture;
     cubemapViewDesc.viewType = RhiTextureViewType::Cube;
+    cubemapViewDesc.layerCount = 6u;
     m_cubemapView = rhiDevice.createTextureView(cubemapViewDesc);
     RhiSamplerDesc cubemapSamplerDesc;
     cubemapSamplerDesc.addressU = RhiAddressMode::ClampToEdge;

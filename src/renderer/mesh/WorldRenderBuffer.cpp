@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
 
 namespace {
@@ -33,8 +35,18 @@ uint32_t packSignedNormal(const int8_t normal) {
 }
 
 uint32_t packLocalCoord12(const float value) {
+    if (!std::isfinite(value)) {
+        std::cerr << "WorldRenderBuffer: packed local coordinate is not finite value="
+                  << value << '\n';
+        std::abort();
+    }
     const int quantized = static_cast<int>(std::lround(value * kPackedPositionScale));
-    return static_cast<uint32_t>(std::clamp(quantized, 0, 4095));
+    if (quantized < 0 || quantized > 4095) {
+        std::cerr << "WorldRenderBuffer: packed local coordinate is out of range value="
+                  << value << " quantized=" << quantized << '\n';
+        std::abort();
+    }
+    return static_cast<uint32_t>(quantized);
 }
 
 std::vector<PackedBlockVertex> packBlockVertices(const std::vector<BlockVertex>& vertices) {

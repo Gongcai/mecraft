@@ -4607,12 +4607,16 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
         desc.format == RhiTextureFormat::Undefined && textureResolved ? textureRecord.desc.format : desc.format;
     GlFormatInfo format;
     const GLenum viewTarget = toGlTextureViewTarget(desc.viewType);
+    const bool cubeRangeValid = desc.viewType != RhiTextureViewType::Cube ||
+                                (resolvedDesc.baseLayer % 6u == 0u &&
+                                 resolvedDesc.layerCount == 6u);
     if (!m_initialized || !textureResolved || textureRecord.swapchainBackbuffer || viewTarget == 0u ||
         !toGlFormatInfo(resolvedFormat, format) || resolvedDesc.mipCount == 0u ||
         resolvedDesc.layerCount == 0u || resolvedDesc.baseMip >= textureRecord.desc.mipLevels ||
         resolvedDesc.mipCount > textureRecord.desc.mipLevels - resolvedDesc.baseMip ||
         resolvedDesc.baseLayer >= textureRecord.desc.depthOrLayers ||
-        resolvedDesc.layerCount > textureRecord.desc.depthOrLayers - resolvedDesc.baseLayer) {
+        resolvedDesc.layerCount > textureRecord.desc.depthOrLayers - resolvedDesc.baseLayer ||
+        !cubeRangeValid) {
         std::cerr << "GlRhiDevice: invalid texture view"
                   << " handle=" << desc.texture.index << ':' << desc.texture.generation
                   << " resolved=" << textureResolved
