@@ -258,7 +258,6 @@ set(SRC_RENDERER
         src/renderer/debug/RenderDebugService.cpp
 
         # Contracts
-        src/renderer/contracts/MecraftTextureContract.cpp
 
         # RHI
         src/renderer/rhi/RhiGrowableBuffer.cpp
