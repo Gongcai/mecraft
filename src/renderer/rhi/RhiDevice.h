@@ -33,6 +33,12 @@ public:
     virtual RhiPipelineHandle createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) = 0;
     virtual RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) = 0;
     virtual RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) = 0;
+    virtual RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) = 0;
+    [[nodiscard]] virtual bool areQueryResultsAvailable(RhiQueryPoolHandle pool,
+                                                        uint32_t firstQuery,
+                                                        uint32_t queryCount) const = 0;
+    virtual bool getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
+                                 uint32_t queryCount, uint64_t* results) const = 0;
 
     [[nodiscard]] virtual RhiTextureViewHandle currentSwapchainColorView() const = 0;
     [[nodiscard]] virtual RhiTextureViewHandle currentSwapchainDepthStencilView() const = 0;
@@ -51,6 +57,7 @@ public:
     virtual void destroyPipelineLayout(RhiPipelineLayoutHandle handle) = 0;
     virtual void destroyPipeline(RhiPipelineHandle handle) = 0;
     virtual void destroyBindGroup(RhiBindGroupHandle handle) = 0;
+    virtual void destroyQueryPool(RhiQueryPoolHandle handle) = 0;
 
     virtual RhiCommandList& beginFrame() = 0;
     virtual void submitFrame(RhiCommandList& commandList) = 0;

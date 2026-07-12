@@ -61,6 +61,11 @@ struct RhiSamplerDesc {
     RhiCompareOp compareOp = RhiCompareOp::LessOrEqual;
 };
 
+struct RhiQueryPoolDesc {
+    const char* debugName = nullptr;
+    uint32_t queryCount = 1;
+};
+
 struct RhiColorAttachment {
     RhiTextureViewHandle view;
     RhiLoadOp loadOp = RhiLoadOp::Load;

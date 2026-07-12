@@ -80,6 +80,12 @@ public:
     RhiPipelineHandle createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) override;
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
+    RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) override;
+    [[nodiscard]] bool areQueryResultsAvailable(RhiQueryPoolHandle pool,
+                                                uint32_t firstQuery,
+                                                uint32_t queryCount) const override;
+    bool getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
+                         uint32_t queryCount, uint64_t* results) const override;
 
     [[nodiscard]] RhiTextureViewHandle currentSwapchainColorView() const override;
     [[nodiscard]] RhiTextureViewHandle currentSwapchainDepthStencilView() const override;
@@ -96,6 +102,7 @@ public:
     void destroyPipelineLayout(RhiPipelineLayoutHandle handle) override;
     void destroyPipeline(RhiPipelineHandle handle) override;
     void destroyBindGroup(RhiBindGroupHandle handle) override;
+    void destroyQueryPool(RhiQueryPoolHandle handle) override;
 
     RhiCommandList& beginFrame() override;
     void submitFrame(RhiCommandList& commandList) override;

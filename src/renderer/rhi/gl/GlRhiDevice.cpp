@@ -407,6 +407,11 @@ struct GlBindGroupRecord {
     bool active = false;
 };
 
+struct GlQueryPoolRecord {
+    std::vector<GLuint> queries;
+    bool active = false;
+};
+
 struct GlFramebufferRecord {
     GLuint framebuffer = 0u;
     std::vector<RhiTextureViewHandle> colorViews;
@@ -456,6 +461,7 @@ struct GlRhiDeviceData {
     RhiHandleAllocator<RhiPipelineLayoutHandle> pipelineLayouts;
     RhiHandleAllocator<RhiPipelineHandle> pipelines;
     RhiHandleAllocator<RhiBindGroupHandle> bindGroups;
+    RhiHandleAllocator<RhiQueryPoolHandle> queryPools;
 
     std::vector<GlBufferRecord> bufferRecords;
     std::vector<GlTextureRecord> textureRecords;
@@ -466,6 +472,7 @@ struct GlRhiDeviceData {
     std::vector<GlPipelineLayoutRecord> pipelineLayoutRecords;
     std::vector<GlPipelineRecord> pipelineRecords;
     std::vector<GlBindGroupRecord> bindGroupRecords;
+    std::vector<GlQueryPoolRecord> queryPoolRecords;
     std::vector<GlFramebufferRecord> framebufferCache;
 
     RhiTextureViewHandle swapchainColorView;
@@ -1666,9 +1673,17 @@ void GlRhiCommandList::generateMipmaps(const RhiTextureHandle texture) {
 }
 
 void GlRhiCommandList::writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) {
-    (void) pool;
-    (void) queryIndex;
-    logRhiError("writeTimestamp requires query pool support, which is not implemented yet");
+    if (m_device == nullptr) {
+        logRhiError("writeTimestamp requires an attached device");
+        return;
+    }
+    const GlQueryPoolRecord* record = recordForHandle(
+        m_device->m_data->queryPools, m_device->m_data->queryPoolRecords, pool);
+    if (record == nullptr || queryIndex >= record->queries.size()) {
+        logRhiError("writeTimestamp received an invalid query pool range");
+        return;
+    }
+    glQueryCounter(record->queries[queryIndex], GL_TIMESTAMP);
 }
 
 GlRhiDevice::GlRhiDevice()
@@ -1835,6 +1850,13 @@ void GlRhiDevice::shutdown() {
     m_data->swapchainWidth = 1u;
     m_data->swapchainHeight = 1u;
     m_data->bindGroups.clear();
+    for (GlQueryPoolRecord& record : m_data->queryPoolRecords) {
+        if (record.active && !record.queries.empty()) {
+            glDeleteQueries(static_cast<GLsizei>(record.queries.size()), record.queries.data());
+        }
+        record = {};
+    }
+    m_data->queryPools.clear();
     m_data->pipelines.clear();
     m_data->pipelineLayouts.clear();
     m_data->bindGroupLayouts.clear();
@@ -1852,6 +1874,7 @@ void GlRhiDevice::shutdown() {
     m_data->pipelineLayoutRecords.clear();
     m_data->pipelineRecords.clear();
     m_data->bindGroupRecords.clear();
+    m_data->queryPoolRecords.clear();
     m_commandList.resetFrameState();
     m_initialized = false;
 }
@@ -2318,6 +2341,48 @@ RhiBindGroupHandle GlRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
     return handle;
 }
 
+RhiQueryPoolHandle GlRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
+    if (!m_initialized || desc.queryCount == 0u) {
+        logRhiError("createQueryPool received an invalid descriptor");
+        return {};
+    }
+    std::vector<GLuint> queries(desc.queryCount, 0u);
+    glGenQueries(static_cast<GLsizei>(queries.size()), queries.data());
+    const RhiQueryPoolHandle handle = m_data->queryPools.allocate();
+    const uint32_t slot = handle.index - 1u;
+    if (slot >= m_data->queryPoolRecords.size()) m_data->queryPoolRecords.resize(slot + 1u);
+    m_data->queryPoolRecords[slot] = {std::move(queries), true};
+    return handle;
+}
+
+bool GlRhiDevice::areQueryResultsAvailable(RhiQueryPoolHandle pool,
+                                           uint32_t firstQuery,
+                                           uint32_t queryCount) const {
+    const GlQueryPoolRecord* record = recordForHandle(
+        m_data->queryPools, m_data->queryPoolRecords, pool);
+    if (record == nullptr || queryCount == 0u ||
+        firstQuery > record->queries.size() || queryCount > record->queries.size() - firstQuery) return false;
+    for (uint32_t i = 0; i < queryCount; ++i) {
+        GLint available = GL_FALSE;
+        glGetQueryObjectiv(record->queries[firstQuery + i], GL_QUERY_RESULT_AVAILABLE, &available);
+        if (available == GL_FALSE) return false;
+    }
+    return true;
+}
+
+bool GlRhiDevice::getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
+                                  uint32_t queryCount, uint64_t* results) const {
+    if (results == nullptr || !areQueryResultsAvailable(pool, firstQuery, queryCount)) return false;
+    const GlQueryPoolRecord* record = recordForHandle(
+        m_data->queryPools, m_data->queryPoolRecords, pool);
+    for (uint32_t i = 0; i < queryCount; ++i) {
+        GLuint64 value = 0u;
+        glGetQueryObjectui64v(record->queries[firstQuery + i], GL_QUERY_RESULT, &value);
+        results[i] = static_cast<uint64_t>(value);
+    }
+    return true;
+}
+
 RhiTextureViewHandle GlRhiDevice::currentSwapchainColorView() const {
     return m_initialized && m_data ? m_data->swapchainColorView : RhiTextureViewHandle{};
 }
@@ -2458,6 +2523,18 @@ void GlRhiDevice::destroyBindGroup(RhiBindGroupHandle handle) {
         *record = {};
     }
     (void) m_data->bindGroups.release(handle);
+}
+
+void GlRhiDevice::destroyQueryPool(RhiQueryPoolHandle handle) {
+    GlQueryPoolRecord* record = recordForHandle(
+        m_data->queryPools, m_data->queryPoolRecords, handle);
+    if (record != nullptr) {
+        if (!record->queries.empty()) {
+            glDeleteQueries(static_cast<GLsizei>(record->queries.size()), record->queries.data());
+        }
+        *record = {};
+    }
+    (void) m_data->queryPools.release(handle);
 }
 
 RhiCommandList& GlRhiDevice::beginFrame() {
