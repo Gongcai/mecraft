@@ -292,6 +292,44 @@ bool testGlRhiDeviceHandles() {
     return true;
 }
 
+bool testGlRhiTimestampQueryPool() {
+    GlTestContext context;
+    if (!requireTrue(context.init(), "OpenGL test context must initialize for timestamp queries")) {
+        return false;
+    }
+    GlRhiDevice device;
+    RhiDeviceDesc deviceDesc;
+    deviceDesc.debugName = "rhi_timestamp_query_test";
+    if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for timestamp queries")) {
+        return false;
+    }
+    RhiQueryPoolDesc poolDesc;
+    poolDesc.debugName = "timestamp-pool";
+    poolDesc.queryCount = 2u;
+    const RhiQueryPoolHandle pool = device.createQueryPool(poolDesc);
+    if (!requireTrue(pool.isValid(), "RHI device must create timestamp query pools")) return false;
+
+    RhiCommandList& commandList = device.beginFrame();
+    commandList.writeTimestamp(pool, 0u);
+    commandList.writeTimestamp(pool, 1u);
+    device.submitFrame(commandList);
+    glFinish();
+
+    std::array<uint64_t, 2> timestamps{};
+    if (!requireTrue(device.areQueryResultsAvailable(pool, 0u, 2u),
+                     "submitted timestamp query results must become available")) return false;
+    if (!requireTrue(device.getQueryResults(pool, 0u, 2u, timestamps.data()),
+                     "RHI device must read timestamp query results")) return false;
+    if (!requireTrue(timestamps[1] >= timestamps[0],
+                     "timestamp query results must preserve command order")) return false;
+
+    device.destroyQueryPool(pool);
+    if (!requireTrue(!device.areQueryResultsAvailable(pool, 0u, 1u),
+                     "destroyed query pool handles must become stale")) return false;
+    device.shutdown();
+    return true;
+}
+
 bool testGlRhiGrowableBuffer() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for growable buffer")) {
@@ -2566,6 +2604,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiDeviceHandles()) {
+        return 1;
+    }
+    if (!testGlRhiTimestampQueryPool()) {
         return 1;
     }
     if (!testGlRhiGrowableBuffer()) {
