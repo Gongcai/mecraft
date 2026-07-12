@@ -6,12 +6,8 @@
 #include <string>
 #include <vector>
 
-#include <cstdint>
-
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
-
-class Shader;
 
 // Tab control widget with clickable headers and switchable content panels.
 // Content widgets are owned by the tab control and shown/hidden based on the active tab.
@@ -60,11 +56,6 @@ private:
     [[nodiscard]] int hitTestHeader(float px, float py, const UIRenderContext& ctx) const;
     [[nodiscard]] UITabControlStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedTabControlStyle resolveStyle(const UIRenderContext& ctx, int state) const;
-
-    Shader* m_shader = nullptr;
-    Shader* m_glassShader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
 
     std::vector<Tab> m_tabs;
     int m_activeIndex = 0;

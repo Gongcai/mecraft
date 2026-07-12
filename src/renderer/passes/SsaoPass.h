@@ -6,11 +6,12 @@
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
 
+#include <array>
 #include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
-class Shader;
+class RhiDevice;
 
 /// SSAO render pass: half-res raw, bilateral filter, depth-aware upsample, temporal reprojection.
 /// Reads from DeferredRenderTargets (GBuffer depth, normals, velocity) and writes SSAO results.
@@ -19,8 +20,7 @@ public:
     SsaoPass() = default;
     ~SsaoPass() override = default;
 
-    // RenderPass interface
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SSAO"; }
 
@@ -39,14 +39,75 @@ private:
                             DeferredRenderTargets& targets);
     void renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao,
                             DeferredRenderTargets& targets);
-
-    // Shaders (non-owning, loaded by ResourceMgr)
-    Shader* m_ssaoShader = nullptr;
-    Shader* m_ssaoFilterShader = nullptr;
-    Shader* m_ssaoUpsampleShader = nullptr;
-    Shader* m_ssaoTemporalShader = nullptr;
+    bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureBaseBindGroup(RhiDevice& rhiDevice,
+                             const std::array<RhiTextureViewHandle, 3>& views);
+    bool ensureNoiseTextureView(RhiDevice& rhiDevice);
+    void destroyBaseBindGroup();
+    void destroyBaseRhiResources();
+    void destroyNoiseTextureView();
+    bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureFilterBindGroup(RhiDevice& rhiDevice,
+                               const std::array<RhiTextureViewHandle, 3>& views);
+    void destroyFilterBindGroup();
+    void destroyFilterRhiResources();
+    bool ensureUpsampleRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureUpsampleBindGroup(RhiDevice& rhiDevice,
+                                 const std::array<RhiTextureViewHandle, 2>& views);
+    void destroyUpsampleBindGroup();
+    void destroyUpsampleRhiResources();
+    bool ensureTemporalRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureTemporalBindGroup(RhiDevice& rhiDevice,
+                                 const std::array<RhiTextureViewHandle, 4>& views);
+    void destroyTemporalBindGroup();
+    void destroyTemporalRhiResources();
 
     RhiTextureHandle m_noiseTexture;
+    RhiTextureViewHandle m_noiseTextureView;
+    RhiDevice* m_noiseViewDevice = nullptr;
+
+    RhiDevice* m_baseRhiDevice = nullptr;
+    RhiSamplerHandle m_baseNearestSampler;
+    RhiSamplerHandle m_baseNoiseSampler;
+    RhiBindGroupLayoutHandle m_baseBindGroupLayout;
+    RhiPipelineLayoutHandle m_basePipelineLayout;
+    RhiShaderHandle m_baseVertexShader;
+    RhiShaderHandle m_baseFragmentShader;
+    RhiPipelineHandle m_basePipeline;
+    RhiBindGroupHandle m_baseBindGroup;
+    std::array<RhiTextureViewHandle, 3> m_baseBoundViews = {};
+
+    RhiDevice* m_filterRhiDevice = nullptr;
+    RhiSamplerHandle m_filterSampler;
+    RhiBindGroupLayoutHandle m_filterBindGroupLayout;
+    RhiPipelineLayoutHandle m_filterPipelineLayout;
+    RhiShaderHandle m_filterVertexShader;
+    RhiShaderHandle m_filterFragmentShader;
+    RhiPipelineHandle m_filterPipeline;
+    RhiBindGroupHandle m_filterBindGroup;
+    std::array<RhiTextureViewHandle, 3> m_filterBoundViews = {};
+
+    RhiDevice* m_upsampleRhiDevice = nullptr;
+    RhiSamplerHandle m_upsampleNearestSampler;
+    RhiSamplerHandle m_upsampleLinearSampler;
+    RhiBindGroupLayoutHandle m_upsampleBindGroupLayout;
+    RhiPipelineLayoutHandle m_upsamplePipelineLayout;
+    RhiShaderHandle m_upsampleVertexShader;
+    RhiShaderHandle m_upsampleFragmentShader;
+    RhiPipelineHandle m_upsamplePipeline;
+    RhiBindGroupHandle m_upsampleBindGroup;
+    std::array<RhiTextureViewHandle, 2> m_upsampleBoundViews = {};
+
+    RhiDevice* m_temporalRhiDevice = nullptr;
+    RhiSamplerHandle m_temporalNearestSampler;
+    RhiSamplerHandle m_temporalLinearSampler;
+    RhiBindGroupLayoutHandle m_temporalBindGroupLayout;
+    RhiPipelineLayoutHandle m_temporalPipelineLayout;
+    RhiShaderHandle m_temporalVertexShader;
+    RhiShaderHandle m_temporalFragmentShader;
+    RhiPipelineHandle m_temporalPipeline;
+    RhiBindGroupHandle m_temporalBindGroup;
+    std::array<RhiTextureViewHandle, 4> m_temporalBoundViews = {};
 };
 
 #endif // MECRAFT_SSAO_PASS_H

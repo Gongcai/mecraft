@@ -7,7 +7,6 @@
 #include "../../renderer/rhi/RhiHandles.h"
 #include "../core/UIWidget.h"
 
-class Shader;
 struct TextureAtlas;
 
 class UIImage : public UIWidget {
@@ -37,16 +36,7 @@ protected:
     void renderSelf(const UIRenderContext& ctx) const override;
 
 private:
-    void initMesh();
-    void cleanupMesh();
-    void rebuildMesh(float x0, float y0, float x1, float y1,
-                     float u0, float v0, float u1, float v1) const;
-
-    Shader* m_inventoryShader = nullptr;
-    Shader* m_colorShader = nullptr;
     RhiTextureHandle m_texture;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
     float m_u0 = 0.0f, m_v0 = 0.0f, m_u1 = 1.0f, m_v1 = 1.0f;
     std::array<float, 4> m_tintColor{1.0f, 1.0f, 1.0f, 1.0f};
     bool m_useTexture = true;

@@ -4,9 +4,6 @@
 #include "ShadowMatrices.h"
 #include "ShadowCasterCuller.h"
 
-#include "../renderers/GameplaySkyRenderer.h"
-#include "../core/Shader.h"
-
 #include <glm/glm.hpp>
 #include <array>
 
@@ -19,7 +16,7 @@ class Camera;
 // and binds all shadow uniforms consumed by deferred lighting, volumetric
 // fog, and debug shaders.
 //
-// The actual shadow depth rendering (chunk iteration, FBO layer binding)
+// Shadow depth rendering and cascade attachment selection
 // stays in Renderer because it calls Renderer-internal chunk render methods.
 // ShadowRenderer is the data + uniform layer.
 
@@ -30,16 +27,13 @@ public:
     static constexpr int CASCADE_COUNT = ShadowMatrices::CASCADE_COUNT;
     using Cascade = ShadowMatrices::Cascade;
 
-    struct BiasSettings {
-        float constantBias;
-        float slopeBias;
-        float normalOffset;
-    };
-
     // Compute light direction from sky colors and store it.
     // Clamps minimum elevation to 0.12 above horizon.
     // Returns the computed direction.
-    glm::vec3 computeLightDirection(const GameplaySkyRenderer::SkyColors& skyColors,
+    glm::vec3 computeLightDirection(const glm::vec3& sunDirection,
+                                    float sunVisibility,
+                                    const glm::vec3& moonDirection,
+                                    float moonVisibility,
                                     bool* moonShadowActive = nullptr);
 
     // Set the light direction directly (e.g. from external source).
@@ -54,11 +48,6 @@ public:
     // Build CSM cascades from a CameraBasis directly (no Camera dependency).
     void updateFromBasis(const ShadowMatrices::CameraBasis& basis,
                          const ShadowMatrices::Settings& settings);
-
-    // Bind all CSM shadow uniforms to a shader.
-    // Called by deferred lighting, volumetric fog, and debug passes.
-    void bindShadowUniforms(Shader& shader, bool moonShadowActive,
-                            const BiasSettings& bias = {0.0007f, 0.0022f, 0.035f}) const;
 
     // Accessors
     const Cascade& cascade(int index) const { return m_cascades[index]; }

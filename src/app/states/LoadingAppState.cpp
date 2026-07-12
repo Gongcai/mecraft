@@ -4,11 +4,92 @@
 #include "MainMenuAppState.h"
 #include "../../Diagnostics.h"
 #include "../../game/Game.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiResources.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <iostream>
 
-#include <glad/glad.h>
+namespace {
+
+bool beginLoadingPass(RhiDevice& rhiDevice,
+                      RhiCommandListPool& commandListPool,
+                      const Window& window,
+                      UIRenderer& uiRenderer,
+                      RhiCommandList*& commandList) {
+    const int width = std::max(1, window.getWidth());
+    const int height = std::max(1, window.getHeight());
+    if (!rhiDevice.resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
+        return false;
+    }
+
+    const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
+    if (!colorView.isValid()) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = colorView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.03f;
+    colorAttachment.clearColor[1] = 0.04f;
+    colorAttachment.clearColor[2] = 0.05f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "LoadingScreen";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(width),
+        static_cast<uint32_t>(height)
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    commandList = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({"LoadingScreen.Commands", RhiCommandListType::Graphics})) {
+        return false;
+    }
+    commandList->textureBarrier({
+        rhiDevice.currentSwapchainColorTexture(),
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
+    if (!uiRenderer.prepareTextFrame(*commandList)) {
+        return false;
+    }
+    commandList->beginRendering(renderingInfo);
+    return true;
+}
+
+void endLoadingPass(RhiDevice& rhiDevice,
+                    RhiCommandList*& commandList) {
+    if (commandList == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    commandList->textureBarrier({
+        rhiDevice.currentSwapchainColorTexture(),
+        RhiResourceState::RenderTarget,
+        RhiResourceState::Present
+    });
+    if (!commandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {commandList};
+    if (!rhiDevice.submit({"LoadingScreen.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
+    commandList = nullptr;
+}
+
+} // namespace
 
 LoadingAppState::LoadingAppState(AppStateDependencies deps, GameSessionConfig config)
     : m_deps(deps), m_config(std::move(config)) {
@@ -78,11 +159,20 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
 
 void LoadingAppState::render(const double frameTime) {
     (void)frameTime;
-    glClearColor(0.03f, 0.04f, 0.05f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    UIRenderContext sceneContext =
+        m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
 
-    m_deps.uiRenderer.renderSceneOnly(m_deps.window, m_deps.input.snapshot());
-    m_deps.window.swapBuffers();
+    RhiCommandList* commandList = nullptr;
+    if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool,
+                          m_deps.window, m_deps.uiRenderer, commandList)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
+        return;
+    }
+
+    sceneContext.commandList = commandList;
+    m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
+    endLoadingPass(m_deps.rhiDevice, commandList);
+    m_deps.rhiDevice.present();
     m_firstFrameRendered = true;
 }
 
@@ -98,6 +188,8 @@ std::unique_ptr<Game> LoadingAppState::createGame() const {
         m_deps.uiRenderer,
         m_deps.localeManager,
         m_deps.threadPool,
+        m_deps.rhiDevice,
+        m_deps.commandListPool,
         m_deps.enableDebugDashboard
     };
     return std::make_unique<Game>(m_config, deps);

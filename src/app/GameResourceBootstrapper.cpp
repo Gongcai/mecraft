@@ -204,8 +204,10 @@ bool collectRegisteredBlockTextureNames(BlockTextureNameSet& textureNames) {
 
 } // namespace
 
-bool bootstrapGameResources(ResourceMgr& resourceMgr) {
-    resourceMgr.init();
+bool bootstrapGameResources(ResourceMgr& resourceMgr,
+                            RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool) {
+    resourceMgr.init(rhiDevice, commandListPool);
     if (!resourceMgr.loadBlockTextureCatalog(BLOCK_TEXTURES_CONFIG_PATH, BLOCK_TEXTURE_PACK_CONFIG_PATH)) {
         return false;
     }
@@ -218,13 +220,12 @@ bool bootstrapGameResources(ResourceMgr& resourceMgr) {
                                            blockTextureNames);
     resourceMgr.loadLightmapTextures(LIGHTMAP_DAY_PATH, LIGHTMAP_NIGHT_PATH);
     resourceMgr.loadColormapTextures(GRASS_TEXTURE_PATH, FOLIAGE_TEXTURE_PATH);
-    resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH, false, true, true, false);
-    resourceMgr.loadTexture2D("shader_bayer256", SHADERPACK_BAYER256_PATH, false, true, false, false);
-    // DerivativeMain/texture/RippleNormal.png.mcmeta uses blur=true, clamp=false.
-    resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH, false, true, true, false);
-    resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH, false, false, true, false);
-    resourceMgr.loadTexture2D("rain", RAIN_TEXTURE_PATH, false, false, false, false);
-    resourceMgr.loadTexture2D("snow", SNOW_TEXTURE_PATH, false, false, false, false);
+    resourceMgr.loadTexture2D("shader_noise2d", SHADERPACK_NOISE2D_PATH);
+    resourceMgr.loadTexture2D("shader_bayer256", SHADERPACK_BAYER256_PATH);
+    resourceMgr.loadTexture2D("shader_ripple_normal", SHADERPACK_RIPPLE_NORMAL_PATH);
+    resourceMgr.loadTexture2D("shader_ldr_lut", SHADERPACK_LDR_LUT_PATH);
+    resourceMgr.loadTexture2D("rain", RAIN_TEXTURE_PATH);
+    resourceMgr.loadTexture2D("snow", SNOW_TEXTURE_PATH);
 
     resource::probeAtmosphereLut("Transmittance", SHADERPACK_TRANSMITTANCE_LUT_PATH, 256U * 64U * 16U);
     resource::probeAtmosphereLut("Scattering", SHADERPACK_SCATTERING_LUT_PATH, 32U * 128U * 32U * 8U * 16U);

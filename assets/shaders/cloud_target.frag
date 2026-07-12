@@ -1,63 +1,50 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uDepthTex;
-uniform sampler2D uSkyCaptureTex;
-uniform sampler2D uNoiseTex;
-uniform sampler3D uAtmosphereLut;
-uniform mat4 uInvViewProj;
-uniform vec3 uCameraPos;
-uniform vec3 uSunDirection;
-uniform vec3 uMoonDirection;
-uniform vec3 uSunLightColor;
-uniform vec3 uMoonLightColor;
-uniform vec3 uSkyAmbientColor;
-uniform vec3 uShadowTintColor;
-uniform vec3 uHorizonScatterColor;
-uniform float uSkyIntensity;
-uniform float uMoonVisibility;
-// uCloudWetness removed — cloud_target uses uCloudWetness as single wetness contract
-uniform float uSurfaceWetness;
-uniform float uFogWetness;
-uniform float uCloudWetness;
-uniform float uPrecipitation;
-uniform float uLightningFlash;
-uniform float uAerialStrength;
-uniform float uHorizonScatterStrength;
-uniform float uSunWarmth;
-uniform float uSkyCoolness;
-uniform float uAerialReduction;
-uniform int uCloudShadowsEnabled;
-uniform float uCloudShadowStrength;
-uniform float uCloudShadowScale;
-uniform float uCloudShadowSpeed;
-uniform float uCloudCoverage;
-uniform float uCloudDensity;
-uniform float uCloudHeight;
-uniform float uCloudThickness;
-uniform float uTime;
-uniform float uCloudTimeScale;
-uniform bool uNoiseEnabled;
+layout(binding = 0) uniform sampler2D uDepthTex;
+layout(binding = 1) uniform sampler2D uSkyCaptureTex;
+layout(binding = 2) uniform sampler2D uNoiseTex;
+layout(binding = 3) uniform sampler2D uHistoryCloudTex;
 
-// Planar cloud uniforms
-uniform float uPlanarCloudCoverage;
-uniform float uPlanarCloudDensity;
-uniform float uPlanarCloudAltitude;
+layout(std140, binding = 4) uniform CloudParams {
+    mat4 pInvViewProj;
+    mat4 pPreviousViewProj;
+    vec4 pCameraPosSkyIntensity;
+    vec4 pSunDirectionCloudWetness;
+    vec4 pMoonDirectionMoonVisibility;
+    vec4 pCloudDynamicWeatherTime;
+    vec4 pCloudShape;
+    vec4 pPlanarCloud;
+    vec4 pTiming;
+    ivec4 pControls;
+};
 
-// CPU illuminance uniforms — legacy/fallback only. Cloud lighting reads from
-// GPU SkyCapture metadata via getLightingEnvironment(). Kept for forward path.
-uniform vec3 uDirectIlluminance;
-uniform vec3 uSkyIlluminance;
-uniform vec3 uSunIlluminance;
-uniform vec3 uMoonIlluminance;
-uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
+#define uInvViewProj pInvViewProj
+#define uPreviousViewProj pPreviousViewProj
+#define uCameraPos pCameraPosSkyIntensity.xyz
+#define uSkyIntensity pCameraPosSkyIntensity.w
+#define uSunDirection pSunDirectionCloudWetness.xyz
+#define uCloudWetness pSunDirectionCloudWetness.w
+#define uMoonDirection pMoonDirectionMoonVisibility.xyz
+#define uMoonVisibility pMoonDirectionMoonVisibility.w
+#define uCloudDynamicWeather pCloudDynamicWeatherTime.xyz
+#define uTime pCloudDynamicWeatherTime.w
+#define uCloudCoverage pCloudShape.x
+#define uCloudDensity pCloudShape.y
+#define uCloudHeight pCloudShape.z
+#define uCloudThickness pCloudShape.w
+#define uPlanarCloudCoverage pPlanarCloud.x
+#define uPlanarCloudDensity pPlanarCloud.y
+#define uPlanarCloudAltitude pPlanarCloud.z
+#define uCloudTimeScale pTiming.x
+#define uLightningFlash pTiming.y
+#define uFrameIndex pControls.x
+#define uHistoryAvailable pControls.y
 
-// Temporal cloud reprojection — blend current frame with history.
-uniform sampler2D uHistoryCloudTex;
-uniform mat4 uPreviousViewProj;
-uniform int uFrameIndex;
+#define MECRAFT_ATMOSPHERE_PHASE_ONLY 1
+#define MECRAFT_CLOUD_NOISE_REQUIRED 1
 
 #include "lighting_environment.glsl"
 #include "atmosphere_lut.glsl"
@@ -101,14 +88,6 @@ vec4 multiLobePhase(float cosTheta, float wetness) {
     phases.w = atmHenyeyGreensteinPhase(cosTheta, fG * 0.3) * 0.08       + atmHenyeyGreensteinPhase(cosTheta, bG * 0.3) * bW * 0.2  + cloudCornetteShanksPhase(cosTheta, 0.2) * pW * 0.1;
 
     return phases;
-}
-
-vec3 sampleAtmosphere(vec3 ray, vec3 sunDir, vec3 moonDir, float eyeAlt, float dayFactor, float moonVis) {
-    vec3 transmittance;
-    vec3 sunSky = atmGetSkyRadianceForLight(eyeAlt, ray, sunDir, transmittance);
-    vec3 moonSky = atmGetSkyRadianceForLight(eyeAlt, ray, moonDir, transmittance) *
-                   moonVis * (1.0 - dayFactor) * 0.28;
-    return max(sunSky + moonSky, vec3(0.0));
 }
 
 // Sphere-intersection ray setup (DerivativeMain RaySphereIntersection)
@@ -460,7 +439,7 @@ void main() {
     // since clouds are rendered in world space (no per-pixel motion vectors).
     vec4 historyCloud = vec4(0.0, 0.0, 0.0, 1.0);
     bool historyValid = false;
-    {
+    if (uHistoryAvailable != 0) {
         // Reproject current pixel's cloud world position to previous frame's screen.
         // Use a representative cloud distance (midpoint of cloud layer).
         float cloudDist = mix(startT, endT, 0.5);

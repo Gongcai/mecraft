@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <cstdint>
@@ -26,6 +27,7 @@
 
 class Window;
 class ResourceMgr;
+class RhiDevice;
 class Inventory;
 class LocaleManager;
 class CraftingSystem;
@@ -47,12 +49,13 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
-    void render(const Window& window,
-                const Inventory& inventory,
-                const PlayerStatsData& playerStats,
-                const InputSnapshot& inputSnapshot);
+    UIRenderContext prepareRenderContext(const Window& window,
+                                         RhiDevice& rhiDevice,
+                                         const Inventory& inventory,
+                                         const PlayerStatsData& playerStats,
+                                         const InputSnapshot& inputSnapshot);
+    void renderPrepared(const UIRenderContext& context);
     void renderCommandInputBox(const std::string& text);
-    void renderPickable(const Pickable::SlotInfo* slots, int count, float mouseX, float mouseY);
     [[nodiscard]] UIEventResult routeUIInput(const UIInputEvent& event) const;
     void setInventoryPanelVisible(bool visible);
     void setHumanoidRenderer(HumanoidRenderer* humanoidRenderer);
@@ -104,19 +107,17 @@ public:
     void appendSuccessLine(const std::string& message);
     void clearConsoleLines();
 
-    void renderText(const std::string& text,
-                    float x,
-                    float y,
-                    float scale,
-                    const std::array<float, 4>& color,
-                    float screenWidth,
-                    float screenHeight);
+    // Records text atlas and vertex uploads before the UI render pass begins.
+    bool prepareTextFrame(RhiCommandList& commandList);
 
     // Scene management for menu screens
     void setActiveScene(UIScene* scene);
     [[nodiscard]] UIScene* getActiveScene() const;
     [[nodiscard]] ResourceMgr* getResourceMgr() const;
-    void renderSceneOnly(const Window& window, const InputSnapshot& inputSnapshot);
+    UIRenderContext prepareSceneContext(const Window& window,
+                                        RhiDevice& rhiDevice,
+                                        const InputSnapshot& inputSnapshot);
+    void renderSceneOnlyPrepared(const UIRenderContext& context);
 
     void setCommandCaretBlinkPeriodMs(float periodMs);
     [[nodiscard]] float getCommandCaretBlinkPeriodMs() const;
@@ -144,6 +145,8 @@ public:
     void setHotbarIconTintColor(const std::array<float, 4>& color);
     [[nodiscard]] const std::array<float, 4>& getHotbarIconTintColor() const;
 
+    [[nodiscard]] RhiBindGroupHandle resolveImageBindGroup(RhiTextureHandle texture) const;
+
     void setHotbarCountTextScale(float scale);
     [[nodiscard]] float getHotbarCountTextScale() const;
 
@@ -159,12 +162,29 @@ private:
                                                         const Inventory& inventory,
                                                         const PlayerStatsData& playerStats,
                                                         const InputSnapshot& inputSnapshot) const;
-    [[nodiscard]] UIRenderContext makeContextFromViewport() const;
     void renderControls(const UIRenderContext& context);
     void renderDeathOverlay(const UIRenderContext& context);
-    void prepareBackdropBlur(UIRenderContext& context) const;
-    void ensureBackdropBlurTargets(int sourceWidth, int sourceHeight) const;
+    void prepareBackdropBlur(UIRenderContext& context, RhiDevice& rhiDevice) const;
+    bool ensureBackdropBlurTargets(int sourceWidth, int sourceHeight, RhiDevice& rhiDevice) const;
+    bool ensureBackdropBlurPipeline(RhiDevice& rhiDevice) const;
+    bool ensureBackdropBlurBindGroups(RhiDevice& rhiDevice) const;
+    void destroyBackdropBlurBindGroups() const;
+    void destroyBackdropBlurPipeline() const;
+    void destroyBackdropBlurViews() const;
     void destroyBackdropBlurTargets() const;
+    void initPanelRhiResources(RhiDevice& rhiDevice);
+    void destroyPanelRhiResources();
+    bool ensurePanelGlassBindGroup(RhiDevice& rhiDevice) const;
+    void destroyPanelGlassBindGroup() const;
+    void destroyImageTextureBindings();
+    void populatePanelRhiContext(UIRenderContext& context) const;
+    void collectGameplayText(UIRenderContext& context);
+    void collectSceneText(UIRenderContext& context);
+
+    struct ImageTextureBinding {
+        RhiTextureViewHandle view;
+        RhiBindGroupHandle bindGroup;
+    };
 
     CrosshairControl m_crosshair;
     HotbarControl m_hotbar;
@@ -186,6 +206,8 @@ private:
     UITheme m_theme;
     const LocaleManager* m_localeManager = nullptr;
     mutable UIRenderContext m_lastSceneContext;
+    int m_surfaceWidth = 1;
+    int m_surfaceHeight = 1;
     bool m_commandInputRequested = false;
 
     // GUI Scale setting
@@ -195,12 +217,44 @@ private:
 
     mutable RhiTextureHandle m_backdropSource;
     mutable RhiTextureHandle m_backdropBlur[2];
-    mutable uint32_t m_backdropSourceTex = 0;
-    mutable uint32_t m_backdropBlurTex[2] = {0, 0};
-    mutable uint32_t m_backdropBlurFbo[2] = {0, 0};
-    mutable uint32_t m_backdropFullscreenVao = 0;
+    mutable RhiTextureViewHandle m_backdropSourceView;
+    mutable RhiTextureViewHandle m_backdropBlurView[2];
+    mutable RhiSamplerHandle m_backdropBlurSampler;
+    mutable RhiBindGroupLayoutHandle m_backdropBlurBindGroupLayout;
+    mutable RhiPipelineLayoutHandle m_backdropBlurPipelineLayout;
+    mutable RhiShaderHandle m_backdropBlurVertexShader;
+    mutable RhiShaderHandle m_backdropBlurFragmentShader;
+    mutable RhiPipelineHandle m_backdropBlurPipeline;
+    mutable RhiBindGroupHandle m_backdropBlurBindGroup[3];
+    mutable RhiDevice* m_backdropRhiViewDevice = nullptr;
     mutable int m_backdropSourceWidth = 0;
     mutable int m_backdropSourceHeight = 0;
     mutable int m_backdropBlurWidth = 0;
     mutable int m_backdropBlurHeight = 0;
+    mutable RhiResourceState m_backdropSourceState = RhiResourceState::Undefined;
+    mutable RhiResourceState m_backdropBlurState[2] = {
+        RhiResourceState::Undefined,
+        RhiResourceState::Undefined
+    };
+
+    RhiDevice* m_panelRhiDevice = nullptr;
+    RhiBufferHandle m_panelQuadVertexBuffer;
+    RhiShaderHandle m_panelSolidVertexShader;
+    RhiShaderHandle m_panelSolidFragmentShader;
+    RhiShaderHandle m_panelGlassVertexShader;
+    RhiShaderHandle m_panelGlassFragmentShader;
+    RhiShaderHandle m_imageTextureVertexShader;
+    RhiShaderHandle m_imageTextureFragmentShader;
+    RhiBindGroupLayoutHandle m_panelGlassBindGroupLayout;
+    RhiBindGroupLayoutHandle m_imageTextureBindGroupLayout;
+    RhiPipelineLayoutHandle m_panelSolidPipelineLayout;
+    RhiPipelineLayoutHandle m_panelGlassPipelineLayout;
+    RhiPipelineLayoutHandle m_imageTexturePipelineLayout;
+    RhiPipelineHandle m_panelSolidPipeline;
+    RhiPipelineHandle m_panelGlassPipeline;
+    RhiPipelineHandle m_imageTexturePipeline;
+    RhiSamplerHandle m_panelGlassSampler;
+    RhiSamplerHandle m_imageTextureSampler;
+    mutable RhiBindGroupHandle m_panelGlassBindGroup;
+    mutable std::unordered_map<uint64_t, ImageTextureBinding> m_imageTextureBindings;
 };

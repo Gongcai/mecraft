@@ -1,22 +1,15 @@
 #include "ItemGridControl.h"
 
-#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
 
 void ItemGridControl::init(ResourceMgr& resourceMgr)
 {
     m_resourceMgr = &resourceMgr;
-    m_crosshairShader = resourceMgr.getShader("crosshair");
-    m_inventoryShader = resourceMgr.getShader("inventory");
-    Pickable::initMesh(m_mesh);
 }
 
 void ItemGridControl::shutdown()
 {
-    Pickable::shutdownMesh(m_mesh);
     m_resourceMgr = nullptr;
-    m_crosshairShader = nullptr;
-    m_inventoryShader = nullptr;
     m_hoveredIndex = -1;
     m_lastActivatedIndex = -1;
 }
@@ -33,16 +26,11 @@ void ItemGridControl::renderSelf(const UIRenderContext& context) const
     Pickable::render(m_slots.data(),
                      static_cast<int>(m_slots.size()),
                      m_hoveredIndex,
-                     context.screenWidth,
-                     context.screenHeight,
                      m_renderParams,
-                     m_crosshairShader,
-                     m_inventoryShader,
-                     m_mesh,
+                     context,
                      *m_resourceMgr,
                      m_resourceMgr->getItemIconAtlas(),
-                     m_resourceMgr->getItemTextureAtlas(),
-                     context.textRenderer);
+                     m_resourceMgr->getItemTextureAtlas());
 }
 
 UIEventResult ItemGridControl::onInput(const UIInputEvent& event, const UIRenderContext& /*ctx*/)
@@ -142,4 +130,3 @@ ItemID ItemGridControl::getHoveredItemId() const
     }
     return static_cast<ItemID>(m_slots[m_hoveredIndex].itemId);
 }
-

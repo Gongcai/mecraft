@@ -1800,10 +1800,11 @@ size_t World::getTotalVertexCount() const {
             for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
                 const SubChunk* sc = pair.second->getSubChunk(scy);
                 if (sc) {
-                    total += sc->getMesh().vertexCount;
-                    total += sc->getMesh().cutoutVertexCount;
-                    total += sc->getMesh().cutoutDistanceVertexCount;
-                    total += sc->getMesh().transparentVertexCount;
+                    total += sc->getMesh().opaqueRange.vertexCount;
+                    total += sc->getMesh().cutoutRange.vertexCount;
+                    total += sc->getMesh().cutoutDistanceRange.vertexCount;
+                    total += sc->getMesh().transparentRange.vertexCount;
+                    total += sc->getMesh().waterRange.vertexCount;
                 }
             }
         }

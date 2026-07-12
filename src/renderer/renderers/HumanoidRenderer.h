@@ -6,16 +6,19 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include "../../ecs/components/Components.h"
 #include "../../ecs/entity/EntitySkinLayout.h"
 #include "../../ecs/entity/EntityModelRegistry.h"
+#include "../rhi/RhiHandles.h"
 #include "HumanoidSkinLayoutCatalog.h"
 
 class Camera;
 class IWorldView;
-class Shader;
+class RhiCommandList;
+class RhiDevice;
 class ResourceMgr;
 class Window;
 class World;
@@ -31,42 +34,38 @@ public:
         kRenderMobsOnly   // hide only the local Steve model (first-person view)
     };
 
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    void render(ecs::GameplayRegistry& registry, const Camera& camera, const Window& window,
-                RenderMode mode = kRenderAll);
-    // GBuffer path: renders entities into the deferred GBuffer (5 MRT).
-    // Caller must have already bound the GBuffer FBO with terrain depth.
-    void renderToGBuffer(ecs::GameplayRegistry& registry,
-                         const glm::mat4& jitteredViewProj,
-                         const glm::mat4& previousViewProj,
-                         RenderMode mode = kRenderAll);
-    void renderToGBuffer(const IWorldView& worldView, ecs::GameplayRegistry& registry,
-                         const glm::mat4& jitteredViewProj,
-                         const glm::mat4& previousViewProj,
-                         RenderMode mode = kRenderAll);
-    // Shadow path: renders entities into the CSM shadow map.
-    // Caller must have already bound the shadow FBO layer.
-    void renderToShadowMap(ecs::GameplayRegistry& registry,
-                           const glm::mat4& shadowViewProj,
-                           RenderMode mode = kRenderAll);
-    void renderToShadowMap(const IWorldView& worldView, ecs::GameplayRegistry& registry,
-                           const glm::mat4& shadowViewProj,
-                           const glm::vec3& cameraPos, float splitNear, float splitFar,
-                           RenderMode mode = kRenderAll);
-    void renderInventoryPreview(float x,
+    void prepareFrame(const IWorldView& worldView,
+                      ecs::GameplayRegistry& registry,
+                      RenderMode mode = kRenderAll);
+    void finishFrame();
+    void renderPreparedToGBuffer(RhiCommandList& commandList,
+                                 const glm::mat4& viewProj,
+                                 const glm::mat4& previousViewProj);
+    void renderPreparedToShadowMap(RhiCommandList& commandList,
+                                   const glm::mat4& shadowViewProj,
+                                   const glm::vec3& cameraPos,
+                                   float splitNear,
+                                   float splitFar);
+    void renderPreparedForward(RhiCommandList& commandList,
+                               const glm::mat4& viewProj,
+                               float skyIntensity);
+    void renderInventoryPreview(RhiCommandList& commandList,
+                                float x,
                                 float y,
                                 float width,
                                 float height,
                                 float uiScale,
                                 float pointerX,
                                 float pointerY,
-                                float timeSeconds);
+                                float timeSeconds,
+                                int screenWidth,
+                                int screenHeight);
 
 private:
     struct PartMesh {
-        uint32_t vao = 0;
-        uint32_t vbo = 0;
+        RhiBufferHandle rhiVertexBuffer;
         uint32_t vertexCount = 0;
     };
 
@@ -83,20 +82,50 @@ private:
     std::array<std::array<PartMesh, renderer::kHumanoidPartTypeCount>, renderer::kHumanoidSkinLayoutCount> m_skinLayoutMeshes{};
     std::unordered_map<std::string, PartMesh> m_entityModelPartMeshes;
 
-    Shader* m_shader = nullptr;          // shadow-aware shader for UI/held-item compatible preview paths
-    Shader* m_forwardShader = nullptr;   // forward vanilla world entity shader
-    Shader* m_gbufferShader = nullptr;   // entity GBuffer shader (entity_gbuffer.fs)
-    Shader* m_shadowShader = nullptr;    // entity shadow shader (entity_shadow.fs)
+    struct TextureResource {
+        RhiTextureHandle texture;
+        RhiTextureViewHandle view;
+        RhiBindGroupHandle gbufferBindGroup;
+        RhiBindGroupHandle shadowBindGroup;
+    };
+    std::unordered_map<std::string, TextureResource> m_textureResources;
+
+    struct PreparedPartDraw {
+        const PartMesh* mesh = nullptr;
+        const TextureResource* texture = nullptr;
+        glm::mat4 model{1.0f};
+        glm::mat4 previousModel{1.0f};
+        glm::vec3 entityCenter{0.0f};
+        glm::vec2 light{1.0f, 0.0f};
+        float hurtFlash = 0.0f;
+    };
+    std::vector<PreparedPartDraw> m_preparedPartDraws;
+
     ResourceMgr* m_resourceMgr = nullptr;
-    uint32_t m_neutralShadowDepth = 0;
-    uint32_t m_neutralShadowDepthCompare = 0;
+    RhiDevice* m_rhiDevice = nullptr;
     float m_inventoryPreviewHeadLookX = 0.0f;
     float m_inventoryPreviewHeadLookY = 0.0f;
     float m_inventoryPreviewBodyLookX = 0.0f;
     float m_inventoryPreviewBodyLookY = 0.0f;
     float m_inventoryPreviewLastTime = -1.0f;
+    RhiSamplerHandle m_gbufferSampler;
+    RhiShaderHandle m_gbufferRhiVertexShader;
+    RhiShaderHandle m_gbufferRhiFragmentShader;
+    RhiBindGroupLayoutHandle m_gbufferRhiBindGroupLayout;
+    RhiPipelineLayoutHandle m_gbufferRhiPipelineLayout;
+    RhiPipelineHandle m_gbufferRhiPipeline;
+    RhiShaderHandle m_shadowRhiVertexShader;
+    RhiShaderHandle m_shadowRhiFragmentShader;
+    RhiBindGroupLayoutHandle m_shadowRhiBindGroupLayout;
+    RhiPipelineLayoutHandle m_shadowRhiPipelineLayout;
+    RhiPipelineHandle m_shadowRhiPipeline;
+    RhiShaderHandle m_forwardRhiVertexShader;
+    RhiShaderHandle m_forwardRhiFragmentShader;
+    RhiPipelineLayoutHandle m_forwardRhiPipelineLayout;
+    RhiPipelineHandle m_forwardRhiPipeline;
+    RhiPipelineHandle m_inventoryPreviewPipeline;
 
-    static void destroyMesh(PartMesh& mesh);
+    void destroyMesh(PartMesh& mesh) const;
 
     PartMesh buildPartMesh(const renderer::HumanoidPartMeshDefinition& definition,
                            float textureWidth,
@@ -110,30 +139,16 @@ private:
 
     PartMesh* getMeshForPart(ecs::StevePartType partType, ecs::EntitySkinLayoutKind skinLayout);
     PartMesh* getMeshForEntityModelPart(const std::string& modelId, const std::string& partName);
-    void ensureNeutralShadowTextures();
-    void bindDisabledShadowNeutralTextures(Shader& shader);
+    const TextureResource& requireTextureResource(const std::string& textureKey);
+    void createGBufferRhiResources();
+    void destroyGBufferRhiResources();
 
     // Per-object velocity: stores previous-frame model matrix per entity part.
     std::unordered_map<entt::entity, glm::mat4> m_previousModelMatrices;
+    std::unordered_map<entt::entity, glm::mat4> m_currentModelMatrices;
 
-    // Shared entity draw helper — iterates ECS and draws body parts with the given shader.
-    // prevModelLoc: uniform location for previous-frame model matrix (-1 to skip).
-    void drawEntities(ecs::GameplayRegistry& gameplayReg, Shader& shader,
-                      int modelLoc, int viewProjLoc, int prevModelLoc,
-                      const glm::mat4& viewProj, RenderMode mode);
-    // Overload with world light query — sets uEntitySunlight/uEntityBlockLight per entity.
-    void drawEntities(const IWorldView& worldView, ecs::GameplayRegistry& gameplayReg, Shader& shader,
-                      int modelLoc, int viewProjLoc, int prevModelLoc,
-                      const glm::mat4& viewProj, RenderMode mode,
-                      const glm::vec3& cameraPos = glm::vec3(0.0f),
-                      float splitNear = 0.0f,
-                      float splitFar = FLT_MAX);
     // Query world light at a block position. Returns (sunlight, blocklight) normalized to [0,1].
     static glm::vec2 queryWorldLight(const IWorldView& worldView, const glm::vec3& position);
-    void drawGenericMobParts(entt::registry& reg, entt::entity root,
-                             const ecs::MobVisualComponent& visual,
-                             const ecs::TransformComponent& rootTransform,
-                             Shader& shader, int modelLoc, int prevModelLoc);
 };
 
 #endif // MECRAFT_HUMANOID_RENDERER_H

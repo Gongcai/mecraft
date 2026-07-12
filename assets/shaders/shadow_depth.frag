@@ -1,18 +1,25 @@
 #version 450 core
 #include "derivative_shadow.glsl"
 
-in vec2 vUV;
-in float vLayer;
-in float vAnimationFrameCount;
-in float vAnimationFps;
-in float vAnimated;
-in float vNormal;
-in vec3 vWorldPos;
-flat in int vMaterialKind;
-in float vSkylight;
-flat in float vTintKind;
-in vec2 vTintUV;
+layout(location = 0) in vec2 vUV;
+layout(location = 1) in float vLayer;
+layout(location = 2) in float vAnimationFrameCount;
+layout(location = 3) in float vAnimationFps;
+layout(location = 4) in float vAnimated;
+layout(location = 5) in float vNormal;
+layout(location = 6) in vec3 vWorldPos;
+layout(location = 7) flat in int vMaterialKind;
+layout(location = 8) in float vSkylight;
+layout(location = 9) flat in float vTintKind;
+layout(location = 10) in vec2 vTintUV;
 
+#ifdef RHI_TERRAIN_SHADOW_MDI
+layout(set = 1, binding = 0) uniform sampler2DArray texArray;
+layout(set = 1, binding = 1) uniform sampler2D uNoiseTex;
+layout(set = 1, binding = 2) uniform sampler2D uGrassColormap;
+layout(set = 1, binding = 3) uniform sampler2D uFoliageColormap;
+#include "terrain_shadow_params.glsl"
+#else
 uniform sampler2DArray texArray;
 uniform sampler2D uNoiseTex;
 uniform sampler2D uGrassColormap;
@@ -23,6 +30,7 @@ uniform float uTime;
 uniform vec3 uShadowLightDirection;
 uniform mat4 uShadowModelView;
 uniform int uShadowPassMode; // 0 = opaque-only, 1 = transparent shadow (DepthAll + Color)
+#endif
 
 vec3 redstoneTintSrgb(vec2 tintUV) {
     float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;

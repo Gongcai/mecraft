@@ -11,11 +11,13 @@
 #include <glm/glm.hpp>
 
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiGrowableBuffer.h"
 #include "../../world/block/BlockStateRegistry.h"
 
 class IWorldView;
 class ResourceMgr;
-class Shader;
+class RhiCommandList;
+class RhiDevice;
 class Chunk;
 class SubChunk;
 
@@ -25,16 +27,19 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
     void beginFrame();
+    void prepareFrame(const IWorldView& worldView);
+    [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList);
+    [[nodiscard]] bool prepareForward(RhiCommandList& commandList);
+    [[nodiscard]] bool prepareShadow(RhiCommandList& commandList,
+                                     const glm::vec3& cameraPos,
+                                     float splitNear,
+                                     float splitFar);
 
-    void renderToGBuffer(const IWorldView& worldView,
-                         const glm::mat4& viewProj,
-                         const glm::mat4& previousViewProj);
-    void renderToShadowMap(const IWorldView& worldView,
-                           const glm::mat4& shadowViewProj,
-                           const glm::vec3& cameraPos,
-                           float splitNear,
-                           float splitFar);
-    void renderForward(const IWorldView& worldView,
+    void renderToGBuffer(RhiCommandList& commandList,
+                         const glm::mat4& viewProj);
+    void renderToShadowMap(RhiCommandList& commandList,
+                           const glm::mat4& shadowViewProj);
+    void renderForward(RhiCommandList& commandList,
                        const glm::mat4& viewProj,
                        float skyIntensity);
 
@@ -47,8 +52,7 @@ public:
 
 private:
     struct Mesh {
-        uint32_t vao = 0;
-        uint32_t vbo = 0;
+        RhiBufferHandle rhiVertexBuffer;
         uint32_t vertexCount = 0;
     };
 
@@ -63,6 +67,9 @@ private:
     struct ModelEntry {
         Mesh mesh;
         RhiTextureHandle texture;
+        RhiTextureViewHandle textureView;
+        RhiBindGroupHandle gbufferBindGroup;
+        RhiBindGroupHandle shadowBindGroup;
         bool usesHorizontalFacing = false;
     };
 
@@ -83,6 +90,12 @@ private:
     struct InstancedDrawData {
         glm::mat4 modelMatrix{1.0f};
         glm::vec2 light{1.0f, 0.0f};
+    };
+
+    struct PreparedModelBatch {
+        const ModelEntry* model = nullptr;
+        uint64_t instanceOffset = 0u;
+        uint32_t instanceCount = 0u;
     };
 
     struct SectionKey {
@@ -110,15 +123,29 @@ private:
     };
 
     ResourceMgr* m_resourceMgr = nullptr;
-    Shader* m_gbufferShader = nullptr;
-    Shader* m_shadowShader = nullptr;
-    Shader* m_forwardShader = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<BlockID, ModelEntry> m_models;
     std::unordered_map<SectionKey, SectionCache, SectionKeyHash> m_sectionCaches;
     std::vector<BlockEntityInstance*> m_flatInstances;
-    uint32_t m_instanceVbo = 0;
-    std::size_t m_instanceCapacity = 0;
+    RhiGrowableBuffer m_rhiInstanceBuffer;
     std::vector<InstancedDrawData> m_instanceData;
+    std::vector<PreparedModelBatch> m_gbufferBatches;
+    std::vector<PreparedModelBatch> m_shadowBatches;
+    RhiSamplerHandle m_rhiSampler;
+    RhiShaderHandle m_gbufferVertexShader;
+    RhiShaderHandle m_gbufferFragmentShader;
+    RhiBindGroupLayoutHandle m_gbufferBindGroupLayout;
+    RhiPipelineLayoutHandle m_gbufferPipelineLayout;
+    RhiPipelineHandle m_gbufferPipeline;
+    RhiShaderHandle m_shadowVertexShader;
+    RhiShaderHandle m_shadowFragmentShader;
+    RhiBindGroupLayoutHandle m_shadowBindGroupLayout;
+    RhiPipelineLayoutHandle m_shadowPipelineLayout;
+    RhiPipelineHandle m_shadowPipeline;
+    RhiShaderHandle m_forwardVertexShader;
+    RhiShaderHandle m_forwardFragmentShader;
+    RhiPipelineLayoutHandle m_forwardPipelineLayout;
+    RhiPipelineHandle m_forwardPipeline;
     uint64_t m_cacheSyncSerial = 0;
     uint64_t m_syncedActiveChunkRevision = 0;
     uint64_t m_syncedBlockContentRevision = 0;
@@ -126,14 +153,14 @@ private:
     bool m_instanceCacheSyncedThisFrame = false;
     bool m_instanceLightsSyncedThisFrame = false;
 
-    static void destroyMesh(Mesh& mesh);
-    static Mesh buildMesh(const ModelDefinition& definition);
+    void destroyMesh(Mesh& mesh);
+    Mesh buildMesh(const ModelDefinition& definition);
+    void createGBufferRhiResources();
+    void destroyGBufferRhiResources();
     static ModelDefinition makeChestDefinition();
     static glm::mat4 buildModelMatrix(const ModelEntry& entry,
                                       BlockStateId stateId,
                                       const glm::vec3& blockPosition);
-    void configureInstanceAttributes(const Mesh& mesh) const;
-    void ensureInstanceCapacity(std::size_t instanceCount);
     void synchronizeInstanceCache(const IWorldView& worldView);
     void rebuildFlatInstanceList();
     void updateInstanceLightsForFrame();
@@ -141,22 +168,6 @@ private:
                              const SubChunk& subChunk,
                              int scy,
                              SectionCache& cache) const;
-    void drawBlockEntitiesInstanced(const IWorldView& worldView,
-                                    bool useSplitCulling,
-                                    const glm::vec3& cameraPos,
-                                    float splitNear,
-                                    float splitFar);
-
-    void drawBlockEntities(const IWorldView& worldView,
-                           Shader& shader,
-                           int modelLoc,
-                           int prevModelLoc,
-                           int sunlightLoc,
-                           int blockLightLoc,
-                           bool useSplitCulling,
-                           const glm::vec3& cameraPos,
-                           float splitNear,
-                           float splitFar);
 };
 
 #endif // MECRAFT_BLOCK_ENTITY_RENDERER_H

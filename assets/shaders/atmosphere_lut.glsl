@@ -87,6 +87,7 @@ float atmHenyeyGreensteinPhase(float cosTheta, float g) {
     return (1.0 - gg) / (4.0 * atmPi * phase * sqrt(phase));
 }
 
+#ifndef MECRAFT_ATMOSPHERE_PHASE_ONLY
 float atmGetTextureCoordFromUnitRange(float x, float textureSize) {
     return 0.5 / textureSize + x * (1.0 - 1.0 / textureSize);
 }
@@ -247,7 +248,9 @@ vec3 atmGetSkyRadianceForLight(float eyeAltitude, vec3 viewRay, vec3 lightDirect
 
 // Moon brightness factor — scales moon contribution based on moon phase.
 // Must be set by the calling shader or C++ uniform binding.
+#ifndef MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS
 uniform float uMoonPhaseFlux;
+#endif
 
 // Combined sky radiance for both sun and moon, matching DerivativeMain's GetSkyRadiance.
 // Returns sky radiance in DerivativeMain's irradiance convention (* 20.0).
@@ -331,5 +334,6 @@ vec3 atmGetSunAndSkyIrradiance(vec3 point, vec3 sunDirection, out vec3 sunIrradi
     skyIrradiance *= 1.0 + point.y / r;
     return skyIrradiance;
 }
+#endif
 
 #endif

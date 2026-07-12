@@ -9,16 +9,17 @@
 #include "../../thread/ThreadPool.h"
 #include "engine/platform/Window.h"
 #include "../mesh/ChunkMeshingService.h"
+#include "../rhi/RhiDevice.h"
 #include "../targets/DeferredRenderTargets.h"
 
 #include "../passes/GBufferPass.h"
 #include <memory>
 #include "../renderers/GameplaySkyRenderer.h"
-#include "Shader.h"
 #include "../shadow/ShadowRenderer.h"
 #include "../mesh/TerrainRenderCache.h"
 #include "../mesh/TerrainStreamingService.h"
 #include "../mesh/TerrainRenderer.h"
+#include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/WorldRenderBuffer.h"
 #include "../mesh/WorldDrawBatch.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
@@ -38,6 +39,7 @@ class HumanoidRenderer;
 class DropRenderer;
 class ParticleSystem;
 class DropSystem;
+class RhiCommandListPool;
 
 namespace ecs { class GameplayRegistry; }
 namespace shadow { class ShadowCasterCuller; }
@@ -128,8 +130,12 @@ public:
 #endif
 
     ~RenderResourceHub();
-    void init(ResourceMgr& resourceMgr, ThreadPool& threadPool);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
+                            ThreadPool& threadPool,
+                            RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool);
     void shutdown();
+    [[nodiscard]] bool resizeRhiSwapchain(const Window& window);
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
     void setAtlasAnisotropy(float anisotropy);
@@ -137,10 +143,14 @@ public:
 
     // Shared resource accessors (for RenderScene integration)
     [[nodiscard]] TerrainRenderer& getTerrainRenderer() { return m_terrainRenderer; }
+    [[nodiscard]] TerrainRhiPipelineSet& getTerrainRhiPipelineSet() { return m_terrainRhiPipelines; }
     [[nodiscard]] GameplaySkyRenderer& getGameplaySkyRenderer() { return m_gameplaySkyRenderer; }
     [[nodiscard]] DeferredRenderTargets& getDeferredRenderTargets() { return m_deferredTargets; }
     [[nodiscard]] shadow::ShadowRenderer& getShadowRenderer() { return m_shadowRenderer; }
     [[nodiscard]] WorldRenderBuffer& getWorldRenderBuffer() { return m_worldRenderBuffer; }
+    [[nodiscard]] RhiDevice& rhiDevice();
+    [[nodiscard]] const RhiDevice& rhiDevice() const;
+    [[nodiscard]] RhiCommandListPool& commandListPool();
     void setTerrainStreamingService(TerrainStreamingService* svc);
     void setOverlayRenderer(BlockInteractionOverlayRenderer* renderer) { m_overlayRenderer = renderer; }
     void setDebugService(RenderDebugService* svc) { m_debugService = svc; }
@@ -166,9 +176,7 @@ public:
     [[nodiscard]] size_t getMeshingHistoryCount() const;
 #endif
 
-    [[nodiscard]] int getDrawCallCount() const;
-    [[nodiscard]] bool isMultiDrawIndirectEnabled() const { return m_useMultiDrawIndirect; }
-    [[nodiscard]] int getGlSubmitCount() const;
+    [[nodiscard]] int getTerrainRhiSubmitCount() const;
     [[nodiscard]] float getAtlasAnisotropy() const;
     [[nodiscard]] float getAtlasMaxAnisotropy() const;
 private:
@@ -183,21 +191,11 @@ private:
     int drawCallCount = 0;
 
     WorldRenderBuffer m_worldRenderBuffer;
-    bool m_useMultiDrawIndirect = true;
-
-    // Shaders actively used by Renderer rendering methods
-    Shader* m_chunkShader = nullptr;
-    Shader* m_chunkForwardShader = nullptr;
-    Shader* m_transparentCompositeShader = nullptr;
-    Shader* m_chunkGBufferShader = nullptr;
-    Shader* m_particleGBufferShader = nullptr;
-    Shader* m_shadowDepthShader = nullptr;
-
-    // Shaders used only for null-check guards (loaded but operations delegated to passes)
-    Shader* m_entityGBufferShader = nullptr;
-    Shader* m_entityShadowShader = nullptr;
+    TerrainRhiPipelineSet m_terrainRhiPipelines;
 
     ResourceMgr* m_resourceMgr = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
 
     // Services owned by RenderScene and mirrored here for compatibility/debug controls.
     BlockInteractionOverlayRenderer* m_overlayRenderer = nullptr;

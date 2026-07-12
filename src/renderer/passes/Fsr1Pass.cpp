@@ -1,41 +1,80 @@
 #include "Fsr1Pass.h"
 
-#include "../core/Shader.h"
-#include "../../resource/ResourceMgr.h"
-
-#include <glad/glad.h>
+#include "../debug/RenderDebugService.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiCommandListPool.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cmath>
+#include <optional>
+
+namespace {
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+} // namespace
 
 Fsr1Pass::~Fsr1Pass() {
     shutdown();
 }
 
-void Fsr1Pass::init(ResourceMgr& resourceMgr) {
-    m_easuShader = resourceMgr.getShader("fsr1_easu");
-    m_rcasShader = resourceMgr.getShader("fsr1_rcas");
-    initFullscreenTriangle();
+void Fsr1Pass::init(ResourceMgr&, RhiCommandListPool& commandListPool) {
+    m_commandListPool = &commandListPool;
 }
 
 void Fsr1Pass::shutdown() {
     destroyTargets();
-    destroyFullscreenTriangle();
-    m_easuShader = nullptr;
-    m_rcasShader = nullptr;
+    destroyRhiResources();
+    m_commandListPool = nullptr;
 }
 
-bool Fsr1Pass::execute(uint32_t inputTex,
+RhiCommandList& Fsr1Pass::beginCommandList(const char* const debugName) const {
+    if (m_commandListPool == nullptr) {
+        std::abort();
+    }
+    RhiCommandList* const commandList =
+        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({debugName, RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    return *commandList;
+}
+
+void Fsr1Pass::submitCommandList(RhiDevice& rhiDevice,
+                                 RhiCommandList& commandList,
+                                 const char* const debugName) const {
+    if (!commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* commandLists[] = {&commandList};
+    const RhiSubmitInfo submitInfo{debugName, commandLists, 1u};
+    if (!rhiDevice.submit(submitInfo)) {
+        std::abort();
+    }
+}
+
+bool Fsr1Pass::execute(RhiDevice& rhiDevice,
+                       const RhiTextureViewHandle swapchainColorView,
+                       const RhiTextureViewHandle inputView,
                        const int inputWidth,
                        const int inputHeight,
                        const int outputWidth,
                        const int outputHeight,
-                       const float sharpness) {
-    if (inputTex == 0 || inputWidth <= 0 || inputHeight <= 0 || outputWidth <= 0 || outputHeight <= 0 ||
-        m_easuShader == nullptr || m_rcasShader == nullptr || m_fullscreenVao == 0) {
+                       const float sharpness,
+                       RenderDebugService& debugService) {
+    if (!inputView.isValid() || !swapchainColorView.isValid() ||
+        inputWidth <= 0 || inputHeight <= 0 || outputWidth <= 0 || outputHeight <= 0) {
         return false;
     }
-    if (!ensureTargets(outputWidth, outputHeight)) {
+    if (!ensureRhiPipeline(rhiDevice) ||
+        !ensureTargets(rhiDevice, outputWidth, outputHeight) ||
+        !ensureEasuBindGroup(rhiDevice, inputView) ||
+        !ensureRcasBindGroup(rhiDevice)) {
         return false;
     }
 
@@ -51,43 +90,279 @@ bool Fsr1Pass::execute(uint32_t inputTex,
                           static_cast<float>(outputWidth),
                           static_cast<float>(outputHeight));
 
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
+    RhiColorAttachment easuAttachment;
+    easuAttachment.view = m_easuView;
+    easuAttachment.loadOp = RhiLoadOp::DontCare;
+    easuAttachment.storeOp = RhiStoreOp::Store;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, m_easuFbo);
-    glViewport(0, 0, outputWidth, outputHeight);
-    m_easuShader->use();
-    m_easuShader->setInt("uInputTex", 0);
-    m_easuShader->setVec4("uCon0", con0);
-    m_easuShader->setVec4("uCon1", con1);
-    m_easuShader->setVec4("uCon2", con2);
-    m_easuShader->setVec4("uCon3", con3);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, inputTex);
-    glBindVertexArray(m_fullscreenVao);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    RhiRenderingInfo easuRenderingInfo;
+    easuRenderingInfo.debugName = "FSR1EASU";
+    easuRenderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, outputWidth)),
+        static_cast<uint32_t>(std::max(1, outputHeight))
+    };
+    easuRenderingInfo.colorAttachments = &easuAttachment;
+    easuRenderingInfo.colorAttachmentCount = 1u;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, outputWidth, outputHeight);
-    m_rcasShader->use();
-    m_rcasShader->setInt("uInputTex", 0);
-    m_rcasShader->setVec4("uCon", populateRcasConstants(sharpness));
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, m_easuTex);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    RhiCommandList& easuCommandList = beginCommandList("FSR1.EASU.Commands");
+    const GpuTimerSegmentToken easuTimerToken = debugService.beginGpuTimer(
+        easuCommandList, GpuTimerPass::Post);
+    easuCommandList.textureBarrier({
+        m_easuHandle,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::RenderTarget
+    });
+    easuCommandList.beginRendering(easuRenderingInfo);
+    easuCommandList.setGraphicsPipeline(m_easuPipeline);
+    easuCommandList.setBindGroup(0u, m_easuBindGroup);
+    const glm::vec4 easuPushConstants[4] = {
+        con0,
+        con1,
+        con2,
+        con3
+    };
+    easuCommandList.pushConstants(easuPushConstants, sizeof(easuPushConstants), rhiFlag(RhiShaderStage::Fragment));
+    easuCommandList.draw(3u, 1u, 0u, 0u);
+    easuCommandList.endRendering();
+    easuCommandList.textureBarrier({
+        m_easuHandle,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::ShaderRead
+    });
+    debugService.endGpuTimer(easuCommandList, easuTimerToken);
+    submitCommandList(rhiDevice, easuCommandList, "FSR1.EASU.Submit");
 
-    glBindVertexArray(0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = swapchainColorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "FSR1Backbuffer";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, outputWidth)),
+        static_cast<uint32_t>(std::max(1, outputHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1;
+
+    RhiCommandList& commandList = beginCommandList("FSR1.RCAS.Commands");
+    const GpuTimerSegmentToken rcasTimerToken = debugService.beginGpuTimer(
+        commandList, GpuTimerPass::Post);
+    const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainTexture.isValid()) {
+        std::abort();
+    }
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
+    commandList.beginRendering(renderingInfo);
+    commandList.setGraphicsPipeline(m_rcasPipeline);
+    commandList.setBindGroup(0u, m_rcasBindGroup);
+    const glm::vec4 rcasPushConstants = populateRcasConstants(sharpness);
+    commandList.pushConstants(&rcasPushConstants, sizeof(rcasPushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
+    commandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::Present
+    });
+    debugService.endGpuTimer(commandList, rcasTimerToken);
+    submitCommandList(rhiDevice, commandList, "FSR1.RCAS.Submit");
+
     return true;
 }
 
-bool Fsr1Pass::ensureTargets(const int width, const int height) {
+bool Fsr1Pass::ensureRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        destroyTargets();
+        destroyRhiResources();
+    }
+    if (m_easuPipeline.isValid() && m_rcasPipeline.isValid()) {
+        return true;
+    }
+    m_rhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> easuFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fsr1_easu.frag");
+    const std::optional<std::string> rcasFragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fsr1_rcas.frag");
+    if (!vertexSource.has_value() || !easuFragmentSource.has_value() || !rcasFragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "FSR1.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_vertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc easuFragmentDesc;
+    easuFragmentDesc.debugName = "FSR1.EASU.Fragment";
+    easuFragmentDesc.stage = RhiShaderStage::Fragment;
+    easuFragmentDesc.source = easuFragmentSource->c_str();
+    easuFragmentDesc.sourceSize = easuFragmentSource->size();
+    m_easuFragmentShader = rhiDevice.createShader(easuFragmentDesc);
+
+    RhiShaderDesc rcasFragmentDesc;
+    rcasFragmentDesc.debugName = "FSR1.RCAS.Fragment";
+    rcasFragmentDesc.stage = RhiShaderStage::Fragment;
+    rcasFragmentDesc.source = rcasFragmentSource->c_str();
+    rcasFragmentDesc.sourceSize = rcasFragmentSource->size();
+    m_rcasFragmentShader = rhiDevice.createShader(rcasFragmentDesc);
+    if (!m_vertexShader.isValid() || !m_easuFragmentShader.isValid() || !m_rcasFragmentShader.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Linear;
+    samplerDesc.magFilter = RhiFilter::Linear;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_sampler = rhiDevice.createSampler(samplerDesc);
+    if (!m_sampler.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "FSR1.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::CombinedTextureSampler,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_bindGroupLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "FSR1.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4) * 4u);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_pipelineLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc easuPipelineDesc;
+    easuPipelineDesc.debugName = "FSR1.EASU.Pipeline";
+    easuPipelineDesc.vertexShader = m_vertexShader;
+    easuPipelineDesc.fragmentShader = m_easuFragmentShader;
+    easuPipelineDesc.layout = m_pipelineLayout;
+    easuPipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    easuPipelineDesc.raster.cullMode = RhiCullMode::None;
+    easuPipelineDesc.depthStencil.depthTestEnabled = false;
+    easuPipelineDesc.depthStencil.depthWriteEnabled = false;
+    easuPipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba8Unorm);
+    easuPipelineDesc.blend.attachments.push_back({});
+    m_easuPipeline = rhiDevice.createGraphicsPipeline(easuPipelineDesc);
+    if (!m_easuPipeline.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc rcasPipelineDesc = easuPipelineDesc;
+    rcasPipelineDesc.debugName = "FSR1.RCAS.Pipeline";
+    rcasPipelineDesc.fragmentShader = m_rcasFragmentShader;
+    rcasPipelineDesc.colorFormats.clear();
+    rcasPipelineDesc.colorFormats.push_back(rhiDevice.swapchainColorFormat());
+    m_rcasPipeline = rhiDevice.createGraphicsPipeline(rcasPipelineDesc);
+    if (!m_rcasPipeline.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool Fsr1Pass::ensureEasuBindGroup(RhiDevice& rhiDevice, const RhiTextureViewHandle inputView) {
+    if (!ensureRhiPipeline(rhiDevice) || !inputView.isValid()) {
+        return false;
+    }
+
+    if (m_easuBindGroup.isValid() && sameTextureView(m_boundEasuInputView, inputView)) {
+        return true;
+    }
+
+    if (m_easuBindGroup.isValid()) {
+        rhiDevice.destroyBindGroup(m_easuBindGroup);
+        m_easuBindGroup = {};
+    }
+    m_boundEasuInputView = {};
+
+    RhiBindGroupEntry entry;
+    entry.binding = 0u;
+    entry.resource.combinedTextureSampler.textureView = inputView;
+    entry.resource.combinedTextureSampler.sampler = m_sampler;
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_bindGroupLayout;
+    bindGroupDesc.entries.push_back(entry);
+    m_easuBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_easuBindGroup.isValid()) {
+        return false;
+    }
+
+    m_boundEasuInputView = inputView;
+    return true;
+}
+
+bool Fsr1Pass::ensureRcasBindGroup(RhiDevice& rhiDevice) {
+    if (!ensureRhiPipeline(rhiDevice) || !m_easuView.isValid()) {
+        return false;
+    }
+
+    if (m_rcasBindGroup.isValid() && sameTextureView(m_boundRcasInputView, m_easuView)) {
+        return true;
+    }
+
+    if (m_rcasBindGroup.isValid()) {
+        rhiDevice.destroyBindGroup(m_rcasBindGroup);
+        m_rcasBindGroup = {};
+    }
+    m_boundRcasInputView = {};
+
+    RhiBindGroupEntry entry;
+    entry.binding = 0u;
+    entry.resource.combinedTextureSampler.textureView = m_easuView;
+    entry.resource.combinedTextureSampler.sampler = m_sampler;
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_bindGroupLayout;
+    bindGroupDesc.entries.push_back(entry);
+    m_rcasBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_rcasBindGroup.isValid()) {
+        return false;
+    }
+
+    m_boundRcasInputView = m_easuView;
+    return true;
+}
+
+bool Fsr1Pass::ensureTargets(RhiDevice& rhiDevice, const int width, const int height) {
     const int targetWidth = std::max(1, width);
     const int targetHeight = std::max(1, height);
-    if (m_easuFbo != 0 && m_easuTex != 0 && m_width == targetWidth && m_height == targetHeight) {
+    if (m_easuHandle.isValid() && m_easuView.isValid() && m_rhiDevice == &rhiDevice &&
+        m_width == targetWidth && m_height == targetHeight) {
         return true;
     }
 
@@ -95,47 +370,115 @@ bool Fsr1Pass::ensureTargets(const int width, const int height) {
     m_width = targetWidth;
     m_height = targetHeight;
 
-    glCreateFramebuffers(1, &m_easuFbo);
-    glCreateTextures(GL_TEXTURE_2D, 1, &m_easuTex);
-    glTextureStorage2D(m_easuTex, 1, GL_RGBA8, m_width, m_height);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTextureParameteri(m_easuTex, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glNamedFramebufferTexture(m_easuFbo, GL_COLOR_ATTACHMENT0, m_easuTex, 0);
-    const GLenum drawBuffer = GL_COLOR_ATTACHMENT0;
-    glNamedFramebufferDrawBuffers(m_easuFbo, 1, &drawBuffer);
-    if (glCheckNamedFramebufferStatus(m_easuFbo, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "FSR1.EASU.Target";
+    textureDesc.dimension = RhiTextureDimension::Texture2D;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = static_cast<uint32_t>(m_width);
+    textureDesc.height = static_cast<uint32_t>(m_height);
+    textureDesc.depthOrLayers = 1u;
+    textureDesc.mipLevels = 1u;
+    textureDesc.sampleCount = 1u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    m_easuHandle = rhiDevice.createTexture(textureDesc, nullptr);
+    if (!m_easuHandle.isValid()) {
         destroyTargets();
         return false;
     }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_easuHandle;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_easuView = rhiDevice.createTextureView(viewDesc);
+    if (!m_easuView.isValid()) {
+        destroyTargets();
+        return false;
+    }
+
+    RhiCommandList& commandList = beginCommandList("FSR1.TargetInitialization.Commands");
+    commandList.textureBarrier({
+        m_easuHandle,
+        RhiResourceState::Undefined,
+        RhiResourceState::ShaderRead
+    });
+    submitCommandList(rhiDevice, commandList, "FSR1.TargetInitialization.Submit");
+
     return true;
 }
 
 void Fsr1Pass::destroyTargets() {
-    if (m_easuTex != 0) {
-        glDeleteTextures(1, &m_easuTex);
-        m_easuTex = 0;
+    destroyRhiBindGroups();
+    if (m_rhiDevice != nullptr && m_easuView.isValid()) {
+        m_rhiDevice->destroyTextureView(m_easuView);
     }
-    if (m_easuFbo != 0) {
-        glDeleteFramebuffers(1, &m_easuFbo);
-        m_easuFbo = 0;
+    if (m_rhiDevice != nullptr && m_easuHandle.isValid()) {
+        m_rhiDevice->destroyTexture(m_easuHandle);
     }
+    m_easuView = {};
+    m_easuHandle = {};
     m_width = 0;
     m_height = 0;
 }
 
-void Fsr1Pass::initFullscreenTriangle() {
-    if (m_fullscreenVao == 0) {
-        glGenVertexArrays(1, &m_fullscreenVao);
+void Fsr1Pass::destroyRhiBindGroups() {
+    if (m_rhiDevice != nullptr) {
+        if (m_easuBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(m_easuBindGroup);
+        }
+        if (m_rcasBindGroup.isValid()) {
+            m_rhiDevice->destroyBindGroup(m_rcasBindGroup);
+        }
     }
+    m_easuBindGroup = {};
+    m_rcasBindGroup = {};
+    m_boundEasuInputView = {};
+    m_boundRcasInputView = {};
 }
 
-void Fsr1Pass::destroyFullscreenTriangle() {
-    if (m_fullscreenVao != 0) {
-        glDeleteVertexArrays(1, &m_fullscreenVao);
-        m_fullscreenVao = 0;
+void Fsr1Pass::destroyRhiResources() {
+    destroyRhiBindGroups();
+    if (m_rhiDevice != nullptr) {
+        if (m_easuPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_easuPipeline);
+        }
+        if (m_rcasPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_rcasPipeline);
+        }
+        if (m_vertexShader.isValid()) {
+            m_rhiDevice->destroyShader(m_vertexShader);
+        }
+        if (m_easuFragmentShader.isValid()) {
+            m_rhiDevice->destroyShader(m_easuFragmentShader);
+        }
+        if (m_rcasFragmentShader.isValid()) {
+            m_rhiDevice->destroyShader(m_rcasFragmentShader);
+        }
+        if (m_pipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        }
+        if (m_bindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+        }
+        if (m_sampler.isValid()) {
+            m_rhiDevice->destroySampler(m_sampler);
+        }
     }
+
+    m_easuPipeline = {};
+    m_rcasPipeline = {};
+    m_vertexShader = {};
+    m_easuFragmentShader = {};
+    m_rcasFragmentShader = {};
+    m_pipelineLayout = {};
+    m_bindGroupLayout = {};
+    m_sampler = {};
+    m_rhiDevice = nullptr;
 }
 
 void Fsr1Pass::populateEasuConstants(glm::vec4& con0,

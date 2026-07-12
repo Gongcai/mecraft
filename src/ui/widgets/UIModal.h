@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -13,8 +12,6 @@
 #include "UIButton.h"
 #include "UIPanel.h"
 #include "UIText.h"
-
-class Shader;
 
 // Modal dialog widget with dimmed overlay, centered content panel, title, and action buttons.
 class UIModal : public UIWidget {
@@ -56,10 +53,6 @@ private:
     [[nodiscard]] UIModalStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedModalStyle resolveStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedModalStyle fallbackStyle() const;
-
-    Shader* m_shader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
 
     bool m_open = false;
     bool m_closeOnOverlayClick = true;

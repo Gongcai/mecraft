@@ -1,22 +1,57 @@
 #include "CloudPass.h"
+#include "../core/RenderScene.h"
+#include "../debug/RenderDebugService.h"
 #include "../targets/DeferredRenderTargets.h"
-#include "../core/Shader.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 #include "../../resource/ResourceMgr.h"
-
-#include <glad/glad.h>
 
 #include <glm/glm.hpp>
 #include <algorithm>
+#include <cstddef>
 #include <cmath>
+#include <optional>
+
+namespace {
+[[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
+template <size_t Count>
+[[nodiscard]] bool sameTextureViews(const std::array<RhiTextureViewHandle, Count>& lhs,
+                                    const std::array<RhiTextureViewHandle, Count>& rhs) {
+    for (size_t index = 0u; index < lhs.size(); ++index) {
+        if (!sameTextureView(lhs[index], rhs[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+struct alignas(16) CloudParams {
+    glm::mat4 invViewProj;
+    glm::mat4 previousViewProj;
+    glm::vec4 cameraPosSkyIntensity;
+    glm::vec4 sunDirectionCloudWetness;
+    glm::vec4 moonDirectionMoonVisibility;
+    glm::vec4 cloudDynamicWeatherTime;
+    glm::vec4 cloudShape;
+    glm::vec4 planarCloud;
+    glm::vec4 timing;
+    glm::ivec4 controls;
+};
+static_assert(sizeof(CloudParams) == 256u);
+} // namespace
 
 void CloudPass::init(ResourceMgr& resourceMgr) {
-    m_cloudShader = resourceMgr.getShader("cloud_target");
     m_noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
 }
 
 void CloudPass::shutdown() {
-    m_cloudShader = nullptr;
+    destroyRhiResources();
+    destroyNoiseTextureView();
     m_noiseTexture = {};
     m_hasRenderedClouds = false;
 }
@@ -44,106 +79,414 @@ bool CloudPass::shouldRenderClouds(const FrameContext& ctx, const RenderSettings
 
 void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
                          DeferredRenderTargets& targets) {
-    if (m_cloudShader == nullptr) return;
-
     if (!shouldRenderClouds(ctx, settings)) {
-        targets.copyHistoryCloudToCloud();
+        if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+            return;
+        }
+        RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+        RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+        const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+            ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
+            : GpuTimerSegmentToken{};
+        targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
+                                  RhiResourceState::TransferSrc);
+        targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                                  RhiResourceState::TransferDst);
+        targets.copyHistoryCloudToCloud(commandList);
+        targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
+                                  RhiResourceState::ShaderRead);
+        targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                                  RhiResourceState::ShaderRead);
+        if (ctx.debugService != nullptr) {
+            ctx.debugService->endGpuTimer(commandList, timerToken);
+        }
+        if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
         return;
     }
 
-    m_lastCameraPos = ctx.camera.position;
-    m_lastWeatherSignal = ctx.weather.wetness + ctx.weather.storm + ctx.weather.lightningFlash * 4.0f;
-    m_hasRenderedClouds = true;
-
-    targets.bindCloud();
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    m_cloudShader->use();
-    m_cloudShader->setInt("uDepthTex", 0);
-    m_cloudShader->setInt("uSkyCaptureTex", 1);
-    m_cloudShader->setInt("uNoiseTex", 2);
-    m_cloudShader->setInt("uAtmosphereLut", 3);
-    // Clouds are world-space ray-marched — use non-jittered matrix to avoid TAA-induced jitter.
-    m_cloudShader->setMat4("uInvViewProj", ctx.camera.invViewProj);
-
-    // Sky lighting (inlined)
-    m_cloudShader->setVec3("uCameraPos", ctx.camera.position);
-    m_cloudShader->setVec3("uSunDirection", ctx.skyColors.sunDirection);
-    m_cloudShader->setVec3("uMoonDirection", ctx.skyColors.moonDirection);
-    m_cloudShader->setVec3("uSunLightColor", ctx.skyColors.sunLightColor);
-    m_cloudShader->setVec3("uMoonLightColor", ctx.skyColors.moonLightColor);
-    m_cloudShader->setVec3("uSkyAmbientColor", ctx.skyColors.skyAmbientColor);
-    m_cloudShader->setVec3("uShadowTintColor", ctx.skyColors.shadowTintColor);
-    m_cloudShader->setVec3("uHorizonScatterColor", ctx.skyColors.horizonScatterColor);
-    m_cloudShader->setFloat("uSkyIntensity", ctx.skyIntensity);
-    m_cloudShader->setFloat("uMoonVisibility", ctx.skyColors.moonVisibility);
-    m_cloudShader->setVec3("uDirectIlluminance", ctx.skyIlluminance.directIlluminance);
-    m_cloudShader->setVec3("uSkyIlluminance", ctx.skyIlluminance.skyIlluminance);
-    m_cloudShader->setVec3("uSunIlluminance", ctx.skyIlluminance.sunIlluminance);
-    m_cloudShader->setVec3("uMoonIlluminance", ctx.skyIlluminance.moonIlluminance);
-    m_cloudShader->setVec3("uCloudDynamicWeather", ctx.skyIlluminance.cloudDynamicWeather);
-
-    // Atmosphere (inlined)
-    m_cloudShader->setFloat("uAerialStrength", ctx.atmosphere.aerialStrength);
-    m_cloudShader->setFloat("uHorizonScatterStrength", ctx.atmosphere.horizonScatterStrength);
-    m_cloudShader->setFloat("uSunWarmth", ctx.atmosphere.sunWarmth);
-    m_cloudShader->setFloat("uSkyCoolness", ctx.atmosphere.skyCoolness);
-    m_cloudShader->setFloat("uWeatherWetness", ctx.weather.wetness);
-    m_cloudShader->setFloat("uWeatherStorm", ctx.weather.storm);
-    m_cloudShader->setFloat("uAerialReduction", ctx.weather.aerialReduction);
-    m_cloudShader->setFloat("uLightningFlash", ctx.weather.lightningFlash);
-    m_cloudShader->setFloat("uSurfaceWetness", ctx.weather.surfaceWetness);
-    m_cloudShader->setFloat("uSkyWetness", ctx.weather.skyWetness);
-    m_cloudShader->setFloat("uFogWetness", ctx.weather.fogWetness);
-    m_cloudShader->setFloat("uCloudWetness", ctx.weather.cloudWetness);
-    m_cloudShader->setFloat("uPrecipitation", ctx.weather.precipitation);
-    m_cloudShader->setFloat("uDirectWeatherOcclusion", ctx.atmosphere.directWeatherOcclusion);
-    m_cloudShader->setInt("uDirectWeatherOcclusionOverride", ctx.atmosphere.directWeatherOcclusionOverride);
-
-    // Cloud (inlined)
-    m_cloudShader->setInt("uCloudShadowsEnabled", ctx.cloud.shadowsEnabled ? 1 : 0);
-    m_cloudShader->setFloat("uCloudShadowStrength", ctx.cloud.shadowStrength);
-    m_cloudShader->setFloat("uCloudShadowScale", ctx.cloud.shadowScale);
-    m_cloudShader->setFloat("uCloudShadowSpeed", ctx.cloud.shadowSpeed);
-    m_cloudShader->setFloat("uCloudTimeScale", ctx.cloud.timeScale);
-    m_cloudShader->setFloat("uCloudCoverage", ctx.cloud.coverage);
-    m_cloudShader->setFloat("uCloudDensity", ctx.cloud.density);
-    m_cloudShader->setFloat("uCloudHeight", ctx.cloud.height);
-    m_cloudShader->setFloat("uCloudThickness", ctx.cloud.thickness);
-    m_cloudShader->setFloat("uPlanarCloudCoverage", ctx.cloud.planarCoverage);
-    m_cloudShader->setFloat("uPlanarCloudDensity", ctx.cloud.planarDensity);
-    m_cloudShader->setFloat("uPlanarCloudAltitude", ctx.cloud.planarAltitude);
-
-    m_cloudShader->setFloat("uTime", ctx.shaderTime);
-    m_cloudShader->setBool("uNoiseEnabled", m_noiseTexture.isValid());
-    // Temporal cloud reprojection
-    m_cloudShader->setInt("uHistoryCloudTex", 4);
-    m_cloudShader->setMat4("uPreviousViewProj", ctx.previousViewProj);
-    m_cloudShader->setInt("uFrameIndex", static_cast<int>(ctx.frameIndex & 0x7fffffffULL));
-
-    // Texture bindings
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.depthTextureHandle()));
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.skyCaptureTextureHandle()));
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(m_noiseTexture));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_3D, renderer::rhi::gl::textureId(targets.atmosphereLutTextureHandle()));
-    glActiveTexture(GL_TEXTURE4);
-    glBindTexture(GL_TEXTURE_2D, renderer::rhi::gl::textureId(targets.historyCloudTexturePrevHandle()));
-    RenderPass::renderFullscreen(targets.fullscreenVao(), *m_cloudShader);
-
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureCloudTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureHistoryCloudTextureViews(*ctx.shared->rhiDevice)) {
+        return;
     }
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_3D, 0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!ensureNoiseTextureView(rhiDevice)) {
+        return;
+    }
+    const std::array<RhiTextureViewHandle, 4> views = {
+        targets.depthTextureViewHandle(),
+        targets.skyCaptureTextureViewHandle(),
+        m_noiseTextureView,
+        targets.historyCloudTexturePrevViewHandle()
+    };
+    if (!ensureRhiPipeline(rhiDevice) || !ensureBindGroup(rhiDevice, views)) {
+        return;
+    }
+
+    const bool historyAvailable = m_hasRenderedClouds && ctx.hasPreviousFrame;
+    CloudParams params{};
+    params.invViewProj = ctx.camera.invViewProj;
+    params.previousViewProj = ctx.previousViewProj;
+    params.cameraPosSkyIntensity = glm::vec4(ctx.camera.position, ctx.skyIntensity);
+    params.sunDirectionCloudWetness = glm::vec4(ctx.skyColors.sunDirection,
+                                                ctx.weather.cloudWetness);
+    params.moonDirectionMoonVisibility = glm::vec4(ctx.skyColors.moonDirection,
+                                                    ctx.skyColors.moonVisibility);
+    params.cloudDynamicWeatherTime = glm::vec4(ctx.skyIlluminance.cloudDynamicWeather,
+                                               ctx.shaderTime);
+    params.cloudShape = glm::vec4(ctx.cloud.coverage,
+                                  ctx.cloud.density,
+                                  ctx.cloud.height,
+                                  ctx.cloud.thickness);
+    params.planarCloud = glm::vec4(ctx.cloud.planarCoverage,
+                                   ctx.cloud.planarDensity,
+                                   ctx.cloud.planarAltitude,
+                                   0.0f);
+    params.timing = glm::vec4(ctx.cloud.timeScale,
+                              ctx.weather.lightningFlash,
+                              0.0f,
+                              0.0f);
+    params.controls = glm::ivec4(static_cast<int>(ctx.frameIndex & 0x7fffffffULL),
+                                 historyAvailable ? 1 : 0,
+                                 0,
+                                 0);
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.cloudTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "Cloud";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.halfWidth())),
+        static_cast<uint32_t>(std::max(1, targets.halfHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    targets.transitionTexture(commandList, targets.depthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.skyCaptureTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
+        : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
+    commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
+    commandList.beginRendering(renderingInfo);
+    commandList.setGraphicsPipeline(m_pipeline);
+    commandList.setBindGroup(0u, m_bindGroup);
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
+    targets.transitionTexture(commandList, targets.cloudTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    {
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+    }
+
+    m_lastCameraPos = ctx.camera.position;
+    m_lastWeatherSignal = ctx.weather.wetness + ctx.weather.storm +
+                          ctx.weather.lightningFlash * 4.0f;
+    m_hasRenderedClouds = true;
+}
+
+bool CloudPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
+    if (m_noiseViewDevice != nullptr && m_noiseViewDevice != &rhiDevice) {
+        destroyNoiseTextureView();
+    }
+    if (m_noiseTextureView.isValid()) {
+        return true;
+    }
+    if (!m_noiseTexture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_noiseTexture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
+    viewDesc.baseMip = 0u;
+    viewDesc.mipCount = 1u;
+    viewDesc.baseLayer = 0u;
+    viewDesc.layerCount = 1u;
+    m_noiseTextureView = rhiDevice.createTextureView(viewDesc);
+    if (!m_noiseTextureView.isValid()) {
+        return false;
+    }
+
+    m_noiseViewDevice = &rhiDevice;
+    return true;
+}
+
+void CloudPass::destroyNoiseTextureView() {
+    if (m_noiseViewDevice != nullptr && m_noiseTextureView.isValid()) {
+        m_noiseViewDevice->destroyTextureView(m_noiseTextureView);
+    }
+    m_noiseTextureView = {};
+    m_noiseViewDevice = nullptr;
+}
+
+bool CloudPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        destroyRhiResources();
+    }
+    if (m_pipeline.isValid()) {
+        return true;
+    }
+    m_rhiDevice = &rhiDevice;
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/fullscreen_triangle_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/cloud_target.frag");
+    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc vertexDesc;
+    vertexDesc.debugName = "Cloud.Vertex";
+    vertexDesc.stage = RhiShaderStage::Vertex;
+    vertexDesc.source = vertexSource->c_str();
+    vertexDesc.sourceSize = vertexSource->size();
+    m_vertexShader = rhiDevice.createShader(vertexDesc);
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "Cloud.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiBufferDesc uniformBufferDesc;
+    uniformBufferDesc.debugName = "Cloud.Params";
+    uniformBufferDesc.size = sizeof(CloudParams);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    m_uniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
+    if (!m_uniformBuffer.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    auto createSampler = [&](const RhiFilter filter, const RhiAddressMode addressMode) {
+        RhiSamplerDesc samplerDesc;
+        samplerDesc.minFilter = filter;
+        samplerDesc.magFilter = filter;
+        samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+        samplerDesc.addressU = addressMode;
+        samplerDesc.addressV = addressMode;
+        samplerDesc.addressW = addressMode;
+        return rhiDevice.createSampler(samplerDesc);
+    };
+    m_nearestSampler = createSampler(RhiFilter::Nearest, RhiAddressMode::ClampToEdge);
+    m_linearSampler = createSampler(RhiFilter::Linear, RhiAddressMode::ClampToEdge);
+    m_noiseSampler = createSampler(RhiFilter::Linear, RhiAddressMode::Repeat);
+    if (!m_nearestSampler.isValid() || !m_linearSampler.isValid() ||
+        !m_noiseSampler.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "Cloud.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 4u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    bindGroupLayoutDesc.entries.push_back({
+        4u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_bindGroupLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Cloud.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_pipelineLayout.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Cloud.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_pipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_pipeline.isValid()) {
+        destroyRhiResources();
+        return false;
+    }
+
+    return true;
+}
+
+bool CloudPass::ensureBindGroup(
+    RhiDevice& rhiDevice,
+    const std::array<RhiTextureViewHandle, 4>& views) {
+    if (!ensureRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    if (m_bindGroup.isValid() && sameTextureViews(m_boundViews, views)) {
+        return true;
+    }
+
+    destroyBindGroup();
+    const RhiSamplerHandle samplers[4] = {
+        m_nearestSampler,
+        m_linearSampler,
+        m_noiseSampler,
+        m_linearSampler
+    };
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_bindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = samplers[binding];
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    RhiBindGroupEntry uniformEntry;
+    uniformEntry.binding = 4u;
+    uniformEntry.resource.buffer.buffer = m_uniformBuffer;
+    uniformEntry.resource.buffer.offset = 0u;
+    uniformEntry.resource.buffer.range = sizeof(CloudParams);
+    bindGroupDesc.entries.push_back(uniformEntry);
+
+    m_bindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_bindGroup.isValid()) {
+        m_boundViews = {};
+        return false;
+    }
+
+    m_boundViews = views;
+    return true;
+}
+
+void CloudPass::destroyBindGroup() {
+    if (m_rhiDevice != nullptr && m_bindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_bindGroup);
+    }
+    m_bindGroup = {};
+    m_boundViews = {};
+}
+
+void CloudPass::destroyRhiResources() {
+    destroyBindGroup();
+    if (m_rhiDevice != nullptr) {
+        if (m_pipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_pipeline);
+        }
+        if (m_vertexShader.isValid()) {
+            m_rhiDevice->destroyShader(m_vertexShader);
+        }
+        if (m_fragmentShader.isValid()) {
+            m_rhiDevice->destroyShader(m_fragmentShader);
+        }
+        if (m_pipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        }
+        if (m_bindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+        }
+        if (m_uniformBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_uniformBuffer);
+        }
+        const RhiSamplerHandle samplers[] = {
+            m_nearestSampler,
+            m_linearSampler,
+            m_noiseSampler
+        };
+        for (const RhiSamplerHandle sampler : samplers) {
+            if (sampler.isValid()) {
+                m_rhiDevice->destroySampler(sampler);
+            }
+        }
+    }
+
+    m_uniformBuffer = {};
+    m_nearestSampler = {};
+    m_linearSampler = {};
+    m_noiseSampler = {};
+    m_bindGroupLayout = {};
+    m_pipelineLayout = {};
+    m_vertexShader = {};
+    m_fragmentShader = {};
+    m_pipeline = {};
+    m_rhiDevice = nullptr;
 }

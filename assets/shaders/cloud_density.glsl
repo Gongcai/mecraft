@@ -64,9 +64,11 @@ float cirrusCloudNoise(vec2 p) {
 
 // 2D noise texture lookup with two-octave blend
 float sampleCloudNoise(vec2 p) {
+#ifndef MECRAFT_CLOUD_NOISE_REQUIRED
     if (!uNoiseEnabled) {
         return cloudHash12(p);
     }
+#endif
     vec4 n0 = texture(uNoiseTex, p);
     vec4 n1 = texture(uNoiseTex, p * 2.37 + vec2(0.17, -0.29));
     return n0.r * 0.62 + n1.g * 0.38;

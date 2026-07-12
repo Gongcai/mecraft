@@ -1,29 +1,47 @@
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
 #include "gbuffer_contract.glsl"
 #include "lighting_environment.glsl"
+#ifdef RHI_TERRAIN_LIT_MDI
+#include "terrain_lit_params.glsl"
+#define uMoonPhaseFlux rhiTerrainLitMoonLightColor.w
+#define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS
+layout(set = 1, binding = 14) uniform sampler3D uAtmosphereLut;
+#else
 uniform sampler3D uAtmosphereLut;
+#endif
 #include "atmosphere_lut.glsl"
 
 #ifndef MECRAFT_TRANSPARENT_COMPOSITE
 #define MECRAFT_TRANSPARENT_COMPOSITE 0
 #endif
 
-in vec2 vUV;
-in float vLight;
-in float vSunlight;
-in float vBlockLight;
-in float vAO;
-in float vNormal;
-in float vLayer;
-in float vAnimationFrameCount;
-in float vAnimationFps;
-in float vAnimated;
-in float vFogDist;
-in vec3 vWorldPos;
-flat in float vTintKind;
-flat in float vMaterialKind;
-in vec2 vTintUV;
+layout(location = 0) in vec2 vUV;
+layout(location = 1) in float vLight;
+layout(location = 2) in float vSunlight;
+layout(location = 3) in float vBlockLight;
+layout(location = 4) in float vAO;
+layout(location = 5) in float vNormal;
+layout(location = 6) in float vLayer;
+layout(location = 7) in float vAnimationFrameCount;
+layout(location = 8) in float vAnimationFps;
+layout(location = 9) in float vAnimated;
+layout(location = 10) in float vFogDist;
+layout(location = 11) in vec3 vWorldPos;
+layout(location = 12) flat in float vTintKind;
+layout(location = 13) flat in float vMaterialKind;
+layout(location = 14) in vec2 vTintUV;
 
+#ifdef RHI_TERRAIN_LIT_MDI
+layout(set = 1, binding = 0) uniform sampler2DArray texArray;
+layout(set = 1, binding = 1) uniform sampler2D uLightmapDay;
+layout(set = 1, binding = 2) uniform sampler2D uLightmapNight;
+layout(set = 1, binding = 3) uniform sampler2D uGrassColormap;
+layout(set = 1, binding = 4) uniform sampler2D uFoliageColormap;
+layout(set = 1, binding = 5) uniform sampler2D uOpaqueDepthTex;
+layout(set = 1, binding = 6) uniform sampler2D uSkyCaptureTex;
+layout(set = 1, binding = 7) uniform sampler2D uSceneColorTex;
+layout(set = 1, binding = 8) uniform sampler2D uWaterNoiseTex;
+#else
 uniform sampler2DArray texArray;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
@@ -88,6 +106,7 @@ uniform float uWaterFlowFirstLayer;
 uniform float uWaterFlowLayerCount;
 uniform vec3 uWaterAbsorption;
 uniform vec3 uCameraPos;
+#endif
 
     const float kTwoPi = 6.28318530718;
 

@@ -54,13 +54,6 @@ void ChunkMeshingService::submit(SubChunkMeshingJob job, const int priority) {
         if (job.snapshot) {
             result.meshData = acquireMeshData();
             ChunkMesher::buildSubChunkMeshData(*job.snapshot, result.meshData);
-
-            // Offset bounds from sub-chunk local to column-local
-            const int yBase = job.scy * SubChunk::SIZE;
-            if (result.meshData.hasBounds) {
-                result.meshData.boundsMin.y += static_cast<float>(yBase);
-                result.meshData.boundsMax.y += static_cast<float>(yBase);
-            }
         }
 
         const bool shouldPublish = m_running.load(std::memory_order_acquire) &&

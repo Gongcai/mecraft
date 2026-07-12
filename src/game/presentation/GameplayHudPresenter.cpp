@@ -3,9 +3,10 @@
 #include "../states/GameStateMachine.h"
 #include "../../engine/input/InputManager.h"
 
-void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
-                                   GameStateMachine& stateMachine) {
-    // Convert snapshot player stats to UI format
+#include <cstdlib>
+
+namespace {
+PlayerStatsData toPlayerStatsData(const GameplayPresentationSnapshot& snap) {
     PlayerStatsData playerStats;
     playerStats.health = snap.playerStats.health;
     playerStats.maxHealth = snap.playerStats.maxHealth;
@@ -15,8 +16,36 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
     playerStats.maxFood = snap.playerStats.maxFood;
     playerStats.showSurvivalStats = snap.playerStats.showSurvivalStats;
     playerStats.isDead = snap.playerStats.isDead;
+    return playerStats;
+}
+} // namespace
 
-    m_uiRenderer.render(m_window, *snap.inventory, playerStats, m_input.snapshot());
+void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
+                                   RhiDevice& rhiDevice,
+                                   GameStateMachine& stateMachine) {
+    UIRenderContext context = prepareRenderContext(snap, rhiDevice);
+    renderPrepared(context, stateMachine);
+}
+
+UIRenderContext GameplayHudPresenter::prepareRenderContext(const GameplayPresentationSnapshot& snap,
+                                                           RhiDevice& rhiDevice) {
+    m_playerStats = toPlayerStatsData(snap);
+    return m_uiRenderer.prepareRenderContext(
+        m_window,
+        rhiDevice,
+        *snap.inventory,
+        m_playerStats,
+        m_input.snapshot());
+}
+
+bool GameplayHudPresenter::prepareTextFrame(RhiCommandList& commandList)
+{
+    return m_uiRenderer.prepareTextFrame(commandList);
+}
+
+void GameplayHudPresenter::renderPrepared(const UIRenderContext& context,
+                                          GameStateMachine& stateMachine) {
+    m_uiRenderer.renderPrepared(context);
     stateMachine.render();
 }
 
@@ -28,19 +57,29 @@ void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
 #include "../../renderer/passes/PostProcessPass.h"
 #include "../../ui/Dashboard.h"
 
-void GameplayHudPresenter::renderDashboard(ecs::GameplayRegistry& reg,
-                                             World& world,
-                                             const Camera& camera,
-                                             RenderResourceHub& renderer,
-                                             RenderScene& renderScene,
-                                             PostProcessPass& postProcess,
-                                             Dashboard::FrameProfilerStats& profilerStats,
-                                             const std::function<void(int)>& renderDistanceSetter) {
+bool GameplayHudPresenter::prepareDashboard(
+    RhiCommandList& commandList,
+    ecs::GameplayRegistry& reg,
+    World& world,
+    const Camera& camera,
+    RenderResourceHub& renderer,
+    RenderScene& renderScene,
+    PostProcessPass& postProcess,
+    Dashboard::FrameProfilerStats& profilerStats,
+    const std::function<void(int)>& renderDistanceSetter) {
     if (!m_dashboard) {
-        return;
+        return false;
     }
     Camera mutableCamera = camera;
-    m_dashboard->render(reg, world, mutableCamera, renderer, renderScene,
-                        postProcess, m_uiRenderer, profilerStats, renderDistanceSetter);
+    return m_dashboard->prepareFrame(commandList, reg, world, mutableCamera, renderer,
+                                     renderScene, postProcess, m_uiRenderer,
+                                     profilerStats, renderDistanceSetter);
+}
+
+void GameplayHudPresenter::recordDashboard(RhiCommandList& commandList) const {
+    if (!m_dashboard) {
+        std::abort();
+    }
+    m_dashboard->recordDraws(commandList);
 }
 #endif

@@ -22,7 +22,6 @@
 #include "../debug/DebugFrameProfiler.h"
 #endif
 
-#include <glad/glad.h>
 
 // --------------------------------------------------------------------------
 // PIMPL definition — mirrors the old Game::RenderRuntime struct.
@@ -36,6 +35,8 @@ struct GameplayRenderRuntime::Impl {
     FallingBlockRenderer fallingBlockRenderer;
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
     HumanoidRenderer humanoidRenderer;
+    RainRenderer* rainRenderer = nullptr;
+    ParticleSystem* particleSystem = nullptr;
 
 #ifdef MECRAFT_DEBUG
     Dashboard dashboard;
@@ -54,10 +55,12 @@ GameplayRenderRuntime::GameplayRenderRuntime()
 
 GameplayRenderRuntime::~GameplayRenderRuntime() = default;
 
-void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
+bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   GameSession& session,
                                   UIRenderer& uiRenderer,
-                                  ThreadPool& threadPool) {
+                                  ThreadPool& threadPool,
+                                  RhiDevice& rhiDevice,
+                                  RhiCommandListPool& commandListPool) {
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& blockEntityRenderer = m_impl->blockEntityRenderer;
@@ -67,14 +70,19 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& humanoidRenderer = m_impl->humanoidRenderer;
 
     // Core GPU infrastructure
-    renderer.init(resourceMgr, threadPool);
+    if (!renderer.init(resourceMgr, threadPool, rhiDevice, commandListPool)) {
+        return false;
+    }
 
     // Initialize RenderScene and connect to RenderResourceHub
     renderScene.init(resourceMgr);
     const RenderSettings initialSettings = app::loadRenderSettings(renderer.getSettings());
     renderScene.setupResources(
         &threadPool,
+        &renderer.rhiDevice(),
+        &renderer.commandListPool(),
         &renderer.getTerrainRenderer(),
+        &renderer.getTerrainRhiPipelineSet(),
         &renderer.getWorldRenderBuffer(),
         &renderer.getDeferredRenderTargets(),
         &renderer.getGameplaySkyRenderer(),
@@ -93,9 +101,11 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     // Entity renderers
     blockEntityRenderer.init(resourceMgr);
     dropRenderer.init(resourceMgr);
-    fallingBlockRenderer.init(resourceMgr);
-    firstPersonHeldItemRenderer.init(resourceMgr);
-    humanoidRenderer.init(resourceMgr);
+    if (!fallingBlockRenderer.init(resourceMgr)) {
+        return false;
+    }
+    firstPersonHeldItemRenderer.init(resourceMgr, renderer.rhiDevice());
+    humanoidRenderer.init(resourceMgr, renderer.rhiDevice());
 
     // Cross-wire renderers into RenderScene
     renderScene.setBlockEntityRenderer(&blockEntityRenderer);
@@ -110,10 +120,18 @@ void GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     uiRenderer.setHumanoidRenderer(&humanoidRenderer);
 
     // Particle and rain systems (owned by session, init requires ResourceMgr)
-    session.particleSystem().init(resourceMgr);
-    session.rainRenderer().init(resourceMgr);
+    m_impl->particleSystem = &session.particleSystem();
+    if (!m_impl->particleSystem->init(resourceMgr)) {
+        m_impl->particleSystem = nullptr;
+        return false;
+    }
+    m_impl->rainRenderer = &session.rainRenderer();
+    if (!m_impl->rainRenderer->init(resourceMgr)) {
+        m_impl->rainRenderer = nullptr;
+        return false;
+    }
 
-    glEnable(GL_DEPTH_TEST);
+    return true;
 }
 
 void GameplayRenderRuntime::shutdown() {
@@ -121,6 +139,14 @@ void GameplayRenderRuntime::shutdown() {
 #ifdef MECRAFT_DEBUG
     m_impl->dashboard.shutdown();
 #endif
+    if (m_impl->rainRenderer != nullptr) {
+        m_impl->rainRenderer->shutdown();
+        m_impl->rainRenderer = nullptr;
+    }
+    if (m_impl->particleSystem != nullptr) {
+        m_impl->particleSystem->shutdown();
+        m_impl->particleSystem = nullptr;
+    }
     m_impl->humanoidRenderer.shutdown();
     m_impl->firstPersonHeldItemRenderer.shutdown();
     m_impl->fallingBlockRenderer.shutdown();
@@ -147,9 +173,12 @@ FirstPersonHeldItemRenderer& GameplayRenderRuntime::firstPersonHeldItemRenderer(
 }
 
 #ifdef MECRAFT_DEBUG
-void GameplayRenderRuntime::initDebug(Window& window) {
-    m_impl->dashboard.init(window);
+bool GameplayRenderRuntime::initDebug(Window& window, RhiDevice& rhiDevice) {
+    if (!m_impl->dashboard.init(window, rhiDevice)) {
+        return false;
+    }
     m_impl->dashboard.setFirstPersonHeldItemRenderer(&m_impl->firstPersonHeldItemRenderer);
+    return true;
 }
 
 void GameplayRenderRuntime::publishDebugStats(const double frameTime) {

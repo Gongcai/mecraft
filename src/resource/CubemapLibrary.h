@@ -6,8 +6,12 @@
 #include <string>
 #include <unordered_map>
 
+class RhiDevice;
+
 class CubemapLibrary {
 public:
+    void init(RhiDevice& rhiDevice);
+
     RhiTextureHandle load(const std::string& name,
                           const std::string& rightPath,
                           const std::string& leftPath,
@@ -20,6 +24,7 @@ public:
     void shutdown();
 
 private:
+    RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<std::string, RhiTextureHandle> m_cubemaps;
 };
 

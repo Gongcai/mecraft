@@ -1,8 +1,11 @@
 #include "ForwardPipeline.h"
 #include "RenderScene.h"
 #include "../mesh/TerrainRenderCache.h"
+#include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/WorldRenderBuffer.h"
-#include "../targets/CommonFrameTargets.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../renderers/GameplaySkyRenderer.h"
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
@@ -14,7 +17,6 @@
 #include "../../world/DayNightSystem.h"
 #include "../../particle/ParticleSystem.h"
 
-#include <glad/glad.h>
 #include <algorithm>
 
 ForwardPipeline::ForwardPipeline() = default;
@@ -25,13 +27,10 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
     m_terrainRenderer = shared.terrain;
     m_terrainCache = shared.terrainCache;
     m_worldRenderBuffer = shared.worldRenderBuffer;
-    m_commonTargets = shared.commonTargets;
     m_skyRenderer = shared.sky;
     m_resourceMgr = shared.resources;
 
     // Enable forward vanilla shaders on sub-renderers (no deferred/shaderpack contracts)
-    if (shared.sky) shared.sky->setForwardMode(true);
-    if (shared.dropRenderer) shared.dropRenderer->setForwardMode(true);
 
     m_initialized = true;
 }
@@ -39,60 +38,220 @@ void ForwardPipeline::init(SharedRenderResources& shared) {
 void ForwardPipeline::shutdown() {
     // Revert sub-renderers to deferred shaders
     if (m_shared) {
-        if (m_shared->sky) m_shared->sky->setForwardMode(false);
-        if (m_shared->dropRenderer) m_shared->dropRenderer->setForwardMode(false);
     }
 
     m_shared = nullptr;
     m_terrainRenderer = nullptr;
     m_terrainCache = nullptr;
     m_worldRenderBuffer = nullptr;
-    m_commonTargets = nullptr;
     m_skyRenderer = nullptr;
     m_resourceMgr = nullptr;
+    m_backbufferCommandList = nullptr;
     m_transparentBatch.clear();
     m_transparentPassPlan = {};
-    m_transparentEntries.clear();
     m_initialized = false;
 }
 
 FrameOutput ForwardPipeline::renderFrame(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_initialized || !ctx.worldView) {
+    if (!m_initialized || !ctx.worldView || m_shared == nullptr ||
+        m_shared->rhiDevice == nullptr) {
         return {};
     }
 
-    beginBackbufferFrame(ctx);
+    RhiCommandList* commandListStorage =
+        m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin(
+            {"ForwardPipeline.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    m_backbufferCommandList = &commandList;
+    if (!prepareTerrain(ctx, commandList)) {
+        if (!commandList.end()) std::abort();
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!m_shared->rhiDevice->submit(
+                {"ForwardPipeline.PrepareFailure", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+        m_backbufferCommandList = nullptr;
+        return {};
+    }
+    if (settings.weather.particlesEnabled && m_shared->particleSystem) {
+        m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
+    }
+    if (m_shared->blockEntityRenderer != nullptr) {
+        m_shared->blockEntityRenderer->prepareFrame(*ctx.worldView);
+        if (!m_shared->blockEntityRenderer->prepareForward(commandList)) {
+            if (!commandList.end()) std::abort();
+            RhiCommandList* submittedCommandLists[] = {&commandList};
+            if (!m_shared->rhiDevice->submit(
+                    {"ForwardPipeline.ObjectPrepareFailure", submittedCommandLists, 1u})) {
+                std::abort();
+            }
+            m_backbufferCommandList = nullptr;
+            return {};
+        }
+    }
+    if (!beginBackbufferFrame(ctx)) {
+        if (!commandList.end()) std::abort();
+        RhiCommandList* submittedCommandLists[] = {&commandList};
+        if (!m_shared->rhiDevice->submit(
+                {"ForwardPipeline.BeginFailure", submittedCommandLists, 1u})) {
+            std::abort();
+        }
+        m_backbufferCommandList = nullptr;
+        return {};
+    }
 
     // 1. Sky background (sun, moon, clouds, gradient)
     renderSky(ctx);
+    if (!beginBackbufferScenePass(ctx)) {
+        endBackbufferFrame(ctx);
+        return {};
+    }
 
     // 2. Opaque + cutout terrain
-    renderTerrain(ctx, settings);
+    renderTerrain();
 
     // 3. Forward-only scene objects that should depth-test against terrain.
     renderEntitiesAndParticles(ctx, settings);
 
     // 4. Transparent terrain (water, glass, etc.)
-    renderTransparent(ctx, settings);
+    renderTransparent();
+
+    endBackbufferFrame(ctx);
 
     // 5. Build and return frame output
     return buildFrameOutput(ctx);
 }
 
-void ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDrawBuffer(GL_BACK);
-    glReadBuffer(GL_BACK);
-    glViewport(0, 0, std::max(1, ctx.frameWidth), std::max(1, ctx.frameHeight));
+bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
+    if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
+        m_backbufferCommandList == nullptr ||
+        !ctx.sceneCaptureColorTexture.isValid() || !ctx.sceneCaptureDepthTexture.isValid() ||
+        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
+        return false;
+    }
 
-    glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_BLEND);
-    glDisable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
-    glClearDepth(1.0);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = ctx.sceneCaptureColorView;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 1.0f;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = ctx.sceneCaptureDepthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "ForwardBackbuffer";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
+        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    m_backbufferCommandList->textureBarrier({
+        ctx.sceneCaptureColorTexture,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::RenderTarget
+    });
+    m_backbufferCommandList->textureBarrier({
+        ctx.sceneCaptureDepthTexture,
+        RhiResourceState::DepthRead,
+        RhiResourceState::DepthWrite
+    });
+    m_backbufferCommandList->beginRendering(renderingInfo);
+    m_backbufferCommandList->setViewport({
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, ctx.frameWidth)),
+        static_cast<float>(std::max(1, ctx.frameHeight)),
+        0.0f,
+        1.0f
+    });
+
+    return true;
+}
+
+bool ForwardPipeline::beginBackbufferScenePass(const FrameContext& ctx) {
+    if (m_backbufferCommandList == nullptr ||
+        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
+        return false;
+    }
+
+    m_backbufferCommandList->endRendering();
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = ctx.sceneCaptureColorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = ctx.sceneCaptureDepthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "ForwardSceneBackbuffer";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
+        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    m_backbufferCommandList->beginRendering(renderingInfo);
+    m_backbufferCommandList->setViewport({
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, ctx.frameWidth)),
+        static_cast<float>(std::max(1, ctx.frameHeight)),
+        0.0f,
+        1.0f
+    });
+    return true;
+}
+
+void ForwardPipeline::endBackbufferFrame(const FrameContext& ctx) {
+    if (m_backbufferCommandList == nullptr || m_shared == nullptr || m_shared->rhiDevice == nullptr) {
+        return;
+    }
+
+    m_backbufferCommandList->endRendering();
+    m_backbufferCommandList->textureBarrier({
+        ctx.sceneCaptureColorTexture,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::ShaderRead
+    });
+    m_backbufferCommandList->textureBarrier({
+        ctx.sceneCaptureDepthTexture,
+        RhiResourceState::DepthWrite,
+        RhiResourceState::DepthRead
+    });
+    if (!m_backbufferCommandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {m_backbufferCommandList};
+    if (!m_shared->rhiDevice->submit(
+            {"ForwardPipeline.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
+    m_backbufferCommandList = nullptr;
 }
 
 // ============================================================================
@@ -107,75 +266,81 @@ void ForwardPipeline::renderSky(const FrameContext& ctx) {
         ? static_cast<float>(ctx.frameWidth) / static_cast<float>(ctx.frameHeight)
         : 1.0f;
 
-    // Forward mode: pass 0 for skyCaptureTexture because sky gradient mode doesn't read it.
-    m_skyRenderer->render(*ctx.cameraPtr, aspect, dayNight, 0);
+    m_skyRenderer->render(*ctx.cameraPtr, aspect, dayNight, *m_backbufferCommandList);
 }
 
 // ============================================================================
 // Terrain rendering (opaque + cutout)
 // ============================================================================
 
-void ForwardPipeline::renderTerrain(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_terrainRenderer || !m_resourceMgr || !m_worldRenderBuffer) return;
+bool ForwardPipeline::prepareTerrain(const FrameContext& ctx,
+                                     RhiCommandList& commandList) {
+    if (!m_shared || !m_shared->terrainRhiPipelines || !m_terrainRenderer ||
+        !m_resourceMgr || !m_worldRenderBuffer) {
+        return false;
+    }
 
     auto& terrain = *m_terrainRenderer;
     auto& worldBuffer = *m_worldRenderBuffer;
 
-    // Terrain cache maintenance
     if (m_terrainCache) {
         m_terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
-        m_terrainCache->drainMeshingResults(*ctx.worldView);
+        m_terrainCache->drainMeshingResults(*ctx.worldView, commandList);
     }
     worldBuffer.beginFrame();
     terrain.clearTransparentBatches();
 
-    // Get forward basic shader
-    Shader* terrainShader = m_resourceMgr->getShader("forward_basic_terrain");
-    if (!terrainShader) return;
-
-    // Build terrain frame data from FrameContext
     TerrainFrameData tfd = buildTerrainFrameData(ctx);
-
-    // Frustum + camera
     terrain.setCameraPos(ctx.camera.position);
     terrain.updateFrustum(ctx.camera.viewProj);
 
-    // Terrain render settings
-    TerrainRenderSettings trs = buildTerrainRenderSettings(settings);
-
-    // Bind lightweight forward state
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    terrain.bindBasicForwardState(tfd, texArray, *terrainShader,
-                                   ctx.eyeInWater, 0/*heldBlockLight*/,
-                                   m_resourceMgr, trs);
-
-    // Submit meshing jobs
     if (m_terrainCache) {
         m_terrainCache->submitMeshingJobs(*ctx.worldView, ctx.camera.position);
     }
 
-    // Render opaque + collect cutout/transparent entries
-    std::vector<ChunkRenderEntry> cutoutEntries;
-    std::vector<ChunkRenderEntry> transparentEntries;
-    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, cutoutEntries, transparentEntries, true);
+    terrain.renderOpaqueChunksAndCollectPasses(*ctx.worldView, true);
     terrain.syncTransparentBatches();
 
-    // Save transparent batch for transparent pass
     m_transparentBatch = terrain.transparentBatches();
     m_transparentPassPlan = terrain.transparentPassPlan();
-    m_transparentEntries = transparentEntries;
-
-    // Flush MDI opaque + render cutout
-    worldBuffer.flushOpaque();
-    terrain.renderCutoutChunks(cutoutEntries, *terrainShader);
-    worldBuffer.captureSceneFrameStats();
-
-    // Unbind textures (units 0-4)
-    glBindVertexArray(0);
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
+    std::sort(m_transparentBatch.begin(), m_transparentBatch.end(),
+              [](const DrawBatchEntry& lhs, const DrawBatchEntry& rhs) {
+                  return lhs.distanceSq > rhs.distanceSq;
+              });
+    for (const DrawBatchEntry& entry : m_transparentBatch) {
+        worldBuffer.addTransparent(entry.range);
     }
+
+    if (!m_shared->terrainRhiPipelines->prepareForward(
+            commandList,
+            *m_resourceMgr,
+            tfd) ||
+        !worldBuffer.prepareRhiOpaqueAndCutout(
+            commandList,
+            m_shared->terrainRhiPipelines->forwardMetadataLayout()) ||
+        !worldBuffer.prepareRhiTransparent(
+            commandList,
+            m_shared->terrainRhiPipelines->forwardMetadataLayout())) {
+        return false;
+    }
+    return true;
+}
+
+void ForwardPipeline::renderTerrain() {
+    if (m_backbufferCommandList == nullptr || m_shared == nullptr ||
+        m_shared->terrainRhiPipelines == nullptr || m_worldRenderBuffer == nullptr) {
+        return;
+    }
+
+    m_worldRenderBuffer->recordRhiOpaque(
+        *m_backbufferCommandList,
+        m_shared->terrainRhiPipelines->forwardOpaquePipeline(),
+        m_shared->terrainRhiPipelines->forwardOpaqueBindGroup());
+    m_worldRenderBuffer->recordRhiCutout(
+        *m_backbufferCommandList,
+        m_shared->terrainRhiPipelines->forwardCutoutPipeline(),
+        m_shared->terrainRhiPipelines->forwardCutoutBindGroup());
+    m_worldRenderBuffer->captureSceneFrameStats();
 }
 
 void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings) {
@@ -183,27 +348,33 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
         return;
     }
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
-
-    if (m_shared->blockEntityRenderer) {
-        m_shared->blockEntityRenderer->renderForward(*ctx.worldView, ctx.camera.viewProj, ctx.skyIntensity);
+    if (m_shared->blockEntityRenderer && m_backbufferCommandList != nullptr) {
+        m_shared->blockEntityRenderer->renderForward(*m_backbufferCommandList,
+                                                     ctx.camera.viewProj,
+                                                     ctx.skyIntensity);
     }
 
-    if (m_shared->dropRenderer && m_shared->dropSystem) {
-        m_shared->dropRenderer->render(*m_shared->dropSystem, *ctx.cameraPtr, *ctx.windowPtr);
+    if (m_shared->dropRenderer && m_shared->dropSystem && m_backbufferCommandList != nullptr) {
+        m_shared->dropRenderer->prepareFrame(*ctx.worldView, *m_shared->dropSystem);
+        m_shared->dropRenderer->renderForward(*m_backbufferCommandList,
+                                              ctx.camera.viewProj,
+                                              ctx.skyIntensity,
+                                              ctx.animationTime);
     }
 
-    if (m_shared->humanoidRenderer && m_shared->gameplayRegistry) {
+    if (m_shared->humanoidRenderer && m_shared->gameplayRegistry &&
+        m_backbufferCommandList != nullptr) {
         const auto mode = ctx.renderLocalPlayerModel
             ? HumanoidRenderer::kRenderAll
             : HumanoidRenderer::kRenderMobsOnly;
-        m_shared->humanoidRenderer->render(*m_shared->gameplayRegistry, *ctx.cameraPtr, *ctx.windowPtr, mode);
+        m_shared->humanoidRenderer->prepareFrame(*ctx.worldView, *m_shared->gameplayRegistry, mode);
+        m_shared->humanoidRenderer->renderPreparedForward(
+            *m_backbufferCommandList, ctx.camera.viewProj, ctx.skyIntensity);
+        m_shared->humanoidRenderer->finishFrame();
     }
 
     if (settings.weather.particlesEnabled && m_shared->particleSystem) {
-        m_shared->particleSystem->render(ctx.camera.projection, ctx.camera.view);
+        m_shared->particleSystem->render(*m_backbufferCommandList, ctx.camera.projection * ctx.camera.view);
     }
 }
 
@@ -211,63 +382,25 @@ void ForwardPipeline::renderEntitiesAndParticles(const FrameContext& ctx, const 
 // Transparent rendering (water, glass, etc.)
 // ============================================================================
 
-void ForwardPipeline::renderTransparent(const FrameContext& ctx, const RenderSettings& settings) {
-    if (!m_terrainRenderer || !m_worldRenderBuffer) return;
-    if (!m_transparentPassPlan.hasAny()) return;
-
-    Shader* shader = m_resourceMgr->getShader("forward_basic_terrain");
-    if (!shader) return;
-
-    auto& terrain = *m_terrainRenderer;
-    auto& worldBuffer = *m_worldRenderBuffer;
-
-    const TextureArray& texArray = m_resourceMgr->getTextureArray();
-    TerrainFrameData tfd = buildTerrainFrameData(ctx);
-    TerrainRenderSettings trs = buildTerrainRenderSettings(settings);
-
-    terrain.bindBasicForwardState(tfd, texArray, *shader,
-                                   ctx.eyeInWater, 0, m_resourceMgr, trs);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-
-    // MDI path: sort back-to-front, flush transparent
-    shader->setInt("uForceBaseLod", 1);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-
-    std::sort(m_transparentBatch.begin(), m_transparentBatch.end(),
-              [](const DrawBatchEntry& a, const DrawBatchEntry& b) {
-                  return a.distanceSq > b.distanceSq;
-              });
-    for (const auto& entry : m_transparentBatch) {
-        worldBuffer.addTransparent(entry.range);
+void ForwardPipeline::renderTransparent() {
+    if (!m_transparentPassPlan.hasAny() || m_backbufferCommandList == nullptr ||
+        m_shared == nullptr || m_shared->terrainRhiPipelines == nullptr ||
+        m_worldRenderBuffer == nullptr) {
+        return;
     }
-    worldBuffer.flushTransparent();
 
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
-    shader->setInt("uForceBaseLod", 0);
-
-    // Unbind
-    glBindVertexArray(0);
-    for (int i = 4; i >= 0; --i) {
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(i == 0 ? GL_TEXTURE_2D_ARRAY : GL_TEXTURE_2D, 0);
-    }
+    m_worldRenderBuffer->recordRhiTransparent(
+        *m_backbufferCommandList,
+        m_shared->terrainRhiPipelines->forwardTransparentPipeline(),
+        m_shared->terrainRhiPipelines->forwardTransparentBindGroup());
 }
 
 // ============================================================================
 // Frame output
 // ============================================================================
 
-FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext& ctx) {
+FrameOutput ForwardPipeline::buildFrameOutput(const FrameContext&) {
     FrameOutput output{};
-    if (m_commonTargets) {
-        output.sceneColor = m_commonTargets->sceneColorTextureHandle();
-        output.sceneDepth = m_commonTargets->sceneDepthTextureHandle();
-    }
     // Forward vanilla: no deferred inputs, skip post-process (bloom/exposure/grading)
     output.hasDeferredInputs = false;
     output.hasDebugView = false;
@@ -300,10 +433,4 @@ TerrainFrameData ForwardPipeline::buildTerrainFrameData(const FrameContext& ctx)
     tfd.skyLighting.skyIntensity = ctx.skyIntensity;
 
     return tfd;
-}
-
-TerrainRenderSettings ForwardPipeline::buildTerrainRenderSettings(const RenderSettings& /*settings*/) {
-    // Forward vanilla: TerrainRenderSettings is unused by bindBasicForwardState.
-    // Return defaults. No deferred/shaderpack parameters are read.
-    return TerrainRenderSettings{};
 }

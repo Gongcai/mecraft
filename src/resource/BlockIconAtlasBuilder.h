@@ -4,6 +4,7 @@
 #include <vector>
 
 class BlockTextureLibrary;
+class RhiDevice;
 struct TextureAtlas;
 
 namespace resource {
@@ -11,7 +12,8 @@ namespace resource {
 [[nodiscard]] TextureAtlas buildBlockIconAtlas(int iconSize,
                                                const TextureAtlas& blockAtlas,
                                                const std::vector<unsigned char>& blockAtlasPixels,
-                                               const BlockTextureLibrary& blockTextures);
+                                               const BlockTextureLibrary& blockTextures,
+                                               RhiDevice& rhiDevice);
 
 } // namespace resource
 

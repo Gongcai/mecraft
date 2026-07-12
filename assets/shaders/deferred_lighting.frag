@@ -1,127 +1,181 @@
 #version 450 core
+#define MECRAFT_CSM_CASCADE_COUNT 4
+#define MECRAFT_SHADOW_CASCADE_TYPE_DEFINED
+#define MECRAFT_SHADOW_EXTERNAL_UNIFORMS
+#define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS
 #include "gbuffer_contract.glsl"
 #include "lighting_environment.glsl"
 #include "sky_sh.glsl"
 #include "derivative_sunlight.glsl"
 #include "weather_surface.glsl"
 
-in vec2 vTexCoord;
-flat in vec4 vSkySH_R;
-flat in vec4 vSkySH_G;
-flat in vec4 vSkySH_B;
-out vec4 FragColor;
+struct CsmCascade {
+    mat4 viewProj;
+    float splitNear;
+    float splitFar;
+    float texelWorldSize;
+    float resolutionScale;
+    float depthExtent;
+};
 
-uniform sampler2D uAlbedoTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uVoxelLightTex;
-uniform sampler2D uMaterialTex;
-uniform sampler2D uMaterialAuxTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uLightmapDay;
-uniform sampler2D uLightmapNight;
-uniform sampler2D uShadowMapRaw;    // Raw depth for texelFetch (blockerSearch, debug)
-uniform sampler2D uSsaoTex;
-uniform sampler2D uSkyCaptureTex;
-uniform sampler2D uNoiseTex;
-uniform sampler2D uRippleNormalTex;
-uniform bool uNoiseEnabled;  // for cloud_density.glsl noise fallback
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) flat in vec4 vSkySH_R;
+layout(location = 2) flat in vec4 vSkySH_G;
+layout(location = 3) flat in vec4 vSkySH_B;
+layout(location = 0) out vec4 FragColor;
 
-uniform mat4 uViewProj;
-uniform mat4 uInvViewProj;
-uniform mat4 uProjection;
-uniform mat4 uShadowViewProj;
-uniform mat4 uShadowModelView;
-uniform mat4 uShadowProjection;
-uniform mat4 uShadowProjectionInverse;
-uniform vec3 uCameraPos;
-uniform vec3 uSunDirection;
-uniform vec3 uMoonDirection;
-uniform vec3 uShadowLightDirection;
-uniform vec3 uSunLightColor;
-uniform vec3 uMoonLightColor;
-uniform vec3 uSkyAmbientColor;
-uniform vec3 uShadowTintColor;
-uniform vec3 uHorizonScatterColor;
-uniform float uSkyIntensity;
-uniform float uMoonVisibility;
-uniform vec3 uCloudDynamicWeather; // DerivativeMain cloudDynamicWeather.xyz: cirrocumulus/cirrus/storm
-uniform int uAerialPerspectiveEnabled;
-uniform int uVolumetricFogActive;
-uniform int uVolumetricLightEnabled;
-uniform float uShadowTintStrength;
-uniform float uDirectSunStrength;
-uniform float uSkyAmbientStrength;
-uniform float uWeatherSkylightScale;
-uniform float uMinimumAmbient;
-uniform float uShadowMinLight;
-uniform float uShadowContrast;
-uniform float uBlockLightStrength;
-uniform float uFakeBounceStrength;
-uniform float uAlbedoDesaturation;
-uniform float uSunWarmth;
-uniform float uSkyCoolness;
-uniform float uShadowDesaturation;
-uniform float uAerialStrength;
-uniform float uHorizonScatterStrength;
-uniform float uWeatherWetness;
-uniform float uWeatherStorm;
-uniform float uAerialReduction;
-uniform float uLightningFlash;
-uniform float uSurfaceWetness;
-uniform float uSkyWetness;
-uniform float uFogWetness;
-uniform float uCloudWetness;
-uniform float uDirectWeatherOcclusion;       // manual value when override enabled
-uniform int uDirectWeatherOcclusionOverride; // 0=auto (skyWetness + procedural), 1=manual bypass
-uniform float uPrecipitation;
-uniform int uShadowsEnabled;
-uniform int uSoftShadowsEnabled;
-uniform int uPcssShadowsEnabled;
-uniform int uContactShadowsEnabled;
-uniform int uCloudShadowsEnabled;
-uniform int uShadowLightMode;
-uniform float uShadowDistance;
-uniform float uShadowExtent;
-uniform float uShadowTexelWorldSize;
-uniform float uShadowSoftness;
-uniform float uShadowPcssStrength;
-uniform float uShadowConstantBias;
-uniform float uShadowSlopeBias;
-uniform float uShadowNormalOffset;
-uniform float uContactShadowStrength;
-uniform float uCloudShadowStrength;
-uniform float uCloudShadowScale;
-uniform float uCloudShadowSpeed;
-uniform float uCloudCoverage;
-uniform float uCloudDensity;
-uniform float uCloudHeight;
-uniform float uCloudThickness;
-uniform float uPlanarCloudCoverage;
-uniform float uPlanarCloudDensity;
-uniform float uPlanarCloudAltitude;
-uniform float uTime;
-uniform float uCloudTimeScale;
-uniform int uSsaoEnabled;
-uniform int uIsEyeInWater;       // DerivativeMain isEyeInWater: 1 when camera is underwater
-uniform int uHeldBlockLightValue;
-uniform int uHeldBlockLightValue2;
-uniform int uFogEnabled;
-uniform int uFogMode;
-uniform vec3 uFogColor;
-uniform float uFogStart;
-uniform float uFogEnd;
-uniform float uFogDensity;
-uniform int uDeferredDebugMode; // 0=off, 1=direct, 2=skylight, 3=blocklight, 4=minAmbient, 5=fakeBounce, 6=scene, 7=skyDirRatio, 8=NdotL, 9=cloudShadow, 10=outdoorMask, 11=directFrac, 12=beforeAO, 13=afterAO, 14=rawSkyLight, 15=skyLightMask, 16=vertexAO, 17=SSAO, 18=normalY, 19=contactShadow, 20=puddleMask, 21=rainSplashMask, 22=rainRippleNormal
-uniform int uDerivativeStrictMode; // 1=disable Mecraft extras (minimumAmbient, sky specular, fake bounce) to match DerivativeMain baseline
-uniform int uRainWetSurfacesEnabled;
-uniform int uRainSurfaceRipplesEnabled;
+layout(binding = 0) uniform sampler2D uAlbedoTex;
+layout(binding = 1) uniform sampler2D uNormalAoTex;
+layout(binding = 2) uniform sampler2D uVoxelLightTex;
+layout(binding = 3) uniform sampler2D uMaterialTex;
+layout(binding = 4) uniform sampler2D uMaterialAuxTex;
+layout(binding = 5) uniform sampler2D uDepthTex;
+layout(binding = 6) uniform sampler2D uLightmapDay;
+layout(binding = 7) uniform sampler2D uLightmapNight;
+layout(binding = 8) uniform sampler2D uSsaoTex;
+layout(binding = 9) uniform sampler2D uSkyCaptureTex;
+layout(binding = 10) uniform sampler2D uNoiseTex;
+layout(binding = 11) uniform sampler3D uAtmosphereLut;
+layout(binding = 12) uniform sampler2DArrayShadow uCsmShadowMap;
+layout(binding = 13) uniform sampler2DArray uCsmShadowDepthRaw;
+layout(binding = 14) uniform sampler2DArrayShadow uCsmShadowDepthAll;
+layout(binding = 15) uniform sampler2DArray uCsmShadowDepthAllRaw;
+layout(binding = 16) uniform sampler2DArray uCsmShadowColor0;
+layout(binding = 17) uniform sampler2DArray uCsmShadowColor1;
+layout(binding = 18) uniform sampler2D uRippleNormalTex;
 
-// Shadow color/normal textures (DerivativeMain shadowcolor0/1 equivalent)
-uniform sampler2D uShadowColorTex;
-uniform sampler2D uShadowNormalTex;
+layout(std140, binding = 19) uniform DeferredLightingParams {
+    mat4 pViewProj;
+    mat4 pInvViewProj;
+    mat4 pProjection;
+    mat4 pShadowViewProj;
+    mat4 pShadowModelView;
+    mat4 pShadowProjection;
+    mat4 pShadowProjectionInverse;
+    CsmCascade pCsmCascades[MECRAFT_CSM_CASCADE_COUNT];
+    vec4 pCameraSkyIntensity;
+    vec4 pSunDirectionMoonVisibility;
+    vec4 pMoonDirection;
+    vec4 pShadowDirectionDistance;
+    vec4 pSunLightShadowExtent;
+    vec4 pMoonLightShadowTexelSize;
+    vec4 pSkyAmbientShadowSoftness;
+    vec4 pShadowTintPcssStrength;
+    vec4 pHorizonColorConstantBias;
+    vec4 pCloudWeatherSlopeBias;
+    vec4 pFogColorNormalOffset;
+    vec4 pLighting0;
+    vec4 pLighting1;
+    vec4 pLighting2;
+    vec4 pAtmosphere0;
+    vec4 pWeather0;
+    vec4 pWeather1;
+    vec4 pWeather2;
+    vec4 pCloud0;
+    vec4 pCloud1;
+    vec4 pCloud2;
+    vec4 pFogParams;
+    ivec4 pFlags0;
+    ivec4 pFlags1;
+    ivec4 pFlags2;
+    ivec4 pFlags3;
+    ivec4 pFlags4;
+    ivec4 pFlags5;
+};
 
-// Atmosphere precomputed scattering LUT (256x128x33 RGBA32F)
-uniform sampler3D uAtmosphereLut;
+#define uViewProj pViewProj
+#define uInvViewProj pInvViewProj
+#define uProjection pProjection
+#define uShadowViewProj pShadowViewProj
+#define uShadowModelView pShadowModelView
+#define uShadowProjection pShadowProjection
+#define uShadowProjectionInverse pShadowProjectionInverse
+#define uCsmCascades pCsmCascades
+#define uCameraPos pCameraSkyIntensity.xyz
+#define uSkyIntensity pCameraSkyIntensity.w
+#define uSunDirection pSunDirectionMoonVisibility.xyz
+#define uMoonVisibility pSunDirectionMoonVisibility.w
+#define uMoonDirection pMoonDirection.xyz
+#define uShadowLightDirection pShadowDirectionDistance.xyz
+#define uShadowDistance pShadowDirectionDistance.w
+#define uSunLightColor pSunLightShadowExtent.xyz
+#define uShadowExtent pSunLightShadowExtent.w
+#define uMoonLightColor pMoonLightShadowTexelSize.xyz
+#define uShadowTexelWorldSize pMoonLightShadowTexelSize.w
+#define uSkyAmbientColor pSkyAmbientShadowSoftness.xyz
+#define uShadowSoftness pSkyAmbientShadowSoftness.w
+#define uShadowTintColor pShadowTintPcssStrength.xyz
+#define uShadowPcssStrength pShadowTintPcssStrength.w
+#define uHorizonScatterColor pHorizonColorConstantBias.xyz
+#define uShadowConstantBias pHorizonColorConstantBias.w
+#define uCloudDynamicWeather pCloudWeatherSlopeBias.xyz
+#define uShadowSlopeBias pCloudWeatherSlopeBias.w
+#define uFogColor pFogColorNormalOffset.xyz
+#define uShadowNormalOffset pFogColorNormalOffset.w
+#define uShadowTintStrength pLighting0.x
+#define uDirectSunStrength pLighting0.y
+#define uSkyAmbientStrength pLighting0.z
+#define uWeatherSkylightScale pLighting0.w
+#define uMinimumAmbient pLighting1.x
+#define uShadowMinLight pLighting1.y
+#define uShadowContrast pLighting1.z
+#define uBlockLightStrength pLighting1.w
+#define uFakeBounceStrength pLighting2.x
+#define uAlbedoDesaturation pLighting2.y
+#define uShadowDesaturation pLighting2.z
+#define uContactShadowStrength pLighting2.w
+#define uSunWarmth pAtmosphere0.x
+#define uSkyCoolness pAtmosphere0.y
+#define uAerialStrength pAtmosphere0.z
+#define uHorizonScatterStrength pAtmosphere0.w
+#define uWeatherWetness pWeather0.x
+#define uWeatherStorm pWeather0.y
+#define uAerialReduction pWeather0.z
+#define uLightningFlash pWeather0.w
+#define uSurfaceWetness pWeather1.x
+#define uSkyWetness pWeather1.y
+#define uFogWetness pWeather1.z
+#define uCloudWetness pWeather1.w
+#define uDirectWeatherOcclusion pWeather2.x
+#define uPrecipitation pWeather2.y
+#define uTime pWeather2.z
+#define uCloudTimeScale pWeather2.w
+#define uCloudShadowStrength pCloud0.x
+#define uCloudShadowScale pCloud0.y
+#define uCloudShadowSpeed pCloud0.z
+#define uCloudCoverage pCloud0.w
+#define uCloudDensity pCloud1.x
+#define uCloudHeight pCloud1.y
+#define uCloudThickness pCloud1.z
+#define uPlanarCloudCoverage pCloud1.w
+#define uPlanarCloudDensity pCloud2.x
+#define uPlanarCloudAltitude pCloud2.y
+#define uFogStart pCloud2.z
+#define uFogEnd pCloud2.w
+#define uFogDensity pFogParams.x
+#define uMoonPhaseFlux pFogParams.y
+#define uNoiseEnabled (pFlags0.x != 0)
+#define uAerialPerspectiveEnabled pFlags0.y
+#define uVolumetricFogActive pFlags0.z
+#define uVolumetricLightEnabled pFlags0.w
+#define uDirectWeatherOcclusionOverride pFlags1.x
+#define uShadowsEnabled pFlags1.y
+#define uSoftShadowsEnabled pFlags1.z
+#define uPcssShadowsEnabled pFlags1.w
+#define uContactShadowsEnabled pFlags2.x
+#define uCloudShadowsEnabled pFlags2.y
+#define uShadowLightMode pFlags2.z
+#define uSsaoEnabled pFlags2.w
+#define uIsEyeInWater pFlags3.x
+#define uHeldBlockLightValue pFlags3.y
+#define uHeldBlockLightValue2 pFlags3.z
+#define uFogEnabled pFlags3.w
+#define uFogMode pFlags4.x
+#define uDeferredDebugMode pFlags4.y
+#define uDerivativeStrictMode pFlags4.z
+#define uRainWetSurfacesEnabled pFlags4.w
+#define uRainSurfaceRipplesEnabled pFlags5.x
+#define uCsmCascadeCount pFlags5.y
 
 #include "atmosphere_lut.glsl"
 
@@ -226,25 +280,6 @@ vec2 projectWorldToUv(vec3 worldPos, out float ndcDepth) {
     ndcDepth = ndc.z * 0.5 + 0.5;
     return ndc.xy * 0.5 + 0.5;
 }
-
-float compareShadowTexelAt(vec3 proj, ivec2 texelCoord, float bias) {
-    ivec2 size = textureSize(uShadowMapRaw, 0);
-    if (texelCoord.x < 0 || texelCoord.y < 0 || texelCoord.x >= size.x || texelCoord.y >= size.y) {
-        return 1.0;
-    }
-    float closest = texelFetch(uShadowMapRaw, texelCoord, 0).r;
-    return (proj.z - bias <= closest) ? 1.0 : 0.0;
-}
-
-float sampleShadowDepthAt(vec3 proj, vec2 offsetTexels) {
-    ivec2 size = textureSize(uShadowMapRaw, 0);
-    vec2 uv = proj.xy + offsetTexels / vec2(size);
-    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
-        return 1.0;
-    }
-    return texture(uShadowMapRaw, uv).r;
-}
-
 
 float noise2D(vec2 uv) {
     return texture(uNoiseTex, uv).r;

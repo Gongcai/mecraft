@@ -19,6 +19,9 @@ layout (location = 12) in uint aPackedUV;
 layout (location = 13) in uint aPackedLightAoLayer;
 layout (location = 14) in uint aPackedTintAnim;
 
+#ifdef RHI_TERRAIN_SHADOW_MDI
+#include "terrain_shadow_params.glsl"
+#else
 uniform mat4 viewProj;
 uniform mat4 uShadowModelView;
 uniform mat4 uShadowProjection;
@@ -26,20 +29,30 @@ uniform mat4 uShadowProjectionInverse;
 uniform mat4 model;
 uniform int uUseModel;
 uniform int uVertexFormat;
+#endif
 
-out vec2 vUV;
-out float vLayer;
-out float vAnimationFrameCount;
-out float vAnimationFps;
-out float vAnimated;
-out float vNormal;
-out vec3 vWorldPos;
-flat out int vMaterialKind;
-out float vSkylight;
-flat out float vTintKind;
-out vec2 vTintUV;
+layout(location = 0) out vec2 vUV;
+layout(location = 1) out float vLayer;
+layout(location = 2) out float vAnimationFrameCount;
+layout(location = 3) out float vAnimationFps;
+layout(location = 4) out float vAnimated;
+layout(location = 5) out float vNormal;
+layout(location = 6) out vec3 vWorldPos;
+layout(location = 7) flat out int vMaterialKind;
+layout(location = 8) out float vSkylight;
+layout(location = 9) flat out float vTintKind;
+layout(location = 10) out vec2 vTintUV;
 
 void main() {
+#ifdef RHI_TERRAIN_SHADOW_MDI
+    TerrainVertexDecoded vertex = decodeTerrainPackedVertex(
+        aPackedPos,
+        aPackedUV,
+        aPackedLightAoLayer,
+        aPackedTintAnim,
+        gl_BaseInstanceARB);
+    vec4 worldPos = vec4(vertex.pos, 1.0);
+#else
     TerrainVertexDecoded vertex = (uVertexFormat == 1)
         ? decodeTerrainPackedVertex(aPackedPos, aPackedUV, aPackedLightAoLayer, aPackedTintAnim, gl_BaseInstanceARB)
         : decodeLegacyBlockVertex(aLegacyPos, aLegacyUV, aLegacyNormal, aLegacySunlight, aLegacyBlockLight,
@@ -47,6 +60,7 @@ void main() {
                                   aLegacyAnimated, aLegacyTintPacked);
     vec4 localPos = vec4(vertex.pos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
+#endif
 
     // Mecraft CSM: linear projection, no distortion warp.
     vec3 viewPos = mat3(uShadowModelView) * worldPos.xyz + uShadowModelView[3].xyz;

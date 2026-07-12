@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <vector>
 #include <glm/glm.hpp>
+#include "renderer/rhi/RhiHandles.h"
 #include "../world/block/Block.h"
 
 class ResourceMgr;
-class Shader;
+class RhiCommandList;
+class RhiDevice;
 struct TextureArray;
 
 namespace ecs {
@@ -18,34 +20,54 @@ class ParticleSystem {
 public:
     void bindRegistry(ecs::GameplayRegistry& registry);
 
-    void init(ResourceMgr& resourceMgr);
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr);
     void shutdown();
 
     void emit(const glm::ivec3& blockPos, BlockID blockType);
     void update(float dt);
-    void render(const glm::mat4& projection, const glm::mat4& view);
-    // Render particles into SceneComposite with voxel light and depth from GBuffer.
-    // Called by Renderer before volumetric fog composite so particles
-    // receive unified fog. The caller must have already bound the target FBO
-    // and set up blend/depth-write state.
-    void renderToSceneResolved(Shader& shader, uint32_t voxelLightTex, uint32_t depthTex,
-                               const glm::mat4& view, const glm::mat4& viewProj,
-                               const glm::vec2& screenSize);
+    void prepareFrame(const glm::mat4& view, RhiCommandList& commandList);
+    void render(RhiCommandList& commandList, const glm::mat4& viewProj);
+    void renderToSceneResolved(RhiCommandList& commandList,
+                               RhiTextureHandle voxelLightTexture,
+                               RhiTextureHandle depthTexture,
+                               const glm::mat4& viewProj, const glm::vec2& screenSize);
 
 private:
     // Build billboard vertices from ECS particle data. Returns vertex count.
     int buildVertices(const glm::mat4& view, std::vector<float>& vertices);
+    [[nodiscard]] bool createRhiResources();
+    [[nodiscard]] bool ensureDeferredBindGroup(RhiTextureHandle voxelLightTexture,
+                                               RhiTextureHandle depthTexture);
+    void destroyDeferredBindGroup();
+    void destroyRhiResources();
 
     ecs::GameplayRegistry* m_registry = nullptr;
-    Shader* m_shader = nullptr;
-    Shader* m_gbufferShader = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
     const TextureArray* m_texArray = nullptr;
-
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
+    RhiTextureHandle m_boundVoxelLightTexture;
+    RhiTextureHandle m_boundDepthTexture;
+    RhiBufferHandle m_rhiVertexBuffer;
+    RhiTextureViewHandle m_textureArrayView;
+    RhiTextureViewHandle m_voxelLightView;
+    RhiTextureViewHandle m_depthView;
+    RhiSamplerHandle m_linearSampler;
+    RhiSamplerHandle m_nearestSampler;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_forwardFragmentShader;
+    RhiShaderHandle m_deferredFragmentShader;
+    RhiBindGroupLayoutHandle m_forwardBindGroupLayout;
+    RhiBindGroupLayoutHandle m_deferredBindGroupLayout;
+    RhiPipelineLayoutHandle m_forwardPipelineLayout;
+    RhiPipelineLayoutHandle m_deferredPipelineLayout;
+    RhiPipelineHandle m_forwardPipeline;
+    RhiPipelineHandle m_deferredPipeline;
+    RhiBindGroupHandle m_forwardBindGroup;
+    RhiBindGroupHandle m_deferredBindGroup;
+    uint32_t m_preparedVertexCount = 0;
     std::vector<float> m_vertexBuffer;
 
     static constexpr int MAX_PARTICLES = 1000;
+    static constexpr uint64_t VERTEX_BUFFER_BYTES = MAX_PARTICLES * 6u * 8u * sizeof(float);
 };
 
 #endif // MECRAFT_PARTICLESYSTEM_H

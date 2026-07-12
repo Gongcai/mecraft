@@ -9,7 +9,6 @@
 #include "../core/UIWidget.h"
 
 class Inventory;
-class Shader;
 class CraftingSystem;
 
 struct InventoryPanelLayout {
@@ -104,9 +103,6 @@ private:
     bool m_useExternalSlots = false;
 
     ResourceMgr* m_resourceMgr = nullptr;
-    Shader* m_inventoryShader = nullptr;
-    unsigned int m_vao = 0;
-    unsigned int m_vbo = 0;
     int m_cachedScreenWidth = 1920;
     int m_cachedScreenHeight = 1080;
 
@@ -114,4 +110,3 @@ private:
     mutable UITooltip m_tooltip;
     mutable ItemID m_tooltipHoveredItemId = 0;
 };
-

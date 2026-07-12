@@ -5,13 +5,9 @@
 #include <string>
 #include <vector>
 
-#include <cstdint>
-
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
-
-class Shader;
 
 class UIDropdown : public UIWidget {
 public:
@@ -45,14 +41,6 @@ private:
     [[nodiscard]] bool hitTestExpandedPanel(float px, float py, const UIRenderContext& ctx) const;
     [[nodiscard]] UIDropdownStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedDropdownStyle resolveStyle(const UIRenderContext& ctx) const;
-
-    void initMesh();
-    void cleanupMesh();
-
-    Shader* m_shader = nullptr;
-    Shader* m_glassShader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
 
     std::vector<std::string> m_options;
     int m_selectedIndex = -1;

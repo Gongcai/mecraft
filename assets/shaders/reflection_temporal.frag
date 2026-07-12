@@ -8,19 +8,22 @@
 
 #include "gbuffer_contract.glsl"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uCurrentTex;
-uniform sampler2D uHistoryTex;
-uniform sampler2D uVelocityTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uMaterialTex;
-uniform sampler2D uMaterialAuxTex;
-uniform vec2 uScreenSize;
-uniform float uHistoryWeight;
-uniform float uNear;
+layout(binding = 0) uniform sampler2D uCurrentTex;
+layout(binding = 1) uniform sampler2D uHistoryTex;
+layout(binding = 2) uniform sampler2D uVelocityTex;
+layout(binding = 3) uniform sampler2D uDepthTex;
+layout(binding = 4) uniform sampler2D uNormalAoTex;
+layout(binding = 5) uniform sampler2D uMaterialTex;
+layout(binding = 6) uniform sampler2D uMaterialAuxTex;
+
+layout(push_constant) uniform RhiPushConstants {
+    vec2 uScreenSize;
+    float uHistoryWeight;
+    float uNear;
+};
 
 vec3 reconstructNormal(vec3 packedNormal) {
     return normalize(packedNormal * 2.0 - 1.0);

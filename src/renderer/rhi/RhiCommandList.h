@@ -15,14 +15,20 @@ class RhiCommandList {
 public:
     virtual ~RhiCommandList() = default;
 
+    virtual bool begin(const RhiCommandListDesc& desc) = 0;
+    virtual bool end() = 0;
+    [[nodiscard]] virtual RhiCommandListState state() const = 0;
+
     virtual void beginDebugLabel(const char* name, const glm::vec4& color) = 0;
     virtual void endDebugLabel() = 0;
+    virtual void insertDebugMarker(const char* name, const glm::vec4& color) = 0;
 
     virtual void textureBarrier(const RhiTextureBarrier& barrier) = 0;
     virtual void bufferBarrier(const RhiBufferBarrier& barrier) = 0;
 
     virtual void beginRendering(const RhiRenderingInfo& info) = 0;
     virtual void endRendering() = 0;
+    virtual void clearDepthAttachment(float depth, const RhiRect2D& rect) = 0;
 
     virtual void setViewport(const RhiViewport& viewport) = 0;
     virtual void setScissor(const RhiRect2D& rect) = 0;
@@ -42,11 +48,21 @@ public:
                               uint32_t drawCount, uint32_t stride) = 0;
     virtual void dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
 
+    virtual void updateBuffer(RhiBufferHandle buffer, uint64_t offset,
+                              const void* data, size_t size) = 0;
     virtual void copyBuffer(const RhiBufferCopy& copy) = 0;
     virtual void copyBufferToTexture(const RhiBufferTextureCopy& copy) = 0;
+    virtual void copyTextureToBuffer(const RhiTextureBufferCopy& copy) = 0;
     virtual void copyTexture(const RhiTextureCopy& copy) = 0;
     virtual void blitTexture(const RhiTextureBlit& blit) = 0;
+    // Generates every lower mip level while preserving TransferDst as the externally tracked state
+    // for all subresources. Explicit backends perform the required per-level transfer transitions
+    // inside this command and restore TransferDst before subsequent recorded commands execute.
+    virtual void generateMipmaps(RhiTextureHandle texture) = 0;
 
+    virtual void resetQueryPool(RhiQueryPoolHandle pool,
+                                uint32_t firstQuery,
+                                uint32_t queryCount) = 0;
     virtual void writeTimestamp(RhiQueryPoolHandle pool, uint32_t queryIndex) = 0;
 };
 

@@ -4,6 +4,8 @@
 #include "RenderPass.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldDrawBatch.h"
+#include "../rhi/RhiHandles.h"
+#include "../rhi/RhiTypes.h"
 #include <glm/glm.hpp>
 #include <array>
 #include <vector>
@@ -14,7 +16,6 @@
 
 class DeferredRenderTargets;
 class ResourceMgr;
-class Shader;
 class IWorldView;
 class World;
 class BlockEntityRenderer;
@@ -23,6 +24,7 @@ class DropRenderer;
 class FallingBlockRenderer;
 class DropSystem;
 class WorldRenderBuffer;
+class RhiCommandList;
 
 namespace ecs { class GameplayRegistry; }
 
@@ -32,7 +34,7 @@ namespace shadow { class ShadowRenderer; }
 /// Handles opaque terrain, cutout, entity, drop, and transparent shadow casting.
 class ShadowPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Shadow"; }
 
@@ -47,9 +49,6 @@ public:
     void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
     void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
 
-    /// Check if the shadow shader is loaded.
-    [[nodiscard]] bool hasShaders() const { return m_shadowDepthShader != nullptr; }
-
     /// Execute the full CSM shadow pass for all cascades.
     /// Camera data is extracted from FrameContext internally.
     /// @param ctx Frame context (camera, sky, timing)
@@ -58,7 +57,6 @@ public:
     /// @param world World for chunk queries
     /// @param preservedTransparentBatch Transparent batch to save/restore around the pass
     /// @param preservedTransparentPlan Transparent plan to save/restore around the pass
-    /// @param useMultiDrawIndirect Whether MDI rendering is active
     /// @return Updated transparent batch and plan (preserved from input)
     struct ShadowPassOutput {
         std::vector<DrawBatchEntry> transparentBatch;
@@ -67,30 +65,30 @@ public:
     ShadowPassOutput execute(const FrameContext& ctx, const RenderSettings& settings,
                               DeferredRenderTargets& targets, const IWorldView& worldView,
                               const std::vector<DrawBatchEntry>& preservedTransparentBatch,
-                              const TransparentPassPlan& preservedTransparentPlan,
-                              bool useMultiDrawIndirect);
+                              const TransparentPassPlan& preservedTransparentPlan);
 
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
-    void renderShadowEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                              const glm::vec3& cameraPos, float splitNear, float splitFar);
+    void renderShadowEntities(RhiCommandList& commandList,
+                              const glm::mat4& shadowViewProj,
+                              const glm::vec3& cameraPos,
+                              float splitNear,
+                              float splitFar);
 
     /// Render block entity models into the current shadow cascade layer.
-    void renderShadowBlockEntities(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                                   const glm::vec3& cameraPos, float splitNear, float splitFar);
+    void renderShadowBlockEntities(RhiCommandList& commandList,
+                                   const glm::mat4& shadowViewProj);
 
     /// Render dropped items/blocks into the current shadow cascade layer.
-    void renderShadowDrops(const IWorldView& worldView, const glm::mat4& shadowViewProj,
-                            const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                            float animationTime, float shaderTime);
+    void renderShadowDrops(RhiCommandList& commandList,
+                           const glm::mat4& shadowViewProj,
+                           float animationTime);
 
     /// Render falling-block entities into the current shadow cascade layer.
-    void renderShadowFallingBlocks(const glm::mat4& shadowViewProj,
-                                    const glm::mat4& shadowView, const glm::mat4& shadowProjection,
-                                    float animationTime, float shaderTime);
+    void renderShadowFallingBlocks(RhiCommandList& commandList,
+                                   const glm::mat4& shadowViewProj,
+                                   float animationTime);
 
-    Shader* m_shadowDepthShader = nullptr;
-    Shader* m_entityShadowShader = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     TerrainRenderer* m_terrainRenderer = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
@@ -105,9 +103,14 @@ private:
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeOpaqueRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeCutoutRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeTransparentRanges;
-    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeOpaqueEntries;
-    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeCutoutEntries;
-    std::array<std::vector<ChunkRenderEntry>, 4> m_cascadeTransparentEntries;
+    RhiTextureHandle m_trackedCsmDepthTexture;
+    RhiTextureHandle m_trackedCsmDepthAllTexture;
+    RhiTextureHandle m_trackedCsmColor0Texture;
+    RhiTextureHandle m_trackedCsmColor1Texture;
+    std::array<RhiResourceState, 4> m_csmDepthStates{};
+    std::array<RhiResourceState, 4> m_csmDepthAllStates{};
+    std::array<RhiResourceState, 4> m_csmColor0States{};
+    std::array<RhiResourceState, 4> m_csmColor1States{};
 };
 
 #endif // MECRAFT_SHADOW_PASS_H

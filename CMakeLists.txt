@@ -142,6 +142,14 @@ find_package(OpenAL CONFIG REQUIRED)
 find_package(Vorbis CONFIG REQUIRED COMPONENTS File)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
+find_package(glslang CONFIG REQUIRED)
+find_package(spirv_cross_core CONFIG REQUIRED)
+find_package(spirv_cross_glsl CONFIG REQUIRED)
+find_package(spirv_cross_hlsl CONFIG REQUIRED)
+find_package(spirv_cross_msl CONFIG REQUIRED)
+find_package(spirv_cross_cpp CONFIG REQUIRED)
+find_package(spirv_cross_reflect CONFIG REQUIRED)
+find_package(spirv_cross_c CONFIG REQUIRED)
 
 
 # [应用层]
@@ -202,12 +210,9 @@ set(SRC_CORE
         src/resource/BlockTextureArrayBuilder.cpp
         src/resource/BlockTextureLibrary.cpp
         src/resource/CubemapLibrary.cpp
-        src/resource/DefaultShaderCatalog.cpp
         src/resource/EnvironmentTextureLibrary.cpp
         src/resource/EntityTexturePreloader.cpp
         src/resource/ResourceMgr.cpp
-        src/resource/RhiTextureResourceUtils.cpp
-        src/resource/ShaderLibrary.cpp
         src/resource/TextureAtlas.cpp
         src/resource/TextureAtlasBuilders.cpp
         src/resource/TextureResampler.cpp
@@ -256,18 +261,18 @@ set(SRC_WORLD
 # [渲染与UI]
 set(SRC_RENDERER
         # Debug utilities
-        src/renderer/debug/RenderDebugLabels.cpp
         src/renderer/debug/RenderDebugService.cpp
 
         # Contracts
-        src/renderer/contracts/MecraftTextureContract.cpp
 
         # RHI
+        src/renderer/rhi/RhiGrowableBuffer.cpp
         src/renderer/rhi/RhiHash.cpp
-        src/renderer/rhi/gl/GlRhiTextureRegistry.cpp
+        src/renderer/rhi/RhiDeviceFactory.cpp
+        src/renderer/rhi/RhiShaderCompiler.cpp
+        src/renderer/rhi/RhiShaderSourceLoader.cpp
 
         # Core framework
-        src/renderer/core/Shader.cpp
         src/renderer/core/RenderResourceHub.cpp
         src/renderer/core/RenderScene.cpp
         src/renderer/core/DeferredPipeline.cpp
@@ -277,15 +282,11 @@ set(SRC_RENDERER
         src/renderer/gi/VoxelGiClipmap.cpp
 
         # OpenGL helpers
-        src/renderer/gl/GlStateGuard.cpp
 
         # Render targets
-        src/renderer/targets/CommonFrameTargets.cpp
         src/renderer/targets/DeferredRenderTargets.cpp
-        src/renderer/targets/ShadowTargets.cpp
 
         # Render passes
-        src/renderer/passes/RenderPass.cpp
         src/renderer/passes/SsaoPass.cpp
         src/renderer/passes/SsgiPass.cpp
         src/renderer/passes/VelocityPass.cpp
@@ -325,6 +326,7 @@ set(SRC_RENDERER
         src/renderer/mesh/TerrainRenderCache.cpp
         src/renderer/mesh/TerrainStreamingService.cpp
         src/renderer/mesh/TerrainRenderer.cpp
+        src/renderer/mesh/TerrainRhiPipelineSet.cpp
 
         # Shadow system
         src/renderer/shadow/ShadowMatrices.cpp
@@ -342,6 +344,7 @@ set(SRC_RENDERER
 if(MECRAFT_RHI_BACKEND_OPENGL)
     list(APPEND SRC_RENDERER
             src/renderer/rhi/gl/GlRhiDevice.cpp
+            src/renderer/rhi/gl/GlRhiShaderCompiler.cpp
     )
 endif()
 
@@ -354,7 +357,6 @@ set(SRC_UI
         src/ui/Dashboard.cpp
         src/ui/core/UIInputAdapter.cpp
         src/ui/core/UIRenderer.cpp
-        src/ui/core/UIRenderUtils.cpp
         src/ui/core/UIScene.cpp
         src/ui/core/ScreenTransition.cpp
         src/ui/core/UIStyle.cpp
@@ -395,7 +397,6 @@ set(SRC_UI
         src/ui/hud/CrosshairControl.cpp
         src/ui/hud/HotbarControl.cpp
         src/ui/hud/HudControl.cpp
-        src/ui/hud/PickableOverlay.cpp
         src/ui/hud/Pickable.cpp
         src/ui/hud/ConsoleOverlay.cpp
         src/ui/hud/CommandInputOverlay.cpp
@@ -573,13 +574,11 @@ endif()
 # 4. 第三方源码库
 # ===========================================================================
 add_library(mecraft_third_party STATIC
-        third_party/glad/glad.c
         third_party/enet/enet_impl.cpp
         third_party/imgui/imgui.cpp
         third_party/imgui/imgui_demo.cpp
         third_party/imgui/imgui_draw.cpp
         third_party/imgui/imgui_impl_glfw.cpp
-        third_party/imgui/imgui_impl_opengl3.cpp
         third_party/imgui/imgui_tables.cpp
         third_party/imgui/imgui_widgets.cpp
 )
@@ -602,8 +601,23 @@ mecraft_apply_msvc_defaults(mecraft_third_party)
 # ===========================================================================
 # 5. 构建核心库
 # ===========================================================================
+if(MECRAFT_RHI_BACKEND_OPENGL)
+    add_library(mecraft_rhi_gl_loader OBJECT third_party/glad/glad.c)
+    set_target_properties(mecraft_rhi_gl_loader PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(mecraft_rhi_gl_loader SYSTEM PRIVATE third_party)
+    if(MSVC)
+        target_compile_options(mecraft_rhi_gl_loader PRIVATE /W0)
+    else()
+        target_compile_options(mecraft_rhi_gl_loader PRIVATE -w)
+    endif()
+    mecraft_apply_msvc_defaults(mecraft_rhi_gl_loader)
+endif()
+
 add_library(mecraft_core ${CORE_SOURCES})
 target_compile_features(mecraft_core PUBLIC cxx_std_17)
+if(MECRAFT_RHI_BACKEND_OPENGL)
+    target_sources(mecraft_core PRIVATE $<TARGET_OBJECTS:mecraft_rhi_gl_loader>)
+endif()
 set_target_properties(mecraft_core PROPERTIES
         WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
@@ -627,14 +641,22 @@ target_link_libraries(mecraft_core PUBLIC
         Vorbis::vorbisfile
         Freetype::Freetype
         EnTT::EnTT
+        glslang::glslang
+        glslang::glslang-default-resource-limits
+        glslang::SPIRV
+        spirv-cross-c
 )
 
-# 统一宏定义
-target_compile_definitions(mecraft_core PUBLIC
-        GLFW_INCLUDE_NONE
+# RHI backend selection is an implementation detail of the device factory.
+target_compile_definitions(mecraft_core PRIVATE
         "MECRAFT_DEFAULT_RHI_BACKEND=\"${MECRAFT_DEFAULT_RHI_BACKEND}\""
         $<$<BOOL:${MECRAFT_RHI_BACKEND_OPENGL}>:MECRAFT_RHI_BACKEND_OPENGL>
         $<$<BOOL:${MECRAFT_RHI_BACKEND_VULKAN}>:MECRAFT_RHI_BACKEND_VULKAN>
+)
+
+# Shared compile definitions required by public project headers and consumers.
+target_compile_definitions(mecraft_core PUBLIC
+        GLFW_INCLUDE_NONE
         "MECRAFT_ASSETS_DIR=\"${MECRAFT_ASSETS_DIR_COMPILE}\""
         $<$<OR:$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:MECRAFT_DEBUG>
         $<$<CONFIG:RelWithDebInfo>:MECRAFT_ENABLE_CONSOLE_OUTPUT>
@@ -746,7 +768,9 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
     add_mecraft_test(sleeping_state_test tests/sleeping_state_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
-    add_mecraft_test(rhi_core_test tests/rhi_core_test.cpp)
+    if(MECRAFT_RHI_BACKEND_OPENGL)
+        add_mecraft_test(rhi_core_test tests/rhi_core_test.cpp)
+    endif()
 
     add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)
     add_mecraft_test(drop_system_test tests/drop_system_test.cpp)

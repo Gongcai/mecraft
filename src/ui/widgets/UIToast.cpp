@@ -1,15 +1,15 @@
 #include "UIToast.h"
 
-#include <glad/glad.h>
 #include <algorithm>
 
-#include "../core/UIRenderUtils.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
 
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
+#include <cstdlib>
 
 namespace {
 
@@ -36,26 +36,70 @@ UIToast::~UIToast() {
 }
 
 void UIToast::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
-    // Buffer for: bg (6 verts) + border (24 verts) per toast, up to maxVisible toasts.
-    constexpr int maxToasts = 8;
-    constexpr int totalFloats = maxToasts * 30 * 2;
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(totalFloats * sizeof(float)),
-                 nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "UiToast.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "UiToast.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = m_rhiDevice->createShader(shaderDesc);
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "UiToast.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "UiToast.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    constexpr float vertices[] = {0,0, 1,0, 1,1, 0,0, 1,1, 0,1};
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "UiToast.VertexBuffer";
+    bufferDesc.size = sizeof(vertices);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    m_vertexBuffer = m_rhiDevice->createBuffer(bufferDesc, vertices, sizeof(vertices));
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid() || !m_vertexBuffer.isValid()) std::abort();
 
     UIWidget::init(resourceMgr);
 }
 
 void UIToast::shutdown() {
     cleanupMesh();
-    m_shader = nullptr;
+    if (m_rhiDevice) {
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+    }
+    m_pipeline = {}; m_pipelineLayout = {}; m_fragmentShader = {}; m_vertexShader = {};
+    m_rhiDevice = nullptr;
     m_toasts.clear();
     UIWidget::shutdown();
 }
@@ -107,19 +151,15 @@ void UIToast::onUpdate(float dt) {
     }
 }
 
-void UIToast::initMesh() {
-    // Already initialized in init().
-}
-
 void UIToast::cleanupMesh() {
-    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
-    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
+    if (m_rhiDevice && m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    m_vertexBuffer = {};
 }
 
 void UIToast::renderSelf(const UIRenderContext& ctx) const {
-    if (!m_shader || m_toasts.empty()) return;
-
-    const UIRenderUtils::GLStateGuard guard;
+    if (m_toasts.empty()) return;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record && (!ctx.commandList || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
     const UIToastStyle baseStyle = resolveBaseStyle(ctx);
 
     const float screenW = static_cast<float>(ctx.screenWidth);
@@ -136,42 +176,27 @@ void UIToast::renderSelf(const UIRenderContext& ctx) const {
         const float x1 = x0 + resolved.width;
         const float y1 = y0 + resolved.height;
 
-        // Build vertices: bg (6) + border (24) + accent bar (6).
-        std::vector<float> verts;
-        verts.reserve(36 * 2);
-        UIRenderUtils::pushColorQuad(verts, x0, y0, x1, y1); // bg
-        // Border (4 quads).
-        const float bw = resolved.borderWidth;
-        UIRenderUtils::pushColorQuad(verts, x0, y1 - bw, x1, y1);
-        UIRenderUtils::pushColorQuad(verts, x0, y0, x1, y0 + bw);
-        UIRenderUtils::pushColorQuad(verts, x0, y0, x0 + bw, y1);
-        UIRenderUtils::pushColorQuad(verts, x1 - bw, y0, x1, y1);
-        UIRenderUtils::pushColorQuad(verts, x0, y0, x0 + resolved.accentWidth, y1);
-
-        glBindVertexArray(m_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
-
-        m_shader->use();
-        m_shader->setVec2("uScreenSize", glm::vec2(screenW, static_cast<float>(ctx.screenHeight)));
-
-        // Background.
-        m_shader->setVec4("uColor", glm::vec4(resolved.background[0], resolved.background[1],
-                                              resolved.background[2], resolved.background[3] * toastAlpha));
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-
-        // Border.
-        m_shader->setVec4("uColor", glm::vec4(resolved.border[0], resolved.border[1],
-                                              resolved.border[2], resolved.border[3] * toastAlpha));
-        glDrawArrays(GL_TRIANGLES, 6, 24);
-
-        // Accent bar.
-        m_shader->setVec4("uColor", glm::vec4(resolved.accent[0], resolved.accent[1],
-                                              resolved.accent[2], resolved.accent[3] * toastAlpha));
-        glDrawArrays(GL_TRIANGLES, 30, 6);
-
-        glBindVertexArray(0);
+        if (record) {
+            const float bw = resolved.borderWidth;
+            ctx.commandList->setGraphicsPipeline(m_pipeline);
+            ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+            auto drawRect = [&](float rx, float ry, float rw, float rh, Color color) {
+                color[3] *= toastAlpha;
+                struct Push { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+                const Push push{glm::vec4(screenW, static_cast<float>(ctx.screenHeight), rx, ry),
+                                glm::vec4(rw, rh, 0.0f, 0.0f),
+                                glm::vec4(color[0], color[1], color[2], color[3])};
+                ctx.commandList->pushConstants(&push, sizeof(push),
+                    rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+                ctx.commandList->draw(6u, 1u, 0u, 0u);
+            };
+            drawRect(x0, y0, resolved.width, resolved.height, resolved.background);
+            drawRect(x0, y1 - bw, resolved.width, bw, resolved.border);
+            drawRect(x0, y0, resolved.width, bw, resolved.border);
+            drawRect(x0, y0, bw, resolved.height, resolved.border);
+            drawRect(x1 - bw, y0, bw, resolved.height, resolved.border);
+            drawRect(x0, y0, resolved.accentWidth, resolved.height, resolved.accent);
+        }
 
         // Render text.
         if (ctx.textRenderer) {
@@ -179,10 +204,14 @@ void UIToast::renderSelf(const UIRenderContext& ctx) const {
             const auto metrics = ctx.textRenderer->measureText(toast.text, textScale);
             const float textX = x0 + resolved.textPadding;
             const float textY = y0 + (resolved.height - metrics.height) * 0.5f;
-            ctx.textRenderer->render(toast.text, textX, textY, textScale,
-                                     {resolved.text[0], resolved.text[1], resolved.text[2],
-                                      resolved.text[3] * toastAlpha},
-                                     screenW, static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(
+                ctx,
+                toast.text,
+                textX,
+                textY,
+                textScale,
+                {resolved.text[0], resolved.text[1], resolved.text[2],
+                 resolved.text[3] * toastAlpha});
         }
 
         currentY += resolved.height + resolved.spacing;

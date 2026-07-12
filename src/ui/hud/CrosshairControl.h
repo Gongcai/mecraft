@@ -4,10 +4,11 @@
 
 #include <cstdint>
 
+#include "renderer/rhi/RhiHandles.h"
 #include "../core/UIWidget.h"
 
 class ResourceMgr;
-class Shader;
+class RhiDevice;
 
 class CrosshairControl : public UIWidget
 {
@@ -29,11 +30,13 @@ private:
     void rebuildMesh();
     void cleanupMesh();
 
-    Shader* m_shader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_vertexBuffer;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineHandle m_pipeline;
     int m_vertexCount = 0;
     float m_size = 1.0f;
     std::array<float, 4> m_color {1.0f, 1.0f, 1.0f, 1.0f};
 };
-

@@ -1,5 +1,7 @@
 #include "renderer/rhi/RhiHash.h"
 
+#include <cstring>
+
 namespace {
 constexpr uint64_t kFnvOffset = 1469598103934665603ull;
 constexpr uint64_t kFnvPrime = 1099511628211ull;
@@ -14,6 +16,12 @@ void rhiHashCombine(uint64_t& hash, uint64_t value) {
 template <typename Enum>
 void rhiHashEnum(uint64_t& hash, Enum value) {
     rhiHashCombine(hash, static_cast<uint64_t>(value));
+}
+
+uint32_t floatBits(const float value) {
+    uint32_t bits = 0u;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
 }
 } // namespace
 
@@ -35,6 +43,7 @@ uint64_t rhiHashBufferDesc(const RhiBufferDesc& desc) {
     rhiHashCombine(hash, desc.size);
     rhiHashCombine(hash, desc.usage);
     rhiHashEnum(hash, desc.memoryUsage);
+    rhiHashEnum(hash, desc.initialState);
     return hash;
 }
 
@@ -75,7 +84,10 @@ uint64_t rhiHashGraphicsPipelineDesc(const RhiGraphicsPipelineDesc& desc) {
     rhiHashEnum(hash, desc.topology);
     rhiHashEnum(hash, desc.raster.cullMode);
     rhiHashEnum(hash, desc.raster.frontFace);
+    rhiHashCombine(hash, floatBits(desc.raster.depthBiasConstantFactor));
+    rhiHashCombine(hash, floatBits(desc.raster.depthBiasSlopeFactor));
     rhiHashCombine(hash, desc.raster.depthClampEnabled ? 1u : 0u);
+    rhiHashCombine(hash, desc.raster.depthBiasEnabled ? 1u : 0u);
     rhiHashCombine(hash, desc.raster.scissorEnabled ? 1u : 0u);
     rhiHashCombine(hash, desc.depthStencil.depthTestEnabled ? 1u : 0u);
     rhiHashCombine(hash, desc.depthStencil.depthWriteEnabled ? 1u : 0u);

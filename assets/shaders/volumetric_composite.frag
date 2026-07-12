@@ -1,17 +1,16 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSceneTex;
-uniform sampler2D uVolumetricTex;
-uniform sampler2D uDepthTex;
-uniform float uNearPlane;
-uniform float uFarPlane;
-uniform int uFrameIndex;
-uniform int uFreezeBias; // A/B test: 1 = use static bias (no temporal rotation)
-uniform int uIsEyeInWater;
-uniform int uVolumetricFogActive; // 0 = fog disabled, output transmittance=1.0
+layout(binding = 0) uniform sampler2D uSceneTex;
+layout(binding = 1) uniform sampler2D uVolumetricTex;
+layout(binding = 2) uniform sampler2D uDepthTex;
+
+layout(push_constant) uniform RhiPushConstants {
+    vec4 uDepthParams;
+    ivec4 uCompositeFlags;
+};
 
 float viewDistanceFromDepth(float depth) {
     if (depth >= 0.9999) {
@@ -20,7 +19,8 @@ float viewDistanceFromDepth(float depth) {
     // DerivativeMain/lib/Head/Functions.inc GetDepthLinear(): depth-only
     // view-space z distance. Do not use ray length here; SpatialUpscale's
     // sigmaZ is tuned for linear depth and ray length jitters at screen edges.
-    return (uNearPlane * uFarPlane) / (depth * (uNearPlane - uFarPlane) + uFarPlane);
+    return (uDepthParams.x * uDepthParams.y) /
+           (depth * (uDepthParams.x - uDepthParams.y) + uDepthParams.y);
 }
 
 float viewDistanceFromDepthTexel(ivec2 texel) {
@@ -39,9 +39,9 @@ vec4 spatialUpscaleVolumetric(vec2 uv) {
     // DerivativeMain lib/Atmosphere/Fogs.glsl:46: bias rotates with frameCounter
     // so each frame samples a different 2x2 quarter, providing temporal variation.
     // A/B test: uFreezeBias=1 uses static bias (no temporal rotation).
-    ivec2 bias = (uFreezeBias != 0 || uIsEyeInWater != 0)
+    ivec2 bias = (uCompositeFlags.y != 0 || uCompositeFlags.z != 0)
         ? ivec2(floor(fullCoord)) & ivec2(1)
-        : ivec2(fullCoord + float(uFrameIndex)) & ivec2(1);
+        : ivec2(fullCoord + float(uCompositeFlags.x)) & ivec2(1);
     ivec2 baseTexel = ivec2(floor(fullCoord * 0.5)) + bias * 2;
     ivec2 offsets[4] = ivec2[](
         ivec2(-2, -2),
@@ -70,12 +70,12 @@ void main() {
 
     // When volumetric fog is disabled, output transmittance=1.0 (no fog) so that
     // Bloomy Fog in postprocess doesn't misinterpret alpha=0 as "fully fogged".
-    if (uVolumetricFogActive == 0) {
+    if (uCompositeFlags.w == 0) {
         FragColor = vec4(scene, 1.0);
         return;
     }
 
-    vec4 volumetric = (uIsEyeInWater != 0)
+    vec4 volumetric = (uCompositeFlags.z != 0)
         ? texture(uVolumetricTex, vTexCoord)
         : spatialUpscaleVolumetric(vTexCoord);
     // Output fog transmittance in alpha for Bloomy Fog in postprocess.

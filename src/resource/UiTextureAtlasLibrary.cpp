@@ -1,32 +1,25 @@
 #include "UiTextureAtlasLibrary.h"
 
 #include "BlockIconAtlasBuilder.h"
-#include "RhiTextureResourceUtils.h"
 #include "TextureAtlasBuilders.h"
 #include "../Diagnostics.h"
-#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "renderer/rhi/RhiDevice.h"
 
-#include <glad/glad.h>
-
+#include <cassert>
 #include <cstdio>
 #include <utility>
 
-namespace {
-
-[[nodiscard]] GLuint textureId(const TextureAtlas& atlas) {
-    return static_cast<GLuint>(renderer::rhi::gl::textureId(atlas.texture));
+void UiTextureAtlasLibrary::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
+    m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
 }
 
-void deleteTextureAtlas(TextureAtlas& atlas) {
-    const GLuint nativeTexture = textureId(atlas);
-    resource::unregisterTextureAtlas(atlas);
-    if (nativeTexture != 0) {
-        glDeleteTextures(1, &nativeTexture);
+void UiTextureAtlasLibrary::deleteTextureAtlas(TextureAtlas& atlas) {
+    if (m_rhiDevice != nullptr && atlas.texture.isValid()) {
+        m_rhiDevice->destroyTexture(atlas.texture);
     }
     atlas = {};
 }
-
-} // namespace
 
 void UiTextureAtlasLibrary::shutdown() {
     deleteTextureAtlas(m_blockIconAtlas);
@@ -36,19 +29,23 @@ void UiTextureAtlasLibrary::shutdown() {
     m_itemTexturePixels.clear();
     m_itemTextureIndices.clear();
     m_hudIconIndices.clear();
+    m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
 }
 
 void UiTextureAtlasLibrary::buildBlockIconAtlas(const int iconSize, const BlockTextureLibrary& blockTextures) {
     const TextureAtlas& blockAtlas = blockTextures.atlas();
     const std::vector<unsigned char>& blockAtlasPixels = blockTextures.atlasPixels();
-    if (textureId(blockAtlas) == 0 || blockAtlasPixels.empty() || blockAtlas.tileSize <= 0 || blockAtlas.tilesPerRow <= 0) {
+    if (!blockAtlas.texture.isValid() || blockAtlasPixels.empty() ||
+        blockAtlas.tileSize <= 0 || blockAtlas.tilesPerRow <= 0 || m_rhiDevice == nullptr) {
         MECRAFT_LOG_FPRINTF(stderr, "[Resource] Block icon atlas requires the block texture atlas to be built first\n");
         return;
     }
 
     deleteTextureAtlas(m_blockIconAtlas);
 
-    m_blockIconAtlas = resource::buildBlockIconAtlas(iconSize, blockAtlas, blockAtlasPixels, blockTextures);
+    m_blockIconAtlas = resource::buildBlockIconAtlas(
+        iconSize, blockAtlas, blockAtlasPixels, blockTextures, *m_rhiDevice);
 }
 
 const TextureAtlas& UiTextureAtlasLibrary::blockIconAtlas() const {
@@ -58,9 +55,11 @@ const TextureAtlas& UiTextureAtlasLibrary::blockIconAtlas() const {
 void UiTextureAtlasLibrary::buildItemTextureAtlas(const std::string& directory,
                                                  const int tileSize,
                                                  const BlockTextureCatalog& catalog) {
+    assert(m_rhiDevice != nullptr);
     deleteTextureAtlas(m_itemTextureAtlas);
 
-    resource::IndexedTextureAtlas atlas = resource::buildItemTextureAtlas(directory, tileSize, catalog);
+    resource::IndexedTextureAtlas atlas = resource::buildItemTextureAtlas(
+        directory, tileSize, catalog, *m_rhiDevice, *m_commandListPool);
     m_itemTextureAtlas = atlas.atlas;
     m_itemTexturePixels = std::move(atlas.pixels);
     m_itemTextureIndices = std::move(atlas.indices);
@@ -83,9 +82,11 @@ const std::vector<unsigned char>& UiTextureAtlasLibrary::itemTexturePixels() con
 }
 
 void UiTextureAtlasLibrary::buildHudIconAtlas(const std::string& directory, const int iconSize) {
+    assert(m_rhiDevice != nullptr);
     deleteTextureAtlas(m_hudIconAtlas);
 
-    resource::IndexedTextureAtlas atlas = resource::buildHudIconAtlas(directory, iconSize);
+    resource::IndexedTextureAtlas atlas = resource::buildHudIconAtlas(
+        directory, iconSize, *m_rhiDevice, *m_commandListPool);
     m_hudIconAtlas = atlas.atlas;
     m_hudIconIndices = std::move(atlas.indices);
 }

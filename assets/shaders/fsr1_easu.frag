@@ -4,14 +4,17 @@
 #define A_GLSL 1
 #include "ffx-fsr/ffx_a.h"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uInputTex;
-uniform vec4 uCon0;
-uniform vec4 uCon1;
-uniform vec4 uCon2;
-uniform vec4 uCon3;
+layout(binding = 0) uniform sampler2D uInputTex;
+
+layout(push_constant) uniform RhiPushConstants {
+    vec4 uCon0;
+    vec4 uCon1;
+    vec4 uCon2;
+    vec4 uCon3;
+};
 
 #define FSR_EASU_F 1
 AF4 FsrEasuRF(AF2 p) { return textureGather(uInputTex, p, 0); }

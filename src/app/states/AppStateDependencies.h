@@ -14,6 +14,8 @@
 #include "../../locale/LocaleManager.h"
 
 class AppStateMachine;
+class RhiDevice;
+class RhiCommandListPool;
 class ThreadPool;
 
 struct AppStateDependencies {
@@ -28,6 +30,8 @@ struct AppStateDependencies {
     UIRenderer& uiRenderer;
     LocaleManager& localeManager;
     ThreadPool& threadPool;
+    RhiDevice& rhiDevice;
+    RhiCommandListPool& commandListPool;
     bool enableDebugDashboard;
     std::function<void()> beginGameplayInputReplay;
     std::function<void()> endGameplayInputReplay;

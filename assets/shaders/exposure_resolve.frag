@@ -1,16 +1,21 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uExposureDataTex;
 layout(binding = 1) uniform sampler2D uPreviousExposureTex;
-layout(location = 0) uniform float uFrameTime;
-layout(location = 1) uniform float uAutoExposureSpeed;
-layout(location = 2) uniform float uAutoExposureBias;
-layout(location = 3) uniform float uManualExposure;
-layout(location = 4) uniform bool uInitialized;
-layout(location = 5) uniform bool uReusePreviousTarget;
+layout(push_constant) uniform RhiPushConstants {
+    vec4 pExposure;
+    ivec4 pFlags;
+};
+
+#define uFrameTime pExposure.x
+#define uAutoExposureSpeed pExposure.y
+#define uAutoExposureBias pExposure.z
+#define uManualExposure pExposure.w
+#define uInitialized (pFlags.x != 0)
+#define uReusePreviousTarget (pFlags.y != 0)
 
 void main() {
     vec4 previousState = texelFetch(uPreviousExposureTex, ivec2(0, 0), 0);

@@ -1,15 +1,46 @@
 #include "UITabControl.h"
 
-#include <glad/glad.h>
 #include <algorithm>
-#include <glm/vec2.hpp>
+#include <cmath>
 #include <glm/vec4.hpp>
 
-#include "../core/UIRenderUtils.h"
 #include "../font/TextRenderer.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/core/Shader.h"
-#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+
+namespace {
+
+struct TabSolidPushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 rectRadius;
+    glm::vec4 color;
+};
+
+struct TabGlassPushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 extentOpacity;
+    glm::vec4 tint;
+    glm::vec4 appearance;
+};
+
+static_assert(sizeof(TabSolidPushConstants) == 48u);
+static_assert(sizeof(TabGlassPushConstants) == 64u);
+
+[[nodiscard]] RhiRect2D tabScissor(const UIRenderContext& context) {
+    if (context.hasScissor) {
+        return context.scissor;
+    }
+    return {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
+    };
+}
+
+} // namespace
 
 // Simple transparent panel used as a content container for each tab.
 class TabContentPanel : public UIWidget {
@@ -32,30 +63,10 @@ UITabControl::~UITabControl() {
 }
 
 void UITabControl::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
-    m_glassShader = resourceMgr.getShader("ui_glass");
-    // Mesh for: header bg rects (6 verts per tab) + indicator rect (6 verts) + content bg (6 verts).
-    // We'll buffer-sub-data dynamically, so allocate generously.
-    constexpr int maxTabs = 32;
-    constexpr int totalFloats = (maxTabs * 6 + 6 + 6) * 2;
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(totalFloats * sizeof(float)),
-                 nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-
     UIWidget::init(resourceMgr);
 }
 
 void UITabControl::shutdown() {
-    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
-    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
-    m_shader = nullptr;
-    m_glassShader = nullptr;
     UIWidget::shutdown();
 }
 
@@ -157,9 +168,16 @@ int UITabControl::hitTestHeader(float px, float py, const UIRenderContext& ctx) 
 void UITabControl::renderSelf(const UIRenderContext& ctx) const {
     // Tab headers are rendered in renderSelf.
     // Content is rendered in render() override.
-    if (!m_shader || m_tabs.empty()) return;
+    if (m_tabs.empty()) {
+        return;
+    }
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record && (ctx.commandList == nullptr ||
+                   !ctx.panelQuadVertexBuffer.isValid() ||
+                   !ctx.panelSolidPipeline.isValid())) {
+        return;
+    }
 
-    const UIRenderUtils::GLStateGuard guard;
     const UITabControlStyle baseStyle = resolveBaseStyle(ctx);
     const UIResolvedTabControlStyle baseResolved =
         UIStyleResolver::resolveTabControl(baseStyle, interactive ? UIStyleState_Normal : UIStyleState_Disabled);
@@ -176,84 +194,90 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
     const float tabW = aw / static_cast<float>(m_tabs.size());
 
     // Header Y is at the top of the widget (higher Y in OpenGL coords).
-    const float headerTopY = ay + ah;
     const float headerBottomY = ay + ah - headerH;
 
-    // Build header vertices.
-    std::vector<float> verts;
-    verts.reserve((m_tabs.size() * 6 + 12) * 2);
-    UIRenderUtils::pushColorQuad(verts, ax, ay, ax + aw, headerBottomY);
-    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
-        const float x0 = ax + static_cast<float>(i) * tabW;
-        const float x1 = x0 + tabW;
-        UIRenderUtils::pushColorQuad(verts, x0, headerBottomY, x1, headerTopY);
-    }
-    // Indicator rect (below active header).
     const float indX0 = ax + static_cast<float>(m_activeIndex) * tabW;
     const float indX1 = indX0 + tabW;
-    UIRenderUtils::pushColorQuad(verts, indX0, headerBottomY - indicatorH,
-                                 indX1, headerBottomY);
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
-
-    const uint32_t backdropBlurTextureId = renderer::rhi::gl::textureId(ctx.backdropBlur);
-    const bool useGlass = m_glassShader &&
-                          backdropBlurTextureId != 0 &&
+    const bool useGlass = ctx.panelGlassPipeline.isValid() &&
+                          ctx.panelGlassBindGroup.isValid() &&
+                          ctx.backdropBlurView.isValid() &&
                           ctx.backdropSourceWidth > 0 &&
-                          ctx.backdropSourceHeight > 0;
+                          ctx.backdropSourceHeight > 0 &&
+                          ctx.backdropBlurWidth > 0 &&
+                          ctx.backdropBlurHeight > 0;
+
+    if (record) {
+        RhiCommandList& commandList = *ctx.commandList;
+        const RhiRect2D scissor = tabScissor(ctx);
 
     if (useGlass) {
         const float tintStrength = std::clamp(contentCol[3] * 0.40f, 0.18f, 0.40f);
-        m_glassShader->use();
-        m_glassShader->setVec2("uScreenSize",
-                               glm::vec2(static_cast<float>(ctx.screenWidth),
-                                         static_cast<float>(ctx.screenHeight)));
-        m_glassShader->setVec2("uBackdropSize",
-                               glm::vec2(static_cast<float>(ctx.backdropSourceWidth),
-                                         static_cast<float>(ctx.backdropSourceHeight)));
-        m_glassShader->setVec4("uTint", glm::vec4(contentCol[0], contentCol[1], contentCol[2], tintStrength));
-        m_glassShader->setFloat("uOpacity", std::clamp(alpha * 0.94f, 0.0f, 1.0f));
-        m_glassShader->setFloat("uSaturation", 0.58f);
-        m_glassShader->setFloat("uDarken", 0.74f);
-        m_glassShader->setInt("uBackdrop", 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, backdropBlurTextureId);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        const TabGlassPushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth),
+                      static_cast<float>(ctx.screenHeight), ax, ay),
+            glm::vec4(aw, headerBottomY - ay, 0.0f,
+                      std::clamp(alpha * 0.94f, 0.0f, 1.0f)),
+            glm::vec4(contentCol[0], contentCol[1], contentCol[2], tintStrength),
+            glm::vec4(0.58f, 0.74f, 0.0f, 0.0f)
+        };
+        commandList.setGraphicsPipeline(ctx.panelGlassPipeline);
+        commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+        commandList.setBindGroup(0u, ctx.panelGlassBindGroup);
+        commandList.setScissor(scissor);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) |
+                                  rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(6u, 1u, 0u, 0u);
     }
 
-    m_shader->use();
-    m_shader->setVec2("uScreenSize",
-                      glm::vec2(static_cast<float>(ctx.screenWidth),
-                                static_cast<float>(ctx.screenHeight)));
+    commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
+    commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+    commandList.setScissor(scissor);
 
-    // Draw content background, then headers and the active indicator.
-    Color contentDraw = contentCol;
-    contentDraw[3] *= useGlass ? 0.34f : 1.0f;
-    m_shader->setVec4("uColor",
-                      glm::vec4(contentDraw[0], contentDraw[1], contentDraw[2], contentDraw[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    const GLint headerVertexOffset = 6;
-    for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
-        int tabState = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
-        if (i == m_activeIndex) {
-            tabState |= static_cast<int>(UIStyleState_Selected);
-        } else if (i == m_hoveredTab) {
-            tabState |= static_cast<int>(UIStyleState_Hovered);
+    auto drawSolidRect = [&](const float x,
+                             const float y,
+                             const float rectWidth,
+                             const float rectHeight,
+                             const Color& color) {
+        if (rectWidth <= 0.0f || rectHeight <= 0.0f || color[3] <= 0.0f) {
+            return;
         }
-        const Color col = UIStyleResolver::resolveTabControl(baseStyle, tabState).header;
-        m_shader->setVec4("uColor", glm::vec4(col[0], col[1], col[2], col[3] * alpha));
-        glDrawArrays(GL_TRIANGLES, headerVertexOffset + i * 6, 6);
+        const TabSolidPushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth),
+                      static_cast<float>(ctx.screenHeight), x, y),
+            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
+            glm::vec4(color[0], color[1], color[2], color[3])
+        };
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) |
+                                  rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(6u, 1u, 0u, 0u);
+    };
+
+        // Draw content background, then headers and the active indicator.
+        Color contentDraw = contentCol;
+        contentDraw[3] *= alpha * (useGlass ? 0.34f : 1.0f);
+        drawSolidRect(ax, ay, aw, headerBottomY - ay, contentDraw);
+
+        for (int i = 0; i < static_cast<int>(m_tabs.size()); ++i) {
+            int tabState = interactive ? static_cast<int>(UIStyleState_Normal) : static_cast<int>(UIStyleState_Disabled);
+            if (i == m_activeIndex) {
+                tabState |= static_cast<int>(UIStyleState_Selected);
+            } else if (i == m_hoveredTab) {
+                tabState |= static_cast<int>(UIStyleState_Hovered);
+            }
+            Color col = UIStyleResolver::resolveTabControl(baseStyle, tabState).header;
+            col[3] *= alpha;
+            const float x0 = ax + static_cast<float>(i) * tabW;
+            drawSolidRect(x0, headerBottomY, tabW, headerH, col);
+        }
+
+        // Draw indicator.
+        Color indicatorDraw = indCol;
+        indicatorDraw[3] *= alpha;
+        drawSolidRect(indX0, headerBottomY - indicatorH,
+                      indX1 - indX0, indicatorH, indicatorDraw);
     }
-
-    // Draw indicator.
-    m_shader->setVec4("uColor", glm::vec4(indCol[0], indCol[1], indCol[2], indCol[3] * alpha));
-    glDrawArrays(GL_TRIANGLES, headerVertexOffset + static_cast<GLint>(m_tabs.size() * 6), 6);
-
-    glBindVertexArray(0);
 
     // Render header text.
     if (ctx.textRenderer) {
@@ -263,10 +287,13 @@ void UITabControl::renderSelf(const UIRenderContext& ctx) const {
             const float x0 = ax + static_cast<float>(i) * tabW;
             const float textX = x0 + (tabW - m.width) * 0.5f;
             const float textY = headerBottomY + (headerH - m.height) * 0.5f;
-            ctx.textRenderer->render(m_tabs[i].title, textX, textY, textScale,
-                                     {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha},
-                                     static_cast<float>(ctx.screenWidth),
-                                     static_cast<float>(ctx.screenHeight));
+            ctx.textRenderer->draw(
+                ctx,
+                m_tabs[i].title,
+                textX,
+                textY,
+                textScale,
+                {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * alpha});
         }
     }
 }

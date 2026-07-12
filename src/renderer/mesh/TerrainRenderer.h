@@ -25,24 +25,11 @@ struct CascadeAabbCuller {
 class Chunk;
 class IWorldView;
 class World;
-class Shader;
-class ResourceMgr;
 class WorldRenderBuffer;
-class DeferredRenderTargets;
-
-struct TextureArray;
 
 namespace shadow { class ShadowCasterCuller; }
 
-/// Entry describing a chunk or sub-chunk to render.
-/// Redefined here to avoid circular dependency with Renderer.h.
-struct ChunkRenderEntry {
-    Chunk* chunk = nullptr;
-    int scy = -1;        // -1 = column aggregate, otherwise sub-chunk index
-    bool aggregated = false;
-};
-
-/// Settings subset required by bindChunkRenderState, decoupled from Renderer.
+/// Terrain material and lighting controls consumed by RHI terrain pipelines.
 struct TerrainRenderSettings {
     bool rainWetSurfacesEnabled = true;
     bool rainSurfaceRipplesEnabled = true;
@@ -65,7 +52,7 @@ struct TerrainRenderSettings {
     float blockParallaxDepth = 0.075f;
 };
 
-/// Sky lighting data required by bindChunkRenderState.
+/// Sky lighting parameters consumed by RHI terrain pipelines.
 struct TerrainSkyLightingData {
     glm::vec3 cameraPos = glm::vec3(0.0f);
     glm::vec3 sunDirection = glm::vec3(0.0f);
@@ -77,6 +64,7 @@ struct TerrainSkyLightingData {
     glm::vec3 horizonScatterColor = glm::vec3(0.0f);
     float skyIntensity = 1.0f;
     float moonVisibility = 0.0f;
+    float moonPhaseFlux = 0.0f;
     glm::vec3 directIlluminance = glm::vec3(0.0f);
     glm::vec3 skyIlluminance = glm::vec3(0.0f);
     glm::vec3 sunIlluminance = glm::vec3(0.0f);
@@ -84,7 +72,7 @@ struct TerrainSkyLightingData {
     glm::vec3 cloudDynamicWeather = glm::vec3(0.0f);
 };
 
-/// Fog parameters required by bindChunkRenderState.
+/// Fog parameters consumed by RHI terrain pipelines.
 struct TerrainFogData {
     bool enabled = true;
     int mode = 0;           // FogMode enum value
@@ -94,7 +82,7 @@ struct TerrainFogData {
     float density = 0.01f;
 };
 
-/// Atmosphere parameters required by bindChunkRenderState.
+/// Atmosphere parameters consumed by RHI terrain pipelines.
 struct TerrainAtmosphereData {
     float aerialStrength = 0.65f;
     float horizonScatterStrength = 0.78f;
@@ -113,8 +101,7 @@ struct TerrainAtmosphereData {
     int directWeatherOcclusionOverride = 0;
 };
 
-/// Per-frame rendering data required by bindChunkRenderState.
-/// Kept local to terrain rendering to avoid circular header dependencies.
+/// Per-frame parameters shared by terrain RHI pipelines.
 struct TerrainFrameData {
     glm::mat4 view = glm::mat4(1.0f);
     glm::mat4 viewProj = glm::mat4(1.0f);
@@ -135,7 +122,7 @@ public:
                                       const glm::vec3& boundsMax,
                                       void* userData);
 
-    void init(ResourceMgr& resourceMgr);
+    void init();
     void shutdown();
 
     // --- Dependency injection ---
@@ -146,41 +133,16 @@ public:
     void updateFrustum(const glm::mat4& viewProj);
     void setCameraPos(const glm::vec3& pos) { m_cameraPos = pos; }
 
-    // --- Chunk render state binding ---
-    /// Binds ~30 uniforms and ~15 textures for the chunk GBuffer shader.
-    /// Inlines bindFogUniforms, bindSkyLightingUniforms, bindAtmosphereUniforms, bindWaterEffectUniforms.
-    void bindChunkRenderState(const TerrainFrameData& frame, const TextureArray& texArray,
-                              Shader& shader, bool deferredFrameActive, int debugLightMode,
-                              bool eyeInWater, int heldBlockLightValue,
-                              DeferredRenderTargets& targets, ResourceMgr* resourceMgr,
-                              bool volumetricFogShadersReady,
-                              const TerrainRenderSettings& settings);
-
-    /// Lightweight forward-only state binding - no deferred resources.
-    /// Binds only: texture array, lightmap, biome colormap, fog, and sky intensity.
-    /// Does NOT bind: skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric.
-    void bindBasicForwardState(const TerrainFrameData& frame, const TextureArray& texArray,
-                               Shader& shader, bool eyeInWater, int heldBlockLightValue,
-                               ResourceMgr* resourceMgr, const TerrainRenderSettings& settings);
-
     // --- Main rendering methods ---
     /// Traverses chunk columns with hierarchical frustum culling.
-    /// In MDI mode, adds draw ranges to WorldRenderBuffer.
-    /// In non-MDI mode, issues direct draw calls for opaque geometry.
-    /// Collects cutout and transparent entries for later passes.
+    /// Adds visible draw ranges to WorldRenderBuffer and transparent batches.
     void renderOpaqueChunksAndCollectPasses(
         const IWorldView& worldView,
-        std::vector<ChunkRenderEntry>& cutoutEntries,
-        std::vector<ChunkRenderEntry>& transparentEntries,
         bool frustumCull = true,
         float maxCameraDistance = 0.0f,
         shadow::ShadowCasterCuller* shadowCuller = nullptr,
         AabbVisibilityFn extraAabbCuller = nullptr,
         void* extraAabbCullerUserData = nullptr);
-
-    /// Renders cutout chunks (MDI: flushes cutout buffer; non-MDI: draws individual VAOs).
-    void renderCutoutChunks(const std::vector<ChunkRenderEntry>& cutoutEntries,
-                            Shader& chunkShader);
 
     // --- Transparent batch management ---
     void syncTransparentBatches();
@@ -197,16 +159,11 @@ public:
         const std::array<CascadeAabbCuller, 4>& cascadeCullers,
         std::array<std::vector<GpuMeshRange>, 4>& outOpaqueRanges,
         std::array<std::vector<GpuMeshRange>, 4>& outCutoutRanges,
-        std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges,
-        std::array<std::vector<ChunkRenderEntry>, 4>& outOpaqueEntries,
-        std::array<std::vector<ChunkRenderEntry>, 4>& outCutoutEntries,
-        std::array<std::vector<ChunkRenderEntry>, 4>& outTransparentEntries
+        std::array<std::vector<GpuMeshRange>, 4>& outTransparentRanges
     );
 
     // --- Accessors ---
     [[nodiscard]] const std::vector<ChunkRenderColumnCache>& chunkRenderColumns() const;
-    [[nodiscard]] bool useMultiDrawIndirect() const { return m_useMultiDrawIndirect; }
-    void setUseMultiDrawIndirect(bool v) { m_useMultiDrawIndirect = v; }
     void setChunkCullingDebugEnabled(bool v) { m_chunkCullingDebugEnabled = v; }
 
     // --- Debug counters (per-frame, reset externally) ---
@@ -264,13 +221,6 @@ private:
     static void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
                              const glm::vec3& candidateMin, const glm::vec3& candidateMax);
 
-    // --- Inline shader binding helpers (inlined from Renderer) ---
-    static void bindFogUniforms(Shader& shader, const TerrainFogData& fog);
-    static void bindSkyLightingUniforms(Shader& shader, const TerrainSkyLightingData& sky,
-                                        const glm::vec3& cameraPos, int heldBlockLightValue);
-    static void bindAtmosphereUniforms(Shader& shader, const TerrainAtmosphereData& atm);
-    static void bindWaterEffectUniforms(Shader& shader, bool enabled, ResourceMgr* resourceMgr);
-
     // --- Non-owning dependencies ---
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
     TerrainRenderCache* m_terrainCache = nullptr;
@@ -281,7 +231,6 @@ private:
     std::array<Plane, 6> m_frustumPlanes{};
 
     // --- Configuration ---
-    bool m_useMultiDrawIndirect = true;
     bool m_chunkCullingDebugEnabled = false;
     float m_cutoutRenderDistanceChunks = 4.0f;
     bool m_cutoutDistanceLimitEnabled = true;

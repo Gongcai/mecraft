@@ -1,11 +1,57 @@
 #ifndef MECRAFT_RHI_TYPES_H
 #define MECRAFT_RHI_TYPES_H
 
+#include <cstddef>
 #include <cstdint>
+
+class RhiCommandList;
 
 enum class RhiBackend {
     OpenGL,
     Vulkan
+};
+
+enum class RhiCommandListType {
+    Graphics,
+    Compute,
+    Transfer
+};
+
+enum class RhiCommandListState {
+    Initial,
+    Recording,
+    Executable,
+    Pending
+};
+
+struct RhiCommandListDesc {
+    const char* debugName = nullptr;
+    RhiCommandListType type = RhiCommandListType::Graphics;
+};
+
+struct RhiCommandListPoolDesc {
+    const char* debugName = nullptr;
+    uint32_t initialCommandListCapacity = 1u;
+    size_t initialArenaCapacity = 64u * 1024u;
+};
+
+struct RhiSubmitInfo {
+    const char* debugName = nullptr;
+    RhiCommandList* const* commandLists = nullptr;
+    uint32_t commandListCount = 0u;
+};
+
+struct RhiSubmissionToken {
+    /// Identifies the device instance that issued this backend-independent token.
+    uint64_t deviceId = 0u;
+    /// Identifies one submission in the device's monotonically ordered queue.
+    uint64_t sequence = 0u;
+
+    /// Reports whether this token identifies a submission on a device instance.
+    /// @return True when both the device identity and queue sequence are non-zero.
+    [[nodiscard]] constexpr bool isValid() const {
+        return deviceId != 0u && sequence != 0u;
+    }
 };
 
 struct RhiDeviceDesc {
@@ -14,6 +60,7 @@ struct RhiDeviceDesc {
     int width = 1;
     int height = 1;
     bool enableDebugMarkers = false;
+    bool enableDebugOutput = false;
 };
 
 struct RhiCapabilities {
@@ -25,6 +72,8 @@ struct RhiCapabilities {
     bool descriptorIndexing = false;
     uint32_t maxColorAttachments = 0;
     uint32_t maxSampledTexturesPerStage = 0;
+    uint32_t textureBufferCopyRowPitchAlignment = 1;
+    float maxSamplerAnisotropy = 1.0f;
 };
 
 enum class RhiShaderStage : uint32_t {
@@ -98,6 +147,10 @@ enum class RhiMemoryUsage {
     GpuToCpu
 };
 
+enum class RhiQueryType {
+    Timestamp
+};
+
 enum class RhiFilter {
     Nearest,
     Linear
@@ -113,6 +166,12 @@ enum class RhiAddressMode {
     MirroredRepeat,
     ClampToEdge,
     ClampToBorder
+};
+
+enum class RhiBorderColor {
+    TransparentBlack,
+    OpaqueBlack,
+    OpaqueWhite
 };
 
 enum class RhiCompareOp {
@@ -151,7 +210,9 @@ enum class RhiResourceState {
     IndexBuffer,
     IndirectArgument,
     UniformBuffer,
-    StorageBuffer
+    StorageBuffer,
+    HostRead,
+    HostWrite
 };
 
 enum class RhiIndexFormat {
@@ -206,7 +267,11 @@ enum class RhiVertexFormat {
     Uint,
     Uint2,
     Uint3,
-    Uint4
+    Uint4,
+    Sint8,
+    Unorm8,
+    Uint8,
+    Uint16
 };
 
 enum class RhiVertexInputRate {

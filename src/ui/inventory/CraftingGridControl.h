@@ -6,7 +6,6 @@
 #include "ItemGridControl.h"
 #include "../../item/Item.h"
 
-class Shader;
 class CraftingSystem;
 
 struct CraftingGridLayout {

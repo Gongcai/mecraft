@@ -166,8 +166,6 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
         return;
     }
 
-    column.chunk->ensureColumnMeshBuilt();
-
     bool needsRefresh = !column.stateValid;
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         const uint64_t revision = column.chunk->getSubChunkMeshRevision(scy);
@@ -188,36 +186,10 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
         return;
     }
 
-    const SubChunkMesh& columnMesh = column.chunk->getColumnMesh();
-    column.aggregatedHasOpaque = columnMesh.vertexCount > 0;
-    column.aggregatedHasCutout =
-        columnMesh.cutoutVertexCount > 0 ||
-        columnMesh.cutoutDistanceVertexCount > 0;
-    column.aggregatedPresent = column.aggregatedHasOpaque || column.aggregatedHasCutout;
-
-    const bool columnBoundsPresent = m_useMultiDrawIndirect
-        ? columnMesh.hasBounds
-        : column.aggregatedPresent;
-    if (columnBoundsPresent) {
-        column.aggregatedBoundsMin = columnMesh.hasBounds
-            ? columnMesh.boundsMin
-            : column.worldOffset;
-        column.aggregatedBoundsMax = columnMesh.hasBounds
-            ? columnMesh.boundsMax
-            : column.worldOffset + glm::vec3(Chunk::SIZE_X, Chunk::SIZE_Y, Chunk::SIZE_Z);
-    } else {
-        column.aggregatedBoundsMin = glm::vec3(0.0f);
-        column.aggregatedBoundsMax = glm::vec3(0.0f);
-    }
-
     bool columnHasBounds = false;
     glm::vec3 columnMin(0.0f);
     glm::vec3 columnMax(0.0f);
-    if (columnBoundsPresent) {
-        expandBounds(columnMin, columnMax, columnHasBounds,
-                     column.aggregatedBoundsMin, column.aggregatedBoundsMax);
-    }
-
+    column.renderableCount = 0;
     column.transparentCount = 0;
     for (int scy = 0; scy < Chunk::NUM_SUB_CHUNKS; ++scy) {
         const SubChunk* sc = column.chunk->getSubChunk(scy);
@@ -226,31 +198,40 @@ void TerrainRenderCache::refreshChunkRenderColumnCache(ChunkRenderColumnCache& c
         }
 
         const SubChunkMesh& mesh = sc->getMesh();
-        if (mesh.transparentVertexCount == 0 && mesh.waterVertexCount == 0) {
+        if (!mesh.inGlobalPool) {
+            continue;
+        }
+        const bool hasOpaqueOrCutout =
+            mesh.opaqueRange.vertexCount > 0 ||
+            mesh.cutoutRange.vertexCount > 0 ||
+            mesh.cutoutDistanceRange.vertexCount > 0;
+        const bool hasTransparent =
+            mesh.transparentRange.vertexCount > 0 ||
+            mesh.waterRange.vertexCount > 0;
+        if (!hasOpaqueOrCutout && !hasTransparent) {
             continue;
         }
 
         const int yBase = scy * SubChunk::SIZE;
-        TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
-        if (m_useMultiDrawIndirect) {
-            transparent.boundsMin = mesh.hasBounds
-                ? mesh.boundsMin
-                : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
-            transparent.boundsMax = mesh.hasBounds
-                ? mesh.boundsMax
-                : column.worldOffset + glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
-        } else {
-            transparent.boundsMin = mesh.hasBounds
-                ? mesh.boundsMin + column.worldOffset
-                : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
-            transparent.boundsMax = mesh.hasBounds
-                ? mesh.boundsMax + column.worldOffset
-                : column.worldOffset + glm::vec3(Chunk::SIZE_X, static_cast<float>(yBase + SubChunk::SIZE), Chunk::SIZE_Z);
-        }
+        const glm::vec3 boundsMin = mesh.hasBounds
+            ? mesh.boundsMin
+            : column.worldOffset + glm::vec3(0.0f, static_cast<float>(yBase), 0.0f);
+        const glm::vec3 boundsMax = mesh.hasBounds
+            ? mesh.boundsMax
+            : column.worldOffset + glm::vec3(
+                Chunk::SIZE_X,
+                static_cast<float>(yBase + SubChunk::SIZE),
+                Chunk::SIZE_Z);
 
-        column.transparentScys[column.transparentCount++] = scy;
-        expandBounds(columnMin, columnMax, columnHasBounds,
-                     transparent.boundsMin, transparent.boundsMax);
+        ++column.renderableCount;
+        expandBounds(columnMin, columnMax, columnHasBounds, boundsMin, boundsMax);
+
+        if (hasTransparent) {
+            TransparentSubChunkCache& transparent = column.transparentSubChunks[scy];
+            transparent.boundsMin = boundsMin;
+            transparent.boundsMax = boundsMax;
+            column.transparentScys[column.transparentCount++] = scy;
+        }
     }
 
     column.columnHasBounds = columnHasBounds;
@@ -346,13 +327,6 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
 
         SubChunkMesh emptyMesh;
         chunk.setSubChunkMesh(scy, emptyMesh);
-
-        ChunkMeshData emptyMeshData;
-        if (m_useMultiDrawIndirect) {
-            chunk.updateColumnAggregateBoundsOnly(scy, emptyMeshData, false);
-        } else {
-            chunk.updateColumnAggregateData(scy, emptyMeshData);
-        }
     };
 
     for (const auto& pair : activeChunks) {
@@ -460,7 +434,8 @@ void TerrainRenderCache::submitMeshingJobs(const IWorldView& worldView, const gl
 // Meshing result drain
 // ---------------------------------------------------------------------------
 
-void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
+void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView,
+                                             RhiCommandList& commandList) {
     // Phase 1: Drain all completed results from the service into the deferred buffer.
     // This avoids interleaving tryPopCompleted with budget checks, and lets us
     // process results in order with strict vertex/time budgets.
@@ -569,91 +544,56 @@ void TerrainRenderCache::drainMeshingResults(const IWorldView& worldView) {
             }
         };
 
-        if (m_useMultiDrawIndirect) {
-            // MDI path: bake world offset and upload to global buffer pool.
-            const bool hasOpaqueOrCutout =
-                !result.meshData.opaqueVertices.empty() ||
-                !result.meshData.cutoutVertices.empty() ||
-                !result.meshData.cutoutDistanceVertices.empty();
-            bakeWorldOffset(result.meshData.opaqueVertices);
-            bakeWorldOffset(result.meshData.cutoutVertices);
-            bakeWorldOffset(result.meshData.cutoutDistanceVertices);
-            bakeWorldOffset(result.meshData.transparentVertices);
-            bakeWorldOffset(result.meshData.waterVertices);
+        bakeWorldOffset(result.meshData.opaqueVertices);
+        bakeWorldOffset(result.meshData.cutoutVertices);
+        bakeWorldOffset(result.meshData.cutoutDistanceVertices);
+        bakeWorldOffset(result.meshData.transparentVertices);
+        bakeWorldOffset(result.meshData.waterVertices);
 
-            const glm::vec3 boundsWorldOffset(txOff, tyOff, tzOff);
-            WorldGpuMesh gpu = m_worldRenderBuffer->uploadSubChunk(
-                result.meshData.opaqueVertices,
-                result.meshData.cutoutVertices,
-                result.meshData.cutoutDistanceVertices,
-                result.meshData.transparentVertices,
-                result.meshData.waterVertices,
-                result.meshData.hasBounds,
-                result.meshData.hasBounds ? result.meshData.boundsMin + boundsWorldOffset : glm::vec3(0.0f),
-                result.meshData.hasBounds ? result.meshData.boundsMax + boundsWorldOffset : glm::vec3(0.0f));
-            if ((!result.meshData.opaqueVertices.empty() && gpu.opaque.vertexCount == 0) ||
-                (!result.meshData.cutoutVertices.empty() && gpu.cutout.vertexCount == 0) ||
-                (!result.meshData.cutoutDistanceVertices.empty() && gpu.cutoutDistance.vertexCount == 0) ||
-                (!result.meshData.transparentVertices.empty() && gpu.transparent.vertexCount == 0) ||
-                (!result.meshData.waterVertices.empty() && gpu.water.vertexCount == 0)) {
-                recycleResultMeshData();
-                continue;
-            }
-
-            mesh.opaqueRange = gpu.opaque;
-            mesh.cutoutRange = gpu.cutout;
-            mesh.cutoutDistanceRange = gpu.cutoutDistance;
-            mesh.transparentRange = gpu.transparent;
-            mesh.waterRange = gpu.water;
-            mesh.opaqueRange.metadataIndex = gpu.metadataIndex;
-            mesh.cutoutRange.metadataIndex = gpu.metadataIndex;
-            mesh.cutoutDistanceRange.metadataIndex = gpu.metadataIndex;
-            mesh.transparentRange.metadataIndex = gpu.metadataIndex;
-            mesh.waterRange.metadataIndex = gpu.metadataIndex;
-            mesh.vertexCount = gpu.opaque.vertexCount;
-            mesh.cutoutVertexCount = gpu.cutout.vertexCount;
-            mesh.cutoutDistanceVertexCount = gpu.cutoutDistance.vertexCount;
-            mesh.transparentVertexCount = gpu.transparent.vertexCount;
-            mesh.waterVertexCount = gpu.water.vertexCount;
-            mesh.hasBounds = result.meshData.hasBounds;
-            mesh.boundsMin = gpu.boundsMin;
-            mesh.boundsMax = gpu.boundsMax;
-            mesh.inGlobalPool = true;
-
-            const SubChunkGpuKey gpuKey{result.chunkKey, result.scy};
-            releaseMdiAllocation(gpuKey);
-            m_mdiMeshAllocations[gpuKey] = MdiMeshAllocation{gpu};
-            chunk.setSubChunkMesh(result.scy, mesh);
-
-            // MDI mode only needs column bounds for hierarchical frustum culling.
-            chunk.updateColumnAggregateBoundsOnly(result.scy, result.meshData, hasOpaqueOrCutout);
+        const glm::vec3 boundsWorldOffset(txOff, tyOff + scyYOff, tzOff);
+        WorldGpuMesh gpu = m_worldRenderBuffer->uploadSubChunk(
+            commandList,
+            result.meshData.opaqueVertices,
+            result.meshData.cutoutVertices,
+            result.meshData.cutoutDistanceVertices,
+            result.meshData.transparentVertices,
+            result.meshData.waterVertices,
+            result.meshData.hasBounds,
+            result.meshData.hasBounds ? result.meshData.boundsMin + boundsWorldOffset : glm::vec3(0.0f),
+            result.meshData.hasBounds ? result.meshData.boundsMax + boundsWorldOffset : glm::vec3(0.0f));
+        if ((!result.meshData.opaqueVertices.empty() && gpu.opaque.vertexCount == 0) ||
+            (!result.meshData.cutoutVertices.empty() && gpu.cutout.vertexCount == 0) ||
+            (!result.meshData.cutoutDistanceVertices.empty() && gpu.cutoutDistance.vertexCount == 0) ||
+            (!result.meshData.transparentVertices.empty() && gpu.transparent.vertexCount == 0) ||
+            (!result.meshData.waterVertices.empty() && gpu.water.vertexCount == 0)) {
             recycleResultMeshData();
-        } else {
-            // Old path: per-mesh VAOs.
-            mesh.upload(result.meshData.opaqueVertices);
-            mesh.uploadCutout(result.meshData.cutoutVertices);
-            mesh.uploadCutoutDistance(result.meshData.cutoutDistanceVertices);
-
-            std::vector<BlockVertex> transparentVerts = result.meshData.transparentVertices;
-            const uint32_t genericTransparentVertexCount = static_cast<uint32_t>(transparentVerts.size());
-            const uint32_t waterVertexCount = static_cast<uint32_t>(result.meshData.waterVertices.size());
-            transparentVerts.insert(transparentVerts.end(), result.meshData.waterVertices.begin(), result.meshData.waterVertices.end());
-            bakeWorldOffset(transparentVerts);
-            mesh.uploadTransparent(transparentVerts);
-            mesh.waterVertexCount = waterVertexCount;
-            mesh.transparentVertexCount = genericTransparentVertexCount + waterVertexCount;
-
-            mesh.hasBounds = result.meshData.hasBounds;
-            mesh.boundsMin = result.meshData.boundsMin;
-            mesh.boundsMax = result.meshData.boundsMax;
-            chunk.setSubChunkMesh(result.scy, mesh);
-            chunk.updateColumnAggregateData(result.scy, result.meshData);
-            recycleResultMeshData();
+            continue;
         }
+
+        mesh.opaqueRange = gpu.opaque;
+        mesh.cutoutRange = gpu.cutout;
+        mesh.cutoutDistanceRange = gpu.cutoutDistance;
+        mesh.transparentRange = gpu.transparent;
+        mesh.waterRange = gpu.water;
+        mesh.opaqueRange.metadataIndex = gpu.metadataIndex;
+        mesh.cutoutRange.metadataIndex = gpu.metadataIndex;
+        mesh.cutoutDistanceRange.metadataIndex = gpu.metadataIndex;
+        mesh.transparentRange.metadataIndex = gpu.metadataIndex;
+        mesh.waterRange.metadataIndex = gpu.metadataIndex;
+        mesh.hasBounds = result.meshData.hasBounds;
+        mesh.boundsMin = gpu.boundsMin;
+        mesh.boundsMax = gpu.boundsMax;
+        mesh.inGlobalPool = true;
+
+        const SubChunkGpuKey gpuKey{result.chunkKey, result.scy};
+        releaseMdiAllocation(gpuKey);
+        m_mdiMeshAllocations[gpuKey] = MdiMeshAllocation{gpu};
+        chunk.setSubChunkMesh(result.scy, mesh);
+        recycleResultMeshData();
 
         m_meshUploadVerticesThisFrame += currentVertices;
         m_meshUploadBytesThisFrame += static_cast<size_t>(currentVertices) *
-            (m_useMultiDrawIndirect ? sizeof(PackedBlockVertex) : sizeof(BlockVertex));
+            sizeof(PackedBlockVertex);
 
         if (overBudget) {
             break;  // Allow one over-budget upload, then stop

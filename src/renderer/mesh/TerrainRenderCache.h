@@ -16,6 +16,7 @@ class Chunk;
 class IWorldView;
 class World;
 class WorldRenderBuffer;
+class RhiCommandList;
 
 /// Per-sub-chunk transparent bounds cache
 struct TransparentSubChunkCache {
@@ -52,11 +53,6 @@ struct ChunkRenderColumnCache {
     int chunkZ = 0;
     glm::vec3 worldOffset = glm::vec3(0.0f);
     bool stateValid = false;
-    bool aggregatedPresent = false;
-    bool aggregatedHasOpaque = false;
-    bool aggregatedHasCutout = false;
-    glm::vec3 aggregatedBoundsMin = glm::vec3(0.0f);
-    glm::vec3 aggregatedBoundsMax = glm::vec3(0.0f);
     bool columnHasBounds = false;
     glm::vec3 columnBoundsMin = glm::vec3(0.0f);
     glm::vec3 columnBoundsMax = glm::vec3(0.0f);
@@ -65,6 +61,7 @@ struct ChunkRenderColumnCache {
     std::array<uint64_t, Chunk::NUM_SUB_CHUNKS> subChunkMeshFingerprints{};
     std::array<int, Chunk::NUM_SUB_CHUNKS> transparentScys{};
     std::array<TransparentSubChunkCache, Chunk::NUM_SUB_CHUNKS> transparentSubChunks{};
+    int renderableCount = 0;
     int transparentCount = 0;
     uint64_t validatedFrameSerial = 0;
 };
@@ -105,7 +102,6 @@ public:
     void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
     void setChunkMeshingService(ChunkMeshingService* svc) { m_meshingService = svc; }
     void setRegionChunkSize(int size) { m_regionChunkSize = size; }
-    void setUseMultiDrawIndirect(bool v) { m_useMultiDrawIndirect = v; }
     void setMeshingBudgets(int submitBudget,
                            int maxInFlight,
                            float submitTimeBudgetMs,
@@ -127,7 +123,7 @@ public:
 
     // Meshing job management
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);
-    void drainMeshingResults(const IWorldView& worldView);
+    void drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
     [[nodiscard]] const std::unordered_set<int64_t>& meshingInFlight() const { return m_meshingInFlight; }
 
     [[nodiscard]] int meshingSubmittedThisFrame() const { return m_meshingSubmittedThisFrame; }
@@ -183,8 +179,6 @@ private:
 
     // Configuration
     int m_regionChunkSize = 8;
-    bool m_useMultiDrawIndirect = true;
-
     // Meshing budgets
     int m_meshingSubmitBudget = 16;
     int m_meshingMaxInFlight = 64;

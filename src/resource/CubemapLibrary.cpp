@@ -2,41 +2,17 @@
 
 #include "../Diagnostics.h"
 #include "../third_party/stb/stb_image.h"
-#include "renderer/rhi/RhiTypes.h"
-#include "renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "renderer/rhi/RhiDevice.h"
 
-#include <glad/glad.h>
-
+#include <array>
+#include <cassert>
 #include <cstdio>
+#include <vector>
 
-namespace {
-
-[[nodiscard]] RhiTextureHandle registerCubemapTexture(const GLuint textureID,
-                                                      const int width,
-                                                      const int height) {
-    return renderer::rhi::gl::registerTexture({
-        textureID,
-        RhiTextureDimension::Cube,
-        RhiTextureFormat::Rgba8Unorm,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height),
-        6,
-        1,
-        1,
-        rhiFlag(RhiTextureUsage::Sampled),
-        false
-    });
+void CubemapLibrary::init(RhiDevice& rhiDevice) {
+    assert(m_rhiDevice == nullptr);
+    m_rhiDevice = &rhiDevice;
 }
-
-void deleteCubemapTexture(RhiTextureHandle& texture) {
-    const GLuint textureID = static_cast<GLuint>(renderer::rhi::gl::textureId(texture));
-    renderer::rhi::gl::unregisterTextureAndReset(texture);
-    if (textureID != 0) {
-        glDeleteTextures(1, &textureID);
-    }
-}
-
-} // namespace
 
 RhiTextureHandle CubemapLibrary::load(const std::string& name,
                                       const std::string& rightPath,
@@ -45,26 +21,21 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
                                       const std::string& bottomPath,
                                       const std::string& frontPath,
                                       const std::string& backPath) {
+    assert(m_rhiDevice != nullptr);
     const auto existing = m_cubemaps.find(name);
     if (existing != m_cubemaps.end()) {
         return existing->second;
     }
 
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
-
-    const std::string paths[6] = { rightPath, leftPath, topPath, bottomPath, frontPath, backPath };
-    const GLenum faces[6] = {
-        GL_TEXTURE_CUBE_MAP_POSITIVE_X, GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
-        GL_TEXTURE_CUBE_MAP_POSITIVE_Y, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
-        GL_TEXTURE_CUBE_MAP_POSITIVE_Z, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
+    const std::array<std::string, 6> paths = {
+        rightPath, leftPath, topPath, bottomPath, frontPath, backPath
     };
 
     stbi_set_flip_vertically_on_load(false);
 
     int cubemapWidth = 0;
     int cubemapHeight = 0;
+    std::vector<unsigned char> pixels;
 
     for (int i = 0; i < 6; ++i) {
         int width = 0;
@@ -75,8 +46,6 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
             if (data != nullptr) {
                 stbi_image_free(data);
             }
-            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-            glDeleteTextures(1, &textureID);
             MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to load cubemap face '%s': %s\n",
                                 name.c_str(), paths[i].c_str());
             return {};
@@ -86,28 +55,32 @@ RhiTextureHandle CubemapLibrary::load(const std::string& name,
             cubemapHeight = height;
         } else if (width != cubemapWidth || height != cubemapHeight) {
             stbi_image_free(data);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-            glDeleteTextures(1, &textureID);
             MECRAFT_LOG_FPRINTF(stderr, "[Resource] Cubemap face size mismatch '%s': %s\n",
                                 name.c_str(), paths[i].c_str());
             return {};
         }
-        glTexImage2D(faces[i], 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        const size_t faceSize = static_cast<size_t>(width) * static_cast<size_t>(height) * 4u;
+        pixels.insert(pixels.end(), data, data + faceSize);
         stbi_image_free(data);
     }
 
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-
-    RhiTextureHandle texture = registerCubemapTexture(textureID, cubemapWidth, cubemapHeight);
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = name.c_str();
+    textureDesc.dimension = RhiTextureDimension::Cube;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = static_cast<uint32_t>(cubemapWidth);
+    textureDesc.height = static_cast<uint32_t>(cubemapHeight);
+    textureDesc.depthOrLayers = 6u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
+    RhiTextureInitialData initialData;
+    initialData.pixels = pixels.data();
+    initialData.sizeBytes = pixels.size();
+    initialData.layerCount = 6u;
+    initialData.finalState = RhiResourceState::ShaderRead;
+    RhiTextureHandle texture = m_rhiDevice->createTexture(textureDesc, &initialData);
     if (!texture.isValid()) {
-        glDeleteTextures(1, &textureID);
-        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to register cubemap RHI handle '%s'\n",
+        MECRAFT_LOG_FPRINTF(stderr, "[Resource] Failed to create cubemap RHI resource '%s'\n",
                             name.c_str());
         return {};
     }
@@ -125,8 +98,10 @@ RhiTextureHandle CubemapLibrary::get(const std::string& name) const {
 }
 
 void CubemapLibrary::shutdown() {
+    assert(m_rhiDevice != nullptr);
     for (auto& [_, texture] : m_cubemaps) {
-        deleteCubemapTexture(texture);
+        m_rhiDevice->destroyTexture(texture);
     }
     m_cubemaps.clear();
+    m_rhiDevice = nullptr;
 }

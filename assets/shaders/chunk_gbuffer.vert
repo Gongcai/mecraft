@@ -17,27 +17,41 @@ layout (location = 13) in uint aPackedLightAoLayer;
 layout (location = 14) in uint aPackedTintAnim;
 #include "terrain_vertex_decode.glsl"
 
+#ifdef RHI_TERRAIN_MDI
+#include "terrain_gbuffer_params.glsl"
+#else
 uniform mat4 view;
 uniform mat4 viewProj;
 uniform mat4 model;
 uniform int uUseModel;
 uniform int uVertexFormat;
+#endif
 
-out vec2 vUV;
-out float vSunlight;
-out float vBlockLight;
-out float vAO;
-out float vNormal;
-out float vLayer;
-out float vAnimationFrameCount;
-out float vAnimationFps;
-out float vAnimated;
-flat out float vTintKind;
-flat out float vMaterialKind;
-out vec2 vTintUV;
-out vec3 vWorldPos;
+layout(location = 0) out vec2 vUV;
+layout(location = 1) out float vSunlight;
+layout(location = 2) out float vBlockLight;
+layout(location = 3) out float vAO;
+layout(location = 4) out float vNormal;
+layout(location = 5) out float vLayer;
+layout(location = 6) out float vAnimationFrameCount;
+layout(location = 7) out float vAnimationFps;
+layout(location = 8) out float vAnimated;
+layout(location = 9) flat out float vTintKind;
+layout(location = 10) flat out float vMaterialKind;
+layout(location = 11) out vec2 vTintUV;
+layout(location = 12) out vec3 vWorldPos;
 
 void main() {
+#ifdef RHI_TERRAIN_MDI
+    TerrainVertexDecoded vertex = decodeTerrainPackedVertex(
+        aPackedPos,
+        aPackedUV,
+        aPackedLightAoLayer,
+        aPackedTintAnim,
+        gl_BaseInstanceARB);
+    vec4 worldPos = vec4(vertex.pos, 1.0);
+    gl_Position = rhiTerrainViewProj * worldPos;
+#else
     TerrainVertexDecoded vertex = (uVertexFormat == 1)
         ? decodeTerrainPackedVertex(aPackedPos, aPackedUV, aPackedLightAoLayer, aPackedTintAnim, gl_BaseInstanceARB)
         : decodeLegacyBlockVertex(aLegacyPos, aLegacyUV, aLegacyNormal, aLegacySunlight, aLegacyBlockLight,
@@ -46,6 +60,7 @@ void main() {
     vec4 localPos = vec4(vertex.pos, 1.0);
     vec4 worldPos = (uUseModel != 0) ? model * localPos : localPos;
     gl_Position = viewProj * worldPos;
+#endif
 
     vUV = vertex.uv;
     vSunlight = vertex.sunlight;

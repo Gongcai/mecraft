@@ -1,12 +1,16 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSsgiHalfResTex;
-uniform sampler2D uDepthTex;
-uniform vec2 uHalfResSize;
-uniform float uNear;
+layout(binding = 0) uniform sampler2D uSsgiHalfResTex;
+layout(binding = 1) uniform sampler2D uDepthTex;
+
+layout(push_constant) uniform RhiPushConstants {
+    vec2 uHalfResSize;
+    float uNear;
+    float uPadding0;
+};
 
 float linearizeDepth(float depth) {
     return 2.0 * uNear / max(1.0 - depth, 1e-7);

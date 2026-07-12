@@ -2,28 +2,37 @@
 
 #include "gbuffer_contract.glsl"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSceneLightingTex;
-uniform sampler2D uAlbedoTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uMaterialAuxTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uNoiseTex;
+layout(binding = 0) uniform sampler2D uSceneLightingTex;
+layout(binding = 1) uniform sampler2D uAlbedoTex;
+layout(binding = 2) uniform sampler2D uNormalAoTex;
+layout(binding = 3) uniform sampler2D uMaterialAuxTex;
+layout(binding = 4) uniform sampler2D uDepthTex;
+layout(binding = 5) uniform sampler2D uNoiseTex;
 
-uniform mat4 uViewProj;
-uniform mat4 uInvViewProj;
-uniform vec3 uCameraPos;
-uniform vec2 uHalfResolution;
-uniform float uRadius;
-uniform float uStrength;
-uniform float uMaxDistance;
-uniform float uThickness;
-uniform float uRadianceFilterStrength;
-uniform float uColorBleedStrength;
-uniform int uSamples;
-uniform int uFrameIndex;
+layout(std140, binding = 6) uniform SsgiBaseParams {
+    mat4 pViewProj;
+    mat4 pInvViewProj;
+    vec4 pCameraPosRadius;
+    vec4 pHalfResolutionStrengthMaxDistance;
+    vec4 pQuality;
+    ivec4 pControls;
+};
+
+#define uViewProj pViewProj
+#define uInvViewProj pInvViewProj
+#define uCameraPos pCameraPosRadius.xyz
+#define uRadius pCameraPosRadius.w
+#define uHalfResolution pHalfResolutionStrengthMaxDistance.xy
+#define uStrength pHalfResolutionStrengthMaxDistance.z
+#define uMaxDistance pHalfResolutionStrengthMaxDistance.w
+#define uThickness pQuality.x
+#define uRadianceFilterStrength pQuality.y
+#define uColorBleedStrength pQuality.z
+#define uSamples pControls.x
+#define uFrameIndex pControls.y
 
 const float PI = 3.14159265359;
 const float GOLDEN_ANGLE = 2.39996322973;

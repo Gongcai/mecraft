@@ -1,17 +1,17 @@
 #include "BlockMeshBuilder.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <glad/glad.h>
-
 #include <glm/glm.hpp>
 
 #include "../../resource/ResourceMgr.h"
+#include "../rhi/RhiDevice.h"
 #include "../../world/block/Block.h"
 #include "../../world/block/BlockModelRegistry.h"
 #include "../../world/block/BlockStateRegistry.h"
@@ -382,52 +382,28 @@ void appendModelVertices(std::vector<BlockVertex>& vertices,
 
 } // namespace
 
-BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices) {
+BlockCubeMesh uploadBlockCubeMesh(const std::vector<BlockVertex>& vertices,
+                                  RhiDevice& rhiDevice,
+                                  const char* debugName) {
     BlockCubeMesh mesh;
     if (vertices.empty()) {
         return mesh;
     }
 
-    glGenVertexArrays(1, &mesh.vao);
-    glGenBuffers(1, &mesh.vbo);
     mesh.vertexCount = static_cast<uint32_t>(vertices.size());
-
-    glBindVertexArray(mesh.vao);
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-    glBufferData(GL_ARRAY_BUFFER,
-                 static_cast<GLsizeiptr>(vertices.size() * sizeof(BlockVertex)),
-                 vertices.data(),
-                 GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, x)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, u)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 1, GL_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, normal)));
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, sunlight)));
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 1, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, blockLight)));
-    glEnableVertexAttribArray(5);
-    glVertexAttribPointer(5, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, ao)));
-    glEnableVertexAttribArray(6);
-    glVertexAttribPointer(6, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, layer)));
-    glEnableVertexAttribArray(7);
-    glVertexAttribPointer(7, 1, GL_UNSIGNED_SHORT, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFrameCount)));
-    glEnableVertexAttribArray(8);
-    glVertexAttribPointer(8, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animationFps)));
-    glEnableVertexAttribArray(9);
-    glVertexAttribPointer(9, 1, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, animated)));
-
-    glEnableVertexAttribArray(10);
-    glVertexAttribIPointer(10, 1, GL_UNSIGNED_SHORT, sizeof(BlockVertex), reinterpret_cast<void*>(offsetof(BlockVertex, tintPacked)));
-    for (GLuint attrib = 11; attrib <= 14; ++attrib) {
-        glDisableVertexAttribArray(attrib);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = debugName;
+    bufferDesc.size = vertices.size() * sizeof(BlockVertex);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    mesh.rhiVertexBuffer = rhiDevice.createBuffer(
+        bufferDesc, vertices.data(), vertices.size() * sizeof(BlockVertex));
+    mesh.rhiDevice = &rhiDevice;
+    if (!mesh.rhiVertexBuffer.isValid()) {
+        destroyBlockCubeMesh(mesh);
     }
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
     return mesh;
 }
 
@@ -504,36 +480,56 @@ std::vector<BlockVertex> buildBlockMeshVertices(const BlockID blockId, const Res
     return buildBlockMeshVerticesForState(BlockStateRegistry::getDefaultState(blockId), resourceMgr);
 }
 
-BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, const ResourceMgr& resourceMgr) {
+BlockCubeMesh buildBlockCubeMesh(const BlockID blockId, ResourceMgr& resourceMgr) {
     BlockCubeMesh mesh;
     std::vector<BlockVertex> vertices = buildBlockMeshVertices(blockId, resourceMgr);
     if (vertices.empty()) {
         return mesh;
     }
 
-    return uploadBlockCubeMesh(vertices);
+    RhiDevice& rhiDevice = resourceMgr.rhiDevice();
+    return uploadBlockCubeMesh(vertices, rhiDevice, "BlockCubeMesh.VertexBuffer");
 }
 
-BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, const ResourceMgr& resourceMgr) {
+BlockCubeMesh buildBlockStateCubeMesh(const BlockStateId stateId, ResourceMgr& resourceMgr) {
     BlockCubeMesh mesh;
     std::vector<BlockVertex> vertices = buildBlockMeshVerticesForState(stateId, resourceMgr);
     if (vertices.empty()) {
         return mesh;
     }
 
-    return uploadBlockCubeMesh(vertices);
+    RhiDevice& rhiDevice = resourceMgr.rhiDevice();
+    return uploadBlockCubeMesh(vertices, rhiDevice, "BlockStateCubeMesh.VertexBuffer");
 }
 
 void destroyBlockCubeMesh(BlockCubeMesh& mesh) {
-    if (mesh.vbo != 0) {
-        glDeleteBuffers(1, &mesh.vbo);
-        mesh.vbo = 0;
-    }
-    if (mesh.vao != 0) {
-        glDeleteVertexArrays(1, &mesh.vao);
-        mesh.vao = 0;
+    if (mesh.rhiDevice != nullptr && mesh.rhiVertexBuffer.isValid()) {
+        mesh.rhiDevice->destroyBuffer(mesh.rhiVertexBuffer);
+        mesh.rhiVertexBuffer = {};
     }
     mesh.vertexCount = 0;
+    mesh.rhiDevice = nullptr;
+}
+
+void setBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc) {
+    pipelineDesc.vertexInput.bindings.push_back({
+        0u,
+        static_cast<uint32_t>(sizeof(BlockVertex)),
+        RhiVertexInputRate::Vertex
+    });
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, static_cast<uint32_t>(offsetof(BlockVertex, x))},
+        {1u, 0u, RhiVertexFormat::Float2, static_cast<uint32_t>(offsetof(BlockVertex, u))},
+        {2u, 0u, RhiVertexFormat::Sint8, static_cast<uint32_t>(offsetof(BlockVertex, normal))},
+        {3u, 0u, RhiVertexFormat::Unorm8, static_cast<uint32_t>(offsetof(BlockVertex, sunlight))},
+        {4u, 0u, RhiVertexFormat::Unorm8, static_cast<uint32_t>(offsetof(BlockVertex, blockLight))},
+        {5u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, ao))},
+        {6u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, layer))},
+        {7u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, animationFrameCount))},
+        {8u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, animationFps))},
+        {9u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, animated))},
+        {10u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, tintPacked))}
+    };
 }
 
 } // namespace renderer

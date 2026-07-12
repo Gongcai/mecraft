@@ -7,6 +7,8 @@
 #include <string>
 #include <unordered_map>
 
+class RhiDevice;
+
 struct Texture2DInfo {
     RhiTextureHandle texture;
 };
@@ -20,11 +22,11 @@ struct GuiTextureInfo {
 
 class Texture2DLibrary {
 public:
+    void init(RhiDevice& rhiDevice);
+
     RhiTextureHandle load(const std::string& name,
                           const std::string& path,
                           bool srgb = false,
-                          bool repeat = false,
-                          bool linear = true,
                           bool flipVertically = false);
 
     [[nodiscard]] RhiTextureHandle getHandle(const std::string& name) const;
@@ -44,6 +46,7 @@ public:
     void shutdown();
 
 private:
+    RhiDevice* m_rhiDevice = nullptr;
     std::unordered_map<std::string, Texture2DInfo> m_textures;
     std::unordered_map<std::string, GuiTextureInfo> m_guiTextures;
 };

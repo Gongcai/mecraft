@@ -11,6 +11,9 @@
 #include "../presentation/GameplayPresentationSnapshot.h"
 #include "../../renderer/core/RenderResourceHub.h"
 #include "../../renderer/core/RenderScene.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiResources.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/passes/PostProcessPass.h"
 #include "../render/GameplayRenderRuntime.h"
@@ -30,6 +33,81 @@
 #include <algorithm>
 
 namespace {
+
+bool prepareUiOverlayFrame(RenderResourceHub& renderer,
+                           GameplayHudPresenter& hudPresenter,
+                           RhiCommandList*& commandList) {
+    commandList = renderer.commandListPool().acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({"Gameplay.UiOverlay.Commands", RhiCommandListType::Graphics})) {
+        return false;
+    }
+    return hudPresenter.prepareTextFrame(*commandList);
+}
+
+bool beginUiOverlayRendering(RenderResourceHub& renderer,
+                             Window& window,
+                             RhiCommandList& commandList) {
+    RhiDevice& rhiDevice = renderer.rhiDevice();
+    const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
+    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
+    if (!colorView.isValid() || !depthView.isValid()) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = colorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "UiOverlay";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, window.getWidth())),
+        static_cast<uint32_t>(std::max(1, window.getHeight()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    commandList.textureBarrier({
+        rhiDevice.currentSwapchainColorTexture(),
+        RhiResourceState::Present,
+        RhiResourceState::RenderTarget
+    });
+    commandList.beginRendering(renderingInfo);
+    return true;
+}
+
+void endUiOverlayPass(RenderResourceHub& renderer,
+                      RhiCommandList*& commandList) {
+    if (commandList == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    commandList->textureBarrier({
+        renderer.rhiDevice().currentSwapchainColorTexture(),
+        RhiResourceState::RenderTarget,
+        RhiResourceState::Present
+    });
+    if (!commandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {commandList};
+    if (!renderer.rhiDevice().submit(
+            {"Gameplay.UiOverlay.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
+    commandList = nullptr;
+}
 
 void sendClientInput(GameSession& session, const float fixedStep) {
     if (!session.client().areSpawnChunksReady()) {
@@ -225,7 +303,7 @@ void GameFrameOrchestrator::syncAudioListener(AudioListenerSyncSystem& audioSync
     audioSync.update(deltaTime, session.gameplayScene().registry());
 }
 
-void GameFrameOrchestrator::renderFrame(GameSession& session,
+bool GameFrameOrchestrator::renderFrame(GameSession& session,
                                          GameplayRenderRuntime& renderRuntime,
                                          GameplayHudPresenter* hudPresenter,
                                          Window& window,
@@ -233,16 +311,19 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
                                          float interpolationAlpha) {
     if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
         session.client().receiveMessages();
-        window.swapBuffers();
-        return;
+        renderRuntime.resourceHub().rhiDevice().present();
+        return true;
     }
 
     // Obtain renderer references from the aggregate
+    auto& renderer = renderRuntime.resourceHub();
+    if (!renderer.resizeRhiSwapchain(window)) {
+        return false;
+    }
     auto& renderScene = renderRuntime.renderScene();
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
 #ifdef MECRAFT_DEBUG
     auto& postProcess = renderScene.postProcessPass();
-    auto& renderer = renderRuntime.resourceHub();
 #endif
 
 #ifdef MECRAFT_DEBUG
@@ -314,6 +395,7 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
     const auto sceneEnd = std::chrono::steady_clock::now();
     auto uiEnd = sceneEnd;
     auto dashboardEnd = sceneEnd;
+    double dashboardPrepareMs = 0.0;
 #endif
 
     // Invoke pre-UI callback (e.g., screenshot capture) after 3D scene, before UI
@@ -324,14 +406,19 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
-        hudPresenter->render(snap, session.stateMachine());
+        UIRenderContext uiContext = hudPresenter->prepareRenderContext(snap, renderer.rhiDevice());
+        RhiCommandList* uiCommandList = nullptr;
+        if (!prepareUiOverlayFrame(renderer, *hudPresenter, uiCommandList)) {
+            return false;
+        }
+        uiContext.commandList = uiCommandList;
+
 #ifdef MECRAFT_DEBUG
-        uiEnd = std::chrono::steady_clock::now();
-#endif
-#ifdef MECRAFT_DEBUG
-        // G7: Render debug dashboard (Dashboard is injected into presenter by Game)
-        if (renderRuntime.dashboardProfilerStats()) {
-            hudPresenter->renderDashboard(
+        bool dashboardPrepared = false;
+        if (hudPresenter->hasDashboard() && renderRuntime.dashboardProfilerStats()) {
+            const auto dashboardPrepareStart = std::chrono::steady_clock::now();
+            dashboardPrepared = hudPresenter->prepareDashboard(
+                *uiCommandList,
                 reg,
                 session.world(),
                 snap.renderCamera,
@@ -344,24 +431,45 @@ void GameFrameOrchestrator::renderFrame(GameSession& session,
                     session.client().clientWorld().setRenderDistance(distance);
                     session.client().sendViewConfig(distance);
                 });
+            dashboardPrepareMs = std::chrono::duration<double, std::milli>(
+                std::chrono::steady_clock::now() - dashboardPrepareStart).count();
+            if (!dashboardPrepared) {
+                return false;
+            }
+        }
+#endif
+        if (!beginUiOverlayRendering(renderer, window, *uiCommandList)) {
+            return false;
+        }
+        hudPresenter->renderPrepared(uiContext, session.stateMachine());
+#ifdef MECRAFT_DEBUG
+        uiEnd = std::chrono::steady_clock::now();
+        if (dashboardPrepared) {
+            hudPresenter->recordDashboard(*uiCommandList);
         }
         dashboardEnd = std::chrono::steady_clock::now();
 #endif
+        endUiOverlayPass(renderer, uiCommandList);
     }
 #ifdef MECRAFT_DEBUG
     const auto preSwapEnd = std::chrono::steady_clock::now();
 #endif
-    window.swapBuffers();
+    renderer.rhiDevice().present();
 
 #ifdef MECRAFT_DEBUG
     const auto renderEnd = std::chrono::steady_clock::now();
     if (auto* profiler = renderRuntime.profiler()) {
+        const double uiTotalMs =
+            std::chrono::duration<double, std::milli>(uiEnd - sceneEnd).count();
+        const double dashboardRecordMs =
+            std::chrono::duration<double, std::milli>(dashboardEnd - uiEnd).count();
         profiler->recordRenderSnapshot(std::chrono::duration<double, std::milli>(snapshotEnd - renderStart).count());
         profiler->recordRenderScene(std::chrono::duration<double, std::milli>(sceneEnd - snapshotEnd).count());
-        profiler->recordRenderUi(std::chrono::duration<double, std::milli>(uiEnd - sceneEnd).count());
-        profiler->recordRenderDashboard(std::chrono::duration<double, std::milli>(dashboardEnd - uiEnd).count());
+        profiler->recordRenderUi(std::max(0.0, uiTotalMs - dashboardPrepareMs));
+        profiler->recordRenderDashboard(dashboardPrepareMs + dashboardRecordMs);
         profiler->recordSwapBuffers(std::chrono::duration<double, std::milli>(renderEnd - preSwapEnd).count());
         profiler->recordRender(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());
     }
 #endif
+    return true;
 }

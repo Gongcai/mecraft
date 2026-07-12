@@ -9,6 +9,9 @@
 #include <unordered_map>
 #include <vector>
 
+class RhiDevice;
+class RhiCommandListPool;
+
 namespace resource {
 
 struct IndexedTextureAtlas {
@@ -19,18 +22,26 @@ struct IndexedTextureAtlas {
 
 [[nodiscard]] IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
                                                         int tileSize,
-                                                        const BlockTextureCatalog& catalog);
+                                                        const BlockTextureCatalog& catalog,
+                                                        RhiDevice& rhiDevice,
+                                                        RhiCommandListPool& commandListPool);
 
 [[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
                                                          int tileSize,
-                                                         const BlockTextureCatalog& catalog);
+                                                         const BlockTextureCatalog& catalog,
+                                                         RhiDevice& rhiDevice,
+                                                         RhiCommandListPool& commandListPool);
 
 [[nodiscard]] IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
                                                          int tileSize,
-                                                         const BlockTextureCatalog& catalog);
+                                                         const BlockTextureCatalog& catalog,
+                                                         RhiDevice& rhiDevice,
+                                                         RhiCommandListPool& commandListPool);
 
 [[nodiscard]] IndexedTextureAtlas buildHudIconAtlas(const std::string& directory,
-                                                    int iconSize);
+                                                    int iconSize,
+                                                    RhiDevice& rhiDevice,
+                                                    RhiCommandListPool& commandListPool);
 
 } // namespace resource
 

@@ -1,67 +1,100 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
+#define MECRAFT_CSM_CASCADE_COUNT 4
+#define MECRAFT_SHADOW_CASCADE_TYPE_DEFINED
+#define MECRAFT_SHADOW_EXTERNAL_UNIFORMS
 #define MECRAFT_SHADOW_NO_SAMPLER
+
+struct CsmCascade {
+    mat4 viewProj;
+    float splitNear;
+    float splitFar;
+    float texelWorldSize;
+    float resolutionScale;
+    float depthExtent;
+};
+
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
+
+layout(binding = 0) uniform sampler2D uAlbedoTex;
+layout(binding = 1) uniform sampler2D uNormalAoTex;
+layout(binding = 2) uniform sampler2D uVoxelLightTex;
+layout(binding = 3) uniform sampler2D uMaterialTex;
+layout(binding = 4) uniform sampler2D uDepthTex;
+layout(binding = 5) uniform sampler2DArray uShadowMapRaw;
+layout(binding = 6) uniform sampler2D uSsaoTex;
+layout(binding = 7) uniform sampler2D uSceneLightingTex;
+layout(binding = 8) uniform sampler2D uTransparentCompositeTex;
+layout(binding = 9) uniform sampler2D uTransparentCompositeDepthTex;
+layout(binding = 10) uniform sampler2D uVolumetricTex;
+layout(binding = 11) uniform sampler2D uSkyCaptureTex;
+layout(binding = 12) uniform sampler2D uVelocityTex;
+layout(binding = 13) uniform sampler2D uHistorySceneTex;
+layout(binding = 13) uniform sampler2D uHistoryDepthTex;
+layout(binding = 13) uniform sampler2D uNoiseTex;
+layout(binding = 13) uniform sampler2D uMaterialAuxTex;
+layout(binding = 14) uniform sampler2D uReflectionTex;
+layout(binding = 14) uniform sampler2D uHistoryReflectionTex;
+layout(binding = 15) uniform sampler2D uCloudTex;
+layout(binding = 15) uniform sampler2D uSceneCompositeTex;
+layout(binding = 15) uniform sampler2D uSceneResolvedTex;
+layout(binding = 15) uniform sampler2D uHistoryCloudTex;
+layout(binding = 16) uniform sampler2DArray uCsmShadowDepthTex;
+layout(binding = 17) uniform sampler2D uTemporalCurrentTex;
+layout(binding = 18) uniform sampler2D uSsgiTex;
+layout(binding = 19) uniform sampler2DArray uCsmShadowColor0Tex;
+layout(binding = 20) uniform sampler2DArray uCsmShadowColor1Tex;
+
+layout(std140, binding = 21) uniform DebugParams {
+    mat4 pShadowModelView;
+    mat4 pShadowProjection;
+    mat4 pShadowProjectionInverse;
+    mat4 pInvViewProj;
+    CsmCascade pCsmCascades[MECRAFT_CSM_CASCADE_COUNT];
+    vec4 pCameraNear;
+    vec4 pSunDirectionFar;
+    vec4 pMoonDirectionShadowExtent;
+    vec4 pShadowDirectionTexelSize;
+    vec4 pSunLightColorShadowMapSize;
+    vec4 pSkyAmbientColorShadowDistance;
+    vec4 pHorizonColorConstantBias;
+    vec4 pFogColorSlopeBias;
+    vec4 pShadowParams;
+    ivec4 pFlags0;
+    ivec4 pFlags1;
+};
+
+#define uShadowModelView pShadowModelView
+#define uShadowProjection pShadowProjection
+#define uShadowProjectionInverse pShadowProjectionInverse
+#define uInvViewProj pInvViewProj
+#define uCsmCascades pCsmCascades
+#define uCameraPos pCameraNear.xyz
+#define uNearPlane pCameraNear.w
+#define uSunDirection pSunDirectionFar.xyz
+#define uFarPlane pSunDirectionFar.w
+#define uMoonDirection pMoonDirectionShadowExtent.xyz
+#define uShadowExtent pMoonDirectionShadowExtent.w
+#define uShadowLightDirection pShadowDirectionTexelSize.xyz
+#define uShadowTexelWorldSize pShadowDirectionTexelSize.w
+#define uSunLightColor pSunLightColorShadowMapSize.xyz
+#define uShadowMapSize pSunLightColorShadowMapSize.w
+#define uSkyAmbientColor pSkyAmbientColorShadowDistance.xyz
+#define uShadowDistance pSkyAmbientColorShadowDistance.w
+#define uHorizonScatterColor pHorizonColorConstantBias.xyz
+#define uShadowConstantBias pHorizonColorConstantBias.w
+#define uFogColor pFogColorSlopeBias.xyz
+#define uShadowSlopeBias pFogColorSlopeBias.w
+#define uShadowNormalOffset pShadowParams.x
+#define uShadowLightMode pFlags0.x
+#define uCsmCascadeCount pFlags0.y
+#define uDebugViewMode pFlags0.z
+#define uFrameIndex pFlags0.w
+#define uFreezeBias pFlags1.x
+
 #include "mecraft_shadow.glsl"
 #include "render_contract.glsl"
-
-in vec2 vTexCoord;
-out vec4 FragColor;
-
-uniform sampler2D uAlbedoTex;
-uniform sampler2D uNormalAoTex;
-uniform sampler2D uVoxelLightTex;
-uniform sampler2D uMaterialTex;
-uniform sampler2D uMaterialAuxTex;
-uniform sampler2D uDepthTex;
-uniform sampler2D uShadowMapRaw;
-uniform sampler2D uSsaoTex;
-uniform sampler2D uSceneLightingTex;
-uniform sampler2D uSceneCompositeTex;
-uniform sampler2D uSceneResolvedTex;
-uniform sampler2D uTemporalCurrentTex;
-uniform sampler2D uTransparentCompositeTex;
-uniform sampler2D uTransparentCompositeDepthTex;
-uniform sampler2D uVolumetricTex;
-uniform sampler2D uSkyCaptureTex;
-uniform sampler2D uVelocityTex;
-uniform sampler2D uHistorySceneTex;
-uniform sampler2D uHistoryDepthTex;
-uniform sampler2D uReflectionTex;
-uniform sampler2D uCloudTex;
-uniform sampler2D uHistoryReflectionTex;
-uniform sampler2D uHistoryCloudTex;
-uniform sampler2D uNoiseTex;
-uniform sampler2D uShadowColorTex;
-uniform sampler2D uShadowNormalTex;
-uniform sampler2D uSsgiTex;
-uniform sampler2DArray uCsmShadowDepthTex;
-uniform mat4 uShadowModelView;
-uniform mat4 uShadowProjection;
-uniform mat4 uShadowProjectionInverse;
-uniform mat4 uInvViewProj;
-uniform float uNearPlane;
-uniform float uFarPlane;
-uniform vec3 uCameraPos;
-uniform vec3 uSunDirection;
-uniform vec3 uMoonDirection;
-uniform vec3 uShadowLightDirection;
-uniform float uShadowExtent;
-uniform float uShadowTexelWorldSize;
-uniform float uShadowMapSize;
-uniform float uShadowDistance;
-uniform float uShadowConstantBias;
-uniform float uShadowSlopeBias;
-uniform float uShadowNormalOffset;
-uniform int uShadowLightMode;
-uniform int uDebugViewMode;
-uniform int uFrameIndex;
-uniform int uFreezeBias;
-
-// Lighting diagnostic uniforms (for debug view 45)
-uniform vec3 uSunLightColor;
-uniform vec3 uSkyAmbientColor;
-uniform vec3 uHorizonScatterColor;
-uniform vec3 uFogColor;
 
 vec3 tonemapPreview(vec3 color) {
     color = max(color, vec3(0.0));
@@ -216,7 +249,7 @@ void main() {
         return;
     }
     if (uDebugViewMode == 8) {
-        FragColor = vec4(vec3(texture(uShadowMapRaw, vTexCoord).r), 1.0);
+        FragColor = vec4(vec3(texture(uShadowMapRaw, vec3(vTexCoord, 0.0)).r), 1.0);
         return;
     }
     if (uDebugViewMode == 9) {
@@ -316,7 +349,7 @@ void main() {
             return;
         }
 
-        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float shadowDepth = texture(uShadowMapRaw, vec3(shadowUv.xy, 0.0)).r;
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
         float lit = shadowUv.z - bias <= shadowDepth ? 1.0 : 0.0;
         float margin = (shadowDepth - (shadowUv.z - bias)) * uShadowDistance * 2.0;
@@ -469,7 +502,7 @@ void main() {
             return;
         }
 
-        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float shadowDepth = texture(uShadowMapRaw, vec3(shadowUv.xy, 0.0)).r;
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
         float margin = shadowUv.z - bias - shadowDepth;
         // Green = lit (margin <= 0), Red = shadowed (margin > 0)
@@ -509,10 +542,10 @@ void main() {
         }
 
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
-        float shadowDepth = texture(uShadowMapRaw, shadowUv.xy).r;
+        float shadowDepth = texture(uShadowMapRaw, vec3(shadowUv.xy, 0.0)).r;
         float shadowed = (shadowUv.z - bias > shadowDepth) ? 1.0 : 0.0;
-        vec4 casterColor = texture(uShadowColorTex, shadowUv.xy);
-        vec4 casterNormal = texture(uShadowNormalTex, shadowUv.xy);
+        vec4 casterColor = texture(uCsmShadowColor0Tex, vec3(shadowUv.xy, 0.0));
+        vec4 casterNormal = texture(uCsmShadowColor1Tex, vec3(shadowUv.xy, 0.0));
         float cleared = step(0.995, casterColor.r) * step(0.995, casterColor.g) *
                         step(0.995, casterColor.b) * step(0.995, casterColor.a);
         vec3 normalPreview = vec3(casterNormal.rg, casterNormal.b);

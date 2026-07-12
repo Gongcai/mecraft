@@ -4,8 +4,10 @@
 
 #include "RenderResourceHub.h"
 
+#include "../../Diagnostics.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
+#include "../rhi/RhiDevice.h"
 #include "../../particle/ParticleSystem.h"
 #include "../mesh/ChunkMesher.h"
 #include "../../ecs/GameplayRegistry.h"
@@ -18,9 +20,11 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <filesystem>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <array>
@@ -39,23 +43,6 @@ struct MeshingCandidate {
     std::shared_ptr<Chunk> neighborPosZ;
     std::shared_ptr<Chunk> neighborNegZ;
 };
-
-void expandBounds(glm::vec3& minBounds, glm::vec3& maxBounds, bool& hasBounds,
-                  const glm::vec3& candidateMin, const glm::vec3& candidateMax) {
-    if (!hasBounds) {
-        minBounds = candidateMin;
-        maxBounds = candidateMax;
-        hasBounds = true;
-        return;
-    }
-
-    minBounds.x = std::min(minBounds.x, candidateMin.x);
-    minBounds.y = std::min(minBounds.y, candidateMin.y);
-    minBounds.z = std::min(minBounds.z, candidateMin.z);
-    maxBounds.x = std::max(maxBounds.x, candidateMax.x);
-    maxBounds.y = std::max(maxBounds.y, candidateMax.y);
-    maxBounds.z = std::max(maxBounds.z, candidateMax.z);
-}
 
 #ifdef MECRAFT_DEBUG
 constexpr FrustumPlane kPlaneFromIndex(const size_t index) {
@@ -86,39 +73,36 @@ RenderResourceHub::~RenderResourceHub() {
     shutdown();
 }
 
-void RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool) {
+bool RenderResourceHub::init(ResourceMgr& resourceMgr,
+                             ThreadPool& threadPool,
+                             RhiDevice& rhiDevice,
+                             RhiCommandListPool& commandListPool) {
     m_resourceMgr = &resourceMgr;
-    m_chunkForwardShader = resourceMgr.getShader("chunk_lit");
-    m_transparentCompositeShader = resourceMgr.getShader("transparent_composite");
-    if (m_transparentCompositeShader == nullptr) {
-        m_transparentCompositeShader = m_chunkForwardShader;
-    }
-    m_chunkShader = m_chunkForwardShader;
-    m_chunkGBufferShader = resourceMgr.getShader("chunk_gbuffer");
-    m_shadowDepthShader = resourceMgr.getShader("shadow_depth");
-    m_entityShadowShader = resourceMgr.getShader("entity_shadow");
-    m_particleGBufferShader = resourceMgr.getShader("particle_gbuffer");
+    m_rhiDevice = &rhiDevice;
+    m_commandListPool = &commandListPool;
 
-    //m_uiShader = resourceMgr.getShader("ui");
     // R8: Overlay initialization removed — handled by BlockInteractionOverlayRenderer
-    m_worldRenderBuffer.init();
+    m_terrainRhiPipelines.init(*m_rhiDevice);
+    if (!m_worldRenderBuffer.init(*m_rhiDevice)) {
+        return false;
+    }
     m_terrainCache.init();
     m_terrainCache.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainCache.setChunkMeshingService(&m_meshingService);
     m_terrainCache.setRegionChunkSize(m_regionChunkSize);
-    m_terrainCache.setUseMultiDrawIndirect(m_useMultiDrawIndirect);
-    m_terrainRenderer.init(resourceMgr);
+    m_terrainRenderer.init();
     m_terrainRenderer.setWorldRenderBuffer(&m_worldRenderBuffer);
     m_terrainRenderer.setTerrainRenderCache(&m_terrainCache);
-    m_terrainRenderer.setUseMultiDrawIndirect(m_useMultiDrawIndirect);
 #ifdef MECRAFT_DEBUG
     m_terrainRenderer.setChunkCullingDebugEnabled(m_chunkCullingDebugEnabled);
 #endif
     // Phase 5c: Inject WaterCompositePass dependencies
-    m_deferredTargets.init();
+    if (!m_deferredTargets.init(*m_rhiDevice, *m_commandListPool)) {
+        return false;
+    }
     const std::string atmosphereLutPath = resolveAtmosphereFinalLutPath();
     m_deferredTargets.loadAtmosphereLut(atmosphereLutPath.c_str());
-    m_gameplaySkyRenderer.init(resourceMgr);
+    m_gameplaySkyRenderer.init(resourceMgr, *m_rhiDevice);
     if (!m_meshingSubmitBudgetOverridden) {
         const int workerCount = std::max(1, threadPool.numWorkers());
         m_meshingSubmitBudget = 2 + std::max(0, workerCount - 1);
@@ -140,6 +124,7 @@ void RenderResourceHub::init(ResourceMgr &resourceMgr, ThreadPool& threadPool) {
                                      static_cast<float>(m_meshingDrainTimeBudgetMs),
                                      m_meshingDrainVertexBudget);
     m_meshingService.start(&threadPool);
+    return true;
 }
 
 void RenderResourceHub::shutdown() {
@@ -150,16 +135,42 @@ void RenderResourceHub::shutdown() {
     m_terrainCache.shutdown();
     m_meshingService.shutdown();
     m_worldRenderBuffer.shutdown();
+    m_terrainRhiPipelines.shutdown();
     m_meshingInFlight.clear();
     m_deferredMeshResults.clear();
-    m_chunkShader = nullptr;
-    m_chunkForwardShader = nullptr;
-    m_transparentCompositeShader = nullptr;
-    m_chunkGBufferShader = nullptr;
-    m_shadowDepthShader = nullptr;
-    m_entityShadowShader = nullptr;
-    m_entityGBufferShader = nullptr;
-    m_particleGBufferShader = nullptr;
+    m_rhiDevice = nullptr;
+    m_commandListPool = nullptr;
+}
+
+bool RenderResourceHub::resizeRhiSwapchain(const Window& window) {
+    if (!m_rhiDevice) {
+        MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: RHI device is not initialized\n");
+        return false;
+    }
+
+    const int width = window.getWidth();
+    const int height = window.getHeight();
+    if (width <= 0 || height <= 0) {
+        MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: invalid swapchain dimensions\n");
+        return false;
+    }
+
+    return m_rhiDevice->resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+}
+
+RhiDevice& RenderResourceHub::rhiDevice() {
+    assert(m_rhiDevice != nullptr);
+    return *m_rhiDevice;
+}
+
+const RhiDevice& RenderResourceHub::rhiDevice() const {
+    assert(m_rhiDevice != nullptr);
+    return *m_rhiDevice;
+}
+
+RhiCommandListPool& RenderResourceHub::commandListPool() {
+    assert(m_commandListPool != nullptr);
+    return *m_commandListPool;
 }
 
 void RenderResourceHub::setMeshingSubmitBudget(const int budget) {
@@ -193,7 +204,6 @@ void RenderResourceHub::setTerrainStreamingService(TerrainStreamingService* svc)
         m_terrainRenderer.setTerrainRenderCache(&svc->terrainCache());
         // Update WorldRenderBuffer reference in the service's cache
         svc->terrainCache().setWorldRenderBuffer(&m_worldRenderBuffer);
-        svc->terrainCache().setUseMultiDrawIndirect(m_useMultiDrawIndirect);
     }
 }
 
@@ -297,7 +307,7 @@ ShadowFrameStats RenderResourceHub::getShadowFrameStats() const {
 RenderWorkStats RenderResourceHub::getRenderWorkStats() const {
     RenderWorkStats stats;
     const auto& sceneStats = m_worldRenderBuffer.sceneFrameStats();
-    stats.blockVertexBytes = m_useMultiDrawIndirect ? sizeof(PackedBlockVertex) : sizeof(BlockVertex);
+    stats.blockVertexBytes = sizeof(PackedBlockVertex);
     stats.opaqueCommands = sceneStats.opaqueCommands;
     stats.cutoutCommands = sceneStats.cutoutCommands;
     stats.transparentCommands = sceneStats.transparentCommands + sceneStats.waterCommands;
@@ -411,13 +421,6 @@ size_t RenderResourceHub::getMeshingHistoryCount() const {
 }
 #endif
 
-int RenderResourceHub::getDrawCallCount() const {
-    return m_terrainRenderer.drawCallCount();
-}
-
-int RenderResourceHub::getGlSubmitCount() const {
-    if (m_useMultiDrawIndirect) {
-        return m_worldRenderBuffer.sceneFrameStats().glSubmitCount;
-    }
-    return m_terrainRenderer.drawCallCount();
+int RenderResourceHub::getTerrainRhiSubmitCount() const {
+    return m_worldRenderBuffer.sceneFrameStats().rhiSubmitCount;
 }

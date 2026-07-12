@@ -1,10 +1,10 @@
 #include "TextureAtlasBuilders.h"
-#include "RhiTextureResourceUtils.h"
 #include "TextureResampler.h"
+#include "renderer/rhi/RhiCommandList.h"
+#include "renderer/rhi/RhiDevice.h"
+#include "renderer/rhi/RhiResources.h"
 
 #include "../third_party/stb/stb_image.h"
-
-#include <glad/glad.h>
 
 #include <algorithm>
 #include <cmath>
@@ -146,31 +146,50 @@ void copyTilePixelsToAtlas(std::vector<unsigned char>& atlasPixels,
     }
 }
 
-void uploadNearestAtlasTexture(const GLuint textureID,
-                               const TextureAtlas& atlas,
-                               const std::vector<unsigned char>& pixels,
-                               const bool generateMipmaps,
-                               const int maxMipmapLevel) {
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, generateMipmaps ? GL_NEAREST_MIPMAP_LINEAR : GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, atlas.atlasWidth, atlas.atlasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-    if (generateMipmaps) {
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, maxMipmapLevel);
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
+void createAtlasTexture(resource::IndexedTextureAtlas& atlas,
+                        RhiDevice& rhiDevice,
+                        RhiCommandListPool& commandListPool,
+                        const int maxMipmapLevel,
+                        const char* debugName) {
+    RhiTextureDesc desc;
+    desc.debugName = debugName;
+    desc.dimension = RhiTextureDimension::Texture2D;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.width = static_cast<uint32_t>(atlas.atlas.atlasWidth);
+    desc.height = static_cast<uint32_t>(atlas.atlas.atlasHeight);
+    desc.mipLevels = static_cast<uint32_t>(maxMipmapLevel + 1);
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                 rhiFlag(RhiTextureUsage::TransferSrc) |
+                 rhiFlag(RhiTextureUsage::TransferDst);
 
-void registerBuiltAtlas(resource::IndexedTextureAtlas& atlas, const GLuint textureID, const char* label) {
-    if (!resource::registerTextureAtlas(atlas.atlas, textureID)) {
-        if (textureID != 0) {
-            glDeleteTextures(1, &textureID);
-        }
-        failTextureAtlasBuilders(std::string("Failed to register ") + label + " RHI handle");
+    RhiTextureInitialData initialData;
+    initialData.pixels = atlas.pixels.data();
+    initialData.sizeBytes = atlas.pixels.size();
+    initialData.finalState = desc.mipLevels > 1u
+        ? RhiResourceState::TransferDst
+        : RhiResourceState::ShaderRead;
+    atlas.atlas.texture = rhiDevice.createTexture(desc, &initialData);
+    if (!atlas.atlas.texture.isValid()) {
+        failTextureAtlasBuilders(std::string("Failed to create ") + debugName);
+    }
+    RhiCommandList* commandListStorage = commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin({"TextureAtlas.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    if (desc.mipLevels > 1u) {
+        commandList.generateMipmaps(atlas.atlas.texture);
+        commandList.textureBarrier({atlas.atlas.texture,
+                                    RhiResourceState::TransferDst,
+                                    RhiResourceState::ShaderRead});
+    }
+    if (!commandList.end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!rhiDevice.submit({"TextureAtlas.Submit", submittedCommandLists, 1u})) {
+        std::abort();
     }
 }
 
@@ -180,7 +199,9 @@ namespace resource {
 
 IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
                                           const int tileSize,
-                                          const BlockTextureCatalog& catalog) {
+                                          const BlockTextureCatalog& catalog,
+                                          RhiDevice& rhiDevice,
+                                          RhiCommandListPool& commandListPool) {
     if (tileSize <= 0) {
         failTextureAtlasBuilders("Item texture atlas tile size must be positive");
     }
@@ -243,28 +264,30 @@ IndexedTextureAtlas buildItemTextureAtlas(const std::string& directory,
         result.indices[textureName] = i;
     }
 
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
     result.atlas.atlasWidth = atlasWidth;
     result.atlas.atlasHeight = atlasHeight;
     result.atlas.tileSize = tileSize;
     result.atlas.tileStride = tileStride;
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;
-    uploadNearestAtlasTexture(textureID, result.atlas, result.pixels, true, 0);
-    registerBuiltAtlas(result, textureID, "item texture atlas");
+    createAtlasTexture(result, rhiDevice, commandListPool, 0, "Resource.ItemTextureAtlas");
     return result;
 }
 
 IndexedTextureAtlas buildBlockTextureAtlas(const std::string& directory,
                                            const int tileSize,
-                                           const BlockTextureCatalog& catalog) {
-    return buildBlockTextureAtlas(buildBlockTextureManifest(directory), tileSize, catalog);
+                                           const BlockTextureCatalog& catalog,
+                                           RhiDevice& rhiDevice,
+                                           RhiCommandListPool& commandListPool) {
+    return buildBlockTextureAtlas(
+        buildBlockTextureManifest(directory), tileSize, catalog, rhiDevice, commandListPool);
 }
 
 IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
                                            const int tileSize,
-                                           const BlockTextureCatalog& catalog) {
+                                           const BlockTextureCatalog& catalog,
+                                           RhiDevice& rhiDevice,
+                                           RhiCommandListPool& commandListPool) {
     if (tileSize <= 0) {
         failTextureAtlasBuilders("Block texture atlas tile size must be positive");
     }
@@ -346,8 +369,6 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
         result.indices[textureName] = i;
     }
 
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
     result.atlas.atlasWidth = atlasWidth;
     result.atlas.atlasHeight = atlasHeight;
     result.atlas.tileSize = tileSize;
@@ -358,12 +379,15 @@ IndexedTextureAtlas buildBlockTextureAtlas(const BlockTextureManifest& manifest,
     const int fullChainMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(std::max(atlasWidth, atlasHeight)))));
     const int paddingSafeMaxLevel = static_cast<int>(std::floor(std::log2(static_cast<float>(kTilePadding))));
     const int clampedMaxLevel = std::max(0, std::min(fullChainMaxLevel, paddingSafeMaxLevel));
-    uploadNearestAtlasTexture(textureID, result.atlas, result.pixels, true, clampedMaxLevel);
-    registerBuiltAtlas(result, textureID, "block texture atlas");
+    createAtlasTexture(result, rhiDevice, commandListPool,
+                       clampedMaxLevel, "Resource.BlockTextureAtlas");
     return result;
 }
 
-IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int iconSize) {
+IndexedTextureAtlas buildHudIconAtlas(const std::string& directory,
+                                      const int iconSize,
+                                      RhiDevice& rhiDevice,
+                                      RhiCommandListPool& commandListPool) {
     if (iconSize <= 0) {
         failTextureAtlasBuilders("HUD icon atlas icon size must be positive");
     }
@@ -414,16 +438,13 @@ IndexedTextureAtlas buildHudIconAtlas(const std::string& directory, const int ic
         result.indices[imagePaths[i].stem().string()] = i;
     }
 
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
     result.atlas.atlasWidth = atlasWidth;
     result.atlas.atlasHeight = atlasHeight;
     result.atlas.tileSize = iconSize;
     result.atlas.tileStride = tileStride;
     result.atlas.tilePadding = kTilePadding;
     result.atlas.tilesPerRow = tilesPerRow;
-    uploadNearestAtlasTexture(textureID, result.atlas, result.pixels, false, 0);
-    registerBuiltAtlas(result, textureID, "HUD icon atlas");
+    createAtlasTexture(result, rhiDevice, commandListPool, 0, "Resource.HudIconAtlas");
     return result;
 }
 

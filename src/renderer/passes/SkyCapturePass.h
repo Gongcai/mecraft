@@ -2,6 +2,7 @@
 #define MECRAFT_SKY_CAPTURE_PASS_H
 
 #include "RenderPass.h"
+#include "../rhi/RhiHandles.h"
 #include <glm/glm.hpp>
 
 class DeferredRenderTargets;
@@ -9,18 +10,21 @@ class GameplaySkyRenderer;
 class ResourceMgr;
 class DayNightSystem;
 class WeatherSystem;
+class RhiDevice;
+class RhiCommandListPool;
 
 /// Sky capture pass: renders equirectangular sky radiance and cloud data for IBL and lighting.
 class SkyCapturePass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SkyCapture"; }
 
     /// Execute sky capture rendering.
     /// @param dayNightSystem Day/night system for sky colors and time
     /// @param weatherSystem Weather system for wetness and storm state
-    /// @param targets Deferred render targets (sky capture FBO, atmosphere LUT)
+    /// @param rhiDevice RHI device used to begin the sky capture render targets
+    /// @param targets Deferred render targets for sky capture and atmosphere LUT resources
     /// @param skyRenderer Gameplay sky renderer (owns shaders and rendering)
     /// @param resourceMgr Resource manager for noise texture
     /// @param cameraY Camera altitude for atmosphere scattering
@@ -28,10 +32,29 @@ public:
     /// @param cameraPos Camera position for cloud rendering
     /// @param cloudTimeScale Cloud time scale from settings
     void execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
+                 RhiDevice& rhiDevice,
+                 RhiCommandListPool& commandListPool,
                  DeferredRenderTargets& targets,
-                 GameplaySkyRenderer& skyRenderer, ResourceMgr* resourceMgr,
+                 GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
                  float cameraY, float shaderTime, const glm::vec3& cameraPos,
                  float cloudTimeScale);
+
+private:
+    [[nodiscard]] bool ensureMetadataResources(RhiDevice& rhiDevice,
+                                               RhiTextureViewHandle atmosphereLutView);
+    void destroyMetadataResources();
+
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiSamplerHandle m_metadataSampler;
+    RhiShaderHandle m_metadataVertexShader;
+    RhiShaderHandle m_rawFragmentShader;
+    RhiShaderHandle m_metadataFragmentShader;
+    RhiBindGroupLayoutHandle m_metadataBindGroupLayout;
+    RhiPipelineLayoutHandle m_metadataPipelineLayout;
+    RhiPipelineHandle m_metadataPipeline;
+    RhiPipelineHandle m_rawPipeline;
+    RhiBindGroupHandle m_metadataBindGroup;
+    RhiTextureViewHandle m_boundAtmosphereLutView;
 };
 
 #endif // MECRAFT_SKY_CAPTURE_PASS_H

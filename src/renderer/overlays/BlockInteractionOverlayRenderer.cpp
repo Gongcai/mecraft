@@ -5,11 +5,14 @@
 #include "../../world/block/BlockSelection.h"
 #include "../../world/block/BlockStateRegistry.h"
 #include "../../world/redstone/WireFaceGeometry.h"
-#include "../core/Shader.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiResources.h"
+#include "../rhi/RhiShaderSourceLoader.h"
 
 #include <array>
-
-#include <glad/glad.h>
+#include <cstdlib>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace {
 
@@ -37,50 +40,140 @@ BlockSelectionBox selectionBoxForTarget(const BlockStateId targetState,
 
 } // namespace
 
-void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr) {
-    m_outlineShader = resourceMgr.getShader("outline");
-    m_breakOverlayShader = resourceMgr.getShader("break_overlay");
+void BlockInteractionOverlayRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
+    static_cast<void>(resourceMgr);
     initOutlineMesh();
     initBreakOverlayMesh();
+    const auto vertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_outline_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_outline_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "BlockOverlay.Outline.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_outlineVertexShader = rhiDevice.createShader(shaderDesc);
+    shaderDesc.debugName = "BlockOverlay.Outline.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_outlineFragmentShader = rhiDevice.createShader(shaderDesc);
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "BlockOverlay.Outline.PipelineLayout";
+    layoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4);
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                    rhiFlag(RhiShaderStage::Fragment);
+    m_outlinePipelineLayout = rhiDevice.createPipelineLayout(layoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "BlockOverlay.Outline.Pipeline";
+    pipelineDesc.vertexShader = m_outlineVertexShader;
+    pipelineDesc.fragmentShader = m_outlineFragmentShader;
+    pipelineDesc.layout = m_outlinePipelineLayout;
+    pipelineDesc.vertexInput.bindings = {{0u, sizeof(float) * 3u, RhiVertexInputRate::Vertex}};
+    pipelineDesc.vertexInput.attributes = {{0u, 0u, RhiVertexFormat::Float3, 0u}};
+    pipelineDesc.topology = RhiPrimitiveTopology::LineList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    pipelineDesc.blend.attachments.resize(1u);
+    m_outlinePipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    const auto breakVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_break_rhi.vert");
+    const auto breakFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/block_break_rhi.frag");
+    if (!breakVertexSource || !breakFragmentSource) std::abort();
+    RhiShaderDesc breakShaderDesc;
+    breakShaderDesc.debugName = "BlockOverlay.Break.Vertex";
+    breakShaderDesc.stage = RhiShaderStage::Vertex;
+    breakShaderDesc.source = breakVertexSource->c_str();
+    breakShaderDesc.sourceSize = breakVertexSource->size();
+    m_breakVertexShader = rhiDevice.createShader(breakShaderDesc);
+    breakShaderDesc.debugName = "BlockOverlay.Break.Fragment";
+    breakShaderDesc.stage = RhiShaderStage::Fragment;
+    breakShaderDesc.source = breakFragmentSource->c_str();
+    breakShaderDesc.sourceSize = breakFragmentSource->size();
+    m_breakFragmentShader = rhiDevice.createShader(breakShaderDesc);
+    RhiPipelineLayoutDesc breakLayoutDesc;
+    breakLayoutDesc.debugName = "BlockOverlay.Break.PipelineLayout";
+    breakLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 2u + sizeof(glm::vec4) + sizeof(glm::ivec4);
+    breakLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
+                                         rhiFlag(RhiShaderStage::Fragment);
+    m_breakPipelineLayout = rhiDevice.createPipelineLayout(breakLayoutDesc);
+    RhiGraphicsPipelineDesc breakPipelineDesc;
+    breakPipelineDesc.debugName = "BlockOverlay.Break.Pipeline";
+    breakPipelineDesc.vertexShader = m_breakVertexShader;
+    breakPipelineDesc.fragmentShader = m_breakFragmentShader;
+    breakPipelineDesc.layout = m_breakPipelineLayout;
+    breakPipelineDesc.vertexInput.bindings = {{0u, sizeof(float) * 5u, RhiVertexInputRate::Vertex}};
+    breakPipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, 0u},
+        {1u, 0u, RhiVertexFormat::Float2, sizeof(float) * 3u}
+    };
+    breakPipelineDesc.raster.cullMode = RhiCullMode::None;
+    breakPipelineDesc.depthStencil.depthTestEnabled = true;
+    breakPipelineDesc.depthStencil.depthWriteEnabled = false;
+    breakPipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    breakPipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    RhiBlendAttachmentState breakBlend;
+    breakBlend.blendEnabled = true;
+    breakBlend.srcColor = RhiBlendFactor::SrcAlpha;
+    breakBlend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    breakBlend.srcAlpha = RhiBlendFactor::One;
+    breakBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    breakPipelineDesc.blend.attachments.push_back(breakBlend);
+    m_breakPipeline = rhiDevice.createGraphicsPipeline(breakPipelineDesc);
+    if (!m_outlineVertexShader.isValid() || !m_outlineFragmentShader.isValid() ||
+        !m_outlinePipelineLayout.isValid() || !m_outlinePipeline.isValid() ||
+        !m_breakVertexShader.isValid() || !m_breakFragmentShader.isValid() ||
+        !m_breakPipelineLayout.isValid() || !m_breakPipeline.isValid()) std::abort();
 }
 
 void BlockInteractionOverlayRenderer::shutdown() {
-    if (m_outlineVbo != 0) {
-        glDeleteBuffers(1, &m_outlineVbo);
-        m_outlineVbo = 0;
+    if (m_rhiDevice != nullptr) {
+        if (m_outlinePipeline.isValid()) m_rhiDevice->destroyPipeline(m_outlinePipeline);
+        if (m_outlinePipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_outlinePipelineLayout);
+        if (m_outlineFragmentShader.isValid()) m_rhiDevice->destroyShader(m_outlineFragmentShader);
+        if (m_outlineVertexShader.isValid()) m_rhiDevice->destroyShader(m_outlineVertexShader);
+        if (m_breakPipeline.isValid()) m_rhiDevice->destroyPipeline(m_breakPipeline);
+        if (m_breakPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_breakPipelineLayout);
+        if (m_breakFragmentShader.isValid()) m_rhiDevice->destroyShader(m_breakFragmentShader);
+        if (m_breakVertexShader.isValid()) m_rhiDevice->destroyShader(m_breakVertexShader);
     }
-    if (m_outlineVao != 0) {
-        glDeleteVertexArrays(1, &m_outlineVao);
-        m_outlineVao = 0;
+    m_outlinePipeline = {};
+    m_outlinePipelineLayout = {};
+    m_outlineFragmentShader = {};
+    m_outlineVertexShader = {};
+    m_breakPipeline = {};
+    m_breakPipelineLayout = {};
+    m_breakFragmentShader = {};
+    m_breakVertexShader = {};
+    if (m_rhiDevice != nullptr) {
+        if (m_breakOverlayCrossVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_breakOverlayCrossVertexBuffer);
+        if (m_breakOverlayVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_breakOverlayVertexBuffer);
+        if (m_outlineVertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_outlineVertexBuffer);
     }
-    if (m_breakOverlayVbo != 0) {
-        glDeleteBuffers(1, &m_breakOverlayVbo);
-        m_breakOverlayVbo = 0;
-    }
-    if (m_breakOverlayVao != 0) {
-        glDeleteVertexArrays(1, &m_breakOverlayVao);
-        m_breakOverlayVao = 0;
-    }
-    if (m_breakOverlayCrossVbo != 0) {
-        glDeleteBuffers(1, &m_breakOverlayCrossVbo);
-        m_breakOverlayCrossVbo = 0;
-    }
-    if (m_breakOverlayCrossVao != 0) {
-        glDeleteVertexArrays(1, &m_breakOverlayCrossVao);
-        m_breakOverlayCrossVao = 0;
-    }
+    m_breakOverlayCrossVertexBuffer = {};
+    m_breakOverlayVertexBuffer = {};
+    m_outlineVertexBuffer = {};
+    m_rhiDevice = nullptr;
 }
 
 void BlockInteractionOverlayRenderer::render(const IWorldView& worldView,
                                               const glm::mat4& viewProj,
                                               const BlockTargetRenderData& target,
-                                              const BlockBreakRenderData& blockBreak) {
-    renderBlockBreakOverlay(worldView, viewProj, blockBreak);
-    renderBlockOutline(worldView, viewProj, target);
+                                              const BlockBreakRenderData& blockBreak,
+                                              RhiCommandList& commandList) {
+    renderBlockBreakOverlay(worldView, viewProj, blockBreak, commandList);
+    renderBlockOutline(worldView, viewProj, target, commandList);
 }
 
 void BlockInteractionOverlayRenderer::initOutlineMesh() {
-    if (m_outlineVao != 0) {
+    if (m_outlineVertexBuffer.isValid()) {
         return;
     }
 
@@ -90,22 +183,20 @@ void BlockInteractionOverlayRenderer::initOutlineMesh() {
         0,0,0, 0,0,1,  1,0,0, 1,0,1,  1,1,0, 1,1,1,  0,1,0, 0,1,1
     };
 
-    glGenVertexArrays(1, &m_outlineVao);
-    glGenBuffers(1, &m_outlineVbo);
-
-    glBindVertexArray(m_outlineVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_outlineVbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kOutlineVertices.size() * sizeof(float)),
-                 kOutlineVertices.data(), GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "BlockOverlay.Outline.VertexBuffer";
+    bufferDesc.size = kOutlineVertices.size() * sizeof(float);
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    m_outlineVertexBuffer = m_rhiDevice->createBuffer(
+        bufferDesc, kOutlineVertices.data(), bufferDesc.size);
+    if (!m_outlineVertexBuffer.isValid()) std::abort();
 }
 
 void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
-    if (m_breakOverlayVao != 0 && m_breakOverlayCrossVao != 0) {
+    if (m_breakOverlayVertexBuffer.isValid() && m_breakOverlayCrossVertexBuffer.isValid()) {
         return;
     }
 
@@ -140,44 +231,37 @@ void BlockInteractionOverlayRenderer::initBreakOverlayMesh() {
         0.8536f,0.0f,0.1464f, 0,0,  0.1464f,1.0f,0.8536f, 1,1,  0.8536f,1.0f,0.1464f, 0,1
     };
 
-    glGenVertexArrays(1, &m_breakOverlayVao);
-    glGenBuffers(1, &m_breakOverlayVbo);
+    m_breakOverlayVertexCount = static_cast<int32_t>(kBreakOverlayVertices.size() / 5);
+    RhiBufferDesc overlayBufferDesc;
+    overlayBufferDesc.debugName = "BlockOverlay.Break.VertexBuffer";
+    overlayBufferDesc.size = kBreakOverlayVertices.size() * sizeof(float);
+    overlayBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    overlayBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    overlayBufferDesc.initialState = RhiResourceState::VertexBuffer;
+    m_breakOverlayVertexBuffer = m_rhiDevice->createBuffer(
+        overlayBufferDesc, kBreakOverlayVertices.data(), overlayBufferDesc.size);
+    if (!m_breakOverlayVertexBuffer.isValid()) std::abort();
 
-    glBindVertexArray(m_breakOverlayVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_breakOverlayVbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kBreakOverlayVertices.size() * sizeof(float)),
-                 kBreakOverlayVertices.data(), GL_STATIC_DRAW);
+    m_breakOverlayCrossVertexCount = static_cast<int32_t>(kBreakOverlayCrossVertices.size() / 5);
+    RhiBufferDesc crossBufferDesc;
+    crossBufferDesc.debugName = "BlockOverlay.BreakCross.VertexBuffer";
+    crossBufferDesc.size = kBreakOverlayCrossVertices.size() * sizeof(float);
+    crossBufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                            rhiFlag(RhiBufferUsage::TransferDst);
+    crossBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    crossBufferDesc.initialState = RhiResourceState::VertexBuffer;
+    m_breakOverlayCrossVertexBuffer = m_rhiDevice->createBuffer(
+        crossBufferDesc, kBreakOverlayCrossVertices.data(), crossBufferDesc.size);
+    if (!m_breakOverlayCrossVertexBuffer.isValid()) std::abort();
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-
-    m_breakOverlayVertexCount = static_cast<GLsizei>(kBreakOverlayVertices.size() / 5);
-
-    glGenVertexArrays(1, &m_breakOverlayCrossVao);
-    glGenBuffers(1, &m_breakOverlayCrossVbo);
-
-    glBindVertexArray(m_breakOverlayCrossVao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_breakOverlayCrossVbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kBreakOverlayCrossVertices.size() * sizeof(float)),
-                 kBreakOverlayCrossVertices.data(), GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-
-    m_breakOverlayCrossVertexCount = static_cast<GLsizei>(kBreakOverlayCrossVertices.size() / 5);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
 }
 
 void BlockInteractionOverlayRenderer::renderBlockOutline(const IWorldView& worldView,
                                                          const glm::mat4& viewProj,
-                                                         const BlockTargetRenderData& target) {
-    if (m_outlineShader == nullptr || m_outlineVao == 0 || !target.hasTarget) {
+                                                         const BlockTargetRenderData& target,
+                                                         RhiCommandList& commandList) {
+    if (!m_outlineVertexBuffer.isValid() || !target.hasTarget) {
         return;
     }
 
@@ -192,24 +276,21 @@ void BlockInteractionOverlayRenderer::renderBlockOutline(const IWorldView& world
     model = glm::scale(model, boxSize + glm::vec3(0.002f));
     model = glm::translate(model, glm::vec3(-0.5f));
 
-    m_outlineShader->use();
-    m_outlineShader->setMat4("viewProj", viewProj);
-    m_outlineShader->setMat4("model", model);
-    m_outlineShader->setVec3("lineColor", 0.05f, 0.05f, 0.05f);
-
-    glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-
-    glBindVertexArray(m_outlineVao);
-    glDrawArrays(GL_LINES, 0, 24);
-    glBindVertexArray(0);
-    glDepthMask(GL_TRUE);
+    struct PushConstants { glm::mat4 viewProj; glm::mat4 model; glm::vec4 color; };
+    const PushConstants constants{viewProj, model, glm::vec4(0.05f, 0.05f, 0.05f, 1.0f)};
+    commandList.setGraphicsPipeline(m_outlinePipeline);
+    commandList.setVertexBuffer(0u, m_outlineVertexBuffer, 0u);
+    commandList.pushConstants(&constants, sizeof(constants),
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(24u, 1u, 0u, 0u);
 }
 
 void BlockInteractionOverlayRenderer::renderBlockBreakOverlay(const IWorldView& worldView,
                                                                const glm::mat4& viewProj,
-                                                               const BlockBreakRenderData& blockBreak) {
-    if (m_breakOverlayShader == nullptr || m_breakOverlayVao == 0 || !blockBreak.active) {
+                                                               const BlockBreakRenderData& blockBreak,
+                                                               RhiCommandList& commandList) {
+    if (!m_breakOverlayVertexBuffer.isValid() || !m_breakOverlayCrossVertexBuffer.isValid() ||
+        !blockBreak.active) {
         return;
     }
 
@@ -232,21 +313,22 @@ void BlockInteractionOverlayRenderer::renderBlockBreakOverlay(const IWorldView& 
     model = glm::scale(model, boxSize + glm::vec3(0.001f));
     model = glm::translate(model, glm::vec3(-0.5f));
 
-    m_breakOverlayShader->use();
-    m_breakOverlayShader->setMat4("viewProj", viewProj);
-    m_breakOverlayShader->setMat4("model", model);
-    m_breakOverlayShader->setFloat("breakProgress", breakProgress);
-    m_breakOverlayShader->setVec3("blockWorldPos", glm::vec3(target));
-    m_breakOverlayShader->setInt("uUseMeshUV", useCrossOverlay ? 1 : 0);
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
-
-    glBindVertexArray(useCrossOverlay ? m_breakOverlayCrossVao : m_breakOverlayVao);
-    glDrawArrays(GL_TRIANGLES, 0, useCrossOverlay ? m_breakOverlayCrossVertexCount : m_breakOverlayVertexCount);
-    glBindVertexArray(0);
-
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
+    struct PushConstants {
+        glm::mat4 viewProj;
+        glm::mat4 model;
+        glm::vec4 blockPosProgress;
+        glm::ivec4 flags;
+    };
+    const PushConstants constants{
+        viewProj, model, glm::vec4(glm::vec3(target), breakProgress),
+        glm::ivec4(useCrossOverlay ? 1 : 0, 0, 0, 0)
+    };
+    commandList.setGraphicsPipeline(m_breakPipeline);
+    commandList.setVertexBuffer(0u, useCrossOverlay ? m_breakOverlayCrossVertexBuffer
+                                                     : m_breakOverlayVertexBuffer, 0u);
+    commandList.pushConstants(&constants, sizeof(constants),
+        rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(static_cast<uint32_t>(useCrossOverlay ? m_breakOverlayCrossVertexCount
+                                                           : m_breakOverlayVertexCount),
+                     1u, 0u, 0u);
 }

@@ -4,14 +4,13 @@
 #include <functional>
 #include <string>
 
-#include <cstdint>
-
+#include "renderer/rhi/RhiHandles.h"
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "UIText.h"
 #include "../core/Tween.h"
 
-class Shader;
+class RhiDevice;
 
 class UICheckbox : public UIWidget {
 public:
@@ -41,9 +40,14 @@ private:
     [[nodiscard]] UICheckboxStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] int currentStyleState() const;
 
-    Shader* m_shader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_vertexBuffer;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_shapeFragmentShader;
+    RhiShaderHandle m_colorFragmentShader;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineHandle m_shapePipeline;
+    RhiPipelineHandle m_colorPipeline;
     UIText m_label;
 
     bool m_checked = false;

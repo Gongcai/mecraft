@@ -4,25 +4,33 @@
 // no skyCapture, atmosphereLut, shadow maps, SSAO, SSR, volumetric.
 // Contract: texture array + lightmap day/night + AO levels + biome tint + fog.
 
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
 
-in vec2 vUV;
-in float vLight;
-in float vSunlight;
-in float vBlockLight;
-in float vAO;
-in float vNormal;
-in float vLayer;
-in float vAnimationFrameCount;
-in float vAnimationFps;
-in float vAnimated;
-in float vFogDist;
-in vec3 vWorldPos;
-flat in float vTintKind;
-flat in float vMaterialKind;
-in vec2 vTintUV;
+layout(location = 0) in vec2 vUV;
+layout(location = 1) in float vLight;
+layout(location = 2) in float vSunlight;
+layout(location = 3) in float vBlockLight;
+layout(location = 4) in float vAO;
+layout(location = 5) in float vNormal;
+layout(location = 6) in float vLayer;
+layout(location = 7) in float vAnimationFrameCount;
+layout(location = 8) in float vAnimationFps;
+layout(location = 9) in float vAnimated;
+layout(location = 10) in float vFogDist;
+layout(location = 11) in vec3 vWorldPos;
+layout(location = 12) flat in float vTintKind;
+layout(location = 13) flat in float vMaterialKind;
+layout(location = 14) in vec2 vTintUV;
 
 // Textures
+#ifdef RHI_TERRAIN_FORWARD_MDI
+layout(set = 1, binding = 0) uniform sampler2DArray texArray;
+layout(set = 1, binding = 1) uniform sampler2D uLightmapDay;
+layout(set = 1, binding = 2) uniform sampler2D uLightmapNight;
+layout(set = 1, binding = 3) uniform sampler2D uGrassColormap;
+layout(set = 1, binding = 4) uniform sampler2D uFoliageColormap;
+#include "terrain_forward_params.glsl"
+#else
 uniform sampler2DArray texArray;
 uniform sampler2D uLightmapDay;
 uniform sampler2D uLightmapNight;
@@ -44,6 +52,7 @@ uniform float uFogDensity;
 
 // Debug
 uniform int uDebugLightMode; // 0=off, 1=sky light heatmap, 2=block light heatmap, 3=combined
+#endif
 
 vec3 redstoneTintSrgb(vec2 tintUV) {
     float power = clamp(floor(tintUV.x * 16.0), 0.0, 15.0) / 15.0;

@@ -5,7 +5,6 @@
 #include "../widgets/UIButton.h"
 #include "../layout/UIStackLayout.h"
 #include "../../locale/LocaleManager.h"
-#include "../../renderer/core/Shader.h"
 
 #include <algorithm>
 

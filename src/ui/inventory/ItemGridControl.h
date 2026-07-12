@@ -6,8 +6,6 @@
 #include "../hud/Pickable.h"
 #include "../../item/Item.h"
 
-class Shader;
-
 class ItemGridControl : public UIWidget {
 public:
     void init(ResourceMgr& resourceMgr) override;
@@ -36,12 +34,8 @@ private:
     int hitTest(float mouseX, float mouseY) const;
 
     ResourceMgr* m_resourceMgr = nullptr;
-    Shader* m_crosshairShader = nullptr;
-    Shader* m_inventoryShader = nullptr;
-    Pickable::MeshHandles m_mesh;
     Pickable::RenderParams m_renderParams;
     std::vector<Pickable::SlotInfo> m_slots;
     int m_hoveredIndex = -1;
     int m_lastActivatedIndex = -1;
 };
-

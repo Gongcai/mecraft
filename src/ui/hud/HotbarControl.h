@@ -11,7 +11,6 @@
 class Window;
 class Inventory;
 class ResourceMgr;
-class Shader;
 class TextRenderer;
 class LocaleManager;
 
@@ -42,17 +41,20 @@ protected:
     void renderSelf(const UIRenderContext& context) const override;
 
 private:
-    void initMesh();
-    void cleanupMesh();
-    void renderInternal(float screenW, float screenH, const Inventory& inventory, const TextRenderer* textRenderer = nullptr) const;
-    void renderCountText(float screenW, float screenH, const int* slotCounts, int slotCount,
-                         float slotStride, float startX, float startY, const TextRenderer& textRenderer) const;
-    void renderItemName(float screenW, float screenH, const Inventory& inventory, const TextRenderer& textRenderer, float timeSeconds) const;
+    void renderInternal(const UIRenderContext& context, const Inventory& inventory) const;
+    void renderCountText(const UIRenderContext& context,
+                         const int* slotCounts,
+                         int slotCount,
+                         float slotStride,
+                         float startX,
+                         float startY,
+                         const TextRenderer& textRenderer) const;
+    void renderItemName(const UIRenderContext& context,
+                        const Inventory& inventory,
+                        const TextRenderer& textRenderer,
+                        float timeSeconds) const;
     void checkSlotChange(const Inventory& inventory, const LocaleManager* localeManager = nullptr) const;
 
-    Shader* m_inventoryShader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
     ResourceMgr* m_resourceMgr = nullptr;
     const Inventory* m_inventory = nullptr;
 
@@ -71,24 +73,6 @@ private:
     mutable float m_itemNameShowTime = -100.0f;
     float m_itemNameDisplayDuration = 2.0f;
 
-    // Dirty flag: skip vertex rebuild when inventory hasn't changed.
     static constexpr int kHotbarSlots = 10;
-    mutable bool m_dirty = true;
-    mutable int m_cachedVertCount = 0;
-    mutable int m_cachedSelectedSlot = -1;
     mutable int m_cachedSlotCounts[kHotbarSlots] = {};
-    mutable ItemID m_cachedSlotItems[kHotbarSlots] = {};
-    mutable float m_cachedScreenW = 0.0f;
-    mutable float m_cachedScreenH = 0.0f;
-
-    // Cached draw state for replaying without vertex rebuild.
-    mutable int m_cachedBgVertCount = 0;
-    mutable int m_cachedSelectedVertCount = 0;
-    mutable RhiTextureHandle m_cachedBgTexture;
-    mutable int m_cachedIconVertCounts[3] = {};
-    mutable uint32_t m_cachedIconTextures[3] = {};
-
-    // Cached layout position for text rendering in cache-hit path.
-    mutable float m_cachedStartX = 0.0f;
-    mutable float m_cachedStartY = 0.0f;
 };

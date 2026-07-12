@@ -1,12 +1,8 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
-
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
-
-class Shader;
 
 class UIPanel : public UIWidget {
 public:
@@ -32,16 +28,7 @@ protected:
     void renderSelf(const UIRenderContext& ctx) const override;
 
 private:
-    void initMesh();
-    void cleanupMesh();
-    void rebuildMesh(float x0, float y0, float x1, float y1) const;
-    void rebuildBorderMesh(float x0, float y0, float x1, float y1, float bw) const;
     [[nodiscard]] UIComponentStyle resolveBaseStyle(const UIRenderContext& ctx) const;
-
-    Shader* m_shader = nullptr;
-    Shader* m_glassShader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
 
     std::array<float, 4> m_bgColor{0.2f, 0.2f, 0.2f, 0.8f};
     std::array<float, 4> m_borderColor{1.0f, 1.0f, 1.0f, 0.5f};
@@ -51,7 +38,4 @@ private:
     bool m_hasLocalBorderWidth = false;
     UIPanelTone m_tone = UIPanelTone::Default;
 
-    // Guard against double GPU resource creation when init() is called
-    // more than once on the same instance (e.g. scene re-init).
-    bool m_gpuInitialized = false;
 };

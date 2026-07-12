@@ -6,6 +6,7 @@
 #include <glm/vec2.hpp>
 
 #include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiResources.h"
 #include "UITheme.h"
 #include "UIScaleConfig.h"
 #include "../layout/UILayout.h"
@@ -15,6 +16,13 @@ class LocaleManager;
 class Inventory;
 class TextRenderer;
 class HumanoidRenderer;
+class RhiCommandList;
+class UIRenderer;
+
+enum class UIRenderPhase {
+    CollectText,
+    Record
+};
 
 struct PlayerStatsData {
     int health = 20;
@@ -28,6 +36,7 @@ struct PlayerStatsData {
 };
 
 struct UIRenderContext {
+    UIRenderPhase phase = UIRenderPhase::Record;
     // Screen dimensions (physical pixels)
     int screenWidth = 0;
     int screenHeight = 0;
@@ -51,6 +60,17 @@ struct UIRenderContext {
     const UITheme* theme = nullptr;
     const LocaleManager* localeManager = nullptr;
     RhiTextureHandle backdropBlur;
+    RhiTextureViewHandle backdropBlurView;
+    RhiBufferHandle panelQuadVertexBuffer;
+    RhiPipelineHandle panelSolidPipeline;
+    RhiPipelineHandle panelGlassPipeline;
+    RhiBindGroupHandle panelGlassBindGroup;
+    RhiPipelineHandle imageTexturePipeline;
+    const UIRenderer* uiRenderer = nullptr;
+    RhiCommandList* commandList = nullptr;
+    bool hasScissor = false;
+    RhiRect2D scissor;
+    bool backdropBlurPrepared = false;
     int backdropSourceWidth = 0;
     int backdropSourceHeight = 0;
     int backdropBlurWidth = 0;

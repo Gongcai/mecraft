@@ -1,11 +1,11 @@
 #pragma once
 
-#include <cstdint>
-
 #include "Tween.h"
+#include "renderer/rhi/RhiHandles.h"
 
-class Shader;
 class ResourceMgr;
+class RhiCommandList;
+class RhiDevice;
 
 class ScreenTransition {
 public:
@@ -19,7 +19,7 @@ public:
     void startFadeIn(float duration);
 
     void tick(float dt);
-    void render(int screenW, int screenH) const;
+    void render(int screenW, int screenH, RhiCommandList& commandList) const;
 
     [[nodiscard]] bool isDone() const { return m_alphaTween.isDone(); }
     [[nodiscard]] bool isActive() const { return m_alphaTween.isRunning(); }
@@ -28,8 +28,11 @@ private:
     void initMesh();
     void cleanupMesh();
 
-    Shader* m_shader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_vertexBuffer;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineHandle m_pipeline;
     Tween<float> m_alphaTween;
 };

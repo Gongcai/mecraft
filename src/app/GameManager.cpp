@@ -6,6 +6,9 @@
 #include "../Diagnostics.h"
 #include "../Paths.h"
 #include "../engine/platform/Time.h"
+#include "../renderer/rhi/RhiDevice.h"
+#include "../renderer/rhi/RhiDeviceFactory.h"
+#include "../renderer/rhi/RhiCommandListPool.h"
 #include "../save/SaveManager.h"
 #include "../net/ENetTransport.h"
 #include <algorithm>
@@ -39,11 +42,20 @@ GameManager::~GameManager() = default;
 
 bool GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
     m_launchOptions = std::move(launchOptions);
+    m_rhiDevice = renderer::rhi::createDefaultRhiDevice();
+    if (!m_rhiDevice) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to create app RHI device\n");
+        return false;
+    }
     if (!initWindow(width, height, title)) {
+        m_rhiDevice.reset();
+        return false;
+    }
+    if (!initRhiDevice()) {
         return false;
     }
     m_threadPool.start();
-    if (!app::bootstrapGameResources(m_resourceMgr)) {
+    if (!app::bootstrapGameResources(m_resourceMgr, *m_rhiDevice, *m_commandListPool)) {
         return false;
     }
     
@@ -77,8 +89,41 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     return true;
 }
 
+bool GameManager::initRhiDevice() {
+    RhiDeviceDesc desc;
+    desc.debugName = "AppRenderer";
+    desc.nativeWindow = m_window.getHandle();
+    desc.width = m_window.getWidth();
+    desc.height = m_window.getHeight();
+    desc.enableDebugOutput = m_launchOptions.enableRhiDebugOutput;
+    if (!m_rhiDevice->init(desc)) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to initialize app RHI device\n");
+        m_rhiDevice.reset();
+        return false;
+    }
+    RhiCommandListPoolDesc poolDesc;
+    poolDesc.debugName = "App.GraphicsCommandListPool";
+    poolDesc.initialCommandListCapacity = 16u;
+    m_commandListPool = m_rhiDevice->createCommandListPool(poolDesc);
+    if (!m_commandListPool) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to create app command-list pool\n");
+        m_rhiDevice->shutdown();
+        m_rhiDevice.reset();
+        return false;
+    }
+    return true;
+}
+
 bool GameManager::initWindow(int width, int height, const char* title) {
-    if (!m_window.init(width, height, title, m_launchOptions.enableGlDebugOutput)) {
+    if (!m_window.initializePlatform()) {
+        MECRAFT_LOG_STREAM(std::cerr << "Error while initializing the window platform." << std::endl);
+        return false;
+    }
+    if (!m_rhiDevice->prepareWindowCreation()) {
+        MECRAFT_LOG_STREAM(std::cerr << "RHI backend failed to prepare native window creation." << std::endl);
+        return false;
+    }
+    if (!m_window.create(width, height, title)) {
         MECRAFT_LOG_STREAM(std::cerr << "Error while initializing the window." << std::endl);
         return false;
     }
@@ -103,6 +148,8 @@ AppStateDependencies GameManager::makeAppStateDependencies() {
         m_uiRenderer,
         m_localeManager,
         m_threadPool,
+        *m_rhiDevice,
+        *m_commandListPool,
         m_launchOptions.enableDebugDashboard,
         [this]() { activateInputReplayForScope(AppLaunchOptions::InputReplayScope::Gameplay); },
         [this]() {
@@ -355,9 +402,17 @@ void GameManager::shutdown() {
         m_appStateMachine.popState();
     }
     m_uiRenderer.shutdown();
+    m_resourceMgr.shutdown();
     m_bgmSystem.shutdown();
     m_audioEngine.shutdown();
+    if (m_rhiDevice) {
+        m_rhiDevice->waitIdle();
+        m_commandListPool.reset();
+        m_rhiDevice->shutdown();
+        m_rhiDevice.reset();
+    }
     net::ENetTransport::deinitialize();
     m_threadPool.shutdown();
     m_input.shutdownInputReplay();
+    m_window.destroy();
 }

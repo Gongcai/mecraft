@@ -11,6 +11,7 @@ class IWorldView;
 class World;
 class ThreadPool;
 class WorldRenderBuffer;
+class RhiCommandList;
 
 /// Centralized terrain mesh streaming orchestrator.
 /// Owns TerrainRenderCache and ChunkMeshingService, manages meshing budgets,
@@ -38,7 +39,7 @@ public:
     void releaseMdiAllocation(const SubChunkGpuKey& key);
 
     /// Drain completed meshing results and upload to GPU.
-    void drainMeshingResults(const IWorldView& worldView);
+    void drainMeshingResults(const IWorldView& worldView, RhiCommandList& commandList);
 
     /// Submit new meshing jobs for dirty sub-chunks near the camera.
     void submitMeshingJobs(const IWorldView& worldView, const glm::vec3& cameraPos);

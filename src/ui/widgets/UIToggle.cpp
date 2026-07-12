@@ -1,15 +1,14 @@
 #include "UIToggle.h"
 
-#include <glad/glad.h>
 #include <algorithm>
-#include <vector>
 
-#include "../core/UIRenderUtils.h"
 #include "../../resource/ResourceMgr.h"
-#include "../../renderer/core/Shader.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
 
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
+#include <cstdlib>
 
 UIToggle::UIToggle() {
     interactive = true;
@@ -23,7 +22,47 @@ UIToggle::~UIToggle() {
 }
 
 void UIToggle::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "UiToggle.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "UiToggle.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = m_rhiDevice->createShader(shaderDesc);
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "UiToggle.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "UiToggle.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid()) std::abort();
     initMesh();
     m_knobTween.start(m_checked ? 1.0f : 0.0f, m_checked ? 1.0f : 0.0f, 0.15f, EasingType::EaseOut);
     m_label.anchor = Anchor::BottomLeft;
@@ -34,7 +73,17 @@ void UIToggle::init(ResourceMgr& resourceMgr) {
 void UIToggle::shutdown() {
     m_label.shutdown();
     cleanupMesh();
-    m_shader = nullptr;
+    if (m_rhiDevice != nullptr) {
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+    }
+    m_pipeline = {};
+    m_pipelineLayout = {};
+    m_fragmentShader = {};
+    m_vertexShader = {};
+    m_rhiDevice = nullptr;
     UIWidget::shutdown();
 }
 
@@ -77,28 +126,30 @@ void UIToggle::toggle() {
 }
 
 void UIToggle::initMesh() {
-    constexpr int kMaxShapeVerts = 128;
-
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(kMaxShapeVerts * 2 * sizeof(float)),
-                 nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
+    constexpr float vertices[] = {
+        0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f
+    };
+    RhiBufferDesc desc;
+    desc.debugName = "UiToggle.VertexBuffer";
+    desc.size = sizeof(vertices);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
+    m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
+    if (!m_vertexBuffer.isValid()) std::abort();
 }
 
 void UIToggle::cleanupMesh() {
-    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
-    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
+    if (m_rhiDevice != nullptr && m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+    m_vertexBuffer = {};
 }
 
 void UIToggle::renderSelf(const UIRenderContext& ctx) const {
-    if (!m_shader) return;
-
-    const UIRenderUtils::GLStateGuard guard;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record &&
+        (ctx.commandList == nullptr || !m_pipeline.isValid() || !m_vertexBuffer.isValid())) return;
 
     const UIResolvedToggleStyle resolved =
         UIStyleResolver::resolveToggle(resolveBaseStyle(ctx), currentStyleState());
@@ -133,41 +184,30 @@ void UIToggle::renderSelf(const UIRenderContext& ctx) const {
         trackCol[3] = std::clamp(trackCol[3] * 1.08f, 0.0f, 1.0f);
     }
 
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-
-    m_shader->use();
-    m_shader->setVec2("uScreenSize",
-                      glm::vec2(static_cast<float>(ctx.screenWidth),
-                                static_cast<float>(ctx.screenHeight)));
-
-    auto drawShape = [&](const std::vector<float>& verts, Color shapeColor) {
-        if (verts.empty()) return;
-        shapeColor[3] *= alpha;
-        m_shader->setVec4("uColor", glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3]));
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
-                        static_cast<GLsizeiptr>(verts.size() * sizeof(float)),
-                        verts.data());
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(verts.size() / 2));
-    };
-
-    std::vector<float> verts;
-    verts.reserve(128);
-
-    verts.clear();
-    UIRenderUtils::pushCapsule(verts, ax, ay, ax + toggleW, ay + toggleH);
-    drawShape(verts, trackCol);
-
-    verts.clear();
-    Color knobShadow {0.0f, 0.0f, 0.0f, active ? 0.30f : 0.20f};
-    UIRenderUtils::pushCircle(verts, knobCx, knobCy - 1.0f, knobRadius + 1.5f);
-    drawShape(verts, knobShadow);
-
-    verts.clear();
-    UIRenderUtils::pushCircle(verts, knobCx, knobCy, knobRadius);
-    drawShape(verts, knobCol);
-
-    glBindVertexArray(0);
+    if (record) {
+        ctx.commandList->setGraphicsPipeline(m_pipeline);
+        ctx.commandList->setVertexBuffer(0u, m_vertexBuffer, 0u);
+        auto drawShape = [&](const float x0, const float y0, const float shapeW,
+                             const float shapeH, const float radius, Color shapeColor) {
+            shapeColor[3] *= alpha;
+            struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+            const PushConstants pushConstants{
+                glm::vec4(static_cast<float>(ctx.screenWidth), static_cast<float>(ctx.screenHeight), x0, y0),
+                glm::vec4(shapeW, shapeH, radius, 0.0f),
+                glm::vec4(shapeColor[0], shapeColor[1], shapeColor[2], shapeColor[3])
+            };
+            ctx.commandList->pushConstants(&pushConstants, sizeof(pushConstants),
+                                           rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+            ctx.commandList->draw(6u, 1u, 0u, 0u);
+        };
+        drawShape(ax, ay, toggleW, toggleH, trackRadius, trackCol);
+        Color knobShadow {0.0f, 0.0f, 0.0f, active ? 0.30f : 0.20f};
+        const float shadowRadius = knobRadius + 1.5f;
+        drawShape(knobCx - shadowRadius, knobCy - 1.0f - shadowRadius,
+                  shadowRadius * 2.0f, shadowRadius * 2.0f, shadowRadius, knobShadow);
+        drawShape(knobCx - knobRadius, knobCy - knobRadius,
+                  knobRadius * 2.0f, knobRadius * 2.0f, knobRadius, knobCol);
+    }
 
     // Render label to the right.
     const float labelGap = 8.0f;

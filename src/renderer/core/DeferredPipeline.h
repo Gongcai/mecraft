@@ -39,9 +39,6 @@ namespace shadow { class ShadowRenderer; }
 /// Implements RenderPipeline interface for pipeline switching.
 class DeferredPipeline : public RenderPipeline {
 public:
-    // Legacy init (used during transition)
-    void init(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer);
-
     // RenderPipeline interface
     void init(SharedRenderResources& shared) override;
     void shutdown() override;
@@ -74,6 +71,8 @@ public:
     VoxelGiClipmap* voxelGiClipmap() const { return m_voxelGiClipmap.get(); }
 
 private:
+    void initializePasses(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer);
+
     // Pass instances
     std::unique_ptr<SsaoPass> m_ssaoPass;
     std::unique_ptr<SsgiPass> m_ssgiPass;
@@ -103,8 +102,6 @@ private:
     bool m_hasPreviousFrameData = false;
     bool m_waterRenderedBeforeTemporal = false;
     bool m_deferredHistoryUpdatedThisFrame = false;
-    int32_t m_capturedFramebuffer = 0;
-    int32_t m_capturedViewport[4] = {};
     int m_heldBlockLightValue = 0;
 
     // Settings (cached from RenderSettings for current frame)
@@ -113,11 +110,8 @@ private:
     // Transparent batch state (populated by renderGBufferTerrain, consumed by water/transparent)
     std::vector<DrawBatchEntry> m_transparentBatch;
     TransparentPassPlan m_transparentPassPlan;
-    std::vector<ChunkRenderEntry> m_transparentEntries;
 
     // Private orchestration methods
-    void captureCurrentFramebuffer();
-    void restoreCapturedFramebufferViewport(int windowWidth, int windowHeight);
     void clearDeferredAuxiliaryTargets();
     void updateDeferredHistoryTargets();
     void renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings);

@@ -4,6 +4,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiTypes.h"
 #include "../../world/block/Block.h"
 
 #include <glm/glm.hpp>
@@ -35,6 +36,9 @@ struct VoxelGiClipmapStats {
 };
 
 class IBlockTextureColorProvider;
+class RhiCommandList;
+class RhiCommandListPool;
+class RhiDevice;
 
 /// Maintains a camera-centered 3D radiance clipmap for stable low-frequency GI.
 class VoxelGiClipmap {
@@ -48,10 +52,12 @@ public:
     void shutdown();
     void update(const FrameContext& ctx,
                 const VoxelGiSettings& settings,
-                const IBlockTextureColorProvider& textureColors);
+                const IBlockTextureColorProvider& textureColors,
+                RhiDevice& rhiDevice,
+                RhiCommandListPool& commandListPool);
 
-    [[nodiscard]] RhiTextureHandle textureHandle() const { return m_textureHandle; }
-    [[nodiscard]] bool valid() const { return m_valid && m_textureHandle.isValid(); }
+    [[nodiscard]] RhiTextureHandle textureHandle() const { return m_texture; }
+    [[nodiscard]] bool valid() const { return m_valid && m_texture.isValid(); }
     [[nodiscard]] glm::vec3 origin() const { return m_origin; }
     [[nodiscard]] float voxelSize() const { return m_voxelSize; }
     [[nodiscard]] int resolution() const { return m_resolution; }
@@ -76,11 +82,25 @@ private:
         float sunBounceStrength = 1.0f;
     };
 
-    void allocateTexture(int resolution);
-    void uploadFullVolume();
-    [[nodiscard]] int uploadShiftedVolume(const glm::ivec3& deltaVoxels);
-    [[nodiscard]] bool uploadSubVolume(int x, int y, int z, int width, int height, int depth);
-    void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels);
+    [[nodiscard]] bool allocateTexture(int resolution, RhiDevice& rhiDevice);
+    [[nodiscard]] bool uploadFullVolume(RhiCommandList& commandList,
+                                        RhiDevice& rhiDevice,
+                                        std::vector<RhiBufferHandle>& stagingBuffers);
+    [[nodiscard]] int uploadShiftedVolume(const glm::ivec3& deltaVoxels,
+                                          RhiCommandList& commandList,
+                                          RhiDevice& rhiDevice,
+                                          std::vector<RhiBufferHandle>& stagingBuffers);
+    [[nodiscard]] bool uploadSubVolume(int x, int y, int z, int width, int height, int depth,
+                                       RhiCommandList& commandList,
+                                       RhiDevice& rhiDevice,
+                                       std::vector<RhiBufferHandle>& stagingBuffers);
+    void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels, RhiCommandList& commandList);
+    void transitionTexture(RhiCommandList& commandList,
+                           RhiTextureHandle texture,
+                           RhiResourceState& currentState,
+                           RhiResourceState newState);
+    [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
+    void submitCommandList(RhiCommandList& commandList, const char* debugName) const;
     void rebuildVolume(const IWorldView& worldView,
                        const IBlockTextureColorProvider& textureColors,
                        const LightingSampleParams& lighting,
@@ -107,9 +127,12 @@ private:
                                                 const LightingSampleParams& lighting,
                                                 const glm::ivec3& blockPos);
 
-    uint32_t m_texture = 0;
-    RhiTextureHandle m_textureHandle;
-    uint32_t m_shiftScratchTexture = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
+    RhiTextureHandle m_texture;
+    RhiTextureHandle m_shiftScratchTexture;
+    RhiResourceState m_textureState = RhiResourceState::Undefined;
+    RhiResourceState m_shiftScratchTextureState = RhiResourceState::Undefined;
     bool m_valid = false;
     int m_resolution = 0;
     int m_mipLevels = 1;

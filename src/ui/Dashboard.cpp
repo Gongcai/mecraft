@@ -2,7 +2,6 @@
 // Created by Caiwe on 2026/3/25.
 //
 
-// Dashboard 调试 UI 仅在 Debug 模式下编译
 #ifdef MECRAFT_DEBUG
 
 #include "Dashboard.h"
@@ -12,12 +11,60 @@
 #include "../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../renderer/core/RenderSettings.h"
 #include "../renderer/debug/RenderDebugService.h"
+#include "../renderer/rhi/RhiCommandList.h"
+#include "../renderer/rhi/RhiDevice.h"
+#include "../renderer/rhi/RhiShaderSourceLoader.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <cstdint>
+#include <limits>
+#include <optional>
+#include <string>
+
+namespace {
+constexpr ImTextureID kDashboardFontTextureId = 1u;
+constexpr uint64_t kInitialVertexBufferCapacity = 64u * 1024u;
+constexpr uint64_t kInitialIndexBufferCapacity = 16u * 1024u;
+
+struct DashboardPushConstants {
+    float scale[2];
+    float translate[2];
+};
+
+static_assert(sizeof(DashboardPushConstants) == 16u);
+static_assert(sizeof(ImDrawIdx) == sizeof(uint16_t) ||
+              sizeof(ImDrawIdx) == sizeof(uint32_t));
+
+[[nodiscard]] uint64_t alignedUploadSize(const uint64_t size) {
+    return (size + 3u) & ~uint64_t{3u};
+}
+
+[[nodiscard]] bool checkedMultiply(const uint64_t lhs,
+                                   const uint64_t rhs,
+                                   uint64_t& result) {
+    if (lhs != 0u && rhs > std::numeric_limits<uint64_t>::max() / lhs) {
+        return false;
+    }
+    result = lhs * rhs;
+    return true;
+}
+
+[[nodiscard]] uint64_t grownCapacity(const uint64_t current,
+                                     const uint64_t required) {
+    uint64_t capacity = std::max<uint64_t>(current, 4u);
+    while (capacity < required) {
+        if (capacity > std::numeric_limits<uint64_t>::max() / 2u) {
+            return required;
+        }
+        capacity *= 2u;
+    }
+    return capacity;
+}
+} // namespace
 
 Dashboard::Dashboard() : m_initialized(false) {
     // Setup Dear ImGui context
@@ -28,45 +75,69 @@ Dashboard::~Dashboard() {
 }
 
 void Dashboard::shutdown() {
-    if (m_initialized) {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-        ImGui::DestroyContext();
-        m_initialized = false;
+    destroyRhiResources();
+    if (m_contextCreated) {
+        ImGuiIO& io = ImGui::GetIO();
+        io.BackendFlags &= ~ImGuiBackendFlags_RendererHasVtxOffset;
+        io.BackendRendererName = nullptr;
+        io.BackendRendererUserData = nullptr;
     }
+    if (m_platformInitialized) {
+        ImGui_ImplGlfw_Shutdown();
+        m_platformInitialized = false;
+    }
+    if (m_contextCreated) {
+        ImGui::DestroyContext();
+        m_contextCreated = false;
+    }
+    m_framePrepared = false;
+    m_initialized = false;
 }
 
-void Dashboard::init(const Window &window) {
+bool Dashboard::init(const Window& window, RhiDevice& rhiDevice) {
+    shutdown();
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+    m_contextCreated = true;
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+    io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+    io.BackendRendererName = "mecraft_rhi";
+    io.BackendRendererUserData = this;
 
-    // Setup Platform/Renderer backends
-    ImGui_ImplGlfw_InitForOpenGL(window.getHandle(), true);          // Second param install_callback=true will install GLFW callbacks and chain to existing ones.
-    ImGui_ImplOpenGL3_Init();
+    if (!ImGui_ImplGlfw_InitForOther(window.getHandle(), true)) {
+        shutdown();
+        return false;
+    }
+    m_platformInitialized = true;
+    if (!createRhiResources(rhiDevice)) {
+        shutdown();
+        return false;
+    }
     m_initialized = true;
+    return true;
 }
 
 void Dashboard::setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer) {
     m_firstPersonHeldItemRenderer = renderer;
 }
 
-void Dashboard::render(ecs::GameplayRegistry &registry,
-                       World &world,
-                       Camera &camera,
-                       RenderResourceHub &render,
-                       RenderScene& renderScene,
-                       PostProcessPass& postProcess,
-                       UIRenderer& uiRenderer,
-                       FrameProfilerStats& profilerStats,
-                       const std::function<void(int)>& renderDistanceSetter) {
-    // (Your code calls glfwPollEvents())
-    // ...
-    // Start the Dear ImGui frame
-    ImGui_ImplOpenGL3_NewFrame();
+bool Dashboard::prepareFrame(RhiCommandList& commandList,
+                             ecs::GameplayRegistry& registry,
+                             World& world,
+                             Camera& camera,
+                             RenderResourceHub& render,
+                             RenderScene& renderScene,
+                             PostProcessPass& postProcess,
+                             UIRenderer& uiRenderer,
+                             FrameProfilerStats& profilerStats,
+                             const std::function<void(int)>& renderDistanceSetter) {
+    if (!m_initialized || m_rhiDevice == nullptr) {
+        return false;
+    }
+    m_framePrepared = false;
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
     ImGui::GetIO().FontGlobalScale = m_fontScale;
@@ -88,11 +159,459 @@ void Dashboard::render(ecs::GameplayRegistry &registry,
         showTextSettings(uiRenderer);
     }
     ImGui::End();
-    // Rendering
-    // (Your code clears your framebuffer, renders your other stuff etc.)
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    // (Your code calls glfwSwapBuffers() etc.)
+    const ImDrawData* drawData = ImGui::GetDrawData();
+    if (drawData == nullptr || !buildPreparedDraws(*drawData)) {
+        return false;
+    }
+    if (m_fontTextureState != RhiResourceState::ShaderRead) {
+        commandList.textureBarrier({m_fontTexture, m_fontTextureState,
+                                    RhiResourceState::ShaderRead});
+        m_fontTextureState = RhiResourceState::ShaderRead;
+    }
+    if (!uploadDrawBuffers(commandList)) {
+        return false;
+    }
+    m_framePrepared = true;
+    return true;
+}
+
+bool Dashboard::createRhiResources(RhiDevice& rhiDevice) {
+    m_rhiDevice = &rhiDevice;
+
+    unsigned char* fontPixels = nullptr;
+    int fontWidth = 0;
+    int fontHeight = 0;
+    int bytesPerPixel = 0;
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->GetTexDataAsAlpha8(&fontPixels, &fontWidth, &fontHeight, &bytesPerPixel);
+    if (fontPixels == nullptr || fontWidth <= 0 || fontHeight <= 0 || bytesPerPixel != 1) {
+        return false;
+    }
+
+    uint64_t fontByteSize = 0u;
+    if (!checkedMultiply(static_cast<uint64_t>(fontWidth),
+                         static_cast<uint64_t>(fontHeight), fontByteSize) ||
+        fontByteSize > std::numeric_limits<size_t>::max()) {
+        return false;
+    }
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "Dashboard.FontAtlas";
+    textureDesc.format = RhiTextureFormat::R8Unorm;
+    textureDesc.width = static_cast<uint32_t>(fontWidth);
+    textureDesc.height = static_cast<uint32_t>(fontHeight);
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
+    RhiTextureInitialData initialData;
+    initialData.pixels = fontPixels;
+    initialData.sizeBytes = static_cast<size_t>(fontByteSize);
+    initialData.finalState = RhiResourceState::ShaderRead;
+    m_fontTexture = rhiDevice.createTexture(textureDesc, &initialData);
+    m_fontTextureState = RhiResourceState::ShaderRead;
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = m_fontTexture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = RhiTextureFormat::R8Unorm;
+    m_fontTextureView = rhiDevice.createTextureView(viewDesc);
+
+    RhiSamplerDesc samplerDesc;
+    samplerDesc.minFilter = RhiFilter::Linear;
+    samplerDesc.magFilter = RhiFilter::Linear;
+    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
+    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
+    m_fontSampler = rhiDevice.createSampler(samplerDesc);
+
+    const std::optional<std::string> vertexSource =
+        renderer::rhi::loadShaderSource("assets/shaders/imgui_rhi.vert");
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource("assets/shaders/imgui_rhi.frag");
+    if (!vertexSource || !fragmentSource) {
+        return false;
+    }
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "Dashboard.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = rhiDevice.createShader(shaderDesc);
+    shaderDesc.debugName = "Dashboard.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = rhiDevice.createShader(shaderDesc);
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "Dashboard.BindGroupLayout";
+    bindGroupLayoutDesc.entries.push_back({
+        0u,
+        RhiBindingType::CombinedTextureSampler,
+        rhiFlag(RhiShaderStage::Fragment),
+        1u
+    });
+    m_bindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Dashboard.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(DashboardPushConstants);
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex);
+    m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Dashboard.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({
+        0u, sizeof(ImDrawVert), RhiVertexInputRate::Vertex
+    });
+    pipelineDesc.vertexInput.attributes.push_back({
+        0u, 0u, RhiVertexFormat::Float2, static_cast<uint32_t>(offsetof(ImDrawVert, pos))
+    });
+    pipelineDesc.vertexInput.attributes.push_back({
+        1u, 0u, RhiVertexFormat::Float2, static_cast<uint32_t>(offsetof(ImDrawVert, uv))
+    });
+    pipelineDesc.vertexInput.attributes.push_back({
+        2u, 0u, RhiVertexFormat::Uint, static_cast<uint32_t>(offsetof(ImDrawVert, col))
+    });
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.raster.scissorEnabled = true;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    pipelineDesc.colorFormats.push_back(rhiDevice.swapchainColorFormat());
+    m_pipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_bindGroupLayout;
+    RhiBindGroupEntry fontEntry;
+    fontEntry.binding = 0u;
+    fontEntry.resource.combinedTextureSampler.textureView = m_fontTextureView;
+    fontEntry.resource.combinedTextureSampler.sampler = m_fontSampler;
+    bindGroupDesc.entries.push_back(fontEntry);
+    m_fontBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "Dashboard.Vertices";
+    bufferDesc.size = kInitialVertexBufferCapacity;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    bufferDesc.initialState = RhiResourceState::VertexBuffer;
+    m_vertexBuffer = rhiDevice.createBuffer(bufferDesc, nullptr, 0u);
+    m_vertexBufferCapacity = kInitialVertexBufferCapacity;
+    m_vertexBufferState = RhiResourceState::VertexBuffer;
+    bufferDesc.debugName = "Dashboard.Indices";
+    bufferDesc.size = kInitialIndexBufferCapacity;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Index) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.initialState = RhiResourceState::IndexBuffer;
+    m_indexBuffer = rhiDevice.createBuffer(bufferDesc, nullptr, 0u);
+    m_indexBufferCapacity = kInitialIndexBufferCapacity;
+    m_indexBufferState = RhiResourceState::IndexBuffer;
+
+    if (!m_fontTexture.isValid() || !m_fontTextureView.isValid() ||
+        !m_fontSampler.isValid() || !m_vertexShader.isValid() ||
+        !m_fragmentShader.isValid() || !m_bindGroupLayout.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid() ||
+        !m_fontBindGroup.isValid() || !m_vertexBuffer.isValid() ||
+        !m_indexBuffer.isValid()) {
+        return false;
+    }
+
+    io.Fonts->SetTexID(kDashboardFontTextureId);
+    return true;
+}
+
+void Dashboard::destroyRhiResources() {
+    if (m_contextCreated) {
+        ImGui::GetIO().Fonts->SetTexID(ImTextureID_Invalid);
+    }
+    if (m_rhiDevice != nullptr) {
+        if (m_indexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_indexBuffer);
+        if (m_vertexBuffer.isValid()) m_rhiDevice->destroyBuffer(m_vertexBuffer);
+        if (m_fontBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_fontBindGroup);
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_bindGroupLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+        if (m_fontSampler.isValid()) m_rhiDevice->destroySampler(m_fontSampler);
+        if (m_fontTextureView.isValid()) m_rhiDevice->destroyTextureView(m_fontTextureView);
+        if (m_fontTexture.isValid()) m_rhiDevice->destroyTexture(m_fontTexture);
+    }
+    m_rhiDevice = nullptr;
+    m_fontTexture = {};
+    m_fontTextureView = {};
+    m_fontSampler = {};
+    m_vertexShader = {};
+    m_fragmentShader = {};
+    m_bindGroupLayout = {};
+    m_pipelineLayout = {};
+    m_pipeline = {};
+    m_fontBindGroup = {};
+    m_vertexBuffer = {};
+    m_indexBuffer = {};
+    m_fontTextureState = RhiResourceState::Undefined;
+    m_vertexBufferState = RhiResourceState::Undefined;
+    m_indexBufferState = RhiResourceState::Undefined;
+    m_vertexBufferCapacity = 0u;
+    m_indexBufferCapacity = 0u;
+    m_vertices.clear();
+    m_indexBytes.clear();
+    m_preparedDraws.clear();
+}
+
+bool Dashboard::buildPreparedDraws(const ImDrawData& drawData) {
+    m_vertices.clear();
+    m_indexBytes.clear();
+    m_preparedDraws.clear();
+    m_displayPos = drawData.DisplayPos;
+    m_displaySize = drawData.DisplaySize;
+    m_framebufferScale = drawData.FramebufferScale;
+
+    const float framebufferWidth = drawData.DisplaySize.x * drawData.FramebufferScale.x;
+    const float framebufferHeight = drawData.DisplaySize.y * drawData.FramebufferScale.y;
+    if (!std::isfinite(framebufferWidth) || !std::isfinite(framebufferHeight) ||
+        framebufferWidth > static_cast<float>(std::numeric_limits<int32_t>::max()) ||
+        framebufferHeight > static_cast<float>(std::numeric_limits<int32_t>::max())) {
+        return false;
+    }
+    m_framebufferWidth = static_cast<int32_t>(framebufferWidth);
+    m_framebufferHeight = static_cast<int32_t>(framebufferHeight);
+    if (m_framebufferWidth <= 0 || m_framebufferHeight <= 0) {
+        return true;
+    }
+    if (drawData.TotalVtxCount < 0 || drawData.TotalIdxCount < 0) {
+        return false;
+    }
+
+    m_vertices.reserve(static_cast<size_t>(drawData.TotalVtxCount));
+    uint64_t totalIndexBytes = 0u;
+    if (!checkedMultiply(static_cast<uint64_t>(drawData.TotalIdxCount),
+                         sizeof(ImDrawIdx), totalIndexBytes) ||
+        totalIndexBytes > std::numeric_limits<size_t>::max() - 3u) {
+        return false;
+    }
+    m_indexBytes.resize(static_cast<size_t>(alignedUploadSize(totalIndexBytes)), 0u);
+
+    uint64_t globalVertexOffset = 0u;
+    uint64_t globalIndexOffset = 0u;
+    uint64_t indexByteOffset = 0u;
+    for (const ImDrawList* drawList : drawData.CmdLists) {
+        if (drawList == nullptr || drawList->VtxBuffer.Size < 0 || drawList->IdxBuffer.Size < 0) {
+            return false;
+        }
+        m_vertices.insert(m_vertices.end(), drawList->VtxBuffer.begin(), drawList->VtxBuffer.end());
+        const uint64_t drawListIndexBytes =
+            static_cast<uint64_t>(drawList->IdxBuffer.Size) * sizeof(ImDrawIdx);
+        if (drawListIndexBytes != 0u) {
+            std::memcpy(m_indexBytes.data() + indexByteOffset,
+                        drawList->IdxBuffer.Data,
+                        static_cast<size_t>(drawListIndexBytes));
+        }
+
+        for (const ImDrawCmd& drawCommand : drawList->CmdBuffer) {
+            if (drawCommand.UserCallback != nullptr) {
+                if (drawCommand.UserCallback != ImDrawCallback_ResetRenderState) {
+                    return false;
+                }
+                PreparedDraw reset;
+                reset.resetState = true;
+                m_preparedDraws.push_back(reset);
+                continue;
+            }
+            if (drawCommand.GetTexID() != kDashboardFontTextureId) {
+                return false;
+            }
+            if (drawCommand.ElemCount == 0u) {
+                continue;
+            }
+            if (drawCommand.IdxOffset > static_cast<unsigned int>(drawList->IdxBuffer.Size) ||
+                drawCommand.ElemCount > static_cast<unsigned int>(drawList->IdxBuffer.Size) -
+                                        drawCommand.IdxOffset ||
+                drawCommand.VtxOffset > static_cast<unsigned int>(drawList->VtxBuffer.Size)) {
+                return false;
+            }
+            for (unsigned int i = 0u; i < drawCommand.ElemCount; ++i) {
+                const uint64_t referencedVertex =
+                    static_cast<uint64_t>(drawCommand.VtxOffset) +
+                    drawList->IdxBuffer[drawCommand.IdxOffset + i];
+                if (referencedVertex >= static_cast<uint64_t>(drawList->VtxBuffer.Size)) {
+                    return false;
+                }
+            }
+
+            const float clipMinX =
+                (drawCommand.ClipRect.x - drawData.DisplayPos.x) * drawData.FramebufferScale.x;
+            const float clipMinY =
+                (drawCommand.ClipRect.y - drawData.DisplayPos.y) * drawData.FramebufferScale.y;
+            const float clipMaxX =
+                (drawCommand.ClipRect.z - drawData.DisplayPos.x) * drawData.FramebufferScale.x;
+            const float clipMaxY =
+                (drawCommand.ClipRect.w - drawData.DisplayPos.y) * drawData.FramebufferScale.y;
+            if (!std::isfinite(clipMinX) || !std::isfinite(clipMinY) ||
+                !std::isfinite(clipMaxX) || !std::isfinite(clipMaxY)) {
+                return false;
+            }
+            const float clampedMinX = std::clamp(clipMinX, 0.0f, framebufferWidth);
+            const float clampedMinY = std::clamp(clipMinY, 0.0f, framebufferHeight);
+            const float clampedMaxX = std::clamp(clipMaxX, 0.0f, framebufferWidth);
+            const float clampedMaxY = std::clamp(clipMaxY, 0.0f, framebufferHeight);
+            if (clampedMaxX <= clampedMinX || clampedMaxY <= clampedMinY) {
+                continue;
+            }
+
+            const int32_t scissorMinX = static_cast<int32_t>(std::floor(clampedMinX));
+            const int32_t scissorMaxX = static_cast<int32_t>(std::ceil(clampedMaxX));
+            const int32_t scissorMinY = static_cast<int32_t>(std::floor(clampedMinY));
+            const int32_t scissorMaxY = static_cast<int32_t>(std::ceil(clampedMaxY));
+            const uint64_t firstIndex = globalIndexOffset + drawCommand.IdxOffset;
+            const uint64_t vertexOffset = globalVertexOffset + drawCommand.VtxOffset;
+            if (firstIndex > std::numeric_limits<uint32_t>::max() ||
+                vertexOffset > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+                return false;
+            }
+
+            PreparedDraw prepared;
+            prepared.scissor.x = scissorMinX;
+            prepared.scissor.y = m_framebufferHeight - scissorMaxY;
+            prepared.scissor.width = static_cast<uint32_t>(scissorMaxX - scissorMinX);
+            prepared.scissor.height = static_cast<uint32_t>(scissorMaxY - scissorMinY);
+            prepared.indexCount = drawCommand.ElemCount;
+            prepared.firstIndex = static_cast<uint32_t>(firstIndex);
+            prepared.vertexOffset = static_cast<int32_t>(vertexOffset);
+            m_preparedDraws.push_back(prepared);
+        }
+
+        globalVertexOffset += static_cast<uint64_t>(drawList->VtxBuffer.Size);
+        globalIndexOffset += static_cast<uint64_t>(drawList->IdxBuffer.Size);
+        indexByteOffset += drawListIndexBytes;
+    }
+    return globalVertexOffset == static_cast<uint64_t>(drawData.TotalVtxCount) &&
+           globalIndexOffset == static_cast<uint64_t>(drawData.TotalIdxCount) &&
+           indexByteOffset == totalIndexBytes;
+}
+
+bool Dashboard::uploadDrawBuffers(RhiCommandList& commandList) {
+    if (m_vertices.empty() && m_indexBytes.empty()) {
+        return true;
+    }
+    uint64_t vertexBytes = 0u;
+    if (!checkedMultiply(m_vertices.size(), sizeof(ImDrawVert), vertexBytes) ||
+        vertexBytes == 0u || m_indexBytes.empty()) {
+        return false;
+    }
+
+    auto ensureCapacity = [this](RhiBufferHandle& buffer,
+                                 uint64_t& capacity,
+                                 RhiResourceState& state,
+                                 const uint64_t required,
+                                 const RhiBufferUsage usage,
+                                 const char* debugName) {
+        if (required <= capacity) {
+            return true;
+        }
+        const uint64_t newCapacity = grownCapacity(capacity, required);
+        RhiBufferDesc desc;
+        desc.debugName = debugName;
+        desc.size = newCapacity;
+        desc.usage = rhiFlag(usage) | rhiFlag(RhiBufferUsage::TransferDst);
+        desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        const RhiResourceState functionalState = usage == RhiBufferUsage::Vertex
+            ? RhiResourceState::VertexBuffer
+            : RhiResourceState::IndexBuffer;
+        desc.initialState = functionalState;
+        const RhiBufferHandle newBuffer = m_rhiDevice->createBuffer(desc, nullptr, 0u);
+        if (!newBuffer.isValid()) {
+            return false;
+        }
+        if (buffer.isValid()) {
+            m_rhiDevice->destroyBuffer(buffer);
+        }
+        buffer = newBuffer;
+        capacity = newCapacity;
+        state = functionalState;
+        return true;
+    };
+
+    if (!ensureCapacity(m_vertexBuffer, m_vertexBufferCapacity, m_vertexBufferState,
+                        vertexBytes, RhiBufferUsage::Vertex, "Dashboard.Vertices") ||
+        !ensureCapacity(m_indexBuffer, m_indexBufferCapacity, m_indexBufferState,
+                        m_indexBytes.size(), RhiBufferUsage::Index, "Dashboard.Indices")) {
+        return false;
+    }
+
+    commandList.bufferBarrier({m_vertexBuffer, m_vertexBufferState,
+                               RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_vertexBuffer, 0u, m_vertices.data(),
+                             static_cast<size_t>(vertexBytes));
+    commandList.bufferBarrier({m_vertexBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::VertexBuffer});
+    m_vertexBufferState = RhiResourceState::VertexBuffer;
+
+    commandList.bufferBarrier({m_indexBuffer, m_indexBufferState,
+                               RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_indexBuffer, 0u, m_indexBytes.data(), m_indexBytes.size());
+    commandList.bufferBarrier({m_indexBuffer, RhiResourceState::TransferDst,
+                               RhiResourceState::IndexBuffer});
+    m_indexBufferState = RhiResourceState::IndexBuffer;
+    return true;
+}
+
+void Dashboard::bindRenderState(RhiCommandList& commandList) const {
+    DashboardPushConstants constants;
+    constants.scale[0] = 2.0f / m_displaySize.x;
+    constants.scale[1] = -2.0f / m_displaySize.y;
+    constants.translate[0] = -1.0f - m_displayPos.x * constants.scale[0];
+    constants.translate[1] = 1.0f - m_displayPos.y * constants.scale[1];
+
+    commandList.setViewport({
+        0.0f,
+        0.0f,
+        static_cast<float>(m_framebufferWidth),
+        static_cast<float>(m_framebufferHeight),
+        0.0f,
+        1.0f
+    });
+    commandList.setGraphicsPipeline(m_pipeline);
+    commandList.setBindGroup(0u, m_fontBindGroup);
+    commandList.setVertexBuffer(0u, m_vertexBuffer, 0u);
+    const RhiIndexFormat indexFormat = sizeof(ImDrawIdx) == sizeof(uint16_t)
+                                           ? RhiIndexFormat::Uint16
+                                           : RhiIndexFormat::Uint32;
+    commandList.setIndexBuffer(m_indexBuffer, indexFormat, 0u);
+    commandList.pushConstants(&constants, sizeof(constants), rhiFlag(RhiShaderStage::Vertex));
+}
+
+void Dashboard::recordDraws(RhiCommandList& commandList) const {
+    if (!m_initialized || !m_framePrepared) {
+        std::abort();
+    }
+    if (m_preparedDraws.empty()) {
+        return;
+    }
+    bindRenderState(commandList);
+    for (const PreparedDraw& draw : m_preparedDraws) {
+        if (draw.resetState) {
+            bindRenderState(commandList);
+            continue;
+        }
+        commandList.setScissor(draw.scissor);
+        commandList.drawIndexed(draw.indexCount, 1u, draw.firstIndex,
+                                draw.vertexOffset, 0u);
+    }
 }
 
 void Dashboard::showPlayerStats(ecs::GameplayRegistry &registry) {
@@ -233,10 +752,11 @@ void Dashboard::refreshWorldMetricsIfNeeded(World& world, const double now, cons
             }
             ++metrics.activeSubChunks;
             const SubChunkMesh& mesh = subChunk->getMesh();
-            metrics.totalVertices += mesh.vertexCount;
-            metrics.totalVertices += mesh.cutoutVertexCount;
-            metrics.totalVertices += mesh.cutoutDistanceVertexCount;
-            metrics.totalVertices += mesh.transparentVertexCount;
+            metrics.totalVertices += mesh.opaqueRange.vertexCount;
+            metrics.totalVertices += mesh.cutoutRange.vertexCount;
+            metrics.totalVertices += mesh.cutoutDistanceRange.vertexCount;
+            metrics.totalVertices += mesh.transparentRange.vertexCount;
+            metrics.totalVertices += mesh.waterRange.vertexCount;
             metrics.chunkStorageBytes += subChunk->estimatedMemoryBytes();
         }
     }
@@ -375,11 +895,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                              ImVec2(0.0f, 55.0f));
         }
 
-        if (render.isMultiDrawIndirectEnabled()) {
-            ImGui::Text("GL Submissions: %d (MDI)", render.getGlSubmitCount());
-        } else {
-            ImGui::Text("Draw Calls: %d", render.getDrawCallCount());
-        }
+        ImGui::Text("Terrain RHI Submissions: %d", render.getTerrainRhiSubmitCount());
 
         GpuFrameStats gpuStats = m_displayGpuStats;
         bool gpuTimerEnabled = render.isGpuTimerEnabled();
@@ -450,7 +966,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         };
 
         const int visibleMdiSubChunks = std::max(0, renderWork.mdiSubChunkTests - renderWork.mdiSubChunksCulled);
-        const char* terrainVertexFormat = render.isMultiDrawIndirectEnabled() ? "PackedBlockVertex" : "BlockVertex";
+        constexpr const char* terrainVertexFormat = "PackedBlockVertex";
 
         ImGui::Separator();
         ImGui::Text("Render Work");

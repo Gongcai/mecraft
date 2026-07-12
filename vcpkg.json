@@ -6,9 +6,11 @@
     "entt",
     "freetype",
     "glfw3",
+    "glslang",
     "glm",
     "libvorbis",
     "nlohmann-json",
-    "openal-soft"
+    "openal-soft",
+    "spirv-cross"
   ]
 }

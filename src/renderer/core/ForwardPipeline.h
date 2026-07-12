@@ -9,10 +9,10 @@
 #include <vector>
 
 class ResourceMgr;
+class RhiCommandList;
 class TerrainRenderer;
 class TerrainRenderCache;
 class WorldRenderBuffer;
-class CommonFrameTargets;
 class GameplaySkyRenderer;
 
 /// Forward rendering pipeline - vanilla/basic fallback renderer.
@@ -32,29 +32,30 @@ public:
     bool supportsDebugView() const override { return false; }
 
 private:
-    void beginBackbufferFrame(const FrameContext& ctx);
+    bool beginBackbufferFrame(const FrameContext& ctx);
+    bool beginBackbufferScenePass(const FrameContext& ctx);
+    void endBackbufferFrame(const FrameContext& ctx);
+    bool prepareTerrain(const FrameContext& ctx, RhiCommandList& commandList);
     void renderSky(const FrameContext& ctx);
-    void renderTerrain(const FrameContext& ctx, const RenderSettings& settings);
+    void renderTerrain();
     void renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings);
-    void renderTransparent(const FrameContext& ctx, const RenderSettings& settings);
+    void renderTransparent();
     FrameOutput buildFrameOutput(const FrameContext& ctx);
 
     static TerrainFrameData buildTerrainFrameData(const FrameContext& ctx);
-    static TerrainRenderSettings buildTerrainRenderSettings(const RenderSettings& settings);
 
     // Shared resources (non-owning, set during init)
     TerrainRenderer* m_terrainRenderer = nullptr;
     TerrainRenderCache* m_terrainCache = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
-    CommonFrameTargets* m_commonTargets = nullptr;
     GameplaySkyRenderer* m_skyRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     SharedRenderResources* m_shared = nullptr;
+    RhiCommandList* m_backbufferCommandList = nullptr;
 
     // Transparent batch state (populated by renderTerrain, consumed by renderTransparent)
     std::vector<DrawBatchEntry> m_transparentBatch;
     TransparentPassPlan m_transparentPassPlan;
-    std::vector<ChunkRenderEntry> m_transparentEntries;
 
     bool m_initialized = false;
 };

@@ -1,56 +1,106 @@
 #include "ScreenTransition.h"
 
-#include <glad/glad.h>
-
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include "../../renderer/core/Shader.h"
 #include "../../resource/ResourceMgr.h"
+#include "../../renderer/rhi/RhiCommandList.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiShaderSourceLoader.h"
+
+#include <cstdlib>
 
 ScreenTransition::~ScreenTransition() {
     shutdown();
 }
 
 void ScreenTransition::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
+    m_rhiDevice = &resourceMgr.rhiDevice();
+    const auto vertexSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.vert");
+    const auto fragmentSource = renderer::rhi::loadShaderSource("assets/shaders/ui_capsule_rhi.frag");
+    if (!vertexSource || !fragmentSource) std::abort();
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "ScreenTransition.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = vertexSource->c_str();
+    shaderDesc.sourceSize = vertexSource->size();
+    m_vertexShader = m_rhiDevice->createShader(shaderDesc);
+    shaderDesc.debugName = "ScreenTransition.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = fragmentSource->c_str();
+    shaderDesc.sourceSize = fragmentSource->size();
+    m_fragmentShader = m_rhiDevice->createShader(shaderDesc);
+
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "ScreenTransition.PipelineLayout";
+    layoutDesc.pushConstantBytes = 48u;
+    layoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment);
+    m_pipelineLayout = m_rhiDevice->createPipelineLayout(layoutDesc);
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "ScreenTransition.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_fragmentShader;
+    pipelineDesc.layout = m_pipelineLayout;
+    pipelineDesc.vertexInput.bindings.push_back({0u, sizeof(float) * 2u, RhiVertexInputRate::Vertex});
+    pipelineDesc.vertexInput.attributes.push_back({0u, 0u, RhiVertexFormat::Float2, 0u});
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    RhiBlendAttachmentState blend;
+    blend.blendEnabled = true;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
+    blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    blend.srcAlpha = RhiBlendFactor::One;
+    blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    pipelineDesc.blend.attachments.push_back(blend);
+    m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    if (!m_vertexShader.isValid() || !m_fragmentShader.isValid() ||
+        !m_pipelineLayout.isValid() || !m_pipeline.isValid()) std::abort();
     initMesh();
 }
 
 void ScreenTransition::shutdown() {
     cleanupMesh();
-    m_shader = nullptr;
+    if (m_rhiDevice != nullptr) {
+        if (m_pipeline.isValid()) m_rhiDevice->destroyPipeline(m_pipeline);
+        if (m_pipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
+        if (m_fragmentShader.isValid()) m_rhiDevice->destroyShader(m_fragmentShader);
+        if (m_vertexShader.isValid()) m_rhiDevice->destroyShader(m_vertexShader);
+    }
+    m_pipeline = {};
+    m_pipelineLayout = {};
+    m_fragmentShader = {};
+    m_vertexShader = {};
+    m_rhiDevice = nullptr;
 }
 
 void ScreenTransition::initMesh() {
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    float vertices[] = {
-        -1.0f, -1.0f,
-         1.0f, -1.0f,
-         1.0f,  1.0f,
-        -1.0f, -1.0f,
-         1.0f,  1.0f,
-        -1.0f,  1.0f,
+    constexpr float vertices[] = {
+        0.0f, 0.0f,
+        1.0f, 0.0f,
+        1.0f, 1.0f,
+        0.0f, 0.0f,
+        1.0f, 1.0f,
+        0.0f, 1.0f,
     };
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    RhiBufferDesc desc;
+    desc.debugName = "ScreenTransition.VertexBuffer";
+    desc.size = sizeof(vertices);
+    desc.usage = rhiFlag(RhiBufferUsage::Vertex) |
+                 rhiFlag(RhiBufferUsage::TransferDst);
+    desc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    desc.initialState = RhiResourceState::VertexBuffer;
+    m_vertexBuffer = m_rhiDevice->createBuffer(desc, vertices, sizeof(vertices));
+    if (!m_vertexBuffer.isValid()) std::abort();
 }
 
 void ScreenTransition::cleanupMesh() {
-    if (m_vao != 0) {
-        glDeleteVertexArrays(1, &m_vao);
-        m_vao = 0;
+    if (m_rhiDevice != nullptr && m_vertexBuffer.isValid()) {
+        m_rhiDevice->destroyBuffer(m_vertexBuffer);
     }
-    if (m_vbo != 0) {
-        glDeleteBuffers(1, &m_vbo);
-        m_vbo = 0;
-    }
+    m_vertexBuffer = {};
 }
 
 void ScreenTransition::startFadeOut(float duration) {
@@ -65,30 +115,23 @@ void ScreenTransition::tick(float dt) {
     m_alphaTween.tick(dt);
 }
 
-void ScreenTransition::render(int screenW, int screenH) const {
-    if (!m_shader || m_vao == 0 || m_alphaTween.isDone()) return;
+void ScreenTransition::render(const int screenW,
+                              const int screenH,
+                              RhiCommandList& commandList) const {
+    if (!m_pipeline.isValid() || !m_vertexBuffer.isValid() || m_alphaTween.isDone()) return;
 
     float a = m_alphaTween.value();
     if (a <= 0.0f) return;
 
-    // Save GL state
-    GLboolean depthTest;
-    glGetBooleanv(GL_DEPTH_TEST, &depthTest);
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // Use NDC coordinates directly (the shader expects pixel coords, but we pass NDC and set screen to 1,1)
-    // Actually, the ui_color shader divides by uScreenSize. To render full-screen in NDC,
-    // we use vertices in NDC space and set uScreenSize to (1,1) so division is identity.
-    m_shader->use();
-    m_shader->setVec2("uScreenSize", glm::vec2(1.0f, 1.0f));
-    m_shader->setVec4("uColor", glm::vec4(0.0f, 0.0f, 0.0f, a));
-
-    glBindVertexArray(m_vao);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    glBindVertexArray(0);
-
-    // Restore GL state
-    if (depthTest) glEnable(GL_DEPTH_TEST);
+    struct PushConstants { glm::vec4 screenRect; glm::vec4 rectRadius; glm::vec4 color; };
+    const PushConstants pushConstants{
+        glm::vec4(static_cast<float>(screenW), static_cast<float>(screenH), 0.0f, 0.0f),
+        glm::vec4(static_cast<float>(screenW), static_cast<float>(screenH), 0.0f, 0.0f),
+        glm::vec4(0.0f, 0.0f, 0.0f, a)
+    };
+    commandList.setGraphicsPipeline(m_pipeline);
+    commandList.setVertexBuffer(0u, m_vertexBuffer, 0u);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Vertex) | rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(6u, 1u, 0u, 0u);
 }

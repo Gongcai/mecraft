@@ -2,6 +2,7 @@
 #define MECRAFT_FIRST_PERSON_HELD_ITEM_RENDERER_H
 
 #include <cstdint>
+#include <array>
 #include <unordered_map>
 
 #include <glm/mat4x4.hpp>
@@ -9,11 +10,12 @@
 #include "../../item/Item.h"
 #include "../../world/block/Block.h"
 #include "../core/FrameOutput.h"
+#include "../rhi/RhiHandles.h"
 
 class Inventory;
+class RhiCommandList;
+class RhiDevice;
 class ResourceMgr;
-class Shader;
-class Window;
 
 struct FirstPersonHeldItemMotion {
     bool moving = false;
@@ -86,11 +88,8 @@ public:
         float nz = 0.0f;
     };
 
-    void init(ResourceMgr& resourceMgr);
+    void init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice);
     void shutdown();
-    /// Switch to forward vanilla shaders (no CSM shadow / held_item_shadow contract).
-    /// Must be called after init(). Reverts to deferred shaders if false.
-    void setForwardMode(bool forward);
     void loadConfig();
     void saveConfig() const;
 
@@ -102,6 +101,14 @@ public:
     void setContinuousSwing(bool active);
     void setEnvironmentLight(float sunlight, float blockLight);
     void setSceneHdrScale(float scale);
+    void prepareFrameResources(const Inventory& inventory);
+    void prepareFrame(int width,
+                      int height,
+                      const Inventory& inventory,
+                      const FirstPersonHeldItemMotion& motion,
+                      float timeSeconds);
+    void prepareRhiFrame(RhiCommandList& commandList);
+    void renderPrepared(RhiCommandList& commandList);
 
     // Shadow data from Renderer — must be set before render() each frame.
     struct ShadowData {
@@ -135,20 +142,28 @@ public:
     /// Convert FirstPersonShadowData (from FrameOutput) to ShadowData.
     static ShadowData fromFirstPersonShadowData(const FirstPersonShadowData& sd);
 
-    void render(const Window& window,
-                const Inventory& inventory,
-                const FirstPersonHeldItemMotion& motion,
-                float timeSeconds);
-    void render(int width,
-                int height,
-                const Inventory& inventory,
-                const FirstPersonHeldItemMotion& motion,
-                float timeSeconds);
-
 private:
+    struct alignas(16) CascadeUniform {
+        glm::mat4 viewProj{1.0f};
+        glm::vec4 splitNearFarTexelResolution{0.0f};
+        glm::vec4 depthExtentPadding{0.0f};
+    };
+
+    struct alignas(16) ShadowUniforms {
+        std::array<CascadeUniform, 4> cascades{};
+        glm::vec4 cameraPosShadowDistance{0.0f};
+        glm::vec4 sunDirectionConstantBias{0.0f};
+        glm::vec4 shadowParams{0.0f};
+        glm::ivec4 shadowFlags{0};
+        glm::vec4 lighting{0.0f};
+        glm::vec4 hdrScalePadding{0.0f};
+    };
+    static_assert(sizeof(CascadeUniform) == 96u);
+    static_assert(sizeof(ShadowUniforms) == 480u);
+
     struct Mesh {
-        uint32_t vao = 0;
-        uint32_t vbo = 0;
+        RhiBufferHandle rhiVertexBuffer;
+        RhiDevice* rhiDevice = nullptr;
         uint32_t vertexCount = 0;
     };
 
@@ -158,21 +173,51 @@ private:
     Mesh buildItemMesh(ItemID itemId) const;
     Mesh buildRightArmMesh() const;
     static void destroyMesh(Mesh& mesh);
-
-    void drawArm(const glm::mat4& viewProj, const glm::mat4& model);
-    void bindShadowUniforms(Shader& shader) const;
-    void drawItem(ItemID itemId,
-                  const glm::mat4& view,
-                  const glm::mat4& viewProj,
-                  const glm::mat4& model);
+    void createRhiTextureResources();
+    void destroyRhiTextureResources();
+    void createArmRhiResources();
+    void destroyArmRhiResources();
+    void createItemRhiResources();
+    void destroyItemRhiResources();
+    void createBlockRhiResources();
+    void destroyBlockRhiResources();
+    void synchronizeShadowTextureViews();
+    void destroyShadowTextureViews();
 
     ResourceMgr* m_resourceMgr = nullptr;
-    Shader* m_blockShader = nullptr;
-    Shader* m_itemShader = nullptr;
-    Shader* m_steveShader = nullptr;
-    Shader* m_deferredBlockShader = nullptr;  // Original deferred shader (block_item_lit)
-    Shader* m_deferredItemShader = nullptr;   // Original deferred shader (item_model)
-    Shader* m_deferredSteveShader = nullptr;  // Original deferred shader (steve)
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiTextureViewHandle m_steveTextureView;
+    RhiTextureViewHandle m_itemAtlasView;
+    RhiTextureViewHandle m_blockTextureArrayView;
+    RhiTextureViewHandle m_lightmapDayView;
+    RhiTextureViewHandle m_lightmapNightView;
+    RhiTextureViewHandle m_grassColormapView;
+    RhiTextureViewHandle m_foliageColormapView;
+    RhiSamplerHandle m_textureSampler;
+    RhiSamplerHandle m_blockTextureSampler;
+    std::array<RhiTextureHandle, 6> m_shadowTextureHandles{};
+    std::array<RhiTextureViewHandle, 6> m_shadowTextureViews{};
+    RhiSamplerHandle m_shadowCompareSampler;
+    RhiSamplerHandle m_shadowRawSampler;
+    RhiBufferHandle m_shadowUniformBuffer;
+    RhiShaderHandle m_armVertexShader;
+    RhiShaderHandle m_armFragmentShader;
+    RhiBindGroupLayoutHandle m_armBindGroupLayout;
+    RhiPipelineLayoutHandle m_armPipelineLayout;
+    RhiPipelineHandle m_armPipeline;
+    RhiBindGroupHandle m_armBindGroup;
+    RhiShaderHandle m_itemVertexShader;
+    RhiShaderHandle m_itemFragmentShader;
+    RhiBindGroupLayoutHandle m_itemBindGroupLayout;
+    RhiPipelineLayoutHandle m_itemPipelineLayout;
+    RhiPipelineHandle m_itemPipeline;
+    RhiBindGroupHandle m_itemBindGroup;
+    RhiShaderHandle m_blockVertexShader;
+    RhiShaderHandle m_blockFragmentShader;
+    RhiBindGroupLayoutHandle m_blockBindGroupLayout;
+    RhiPipelineLayoutHandle m_blockPipelineLayout;
+    RhiPipelineHandle m_blockPipeline;
+    RhiBindGroupHandle m_blockBindGroup;
     Mesh m_rightArmMesh;
     std::unordered_map<BlockID, Mesh> m_blockMeshes;
     std::unordered_map<ItemID, Mesh> m_itemMeshes;
@@ -195,6 +240,18 @@ private:
     float m_environmentBlockLight = 0.0f;
     float m_sceneHdrScale = 1.0f;
     bool m_initialized = false;
+
+    enum class PreparedDrawKind : uint8_t { None, Arm, Item, Block };
+    struct PreparedHeldItemFrame {
+        PreparedDrawKind kind = PreparedDrawKind::None;
+        glm::mat4 view{1.0f};
+        glm::mat4 viewProj{1.0f};
+        glm::mat4 model{1.0f};
+        ItemID itemId = 0;
+        int width = 0;
+        int height = 0;
+    };
+    PreparedHeldItemFrame m_preparedFrame;
 };
 
 #endif // MECRAFT_FIRST_PERSON_HELD_ITEM_RENDERER_H

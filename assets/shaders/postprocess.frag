@@ -1,7 +1,7 @@
 #version 450 core
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneTex;
 layout(binding = 1) uniform sampler2D uBloomTex;
@@ -18,7 +18,7 @@ layout(binding = 10) uniform sampler2D uExposureStateTex;
 layout(binding = 9) uniform sampler2D uDepthTex;        // GBuffer depth for sky pixel detection
 layout(binding = 11) uniform sampler2D uSceneDepthTex;  // Final scene depth, including forward first-person items
 
-layout(std140, binding = 0) uniform PostProcessParams {
+layout(std140, binding = 12) uniform PostProcessParams {
     ivec4 uPostFlags0;
     ivec4 uPostModes0;
     ivec4 uPostFlags1;

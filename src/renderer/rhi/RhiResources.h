@@ -7,6 +7,9 @@
 #include <cstddef>
 #include <cstdint>
 
+inline constexpr uint32_t kRhiRemainingMipLevels = 0xFFFFFFFFu;
+inline constexpr uint32_t kRhiRemainingArrayLayers = 0xFFFFFFFFu;
+
 struct RhiTextureDesc {
     const char* debugName = nullptr;
     RhiTextureDimension dimension = RhiTextureDimension::Texture2D;
@@ -24,6 +27,8 @@ struct RhiTextureInitialData {
     size_t sizeBytes = 0;
     uint32_t mipLevel = 0;
     uint32_t arrayLayer = 0;
+    uint32_t layerCount = 1;
+    RhiResourceState finalState = RhiResourceState::Undefined;
 };
 
 struct RhiTextureViewDesc {
@@ -42,6 +47,7 @@ struct RhiBufferDesc {
     uint64_t size = 0;
     RhiBufferUsageFlags usage = 0;
     RhiMemoryUsage memoryUsage = RhiMemoryUsage::GpuOnly;
+    RhiResourceState initialState = RhiResourceState::Undefined;
 };
 
 struct RhiSamplerDesc {
@@ -51,9 +57,16 @@ struct RhiSamplerDesc {
     RhiAddressMode addressU = RhiAddressMode::ClampToEdge;
     RhiAddressMode addressV = RhiAddressMode::ClampToEdge;
     RhiAddressMode addressW = RhiAddressMode::ClampToEdge;
+    RhiBorderColor borderColor = RhiBorderColor::TransparentBlack;
     float maxAnisotropy = 1.0f;
     bool compareEnabled = false;
     RhiCompareOp compareOp = RhiCompareOp::LessOrEqual;
+};
+
+struct RhiQueryPoolDesc {
+    const char* debugName = nullptr;
+    RhiQueryType type = RhiQueryType::Timestamp;
+    uint32_t queryCount = 1;
 };
 
 struct RhiColorAttachment {
@@ -83,6 +96,10 @@ struct RhiTextureBarrier {
     RhiTextureHandle texture;
     RhiResourceState oldState = RhiResourceState::Undefined;
     RhiResourceState newState = RhiResourceState::Undefined;
+    uint32_t baseMip = 0u;
+    uint32_t mipCount = kRhiRemainingMipLevels;
+    uint32_t baseLayer = 0u;
+    uint32_t layerCount = kRhiRemainingArrayLayers;
 };
 
 struct RhiBufferBarrier {
@@ -105,6 +122,43 @@ struct RhiBufferTextureCopy {
     uint64_t bufferOffset = 0;
     uint32_t mipLevel = 0;
     uint32_t arrayLayer = 0;
+    uint32_t dstX = 0;
+    uint32_t dstY = 0;
+    uint32_t dstZ = 0;
+    uint32_t width = 1;
+    uint32_t height = 1;
+    uint32_t depth = 1;
+};
+
+struct RhiTextureBufferCopy {
+    RhiTextureHandle srcTexture;
+    RhiBufferHandle dstBuffer;
+    uint64_t bufferOffset = 0;
+    uint32_t bytesPerRow = 0;
+    uint32_t rowsPerImage = 0;
+    uint32_t mipLevel = 0;
+    uint32_t arrayLayer = 0;
+    uint32_t srcX = 0;
+    uint32_t srcY = 0;
+    uint32_t srcZ = 0;
+    uint32_t width = 1;
+    uint32_t height = 1;
+    uint32_t depth = 1;
+};
+
+struct RhiTextureSubresourceLayers {
+    uint32_t mipLevel = 0;
+    uint32_t baseArrayLayer = 0;
+    uint32_t layerCount = 1;
+};
+
+struct RhiOffset3D {
+    uint32_t x = 0;
+    uint32_t y = 0;
+    uint32_t z = 0;
+};
+
+struct RhiExtent3D {
     uint32_t width = 1;
     uint32_t height = 1;
     uint32_t depth = 1;
@@ -113,16 +167,18 @@ struct RhiBufferTextureCopy {
 struct RhiTextureCopy {
     RhiTextureHandle src;
     RhiTextureHandle dst;
-    uint32_t srcMipLevel = 0;
-    uint32_t dstMipLevel = 0;
-    uint32_t width = 1;
-    uint32_t height = 1;
-    uint32_t depth = 1;
+    RhiTextureSubresourceLayers srcSubresource;
+    RhiOffset3D srcOffset;
+    RhiTextureSubresourceLayers dstSubresource;
+    RhiOffset3D dstOffset;
+    RhiExtent3D extent;
 };
 
 struct RhiTextureBlit {
     RhiTextureHandle src;
     RhiTextureHandle dst;
+    RhiTextureViewHandle srcView;
+    RhiTextureViewHandle dstView;
     uint32_t srcMipLevel = 0;
     uint32_t dstMipLevel = 0;
 };

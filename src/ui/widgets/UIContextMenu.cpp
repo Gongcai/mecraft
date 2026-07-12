@@ -1,16 +1,46 @@
 #include "UIContextMenu.h"
 
-#include <glad/glad.h>
 #include <algorithm>
+#include <cmath>
 
-#include "../core/UIRenderUtils.h"
 #include "../font/TextRenderer.h"
-#include "../../resource/ResourceMgr.h"
-#include "../../renderer/core/Shader.h"
-#include "../../renderer/rhi/gl/GlRhiTextureRegistry.h"
+#include "../../renderer/rhi/RhiCommandList.h"
 
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
+
+namespace {
+
+struct ContextMenuSolidPushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 rectRadius;
+    glm::vec4 color;
+};
+
+struct ContextMenuGlassPushConstants {
+    glm::vec4 screenRect;
+    glm::vec4 extentOpacity;
+    glm::vec4 tint;
+    glm::vec4 appearance;
+};
+
+static_assert(sizeof(ContextMenuSolidPushConstants) == 48u);
+static_assert(sizeof(ContextMenuGlassPushConstants) == 64u);
+
+[[nodiscard]] RhiRect2D contextMenuScissor(const UIRenderContext& context) {
+    if (context.hasScissor) {
+        return context.scissor;
+    }
+    return {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenWidth) * context.pixelScale()))),
+        static_cast<uint32_t>(std::max(1.0f,
+            std::round(static_cast<float>(context.screenHeight) * context.pixelScale())))
+    };
+}
+
+} // namespace
 
 UIContextMenu::UIContextMenu() {
     interactive = true;
@@ -26,31 +56,12 @@ UIContextMenu::~UIContextMenu() {
 }
 
 void UIContextMenu::init(ResourceMgr& resourceMgr) {
-    m_shader = resourceMgr.getShader("ui_color");
-    m_glassShader = resourceMgr.getShader("ui_glass");
-
-    // Buffer: background (6) + border (24) + items (up to 32 * 6) + separator lines (up to 16 * 6)
-    // Generous allocation.
-    constexpr int totalFloats = (6 + 24 + 32 * 6 + 16 * 6) * 2;
-    glGenVertexArrays(1, &m_vao);
-    glGenBuffers(1, &m_vbo);
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(totalFloats * sizeof(float)),
-                 nullptr, GL_DYNAMIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-    glBindVertexArray(0);
-
     m_showTween.start(0.0f, 0.0f, 0.15f, EasingType::EaseOut);
 
     UIWidget::init(resourceMgr);
 }
 
 void UIContextMenu::shutdown() {
-    cleanupMesh();
-    m_shader = nullptr;
-    m_glassShader = nullptr;
     m_items.clear();
     UIWidget::shutdown();
 }
@@ -104,11 +115,6 @@ void UIContextMenu::updateAnimations(float dt) {
     UIWidget::updateAnimations(dt);
 }
 
-void UIContextMenu::cleanupMesh() {
-    if (m_vao) { glDeleteVertexArrays(1, &m_vao); m_vao = 0; }
-    if (m_vbo) { glDeleteBuffers(1, &m_vbo); m_vbo = 0; }
-}
-
 int UIContextMenu::hitTestItem(float px, float py, const UIRenderContext& ctx) const {
     const UIResolvedContextMenuStyle resolved = resolveStyle(ctx);
     const float flippedY = static_cast<float>(ctx.screenHeight) - py;
@@ -146,8 +152,12 @@ void UIContextMenu::renderSelf(const UIRenderContext& ctx) const {
 void UIContextMenu::render(const UIRenderContext& ctx) const {
     if (!visible || !m_menuVisible) return;
     if (m_showTween.value() < 0.01f) return;
-
-    const UIRenderUtils::GLStateGuard guard;
+    const bool record = ctx.phase == UIRenderPhase::Record;
+    if (record && (ctx.commandList == nullptr ||
+                   !ctx.panelQuadVertexBuffer.isValid() ||
+                   !ctx.panelSolidPipeline.isValid())) {
+        return;
+    }
 
     const UIResolvedContextMenuStyle resolved = resolveStyle(ctx);
     const Color bgCol = resolved.background;
@@ -164,123 +174,117 @@ void UIContextMenu::render(const UIRenderContext& ctx) const {
     const float menuTop_screen = m_menuY;
     const float menuTop_widget = static_cast<float>(ctx.screenHeight) - menuTop_screen;
     const float menuBottom_widget = menuTop_widget - menuH;
-    const uint32_t backdropBlurTextureId = renderer::rhi::gl::textureId(ctx.backdropBlur);
-    const bool useGlass = m_glassShader &&
-                          backdropBlurTextureId != 0 &&
+    const bool useGlass = ctx.panelGlassPipeline.isValid() &&
+                          ctx.panelGlassBindGroup.isValid() &&
+                          ctx.backdropBlurView.isValid() &&
                           ctx.backdropSourceWidth > 0 &&
                           ctx.backdropSourceHeight > 0 &&
                           ctx.backdropBlurWidth > 0 &&
                           ctx.backdropBlurHeight > 0;
 
-    // Build vertices.
-    std::vector<float> verts;
-    // Background (offset 0).
-    UIRenderUtils::pushColorQuad(verts, menuLeft, menuBottom_widget,
-                                 menuLeft + menuW, menuTop_widget);
-    // Border (offset 6, 24 verts).
-    UIRenderUtils::pushColorQuad(verts, menuLeft, menuTop_widget - brdW,
-                                 menuLeft + menuW, menuTop_widget);          // top
-    UIRenderUtils::pushColorQuad(verts, menuLeft, menuBottom_widget,
-                                 menuLeft + menuW, menuBottom_widget + brdW); // bottom
-    UIRenderUtils::pushColorQuad(verts, menuLeft, menuBottom_widget,
-                                 menuLeft + brdW, menuTop_widget);            // left
-    UIRenderUtils::pushColorQuad(verts, menuLeft + menuW - brdW, menuBottom_widget,
-                                 menuLeft + menuW, menuTop_widget);           // right
-
-    // Item hover highlights and separator lines.
-    float yOff = resolved.padding;
-    for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-        const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
-        const float itemTop = menuTop_widget - yOff;
-        const float itemBottom = itemTop - itemH;
-
-        if (m_items[i].type == ItemType::Entry && i == m_hoveredItem) {
-            UIRenderUtils::pushColorQuad(verts, menuLeft + 3.0f, itemBottom + 1.0f,
-                                         menuLeft + menuW - 3.0f, itemTop - 1.0f);
-        } else if (m_items[i].type == ItemType::Separator) {
-            const float sepY = itemTop - itemH * 0.5f;
-            UIRenderUtils::pushColorQuad(verts, menuLeft + 8.0f, sepY - 0.5f,
-                                         menuLeft + menuW - 8.0f, sepY + 0.5f);
-        }
-        yOff += itemH;
-    }
-
-    glBindVertexArray(m_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferSubData(GL_ARRAY_BUFFER, 0,
-                    static_cast<GLsizeiptr>(verts.size() * sizeof(float)), verts.data());
+    if (record) {
+        RhiCommandList& commandList = *ctx.commandList;
+        const RhiRect2D scissor = contextMenuScissor(ctx);
 
     if (useGlass) {
         const float tintStrength = std::clamp(bgCol[3] * 0.34f, 0.16f, 0.34f);
+        const ContextMenuGlassPushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth),
+                      static_cast<float>(ctx.screenHeight), menuLeft, menuBottom_widget),
+            glm::vec4(menuW, menuH, 0.0f,
+                      std::clamp(menuAlpha * 0.96f, 0.0f, 1.0f)),
+            glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength),
+            glm::vec4(0.54f, 0.70f, 0.0f, 0.0f)
+        };
 
-        m_glassShader->use();
-        m_glassShader->setVec2("uScreenSize",
-                               glm::vec2(static_cast<float>(ctx.screenWidth),
-                                         static_cast<float>(ctx.screenHeight)));
-        m_glassShader->setVec2("uBackdropSize",
-                               glm::vec2(static_cast<float>(ctx.backdropSourceWidth),
-                                         static_cast<float>(ctx.backdropSourceHeight)));
-        m_glassShader->setVec4("uTint", glm::vec4(bgCol[0], bgCol[1], bgCol[2], tintStrength));
-        m_glassShader->setFloat("uOpacity", std::clamp(menuAlpha * 0.96f, 0.0f, 1.0f));
-        m_glassShader->setFloat("uSaturation", 0.54f);
-        m_glassShader->setFloat("uDarken", 0.70f);
-        m_glassShader->setInt("uBackdrop", 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, backdropBlurTextureId);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        commandList.setGraphicsPipeline(ctx.panelGlassPipeline);
+        commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+        commandList.setBindGroup(0u, ctx.panelGlassBindGroup);
+        commandList.setScissor(scissor);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) |
+                                  rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(6u, 1u, 0u, 0u);
     }
 
-    m_shader->use();
-    m_shader->setVec2("uScreenSize",
-                      glm::vec2(static_cast<float>(ctx.screenWidth),
-                                static_cast<float>(ctx.screenHeight)));
+    commandList.setGraphicsPipeline(ctx.panelSolidPipeline);
+    commandList.setVertexBuffer(0u, ctx.panelQuadVertexBuffer, 0u);
+    commandList.setScissor(scissor);
 
-    // Background.
-    const float bgAlphaScale = useGlass ? 0.42f : 1.0f;
-    m_shader->setVec4("uColor", glm::vec4(bgCol[0], bgCol[1], bgCol[2], bgCol[3] * menuAlpha * bgAlphaScale));
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-
-    // Border.
-    m_shader->setVec4("uColor", glm::vec4(brdCol[0], brdCol[1], brdCol[2], brdCol[3] * menuAlpha));
-    glDrawArrays(GL_TRIANGLES, 6, 24);
-
-    // Item highlights and separators.
-    int vertIdx = 30;
-    yOff = resolved.padding;
-    for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
-        const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
-        if (m_items[i].type == ItemType::Entry && i == m_hoveredItem) {
-            const float hoverAlphaScale = useGlass ? 0.84f : 1.0f;
-            m_shader->setVec4("uColor", glm::vec4(hovCol[0], hovCol[1], hovCol[2],
-                                                  hovCol[3] * menuAlpha * hoverAlphaScale));
-            glDrawArrays(GL_TRIANGLES, vertIdx, 6);
-            vertIdx += 6;
-        } else if (m_items[i].type == ItemType::Separator) {
-            const float separatorAlphaScale = useGlass ? 0.66f : 1.0f;
-            m_shader->setVec4("uColor", glm::vec4(sepCol[0], sepCol[1], sepCol[2],
-                                                  sepCol[3] * menuAlpha * separatorAlphaScale));
-            glDrawArrays(GL_TRIANGLES, vertIdx, 6);
-            vertIdx += 6;
+    auto drawSolidRect = [&](const float rectX,
+                             const float rectY,
+                             const float rectWidth,
+                             const float rectHeight,
+                             const Color& rectColor) {
+        if (rectWidth <= 0.0f || rectHeight <= 0.0f || rectColor[3] <= 0.0f) {
+            return;
         }
-        yOff += itemH;
-    }
+        const ContextMenuSolidPushConstants pushConstants{
+            glm::vec4(static_cast<float>(ctx.screenWidth),
+                      static_cast<float>(ctx.screenHeight), rectX, rectY),
+            glm::vec4(rectWidth, rectHeight, 0.0f, 0.0f),
+            glm::vec4(rectColor[0], rectColor[1], rectColor[2], rectColor[3])
+        };
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Vertex) |
+                                  rhiFlag(RhiShaderStage::Fragment));
+        commandList.draw(6u, 1u, 0u, 0u);
+    };
 
-    glBindVertexArray(0);
+        // Background.
+        const float bgAlphaScale = useGlass ? 0.42f : 1.0f;
+        Color background = bgCol;
+        background[3] *= menuAlpha * bgAlphaScale;
+        drawSolidRect(menuLeft, menuBottom_widget, menuW, menuH, background);
+
+        // Border.
+        Color border = brdCol;
+        border[3] *= menuAlpha;
+        drawSolidRect(menuLeft, menuTop_widget - brdW, menuW, brdW, border);
+        drawSolidRect(menuLeft, menuBottom_widget, menuW, brdW, border);
+        drawSolidRect(menuLeft, menuBottom_widget, brdW, menuH, border);
+        drawSolidRect(menuLeft + menuW - brdW, menuBottom_widget, brdW, menuH, border);
+
+        // Item highlights and separators.
+        float yOff = resolved.padding;
+        for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
+            const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
+            const float itemTop = menuTop_widget - yOff;
+            const float itemBottom = itemTop - itemH;
+            if (m_items[i].type == ItemType::Entry && i == m_hoveredItem) {
+                const float hoverAlphaScale = useGlass ? 0.84f : 1.0f;
+                Color hover = hovCol;
+                hover[3] *= menuAlpha * hoverAlphaScale;
+                drawSolidRect(menuLeft + 3.0f, itemBottom + 1.0f,
+                              menuW - 6.0f, itemH - 2.0f, hover);
+            } else if (m_items[i].type == ItemType::Separator) {
+                const float separatorAlphaScale = useGlass ? 0.66f : 1.0f;
+                Color separator = sepCol;
+                separator[3] *= menuAlpha * separatorAlphaScale;
+                const float separatorY = itemTop - itemH * 0.5f;
+                drawSolidRect(menuLeft + 8.0f, separatorY - 0.5f,
+                              menuW - 16.0f, 1.0f, separator);
+            }
+            yOff += itemH;
+        }
+    }
 
     // Render text.
     if (ctx.textRenderer) {
         const float textScale = 1.0f;
-        yOff = resolved.padding;
+        float yOff = resolved.padding;
         for (int i = 0; i < static_cast<int>(m_items.size()); ++i) {
             const float itemH = (m_items[i].type == ItemType::Separator) ? resolved.separatorHeight : resolved.itemHeight;
             if (m_items[i].type == ItemType::Entry) {
                 const float textY = menuTop_widget - yOff - itemH * 0.5f -
                                     ctx.textRenderer->measureText(m_items[i].text, textScale).height * 0.5f;
-                ctx.textRenderer->render(m_items[i].text,
-                                         menuLeft + 12.0f, textY, textScale,
-                                         {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * menuAlpha},
-                                         static_cast<float>(ctx.screenWidth),
-                                         static_cast<float>(ctx.screenHeight));
+                ctx.textRenderer->draw(
+                    ctx,
+                    m_items[i].text,
+                    menuLeft + 12.0f,
+                    textY,
+                    textScale,
+                    {txtCol[0], txtCol[1], txtCol[2], txtCol[3] * menuAlpha});
             }
             yOff += itemH;
         }

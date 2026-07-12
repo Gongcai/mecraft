@@ -5,11 +5,12 @@
 
 #include <cstdint>
 
+#include "renderer/rhi/RhiHandles.h"
 #include "../core/UIStyle.h"
 #include "../core/UIWidget.h"
 #include "../core/Tween.h"
 
-class Shader;
+class RhiDevice;
 
 // Progress bar widget that displays a 0..1 progress value with optional text overlay.
 class UIProgressBar : public UIWidget {
@@ -51,9 +52,12 @@ private:
     [[nodiscard]] UIProgressBarStyle resolveBaseStyle(const UIRenderContext& ctx) const;
     [[nodiscard]] UIResolvedProgressBarStyle resolveStyle(const UIRenderContext& ctx) const;
 
-    Shader* m_shader = nullptr;
-    uint32_t m_vao = 0;
-    uint32_t m_vbo = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_vertexBuffer;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineHandle m_pipeline;
 
     float m_progress = 0.0f;
     Tween<float> m_progressTween;

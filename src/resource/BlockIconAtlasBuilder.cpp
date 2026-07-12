@@ -1,6 +1,7 @@
 #include "BlockIconAtlasBuilder.h"
 
-#include "RhiTextureResourceUtils.h"
+#include "renderer/rhi/RhiDevice.h"
+#include "renderer/rhi/RhiResources.h"
 
 #include "BlockTextureLibrary.h"
 #include "TextureAtlas.h"
@@ -16,7 +17,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <glad/glad.h>
 #include <glm/vec3.hpp>
 
 namespace {
@@ -543,7 +543,8 @@ namespace resource {
 TextureAtlas buildBlockIconAtlas(int iconSize,
                                  const TextureAtlas& blockAtlas,
                                  const std::vector<unsigned char>& blockAtlasPixels,
-                                 const BlockTextureLibrary& blockTextures) {
+                                 const BlockTextureLibrary& blockTextures,
+                                 RhiDevice& rhiDevice) {
     if (iconSize < 16) {
         iconSize = 16;
     }
@@ -661,18 +662,6 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
                               tint);
     }
 
-    GLuint textureID = 0;
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlasWidth, atlasHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, iconAtlasPixels.data());
-    glBindTexture(GL_TEXTURE_2D, 0);
-
     TextureAtlas atlas;
     atlas.atlasWidth = atlasWidth;
     atlas.atlasHeight = atlasHeight;
@@ -680,9 +669,21 @@ TextureAtlas buildBlockIconAtlas(int iconSize,
     atlas.tileStride = iconSize;
     atlas.tilePadding = 0;
     atlas.tilesPerRow = tilesPerRow;
-    if (!registerTextureAtlas(atlas, textureID)) {
-        glDeleteTextures(1, &textureID);
-        failBlockIconAtlasBuilder("Failed to register block icon atlas RHI handle");
+    RhiTextureDesc desc;
+    desc.debugName = "Resource.BlockIconAtlas";
+    desc.dimension = RhiTextureDimension::Texture2D;
+    desc.format = RhiTextureFormat::Rgba8Unorm;
+    desc.width = static_cast<uint32_t>(atlasWidth);
+    desc.height = static_cast<uint32_t>(atlasHeight);
+    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                 rhiFlag(RhiTextureUsage::TransferDst);
+    RhiTextureInitialData initialData;
+    initialData.pixels = iconAtlasPixels.data();
+    initialData.sizeBytes = iconAtlasPixels.size();
+    initialData.finalState = RhiResourceState::ShaderRead;
+    atlas.texture = rhiDevice.createTexture(desc, &initialData);
+    if (!atlas.texture.isValid()) {
+        failBlockIconAtlasBuilder("Failed to create block icon atlas RHI texture");
     }
     return atlas;
 }

@@ -18,6 +18,8 @@
 // Forward declarations
 class RenderResourceHub;
 class ResourceMgr;
+class RhiDevice;
+class RhiCommandListPool;
 class IWorldView;
 class World;
 class Camera;
@@ -33,9 +35,8 @@ class DropSystem;
 class TerrainRenderCache;
 class TerrainStreamingService;
 class TerrainRenderer;
-class CommonFrameTargets;
+class TerrainRhiPipelineSet;
 class DeferredRenderTargets;
-class ShadowTargets;
 class GameplaySkyRenderer;
 class WorldRenderBuffer;
 class ChunkMeshingService;
@@ -56,17 +57,20 @@ namespace shadow { class ShadowRenderer; }
 /// Shared render resources used by both pipelines.
 /// All pointers are non-owning; lifetime is managed by Renderer.
 struct SharedRenderResources {
+    // RHI
+    RhiDevice* rhiDevice = nullptr;
+    RhiCommandListPool* commandListPool = nullptr;
+
     // Terrain
     TerrainRenderCache* terrainCache = nullptr;
     TerrainStreamingService* terrainStreaming = nullptr;
     TerrainRenderer* terrain = nullptr;
+    TerrainRhiPipelineSet* terrainRhiPipelines = nullptr;
     WorldRenderBuffer* worldRenderBuffer = nullptr;
     ChunkMeshingService* meshingService = nullptr;
 
     // Render targets
-    CommonFrameTargets* commonTargets = nullptr;
     DeferredRenderTargets* deferredTargets = nullptr;
-    ShadowTargets* shadowTargets = nullptr;
 
     // Renderers
     GameplaySkyRenderer* sky = nullptr;
@@ -189,7 +193,10 @@ public:
     // Initialize shared resources without depending on legacy renderer
     void setupResources(
         ThreadPool* threadPool,
+        RhiDevice* rhiDevice,
+        RhiCommandListPool* commandListPool,
         TerrainRenderer* terrain,
+        TerrainRhiPipelineSet* terrainRhiPipelines,
         WorldRenderBuffer* worldRenderBuffer,
         DeferredRenderTargets* deferredTargets,
         GameplaySkyRenderer* sky,

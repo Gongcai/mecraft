@@ -5,15 +5,15 @@
 #ifndef MECRAFT_DASHBOARD_H
 #define MECRAFT_DASHBOARD_H
 
-// Dashboard 调试 UI 仅在 Debug 模式下可用
 #ifdef MECRAFT_DEBUG
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <vector>
 #include "../third_party/imgui/imgui.h"
 #include "../third_party/imgui/imgui_impl_glfw.h"
-#include "../third_party/imgui/imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 #include "../engine/camera/Camera.h"
 #include "../engine/platform/Time.h"
@@ -24,8 +24,13 @@
 #include "../renderer/core/RenderResourceHub.h"
 #include "../renderer/core/RenderScene.h"
 #include "../renderer/passes/PostProcessPass.h"
+#include "../renderer/rhi/RhiHandles.h"
+#include "../renderer/rhi/RhiResources.h"
+#include "../renderer/rhi/RhiTypes.h"
 class FirstPersonHeldItemRenderer;
 class PostProcessPass;
+class RhiCommandList;
+class RhiDevice;
 class UIRenderer;
 class Dashboard {
 public:
@@ -117,19 +122,30 @@ public:
 
     Dashboard();
     ~Dashboard();
-    void init(const Window& window);
+    [[nodiscard]] bool init(const Window& window, RhiDevice& rhiDevice);
     void shutdown();
     void setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer);
-    void render(ecs::GameplayRegistry& registry,
-                World &world,
-                Camera &camera,
-                RenderResourceHub &render,
-                RenderScene& renderScene,
-                PostProcessPass& postProcess,
-                UIRenderer& uiRenderer,
-                FrameProfilerStats& profilerStats,
-                const std::function<void(int)>& renderDistanceSetter = {});
+    [[nodiscard]] bool prepareFrame(
+        RhiCommandList& commandList,
+        ecs::GameplayRegistry& registry,
+        World& world,
+        Camera& camera,
+        RenderResourceHub& render,
+        RenderScene& renderScene,
+        PostProcessPass& postProcess,
+        UIRenderer& uiRenderer,
+        FrameProfilerStats& profilerStats,
+        const std::function<void(int)>& renderDistanceSetter = {});
+    void recordDraws(RhiCommandList& commandList) const;
 private:
+    struct PreparedDraw {
+        RhiRect2D scissor;
+        uint32_t indexCount = 0u;
+        uint32_t firstIndex = 0u;
+        int32_t vertexOffset = 0;
+        bool resetState = false;
+    };
+
     struct CachedWorldMetrics {
         size_t activeChunks = 0;
         size_t activeSubChunks = 0;
@@ -152,8 +168,38 @@ private:
     void showHeldItemPreviewSettings(FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer);
     void showTextSettings(UIRenderer& uiRenderer);
     void refreshWorldMetricsIfNeeded(World& world, double now, bool forceRefresh);
+    [[nodiscard]] bool createRhiResources(RhiDevice& rhiDevice);
+    void destroyRhiResources();
+    [[nodiscard]] bool buildPreparedDraws(const ImDrawData& drawData);
+    [[nodiscard]] bool uploadDrawBuffers(RhiCommandList& commandList);
+    void bindRenderState(RhiCommandList& commandList) const;
 
     FirstPersonHeldItemRenderer* m_firstPersonHeldItemRenderer = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiTextureHandle m_fontTexture;
+    RhiTextureViewHandle m_fontTextureView;
+    RhiSamplerHandle m_fontSampler;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiPipelineHandle m_pipeline;
+    RhiBindGroupHandle m_fontBindGroup;
+    RhiBufferHandle m_vertexBuffer;
+    RhiBufferHandle m_indexBuffer;
+    RhiResourceState m_fontTextureState = RhiResourceState::Undefined;
+    RhiResourceState m_vertexBufferState = RhiResourceState::VertexBuffer;
+    RhiResourceState m_indexBufferState = RhiResourceState::IndexBuffer;
+    uint64_t m_vertexBufferCapacity = 0u;
+    uint64_t m_indexBufferCapacity = 0u;
+    std::vector<ImDrawVert> m_vertices;
+    std::vector<uint8_t> m_indexBytes;
+    std::vector<PreparedDraw> m_preparedDraws;
+    ImVec2 m_displayPos{};
+    ImVec2 m_displaySize{};
+    ImVec2 m_framebufferScale{1.0f, 1.0f};
+    int32_t m_framebufferWidth = 0;
+    int32_t m_framebufferHeight = 0;
     FrameProfilerStats m_displayProfilerStats{};
     GpuFrameStats m_displayGpuStats{};
     ShadowFrameStats m_displayShadowStats{};
@@ -163,7 +209,10 @@ private:
     double m_displayFps = 0.0;
     double m_nextProfilerStatsRefreshTime = 0.0;
     float m_profilerStatsRefreshIntervalSec = 0.5f;
-    float m_fontScale = 1.5f; // Global ImGui font scale
+    float m_fontScale = 1.5f;
+    bool m_contextCreated = false;
+    bool m_platformInitialized = false;
+    bool m_framePrepared = false;
     bool m_initialized = false;
 };
 

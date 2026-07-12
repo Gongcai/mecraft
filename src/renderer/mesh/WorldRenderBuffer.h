@@ -6,7 +6,12 @@
 #include <unordered_set>
 #include <vector>
 
+#include "renderer/rhi/RhiGrowableBuffer.h"
+#include "renderer/rhi/RhiHandles.h"
 #include "../../world/chunk/SubChunk.h"
+
+class RhiCommandList;
+class RhiDevice;
 
 struct DrawArraysIndirectCommand {
     uint32_t count;
@@ -15,28 +20,19 @@ struct DrawArraysIndirectCommand {
     uint32_t baseInstance;
 };
 
-class VertexPoolAllocator {
+class VertexRangeAllocator {
 public:
-    VertexPoolAllocator();
-    ~VertexPoolAllocator();
-
-    void init(size_t initialCapacityVertices);
+    void init(size_t capacityVertices);
     void shutdown();
 
     bool allocate(uint32_t vertexCount, GpuMeshRange& outRange);
     void free(const GpuMeshRange& range);
-    void upload(const GpuMeshRange& range, const std::vector<PackedBlockVertex>& vertices);
+    void grow(size_t newCapacityVertices);
 
-    uint32_t vbo() const { return m_vbo; }
-    uint64_t generation() const { return m_generationCounter; }
-    size_t capacityVertices() const { return m_capacityVertices; }
-    size_t usedVertices() const { return m_usedVertices; }
-    float fragmentationRatio() const;
-
-    // Per-frame stats (reset by beginFrame)
-    void beginFrame();
-    size_t expandCountThisFrame() const { return m_expandCountThisFrame; }
-    size_t uploadedBytesThisFrame() const { return m_uploadedBytesThisFrame; }
+    [[nodiscard]] uint64_t generation() const { return m_generationCounter; }
+    [[nodiscard]] size_t capacityVertices() const { return m_capacityVertices; }
+    [[nodiscard]] size_t usedVertices() const { return m_usedVertices; }
+    [[nodiscard]] float fragmentationRatio() const;
 
 private:
     struct FreeBlock {
@@ -45,26 +41,53 @@ private:
         int next = -1;
     };
 
-    void expand(size_t newCapacityVertices);
-
     static constexpr size_t kFreeBlockPoolSize = 256;
     std::vector<FreeBlock> m_freeBlocks;
     int m_freeHead = -1;
     std::vector<int> m_freeBlockFreeList;
-
-    uint32_t m_vbo = 0;
     size_t m_capacityVertices = 0;
     size_t m_usedVertices = 0;
     uint64_t m_generationCounter = 1;
     std::unordered_set<uint64_t> m_liveAllocations;
 
-    // Per-frame stats
-    size_t m_expandCountThisFrame = 0;
-    size_t m_uploadedBytesThisFrame = 0;
-
     int allocFreeBlockNode();
     void returnFreeBlockNode(int nodeIdx);
-    void coalesceAt(int nodeIdx);
+    void coalesce();
+};
+
+class RhiVertexPoolAllocator {
+public:
+    RhiVertexPoolAllocator();
+    ~RhiVertexPoolAllocator();
+
+    bool init(RhiDevice& rhiDevice, size_t initialCapacityVertices, const char* debugName);
+    void shutdown();
+
+    bool allocate(RhiCommandList& commandList, uint32_t vertexCount, GpuMeshRange& outRange);
+    void free(const GpuMeshRange& range);
+    bool upload(RhiCommandList& commandList,
+                const GpuMeshRange& range,
+                const std::vector<PackedBlockVertex>& vertices);
+
+    [[nodiscard]] RhiBufferHandle buffer() const { return m_buffer; }
+    [[nodiscard]] size_t capacityVertices() const { return m_ranges.capacityVertices(); }
+    [[nodiscard]] size_t usedVertices() const { return m_ranges.usedVertices(); }
+    [[nodiscard]] float fragmentationRatio() const { return m_ranges.fragmentationRatio(); }
+
+    void beginFrame();
+    [[nodiscard]] size_t expandCountThisFrame() const { return m_expandCountThisFrame; }
+    [[nodiscard]] size_t uploadedBytesThisFrame() const { return m_uploadedBytesThisFrame; }
+
+private:
+    bool expand(RhiCommandList& commandList, size_t newCapacityVertices);
+
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiBufferHandle m_buffer;
+    std::vector<RhiBufferHandle> m_retiredBuffers;
+    VertexRangeAllocator m_ranges;
+    const char* m_debugName = nullptr;
+    size_t m_expandCountThisFrame = 0;
+    size_t m_uploadedBytesThisFrame = 0;
 };
 
 class WorldRenderBuffer {
@@ -74,7 +97,7 @@ public:
     };
 
     struct FrameStatsSnapshot {
-        int glSubmitCount = 0;
+        int rhiSubmitCount = 0;
         size_t opaqueCommands = 0;
         size_t cutoutCommands = 0;
         size_t transparentCommands = 0;
@@ -97,10 +120,11 @@ public:
     WorldRenderBuffer();
     ~WorldRenderBuffer();
 
-    void init();
+    bool init(RhiDevice& rhiDevice);
     void shutdown();
 
-    WorldGpuMesh uploadSubChunk(const std::vector<BlockVertex>& opaque,
+    WorldGpuMesh uploadSubChunk(RhiCommandList& commandList,
+                                const std::vector<BlockVertex>& opaque,
                                 const std::vector<BlockVertex>& cutout,
                                 const std::vector<BlockVertex>& cutoutDistance,
                                 const std::vector<BlockVertex>& transparent,
@@ -119,17 +143,29 @@ public:
     void addTransparent(const GpuMeshRange& range);
     void addWater(const GpuMeshRange& range);
 
-    void flushOpaque();
-    void flushCutout();
-    void flushTransparent();
-    void flushWater();
-    void bindTransparentVao();
+    bool prepareRhiOpaqueAndCutout(RhiCommandList& commandList,
+                                   RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiOpaque(RhiCommandList& commandList,
+                         RhiPipelineHandle pipeline,
+                         RhiBindGroupHandle materialBindGroup);
+    void recordRhiCutout(RhiCommandList& commandList,
+                         RhiPipelineHandle pipeline,
+                         RhiBindGroupHandle materialBindGroup);
+    bool prepareRhiTransparent(RhiCommandList& commandList,
+                               RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiTransparent(RhiCommandList& commandList,
+                              RhiPipelineHandle pipeline,
+                              RhiBindGroupHandle materialBindGroup);
+    bool prepareRhiWater(RhiCommandList& commandList,
+                         RhiBindGroupLayoutHandle metadataLayout);
+    void recordRhiWater(RhiCommandList& commandList,
+                        RhiPipelineHandle pipeline,
+                        RhiBindGroupHandle materialBindGroup);
 
     void clearWaterCommands();
 
-    uint32_t transparentVao() const { return m_transparentVao; }
     const FrameStatsSnapshot& sceneFrameStats() const { return m_sceneFrameStats; }
-    int glSubmitCount() const { return m_glSubmitCount; }
+    int rhiSubmitCount() const { return m_rhiSubmitCount; }
     size_t opaqueCommandCount() const { return m_opaqueCommands.size(); }
     size_t cutoutCommandCount() const { return m_cutoutCommands.size(); }
     size_t transparentCommandCount() const { return m_transparentCommands.size(); }
@@ -163,31 +199,23 @@ public:
     size_t transparentUploadedBytes() const { return m_transparentPool.uploadedBytesThisFrame(); }
 
 private:
-    static void setupVertexLayout();
-    uint32_t uploadSubChunkMetadata(const glm::vec3& origin);
-    void bindMetadataBuffer() const;
+    uint32_t uploadSubChunkMetadata(RhiCommandList& commandList, const glm::vec3& origin);
+    bool ensureRhiMetadataBindGroup(RhiBindGroupLayoutHandle metadataLayout);
 
-    VertexPoolAllocator m_opaquePool;
-    VertexPoolAllocator m_cutoutPool;
-    VertexPoolAllocator m_transparentPool;
+    RhiVertexPoolAllocator m_opaquePool;
+    RhiVertexPoolAllocator m_cutoutPool;
+    RhiVertexPoolAllocator m_transparentPool;
 
-    uint32_t m_opaqueVao = 0;
-    uint32_t m_cutoutVao = 0;
-    uint32_t m_transparentVao = 0;
-    uint32_t m_opaqueVaoBoundVbo = 0;
-    uint32_t m_cutoutVaoBoundVbo = 0;
-    uint32_t m_transparentVaoBoundVbo = 0;
-
-    uint32_t m_opaqueIndirectBuf = 0;
-    uint32_t m_cutoutIndirectBuf = 0;
-    uint32_t m_transparentIndirectBuf = 0;
-    uint32_t m_waterIndirectBuf = 0;
-    uint32_t m_subChunkMetadataBuffer = 0;
-
-    size_t m_opaqueIndirectCapacity = 0;
-    size_t m_cutoutIndirectCapacity = 0;
-    size_t m_transparentIndirectCapacity = 0;
-    size_t m_waterIndirectCapacity = 0;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiGrowableBuffer m_rhiOpaqueIndirectBuffer;
+    RhiGrowableBuffer m_rhiCutoutIndirectBuffer;
+    RhiGrowableBuffer m_rhiTransparentIndirectBuffer;
+    RhiGrowableBuffer m_rhiWaterIndirectBuffer;
+    RhiGrowableBuffer m_rhiMetadataBuffer;
+    RhiBindGroupHandle m_rhiMetadataBindGroup;
+    std::vector<RhiBindGroupHandle> m_retiredMetadataBindGroups;
+    RhiBindGroupLayoutHandle m_rhiMetadataLayout;
+    RhiBufferHandle m_rhiMetadataBoundBuffer;
 
     std::vector<DrawArraysIndirectCommand> m_opaqueCommands;
     std::vector<DrawArraysIndirectCommand> m_cutoutCommands;
@@ -196,7 +224,7 @@ private:
     std::vector<SubChunkDrawMetadata> m_subChunkMetadata;
     std::vector<uint32_t> m_freeSubChunkMetadataIndices;
 
-    int m_glSubmitCount = 0;
+    int m_rhiSubmitCount = 0;
     size_t m_opaqueLogicalCommandCount = 0;
     size_t m_cutoutLogicalCommandCount = 0;
     size_t m_transparentLogicalCommandCount = 0;
@@ -206,12 +234,7 @@ private:
     uint64_t m_waterVertexCount = 0;
     FrameStatsSnapshot m_sceneFrameStats{};
 
-    void ensureVaoVertexBuffer(uint32_t vao, uint32_t vbo, uint32_t& cachedVbo);
     FrameStatsSnapshot makeCurrentFrameStats() const;
-    void ensureIndirectCapacity(std::vector<DrawArraysIndirectCommand>& commands,
-                                uint32_t& buf, size_t& capacity, size_t needed);
-    void flushPass(std::vector<DrawArraysIndirectCommand>& commands,
-                   uint32_t& indirectBuf, uint32_t vao, uint32_t vbo, uint32_t& cachedVbo);
 };
 
 #endif // MECRAFT_WORLDRENDERBUFFER_H

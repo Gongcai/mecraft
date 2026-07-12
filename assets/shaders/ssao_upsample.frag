@@ -3,13 +3,17 @@
 // Weights each of the 4 half-res texels by depth similarity to the full-res center pixel,
 // preserving edges at depth discontinuities.
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uSsaoHalfResTex;
-uniform sampler2D uDepthTex;
-uniform vec2 uHalfResSize;
-uniform float uNear;
+layout(binding = 0) uniform sampler2D uSsaoHalfResTex;
+layout(binding = 1) uniform sampler2D uDepthTex;
+
+layout(push_constant) uniform RhiPushConstants {
+    vec2 uHalfResSize;
+    float uNear;
+    float uPadding0;
+};
 
 void main() {
     ivec2 fullTexel = ivec2(gl_FragCoord.xy);

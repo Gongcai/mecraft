@@ -48,8 +48,9 @@ void TerrainStreamingService::releaseMdiAllocation(const SubChunkGpuKey& key) {
     m_terrainCache.releaseMdiAllocation(key);
 }
 
-void TerrainStreamingService::drainMeshingResults(const IWorldView& worldView) {
-    m_terrainCache.drainMeshingResults(worldView);
+void TerrainStreamingService::drainMeshingResults(const IWorldView& worldView,
+                                                  RhiCommandList& commandList) {
+    m_terrainCache.drainMeshingResults(worldView, commandList);
     syncFrameStats();
 }
 

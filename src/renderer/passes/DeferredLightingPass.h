@@ -6,18 +6,19 @@
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
 
+#include <array>
 #include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
-class Shader;
+class RhiDevice;
 
 namespace shadow { class ShadowRenderer; }
 
 /// Deferred lighting pass: computes full-scene lighting from GBuffer, shadows, SSAO, and atmosphere.
 class DeferredLightingPass : public RenderPass {
 public:
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DeferredLighting"; }
 
@@ -31,12 +32,45 @@ public:
                  DeferredRenderTargets& targets);
 
 private:
-    Shader* m_deferredLightingShader = nullptr;
+    bool ensureRhiPipeline(RhiDevice& rhiDevice);
+    bool ensureExternalTextureViews(RhiDevice& rhiDevice);
+    bool ensureTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture,
+                           RhiTextureFormat format, RhiTextureHandle& viewTexture,
+                           RhiTextureViewHandle& textureView);
+    bool ensureRhiBindGroup(RhiDevice& rhiDevice,
+                            const std::array<RhiTextureViewHandle, 19>& views);
+    void destroyRhiBindGroup();
+    void destroyExternalTextureViews();
+    void destroyRhiResources();
+
+    RhiDevice* m_rhiDevice = nullptr;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
-    ResourceMgr* m_resourceMgr = nullptr;
     int m_heldBlockLightValue = 0;
+    RhiTextureHandle m_lightmapDayTexture;
+    RhiTextureHandle m_lightmapNightTexture;
     RhiTextureHandle m_noiseTexture;
     RhiTextureHandle m_rippleNormalTexture;
+    RhiTextureHandle m_lightmapDayViewTexture;
+    RhiTextureHandle m_lightmapNightViewTexture;
+    RhiTextureHandle m_noiseViewTexture;
+    RhiTextureHandle m_rippleNormalViewTexture;
+    RhiTextureViewHandle m_lightmapDayTextureView;
+    RhiTextureViewHandle m_lightmapNightTextureView;
+    RhiTextureViewHandle m_noiseTextureView;
+    RhiTextureViewHandle m_rippleNormalTextureView;
+    RhiBufferHandle m_uniformBuffer;
+    RhiSamplerHandle m_nearestClampSampler;
+    RhiSamplerHandle m_linearClampSampler;
+    RhiSamplerHandle m_linearRepeatSampler;
+    RhiSamplerHandle m_nearestBorderSampler;
+    RhiSamplerHandle m_compareBorderSampler;
+    RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiPipelineLayoutHandle m_pipelineLayout;
+    RhiShaderHandle m_vertexShader;
+    RhiShaderHandle m_fragmentShader;
+    RhiPipelineHandle m_pipeline;
+    RhiBindGroupHandle m_bindGroup;
+    std::array<RhiTextureViewHandle, 19> m_boundViews = {};
 };
 
 #endif // MECRAFT_DEFERRED_LIGHTING_PASS_H

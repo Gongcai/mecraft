@@ -1,20 +1,22 @@
 #include "RenderScene.h"
+#include "../../Diagnostics.h"
 #include "RenderResourceHub.h"
 #include "SettingsMapper.h"
 #include "ForwardPipeline.h"
 #include "DeferredPipeline.h"
-#include "../debug/RenderDebugLabels.h"
-#include "../rhi/gl/GlRhiTextureRegistry.h"
+#include "../rhi/RhiCommandList.h"
+#include "../rhi/RhiDevice.h"
+#include "../rhi/RhiResources.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/BlockEntityRenderer.h"
 #include "../renderers/FirstPersonHeldItemRenderer.h"
-#include <glad/glad.h>
 #include "engine/camera/Camera.h"
 #include "../mesh/TerrainStreamingService.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <iostream>
 #include <utility>
 #include "engine/platform/Window.h"
 #include "../../particle/RainRenderer.h"
@@ -103,6 +105,90 @@ float computeHeldItemSceneHdrScale(const FrameContext& ctx,
     return std::clamp(scale, 1.0f, 6.5f);
 }
 
+RhiCommandList* beginSceneCaptureRendering(RhiCommandList& commandList,
+                                           const FrameContext& ctx,
+                                           const char* debugName) {
+    if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
+        return nullptr;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = ctx.sceneCaptureColorView;
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = ctx.sceneCaptureDepthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = debugName;
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
+        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    commandList.textureBarrier({
+        ctx.sceneCaptureColorTexture,
+        RhiResourceState::ShaderRead,
+        RhiResourceState::RenderTarget
+    });
+    commandList.textureBarrier({
+        ctx.sceneCaptureDepthTexture,
+        RhiResourceState::DepthRead,
+        RhiResourceState::DepthWrite
+    });
+    commandList.beginRendering(renderingInfo);
+    return &commandList;
+}
+
+RhiCommandList* beginSceneCaptureRendering(RhiCommandListPool& commandListPool,
+                                           const FrameContext& ctx,
+                                           const char* debugName) {
+    RhiCommandList* commandListStorage =
+        commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin(
+            {"SceneCapture.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
+    return beginSceneCaptureRendering(commandList, ctx, debugName);
+}
+
+void endSceneCaptureRendering(RhiDevice& rhiDevice,
+                              RhiCommandList* commandList,
+                              const FrameContext& ctx) {
+    if (commandList == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    commandList->textureBarrier({
+        ctx.sceneCaptureColorTexture,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::ShaderRead
+    });
+    commandList->textureBarrier({
+        ctx.sceneCaptureDepthTexture,
+        RhiResourceState::DepthWrite,
+        RhiResourceState::DepthRead
+    });
+    if (!commandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {commandList};
+    if (!rhiDevice.submit({"SceneCapture.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
+}
+
 glm::vec2 sampleHeldItemLight(const IWorldView& worldView, const glm::vec3& cameraPosition) {
     const int x0 = static_cast<int>(std::floor(cameraPosition.x));
     const int y0 = static_cast<int>(std::floor(cameraPosition.y));
@@ -138,21 +224,14 @@ RenderScene::RenderScene() = default;
 RenderScene::~RenderScene() = default;
 
 void RenderScene::init(ResourceMgr& resourceMgr) {
-    // Phase 5: Initialize shared post-process pass
-    m_postProcessPass.init(resourceMgr);
-    m_fsr1Pass.init(resourceMgr);
-
     // Phase 9: Populate shared resources
     m_shared.resources = &resourceMgr;
 
     // Phase R4: Initialize terrain streaming service
     // Note: Thread pool initialization is deferred until setupResources() is called
 
-    // Phase R5: Initialize overlay renderer
-    m_overlayRenderer.init(resourceMgr);
-
     // Phase R6: Initialize debug service
-    m_debugService.init();
+    m_debugService.init(resourceMgr.rhiDevice());
 
     // Phase 9: Initialize pipelines
     m_forwardPipeline = std::make_unique<ForwardPipeline>();
@@ -201,7 +280,25 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
         return;
     }
 
-    m_debugService.beginFrame();
+    if (m_shared.commandListPool == nullptr || m_shared.rhiDevice == nullptr) {
+        std::abort();
+    }
+    RhiCommandList* timerResetCommandList =
+        m_shared.commandListPool->acquire(RhiCommandListType::Graphics);
+    if (timerResetCommandList == nullptr ||
+        !timerResetCommandList->begin(
+            {"RenderDebug.TimerReset.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    m_debugService.beginFrame(*timerResetCommandList);
+    if (!timerResetCommandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* timerResetLists[] = {timerResetCommandList};
+    if (!m_shared.rhiDevice->submit(
+            {"RenderDebug.TimerReset.Submit", timerResetLists, 1u})) {
+        std::abort();
+    }
     m_terrainStreamingService.beginFrame();
     if (m_blockEntityRenderer != nullptr) {
         m_blockEntityRenderer->beginFrame();
@@ -221,16 +318,17 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     }
 
     // New pipeline path
-    char frameLabel[64];
-    std::snprintf(frameLabel, sizeof(frameLabel), "Frame %llu %s",
-                  static_cast<unsigned long long>(m_currentContext.frameIndex),
-                  m_activePipeline ? m_activePipeline->name() : "Unknown");
-    renderer::debug::ScopedDebugGroup frameGroup(frameLabel);
     m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
 
     // R5: Render block interaction overlays (outline + break overlay)
     const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
-    m_overlayRenderer.render(worldView, viewProj, target, blockBreak);
+    RhiCommandList* overlayCommandList = beginSceneCaptureRendering(
+        *m_shared.commandListPool,
+        m_currentContext, "SceneCapture.BlockOverlay");
+    if (overlayCommandList != nullptr) {
+        m_overlayRenderer.render(worldView, viewProj, target, blockBreak, *overlayCommandList);
+    }
+    endSceneCaptureRendering(*m_shared.rhiDevice, overlayCommandList, m_currentContext);
 }
 
 void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
@@ -243,11 +341,12 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const glm::ivec2 frameRenderSize = skipPostProcess
         ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
         : internalRenderSize(request.window);
-    if (!skipPostProcess) {
-        m_postProcessPass.beginSceneCapture(frameRenderSize.x, frameRenderSize.y);
-    } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, frameRenderSize.x, frameRenderSize.y);
+    if (!m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice,
+                                             frameRenderSize.x,
+                                             frameRenderSize.y)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to begin post-process scene capture\n");
+        m_terrainStreamingService.endFrame();
+        return;
     }
 
     const bool lightDebugActive = isLightDebugActive();
@@ -262,35 +361,55 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (m_settings.weather.rainLinesEnabled) {
             const auto& weather = request.weatherSystem.getDerived();
             const glm::vec3 camPos = request.camera.getPosition();
+            const auto viewMat = request.camera.getViewMatrix();
+            request.rainRenderer.prepareFrame(camPos,
+                                              viewMat,
+                                              weather.rainStrength,
+                                              weather.snowStrength,
+                                              request.frameTime);
+            RhiCommandList* weatherCommandList = nullptr;
+            if (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f) {
+                RhiCommandList* commandListStorage =
+                    m_shared.commandListPool->acquire(RhiCommandListType::Graphics);
+                if (commandListStorage == nullptr ||
+                    !commandListStorage->begin(
+                        {"Weather.Commands", RhiCommandListType::Graphics})) {
+                    std::abort();
+                }
+                RhiCommandList& commandList = *commandListStorage;
+                request.rainRenderer.uploadFrame(commandList);
+                weatherCommandList = beginSceneCaptureRendering(
+                    commandList, m_currentContext, "SceneCapture.Weather");
+            }
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));
             auto projMat = request.camera.getProjectionMatrix(frameAspect);
-            auto viewMat = request.camera.getViewMatrix();
             const float alphaScale = m_settings.weather.rainAlphaScale;
             const bool forwardVanillaActive = isNewPipelineActive() &&
                                                getPipelineMode() == PipelineMode::Forward;
-            const GLuint depthTex = forwardVanillaActive
-                ? 0
-                : static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.gbufferDepth));
+            const RhiTextureHandle depthTexture = forwardVanillaActive
+                ? RhiTextureHandle{}
+                : m_lastFrameOutput.gbufferDepth;
             const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
             const glm::vec2 precipitationScreenSize(
                 static_cast<float>(frameRenderSize.x),
                 static_cast<float>(frameRenderSize.y));
 
-            if (weather.rainStrength > 0.01f) {
-                request.rainRenderer.render(projMat, viewMat, camPos,
+            if (weatherCommandList != nullptr && weather.rainStrength > 0.01f) {
+                request.rainRenderer.render(*weatherCommandList, projMat, viewMat,
                                              weather.rainStrength, cameraRainVisibility,
-                                             alphaScale, depthTex,
-                                             precipitationScreenSize, request.frameTime,
+                                             alphaScale, depthTexture,
+                                             precipitationScreenSize,
                                              hardwareDepthTest);
             }
-            if (weather.snowStrength > 0.01f) {
-                request.rainRenderer.renderSnow(projMat, viewMat, camPos,
+            if (weatherCommandList != nullptr && weather.snowStrength > 0.01f) {
+                request.rainRenderer.renderSnow(*weatherCommandList, projMat, viewMat,
                                                 weather.snowStrength, cameraRainVisibility,
-                                                alphaScale * 0.6f, depthTex,
-                                                precipitationScreenSize, request.frameTime,
+                                                alphaScale * 0.6f, depthTexture,
+                                                precipitationScreenSize,
                                                 hardwareDepthTest);
             }
+            endSceneCaptureRendering(*m_shared.rhiDevice, weatherCommandList, m_currentContext);
         }
     }
 
@@ -298,74 +417,87 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         request.firstPersonHeldItemRenderer != nullptr &&
         request.firstPersonInventory != nullptr &&
         request.firstPersonHeldItemMotion != nullptr) {
-        request.firstPersonHeldItemRenderer->setForwardMode(getPipelineMode() == PipelineMode::Forward);
         request.firstPersonHeldItemRenderer->setShadowData(
             FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
         const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());
         request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
         request.firstPersonHeldItemRenderer->setSceneHdrScale(
             computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
-        request.firstPersonHeldItemRenderer->render(
+        request.firstPersonHeldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
+        request.firstPersonHeldItemRenderer->prepareFrame(
             frameRenderSize.x,
             frameRenderSize.y,
             *request.firstPersonInventory,
             *request.firstPersonHeldItemMotion,
             static_cast<float>(Time::getGameTime()));
+        RhiCommandList* commandListStorage =
+            m_shared.commandListPool->acquire(RhiCommandListType::Graphics);
+        if (commandListStorage == nullptr ||
+            !commandListStorage->begin(
+                {"FirstPersonHeldItem.Commands", RhiCommandListType::Graphics})) {
+            std::abort();
+        }
+        RhiCommandList& commandList = *commandListStorage;
+        request.firstPersonHeldItemRenderer->prepareRhiFrame(commandList);
+        RhiCommandList* heldItemCommandList = beginSceneCaptureRendering(
+            commandList, m_currentContext, "SceneCapture.FirstPersonHeldItem");
+        request.firstPersonHeldItemRenderer->renderPrepared(commandList);
+        endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList, m_currentContext);
     }
 
-    if (!skipPostProcess) {
-        const bool postTimerStarted = m_debugService.beginGpuTimer(GpuTimerPass::Post);
+    if (skipPostProcess) {
+        m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
+                                                       m_currentContext.swapchainColorView,
+                                                       request.window,
+                                                       m_debugService);
+    } else {
         PostProcessEffects effects = buildPostProcessEffects(
             request.worldView, request.camera, request.window,
             cameraRainVisibility, request.screenRollRadians,
             request.dayNightSystem, request.weatherSystem);
         m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
-            m_postProcessPass.blitSceneCaptureToBackbuffer(request.window);
+            m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
+                                                           m_currentContext.swapchainColorView,
+                                                           request.window,
+                                                           m_debugService);
         } else {
-            const GLuint gbufferDepthTex =
-                static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.gbufferDepth));
-            const GLuint weatherMaskTex =
-                static_cast<GLuint>(renderer::rhi::gl::textureId(m_lastFrameOutput.weatherMask));
             const bool fsrEnabled = m_settings.upscale.fsr1Enabled &&
                                     m_settings.upscale.renderScale < 0.999f;
             if (fsrEnabled) {
-                const GLuint postTex = m_postProcessPass.compositeToTexture(
+                const RhiTextureHandle postTexture = m_postProcessPass.compositeToTexture(
+                    *m_shared.rhiDevice,
                     request.window,
                     request.frameTime,
-                    gbufferDepthTex,
-                    weatherMaskTex);
-                bool upscaled = false;
-                if (postTex != 0) {
-                    const int inputWidth = m_postProcessPass.targetWidth();
-                    const int inputHeight = m_postProcessPass.targetHeight();
-                    upscaled = m_fsr1Pass.execute(
-                        postTex,
+                    m_lastFrameOutput.gbufferDepth,
+                    m_debugService);
+                if (!postTexture.isValid()) {
+                    std::abort();
+                }
+                const int inputWidth = m_postProcessPass.targetWidth();
+                const int inputHeight = m_postProcessPass.targetHeight();
+                if (!m_fsr1Pass.execute(
+                        *m_shared.rhiDevice,
+                        m_currentContext.swapchainColorView,
+                        m_postProcessPass.compositeTextureViewHandle(),
                         inputWidth,
                         inputHeight,
                         std::max(1, request.window.getWidth()),
                         std::max(1, request.window.getHeight()),
-                        m_settings.upscale.sharpness);
-                }
-                if (!upscaled && postTex != 0) {
-                    m_postProcessPass.blitTextureToBackbuffer(postTex, request.window);
-                } else if (!upscaled) {
-                    m_postProcessPass.compositeToBackbuffer(
-                        request.window,
-                        request.frameTime,
-                        gbufferDepthTex,
-                        weatherMaskTex);
+                        m_settings.upscale.sharpness,
+                        m_debugService)) {
+                    std::abort();
                 }
             } else {
                 m_postProcessPass.compositeToBackbuffer(
+                    *m_shared.rhiDevice,
+                    m_currentContext.swapchainColorView,
+                    m_currentContext.swapchainColorFormat,
                     request.window,
                     request.frameTime,
-                    gbufferDepthTex,
-                    weatherMaskTex);
+                    m_lastFrameOutput.gbufferDepth,
+                    m_debugService);
             }
-        }
-        if (postTimerStarted) {
-            m_debugService.endGpuTimer(GpuTimerPass::Post);
         }
     }
 
@@ -517,7 +649,10 @@ const FrameOutput& RenderScene::getLastFrameOutput() const {
 
 void RenderScene::setupResources(
     ThreadPool* threadPool,
+    RhiDevice* rhiDevice,
+    RhiCommandListPool* commandListPool,
     TerrainRenderer* terrain,
+    TerrainRhiPipelineSet* terrainRhiPipelines,
     WorldRenderBuffer* worldRenderBuffer,
     DeferredRenderTargets* deferredTargets,
     GameplaySkyRenderer* sky,
@@ -532,9 +667,16 @@ void RenderScene::setupResources(
     m_terrainStreamingService.init(threadPool, worldRenderBuffer);
     m_shared.overlayRenderer = &m_overlayRenderer;
 
+    m_shared.rhiDevice = rhiDevice;
+    m_shared.commandListPool = commandListPool;
+    if (rhiDevice == nullptr || commandListPool == nullptr) std::abort();
+    m_postProcessPass.init(*m_shared.resources, *commandListPool);
+    m_fsr1Pass.init(*m_shared.resources, *commandListPool);
+    m_overlayRenderer.init(*m_shared.resources, *rhiDevice);
     m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
     m_shared.terrainStreaming = &m_terrainStreamingService;
     m_shared.terrain = terrain;
+    m_shared.terrainRhiPipelines = terrainRhiPipelines;
     m_shared.worldRenderBuffer = worldRenderBuffer;
     m_shared.meshingService = &m_terrainStreamingService.meshingService();
     m_shared.deferredTargets = deferredTargets;
@@ -564,7 +706,10 @@ bool RenderScene::isLightDebugActive() const {
 }
 
 bool RenderScene::isNewPipelineReady() const {
-    if (!m_activePipeline || !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
+    if (!m_activePipeline || !m_shared.rhiDevice ||
+        !m_shared.rhiDevice->currentSwapchainColorView().isValid() ||
+        !m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid() ||
+        !m_shared.terrain || !m_shared.sky || !m_shared.resources) {
         return false;
     }
     // Deferred pipeline requires deferredTargets; forward pipeline does not.
@@ -588,6 +733,9 @@ void RenderScene::setNewPipelineActive(bool active) {
 
 const char* RenderScene::getPipelineStatus() const {
     if (!m_activePipeline) return "No active pipeline";
+    if (!m_shared.rhiDevice) return "Missing: rhiDevice";
+    if (!m_shared.rhiDevice->currentSwapchainColorView().isValid()) return "Missing: swapchainColorView";
+    if (!m_shared.rhiDevice->currentSwapchainDepthStencilView().isValid()) return "Missing: swapchainDepthStencilView";
     if (!m_shared.terrain) return "Missing: terrain";
     if (!m_shared.sky) return "Missing: sky";
     if (!m_shared.resources) return "Missing: resources";
@@ -602,27 +750,9 @@ bool RenderScene::prepareFrameResources(const Window& window) {
         return true;
     }
 
-    GLint previousDrawFramebuffer = 0;
-    GLint previousReadFramebuffer = 0;
-    GLint previousViewport[4] = {};
-    glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &previousDrawFramebuffer);
-    glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
-    glGetIntegerv(GL_VIEWPORT, previousViewport);
-
     DeferredRenderTargets& targets = *m_shared.deferredTargets;
-    if (!targets.init()) {
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
-        glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
-        return false;
-    }
-
     const glm::ivec2 internalSize = internalRenderSize(window);
-    const bool ready = targets.ensureSize(internalSize.x, internalSize.y, m_settings.shadow.resolution);
-    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(previousDrawFramebuffer));
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previousReadFramebuffer));
-    glViewport(previousViewport[0], previousViewport[1], previousViewport[2], previousViewport[3]);
-    return ready;
+    return targets.ensureSize(internalSize.x, internalSize.y, m_settings.shadow.resolution);
 }
 
 PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
@@ -732,6 +862,15 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     const glm::ivec2 internalSize = internalRenderSize(window);
     ctx.frameWidth = internalSize.x;
     ctx.frameHeight = internalSize.y;
+    ctx.swapchainColorTexture = m_shared.rhiDevice->currentSwapchainColorTexture();
+    ctx.swapchainColorView = m_shared.rhiDevice->currentSwapchainColorView();
+    ctx.swapchainDepthStencilView = m_shared.rhiDevice->currentSwapchainDepthStencilView();
+    ctx.swapchainColorFormat = m_shared.rhiDevice->swapchainColorFormat();
+    ctx.swapchainDepthStencilFormat = m_shared.rhiDevice->swapchainDepthStencilFormat();
+    ctx.sceneCaptureColorTexture = m_postProcessPass.sceneColorTextureHandle();
+    ctx.sceneCaptureDepthTexture = m_postProcessPass.sceneDepthTextureHandle();
+    ctx.sceneCaptureColorView = m_postProcessPass.sceneColorTextureViewHandle();
+    ctx.sceneCaptureDepthView = m_postProcessPass.sceneDepthTextureViewHandle();
 
     // Frame timing
     ctx.frameIndex = m_frameCounter++;

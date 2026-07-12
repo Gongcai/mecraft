@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <glad/glad.h>
-
 namespace {
 std::array<float, 4> textColorForType(ConsoleDisplayBox::MessageType type,
                                       const ConsoleDisplayBox::RenderParams& params)
@@ -83,10 +81,11 @@ float ConsoleDisplayBox::computeLineAlpha(double ageSec, float holdSeconds, floa
 void ConsoleDisplayBox::render(double nowSec,
                                const RenderParams& params,
                                const DrawRectFn& drawRect,
+                               const SetClipRectFn& setClipRect,
                                const RenderTextFn& renderText,
                                const MeasureTextFn& measureText)
 {
-    if (!drawRect || !renderText || params.screenW <= 0 || params.screenH <= 0) {
+    if (!drawRect || !setClipRect || !renderText || params.screenW <= 0 || params.screenH <= 0) {
         return;
     }
 
@@ -106,19 +105,6 @@ void ConsoleDisplayBox::render(double nowSec,
 
     const int stackBaseY = params.inputY + params.inputBoxH + params.inputToFirstBoxGap;
 
-    GLboolean scissorWasEnabled = glIsEnabled(GL_SCISSOR_TEST);
-    GLint previousScissorBox[4] = {0, 0, params.screenW, params.screenH};
-    if (scissorWasEnabled) {
-        glGetIntegerv(GL_SCISSOR_BOX, previousScissorBox);
-    }
-
-    glDisable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(0, 0, params.screenW, params.screenH);
-
     const std::size_t visibleCount = std::min(params.visibleBoxes, m_lines.size());
     std::size_t drawnCount = 0;
     for (auto it = m_lines.rbegin(); it != m_lines.rend() && drawnCount < visibleCount; ++it) {
@@ -130,7 +116,7 @@ void ConsoleDisplayBox::render(double nowSec,
 
         const int boxY = stackBaseY + static_cast<int>(drawnCount) * (params.boxH + params.boxGap);
 
-        glScissor(0, 0, params.screenW, params.screenH);
+        setClipRect(0, 0, params.screenW, params.screenH);
         auto bgColor = params.boxColor;
         bgColor[3] *= alpha;
         drawRect(params.x, boxY, boxW, params.boxH, bgColor);
@@ -157,7 +143,7 @@ void ConsoleDisplayBox::render(double nowSec,
         const float textX = static_cast<float>(clipX + 2);
         const float textY = static_cast<float>(clipY) + (static_cast<float>(clipH) - glyphHeight) * 0.5f;
 
-        glScissor(clipX, clipY, clipW, clipH);
+        setClipRect(clipX, clipY, clipW, clipH);
         auto tintedTextColor = textColorForType(it->type, params);
         tintedTextColor[3] *= alpha;
         renderText(visibleText,
@@ -168,21 +154,7 @@ void ConsoleDisplayBox::render(double nowSec,
                    static_cast<float>(params.screenW),
                    static_cast<float>(params.screenH));
 
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         ++drawnCount;
     }
-
-    if (scissorWasEnabled) {
-        glScissor(previousScissorBox[0], previousScissorBox[1], previousScissorBox[2], previousScissorBox[3]);
-    } else {
-        glDisable(GL_SCISSOR_TEST);
-    }
-
-    glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);
+    setClipRect(0, 0, params.screenW, params.screenH);
 }
-

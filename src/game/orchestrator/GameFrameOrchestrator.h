@@ -36,7 +36,7 @@ public:
                            GameSession& session);
 
     /// Render a full frame (scene, precipitation, UI).
-    void renderFrame(GameSession& session,
+    [[nodiscard]] bool renderFrame(GameSession& session,
                      GameplayRenderRuntime& renderRuntime,
                      GameplayHudPresenter* hudPresenter,
                      Window& window,

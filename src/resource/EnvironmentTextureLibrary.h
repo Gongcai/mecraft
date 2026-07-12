@@ -5,8 +5,12 @@
 
 #include <string>
 
+class RhiDevice;
+
 class EnvironmentTextureLibrary {
 public:
+    void init(RhiDevice& rhiDevice);
+
     void loadLightmaps(const std::string& dayPath, const std::string& nightPath);
     void loadColormaps(const std::string& grassPath, const std::string& foliagePath);
 
@@ -18,9 +22,10 @@ public:
     void shutdown();
 
 private:
-    static RhiTextureHandle loadLinearTexture(const std::string& path, const char* label);
-    static void deleteTexture(RhiTextureHandle& texture);
+    RhiTextureHandle loadTexture(const std::string& path, const char* label) const;
+    void deleteTexture(RhiTextureHandle& texture) const;
 
+    RhiDevice* m_rhiDevice = nullptr;
     RhiTextureHandle m_lightmapDay;
     RhiTextureHandle m_lightmapNight;
     RhiTextureHandle m_grassColormap;

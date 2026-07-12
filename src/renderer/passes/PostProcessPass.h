@@ -3,13 +3,18 @@
 
 #include "RenderPass.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiTypes.h"
+#include <array>
 #include <cstdint>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
 class ResourceMgr;
-class Shader;
+class RhiCommandList;
+class RhiCommandListPool;
+class RhiDevice;
+class RenderDebugService;
 class Window;
 
 /// Per-frame post-process effects configuration.
@@ -69,29 +74,40 @@ class PostProcessPass : public RenderPass {
 public:
     ~PostProcessPass() override;
 
-    void init(ResourceMgr& resourceMgr) override;
+    void init(ResourceMgr& resourceMgr, RhiCommandListPool& commandListPool);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "PostProcess"; }
 
     /// Start capturing world-space rendering into an off-screen scene target.
-    void beginSceneCapture(const Window& window);
-    void beginSceneCapture(int width, int height);
+    [[nodiscard]] bool beginSceneCapture(RhiDevice& rhiDevice, int width, int height);
 
     /// Composite captured scene to back buffer with active effects.
-    void compositeToBackbuffer(const Window& window, float frameTime,
-                               uint32_t gbufDepthTex = 0,
-                               uint32_t weatherMaskTex = 0);
+    void compositeToBackbuffer(RhiDevice& rhiDevice,
+                               RhiTextureViewHandle swapchainColorView,
+                               RhiTextureFormat swapchainColorFormat,
+                               const Window& window,
+                               float frameTime,
+                               RhiTextureHandle gbufferDepthTexture,
+                               RenderDebugService& debugService);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
-    [[nodiscard]] uint32_t compositeToTexture(const Window& window, float frameTime,
-                                              uint32_t gbufDepthTex = 0,
-                                              uint32_t weatherMaskTex = 0);
+    [[nodiscard]] RhiTextureHandle compositeToTexture(RhiDevice& rhiDevice,
+                                                      const Window& window,
+                                                      float frameTime,
+                                                      RhiTextureHandle gbufferDepthTexture,
+                                                      RenderDebugService& debugService);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
-    void blitSceneCaptureToBackbuffer(const Window& window);
+    void blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice,
+                                      RhiTextureViewHandle swapchainColorView,
+                                      const Window& window,
+                                      RenderDebugService& debugService);
 
-    /// Blit an already composited LDR texture to the back buffer.
-    void blitTextureToBackbuffer(uint32_t texture, const Window& window);
+    /// Blit the internal composited LDR texture to the back buffer.
+    void blitCompositeToBackbuffer(RhiDevice& rhiDevice,
+                                   RhiTextureViewHandle swapchainColorView,
+                                   const Window& window,
+                                   RenderDebugService& debugService);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -105,31 +121,62 @@ public:
     }
     [[nodiscard]] int targetWidth() const { return m_targetWidth; }
     [[nodiscard]] int targetHeight() const { return m_targetHeight; }
+    [[nodiscard]] RhiTextureHandle sceneColorTextureHandle() const { return m_sceneColorHandle; }
+    [[nodiscard]] RhiTextureHandle sceneDepthTextureHandle() const { return m_sceneDepthHandle; }
+    [[nodiscard]] RhiTextureViewHandle sceneColorTextureViewHandle() const { return m_sceneColorView; }
+    [[nodiscard]] RhiTextureViewHandle sceneDepthTextureViewHandle() const { return m_sceneDepthView; }
+    [[nodiscard]] RhiTextureHandle compositeTextureHandle() const { return m_compositeHandle; }
+    [[nodiscard]] RhiTextureViewHandle compositeTextureViewHandle() const { return m_compositeView; }
 
 private:
     static constexpr int kBloomMipCount = 7;
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
     static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
-    static constexpr uint32_t kCompositeParamsBinding = 0;
-
-    bool ensureRenderTargets(int width, int height);
+    struct PostProcessCompositeParams;
+    [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
+    void submitCommandList(RhiDevice& rhiDevice,
+                           RhiCommandList& commandList,
+                           const char* debugName) const;
+    bool ensureRenderTargets(RhiDevice& rhiDevice, int width, int height);
+    bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
+    bool ensureRhiPipelines(RhiDevice& rhiDevice);
+    bool ensureSwapchainCompositePipeline(RhiDevice& rhiDevice,
+                                          RhiTextureFormat colorFormat);
+    bool ensureNoiseTextureView(RhiDevice& rhiDevice);
+    bool ensureGbufferDepthTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture);
+    bool rebuildTargetBindGroups();
+    bool rebuildCompositeBindGroups();
     void destroyRenderTargets();
-    void initFullscreenTriangle();
-    void destroyFullscreenTriangle();
-    float updateAutoExposure(float frameTime);
-    void initializeExposureState(float manualExposure);
+    void destroyTargetBindGroups();
+    void destroyCompositeBindGroups();
+    void destroyRhiResources();
+    bool updateAutoExposure(RhiDevice& rhiDevice,
+                            float frameTime,
+                            float& resolvedExposure,
+                            RenderDebugService& debugService);
+    bool initializeExposureState(RhiDevice& rhiDevice,
+                                 float manualExposure,
+                                 RenderDebugService& debugService);
 
     /// Apply bloom extraction and blur passes.
-    /// @return true if bloom was applied
-    bool renderBloom(int maxMipCount);
+    bool renderBloom(RhiDevice& rhiDevice,
+                     int maxMipCount,
+                     bool& bloomReady,
+                     RenderDebugService& debugService);
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
-    void renderComposite(uint32_t gbufDepthTex, uint32_t weatherMaskTex, bool bloomReady);
-    void updateCompositeParams(bool useAutoExposureTexture, bool hasBloom);
-    bool ensureCompositeTarget(int width, int height);
-    void bindCompositeOutput(int width, int height);
-    void bindBackbufferOutput(int width, int height);
+    void renderComposite(RhiCommandList& commandList,
+                         RhiPipelineHandle pipeline);
+    void updateCompositeParams(RhiCommandList& commandList, bool bloomReady);
+    [[nodiscard]] PostProcessCompositeParams buildCompositeParams(
+        bool useAutoExposureTexture, bool hasBloom) const;
+    void bindCompositeOutput(RhiCommandList& commandList, int width, int height);
+    void bindBackbufferOutput(RhiCommandList& commandList,
+                              RhiTextureViewHandle swapchainColorView,
+                              int width,
+                              int height,
+                              bool clearColor);
 
     struct alignas(16) PostProcessCompositeParams {
         glm::ivec4 flags0;
@@ -147,40 +194,68 @@ private:
     static_assert(sizeof(PostProcessCompositeParams) == 176,
                   "Post-process UBO layout must match the std140 shader block.");
 
-    Shader* m_postProcessShader = nullptr;
-    Shader* m_bloomExtractShader = nullptr;
-    Shader* m_bloomBlurShader = nullptr;
-    Shader* m_exposureDownsampleShader = nullptr;
-    Shader* m_exposureResolveShader = nullptr;
-    Shader* m_blitShader = nullptr;
+    RhiDevice* m_rhiDevice = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
     RhiTextureHandle m_noiseTexture;
+    RhiTextureHandle m_noiseViewTexture;
+    RhiTextureViewHandle m_noiseTextureView;
+    RhiTextureHandle m_gbufferDepthViewTexture;
+    RhiTextureViewHandle m_gbufferDepthTextureView;
 
-    // Scene capture FBO
-    uint32_t m_sceneFbo = 0;
-    uint32_t m_sceneColorTex = 0;
-    uint32_t m_sceneDepthTex = 0;
+    RhiBufferHandle m_compositeParamsBuffer;
+    RhiSamplerHandle m_linearClampSampler;
+    RhiSamplerHandle m_nearestClampSampler;
+    RhiSamplerHandle m_nearestRepeatSampler;
+    RhiBindGroupLayoutHandle m_singleTextureBindGroupLayout;
+    RhiBindGroupLayoutHandle m_twoTextureBindGroupLayout;
+    RhiBindGroupLayoutHandle m_compositeBindGroupLayout;
+    RhiPipelineLayoutHandle m_exposureDownsamplePipelineLayout;
+    RhiPipelineLayoutHandle m_exposureResolvePipelineLayout;
+    RhiPipelineLayoutHandle m_bloomExtractPipelineLayout;
+    RhiPipelineLayoutHandle m_bloomBlurPipelineLayout;
+    RhiPipelineLayoutHandle m_compositePipelineLayout;
+    RhiShaderHandle m_fullscreenVertexShader;
+    RhiShaderHandle m_postProcessFragmentShader;
+    RhiShaderHandle m_bloomExtractFragmentShader;
+    RhiShaderHandle m_bloomBlurFragmentShader;
+    RhiShaderHandle m_exposureDownsampleFragmentShader;
+    RhiShaderHandle m_exposureResolveFragmentShader;
+    RhiPipelineHandle m_exposureDownsamplePipeline;
+    RhiPipelineHandle m_exposureResolvePipeline;
+    RhiPipelineHandle m_bloomExtractPipeline;
+    RhiPipelineHandle m_bloomBlurPipeline;
+    RhiPipelineHandle m_compositeTexturePipeline;
+    RhiPipelineHandle m_compositeSwapchainPipeline;
+    RhiTextureFormat m_compositeSwapchainFormat = RhiTextureFormat::Undefined;
+    RhiBindGroupHandle m_bloomExtractBindGroup;
+    RhiBindGroupHandle m_bloomBlurBindGroup[kBloomMipCount][2] = {};
+    RhiBindGroupHandle m_exposureDownsampleBindGroup[kExposureMipCount] = {};
+    RhiBindGroupHandle m_exposureResolveBindGroup[2] = {};
+    RhiBindGroupHandle m_compositeBindGroup[2] = {};
 
-    uint32_t m_compositeFbo = 0;
-    uint32_t m_compositeTex = 0;
-    bool m_renderCompositeToTexture = false;
+    // Scene capture textures
+    RhiTextureHandle m_sceneColorHandle;
+    RhiTextureViewHandle m_sceneColorView;
+    RhiTextureHandle m_sceneDepthHandle;
+    RhiTextureViewHandle m_sceneDepthView;
+
+    RhiTextureHandle m_compositeHandle;
+    RhiTextureViewHandle m_compositeView;
 
     // Bloom chain
-    uint32_t m_bloomFbos[kBloomMipCount][2] = {};
-    uint32_t m_bloomTex[kBloomMipCount][2] = {};
+    RhiTextureHandle m_bloomHandle[kBloomMipCount][2] = {};
+    RhiTextureViewHandle m_bloomView[kBloomMipCount][2] = {};
     glm::ivec2 m_bloomMipSize[kBloomMipCount] = {};
 
     // Auto-exposure downsample chain
-    uint32_t m_exposureFbos[kExposureMipCount] = {};
-    uint32_t m_exposureTex[kExposureMipCount] = {};
+    RhiTextureHandle m_exposureHandle[kExposureMipCount] = {};
+    RhiTextureViewHandle m_exposureView[kExposureMipCount] = {};
     glm::ivec2 m_exposureMipSize[kExposureMipCount] = {};
     int m_exposureMipCount = 0;
-    uint32_t m_exposureStateFbos[2] = {};
-    uint32_t m_exposureStateTex[2] = {};
+    RhiTextureHandle m_exposureStateHandle[2] = {};
+    RhiTextureViewHandle m_exposureStateView[2] = {};
     int m_exposureStateReadIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
-
-    uint32_t m_fullscreenVao = 0;
-    uint32_t m_compositeParamsBuffer = 0;
 
     int m_targetWidth = 0;
     int m_targetHeight = 0;

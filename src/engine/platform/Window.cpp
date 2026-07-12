@@ -2,7 +2,6 @@
 
 #include "../../Diagnostics.h"
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 
@@ -13,27 +12,9 @@ void glfwErrorCallback(int error, const char* description) {
                                  << (description != nullptr ? description : "unknown") << "\n");
 }
 
-void APIENTRY openGlDebugMessageCallback(GLenum source,
-                                         GLenum type,
-                                         GLuint id,
-                                         GLenum severity,
-                                         GLsizei length,
-                                         const GLchar* message,
-                                         const void* userParam) {
-    (void)source;
-    (void)id;
-    (void)length;
-    (void)userParam;
-    if (severity == GL_DEBUG_SEVERITY_NOTIFICATION || type == GL_DEBUG_TYPE_PERFORMANCE) {
-        return;
-    }
-    MECRAFT_LOG_STREAM(std::cerr << "OpenGL debug: " << (message != nullptr ? message : "") << "\n");
-}
-
 } // namespace
 
-bool Window::init(int width, int height, const char *title, bool enableGlDebugOutput) {
-    (void)enableGlDebugOutput;
+bool Window::initializePlatform() {
     glfwSetErrorCallback(glfwErrorCallback);
     if (!glfwInit()) {
         const char* description = nullptr;
@@ -46,9 +27,15 @@ bool Window::init(int width, int height, const char *title, bool enableGlDebugOu
         MECRAFT_LOG_STREAM(std::cerr << "\n");
         return false;
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    m_platformInitialized = true;
+    return true;
+}
+
+bool Window::create(const int width, const int height, const char* title) {
+    if (!m_platformInitialized || m_window != nullptr) {
+        MECRAFT_LOG_STREAM(std::cerr << "Window creation requires an initialized platform and no existing window\n");
+        return false;
+    }
     m_window = glfwCreateWindow(width, height, title, NULL, NULL);
     if (m_window == NULL) {
         const char* description = nullptr;
@@ -59,42 +46,13 @@ bool Window::init(int width, int height, const char *title, bool enableGlDebugOu
                                          << (description != nullptr ? description : "unknown") << ")");
         }
         MECRAFT_LOG_STREAM(std::cerr << "\n");
-        MECRAFT_LOG_STREAM(std::cerr << "Mecraft requires a GPU/driver with OpenGL 4.5 core profile support.\n");
-        glfwTerminate();
         return false;
     }
-    glfwMakeContextCurrent(m_window);
-    glfwSetFramebufferSizeCallback(m_window, framebufferSizeCallback);
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        return false;
-    }
-    const auto* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
-    const auto* glslVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
-    MECRAFT_LOG_STREAM(std::cout << "OpenGL: " << (glVersion != nullptr ? glVersion : "unknown") << "\n");
-    MECRAFT_LOG_STREAM(std::cout << "GLSL: " << (glslVersion != nullptr ? glslVersion : "unknown") << "\n");
-    MECRAFT_LOG_STREAM(std::cout << "GLAD OpenGL 4.5: " << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << "\n");
-    if (!GLAD_GL_VERSION_4_5) {
-        MECRAFT_LOG_STREAM(std::cerr << "OpenGL 4.5 core is required for the hybrid deferred renderer.\n");
-        glfwDestroyWindow(m_window);
-        m_window = nullptr;
-        glfwTerminate();
-        return false;
-    }
-#ifdef MECRAFT_DEBUG
-    if (enableGlDebugOutput && GLAD_GL_VERSION_4_3) {
-        glEnable(GL_DEBUG_OUTPUT);
-        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        glDebugMessageCallback(openGlDebugMessageCallback, nullptr);
-        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
-        glDebugMessageControl(GL_DONT_CARE, GL_DEBUG_TYPE_PERFORMANCE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
-    }
-#endif
     int framebufferWidth = width;
     int framebufferHeight = height;
     glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
     m_width = framebufferWidth > 0 ? framebufferWidth : width;
     m_height = framebufferHeight > 0 ? framebufferHeight : height;
-    glfwSwapInterval(0);
     return true;
 }
 
@@ -106,17 +64,16 @@ void Window::destroy() {
 
     m_width =0;
     m_height =0;
-    glfwTerminate();
+    if (m_platformInitialized) {
+        glfwTerminate();
+        m_platformInitialized = false;
+    }
 }
 
 
 
 bool Window::shouldClose() const {
     return glfwWindowShouldClose(m_window);
-}
-
-void Window::swapBuffers() const {
-    glfwSwapBuffers(m_window);
 }
 
 void Window::pollEvents() {
@@ -155,9 +112,4 @@ void Window::setTitle(const std::string &title) const {
 
 GLFWwindow * Window::getHandle() const {
     return m_window;
-}
-
-void Window::framebufferSizeCallback(GLFWwindow *w, int width, int height) {
-    (void) w;
-    glViewport(0, 0, width, height);
 }

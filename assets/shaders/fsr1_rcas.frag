@@ -4,11 +4,14 @@
 #define A_GLSL 1
 #include "ffx-fsr/ffx_a.h"
 
-in vec2 vTexCoord;
-out vec4 FragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 FragColor;
 
-uniform sampler2D uInputTex;
-uniform vec4 uCon;
+layout(binding = 0) uniform sampler2D uInputTex;
+
+layout(push_constant) uniform RhiPushConstants {
+    vec4 uCon;
+};
 
 #define FSR_RCAS_F 1
 AF4 FsrRcasLoadF(ASU2 p) {

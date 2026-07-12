@@ -5,18 +5,19 @@
 #include "ResourceMgr.h"
 #include "BlockTextureLibrary.h"
 #include "CubemapLibrary.h"
-#include "DefaultShaderCatalog.h"
 #include "EntityTexturePreloader.h"
 #include "EnvironmentTextureLibrary.h"
 #include "Paths.h"
-#include "ShaderLibrary.h"
 #include "Texture2DLibrary.h"
 #include "UiTextureAtlasLibrary.h"
+#include "renderer/rhi/RhiDevice.h"
 
+#include <cassert>
 #include <memory>
 
 struct ResourceMgr::Impl {
-    ShaderLibrary shaders;
+    RhiDevice* rhiDevice = nullptr;
+    RhiCommandListPool* commandListPool = nullptr;
     Texture2DLibrary texture2D;
     BlockTextureLibrary blockTextures;
     UiTextureAtlasLibrary uiTextures;
@@ -35,9 +36,14 @@ ResourceMgr::ResourceMgr(ResourceMgr&&) noexcept = default;
 
 ResourceMgr& ResourceMgr::operator=(ResourceMgr&&) noexcept = default;
 
-void ResourceMgr::init() {
-    resource::loadDefaultShaders(m_impl->shaders);
-
+void ResourceMgr::init(RhiDevice& rhiDevice, RhiCommandListPool& commandListPool) {
+    m_impl->rhiDevice = &rhiDevice;
+    m_impl->commandListPool = &commandListPool;
+    m_impl->texture2D.init(rhiDevice);
+    m_impl->cubemaps.init(rhiDevice);
+    m_impl->environmentTextures.init(rhiDevice);
+    m_impl->blockTextures.init(rhiDevice, commandListPool);
+    m_impl->uiTextures.init(rhiDevice, commandListPool);
     loadCubemap("menu_skybox",
                 SKYBOX_TEXTURES_DIR "/right.png",
                 SKYBOX_TEXTURES_DIR "/left.png",
@@ -57,24 +63,30 @@ void ResourceMgr::shutdown() {
 
     m_impl->cubemaps.shutdown();
 
-    m_impl->shaders.clear();
+    m_impl->rhiDevice = nullptr;
+    m_impl->commandListPool = nullptr;
 }
 
-Shader *ResourceMgr::loadShader(const std::string &name, const char *vertPath, const char *fragPath) {
-    return m_impl->shaders.load(name, vertPath, fragPath);
+RhiDevice& ResourceMgr::rhiDevice() {
+    assert(m_impl->rhiDevice != nullptr);
+    return *m_impl->rhiDevice;
 }
 
-Shader *ResourceMgr::getShader(const std::string &name) {
-    return m_impl->shaders.get(name);
+const RhiDevice& ResourceMgr::rhiDevice() const {
+    assert(m_impl->rhiDevice != nullptr);
+    return *m_impl->rhiDevice;
+}
+
+RhiCommandListPool& ResourceMgr::commandListPool() {
+    assert(m_impl->commandListPool != nullptr);
+    return *m_impl->commandListPool;
 }
 
 RhiTextureHandle ResourceMgr::loadTexture2D(const std::string& name,
                                             const std::string& path,
                                             const bool srgb,
-                                            const bool repeat,
-                                            const bool linear,
                                             const bool flipVertically) {
-    return m_impl->texture2D.load(name, path, srgb, repeat, linear, flipVertically);
+    return m_impl->texture2D.load(name, path, srgb, flipVertically);
 }
 
 RhiTextureHandle ResourceMgr::getTexture2DHandle(const std::string& name) const {
