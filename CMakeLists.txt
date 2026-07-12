@@ -601,10 +601,22 @@ mecraft_apply_msvc_defaults(mecraft_third_party)
 # ===========================================================================
 # 5. 构建核心库
 # ===========================================================================
+if(MECRAFT_RHI_BACKEND_OPENGL)
+    add_library(mecraft_rhi_gl_loader OBJECT third_party/glad/glad.c)
+    set_target_properties(mecraft_rhi_gl_loader PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(mecraft_rhi_gl_loader SYSTEM PRIVATE third_party)
+    if(MSVC)
+        target_compile_options(mecraft_rhi_gl_loader PRIVATE /W0)
+    else()
+        target_compile_options(mecraft_rhi_gl_loader PRIVATE -w)
+    endif()
+    mecraft_apply_msvc_defaults(mecraft_rhi_gl_loader)
+endif()
+
 add_library(mecraft_core ${CORE_SOURCES})
 target_compile_features(mecraft_core PUBLIC cxx_std_17)
 if(MECRAFT_RHI_BACKEND_OPENGL)
-    target_sources(mecraft_core PRIVATE third_party/glad/glad.c)
+    target_sources(mecraft_core PRIVATE $<TARGET_OBJECTS:mecraft_rhi_gl_loader>)
 endif()
 set_target_properties(mecraft_core PROPERTIES
         WINDOWS_EXPORT_ALL_SYMBOLS ON
