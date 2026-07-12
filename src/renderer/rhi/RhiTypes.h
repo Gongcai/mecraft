@@ -60,6 +60,7 @@ struct RhiDeviceDesc {
     int width = 1;
     int height = 1;
     bool enableDebugMarkers = false;
+    bool enableDebugOutput = false;
 };
 
 struct RhiCapabilities {

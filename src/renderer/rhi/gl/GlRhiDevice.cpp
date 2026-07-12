@@ -1,5 +1,6 @@
 #include "renderer/rhi/gl/GlRhiDevice.h"
 
+#include "Diagnostics.h"
 #include "renderer/rhi/RhiHandleAllocator.h"
 #include "renderer/rhi/gl/GlRhiShaderCompiler.h"
 
@@ -21,6 +22,24 @@
 
 namespace {
 std::atomic<uint64_t> g_nextRhiDeviceId{1u};
+
+void APIENTRY openGlDebugMessageCallback(const GLenum source,
+                                         const GLenum type,
+                                         const GLuint id,
+                                         const GLenum severity,
+                                         const GLsizei length,
+                                         const GLchar* message,
+                                         const void* userParam) {
+    (void)source;
+    (void)id;
+    (void)length;
+    (void)userParam;
+    if (severity == GL_DEBUG_SEVERITY_NOTIFICATION || type == GL_DEBUG_TYPE_PERFORMANCE) {
+        return;
+    }
+    MECRAFT_LOG_STREAM(std::cerr << "OpenGL debug: "
+                                 << (message != nullptr ? message : "") << '\n');
+}
 
 struct GlFormatInfo {
     GLenum internalFormat = GL_RGBA8;
@@ -4205,11 +4224,19 @@ GlRhiDevice::~GlRhiDevice() {
     }
 }
 
-bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
-    if (!GLAD_GL_VERSION_4_5) {
-        logRhiError("OpenGL 4.5 is required");
+bool GlRhiDevice::prepareWindowCreation() {
+    if (m_initialized) {
+        logRhiError("window creation must be prepared before device initialization");
         return false;
     }
+    glfwDefaultWindowHints();
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    return true;
+}
+
+bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     if (desc.width <= 0 || desc.height <= 0) {
         logRhiError("init received invalid swapchain dimensions");
         return false;
@@ -4218,6 +4245,40 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
         logRhiError("init requires a native window for swapchain presentation");
         return false;
     }
+    m_data->nativeWindow = static_cast<GLFWwindow*>(desc.nativeWindow);
+    glfwMakeContextCurrent(m_data->nativeWindow);
+    if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
+        logRhiError("failed to load OpenGL entry points");
+        m_data->nativeWindow = nullptr;
+        return false;
+    }
+    const auto* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    const auto* glslVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+    MECRAFT_LOG_STREAM(std::cout << "OpenGL: "
+                                 << (glVersion != nullptr ? glVersion : "unknown") << '\n');
+    MECRAFT_LOG_STREAM(std::cout << "GLSL: "
+                                 << (glslVersion != nullptr ? glslVersion : "unknown") << '\n');
+    MECRAFT_LOG_STREAM(std::cout << "GLAD OpenGL 4.5: "
+                                 << (GLAD_GL_VERSION_4_5 ? "yes" : "no") << '\n');
+    if (!GLAD_GL_VERSION_4_5) {
+        logRhiError("OpenGL 4.5 core profile is required");
+        m_data->nativeWindow = nullptr;
+        return false;
+    }
+#ifdef MECRAFT_DEBUG
+    if (desc.enableDebugOutput && GLAD_GL_VERSION_4_3) {
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+        glDebugMessageCallback(openGlDebugMessageCallback, nullptr);
+        glDebugMessageControl(
+            GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
+        glDebugMessageControl(
+            GL_DONT_CARE, GL_DEBUG_TYPE_PERFORMANCE, GL_DONT_CARE, 0, nullptr, GL_FALSE);
+    }
+#else
+    (void)desc.enableDebugOutput;
+#endif
+    glfwSwapInterval(0);
     {
         std::lock_guard<std::mutex> poolRegistryLock(m_commandPoolRegistry->mutex);
         m_commandPoolRegistry->device = this;
@@ -4264,7 +4325,6 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
 
     m_data->swapchainWidth = static_cast<uint32_t>(desc.width);
     m_data->swapchainHeight = static_cast<uint32_t>(desc.height);
-    m_data->nativeWindow = static_cast<GLFWwindow*>(desc.nativeWindow);
     m_data->swapchainFormat = RhiTextureFormat::Rgba8Unorm;
     m_data->swapchainDepthStencilFormat = RhiTextureFormat::Depth24;
 
@@ -4437,6 +4497,7 @@ void GlRhiDevice::shutdown() {
     m_data->swapchainColorTexture = {};
     m_data->swapchainWidth = 1u;
     m_data->swapchainHeight = 1u;
+    m_data->nativeWindow = nullptr;
     m_data->bindGroups.clear();
     for (GlQueryPoolRecord& record : m_data->queryPoolRecords) {
         if (record.active && !record.queries.empty()) {

@@ -209,6 +209,7 @@ public:
     GlRhiDevice();
     ~GlRhiDevice() override;
 
+    bool prepareWindowCreation() override;
     bool init(const RhiDeviceDesc& desc) override;
     void shutdown() override;
 

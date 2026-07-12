@@ -16,6 +16,7 @@ class RhiDevice {
 public:
     virtual ~RhiDevice() = default;
 
+    virtual bool prepareWindowCreation() = 0;
     virtual bool init(const RhiDeviceDesc& desc) = 0;
     virtual void shutdown() = 0;
 

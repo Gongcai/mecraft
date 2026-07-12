@@ -182,6 +182,7 @@ private:
 
 class RecordingDevice final : public RhiDevice {
 public:
+    bool prepareWindowCreation() override { return true; }
     bool init(const RhiDeviceDesc&) override { return true; }
     void shutdown() override {}
 

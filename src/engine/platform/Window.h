@@ -12,7 +12,8 @@ struct GLFWwindow;
 
 class Window {
 public:
-    bool init(int width, int height, const char* title, bool enableGlDebugOutput);
+    bool initializePlatform();
+    bool create(int width, int height, const char* title);
     void destroy();
 
     [[nodiscard]] bool shouldClose() const;
@@ -27,6 +28,7 @@ public:
 
 private:
     GLFWwindow* m_window = nullptr;
+    bool m_platformInitialized = false;
     int m_width{}, m_height{};
 };
 

@@ -42,7 +42,13 @@ GameManager::~GameManager() = default;
 
 bool GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
     m_launchOptions = std::move(launchOptions);
+    m_rhiDevice = renderer::rhi::createDefaultRhiDevice();
+    if (!m_rhiDevice) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to create app RHI device\n");
+        return false;
+    }
     if (!initWindow(width, height, title)) {
+        m_rhiDevice.reset();
         return false;
     }
     if (!initRhiDevice()) {
@@ -84,17 +90,12 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
 }
 
 bool GameManager::initRhiDevice() {
-    m_rhiDevice = renderer::rhi::createDefaultRhiDevice();
-    if (!m_rhiDevice) {
-        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to create app RHI device\n");
-        return false;
-    }
-
     RhiDeviceDesc desc;
     desc.debugName = "AppRenderer";
     desc.nativeWindow = m_window.getHandle();
     desc.width = m_window.getWidth();
     desc.height = m_window.getHeight();
+    desc.enableDebugOutput = m_launchOptions.enableGlDebugOutput;
     if (!m_rhiDevice->init(desc)) {
         MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to initialize app RHI device\n");
         m_rhiDevice.reset();
@@ -114,7 +115,15 @@ bool GameManager::initRhiDevice() {
 }
 
 bool GameManager::initWindow(int width, int height, const char* title) {
-    if (!m_window.init(width, height, title, m_launchOptions.enableGlDebugOutput)) {
+    if (!m_window.initializePlatform()) {
+        MECRAFT_LOG_STREAM(std::cerr << "Error while initializing the window platform." << std::endl);
+        return false;
+    }
+    if (!m_rhiDevice->prepareWindowCreation()) {
+        MECRAFT_LOG_STREAM(std::cerr << "RHI backend failed to prepare native window creation." << std::endl);
+        return false;
+    }
+    if (!m_window.create(width, height, title)) {
         MECRAFT_LOG_STREAM(std::cerr << "Error while initializing the window." << std::endl);
         return false;
     }
@@ -405,4 +414,5 @@ void GameManager::shutdown() {
     net::ENetTransport::deinitialize();
     m_threadPool.shutdown();
     m_input.shutdownInputReplay();
+    m_window.destroy();
 }
