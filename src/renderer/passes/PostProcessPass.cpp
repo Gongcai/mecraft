@@ -158,7 +158,6 @@ void beginPostProcessColorOutput(RhiCommandList& commandList,
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
-    renderingInfo.coordinateSpace = RhiRenderingCoordinateSpace::Texture;
     commandList.beginRendering(renderingInfo);
 }
 } // namespace
