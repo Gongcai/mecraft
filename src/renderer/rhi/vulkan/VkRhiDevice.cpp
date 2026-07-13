@@ -203,9 +203,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
     });
 }
 
-[[nodiscard]] bool supportsLinearBlit(const VkPhysicalDevice physicalDevice,
-                                      const VkFormat format,
-                                      const VkFormatFeatureFlags2 requiredFeatures) {
+[[nodiscard]] bool supportsFormatFeatures(const VkPhysicalDevice physicalDevice,
+                                          const VkFormat format,
+                                          const VkFormatFeatureFlags2 requiredFeatures) {
     VkFormatProperties3 properties3{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_3};
     VkFormatProperties2 properties2{VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2, &properties3};
     vkGetPhysicalDeviceFormatProperties2(physicalDevice, format, &properties2);
@@ -3174,12 +3174,19 @@ void VkRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
                                                      : VK_FORMAT_UNDEFINED;
     const VkFormat destinationFormat = destination != nullptr
         ? toVkFormat(destination->desc.format) : VK_FORMAT_UNDEFINED;
+    const VkImageAspectFlags sourceAspect = source != nullptr
+        ? defaultAspectForFormat(source->desc.format) : 0u;
+    const VkImageAspectFlags destinationAspect = destination != nullptr
+        ? defaultAspectForFormat(destination->desc.format) : 0u;
+    const bool colorBlit = (sourceAspect & VK_IMAGE_ASPECT_COLOR_BIT) != 0u;
+    const VkFormatFeatureFlags2 sourceFeatures = VK_FORMAT_FEATURE_2_BLIT_SRC_BIT |
+        (colorBlit ? VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT : 0u);
     if (source == nullptr || destination == nullptr ||
-        !supportsLinearBlit(m_device->m_data->physicalDevice, sourceFormat,
-                            VK_FORMAT_FEATURE_2_BLIT_SRC_BIT |
-                            VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT) ||
-        !supportsLinearBlit(m_device->m_data->physicalDevice, destinationFormat,
-                            VK_FORMAT_FEATURE_2_BLIT_DST_BIT)) {
+        sourceAspect != destinationAspect ||
+        !supportsFormatFeatures(m_device->m_data->physicalDevice, sourceFormat,
+                                sourceFeatures) ||
+        !supportsFormatFeatures(m_device->m_data->physicalDevice, destinationFormat,
+                                VK_FORMAT_FEATURE_2_BLIT_DST_BIT)) {
         m_data->valid = false;
         return;
     }
@@ -3192,7 +3199,7 @@ void VkRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
                             static_cast<int32_t>(std::max(destination->desc.height >> blit.dstMipLevel, 1u)), 1};
     vkCmdBlitImage(m_data->commandBuffer, source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                    destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                   1u, &region, VK_FILTER_LINEAR);
+                   1u, &region, colorBlit ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);
     m_data->resourceReferences.reference(sourceHandle);
     m_data->resourceReferences.reference(destinationHandle);
     m_data->resourceReferences.reference(blit.srcView);
@@ -3203,11 +3210,11 @@ void VkRhiCommandList::generateMipmaps(const RhiTextureHandle textureHandle) {
     const auto* texture = findRecord(m_device->m_data->textures, textureHandle);
     if (texture == nullptr || texture->desc.mipLevels < 2u ||
         (defaultAspectForFormat(texture->desc.format) & VK_IMAGE_ASPECT_COLOR_BIT) == 0u ||
-        !supportsLinearBlit(m_device->m_data->physicalDevice,
-                            toVkFormat(texture->desc.format),
-                            VK_FORMAT_FEATURE_2_BLIT_SRC_BIT |
-                            VK_FORMAT_FEATURE_2_BLIT_DST_BIT |
-                            VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
+        !supportsFormatFeatures(m_device->m_data->physicalDevice,
+                                toVkFormat(texture->desc.format),
+                                VK_FORMAT_FEATURE_2_BLIT_SRC_BIT |
+                                VK_FORMAT_FEATURE_2_BLIT_DST_BIT |
+                                VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
         m_data->valid = false;
         return;
     }
