@@ -1891,11 +1891,25 @@ RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
                 vkFreeDescriptorSets(m_data->device, m_data->descriptorPool, 1u, &set);
                 return {};
             }
+            VkImageLayout imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
+                imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+            } else if (view != nullptr) {
+                const auto* texture = findRecord(m_data->textures, view->desc.texture);
+                if (texture == nullptr) {
+                    vkFreeDescriptorSets(m_data->device, m_data->descriptorPool, 1u, &set);
+                    return {};
+                }
+                const RhiTextureFormat viewFormat = view->desc.format == RhiTextureFormat::Undefined
+                    ? texture->desc.format
+                    : view->desc.format;
+                imageLayout = (defaultAspectForFormat(viewFormat) & VK_IMAGE_ASPECT_DEPTH_BIT) != 0u
+                    ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+                    : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
             imageInfos.push_back({sampler != nullptr ? sampler->sampler : VK_NULL_HANDLE,
                                   view != nullptr ? view->view : VK_NULL_HANDLE,
-                                  type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
-                                      ? VK_IMAGE_LAYOUT_GENERAL
-                                      : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+                                  imageLayout});
             write.pImageInfo = &imageInfos.back();
         }
         writes.push_back(write);
