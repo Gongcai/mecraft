@@ -40,9 +40,7 @@ bool blitBlurTargetToSwapchain(RhiDevice& rhiDevice,
                                const RhiTextureHandle source,
                                const int width,
                                const int height) {
-    if (!source.isValid() ||
-        !rhiDevice.resizeSwapchain(static_cast<uint32_t>(std::max(1, width)),
-                                   static_cast<uint32_t>(std::max(1, height)))) {
+    if (!source.isValid() || width <= 0 || height <= 0) {
         return false;
     }
 
