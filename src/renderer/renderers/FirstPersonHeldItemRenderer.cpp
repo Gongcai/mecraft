@@ -39,6 +39,21 @@ struct FaceUvRect {
     float v1 = 0.0f;
 };
 
+void setHeldBlockVertexInputLayout(RhiGraphicsPipelineDesc& pipelineDesc) {
+    pipelineDesc.vertexInput.bindings.push_back({
+        0u,
+        static_cast<uint32_t>(sizeof(BlockVertex)),
+        RhiVertexInputRate::Vertex
+    });
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, static_cast<uint32_t>(offsetof(BlockVertex, x))},
+        {1u, 0u, RhiVertexFormat::Float2, static_cast<uint32_t>(offsetof(BlockVertex, u))},
+        {5u, 0u, RhiVertexFormat::Uint8, static_cast<uint32_t>(offsetof(BlockVertex, ao))},
+        {6u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, layer))},
+        {10u, 0u, RhiVertexFormat::Uint16, static_cast<uint32_t>(offsetof(BlockVertex, tintPacked))}
+    };
+}
+
 bool isTorchShape(const BlockDef& def) {
     return def.renderShapeName == "torch";
 }
@@ -695,7 +710,7 @@ void FirstPersonHeldItemRenderer::createBlockRhiResources() {
     pipelineDesc.vertexShader = m_blockVertexShader;
     pipelineDesc.fragmentShader = m_blockFragmentShader;
     pipelineDesc.layout = m_blockPipelineLayout;
-    renderer::setBlockVertexInputLayout(pipelineDesc);
+    setHeldBlockVertexInputLayout(pipelineDesc);
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Always;
     pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
