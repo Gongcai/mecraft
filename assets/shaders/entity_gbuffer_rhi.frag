@@ -11,10 +11,9 @@ layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec2 vVelocity;
 layout(binding = 0) uniform sampler2D uTexture;
 layout(push_constant) uniform RhiPushConstants {
-    mat4 uViewProj;
-    mat4 uPreviousViewProj;
+    mat4 uModelViewProj;
+    mat4 uPreviousModelViewProj;
     mat4 uModel;
-    mat4 uPreviousModel;
     vec4 uLightHurt;
 };
 void main() {

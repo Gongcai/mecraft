@@ -529,7 +529,7 @@ void HumanoidRenderer::createGBufferRhiResources() {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "Humanoid.GBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_gbufferRhiBindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 4u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 3u + sizeof(glm::vec4);
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
                                             rhiFlag(RhiShaderStage::Fragment);
     m_gbufferRhiPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
@@ -638,16 +638,17 @@ void HumanoidRenderer::renderPreparedToGBuffer(RhiCommandList& commandList,
                                                const glm::mat4& viewProj,
                                                const glm::mat4& previousViewProj) {
     struct PushConstants {
-        glm::mat4 viewProj;
-        glm::mat4 previousViewProj;
+        glm::mat4 modelViewProj;
+        glm::mat4 previousModelViewProj;
         glm::mat4 model;
-        glm::mat4 previousModel;
         glm::vec4 lightHurt;
     };
     commandList.setGraphicsPipeline(m_gbufferRhiPipeline);
     for (const PreparedPartDraw& draw : m_preparedPartDraws) {
         const PushConstants pushConstants{
-            viewProj, previousViewProj, draw.model, draw.previousModel,
+            viewProj * draw.model,
+            previousViewProj * draw.previousModel,
+            draw.model,
             glm::vec4(draw.light, draw.hurtFlash, 0.0f)
         };
         commandList.setBindGroup(0u, draw.texture->gbufferBindGroup);
