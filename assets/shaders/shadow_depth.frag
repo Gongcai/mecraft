@@ -54,8 +54,10 @@ vec3 redstoneTintSrgb(vec2 tintUV) {
 // layout 0 = shadowcolor0: RGB = albedo color (for colored shadows / caustics),
 //                           A = 0.0 for transparent casters (water/glass), 1.0 for opaque
 // layout 1 = shadowcolor1: RG = encoded normal, B = skylight, A = height/aux
+#ifndef RHI_TERRAIN_SHADOW_DEPTH_ONLY
 layout(location = 0) out vec4 ShadowColor;
 layout(location = 1) out vec4 ShadowNormal;
+#endif
 
 const int MATERIAL_WATER = 17;
 const int MATERIAL_STAINED_GLASS = 16;
@@ -150,6 +152,7 @@ void main() {
         }
         // Transparent pass: write water depth + caustics data
         // (DerivativeMain shadowtex0/shadowcolor0/shadowcolor1 for water)
+#ifndef RHI_TERRAIN_SHADOW_DEPTH_ONLY
         vec3 waveNormal = getWaterWaveNormal(vWorldPos.xz - vWorldPos.y);
         float caustics = waterCausticStrength(waveNormal);
         // shadowcolor0: RGB = water caustic/tint, A = 0.0 (transparent marker)
@@ -157,6 +160,7 @@ void main() {
         // shadowcolor1: RG = encoded normal, B = skylight, A = water height
         // DerivativeMain: shadowcolor1.w = surfaceY / 512 + 0.25
         ShadowNormal = vec4(encodeNormal(waveNormal), vSkylight, vWorldPos.y / 512.0 + 0.25);
+#endif
     } else {
         if (uShadowPassMode != 0 && vMaterialKind != MATERIAL_STAINED_GLASS) {
             discard;
@@ -224,6 +228,7 @@ void main() {
             // Transparent pass: stained glass writes colored shadow
             shadowAlpha = 0.0; // marks as transparent caster
         }
+#ifndef RHI_TERRAIN_SHADOW_DEPTH_ONLY
         // All other non-water materials (including cutout like leaves/grass) cast hard shadows.
         ShadowColor = vec4(shadowColor, shadowAlpha);
 
@@ -232,5 +237,6 @@ void main() {
             worldNormal = vec3(0.0, 1.0, 0.0);
         }
         ShadowNormal = vec4(encodeNormal(worldNormal), vSkylight, 1.0);
+#endif
     }
 }

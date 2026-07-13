@@ -192,7 +192,8 @@ private:
     RhiBindGroupLayoutHandle m_shadowMaterialLayout;
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
     RhiShaderHandle m_shadowVertexShader;
-    RhiShaderHandle m_shadowFragmentShader;
+    RhiShaderHandle m_shadowDepthFragmentShader;
+    RhiShaderHandle m_shadowColorFragmentShader;
     RhiPipelineHandle m_shadowOpaquePipeline;
     RhiPipelineHandle m_shadowCutoutPipeline;
     RhiPipelineHandle m_shadowTransparentPipeline;

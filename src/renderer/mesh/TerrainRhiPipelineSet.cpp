@@ -1676,13 +1676,19 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
 
     renderer::rhi::RhiShaderSourceOptions sourceOptions;
     sourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SHADOW_MDI");
+    renderer::rhi::RhiShaderSourceOptions depthSourceOptions = sourceOptions;
+    depthSourceOptions.preprocessorDefinitions.push_back("RHI_TERRAIN_SHADOW_DEPTH_ONLY");
     const std::optional<std::string> vertexSource = renderer::rhi::loadShaderSource(
         "assets/shaders/shadow_depth.vert",
         sourceOptions);
-    const std::optional<std::string> fragmentSource = renderer::rhi::loadShaderSource(
+    const std::optional<std::string> depthFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/shadow_depth.frag",
+        depthSourceOptions);
+    const std::optional<std::string> colorFragmentSource = renderer::rhi::loadShaderSource(
         "assets/shaders/shadow_depth.frag",
         sourceOptions);
-    if (!vertexSource.has_value() || !fragmentSource.has_value()) {
+    if (!vertexSource.has_value() || !depthFragmentSource.has_value() ||
+        !colorFragmentSource.has_value()) {
         destroyShadowResources();
         return false;
     }
@@ -1695,12 +1701,17 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
     m_shadowVertexShader = m_rhiDevice->createShader(vertexDesc);
 
     RhiShaderDesc fragmentDesc;
-    fragmentDesc.debugName = "Terrain.Shadow.Fragment";
+    fragmentDesc.debugName = "Terrain.Shadow.DepthFragment";
     fragmentDesc.stage = RhiShaderStage::Fragment;
-    fragmentDesc.source = fragmentSource->c_str();
-    fragmentDesc.sourceSize = fragmentSource->size();
-    m_shadowFragmentShader = m_rhiDevice->createShader(fragmentDesc);
-    if (!m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid()) {
+    fragmentDesc.source = depthFragmentSource->c_str();
+    fragmentDesc.sourceSize = depthFragmentSource->size();
+    m_shadowDepthFragmentShader = m_rhiDevice->createShader(fragmentDesc);
+    fragmentDesc.debugName = "Terrain.Shadow.ColorFragment";
+    fragmentDesc.source = colorFragmentSource->c_str();
+    fragmentDesc.sourceSize = colorFragmentSource->size();
+    m_shadowColorFragmentShader = m_rhiDevice->createShader(fragmentDesc);
+    if (!m_shadowVertexShader.isValid() || !m_shadowDepthFragmentShader.isValid() ||
+        !m_shadowColorFragmentShader.isValid()) {
         destroyShadowResources();
         return false;
     }
@@ -1789,7 +1800,7 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
 
     RhiGraphicsPipelineDesc pipelineDesc;
     pipelineDesc.vertexShader = m_shadowVertexShader;
-    pipelineDesc.fragmentShader = m_shadowFragmentShader;
+    pipelineDesc.fragmentShader = m_shadowDepthFragmentShader;
     pipelineDesc.layout = m_shadowPipelineLayout;
     setPackedTerrainVertexInput(pipelineDesc);
     pipelineDesc.depthStencil.depthTestEnabled = true;
@@ -1814,6 +1825,7 @@ bool TerrainRhiPipelineSet::ensureShadowPipeline(ResourceMgr& resourceMgr) {
         RhiTextureFormat::Rgba8Unorm,
         RhiTextureFormat::Rgba16Float
     };
+    pipelineDesc.fragmentShader = m_shadowColorFragmentShader;
     pipelineDesc.debugName = "Terrain.Shadow.TransparentPipeline";
     m_shadowTransparentPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_shadowOpaquePipeline.isValid() || !m_shadowCutoutPipeline.isValid() ||
@@ -1937,7 +1949,8 @@ void TerrainRhiPipelineSet::destroyShadowResources() {
         if (m_shadowPipelineLayout.isValid()) m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
         if (m_shadowMaterialLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowMaterialLayout);
         if (m_shadowMetadataLayout.isValid()) m_rhiDevice->destroyBindGroupLayout(m_shadowMetadataLayout);
-        if (m_shadowFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowFragmentShader);
+        if (m_shadowColorFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowColorFragmentShader);
+        if (m_shadowDepthFragmentShader.isValid()) m_rhiDevice->destroyShader(m_shadowDepthFragmentShader);
         if (m_shadowVertexShader.isValid()) m_rhiDevice->destroyShader(m_shadowVertexShader);
         if (m_shadowParamsBuffer.isValid()) m_rhiDevice->destroyBuffer(m_shadowParamsBuffer);
         if (m_shadowBlockSampler.isValid()) m_rhiDevice->destroySampler(m_shadowBlockSampler);
@@ -1950,7 +1963,8 @@ void TerrainRhiPipelineSet::destroyShadowResources() {
     m_shadowPipelineLayout = {};
     m_shadowMaterialLayout = {};
     m_shadowMetadataLayout = {};
-    m_shadowFragmentShader = {};
+    m_shadowColorFragmentShader = {};
+    m_shadowDepthFragmentShader = {};
     m_shadowVertexShader = {};
     m_shadowParamsBuffer = {};
     m_shadowBlockSampler = {};
