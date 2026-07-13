@@ -206,6 +206,12 @@ int main() {
         glfwTerminate();
         return 1;
     }
+    if (device.swapchainColorFormat() != RhiTextureFormat::Bgra8Unorm) {
+        device.shutdown();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
     constexpr uint32_t textureWidth = 256u;
     constexpr uint32_t textureHeight = 128u;
     constexpr uint32_t textureDepth = 33u;

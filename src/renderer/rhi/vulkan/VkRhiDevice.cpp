@@ -506,11 +506,11 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
     }
     formats.resize(formatCount);
     const auto formatIt = std::find_if(formats.begin(), formats.end(), [](const auto& format) {
-        return format.format == VK_FORMAT_B8G8R8A8_SRGB &&
+        return format.format == VK_FORMAT_B8G8R8A8_UNORM &&
                format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     });
     if (formatIt == formats.end()) {
-        std::cerr << "VkRhiDevice: the surface does not expose the required SDR sRGB format\n";
+        std::cerr << "VkRhiDevice: the surface does not expose the required SDR presentation format\n";
         return false;
     }
 
@@ -609,7 +609,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
         const RhiTextureHandle textureHandle = data.textureHandles.allocate();
         RhiTextureDesc textureDesc{};
         textureDesc.debugName = "Vulkan swapchain image";
-        textureDesc.format = RhiTextureFormat::Bgra8Srgb;
+        textureDesc.format = RhiTextureFormat::Bgra8Unorm;
         textureDesc.width = extent.width;
         textureDesc.height = extent.height;
         textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
@@ -636,7 +636,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
         const RhiTextureViewHandle viewHandle = data.textureViewHandles.allocate();
         RhiTextureViewDesc rhiViewDesc{};
         rhiViewDesc.texture = textureHandle;
-        rhiViewDesc.format = RhiTextureFormat::Bgra8Srgb;
+        rhiViewDesc.format = RhiTextureFormat::Bgra8Unorm;
         data.textureViews.emplace(handleKey(viewHandle),
                                   VkRhiDeviceData::TextureView{view, rhiViewDesc});
         data.swapchainViews.push_back(viewHandle);
