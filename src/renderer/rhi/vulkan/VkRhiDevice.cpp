@@ -3313,11 +3313,22 @@ void VkRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
     }
     VkImageBlit region{};
     region.srcSubresource = {defaultAspectForFormat(source->desc.format), blit.srcMipLevel, 0u, 1u};
-    region.srcOffsets[1] = {static_cast<int32_t>(std::max(source->desc.width >> blit.srcMipLevel, 1u)),
-                            static_cast<int32_t>(std::max(source->desc.height >> blit.srcMipLevel, 1u)), 1};
+    const int32_t sourceWidth = static_cast<int32_t>(
+        std::max(source->desc.width >> blit.srcMipLevel, 1u));
+    const int32_t sourceHeight = static_cast<int32_t>(
+        std::max(source->desc.height >> blit.srcMipLevel, 1u));
+    region.srcOffsets[1] = {sourceWidth, sourceHeight, 1};
     region.dstSubresource = {defaultAspectForFormat(destination->desc.format), blit.dstMipLevel, 0u, 1u};
-    region.dstOffsets[1] = {static_cast<int32_t>(std::max(destination->desc.width >> blit.dstMipLevel, 1u)),
-                            static_cast<int32_t>(std::max(destination->desc.height >> blit.dstMipLevel, 1u)), 1};
+    const int32_t destinationWidth = static_cast<int32_t>(
+        std::max(destination->desc.width >> blit.dstMipLevel, 1u));
+    const int32_t destinationHeight = static_cast<int32_t>(
+        std::max(destination->desc.height >> blit.dstMipLevel, 1u));
+    if (source->swapchainAttachment != destination->swapchainAttachment) {
+        region.dstOffsets[0] = {0, destinationHeight, 0};
+        region.dstOffsets[1] = {destinationWidth, 0, 1};
+    } else {
+        region.dstOffsets[1] = {destinationWidth, destinationHeight, 1};
+    }
     vkCmdBlitImage(m_data->commandBuffer, source->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                    destination->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                    1u, &region, colorBlit ? VK_FILTER_LINEAR : VK_FILTER_NEAREST);

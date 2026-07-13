@@ -198,7 +198,8 @@ void main() {
 }
 
 [[nodiscard]] bool validateOffscreenCoordinateContract(VkRhiDevice& device,
-                                                       RhiCommandListPool& commandPool) {
+                                                       RhiCommandListPool& commandPool,
+                                                       GLFWwindow* window) {
     constexpr uint32_t kWidth = 4u;
     constexpr uint32_t kHeight = 4u;
     constexpr uint32_t kRenderY = 1u;
@@ -361,15 +362,149 @@ void main() {
         isRed(pixels + static_cast<size_t>(kRenderY) * kBytesPerRow) &&
         isBlue(pixels + static_cast<size_t>(kRenderY + kRenderHeight - 1u) * kBytesPerRow);
     device.unmapBuffer(readback);
+    if (!orientationCorrect) {
+        return false;
+    }
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+    glfwGetFramebufferSize(window, &framebufferWidth, &framebufferHeight);
+    if (framebufferWidth <= 0 || framebufferHeight <= 0 ||
+        !device.resizeSwapchain(static_cast<uint32_t>(framebufferWidth),
+                                static_cast<uint32_t>(framebufferHeight))) {
+        return false;
+    }
+    const RhiFrameAcquireResult frame = device.acquireFrame();
+    if (frame.status != RhiFrameStatus::Success &&
+        frame.status != RhiFrameStatus::Suboptimal) {
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc presentationPipelineDesc = pipelineDesc;
+    presentationPipelineDesc.debugName = "VulkanSmoke.PresentationOrientation.Pipeline";
+    presentationPipelineDesc.colorFormats.clear();
+    presentationPipelineDesc.colorFormats.push_back(device.swapchainColorFormat());
+    const RhiPipelineHandle presentationPipeline =
+        device.createGraphicsPipeline(presentationPipelineDesc);
+    if (!presentationPipeline.isValid()) {
+        return false;
+    }
+
+    RhiCommandList* presentationCommands = commandPool.acquire(RhiCommandListType::Graphics);
+    if (presentationCommands == nullptr ||
+        !presentationCommands->begin({"VulkanSmoke.PresentationOrientation.Commands",
+                                      RhiCommandListType::Graphics})) {
+        return false;
+    }
+    presentationCommands->bufferBarrier({readback, RhiResourceState::HostRead,
+                                         RhiResourceState::TransferDst});
+    presentationCommands->textureBarrier({texture, RhiResourceState::TransferSrc,
+                                           RhiResourceState::RenderTarget});
+    renderingInfo.renderArea = {0, 0, kWidth, kHeight};
+    presentationCommands->beginRendering(renderingInfo);
+    presentationCommands->setGraphicsPipeline(pipeline);
+    presentationCommands->draw(3u, 1u, 0u, 0u);
+    presentationCommands->endRendering();
+    presentationCommands->textureBarrier({texture, RhiResourceState::RenderTarget,
+                                           RhiResourceState::TransferSrc});
+
+    presentationCommands->textureBarrier({frame.colorTexture, RhiResourceState::Present,
+                                           RhiResourceState::RenderTarget});
+    RhiColorAttachment presentationAttachment;
+    presentationAttachment.view = frame.colorView;
+    presentationAttachment.loadOp = RhiLoadOp::Clear;
+    presentationAttachment.storeOp = RhiStoreOp::Store;
+    RhiRenderingInfo presentationRendering;
+    presentationRendering.debugName = "VulkanSmoke.PresentationOrientation.Rendering";
+    presentationRendering.renderArea = {0, 0, frame.width, frame.height};
+    presentationRendering.colorAttachments = &presentationAttachment;
+    presentationRendering.colorAttachmentCount = 1u;
+    presentationRendering.coordinateSpace = RhiRenderingCoordinateSpace::Texture;
+    presentationCommands->beginRendering(presentationRendering);
+    presentationCommands->setGraphicsPipeline(presentationPipeline);
+    presentationCommands->draw(3u, 1u, 0u, 0u);
+    presentationCommands->endRendering();
+    presentationCommands->textureBarrier({frame.colorTexture, RhiResourceState::RenderTarget,
+                                           RhiResourceState::TransferSrc});
+
+    RhiTextureBufferCopy presentationCopy;
+    presentationCopy.srcTexture = frame.colorTexture;
+    presentationCopy.dstBuffer = readback;
+    presentationCopy.bytesPerRow = kBytesPerPixel;
+    presentationCopy.rowsPerImage = 1u;
+    presentationCopy.srcX = frame.width / 2u;
+    presentationCopy.width = 1u;
+    presentationCopy.height = 1u;
+    presentationCopy.bufferOffset = 0u;
+    presentationCopy.srcY = 0u;
+    presentationCommands->copyTextureToBuffer(presentationCopy);
+    presentationCopy.bufferOffset = kBytesPerPixel;
+    presentationCopy.srcY = frame.height - 1u;
+    presentationCommands->copyTextureToBuffer(presentationCopy);
+
+    presentationCommands->textureBarrier({frame.colorTexture, RhiResourceState::TransferSrc,
+                                           RhiResourceState::TransferDst});
+    RhiTextureBlit presentationBlit;
+    presentationBlit.src = texture;
+    presentationBlit.dstView = frame.colorView;
+    presentationCommands->blitTexture(presentationBlit);
+    presentationCommands->textureBarrier({frame.colorTexture, RhiResourceState::TransferDst,
+                                           RhiResourceState::TransferSrc});
+    presentationCopy.bufferOffset = kBytesPerPixel * 2u;
+    presentationCopy.srcY = 0u;
+    presentationCommands->copyTextureToBuffer(presentationCopy);
+    presentationCopy.bufferOffset = kBytesPerPixel * 3u;
+    presentationCopy.srcY = frame.height - 1u;
+    presentationCommands->copyTextureToBuffer(presentationCopy);
+    presentationCommands->bufferBarrier({readback, RhiResourceState::TransferDst,
+                                         RhiResourceState::HostRead});
+    presentationCommands->textureBarrier({frame.colorTexture, RhiResourceState::TransferSrc,
+                                           RhiResourceState::Present});
+    if (!presentationCommands->end()) {
+        return false;
+    }
+    RhiCommandList* presentationSubmissions[] = {presentationCommands};
+    RhiSubmissionToken presentationToken;
+    if (!device.submit({"VulkanSmoke.PresentationOrientation.Submit",
+                        presentationSubmissions, 1u},
+                       &presentationToken)) {
+        return false;
+    }
+    const RhiFrameStatus presentStatus = device.presentFrame(
+        {frame.frameIndex, frame.imageIndex});
+    if ((presentStatus != RhiFrameStatus::Success &&
+         presentStatus != RhiFrameStatus::Suboptimal) ||
+        !device.waitForSubmission(presentationToken)) {
+        return false;
+    }
+
+    const auto* presentationPixels = static_cast<const uint8_t*>(
+        device.mapBuffer(readback, 0u, kBytesPerPixel * 4u));
+    if (presentationPixels == nullptr) {
+        return false;
+    }
+    const auto isBgraRed = [](const uint8_t* pixel) {
+        return pixel[0] <= 5u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
+    };
+    const auto isBgraBlue = [](const uint8_t* pixel) {
+        return pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
+    };
+    const bool presentationCorrect =
+        isBgraRed(presentationPixels) &&
+        isBgraBlue(presentationPixels + kBytesPerPixel) &&
+        isBgraBlue(presentationPixels + kBytesPerPixel * 2u) &&
+        isBgraRed(presentationPixels + kBytesPerPixel * 3u);
+    device.unmapBuffer(readback);
 
     device.destroyBuffer(readback);
+    device.destroyPipeline(presentationPipeline);
     device.destroyPipeline(pipeline);
     device.destroyPipelineLayout(layout);
     device.destroyShader(fragmentShader);
     device.destroyShader(vertexShader);
     device.destroyTextureView(view);
     device.destroyTexture(texture);
-    return orientationCorrect;
+    return presentationCorrect;
 }
 
 } // namespace
@@ -461,7 +596,7 @@ int main() {
     std::unique_ptr<RhiCommandListPool> commandPool = device.createCommandListPool(
         {"VulkanSmoke.CommandPool", 4u, 64u * 1024u});
     if (commandPool == nullptr ||
-        !validateOffscreenCoordinateContract(device, *commandPool) ||
+        !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||
         !renderStableFrame(device, *commandPool, window) ||
