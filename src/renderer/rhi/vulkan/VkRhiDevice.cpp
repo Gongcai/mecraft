@@ -308,6 +308,22 @@ void enqueueDeferred(DeferredQueue& queue, DeferredItem item) {
            allExist(references.queryPools, data.queryPools);
 }
 
+[[nodiscard]] VkRect2D toVkClippedScissor(const RhiRect2D& rect,
+                                          const uint32_t targetWidth,
+                                          const uint32_t targetHeight) {
+    const int64_t minX = std::clamp<int64_t>(rect.x, 0, targetWidth);
+    const int64_t minY = std::clamp<int64_t>(rect.y, 0, targetHeight);
+    const int64_t maxX = std::clamp<int64_t>(
+        static_cast<int64_t>(rect.x) + rect.width, minX, targetWidth);
+    const int64_t maxY = std::clamp<int64_t>(
+        static_cast<int64_t>(rect.y) + rect.height, minY, targetHeight);
+    return {
+        {static_cast<int32_t>(minX),
+         static_cast<int32_t>(targetHeight - static_cast<uint32_t>(maxY))},
+        {static_cast<uint32_t>(maxX - minX), static_cast<uint32_t>(maxY - minY)}
+    };
+}
+
 void markResourceReferencesUsed(VkRhiDeviceData& data,
                                 const VkRhiCommandResourceReferences& references,
                                 const uint64_t sequence) {
@@ -2808,11 +2824,30 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         m_data->valid = false;
         return;
     }
+    uint32_t targetWidth = 0u;
+    uint32_t targetHeight = 0u;
+    const auto registerAttachmentExtent = [&](const RhiTextureViewHandle viewHandle) {
+        const auto* view = findRecord(m_device->m_data->textureViews, viewHandle);
+        const auto* texture = view != nullptr
+            ? findRecord(m_device->m_data->textures, view->desc.texture)
+            : nullptr;
+        if (view == nullptr || texture == nullptr) {
+            return false;
+        }
+        const uint32_t width = std::max(texture->desc.width >> view->desc.baseMip, 1u);
+        const uint32_t height = std::max(texture->desc.height >> view->desc.baseMip, 1u);
+        if (targetWidth == 0u && targetHeight == 0u) {
+            targetWidth = width;
+            targetHeight = height;
+            return true;
+        }
+        return targetWidth == width && targetHeight == height;
+    };
     std::vector<VkRenderingAttachmentInfo> colors;
     colors.reserve(info.colorAttachmentCount);
     for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
         const auto* view = findRecord(m_device->m_data->textureViews, info.colorAttachments[i].view);
-        if (view == nullptr) {
+        if (view == nullptr || !registerAttachmentExtent(info.colorAttachments[i].view)) {
             m_data->valid = false;
             return;
         }
@@ -2830,7 +2865,7 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     if (info.depthStencilAttachment != nullptr) {
         const auto* view = findRecord(m_device->m_data->textureViews,
                                       info.depthStencilAttachment->view);
-        if (view == nullptr) {
+        if (view == nullptr || !registerAttachmentExtent(info.depthStencilAttachment->view)) {
             m_data->valid = false;
             return;
         }
@@ -2842,8 +2877,17 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
                                          info.depthStencilAttachment->clearStencil};
         m_data->resourceReferences.reference(info.depthStencilAttachment->view);
     }
+    if (targetWidth == 0u || targetHeight == 0u || info.renderArea.x < 0 ||
+        info.renderArea.y < 0 ||
+        static_cast<uint64_t>(info.renderArea.x) + info.renderArea.width > targetWidth ||
+        static_cast<uint64_t>(info.renderArea.y) + info.renderArea.height > targetHeight) {
+        m_data->valid = false;
+        return;
+    }
+    const int32_t nativeRenderAreaY = static_cast<int32_t>(targetHeight) -
+        info.renderArea.y - static_cast<int32_t>(info.renderArea.height);
     VkRenderingInfo native{VK_STRUCTURE_TYPE_RENDERING_INFO};
-    native.renderArea = {{info.renderArea.x, info.renderArea.y},
+    native.renderArea = {{info.renderArea.x, nativeRenderAreaY},
                          {info.renderArea.width, info.renderArea.height}};
     native.layerCount = 1u;
     native.colorAttachmentCount = static_cast<uint32_t>(colors.size());
@@ -2851,16 +2895,18 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     native.pDepthAttachment = info.depthStencilAttachment != nullptr ? &depth : nullptr;
     native.pStencilAttachment = nullptr;
     const VkViewport viewport{static_cast<float>(info.renderArea.x),
-                              static_cast<float>(info.renderArea.y +
-                                                 static_cast<int32_t>(info.renderArea.height)),
+                              static_cast<float>(static_cast<int32_t>(targetHeight) -
+                                                 info.renderArea.y),
                               static_cast<float>(info.renderArea.width),
                               -static_cast<float>(info.renderArea.height), 0.0f, 1.0f};
-    const VkRect2D scissor{{info.renderArea.x, info.renderArea.y},
+    const VkRect2D scissor{{info.renderArea.x, nativeRenderAreaY},
                            {info.renderArea.width, info.renderArea.height}};
     vkCmdSetViewport(m_data->commandBuffer, 0u, 1u, &viewport);
     vkCmdSetScissor(m_data->commandBuffer, 0u, 1u, &scissor);
     vkCmdBeginRendering(m_data->commandBuffer, &native);
     m_data->rendering = true;
+    m_data->renderingTargetWidth = targetWidth;
+    m_data->renderingTargetHeight = targetHeight;
 }
 
 void VkRhiCommandList::endRendering() {
@@ -2870,6 +2916,8 @@ void VkRhiCommandList::endRendering() {
     }
     vkCmdEndRendering(m_data->commandBuffer);
     m_data->rendering = false;
+    m_data->renderingTargetWidth = 0u;
+    m_data->renderingTargetHeight = 0u;
 }
 
 void VkRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& rect) {
@@ -2880,24 +2928,35 @@ void VkRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& 
     VkClearAttachment attachment{};
     attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     attachment.clearValue.depthStencil.depth = depth;
-    VkClearRect clearRect{{{rect.x, rect.y}, {rect.width, rect.height}}, 0u, 1u};
+    const VkRect2D nativeRect = toVkClippedScissor(
+        rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight);
+    VkClearRect clearRect{nativeRect, 0u, 1u};
     vkCmdClearAttachments(m_data->commandBuffer, 1u, &attachment, 1u, &clearRect);
 }
 
 void VkRhiCommandList::setViewport(const RhiViewport& viewport) {
-    if (m_data->state != RhiCommandListState::Recording || viewport.width <= 0.0f ||
-        viewport.height <= 0.0f) {
+    if (m_data->state != RhiCommandListState::Recording || !m_data->rendering ||
+        viewport.x < 0.0f || viewport.y < 0.0f || viewport.width <= 0.0f ||
+        viewport.height <= 0.0f ||
+        viewport.x + viewport.width > static_cast<float>(m_data->renderingTargetWidth) ||
+        viewport.y + viewport.height > static_cast<float>(m_data->renderingTargetHeight)) {
         m_data->valid = false;
         return;
     }
-    const VkViewport native{viewport.x, viewport.y + viewport.height,
+    const VkViewport native{viewport.x,
+                            static_cast<float>(m_data->renderingTargetHeight) - viewport.y,
                             viewport.width, -viewport.height,
                             viewport.minDepth, viewport.maxDepth};
     vkCmdSetViewport(m_data->commandBuffer, 0u, 1u, &native);
 }
 
 void VkRhiCommandList::setScissor(const RhiRect2D& rect) {
-    const VkRect2D native{{rect.x, rect.y}, {rect.width, rect.height}};
+    if (!m_data->rendering) {
+        m_data->valid = false;
+        return;
+    }
+    const VkRect2D native = toVkClippedScissor(
+        rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight);
     vkCmdSetScissor(m_data->commandBuffer, 0u, 1u, &native);
 }
 

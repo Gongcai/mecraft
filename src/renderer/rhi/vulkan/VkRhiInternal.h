@@ -180,6 +180,8 @@ struct VkRhiCommandListData {
     RhiPipelineLayoutHandle pipelineLayoutHandle{};
     uint64_t pendingSequence = 0u;
     bool rendering = false;
+    uint32_t renderingTargetWidth = 0u;
+    uint32_t renderingTargetHeight = 0u;
     bool valid = true;
     std::vector<std::pair<VkBuffer, VmaAllocation>> transientBuffers;
     std::vector<uint32_t> initializedSwapchainImages;
