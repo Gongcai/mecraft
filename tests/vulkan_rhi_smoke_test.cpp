@@ -200,6 +200,181 @@ void main() {
     return true;
 }
 
+[[nodiscard]] bool validateOffscreenCoordinateContract(VkRhiDevice& device,
+                                                       RhiCommandListPool& commandPool) {
+    constexpr uint32_t kWidth = 4u;
+    constexpr uint32_t kHeight = 4u;
+    constexpr uint32_t kRenderY = 1u;
+    constexpr uint32_t kRenderHeight = 2u;
+    constexpr uint32_t kBytesPerPixel = 4u;
+    constexpr uint32_t kBytesPerRow = kWidth * kBytesPerPixel;
+    constexpr uint32_t kReadbackSize = kBytesPerRow * kHeight;
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "VulkanSmoke.OffscreenOrientation";
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = kWidth;
+    textureDesc.height = kHeight;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
+                        rhiFlag(RhiTextureUsage::TransferSrc);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+    if (!texture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = textureDesc.format;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+    if (!view.isValid()) {
+        return false;
+    }
+
+    constexpr char kVertexSource[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec2 vTexCoord;
+void main() {
+    const vec2 positions[3] = vec2[](
+        vec2(-1.0, -1.0),
+        vec2( 3.0, -1.0),
+        vec2(-1.0,  3.0)
+    );
+    vec2 position = positions[gl_VertexIndex];
+    vTexCoord = position * 0.5 + 0.5;
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+)glsl";
+    constexpr char kFragmentSource[] = R"glsl(
+#version 450 core
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) out vec4 outColor;
+void main() {
+    outColor = vTexCoord.y < 0.5
+        ? vec4(1.0, 0.0, 0.0, 1.0)
+        : vec4(0.0, 0.0, 1.0, 1.0);
+}
+)glsl";
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "VulkanSmoke.OffscreenOrientation.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = kVertexSource;
+    shaderDesc.sourceSize = sizeof(kVertexSource) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(shaderDesc);
+    shaderDesc.debugName = "VulkanSmoke.OffscreenOrientation.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = kFragmentSource;
+    shaderDesc.sourceSize = sizeof(kFragmentSource) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(shaderDesc);
+    if (!vertexShader.isValid() || !fragmentShader.isValid()) {
+        return false;
+    }
+
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "VulkanSmoke.OffscreenOrientation.Layout";
+    const RhiPipelineLayoutHandle layout = device.createPipelineLayout(layoutDesc);
+    if (!layout.isValid()) {
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "VulkanSmoke.OffscreenOrientation.Pipeline";
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = layout;
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
+    pipelineDesc.raster.frontFace = RhiFrontFace::CounterClockwise;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(textureDesc.format);
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    if (!pipeline.isValid()) {
+        return false;
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.OffscreenOrientation.Readback";
+    readbackDesc.size = kReadbackSize;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    const RhiBufferHandle readback = device.createBuffer(readbackDesc, nullptr, 0u);
+    if (!readback.isValid()) {
+        return false;
+    }
+
+    RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+    if (commands == nullptr ||
+        !commands->begin({"VulkanSmoke.OffscreenOrientation.Commands",
+                          RhiCommandListType::Graphics})) {
+        return false;
+    }
+    commands->textureBarrier({texture, RhiResourceState::Undefined,
+                              RhiResourceState::RenderTarget});
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = view;
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "VulkanSmoke.OffscreenOrientation.Rendering";
+    renderingInfo.renderArea = {0, static_cast<int32_t>(kRenderY), kWidth, kRenderHeight};
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+    commands->beginRendering(renderingInfo);
+    commands->setGraphicsPipeline(pipeline);
+    commands->draw(3u, 1u, 0u, 0u);
+    commands->endRendering();
+    commands->textureBarrier({texture, RhiResourceState::RenderTarget,
+                              RhiResourceState::TransferSrc});
+    RhiTextureBufferCopy copy;
+    copy.srcTexture = texture;
+    copy.dstBuffer = readback;
+    copy.bytesPerRow = kBytesPerRow;
+    copy.rowsPerImage = kHeight;
+    copy.width = kWidth;
+    copy.height = kHeight;
+    commands->copyTextureToBuffer(copy);
+    commands->bufferBarrier({readback, RhiResourceState::TransferDst,
+                             RhiResourceState::HostRead});
+    if (!commands->end()) {
+        return false;
+    }
+    RhiCommandList* submissions[] = {commands};
+    RhiSubmissionToken token;
+    if (!device.submit({"VulkanSmoke.OffscreenOrientation.Submit", submissions, 1u},
+                       &token) ||
+        !device.waitForSubmission(token)) {
+        return false;
+    }
+
+    const auto* pixels = static_cast<const uint8_t*>(
+        device.mapBuffer(readback, 0u, kReadbackSize));
+    if (pixels == nullptr) {
+        return false;
+    }
+    const auto isRed = [](const uint8_t* pixel) {
+        return pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
+    };
+    const auto isBlue = [](const uint8_t* pixel) {
+        return pixel[0] <= 5u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
+    };
+    const bool orientationCorrect =
+        isRed(pixels + static_cast<size_t>(kRenderY) * kBytesPerRow) &&
+        isBlue(pixels + static_cast<size_t>(kRenderY + kRenderHeight - 1u) * kBytesPerRow);
+    device.unmapBuffer(readback);
+
+    device.destroyBuffer(readback);
+    device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(layout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    device.destroyTextureView(view);
+    device.destroyTexture(texture);
+    return orientationCorrect;
+}
+
 } // namespace
 
 int main() {
@@ -289,6 +464,7 @@ int main() {
     std::unique_ptr<RhiCommandListPool> commandPool = device.createCommandListPool(
         {"VulkanSmoke.CommandPool", 4u, 64u * 1024u});
     if (commandPool == nullptr ||
+        !validateOffscreenCoordinateContract(device, *commandPool) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||
         !renderStableFrame(device, *commandPool, window) ||

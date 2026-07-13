@@ -149,6 +149,16 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         : VK_FRONT_FACE_CLOCKWISE;
 }
 
+[[nodiscard]] VkFrontFace toVkRenderingFrontFace(const VkFrontFace frontFace,
+                                                 const bool renderingToSwapchain) {
+    if (renderingToSwapchain) {
+        return frontFace;
+    }
+    return frontFace == VK_FRONT_FACE_COUNTER_CLOCKWISE
+        ? VK_FRONT_FACE_CLOCKWISE
+        : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+}
+
 [[nodiscard]] VkFilter toVkFilter(const RhiFilter filter) {
     return filter == RhiFilter::Nearest ? VK_FILTER_NEAREST : VK_FILTER_LINEAR;
 }
@@ -1045,8 +1055,10 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         }
         VkPhysicalDeviceDepthClipControlFeaturesEXT depthClip{
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT};
+        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicState{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT, &depthClip};
         VkPhysicalDeviceVulkan13Features features13{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &extendedDynamicState};
         VkPhysicalDeviceVulkan12Features features12{
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &features13};
         VkPhysicalDeviceVulkan11Features features11{
@@ -1057,6 +1069,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         if (features2.features.samplerAnisotropy != VK_TRUE ||
             features11.shaderDrawParameters != VK_TRUE ||
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
+            extendedDynamicState.extendedDynamicState != VK_TRUE ||
             features12.timelineSemaphore != VK_TRUE ||
             features12.bufferDeviceAddress != VK_TRUE ||
             depthClip.depthClipControl != VK_TRUE) {
@@ -1096,8 +1109,11 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkPhysicalDeviceDepthClipControlFeaturesEXT depthClip{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT};
     depthClip.depthClipControl = VK_TRUE;
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicState{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT, &depthClip};
+    extendedDynamicState.extendedDynamicState = VK_TRUE;
     VkPhysicalDeviceVulkan13Features features13{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &extendedDynamicState};
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
     VkPhysicalDeviceVulkan12Features features12{
@@ -1801,8 +1817,9 @@ RhiPipelineHandle VkRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
         VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
     blend.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
     blend.pAttachments = blendAttachments.data();
-    const std::array<VkDynamicState, 2u> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
-                                                       VK_DYNAMIC_STATE_SCISSOR};
+    const std::array<VkDynamicState, 3u> dynamicStates{VK_DYNAMIC_STATE_VIEWPORT,
+                                                       VK_DYNAMIC_STATE_SCISSOR,
+                                                       VK_DYNAMIC_STATE_FRONT_FACE};
     VkPipelineDynamicStateCreateInfo dynamic{
         VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
     dynamic.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
@@ -1840,7 +1857,8 @@ RhiPipelineHandle VkRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
     m_data->pipelines.emplace(handleKey(handle),
                               VkRhiDeviceData::Pipeline{pipeline,
                                                        VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                                       desc.layout});
+                                                       desc.layout,
+                                                       toVkFrontFace(desc.raster.frontFace)});
     nameObject(*m_data, VK_OBJECT_TYPE_PIPELINE, reinterpret_cast<uint64_t>(pipeline),
                desc.debugName);
     return handle;
@@ -2693,9 +2711,11 @@ void VkRhiCommandList::resetForPoolReuse() {
     m_data->bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     m_data->pipelineLayout = VK_NULL_HANDLE;
     m_data->pipelineLayoutHandle = {};
+    m_data->graphicsFrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     m_data->pendingSequence = 0u;
     m_data->rendering = false;
     m_data->renderingToSwapchain = false;
+    m_data->graphicsPipelineBound = false;
     m_data->renderingTargetWidth = 0u;
     m_data->renderingTargetHeight = 0u;
     m_data->valid = true;
@@ -2935,11 +2955,14 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     native.pStencilAttachment = nullptr;
     const float nativeViewportY = targetIsSwapchain
         ? static_cast<float>(static_cast<int32_t>(targetHeight) - info.renderArea.y)
-        : static_cast<float>(info.renderArea.y + static_cast<int32_t>(info.renderArea.height));
+        : static_cast<float>(info.renderArea.y);
+    const float nativeViewportHeight = targetIsSwapchain
+        ? -static_cast<float>(info.renderArea.height)
+        : static_cast<float>(info.renderArea.height);
     const VkViewport viewport{static_cast<float>(info.renderArea.x),
                               nativeViewportY,
                               static_cast<float>(info.renderArea.width),
-                              -static_cast<float>(info.renderArea.height), 0.0f, 1.0f};
+                              nativeViewportHeight, 0.0f, 1.0f};
     const VkRect2D scissor{{info.renderArea.x, nativeRenderAreaY},
                            {info.renderArea.width, info.renderArea.height}};
     vkCmdSetViewport(m_data->commandBuffer, 0u, 1u, &viewport);
@@ -2947,6 +2970,11 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     vkCmdBeginRendering(m_data->commandBuffer, &native);
     m_data->rendering = true;
     m_data->renderingToSwapchain = targetIsSwapchain;
+    if (m_data->graphicsPipelineBound) {
+        vkCmdSetFrontFace(
+            m_data->commandBuffer,
+            toVkRenderingFrontFace(m_data->graphicsFrontFace, targetIsSwapchain));
+    }
     m_data->renderingTargetWidth = targetWidth;
     m_data->renderingTargetHeight = targetHeight;
 }
@@ -2989,9 +3017,12 @@ void VkRhiCommandList::setViewport(const RhiViewport& viewport) {
     }
     const float nativeY = m_data->renderingToSwapchain
         ? static_cast<float>(m_data->renderingTargetHeight) - viewport.y
-        : viewport.y + viewport.height;
+        : viewport.y;
+    const float nativeHeight = m_data->renderingToSwapchain
+        ? -viewport.height
+        : viewport.height;
     const VkViewport native{viewport.x, nativeY,
-                            viewport.width, -viewport.height,
+                            viewport.width, nativeHeight,
                             viewport.minDepth, viewport.maxDepth};
     vkCmdSetViewport(m_data->commandBuffer, 0u, 1u, &native);
 }
@@ -3022,6 +3053,13 @@ void VkRhiCommandList::setGraphicsPipeline(const RhiPipelineHandle pipeline) {
     m_data->bindPoint = record->bindPoint;
     m_data->pipelineLayout = layout->layout;
     m_data->pipelineLayoutHandle = record->layoutHandle;
+    m_data->graphicsFrontFace = record->frontFace;
+    m_data->graphicsPipelineBound = true;
+    if (m_data->rendering) {
+        vkCmdSetFrontFace(
+            m_data->commandBuffer,
+            toVkRenderingFrontFace(record->frontFace, m_data->renderingToSwapchain));
+    }
     m_data->resourceReferences.reference(pipeline);
 }
 

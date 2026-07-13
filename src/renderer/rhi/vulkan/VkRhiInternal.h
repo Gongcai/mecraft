@@ -92,7 +92,13 @@ struct VkRhiDeviceData {
     struct Shader { VkShaderModule module = VK_NULL_HANDLE; RhiShaderStage stage = RhiShaderStage::Vertex; std::string entryPoint; renderer::rhi::RhiShaderReflection reflection; VkRhiResourceLifetime lifetime{}; };
     struct BindGroupLayout { VkDescriptorSetLayout layout = VK_NULL_HANDLE; RhiBindGroupLayoutDesc desc{}; VkRhiResourceLifetime lifetime{}; };
     struct PipelineLayout { VkPipelineLayout layout = VK_NULL_HANDLE; RhiPipelineLayoutDesc desc{}; VkRhiResourceLifetime lifetime{}; };
-    struct Pipeline { VkPipeline pipeline = VK_NULL_HANDLE; VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS; RhiPipelineLayoutHandle layoutHandle{}; VkRhiResourceLifetime lifetime{}; };
+    struct Pipeline {
+        VkPipeline pipeline = VK_NULL_HANDLE;
+        VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        RhiPipelineLayoutHandle layoutHandle{};
+        VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        VkRhiResourceLifetime lifetime{};
+    };
     struct BindGroup { VkDescriptorSet set = VK_NULL_HANDLE; RhiBindGroupLayoutHandle layoutHandle{}; RhiBindGroupDesc desc{}; VkRhiResourceLifetime lifetime{}; };
     struct QueryPool { VkQueryPool pool = VK_NULL_HANDLE; uint32_t count = 0u; VkRhiResourceLifetime lifetime{}; };
     struct FrameContext { VkSemaphore imageAvailable = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; bool fencePending = false; };
@@ -185,9 +191,11 @@ struct VkRhiCommandListData {
     VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     RhiPipelineLayoutHandle pipelineLayoutHandle{};
+    VkFrontFace graphicsFrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     uint64_t pendingSequence = 0u;
     bool rendering = false;
     bool renderingToSwapchain = false;
+    bool graphicsPipelineBound = false;
     uint32_t renderingTargetWidth = 0u;
     uint32_t renderingTargetHeight = 0u;
     bool valid = true;
