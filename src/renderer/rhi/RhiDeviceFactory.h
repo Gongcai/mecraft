@@ -9,6 +9,7 @@ class RhiDevice;
 
 namespace renderer::rhi {
 
+[[nodiscard]] RhiBackend defaultRhiBackend();
 [[nodiscard]] std::unique_ptr<RhiDevice> createRhiDevice(RhiBackend backend);
 [[nodiscard]] std::unique_ptr<RhiDevice> createDefaultRhiDevice();
 

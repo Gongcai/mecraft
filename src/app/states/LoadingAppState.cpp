@@ -16,15 +16,10 @@ namespace {
 
 bool beginLoadingPass(RhiDevice& rhiDevice,
                       RhiCommandListPool& commandListPool,
-                      const Window& window,
+                      const uint32_t width,
+                      const uint32_t height,
                       UIRenderer& uiRenderer,
                       RhiCommandList*& commandList) {
-    const int width = std::max(1, window.getWidth());
-    const int height = std::max(1, window.getHeight());
-    if (!rhiDevice.resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
-        return false;
-    }
-
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
     if (!colorView.isValid()) {
         return false;
@@ -44,8 +39,8 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
     renderingInfo.renderArea = {
         0,
         0,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height)
+        width,
+        height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -159,20 +154,48 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
 
 void LoadingAppState::render(const double frameTime) {
     (void)frameTime;
+    const uint32_t width = static_cast<uint32_t>(std::max(1, m_deps.window.getWidth()));
+    const uint32_t height = static_cast<uint32_t>(std::max(1, m_deps.window.getHeight()));
+    if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to resize the RHI swapchain\n");
+        return;
+    }
+    const RhiFrameAcquireResult frame = m_deps.rhiDevice.acquireFrame();
+    if (frame.status == RhiFrameStatus::Minimized ||
+        frame.status == RhiFrameStatus::OutOfDate) {
+        return;
+    }
+    if (frame.status != RhiFrameStatus::Success &&
+        frame.status != RhiFrameStatus::Suboptimal) {
+        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to acquire the RHI frame\n");
+        return;
+    }
+
     UIRenderContext sceneContext =
         m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
 
     RhiCommandList* commandList = nullptr;
     if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool,
-                          m_deps.window, m_deps.uiRenderer, commandList)) {
+                          frame.width, frame.height, m_deps.uiRenderer, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
+        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex});
         return;
     }
 
     sceneContext.commandList = commandList;
     m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
     endLoadingPass(m_deps.rhiDevice, commandList);
-    m_deps.rhiDevice.present();
+    const RhiFrameStatus presentStatus = m_deps.rhiDevice.presentFrame(
+        {frame.frameIndex, frame.imageIndex});
+    if (presentStatus == RhiFrameStatus::OutOfDate ||
+        presentStatus == RhiFrameStatus::Minimized) {
+        return;
+    }
+    if (presentStatus != RhiFrameStatus::Success &&
+        presentStatus != RhiFrameStatus::Suboptimal) {
+        MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to present the RHI frame\n");
+        return;
+    }
     m_firstFrameRendered = true;
 }
 

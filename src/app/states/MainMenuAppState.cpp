@@ -14,14 +14,9 @@ namespace {
 
 bool beginMenuClearPass(RhiDevice& rhiDevice,
                         RhiCommandListPool& commandListPool,
-                        const Window& window,
+                        const uint32_t width,
+                        const uint32_t height,
                         RhiCommandList*& commandList) {
-    const int width = std::max(1, window.getWidth());
-    const int height = std::max(1, window.getHeight());
-    if (!rhiDevice.resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
-        return false;
-    }
-
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
     const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
     if (!colorView.isValid() || !depthView.isValid()) {
@@ -48,8 +43,8 @@ bool beginMenuClearPass(RhiDevice& rhiDevice,
     renderingInfo.renderArea = {
         0,
         0,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height)
+        width,
+        height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -71,15 +66,10 @@ bool beginMenuClearPass(RhiDevice& rhiDevice,
 
 bool beginMenuOverlayPass(RhiDevice& rhiDevice,
                           RhiCommandListPool& commandListPool,
-                          const Window& window,
+                          const uint32_t width,
+                          const uint32_t height,
                           UIRenderer& uiRenderer,
                           RhiCommandList*& commandList) {
-    const int width = std::max(1, window.getWidth());
-    const int height = std::max(1, window.getHeight());
-    if (!rhiDevice.resizeSwapchain(static_cast<uint32_t>(width), static_cast<uint32_t>(height))) {
-        return false;
-    }
-
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
     if (!colorView.isValid()) {
         return false;
@@ -95,8 +85,8 @@ bool beginMenuOverlayPass(RhiDevice& rhiDevice,
     renderingInfo.renderArea = {
         0,
         0,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height)
+        width,
+        height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -383,32 +373,60 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
 
 void MainMenuAppState::render(double frameTime) {
     (void)frameTime;
+    const uint32_t width = static_cast<uint32_t>(std::max(1, m_deps.window.getWidth()));
+    const uint32_t height = static_cast<uint32_t>(std::max(1, m_deps.window.getHeight()));
+    if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
+        MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to resize the RHI swapchain\n");
+        return;
+    }
+    const RhiFrameAcquireResult frame = m_deps.rhiDevice.acquireFrame();
+    if (frame.status == RhiFrameStatus::Minimized ||
+        frame.status == RhiFrameStatus::OutOfDate) {
+        return;
+    }
+    if (frame.status != RhiFrameStatus::Success &&
+        frame.status != RhiFrameStatus::Suboptimal) {
+        MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to acquire the RHI frame\n");
+        return;
+    }
+
     RhiCommandList* commandList = nullptr;
     if (!beginMenuClearPass(m_deps.rhiDevice, m_deps.commandListPool,
-                            m_deps.window, commandList)) {
+                            frame.width, frame.height, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu clear pass\n");
+        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex});
         return;
     }
     endMenuPass(m_deps.rhiDevice, commandList, true);
 
-    m_skyboxRenderer.render(m_deps.window.getWidth(), m_deps.window.getHeight(),
-                            m_deps.window.getAspectRatio(), m_skyboxYaw, 10.0f,
+    m_skyboxRenderer.render(static_cast<int>(frame.width), static_cast<int>(frame.height),
+                            static_cast<float>(frame.width) / static_cast<float>(frame.height),
+                            m_skyboxYaw, 10.0f,
                             m_deps.rhiDevice);
     UIRenderContext sceneContext =
         m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
 
     if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.commandListPool,
-                              m_deps.window, m_deps.uiRenderer, commandList)) {
+                              frame.width, frame.height, m_deps.uiRenderer, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
+        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex});
         return;
     }
     sceneContext.commandList = commandList;
     m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
 
     if (m_transitioningToGame) {
-        m_transition.render(m_deps.window.getWidth(), m_deps.window.getHeight(), *commandList);
+        m_transition.render(static_cast<int>(frame.width), static_cast<int>(frame.height),
+                            *commandList);
     }
 
     endMenuPass(m_deps.rhiDevice, commandList, true);
-    m_deps.rhiDevice.present();
+    const RhiFrameStatus presentStatus = m_deps.rhiDevice.presentFrame(
+        {frame.frameIndex, frame.imageIndex});
+    if (presentStatus != RhiFrameStatus::Success &&
+        presentStatus != RhiFrameStatus::Suboptimal &&
+        presentStatus != RhiFrameStatus::OutOfDate &&
+        presentStatus != RhiFrameStatus::Minimized) {
+        MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to present the RHI frame\n");
+    }
 }

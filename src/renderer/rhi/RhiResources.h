@@ -6,9 +6,25 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 inline constexpr uint32_t kRhiRemainingMipLevels = 0xFFFFFFFFu;
 inline constexpr uint32_t kRhiRemainingArrayLayers = 0xFFFFFFFFu;
+inline constexpr uint64_t kRhiWholeSize = std::numeric_limits<uint64_t>::max();
+inline constexpr uint32_t kRhiQueueFamilyIgnored = std::numeric_limits<uint32_t>::max();
+inline constexpr uint32_t kRhiQueueFamilyExternal = kRhiQueueFamilyIgnored - 1u;
+
+enum class RhiTextureAspect : uint32_t {
+    Color = 1u << 0u,
+    Depth = 1u << 1u,
+    Stencil = 1u << 2u
+};
+
+using RhiTextureAspectFlags = uint32_t;
+
+[[nodiscard]] constexpr RhiTextureAspectFlags rhiFlag(const RhiTextureAspect aspect) {
+    return static_cast<RhiTextureAspectFlags>(aspect);
+}
 
 struct RhiTextureDesc {
     const char* debugName = nullptr;
@@ -100,12 +116,20 @@ struct RhiTextureBarrier {
     uint32_t mipCount = kRhiRemainingMipLevels;
     uint32_t baseLayer = 0u;
     uint32_t layerCount = kRhiRemainingArrayLayers;
+    // Zero selects every aspect declared by the texture format.
+    RhiTextureAspectFlags aspect = 0u;
+    uint32_t srcQueueFamilyIndex = kRhiQueueFamilyIgnored;
+    uint32_t dstQueueFamilyIndex = kRhiQueueFamilyIgnored;
 };
 
 struct RhiBufferBarrier {
     RhiBufferHandle buffer;
     RhiResourceState oldState = RhiResourceState::Undefined;
     RhiResourceState newState = RhiResourceState::Undefined;
+    uint64_t offset = 0u;
+    uint64_t size = kRhiWholeSize;
+    uint32_t srcQueueFamilyIndex = kRhiQueueFamilyIgnored;
+    uint32_t dstQueueFamilyIndex = kRhiQueueFamilyIgnored;
 };
 
 struct RhiBufferCopy {

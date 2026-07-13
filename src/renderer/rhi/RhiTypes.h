@@ -1,8 +1,11 @@
 #ifndef MECRAFT_RHI_TYPES_H
 #define MECRAFT_RHI_TYPES_H
 
+#include "renderer/rhi/RhiHandles.h"
+
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 class RhiCommandList;
 
@@ -15,6 +18,13 @@ enum class RhiCommandListType {
     Graphics,
     Compute,
     Transfer
+};
+
+enum class RhiQueueType {
+    Graphics,
+    Compute,
+    Transfer,
+    Present
 };
 
 enum class RhiCommandListState {
@@ -35,12 +45,6 @@ struct RhiCommandListPoolDesc {
     size_t initialArenaCapacity = 64u * 1024u;
 };
 
-struct RhiSubmitInfo {
-    const char* debugName = nullptr;
-    RhiCommandList* const* commandLists = nullptr;
-    uint32_t commandListCount = 0u;
-};
-
 struct RhiSubmissionToken {
     /// Identifies the device instance that issued this backend-independent token.
     uint64_t deviceId = 0u;
@@ -52,6 +56,60 @@ struct RhiSubmissionToken {
     [[nodiscard]] constexpr bool isValid() const {
         return deviceId != 0u && sequence != 0u;
     }
+};
+
+struct RhiQueueDependency {
+    RhiSubmissionToken token;
+    uint64_t value = 0u;
+};
+
+struct RhiSubmitInfo {
+    const char* debugName = nullptr;
+    RhiCommandList* const* commandLists = nullptr;
+    uint32_t commandListCount = 0u;
+    RhiQueueType queue = RhiQueueType::Graphics;
+    const RhiQueueDependency* waits = nullptr;
+    uint32_t waitCount = 0u;
+};
+
+enum class RhiFrameStatus {
+    Success,
+    Suboptimal,
+    OutOfDate,
+    Minimized,
+    SurfaceLost,
+    DeviceLost,
+    Error
+};
+
+struct RhiFrameAcquireResult {
+    RhiFrameStatus status = RhiFrameStatus::Error;
+    uint64_t frameIndex = 0u;
+    uint32_t imageIndex = 0u;
+    uint32_t width = 0u;
+    uint32_t height = 0u;
+    RhiTextureHandle colorTexture;
+    RhiTextureViewHandle colorView;
+    RhiTextureViewHandle depthStencilView;
+};
+
+struct RhiPresentInfo {
+    uint64_t frameIndex = 0u;
+    uint32_t imageIndex = 0u;
+};
+
+enum class RhiColorSpace {
+    SrgbNonlinear,
+    DisplayP3Nonlinear,
+    ExtendedSrgbLinear,
+    Hdr10St2084
+};
+
+enum class RhiPresentMode {
+    Immediate,
+    Mailbox,
+    Fifo,
+    FifoRelaxed
 };
 
 struct RhiDeviceDesc {
@@ -74,6 +132,30 @@ struct RhiCapabilities {
     uint32_t maxSampledTexturesPerStage = 0;
     uint32_t textureBufferCopyRowPitchAlignment = 1;
     float maxSamplerAnisotropy = 1.0f;
+    uint32_t swapchainImageCount = 0u;
+    RhiColorSpace swapchainColorSpace = RhiColorSpace::SrgbNonlinear;
+    RhiPresentMode swapchainPresentMode = RhiPresentMode::Fifo;
+    uint32_t vulkanApiVersion = 0u;
+    bool dynamicRendering = false;
+    bool synchronization2 = false;
+    bool timelineSemaphore = false;
+    bool bufferDeviceAddress = false;
+    uint32_t maxDescriptorSetUpdateAfterBindSampledImages = 0u;
+    uint32_t maxDescriptorSetUpdateAfterBindStorageImages = 0u;
+    uint32_t maxDescriptorSetUpdateAfterBindUniformBuffers = 0u;
+    uint32_t maxDescriptorSetUpdateAfterBindStorageBuffers = 0u;
+    uint32_t graphicsQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
+    uint32_t computeQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
+    uint32_t transferQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
+    uint32_t presentQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
+    bool dedicatedComputeQueue = false;
+    bool dedicatedTransferQueue = false;
+    bool accelerationStructure = false;
+    bool rayQuery = false;
+    bool rayTracingPipeline = false;
+    uint32_t shaderBindingTableHandleSize = 0u;
+    uint32_t shaderBindingTableHandleAlignment = 0u;
+    uint32_t shaderBindingTableBaseAlignment = 0u;
 };
 
 enum class RhiShaderStage : uint32_t {
@@ -104,6 +186,9 @@ enum class RhiTextureFormat {
     Rg8Unorm,
     Rgba8Unorm,
     Rgba8Srgb,
+    Bgra8Unorm,
+    Bgra8Srgb,
+    Rgb10A2Unorm,
     Rg16Float,
     Rgba16Float,
     Rgba32Float,

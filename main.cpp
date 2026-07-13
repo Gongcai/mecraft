@@ -24,6 +24,7 @@ void printUsage() {
         << "  --benchmark-report <file>          Write gameplay replay frame timing summary as JSON.\n"
         << "  --benchmark-save-root <path>       Save root for benchmark worlds.\n"
         << "  --benchmark-no-save                Disable saving for benchmark gameplay.\n"
+        << "  --rhi-backend <opengl|vulkan>      Select the graphics backend.\n"
         << "  --rhi-debug-output                 Enable graphics backend debug output.\n"
         << "  --no-rhi-debug-output              Disable graphics backend debug output.\n"
         << "  --no-exit-on-replay-end            Keep app open when replay frames are exhausted.\n";
@@ -151,6 +152,20 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
             options.benchmarkSaveRoot = value;
         } else if (arg == "--benchmark-no-save") {
             options.benchmarkEnableSaving = false;
+        } else if (arg == "--rhi-backend") {
+            const char* value = nullptr;
+            if (!requireValue(argc, argv, index, "--rhi-backend", value, error)) {
+                return false;
+            }
+            const std::string backend = value;
+            if (backend == "opengl") {
+                options.rhiBackend = RhiBackend::OpenGL;
+            } else if (backend == "vulkan") {
+                options.rhiBackend = RhiBackend::Vulkan;
+            } else {
+                error = "RHI backend must be opengl or vulkan";
+                return false;
+            }
         } else if (arg == "--rhi-debug-output") {
             options.enableRhiDebugOutput = true;
             rhiDebugOutputSet = true;

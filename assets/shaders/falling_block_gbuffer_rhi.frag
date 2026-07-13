@@ -17,10 +17,9 @@ layout(binding = 0) uniform sampler2DArray uTextureArray;
 layout(binding = 1) uniform sampler2D uGrassColormap;
 layout(binding = 2) uniform sampler2D uFoliageColormap;
 layout(push_constant) uniform RhiPushConstants {
-    mat4 uViewProj;
-    mat4 uPreviousViewProj;
+    mat4 uModelViewProj;
+    mat4 uPreviousModelViewProj;
     mat4 uModel;
-    mat4 uPreviousModel;
     vec4 uLightAnimation;
 };
 vec3 srgbToLinear(vec3 color) { return pow(max(color, vec3(0.0)), vec3(2.2)); }

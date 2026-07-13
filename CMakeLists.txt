@@ -39,6 +39,22 @@ option(MECRAFT_USE_SOURCE_ASSETS "Use the source-tree assets directory directly 
 option(MECRAFT_RHI_BACKEND_OPENGL "Build OpenGL RHI backend" ON)
 option(MECRAFT_RHI_BACKEND_VULKAN "Build Vulkan RHI backend" OFF)
 set(MECRAFT_DEFAULT_RHI_BACKEND "OpenGL" CACHE STRING "Default RHI backend")
+set_property(CACHE MECRAFT_DEFAULT_RHI_BACKEND PROPERTY STRINGS OpenGL Vulkan)
+
+if(NOT MECRAFT_RHI_BACKEND_OPENGL AND NOT MECRAFT_RHI_BACKEND_VULKAN)
+    message(FATAL_ERROR "At least one RHI backend must be enabled")
+endif()
+if(NOT MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "OpenGL" AND
+   NOT MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "Vulkan")
+    message(FATAL_ERROR
+            "MECRAFT_DEFAULT_RHI_BACKEND must be OpenGL or Vulkan, got: ${MECRAFT_DEFAULT_RHI_BACKEND}")
+endif()
+if(MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "OpenGL" AND NOT MECRAFT_RHI_BACKEND_OPENGL)
+    message(FATAL_ERROR "OpenGL is the default RHI backend but MECRAFT_RHI_BACKEND_OPENGL is disabled")
+endif()
+if(MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "Vulkan" AND NOT MECRAFT_RHI_BACKEND_VULKAN)
+    message(FATAL_ERROR "Vulkan is the default RHI backend but MECRAFT_RHI_BACKEND_VULKAN is disabled")
+endif()
 if(MSVC)
     message(STATUS "Using MSVC")
 
@@ -154,6 +170,7 @@ find_package(spirv_cross_c CONFIG REQUIRED)
 
 # [应用层]
 set(SRC_APP
+        src/app/AppLaunchOptions.cpp
         src/app/AppSettings.cpp
         src/app/GameResourceBootstrapper.cpp
         src/app/GameManager.cpp
@@ -351,6 +368,27 @@ endif()
 if(MECRAFT_RHI_BACKEND_VULKAN)
     find_package(Vulkan REQUIRED)
     find_package(VulkanMemoryAllocator CONFIG REQUIRED)
+    if(TARGET GPUOpen::VulkanMemoryAllocator)
+        set(MECRAFT_VMA_TARGET GPUOpen::VulkanMemoryAllocator)
+    elseif(TARGET VulkanMemoryAllocator::VulkanMemoryAllocator)
+        set(MECRAFT_VMA_TARGET VulkanMemoryAllocator::VulkanMemoryAllocator)
+    else()
+        message(FATAL_ERROR "VulkanMemoryAllocator package does not provide a supported CMake target")
+    endif()
+
+    list(APPEND SRC_RENDERER
+            src/renderer/rhi/vulkan/VkRhiCommandList.cpp
+            src/renderer/rhi/vulkan/VkRhiCommandList.h
+            src/renderer/rhi/vulkan/VkRhiConversions.h
+            src/renderer/rhi/vulkan/VkRhiDevice.cpp
+            src/renderer/rhi/vulkan/VkRhiDevice.h
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        set_source_files_properties(
+                src/renderer/rhi/vulkan/VkRhiDevice.cpp
+                PROPERTIES COMPILE_OPTIONS "-Wno-missing-field-initializers"
+        )
+    endif()
 endif()
 
 set(SRC_UI
@@ -650,7 +688,8 @@ target_link_libraries(mecraft_core PUBLIC
 
 # RHI backend selection is an implementation detail of the device factory.
 target_compile_definitions(mecraft_core PRIVATE
-        "MECRAFT_DEFAULT_RHI_BACKEND=\"${MECRAFT_DEFAULT_RHI_BACKEND}\""
+        $<$<STREQUAL:${MECRAFT_DEFAULT_RHI_BACKEND},OpenGL>:MECRAFT_DEFAULT_RHI_OPENGL>
+        $<$<STREQUAL:${MECRAFT_DEFAULT_RHI_BACKEND},Vulkan>:MECRAFT_DEFAULT_RHI_VULKAN>
         $<$<BOOL:${MECRAFT_RHI_BACKEND_OPENGL}>:MECRAFT_RHI_BACKEND_OPENGL>
         $<$<BOOL:${MECRAFT_RHI_BACKEND_VULKAN}>:MECRAFT_RHI_BACKEND_VULKAN>
 )
@@ -664,8 +703,7 @@ target_compile_definitions(mecraft_core PUBLIC
 )
 
 if(MECRAFT_RHI_BACKEND_VULKAN)
-    target_link_libraries(mecraft_core PUBLIC Vulkan::Vulkan)
-    target_link_libraries(mecraft_core PRIVATE GPUOpen::VulkanMemoryAllocator)
+    target_link_libraries(mecraft_core PRIVATE Vulkan::Vulkan ${MECRAFT_VMA_TARGET})
 endif()
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）
@@ -772,6 +810,20 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
     if(MECRAFT_RHI_BACKEND_OPENGL)
         add_mecraft_test(rhi_core_test tests/rhi_core_test.cpp)
+    endif()
+    add_mecraft_test(rhi_device_factory_test tests/rhi_device_factory_test.cpp)
+    target_compile_definitions(rhi_device_factory_test PRIVATE
+            $<$<BOOL:${MECRAFT_RHI_BACKEND_OPENGL}>:MECRAFT_TEST_RHI_OPENGL>
+            $<$<BOOL:${MECRAFT_RHI_BACKEND_VULKAN}>:MECRAFT_TEST_RHI_VULKAN>
+            $<$<STREQUAL:${MECRAFT_DEFAULT_RHI_BACKEND},OpenGL>:MECRAFT_TEST_DEFAULT_RHI_OPENGL>
+            $<$<STREQUAL:${MECRAFT_DEFAULT_RHI_BACKEND},Vulkan>:MECRAFT_TEST_DEFAULT_RHI_VULKAN>
+    )
+    if(MECRAFT_RHI_BACKEND_VULKAN)
+        add_mecraft_test(vulkan_rhi_smoke_test tests/vulkan_rhi_smoke_test.cpp)
+        set(MECRAFT_VULKAN_LAYER_DIR
+                "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/vulkan/explicit_layer.d")
+        set_tests_properties(vulkan_rhi_smoke_test PROPERTIES
+                ENVIRONMENT "VK_ADD_LAYER_PATH=${MECRAFT_VULKAN_LAYER_DIR}")
     endif()
 
     add_mecraft_test(ore_sampling_perf_test tests/ore_sampling_perf_test.cpp)

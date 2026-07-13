@@ -311,7 +311,6 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
                                          float interpolationAlpha) {
     if (session.isMultiplayer() && !session.client().areSpawnChunksReady()) {
         session.client().receiveMessages();
-        renderRuntime.resourceHub().rhiDevice().present();
         return true;
     }
 
@@ -320,6 +319,18 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
     if (!renderer.resizeRhiSwapchain(window)) {
         return false;
     }
+    RhiDevice& rhiDevice = renderer.rhiDevice();
+    const RhiFrameAcquireResult frame = rhiDevice.acquireFrame();
+    if (frame.status == RhiFrameStatus::Minimized ||
+        frame.status == RhiFrameStatus::OutOfDate ||
+        frame.status == RhiFrameStatus::SurfaceLost) {
+        return true;
+    }
+    if (frame.status != RhiFrameStatus::Success &&
+        frame.status != RhiFrameStatus::Suboptimal) {
+        return false;
+    }
+
     auto& renderScene = renderRuntime.renderScene();
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
 #ifdef MECRAFT_DEBUG
@@ -454,7 +465,15 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 #ifdef MECRAFT_DEBUG
     const auto preSwapEnd = std::chrono::steady_clock::now();
 #endif
-    renderer.rhiDevice().present();
+    const RhiFrameStatus presentStatus = rhiDevice.presentFrame(
+        {frame.frameIndex, frame.imageIndex});
+    if (presentStatus != RhiFrameStatus::Success &&
+        presentStatus != RhiFrameStatus::Suboptimal &&
+        presentStatus != RhiFrameStatus::OutOfDate &&
+        presentStatus != RhiFrameStatus::Minimized &&
+        presentStatus != RhiFrameStatus::SurfaceLost) {
+        return false;
+    }
 
 #ifdef MECRAFT_DEBUG
     const auto renderEnd = std::chrono::steady_clock::now();

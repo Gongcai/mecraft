@@ -20,16 +20,15 @@ layout(location = 5) out vec3 vWorldPosition;
 layout(location = 6) out vec2 vVelocity;
 
 layout(push_constant) uniform RhiPushConstants {
-    mat4 uViewProj;
-    mat4 uPreviousViewProj;
+    mat4 uModelViewProj;
+    mat4 uPreviousModelViewProj;
     mat4 uModel;
-    mat4 uPreviousModel;
     vec4 uLightAnimation;
 };
 
 void main() {
     vec4 worldPosition = uModel * vec4(aPosition, 1.0);
-    gl_Position = uViewProj * worldPosition;
+    gl_Position = uModelViewProj * vec4(aPosition, 1.0);
     vUv = aUv;
     vVertexData = vec4(aSunlight, aBlockLight, float(aAo), float(aNormal));
     vAnimationData = vec4(float(aLayer), float(aAnimationFrameCount),
@@ -37,7 +36,7 @@ void main() {
     vMaterialTint = uvec2((aTintPacked >> 8u) & 63u, (aTintPacked >> 14u) & 3u);
     vTintUv = (vec2(float((aTintPacked >> 4u) & 15u), float(aTintPacked & 15u)) + 0.5) / 16.0;
     vWorldPosition = worldPosition.xyz;
-    vec4 previousClip = uPreviousViewProj * uPreviousModel * vec4(aPosition, 1.0);
+    vec4 previousClip = uPreviousModelViewProj * vec4(aPosition, 1.0);
     vec2 currentNdc = gl_Position.xy / max(gl_Position.w, 0.00001);
     vec2 previousNdc = previousClip.xy / max(previousClip.w, 0.00001);
     vVelocity = (currentNdc - previousNdc) * 0.5;

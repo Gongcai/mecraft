@@ -254,6 +254,12 @@ public:
         return RhiTextureFormat::Depth24;
     }
     bool resizeSwapchain(uint32_t, uint32_t) override { return true; }
+    [[nodiscard]] RhiFrameAcquireResult acquireFrame() override {
+        return {RhiFrameStatus::Success, 0u, 0u, 1u, 1u, {}, {}, {}};
+    }
+    RhiFrameStatus presentFrame(const RhiPresentInfo&) override {
+        return RhiFrameStatus::Success;
+    }
 
     void destroyBuffer(const RhiBufferHandle handle) override { destroyedBuffers.push_back(handle); }
     void destroyTexture(const RhiTextureHandle handle) override { destroyedTextures.push_back(handle); }
@@ -287,7 +293,6 @@ public:
         return token.deviceId == 1u && token.sequence == 1u;
     }
     void waitIdle() override {}
-    void present() override {}
 
     RecordingCommandList commandList;
     std::vector<RhiBufferDesc> bufferDescs;

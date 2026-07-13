@@ -42,7 +42,7 @@ GameManager::~GameManager() = default;
 
 bool GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
     m_launchOptions = std::move(launchOptions);
-    m_rhiDevice = renderer::rhi::createDefaultRhiDevice();
+    m_rhiDevice = renderer::rhi::createRhiDevice(m_launchOptions.rhiBackend);
     if (!m_rhiDevice) {
         MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to create app RHI device\n");
         return false;

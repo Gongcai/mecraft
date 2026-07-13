@@ -46,12 +46,24 @@ public:
     virtual bool getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
                                  uint32_t queryCount, uint64_t* results) const = 0;
 
+    /// Returns the color view for the acquired frame until that frame is presented.
     [[nodiscard]] virtual RhiTextureViewHandle currentSwapchainColorView() const = 0;
+    /// Returns the depth-stencil view for the acquired frame until that frame is presented.
     [[nodiscard]] virtual RhiTextureViewHandle currentSwapchainDepthStencilView() const = 0;
+    /// Returns the color texture for the acquired frame until that frame is presented.
     [[nodiscard]] virtual RhiTextureHandle currentSwapchainColorTexture() const = 0;
     [[nodiscard]] virtual RhiTextureFormat swapchainColorFormat() const = 0;
     [[nodiscard]] virtual RhiTextureFormat swapchainDepthStencilFormat() const = 0;
     virtual bool resizeSwapchain(uint32_t width, uint32_t height) = 0;
+
+    /// Acquires exactly one presentation image and opens its frame lifetime.
+    /// @return Frame status, stable frame identity, extent, and acquired image handles.
+    [[nodiscard]] virtual RhiFrameAcquireResult acquireFrame() = 0;
+
+    /// Presents the currently acquired image and closes its frame lifetime.
+    /// @param info Frame and image indices returned by the matching acquireFrame call.
+    /// @return Presentation status reported by the backend or window system.
+    virtual RhiFrameStatus presentFrame(const RhiPresentInfo& info) = 0;
 
     // Destruction invalidates the public handle immediately. Backends with deferred
     // command execution must retain the native resource until recorded work completes.
@@ -89,7 +101,6 @@ public:
     /// @return False when the token is invalid, foreign, or cannot be waited successfully.
     virtual bool waitForSubmission(RhiSubmissionToken token) = 0;
     virtual void waitIdle() = 0;
-    virtual void present() = 0;
 };
 
 #endif // MECRAFT_RHI_DEVICE_H

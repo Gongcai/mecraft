@@ -5,10 +5,21 @@
 #ifdef MECRAFT_RHI_BACKEND_OPENGL
 #include "renderer/rhi/gl/GlRhiDevice.h"
 #endif
-
-#include <cstring>
+#ifdef MECRAFT_RHI_BACKEND_VULKAN
+#include "renderer/rhi/vulkan/VkRhiDevice.h"
+#endif
 
 namespace renderer::rhi {
+
+RhiBackend defaultRhiBackend() {
+#if defined(MECRAFT_DEFAULT_RHI_OPENGL)
+    return RhiBackend::OpenGL;
+#elif defined(MECRAFT_DEFAULT_RHI_VULKAN)
+    return RhiBackend::Vulkan;
+#else
+#error "A valid default RHI backend compile definition is required"
+#endif
+}
 
 std::unique_ptr<RhiDevice> createRhiDevice(const RhiBackend backend) {
     switch (backend) {
@@ -19,19 +30,17 @@ std::unique_ptr<RhiDevice> createRhiDevice(const RhiBackend backend) {
             return nullptr;
 #endif
         case RhiBackend::Vulkan:
+#ifdef MECRAFT_RHI_BACKEND_VULKAN
+            return std::make_unique<VkRhiDevice>();
+#else
             return nullptr;
+#endif
     }
     return nullptr;
 }
 
 std::unique_ptr<RhiDevice> createDefaultRhiDevice() {
-    if (std::strcmp(MECRAFT_DEFAULT_RHI_BACKEND, "OpenGL") == 0) {
-        return createRhiDevice(RhiBackend::OpenGL);
-    }
-    if (std::strcmp(MECRAFT_DEFAULT_RHI_BACKEND, "Vulkan") == 0) {
-        return createRhiDevice(RhiBackend::Vulkan);
-    }
-    return nullptr;
+    return createRhiDevice(defaultRhiBackend());
 }
 
 } // namespace renderer::rhi

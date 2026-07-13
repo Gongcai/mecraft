@@ -5,6 +5,7 @@
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiShaderSourceLoader.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -99,10 +100,9 @@ void DropRenderer::renderItemsToGBuffer(RhiCommandList& commandList,
                                         const glm::mat4& viewProj,
                                         const glm::mat4& previousViewProj) {
     struct PushConstants {
-        glm::mat4 viewProj;
-        glm::mat4 previousViewProj;
+        glm::mat4 modelViewProj;
+        glm::mat4 previousModelViewProj;
         glm::mat4 model;
-        glm::mat4 previousModel;
         glm::vec4 light;
     };
     commandList.setGraphicsPipeline(m_itemGBufferPipeline);
@@ -112,7 +112,7 @@ void DropRenderer::renderItemsToGBuffer(RhiCommandList& commandList,
             continue;
         }
         const PushConstants pushConstants{
-            viewProj, previousViewProj, drop.model, drop.previousModel,
+            viewProj * drop.model, previousViewProj * drop.previousModel, drop.model,
             glm::vec4(drop.light, 0.0f, 0.0f)
         };
         commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
@@ -128,10 +128,9 @@ void DropRenderer::renderBlocksToGBuffer(RhiCommandList& commandList,
                                          const glm::mat4& previousViewProj,
                                          const float animationTime) {
     struct PushConstants {
-        glm::mat4 viewProj;
-        glm::mat4 previousViewProj;
+        glm::mat4 modelViewProj;
+        glm::mat4 previousModelViewProj;
         glm::mat4 model;
-        glm::mat4 previousModel;
         glm::vec4 lightAnimation;
     };
     commandList.setGraphicsPipeline(m_blockGBufferPipeline);
@@ -141,7 +140,7 @@ void DropRenderer::renderBlocksToGBuffer(RhiCommandList& commandList,
             continue;
         }
         const PushConstants pushConstants{
-            viewProj, previousViewProj, drop.model, drop.previousModel,
+            viewProj * drop.model, previousViewProj * drop.previousModel, drop.model,
             glm::vec4(drop.light, animationTime, 0.0f)
         };
         commandList.setVertexBuffer(0u, drop.mesh->rhiVertexBuffer, 0u);
@@ -396,7 +395,7 @@ void DropRenderer::createItemGBufferRhiResources() {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "Drop.ItemGBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_itemGBufferBindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 4u + sizeof(glm::vec4);
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4) * 3u + sizeof(glm::vec4);
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Vertex) |
                                             rhiFlag(RhiShaderStage::Fragment);
     m_itemGBufferPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
@@ -491,6 +490,13 @@ void DropRenderer::createItemGBufferRhiResources() {
     pipelineDesc.layout = m_blockForwardPipelineLayout;
     pipelineDesc.vertexInput = {};
     renderer::setBlockVertexInputLayout(pipelineDesc);
+    pipelineDesc.vertexInput.attributes.erase(
+        std::remove_if(pipelineDesc.vertexInput.attributes.begin(),
+                       pipelineDesc.vertexInput.attributes.end(),
+                       [](const RhiVertexAttribute& attribute) {
+                           return attribute.location == 3u || attribute.location == 4u;
+                       }),
+        pipelineDesc.vertexInput.attributes.end());
     m_blockForwardPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
 
     RhiBindGroupDesc bindGroupDesc;

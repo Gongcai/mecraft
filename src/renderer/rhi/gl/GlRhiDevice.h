@@ -244,6 +244,8 @@ public:
     [[nodiscard]] RhiTextureFormat swapchainColorFormat() const override;
     [[nodiscard]] RhiTextureFormat swapchainDepthStencilFormat() const override;
     bool resizeSwapchain(uint32_t width, uint32_t height) override;
+    [[nodiscard]] RhiFrameAcquireResult acquireFrame() override;
+    RhiFrameStatus presentFrame(const RhiPresentInfo& info) override;
 
     void destroyBuffer(RhiBufferHandle handle) override;
     void destroyTexture(RhiTextureHandle handle) override;
@@ -264,7 +266,6 @@ public:
                                             bool& complete) override;
     bool waitForSubmission(RhiSubmissionToken token) override;
     void waitIdle() override;
-    void present() override;
 
 private:
     friend class GlRhiCommandList;
@@ -278,6 +279,10 @@ private:
     std::thread::id m_deviceThread;
     uint64_t m_deviceId = 0u;
     uint64_t m_lastSubmittedSequence = 0u;
+    uint64_t m_nextFrameIndex = 0u;
+    uint64_t m_acquiredFrameIndex = 0u;
+    uint32_t m_acquiredImageIndex = 0u;
+    bool m_frameAcquired = false;
     std::unique_ptr<GlRhiDeviceData> m_data;
     std::shared_ptr<GlRhiCommandPoolRegistry> m_commandPoolRegistry;
 };

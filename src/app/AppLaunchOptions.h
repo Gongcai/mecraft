@@ -1,10 +1,14 @@
 #ifndef MECRAFT_APP_LAUNCH_OPTIONS_H
 #define MECRAFT_APP_LAUNCH_OPTIONS_H
 
+#include "renderer/rhi/RhiTypes.h"
+
 #include <filesystem>
 #include <string>
 
 struct AppLaunchOptions {
+    AppLaunchOptions();
+
     enum class InputReplayScope {
         App,
         Gameplay
@@ -30,6 +34,7 @@ struct AppLaunchOptions {
     bool exitWhenPlaybackEnds = true;
     bool enableDebugDashboard = true;
     bool enableRhiDebugOutput = true;
+    RhiBackend rhiBackend;
 };
 
 #endif // MECRAFT_APP_LAUNCH_OPTIONS_H

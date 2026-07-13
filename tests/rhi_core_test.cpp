@@ -997,6 +997,23 @@ bool testGlRhiSwapchainBackbuffer() {
         device.shutdown();
         return false;
     }
+    const RhiFrameAcquireResult frame = device.acquireFrame();
+    if (!requireTrue(frame.status == RhiFrameStatus::Success &&
+                     frame.width == 32u && frame.height == 32u &&
+                     frame.colorTexture.isValid() && frame.colorView.isValid() &&
+                     frame.depthStencilView.isValid(),
+                     "swapchain frame acquisition must expose the current frame resources")) {
+        device.shutdown();
+        return false;
+    }
+    if (!requireTrue(device.acquireFrame().status == RhiFrameStatus::Error,
+                     "frame acquisition must reject a second acquire before presentation") ||
+        !requireTrue(device.presentFrame({frame.frameIndex + 1u, frame.imageIndex}) ==
+                         RhiFrameStatus::Error,
+                     "frame presentation must reject a mismatched frame identity")) {
+        device.shutdown();
+        return false;
+    }
 
     const RhiTextureViewHandle swapchainView = device.currentSwapchainColorView();
     if (!requireTrue(swapchainView.isValid(), "swapchain color view must be valid")) {
@@ -1218,6 +1235,23 @@ void main() {
         return false;
     }
 
+    RhiCommandList& presentCommandList = beginTestCommands(device, commandPool);
+    presentCommandList.textureBarrier({
+        swapchainTexture,
+        RhiResourceState::RenderTarget,
+        RhiResourceState::Present
+    });
+    submitTestCommands(device, commandPool, presentCommandList);
+    if (!requireTrue(device.presentFrame({frame.frameIndex, frame.imageIndex}) ==
+                         RhiFrameStatus::Success,
+                     "the acquired frame identity must present successfully") ||
+        !requireTrue(!device.currentSwapchainColorTexture().isValid() &&
+                         !device.currentSwapchainColorView().isValid(),
+                     "swapchain frame handles must expire after presentation")) {
+        device.shutdown();
+        return false;
+    }
+
     device.destroyBuffer(readbackBuffer);
     device.destroyPipeline(pipeline);
     device.destroyPipelineLayout(pipelineLayout);
@@ -1243,6 +1277,12 @@ bool testGlRhiBlitToSwapchainBackbuffer() {
         return false;
     }
     if (!requireTrue(device.resizeSwapchain(32u, 32u), "swapchain resize must accept blit dimensions")) {
+        device.shutdown();
+        return false;
+    }
+    const RhiFrameAcquireResult frame = device.acquireFrame();
+    if (!requireTrue(frame.status == RhiFrameStatus::Success,
+                     "swapchain frame must be acquired before blitting")) {
         device.shutdown();
         return false;
     }
@@ -4860,6 +4900,41 @@ bool testGlRhiSubmissionCompletionTokens() {
                      "submission wait must reclaim its pending command list") ||
         !requireTrue(commandPool->reset(),
                      "command pool must reset after waiting for its submission")) {
+        device.shutdown();
+        return false;
+    }
+
+    commandList = commandPool->acquire(RhiCommandListType::Graphics);
+    if (!requireTrue(commandList != nullptr &&
+                     commandList->begin({"SubmissionDependency.Commands",
+                                         RhiCommandListType::Graphics}) &&
+                     commandList->end(),
+                     "queue dependency test command list must become executable")) {
+        device.shutdown();
+        return false;
+    }
+    submittedLists[0] = commandList;
+    RhiSubmitInfo invalidQueueSubmit{
+        "SubmissionDependency.InvalidQueue", submittedLists, 1u};
+    invalidQueueSubmit.queue = RhiQueueType::Compute;
+    RhiSubmitInfo invalidWaitSubmit{
+        "SubmissionDependency.InvalidWaitArray", submittedLists, 1u};
+    invalidWaitSubmit.waitCount = 1u;
+    const RhiQueueDependency dependency{token, token.sequence};
+    RhiSubmitInfo dependencySubmit{
+        "SubmissionDependency.Valid", submittedLists, 1u};
+    dependencySubmit.waits = &dependency;
+    dependencySubmit.waitCount = 1u;
+    RhiSubmissionToken dependencyToken;
+    if (!requireTrue(!device.submit(invalidQueueSubmit),
+                     "OpenGL submission must reject unsupported queue types") ||
+        !requireTrue(!device.submit(invalidWaitSubmit),
+                     "submission must reject an inconsistent wait dependency array") ||
+        !requireTrue(device.submit(dependencySubmit, &dependencyToken) &&
+                         dependencyToken.sequence > token.sequence,
+                     "submission must accept a valid ordered queue dependency") ||
+        !requireTrue(device.waitForSubmission(dependencyToken),
+                     "queue dependency submission must complete successfully")) {
         device.shutdown();
         return false;
     }

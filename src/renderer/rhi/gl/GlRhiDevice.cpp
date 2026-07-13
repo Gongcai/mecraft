@@ -152,6 +152,15 @@ template <typename Handle>
         case RhiTextureFormat::Rgba8Srgb:
             out = {GL_SRGB8_ALPHA8, GL_RGBA, GL_UNSIGNED_BYTE, false, false};
             return true;
+        case RhiTextureFormat::Bgra8Unorm:
+            out = {GL_RGBA8, GL_BGRA, GL_UNSIGNED_BYTE, false, false};
+            return true;
+        case RhiTextureFormat::Bgra8Srgb:
+            out = {GL_SRGB8_ALPHA8, GL_BGRA, GL_UNSIGNED_BYTE, false, false};
+            return true;
+        case RhiTextureFormat::Rgb10A2Unorm:
+            out = {GL_RGB10_A2, GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, false, false};
+            return true;
         case RhiTextureFormat::Rg16Float:
             out = {GL_RG16F, GL_RG, GL_HALF_FLOAT, false, false};
             return true;
@@ -191,6 +200,9 @@ template <typename Handle>
         case RhiTextureFormat::Rg8Unorm: return 2u;
         case RhiTextureFormat::Rgba8Unorm:
         case RhiTextureFormat::Rgba8Srgb:
+        case RhiTextureFormat::Bgra8Unorm:
+        case RhiTextureFormat::Bgra8Srgb:
+        case RhiTextureFormat::Rgb10A2Unorm:
         case RhiTextureFormat::R32Float:
         case RhiTextureFormat::Depth24:
         case RhiTextureFormat::Depth24Stencil8:
@@ -201,6 +213,35 @@ template <typename Handle>
         case RhiTextureFormat::Rgba16Float: return 8u;
         case RhiTextureFormat::Rgba32Float: return 16u;
         case RhiTextureFormat::Undefined: return 0u;
+    }
+    return 0u;
+}
+
+[[nodiscard]] RhiTextureAspectFlags textureFormatAspectFlags(
+    const RhiTextureFormat format) {
+    switch (format) {
+        case RhiTextureFormat::Depth16:
+        case RhiTextureFormat::Depth24:
+        case RhiTextureFormat::Depth32Float:
+            return rhiFlag(RhiTextureAspect::Depth);
+        case RhiTextureFormat::Depth24Stencil8:
+            return rhiFlag(RhiTextureAspect::Depth) |
+                   rhiFlag(RhiTextureAspect::Stencil);
+        case RhiTextureFormat::R8Unorm:
+        case RhiTextureFormat::Rg8Unorm:
+        case RhiTextureFormat::Rgba8Unorm:
+        case RhiTextureFormat::Rgba8Srgb:
+        case RhiTextureFormat::Bgra8Unorm:
+        case RhiTextureFormat::Bgra8Srgb:
+        case RhiTextureFormat::Rgb10A2Unorm:
+        case RhiTextureFormat::Rg16Float:
+        case RhiTextureFormat::Rgba16Float:
+        case RhiTextureFormat::Rgba32Float:
+        case RhiTextureFormat::R16Float:
+        case RhiTextureFormat::R32Float:
+            return rhiFlag(RhiTextureAspect::Color);
+        case RhiTextureFormat::Undefined:
+            return 0u;
     }
     return 0u;
 }
@@ -2226,6 +2267,16 @@ void GlRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
         (void) rejectReplayCommand("textureBarrier received an invalid texture handle");
         return;
     }
+    const RhiTextureAspectFlags formatAspects = textureFormatAspectFlags(record->desc.format);
+    const RhiTextureAspectFlags barrierAspects = barrier.aspect == 0u
+        ? formatAspects
+        : barrier.aspect;
+    if (barrierAspects == 0u || (barrierAspects & ~formatAspects) != 0u ||
+        barrier.srcQueueFamilyIndex != kRhiQueueFamilyIgnored ||
+        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored) {
+        (void) rejectReplayCommand("textureBarrier received invalid aspects or queue ownership");
+        return;
+    }
     GlTextureSubresourceRange range;
     if (!resolveTextureSubresourceRange(record->desc,
                                         barrier.baseMip,
@@ -2279,6 +2330,16 @@ void GlRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
         m_device->m_data->buffers, m_device->m_data->bufferRecords, barrier.buffer);
     if (record == nullptr) {
         (void) rejectReplayCommand("bufferBarrier received an invalid buffer handle");
+        return;
+    }
+    const uint64_t barrierSize = barrier.size == kRhiWholeSize
+        ? record->desc.size - std::min(barrier.offset, record->desc.size)
+        : barrier.size;
+    if (barrier.offset >= record->desc.size || barrierSize == 0u ||
+        barrierSize > record->desc.size - barrier.offset ||
+        barrier.srcQueueFamilyIndex != kRhiQueueFamilyIgnored ||
+        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored) {
+        (void) rejectReplayCommand("bufferBarrier received an invalid range or queue ownership");
         return;
     }
     if (record->mapped || record->state != barrier.oldState) {
@@ -4312,6 +4373,10 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_deviceThread = std::this_thread::get_id();
     m_deviceId = g_nextRhiDeviceId.fetch_add(1u, std::memory_order_relaxed);
     m_lastSubmittedSequence = 0u;
+    m_nextFrameIndex = 0u;
+    m_acquiredFrameIndex = 0u;
+    m_acquiredImageIndex = 0u;
+    m_frameAcquired = false;
     m_data->completedSubmissionSequence = 0u;
     m_capabilities.multiDrawIndirect = true;
     m_capabilities.timestampQuery = true;
@@ -4321,6 +4386,9 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.textureBufferCopyRowPitchAlignment = 1u;
     m_capabilities.maxColorAttachments = 8;
     m_capabilities.maxSampledTexturesPerStage = static_cast<uint32_t>(maxTextureUnits);
+    m_capabilities.swapchainImageCount = 1u;
+    m_capabilities.swapchainColorSpace = RhiColorSpace::SrgbNonlinear;
+    m_capabilities.swapchainPresentMode = RhiPresentMode::Immediate;
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &m_capabilities.maxSamplerAnisotropy);
 
     m_data->swapchainWidth = static_cast<uint32_t>(desc.width);
@@ -4537,6 +4605,10 @@ void GlRhiDevice::shutdown() {
     m_commandPoolRegistry->device = nullptr;
     m_deviceId = 0u;
     m_lastSubmittedSequence = 0u;
+    m_nextFrameIndex = 0u;
+    m_acquiredFrameIndex = 0u;
+    m_acquiredImageIndex = 0u;
+    m_frameAcquired = false;
     m_initialized = false;
 }
 
@@ -5348,15 +5420,21 @@ bool GlRhiDevice::getQueryResults(RhiQueryPoolHandle pool, uint32_t firstQuery,
 }
 
 RhiTextureViewHandle GlRhiDevice::currentSwapchainColorView() const {
-    return m_initialized && m_data ? m_data->swapchainColorView : RhiTextureViewHandle{};
+    return m_initialized && m_data && m_frameAcquired
+        ? m_data->swapchainColorView
+        : RhiTextureViewHandle{};
 }
 
 RhiTextureViewHandle GlRhiDevice::currentSwapchainDepthStencilView() const {
-    return m_initialized && m_data ? m_data->swapchainDepthStencilView : RhiTextureViewHandle{};
+    return m_initialized && m_data && m_frameAcquired
+        ? m_data->swapchainDepthStencilView
+        : RhiTextureViewHandle{};
 }
 
 RhiTextureHandle GlRhiDevice::currentSwapchainColorTexture() const {
-    return m_initialized && m_data ? m_data->swapchainColorTexture : RhiTextureHandle{};
+    return m_initialized && m_data && m_frameAcquired
+        ? m_data->swapchainColorTexture
+        : RhiTextureHandle{};
 }
 
 RhiTextureFormat GlRhiDevice::swapchainColorFormat() const {
@@ -5370,6 +5448,11 @@ RhiTextureFormat GlRhiDevice::swapchainDepthStencilFormat() const {
 bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
     if (!m_initialized || !m_data || width == 0u || height == 0u) {
         logRhiError("resizeSwapchain received invalid dimensions");
+        return false;
+    }
+    if (m_frameAcquired &&
+        (width != m_data->swapchainWidth || height != m_data->swapchainHeight)) {
+        logRhiError("resizeSwapchain cannot change dimensions while a frame is acquired");
         return false;
     }
 
@@ -5398,6 +5481,48 @@ bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
     swapchainTexture->desc.width = width;
     swapchainTexture->desc.height = height;
     return true;
+}
+
+RhiFrameAcquireResult GlRhiDevice::acquireFrame() {
+    RhiFrameAcquireResult result;
+    if (!m_initialized || !m_data || std::this_thread::get_id() != m_deviceThread) {
+        logRhiError("acquireFrame requires an initialized device on the device thread");
+        return result;
+    }
+    if (m_frameAcquired) {
+        logRhiError("acquireFrame cannot acquire a second frame before presentation");
+        return result;
+    }
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+    glfwGetFramebufferSize(m_data->nativeWindow, &framebufferWidth, &framebufferHeight);
+    if (framebufferWidth <= 0 || framebufferHeight <= 0) {
+        result.status = RhiFrameStatus::Minimized;
+        return result;
+    }
+    if (static_cast<uint32_t>(framebufferWidth) != m_data->swapchainWidth ||
+        static_cast<uint32_t>(framebufferHeight) != m_data->swapchainHeight) {
+        result.status = RhiFrameStatus::OutOfDate;
+        return result;
+    }
+    if (m_nextFrameIndex == std::numeric_limits<uint64_t>::max()) {
+        logRhiError("acquireFrame exhausted the frame index space");
+        return result;
+    }
+
+    m_frameAcquired = true;
+    m_acquiredFrameIndex = m_nextFrameIndex++;
+    m_acquiredImageIndex = 0u;
+    result.status = RhiFrameStatus::Success;
+    result.frameIndex = m_acquiredFrameIndex;
+    result.imageIndex = m_acquiredImageIndex;
+    result.width = m_data->swapchainWidth;
+    result.height = m_data->swapchainHeight;
+    result.colorTexture = m_data->swapchainColorTexture;
+    result.colorView = m_data->swapchainColorView;
+    result.depthStencilView = m_data->swapchainDepthStencilView;
+    return result;
 }
 
 void GlRhiDevice::destroyBuffer(RhiBufferHandle handle) {
@@ -5557,9 +5682,26 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
         *completionToken = {};
     }
     if (!m_initialized || std::this_thread::get_id() != m_deviceThread ||
-        info.commandLists == nullptr || info.commandListCount == 0u) {
-        logRhiError("submit requires command lists on the device thread");
+        info.commandLists == nullptr || info.commandListCount == 0u ||
+        info.queue != RhiQueueType::Graphics ||
+        (info.waitCount == 0u) != (info.waits == nullptr)) {
+        logRhiError("submit requires a valid graphics queue submission on the device thread");
         return false;
+    }
+    for (uint32_t index = 0u; index < info.waitCount; ++index) {
+        const RhiQueueDependency& dependency = info.waits[index];
+        if (!validateSubmissionToken(dependency.token) ||
+            (dependency.value != 0u && dependency.value != dependency.token.sequence)) {
+            logRhiError("submit received an invalid queue dependency");
+            return false;
+        }
+        for (uint32_t earlier = 0u; earlier < index; ++earlier) {
+            if (info.waits[earlier].token.deviceId == dependency.token.deviceId &&
+                info.waits[earlier].token.sequence == dependency.token.sequence) {
+                logRhiError("submit received a duplicate queue dependency");
+                return false;
+            }
+        }
     }
 
     reclaimCompletedCommandLists();
@@ -5721,19 +5863,39 @@ void GlRhiDevice::waitIdle() {
     }
 }
 
-void GlRhiDevice::present() {
+RhiFrameStatus GlRhiDevice::presentFrame(const RhiPresentInfo& info) {
     if (!m_initialized || std::this_thread::get_id() != m_deviceThread) {
-        logRhiError("present requires an initialized device on the device thread");
-        return;
+        logRhiError("presentFrame requires an initialized device on the device thread");
+        return RhiFrameStatus::Error;
+    }
+    if (!m_frameAcquired || info.frameIndex != m_acquiredFrameIndex ||
+        info.imageIndex != m_acquiredImageIndex) {
+        logRhiError("presentFrame requires the currently acquired frame identity");
+        return RhiFrameStatus::Error;
     }
     const GlTextureRecord* swapchain = recordForHandle(
         m_data->textures, m_data->textureRecords, m_data->swapchainColorTexture);
     const GlTextureSubresourceRange colorRange{0u, 1u, 0u, 1u};
     if (swapchain == nullptr ||
         !textureRangeHasState(*swapchain, colorRange, RhiResourceState::Present)) {
-        logRhiError("present requires the swapchain color texture in Present state");
-        return;
+        logRhiError("presentFrame requires the swapchain color texture in Present state");
+        return RhiFrameStatus::Error;
+    }
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+    glfwGetFramebufferSize(m_data->nativeWindow, &framebufferWidth, &framebufferHeight);
+    if (framebufferWidth <= 0 || framebufferHeight <= 0) {
+        m_frameAcquired = false;
+        return RhiFrameStatus::Minimized;
+    }
+    if (static_cast<uint32_t>(framebufferWidth) != m_data->swapchainWidth ||
+        static_cast<uint32_t>(framebufferHeight) != m_data->swapchainHeight) {
+        m_frameAcquired = false;
+        return RhiFrameStatus::OutOfDate;
     }
     reclaimCompletedCommandLists();
     glfwSwapBuffers(m_data->nativeWindow);
+    m_frameAcquired = false;
+    return RhiFrameStatus::Success;
 }
