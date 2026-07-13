@@ -133,8 +133,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
 }
 
 [[nodiscard]] VkFrontFace toVkRenderingFrontFace(const VkFrontFace frontFace,
-                                                 const bool renderingToSwapchain) {
-    if (renderingToSwapchain) {
+                                                 const bool flipsViewportY) {
+    if (flipsViewportY) {
         return frontFace;
     }
     return frontFace == VK_FRONT_FACE_COUNTER_CLOCKWISE
@@ -2689,7 +2689,7 @@ void VkRhiCommandList::resetForPoolReuse() {
     m_data->graphicsFrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     m_data->pendingSequence = 0u;
     m_data->rendering = false;
-    m_data->renderingToSwapchain = false;
+    m_data->renderingFlipsViewportY = false;
     m_data->graphicsPipelineBound = false;
     m_data->renderingTargetWidth = 0u;
     m_data->renderingTargetHeight = 0u;
@@ -2916,7 +2916,9 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         m_data->valid = false;
         return;
     }
-    const int32_t nativeRenderAreaY = targetIsSwapchain
+    const bool flipsViewportY = targetIsSwapchain &&
+        info.coordinateSpace == RhiRenderingCoordinateSpace::Presentation;
+    const int32_t nativeRenderAreaY = flipsViewportY
         ? static_cast<int32_t>(targetHeight) - info.renderArea.y -
               static_cast<int32_t>(info.renderArea.height)
         : info.renderArea.y;
@@ -2928,10 +2930,10 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     native.pColorAttachments = colors.data();
     native.pDepthAttachment = info.depthStencilAttachment != nullptr ? &depth : nullptr;
     native.pStencilAttachment = nullptr;
-    const float nativeViewportY = targetIsSwapchain
+    const float nativeViewportY = flipsViewportY
         ? static_cast<float>(static_cast<int32_t>(targetHeight) - info.renderArea.y)
         : static_cast<float>(info.renderArea.y);
-    const float nativeViewportHeight = targetIsSwapchain
+    const float nativeViewportHeight = flipsViewportY
         ? -static_cast<float>(info.renderArea.height)
         : static_cast<float>(info.renderArea.height);
     const VkViewport viewport{static_cast<float>(info.renderArea.x),
@@ -2944,11 +2946,11 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     vkCmdSetScissor(m_data->commandBuffer, 0u, 1u, &scissor);
     vkCmdBeginRendering(m_data->commandBuffer, &native);
     m_data->rendering = true;
-    m_data->renderingToSwapchain = targetIsSwapchain;
+    m_data->renderingFlipsViewportY = flipsViewportY;
     if (m_data->graphicsPipelineBound) {
         vkCmdSetFrontFace(
             m_data->commandBuffer,
-            toVkRenderingFrontFace(m_data->graphicsFrontFace, targetIsSwapchain));
+            toVkRenderingFrontFace(m_data->graphicsFrontFace, flipsViewportY));
     }
     m_data->renderingTargetWidth = targetWidth;
     m_data->renderingTargetHeight = targetHeight;
@@ -2961,7 +2963,7 @@ void VkRhiCommandList::endRendering() {
     }
     vkCmdEndRendering(m_data->commandBuffer);
     m_data->rendering = false;
-    m_data->renderingToSwapchain = false;
+    m_data->renderingFlipsViewportY = false;
     m_data->renderingTargetWidth = 0u;
     m_data->renderingTargetHeight = 0u;
 }
@@ -2976,7 +2978,7 @@ void VkRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& 
     attachment.clearValue.depthStencil.depth = depth;
     const VkRect2D nativeRect = toVkClippedScissor(
         rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight,
-        m_data->renderingToSwapchain);
+        m_data->renderingFlipsViewportY);
     VkClearRect clearRect{nativeRect, 0u, 1u};
     vkCmdClearAttachments(m_data->commandBuffer, 1u, &attachment, 1u, &clearRect);
 }
@@ -2990,10 +2992,10 @@ void VkRhiCommandList::setViewport(const RhiViewport& viewport) {
         m_data->valid = false;
         return;
     }
-    const float nativeY = m_data->renderingToSwapchain
+    const float nativeY = m_data->renderingFlipsViewportY
         ? static_cast<float>(m_data->renderingTargetHeight) - viewport.y
         : viewport.y;
-    const float nativeHeight = m_data->renderingToSwapchain
+    const float nativeHeight = m_data->renderingFlipsViewportY
         ? -viewport.height
         : viewport.height;
     const VkViewport native{viewport.x, nativeY,
@@ -3009,7 +3011,7 @@ void VkRhiCommandList::setScissor(const RhiRect2D& rect) {
     }
     const VkRect2D native = toVkClippedScissor(
         rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight,
-        m_data->renderingToSwapchain);
+        m_data->renderingFlipsViewportY);
     vkCmdSetScissor(m_data->commandBuffer, 0u, 1u, &native);
 }
 
@@ -3033,7 +3035,7 @@ void VkRhiCommandList::setGraphicsPipeline(const RhiPipelineHandle pipeline) {
     if (m_data->rendering) {
         vkCmdSetFrontFace(
             m_data->commandBuffer,
-            toVkRenderingFrontFace(record->frontFace, m_data->renderingToSwapchain));
+            toVkRenderingFrontFace(record->frontFace, m_data->renderingFlipsViewportY));
     }
     m_data->resourceReferences.reference(pipeline);
 }

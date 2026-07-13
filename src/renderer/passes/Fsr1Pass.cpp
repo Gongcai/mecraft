@@ -149,6 +149,7 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.coordinateSpace = RhiRenderingCoordinateSpace::Texture;
 
     RhiCommandList& commandList = beginCommandList("FSR1.RCAS.Commands");
     const GpuTimerSegmentToken rcasTimerToken = debugService.beginGpuTimer(

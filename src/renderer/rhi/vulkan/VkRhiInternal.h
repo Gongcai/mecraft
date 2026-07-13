@@ -194,7 +194,7 @@ struct VkRhiCommandListData {
     VkFrontFace graphicsFrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     uint64_t pendingSequence = 0u;
     bool rendering = false;
-    bool renderingToSwapchain = false;
+    bool renderingFlipsViewportY = false;
     bool graphicsPipelineBound = false;
     uint32_t renderingTargetWidth = 0u;
     uint32_t renderingTargetHeight = 0u;

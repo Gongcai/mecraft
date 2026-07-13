@@ -100,12 +100,20 @@ struct RhiDepthStencilAttachment {
     uint32_t clearStencil = 0;
 };
 
+enum class RhiRenderingCoordinateSpace {
+    // Maps clip-space Y to display-space Y for UI and direct presentation geometry.
+    Presentation,
+    // Preserves attachment row order when a pass samples textures into its output.
+    Texture
+};
+
 struct RhiRenderingInfo {
     const char* debugName = nullptr;
     RhiRect2D renderArea;
     const RhiColorAttachment* colorAttachments = nullptr;
     uint32_t colorAttachmentCount = 0;
     const RhiDepthStencilAttachment* depthStencilAttachment = nullptr;
+    RhiRenderingCoordinateSpace coordinateSpace = RhiRenderingCoordinateSpace::Presentation;
 };
 
 struct RhiTextureBarrier {
