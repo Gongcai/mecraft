@@ -13,9 +13,6 @@ const float kPi = 3.14159265359;
 const float kTwoPi = 6.28318530718;
 void main() {
     vec2 uv = clamp(vTexCoord, vec2(0.0), vec2(1.0));
-#ifdef RHI_VULKAN
-    uv.y = 1.0 - uv.y;
-#endif
     float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) /
                     (1.0 - 4.0 / float(skyCaptureRes.x)));
     float phi = u * kTwoPi;
