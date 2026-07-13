@@ -1015,10 +1015,13 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
         VkPhysicalDeviceVulkan12Features features12{
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &features13};
+        VkPhysicalDeviceVulkan11Features features11{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, &features12};
         VkPhysicalDeviceFeatures2 features2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                                            &features12};
+                                            &features11};
         vkGetPhysicalDeviceFeatures2(candidate, &features2);
         if (features2.features.samplerAnisotropy != VK_TRUE ||
+            features11.shaderDrawParameters != VK_TRUE ||
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
             features12.timelineSemaphore != VK_TRUE ||
             features12.bufferDeviceAddress != VK_TRUE ||
@@ -1080,8 +1083,11 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     features12.descriptorBindingVariableDescriptorCount =
         selected12.descriptorBindingVariableDescriptorCount;
     features12.runtimeDescriptorArray = selected12.runtimeDescriptorArray;
+    VkPhysicalDeviceVulkan11Features features11{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, &features12};
+    features11.shaderDrawParameters = VK_TRUE;
     VkPhysicalDeviceFeatures2 features2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
-                                        &features12};
+                                        &features11};
     features2.features.samplerAnisotropy = VK_TRUE;
     features2.features.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect;
     const std::array<const char*, 2u> deviceExtensions{

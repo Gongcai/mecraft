@@ -174,6 +174,29 @@ enum class FrameAttempt {
            RhiFrameStatus::OutOfDate;
 }
 
+[[nodiscard]] bool createDrawParametersShader(VkRhiDevice& device) {
+    constexpr char kVertexShader[] = R"glsl(
+#version 450 core
+#extension GL_ARB_shader_draw_parameters : require
+
+void main() {
+    const float drawOffset = float(gl_DrawIDARB + gl_BaseInstanceARB) * 0.001;
+    gl_Position = vec4(drawOffset, 0.0, 0.0, 1.0);
+}
+)glsl";
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "VulkanSmoke.DrawParameters";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = kVertexShader;
+    shaderDesc.sourceSize = sizeof(kVertexShader) - 1u;
+    const RhiShaderHandle shader = device.createShader(shaderDesc);
+    if (!shader.isValid()) {
+        return false;
+    }
+    device.destroyShader(shader);
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -207,6 +230,12 @@ int main() {
         return 1;
     }
     if (device.swapchainColorFormat() != RhiTextureFormat::Bgra8Unorm) {
+        device.shutdown();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    if (!createDrawParametersShader(device)) {
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();
