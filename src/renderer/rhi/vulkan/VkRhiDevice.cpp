@@ -308,7 +308,8 @@ void enqueueDeferred(DeferredQueue& queue, DeferredItem item) {
 
 [[nodiscard]] VkRect2D toVkClippedScissor(const RhiRect2D& rect,
                                           const uint32_t targetWidth,
-                                          const uint32_t targetHeight) {
+                                          const uint32_t targetHeight,
+                                          const bool flipY) {
     const int64_t minX = std::clamp<int64_t>(rect.x, 0, targetWidth);
     const int64_t minY = std::clamp<int64_t>(rect.y, 0, targetHeight);
     const int64_t maxX = std::clamp<int64_t>(
@@ -317,7 +318,9 @@ void enqueueDeferred(DeferredQueue& queue, DeferredItem item) {
         static_cast<int64_t>(rect.y) + rect.height, minY, targetHeight);
     return {
         {static_cast<int32_t>(minX),
-         static_cast<int32_t>(targetHeight - static_cast<uint32_t>(maxY))},
+         flipY
+             ? static_cast<int32_t>(targetHeight - static_cast<uint32_t>(maxY))
+             : static_cast<int32_t>(minY)},
         {static_cast<uint32_t>(maxX - minX), static_cast<uint32_t>(maxY - minY)}
     };
 }
@@ -632,7 +635,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
                             rhiFlag(RhiTextureUsage::Present);
         data.textures.emplace(handleKey(textureHandle),
                               VkRhiDeviceData::Texture{images[i], VK_NULL_HANDLE,
-                                                       textureDesc, true});
+                                                       textureDesc, true, true});
         data.swapchainTextures.push_back(textureHandle);
         data.swapchainImageInitialized.push_back(false);
 
@@ -685,7 +688,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
                           rhiFlag(RhiTextureUsage::Sampled);
         data.textures.emplace(handleKey(depthHandle),
                               VkRhiDeviceData::Texture{depthImage, depthAllocation,
-                                                       depthDesc, false});
+                                                       depthDesc, false, true});
         data.depthTextures.push_back(depthHandle);
 
         VkImageViewCreateInfo depthViewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -1525,7 +1528,7 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
     }
     const RhiTextureHandle handle = m_data->textureHandles.allocate();
     m_data->textures.emplace(handleKey(handle),
-                             VkRhiDeviceData::Texture{image, allocation, desc, false});
+                             VkRhiDeviceData::Texture{image, allocation, desc, false, false});
     nameObject(*m_data, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image), desc.debugName);
     if (initialData != nullptr && !uploadTextureInitialData(*m_data, image, desc, *initialData)) {
         std::cerr << "VkRhiDevice: texture initial data upload failed ["
@@ -2667,6 +2670,9 @@ void VkRhiCommandList::resetForPoolReuse() {
     m_data->pipelineLayoutHandle = {};
     m_data->pendingSequence = 0u;
     m_data->rendering = false;
+    m_data->renderingToSwapchain = false;
+    m_data->renderingTargetWidth = 0u;
+    m_data->renderingTargetHeight = 0u;
     m_data->valid = true;
     m_data->transientBuffers.clear();
     m_data->initializedSwapchainImages.clear();
@@ -2824,6 +2830,8 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     }
     uint32_t targetWidth = 0u;
     uint32_t targetHeight = 0u;
+    bool targetCoordinateSpaceSet = false;
+    bool targetIsSwapchain = false;
     const auto registerAttachmentExtent = [&](const RhiTextureViewHandle viewHandle) {
         const auto* view = findRecord(m_device->m_data->textureViews, viewHandle);
         const auto* texture = view != nullptr
@@ -2834,6 +2842,12 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         }
         const uint32_t width = std::max(texture->desc.width >> view->desc.baseMip, 1u);
         const uint32_t height = std::max(texture->desc.height >> view->desc.baseMip, 1u);
+        if (!targetCoordinateSpaceSet) {
+            targetCoordinateSpaceSet = true;
+            targetIsSwapchain = texture->swapchainAttachment;
+        } else if (targetIsSwapchain != texture->swapchainAttachment) {
+            return false;
+        }
         if (targetWidth == 0u && targetHeight == 0u) {
             targetWidth = width;
             targetHeight = height;
@@ -2882,8 +2896,10 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         m_data->valid = false;
         return;
     }
-    const int32_t nativeRenderAreaY = static_cast<int32_t>(targetHeight) -
-        info.renderArea.y - static_cast<int32_t>(info.renderArea.height);
+    const int32_t nativeRenderAreaY = targetIsSwapchain
+        ? static_cast<int32_t>(targetHeight) - info.renderArea.y -
+              static_cast<int32_t>(info.renderArea.height)
+        : info.renderArea.y;
     VkRenderingInfo native{VK_STRUCTURE_TYPE_RENDERING_INFO};
     native.renderArea = {{info.renderArea.x, nativeRenderAreaY},
                          {info.renderArea.width, info.renderArea.height}};
@@ -2892,9 +2908,11 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     native.pColorAttachments = colors.data();
     native.pDepthAttachment = info.depthStencilAttachment != nullptr ? &depth : nullptr;
     native.pStencilAttachment = nullptr;
+    const float nativeViewportY = targetIsSwapchain
+        ? static_cast<float>(static_cast<int32_t>(targetHeight) - info.renderArea.y)
+        : static_cast<float>(info.renderArea.y + static_cast<int32_t>(info.renderArea.height));
     const VkViewport viewport{static_cast<float>(info.renderArea.x),
-                              static_cast<float>(static_cast<int32_t>(targetHeight) -
-                                                 info.renderArea.y),
+                              nativeViewportY,
                               static_cast<float>(info.renderArea.width),
                               -static_cast<float>(info.renderArea.height), 0.0f, 1.0f};
     const VkRect2D scissor{{info.renderArea.x, nativeRenderAreaY},
@@ -2903,6 +2921,7 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
     vkCmdSetScissor(m_data->commandBuffer, 0u, 1u, &scissor);
     vkCmdBeginRendering(m_data->commandBuffer, &native);
     m_data->rendering = true;
+    m_data->renderingToSwapchain = targetIsSwapchain;
     m_data->renderingTargetWidth = targetWidth;
     m_data->renderingTargetHeight = targetHeight;
 }
@@ -2914,6 +2933,7 @@ void VkRhiCommandList::endRendering() {
     }
     vkCmdEndRendering(m_data->commandBuffer);
     m_data->rendering = false;
+    m_data->renderingToSwapchain = false;
     m_data->renderingTargetWidth = 0u;
     m_data->renderingTargetHeight = 0u;
 }
@@ -2927,7 +2947,8 @@ void VkRhiCommandList::clearDepthAttachment(const float depth, const RhiRect2D& 
     attachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     attachment.clearValue.depthStencil.depth = depth;
     const VkRect2D nativeRect = toVkClippedScissor(
-        rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight);
+        rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight,
+        m_data->renderingToSwapchain);
     VkClearRect clearRect{nativeRect, 0u, 1u};
     vkCmdClearAttachments(m_data->commandBuffer, 1u, &attachment, 1u, &clearRect);
 }
@@ -2941,8 +2962,10 @@ void VkRhiCommandList::setViewport(const RhiViewport& viewport) {
         m_data->valid = false;
         return;
     }
-    const VkViewport native{viewport.x,
-                            static_cast<float>(m_data->renderingTargetHeight) - viewport.y,
+    const float nativeY = m_data->renderingToSwapchain
+        ? static_cast<float>(m_data->renderingTargetHeight) - viewport.y
+        : viewport.y + viewport.height;
+    const VkViewport native{viewport.x, nativeY,
                             viewport.width, -viewport.height,
                             viewport.minDepth, viewport.maxDepth};
     vkCmdSetViewport(m_data->commandBuffer, 0u, 1u, &native);
@@ -2954,7 +2977,8 @@ void VkRhiCommandList::setScissor(const RhiRect2D& rect) {
         return;
     }
     const VkRect2D native = toVkClippedScissor(
-        rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight);
+        rect, m_data->renderingTargetWidth, m_data->renderingTargetHeight,
+        m_data->renderingToSwapchain);
     vkCmdSetScissor(m_data->commandBuffer, 0u, 1u, &native);
 }
 

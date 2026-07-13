@@ -79,7 +79,14 @@ private:
 
 struct VkRhiDeviceData {
     struct Buffer { VkBuffer buffer = VK_NULL_HANDLE; VmaAllocation allocation = VK_NULL_HANDLE; RhiBufferDesc desc{}; void* mapped = nullptr; VkRhiResourceLifetime lifetime{}; };
-    struct Texture { VkImage image = VK_NULL_HANDLE; VmaAllocation allocation = VK_NULL_HANDLE; RhiTextureDesc desc{}; bool swapchainOwned = false; VkRhiResourceLifetime lifetime{}; };
+    struct Texture {
+        VkImage image = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+        RhiTextureDesc desc{};
+        bool swapchainOwned = false;
+        bool swapchainAttachment = false;
+        VkRhiResourceLifetime lifetime{};
+    };
     struct TextureView { VkImageView view = VK_NULL_HANDLE; RhiTextureViewDesc desc{}; VkRhiResourceLifetime lifetime{}; };
     struct Sampler { VkSampler sampler = VK_NULL_HANDLE; VkRhiResourceLifetime lifetime{}; };
     struct Shader { VkShaderModule module = VK_NULL_HANDLE; RhiShaderStage stage = RhiShaderStage::Vertex; std::string entryPoint; renderer::rhi::RhiShaderReflection reflection; VkRhiResourceLifetime lifetime{}; };
@@ -180,6 +187,7 @@ struct VkRhiCommandListData {
     RhiPipelineLayoutHandle pipelineLayoutHandle{};
     uint64_t pendingSequence = 0u;
     bool rendering = false;
+    bool renderingToSwapchain = false;
     uint32_t renderingTargetWidth = 0u;
     uint32_t renderingTargetHeight = 0u;
     bool valid = true;
