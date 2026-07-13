@@ -33,7 +33,7 @@ struct AppLaunchOptions {
     std::filesystem::path benchmarkReportPath;
     bool exitWhenPlaybackEnds = true;
     bool enableDebugDashboard = true;
-    bool enableRhiDebugOutput = true;
+    bool enableRhiDebugOutput = false;
     RhiBackend rhiBackend;
 };
 
