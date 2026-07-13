@@ -350,6 +350,7 @@ endif()
 
 if(MECRAFT_RHI_BACKEND_VULKAN)
     find_package(Vulkan REQUIRED)
+    find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 endif()
 
 set(SRC_UI
@@ -664,6 +665,7 @@ target_compile_definitions(mecraft_core PUBLIC
 
 if(MECRAFT_RHI_BACKEND_VULKAN)
     target_link_libraries(mecraft_core PUBLIC Vulkan::Vulkan)
+    target_link_libraries(mecraft_core PRIVATE GPUOpen::VulkanMemoryAllocator)
 endif()
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）

@@ -11,6 +11,16 @@
     "libvorbis",
     "nlohmann-json",
     "openal-soft",
-    "spirv-cross"
+    "spirv-cross",
+    "vulkan",
+    {
+      "name": "vulkan-loader",
+      "features": [
+        "xcb",
+        "xlib"
+      ],
+      "platform": "linux"
+    },
+    "vulkan-memory-allocator"
   ]
 }

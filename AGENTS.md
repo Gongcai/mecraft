@@ -25,3 +25,4 @@
 ## Git提交
 
 - 提交消息使用<type>(<scope>): <subject>格式，subject使用中文，type和scope使用英文
+- 每完成一轮工作，提交代码及相关修改
