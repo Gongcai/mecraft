@@ -3,6 +3,7 @@
 #include "derivative_shadow.glsl"
 #include "terrain_vertex_decode.glsl"
 
+#ifndef RHI_TERRAIN_SHADOW_MDI
 layout (location = 0) in vec3 aLegacyPos;
 layout (location = 1) in vec2 aLegacyUV;
 layout (location = 2) in float aLegacyNormal;
@@ -14,6 +15,7 @@ layout (location = 7) in float aLegacyAnimationFrameCount;
 layout (location = 8) in float aLegacyAnimationFps;
 layout (location = 9) in float aLegacyAnimated;
 layout (location = 10) in uint aLegacyTintPacked;
+#endif
 layout (location = 11) in uint aPackedPos;
 layout (location = 12) in uint aPackedUV;
 layout (location = 13) in uint aPackedLightAoLayer;
