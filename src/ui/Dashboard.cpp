@@ -291,6 +291,7 @@ bool Dashboard::createRhiResources(RhiDevice& rhiDevice) {
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     pipelineDesc.colorFormats.push_back(rhiDevice.swapchainColorFormat());
+    pipelineDesc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
     m_pipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
 
     RhiBindGroupDesc bindGroupDesc;

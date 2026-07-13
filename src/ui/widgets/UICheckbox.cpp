@@ -74,6 +74,7 @@ void UICheckbox::init(ResourceMgr& resourceMgr) {
         desc.raster.cullMode = RhiCullMode::None;
         desc.depthStencil.depthTestEnabled = false; desc.depthStencil.depthWriteEnabled = false;
         desc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+        desc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
         RhiBlendAttachmentState blend; blend.blendEnabled = true;
         blend.srcColor = RhiBlendFactor::SrcAlpha; blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
         blend.srcAlpha = RhiBlendFactor::One; blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;

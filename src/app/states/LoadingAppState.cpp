@@ -21,7 +21,8 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
                       UIRenderer& uiRenderer,
                       RhiCommandList*& commandList) {
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
-    if (!colorView.isValid()) {
+    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
+    if (!colorView.isValid() || !depthView.isValid()) {
         return false;
     }
 
@@ -34,6 +35,12 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
     colorAttachment.clearColor[2] = 0.05f;
     colorAttachment.clearColor[3] = 1.0f;
 
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "LoadingScreen";
     renderingInfo.renderArea = {
@@ -44,6 +51,7 @@ bool beginLoadingPass(RhiDevice& rhiDevice,
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList = commandListPool.acquire(RhiCommandListType::Graphics);
     if (commandList == nullptr ||

@@ -59,6 +59,7 @@ void UINumericSpinner::init(ResourceMgr &resourceMgr) {
   pd.depthStencil.depthTestEnabled = false;
   pd.depthStencil.depthWriteEnabled = false;
   pd.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+  pd.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
   RhiBlendAttachmentState blend;
   blend.blendEnabled = true;
   blend.srcColor = RhiBlendFactor::SrcAlpha;

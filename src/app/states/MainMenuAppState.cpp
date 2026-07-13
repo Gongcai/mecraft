@@ -71,7 +71,8 @@ bool beginMenuOverlayPass(RhiDevice& rhiDevice,
                           UIRenderer& uiRenderer,
                           RhiCommandList*& commandList) {
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
-    if (!colorView.isValid()) {
+    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
+    if (!colorView.isValid() || !depthView.isValid()) {
         return false;
     }
 
@@ -79,6 +80,11 @@ bool beginMenuOverlayPass(RhiDevice& rhiDevice,
     colorAttachment.view = colorView;
     colorAttachment.loadOp = RhiLoadOp::Load;
     colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = depthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "MainMenuOverlay";
@@ -90,6 +96,7 @@ bool beginMenuOverlayPass(RhiDevice& rhiDevice,
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
 
     commandList = commandListPool.acquire(RhiCommandListType::Graphics);
     if (commandList == nullptr ||

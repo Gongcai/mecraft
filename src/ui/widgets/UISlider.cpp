@@ -52,6 +52,7 @@ void UISlider::init(ResourceMgr& resourceMgr) {
     pipelineDesc.depthStencil.depthTestEnabled = false;
     pipelineDesc.depthStencil.depthWriteEnabled = false;
     pipelineDesc.colorFormats.push_back(m_rhiDevice->swapchainColorFormat());
+    pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
     RhiBlendAttachmentState blend;
     blend.blendEnabled = true;
     blend.srcColor = RhiBlendFactor::SrcAlpha;
