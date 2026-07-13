@@ -920,6 +920,7 @@ void UIRenderer::initPanelRhiResources(RhiDevice& rhiDevice)
         desc.depthStencil.depthTestEnabled = false;
         desc.depthStencil.depthWriteEnabled = false;
         desc.colorFormats.push_back(rhiDevice.swapchainColorFormat());
+        desc.depthFormat = rhiDevice.swapchainDepthStencilFormat();
         RhiBlendAttachmentState blend;
         blend.blendEnabled = true;
         blend.srcColor = RhiBlendFactor::SrcAlpha;
