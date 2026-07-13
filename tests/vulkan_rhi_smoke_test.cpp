@@ -178,6 +178,9 @@ enum class FrameAttempt {
     constexpr char kVertexShader[] = R"glsl(
 #version 450 core
 #extension GL_ARB_shader_draw_parameters : require
+#ifndef RHI_VULKAN
+#error RHI_VULKAN must be defined by the Vulkan shader compiler path
+#endif
 
 void main() {
     const float drawOffset = float(gl_DrawIDARB + gl_BaseInstanceARB) * 0.001;

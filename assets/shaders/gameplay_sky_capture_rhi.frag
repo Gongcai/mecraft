@@ -287,6 +287,9 @@ vec3 captureCloudySkybox(vec3 worldDir, vec3 skyRadiance, vec3 sunDir, vec3 moon
 void main() {
     // DerivativeMain-compatible sky capture projection.
     vec2 uv = clamp(vUV, vec2(0.0), vec2(1.0));
+#ifdef RHI_VULKAN
+    uv.y = 1.0 - uv.y;
+#endif
     float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) /
                     (1.0 - 4.0 / float(skyCaptureRes.x)));
     float phi = u * kTwoPi;

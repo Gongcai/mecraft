@@ -62,6 +62,23 @@ void logVkError(const char* operation, const VkResult result) {
     return false;
 }
 
+[[nodiscard]] std::optional<std::string> makeVulkanShaderSource(const RhiShaderDesc& desc) {
+    if (desc.source == nullptr || desc.sourceSize == 0u) {
+        return std::nullopt;
+    }
+    std::string source(desc.source, static_cast<size_t>(desc.sourceSize));
+    const size_t versionStart = source.find("#version");
+    if (versionStart == std::string::npos) {
+        return std::nullopt;
+    }
+    const size_t versionEnd = source.find('\n', versionStart);
+    if (versionEnd == std::string::npos) {
+        return std::nullopt;
+    }
+    source.insert(versionEnd + 1u, "#define RHI_VULKAN 1\n");
+    return source;
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                                               VkDebugUtilsMessageTypeFlagsEXT,
                                               const VkDebugUtilsMessengerCallbackDataEXT* data,
@@ -1611,8 +1628,16 @@ RhiSamplerHandle VkRhiDevice::createSampler(const RhiSamplerDesc& desc) {
 
 RhiShaderHandle VkRhiDevice::createShader(const RhiShaderDesc& desc) {
     if (!m_initialized) return {};
+    const std::optional<std::string> vulkanSource = makeVulkanShaderSource(desc);
+    if (!vulkanSource.has_value()) {
+        std::cerr << "VkRhiDevice: shader source requires a #version directive\n";
+        return {};
+    }
+    RhiShaderDesc compileDesc = desc;
+    compileDesc.source = vulkanSource->data();
+    compileDesc.sourceSize = vulkanSource->size();
     std::string error;
-    auto compiled = renderer::rhi::compileShaderToSpirv(desc, error);
+    auto compiled = renderer::rhi::compileShaderToSpirv(compileDesc, error);
     if (!compiled.has_value()) {
         std::cerr << "VkRhiDevice: shader compilation failed: " << error << '\n';
         return {};
