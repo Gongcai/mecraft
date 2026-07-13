@@ -55,7 +55,8 @@ private:
     // Helper to create a labeled slider row
     void addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
                       const std::string& label, float minVal, float maxVal,
-                      float currentVal, float step, std::function<void(float)> onValueChanged);
+                      float currentVal, float step, std::function<void(float)> onValueChanged,
+                      bool interactive = true);
 
     // Helper to create a labeled dropdown row
     void addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
@@ -64,7 +65,8 @@ private:
 
     // Helper to create a toggle
     void addToggle(UIWidget* parent, ResourceMgr& resourceMgr,
-                   const std::string& label, bool checked, std::function<void(bool)> onChanged);
+                   const std::string& label, bool checked, std::function<void(bool)> onChanged,
+                   bool interactive = true);
 
     // Helper to create a section header
     void addSectionHeader(UIWidget* parent, ResourceMgr& resourceMgr, const std::string& text);

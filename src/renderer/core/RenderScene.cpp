@@ -270,6 +270,7 @@ void RenderScene::shutdown() {
 
     // Phase 5: Shutdown shared post-process pass
     m_fsr1Pass.shutdown();
+    m_fsr1Supported = false;
     m_postProcessPass.shutdown();
 }
 
@@ -460,8 +461,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                                            m_currentContext.swapchainColorView,
                                                            m_debugService);
         } else {
-            const bool fsrEnabled = m_settings.upscale.fsr1Enabled &&
-                                    m_settings.upscale.renderScale < 0.999f;
+            const bool fsrEnabled = isFsr1RuntimeEnabled();
             if (fsrEnabled) {
                 const RhiTextureHandle postTexture = m_postProcessPass.compositeToTexture(
                     *m_shared.rhiDevice,
@@ -669,7 +669,10 @@ void RenderScene::setupResources(
     m_shared.commandListPool = commandListPool;
     if (rhiDevice == nullptr || commandListPool == nullptr) std::abort();
     m_postProcessPass.init(*m_shared.resources, *commandListPool);
-    m_fsr1Pass.init(*m_shared.resources, *commandListPool);
+    m_fsr1Supported = Fsr1Pass::isSupported(*rhiDevice);
+    if (m_fsr1Supported) {
+        m_fsr1Pass.init(*m_shared.resources, *commandListPool);
+    }
     m_overlayRenderer.init(*m_shared.resources, *rhiDevice);
     m_shared.terrainCache = &m_terrainStreamingService.terrainCache();
     m_shared.terrainStreaming = &m_terrainStreamingService;
@@ -1020,13 +1023,18 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
 glm::ivec2 RenderScene::internalRenderSize(const Window& window) const {
     const int displayWidth = std::max(1, window.getWidth());
     const int displayHeight = std::max(1, window.getHeight());
-    if (!m_settings.upscale.fsr1Enabled || m_settings.upscale.renderScale >= 0.999f ||
-        m_settings.pipelineMode != PipelineMode::Deferred) {
+    if (!isFsr1RuntimeEnabled()) {
         return glm::ivec2(displayWidth, displayHeight);
     }
     const float scale = std::clamp(m_settings.upscale.renderScale, 0.5f, 1.0f);
     return glm::ivec2(std::max(1, static_cast<int>(std::round(static_cast<float>(displayWidth) * scale))),
                       std::max(1, static_cast<int>(std::round(static_cast<float>(displayHeight) * scale))));
+}
+
+bool RenderScene::isFsr1RuntimeEnabled() const {
+    return m_fsr1Supported && m_settings.upscale.fsr1Enabled &&
+           m_settings.upscale.renderScale < 0.999f &&
+           m_settings.pipelineMode == PipelineMode::Deferred;
 }
 
 void RenderScene::invalidateFrameHistory() {

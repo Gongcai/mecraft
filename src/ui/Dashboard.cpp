@@ -1355,9 +1355,16 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.voxelGi.receiverShadowBoost = 0.95f;
             pipelineChanged = true;
         }
-        pipelineChanged |= ImGui::Checkbox("FSR1 Upscale", &settings.upscale.fsr1Enabled);
+        const bool fsr1Supported = renderScene.isFsr1Supported();
+        bool fsr1EnabledUi = fsr1Supported && settings.upscale.fsr1Enabled;
+        ImGui::BeginDisabled(!fsr1Supported);
+        if (ImGui::Checkbox("FSR1 Upscale (OpenGL only)", &fsr1EnabledUi)) {
+            settings.upscale.fsr1Enabled = fsr1EnabledUi;
+            pipelineChanged = true;
+        }
         pipelineChanged |= ImGui::SliderFloat("FSR1 Render Scale", &settings.upscale.renderScale, 0.50f, 1.00f, "%.2f");
         pipelineChanged |= ImGui::SliderFloat("FSR1 Sharpness", &settings.upscale.sharpness, 0.00f, 2.00f, "%.2f");
+        ImGui::EndDisabled();
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &settings.postProcess.bloomEnabled);
         pipelineChanged |= ImGui::SliderInt("Bloom Mips", &settings.postProcess.bloomMipCount, 1, 7);
         pipelineChanged |= ImGui::SliderFloat("Bloom Threshold", &settings.postProcess.bloomThreshold, 0.0f, 3.0f, "%.2f");

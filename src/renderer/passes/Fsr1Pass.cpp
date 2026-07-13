@@ -22,6 +22,10 @@ Fsr1Pass::~Fsr1Pass() {
     shutdown();
 }
 
+bool Fsr1Pass::isSupported(const RhiDevice& rhiDevice) {
+    return rhiDevice.backend() == RhiBackend::OpenGL;
+}
+
 void Fsr1Pass::init(ResourceMgr&, RhiCommandListPool& commandListPool) {
     m_commandListPool = &commandListPool;
 }
@@ -67,7 +71,7 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
                        const int outputHeight,
                        const float sharpness,
                        RenderDebugService& debugService) {
-    if (!inputView.isValid() || !swapchainColorView.isValid() ||
+    if (!isSupported(rhiDevice) || !inputView.isValid() || !swapchainColorView.isValid() ||
         inputWidth <= 0 || inputHeight <= 0 || outputWidth <= 0 || outputHeight <= 0) {
         return false;
     }

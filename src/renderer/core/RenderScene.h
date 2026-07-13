@@ -135,6 +135,7 @@ public:
     void setSettings(const RenderSettings& settings);
     const RenderSettings& getSettings() const;
     void setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback);
+    [[nodiscard]] bool isFsr1Supported() const { return m_fsr1Supported; }
 
     // Sub-renderer injection (temporary until ECS-driven)
     void setBlockEntityRenderer(BlockEntityRenderer* ber);
@@ -226,6 +227,7 @@ private:
     FrameContext buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
                                    const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem);
     glm::ivec2 internalRenderSize(const Window& window) const;
+    [[nodiscard]] bool isFsr1RuntimeEnabled() const;
 
     /// Prepare active pipeline targets that FrameContext depends on.
     bool prepareFrameResources(const Window& window);
@@ -252,6 +254,7 @@ private:
     // Shared post-processing pass (used by both Forward and Deferred pipelines)
     PostProcessPass m_postProcessPass;
     Fsr1Pass m_fsr1Pass;
+    bool m_fsr1Supported = false;
 
     // Frame state
     FrameOutput m_lastFrameOutput;

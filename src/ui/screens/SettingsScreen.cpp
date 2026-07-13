@@ -361,12 +361,14 @@ void SettingsScreen::addSectionHeader(UIWidget* parent, ResourceMgr& /*resourceM
 
 void SettingsScreen::addToggle(UIWidget* parent, ResourceMgr& resourceMgr,
                                 const std::string& label, bool checked,
-                                std::function<void(bool)> onChanged) {
+                                std::function<void(bool)> onChanged,
+                                const bool interactive) {
     (void)resourceMgr;
     auto toggle = std::make_unique<UIToggle>();
     toggle->setLabel(label);
     toggle->setLabelTextScale(kSettingsRowTextScale);
     toggle->setChecked(checked);
+    toggle->interactive = interactive;
     toggle->width = 520.0f;
     toggle->height = kSettingsRowHeight;
     toggle->onChanged = std::move(onChanged);
@@ -376,7 +378,8 @@ void SettingsScreen::addToggle(UIWidget* parent, ResourceMgr& resourceMgr,
 void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
                                    const std::string& label, float minVal, float maxVal,
                                    float currentVal, float step,
-                                   std::function<void(float)> onValueChanged) {
+                                   std::function<void(float)> onValueChanged,
+                                   const bool interactive) {
     (void)resourceMgr;
     auto row = std::make_unique<UIStackLayout>();
     row->setDirection(StackDirection::Horizontal);
@@ -395,6 +398,7 @@ void SettingsScreen::addSliderRow(UIWidget* parent, ResourceMgr& resourceMgr,
     slider->setRange(minVal, maxVal);
     slider->setStep(step);
     slider->setValue(currentVal);
+    slider->interactive = interactive;
     slider->width = 390.0f;
     slider->height = kSettingsRowHeight;
 
@@ -1328,26 +1332,28 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
 
     if (!m_renderScene) { finalizeScrollTab(tabLayout.scroll, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
+    const bool fsr1Supported = m_renderScene->isFsr1Supported();
 
     addSectionHeader(stack, resourceMgr, "Upscaling");
 
-    addToggle(stack, resourceMgr, "FSR1 Upscale", s.upscale.fsr1Enabled,
+    addToggle(stack, resourceMgr, "FSR1 Upscale (OpenGL only)",
+              fsr1Supported && s.upscale.fsr1Enabled,
               [this](bool v) {
                   auto s = m_renderScene->getSettings(); s.upscale.fsr1Enabled = v;
                   m_renderScene->setSettings(s);
-              });
+              }, fsr1Supported);
     addSliderRow(stack, resourceMgr, "FSR1 Render Scale",
                  0.50f, 1.0f, s.upscale.renderScale, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings(); s.upscale.renderScale = v;
                      m_renderScene->setSettings(s);
-                 });
+                 }, fsr1Supported);
     addSliderRow(stack, resourceMgr, "FSR1 Sharpness",
                  0.0f, 2.0f, s.upscale.sharpness, 0.01f,
                  [this](float v) {
                      auto s = m_renderScene->getSettings(); s.upscale.sharpness = v;
                      m_renderScene->setSettings(s);
-                 });
+                 }, fsr1Supported);
 
     addSectionHeader(stack, resourceMgr, "Anti-Aliasing");
 

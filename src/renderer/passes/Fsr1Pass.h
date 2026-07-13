@@ -20,6 +20,7 @@ public:
     void init(ResourceMgr& resourceMgr, RhiCommandListPool& commandListPool);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "FSR1"; }
+    [[nodiscard]] static bool isSupported(const RhiDevice& rhiDevice);
 
     bool execute(RhiDevice& rhiDevice,
                  RhiTextureViewHandle swapchainColorView,
