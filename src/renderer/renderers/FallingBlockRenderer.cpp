@@ -19,10 +19,9 @@
 namespace {
 
 struct FallingBlockPushConstants {
-    glm::mat4 viewProj;
-    glm::mat4 previousViewProj;
+    glm::mat4 modelViewProj;
+    glm::mat4 previousModelViewProj;
     glm::mat4 model;
-    glm::mat4 previousModel;
     glm::vec4 lightAnimation;
 };
 
@@ -143,7 +142,9 @@ void FallingBlockRenderer::renderToGBuffer(RhiCommandList& commandList,
             continue;
         }
         const FallingBlockPushConstants pushConstants{
-            jitteredViewProj, previousViewProj, instance.model, instance.previousModel,
+            jitteredViewProj * instance.model,
+            previousViewProj * instance.previousModel,
+            instance.model,
             glm::vec4(instance.light, animationTime, 0.0f)
         };
         commandList.setVertexBuffer(0u, mesh->rhiVertexBuffer, 0u);
