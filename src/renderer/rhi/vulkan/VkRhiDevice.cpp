@@ -127,11 +127,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
 }
 
 [[nodiscard]] VkFrontFace toVkFrontFace(const RhiFrontFace face) {
-    // Negative Vulkan viewport heights preserve the RHI clip-space Y direction
-    // but reverse framebuffer winding, so the native front face is inverted.
     return face == RhiFrontFace::CounterClockwise
-        ? VK_FRONT_FACE_CLOCKWISE
-        : VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        ? VK_FRONT_FACE_COUNTER_CLOCKWISE
+        : VK_FRONT_FACE_CLOCKWISE;
 }
 
 [[nodiscard]] VkFilter toVkFilter(const RhiFilter filter) {
