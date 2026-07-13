@@ -77,12 +77,8 @@ bool blitPostProcessTextureToSwapchain(RhiDevice& rhiDevice,
                                        RhiCommandListPool& commandListPool,
                                        const RhiTextureViewHandle swapchainColorView,
                                        const RhiTextureHandle source,
-                                       const int width,
-                                       const int height,
                                        RenderDebugService& debugService) {
-    if (!source.isValid() || !swapchainColorView.isValid() ||
-        !rhiDevice.resizeSwapchain(static_cast<uint32_t>(std::max(1, width)),
-                                   static_cast<uint32_t>(std::max(1, height)))) {
+    if (!source.isValid() || !swapchainColorView.isValid()) {
         return false;
     }
 
@@ -361,7 +357,6 @@ RhiTextureHandle PostProcessPass::compositeToTexture(
 void PostProcessPass::blitSceneCaptureToBackbuffer(
     RhiDevice& rhiDevice,
     const RhiTextureViewHandle swapchainColorView,
-    const Window& window,
     RenderDebugService& debugService) {
     if (!m_sceneCaptured || !m_sceneColorHandle.isValid()) {
         return;
@@ -373,8 +368,6 @@ void PostProcessPass::blitSceneCaptureToBackbuffer(
                                            *m_commandListPool,
                                            swapchainColorView,
                                            m_sceneColorHandle,
-                                           window.getWidth(),
-                                           window.getHeight(),
                                            debugService)) {
         MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Failed to blit scene capture through RHI\n");
     }
@@ -383,7 +376,6 @@ void PostProcessPass::blitSceneCaptureToBackbuffer(
 void PostProcessPass::blitCompositeToBackbuffer(
     RhiDevice& rhiDevice,
     const RhiTextureViewHandle swapchainColorView,
-    const Window& window,
     RenderDebugService& debugService) {
     if (!m_compositeHandle.isValid()) {
         return;
@@ -395,8 +387,6 @@ void PostProcessPass::blitCompositeToBackbuffer(
                                            *m_commandListPool,
                                            swapchainColorView,
                                            m_compositeHandle,
-                                           window.getWidth(),
-                                           window.getHeight(),
                                            debugService)) {
         MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Failed to blit composite target through RHI\n");
     }

@@ -100,13 +100,11 @@ public:
     /// Blit captured scene directly to back buffer without any postprocessing.
     void blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice,
                                       RhiTextureViewHandle swapchainColorView,
-                                      const Window& window,
                                       RenderDebugService& debugService);
 
     /// Blit the internal composited LDR texture to the back buffer.
     void blitCompositeToBackbuffer(RhiDevice& rhiDevice,
                                    RhiTextureViewHandle swapchainColorView,
-                                   const Window& window,
                                    RenderDebugService& debugService);
 
     /// Set effects configuration for the current frame.

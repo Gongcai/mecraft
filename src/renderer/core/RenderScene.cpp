@@ -448,7 +448,6 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     if (skipPostProcess) {
         m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
                                                        m_currentContext.swapchainColorView,
-                                                       request.window,
                                                        m_debugService);
     } else {
         PostProcessEffects effects = buildPostProcessEffects(
@@ -459,7 +458,6 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         if (lightDebugActive) {
             m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
                                                            m_currentContext.swapchainColorView,
-                                                           request.window,
                                                            m_debugService);
         } else {
             const bool fsrEnabled = m_settings.upscale.fsr1Enabled &&
