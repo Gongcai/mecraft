@@ -261,7 +261,21 @@ bool ParticleSystem::createRhiResources() {
     pipelineDesc.fragmentShader = m_deferredFragmentShader;
     pipelineDesc.layout = m_deferredPipelineLayout;
     pipelineDesc.depthStencil.depthTestEnabled = false;
-    pipelineDesc.colorFormats[0] = RhiTextureFormat::Rgba16Float;
+    pipelineDesc.colorFormats = {
+        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::R8Unorm,
+        RhiTextureFormat::R8Unorm
+    };
+    RhiBlendAttachmentState maskBlend;
+    maskBlend.blendEnabled = true;
+    maskBlend.srcColor = RhiBlendFactor::One;
+    maskBlend.dstColor = RhiBlendFactor::One;
+    maskBlend.colorOp = RhiBlendOp::Max;
+    maskBlend.srcAlpha = RhiBlendFactor::One;
+    maskBlend.dstAlpha = RhiBlendFactor::One;
+    maskBlend.alphaOp = RhiBlendOp::Max;
+    pipelineDesc.blend.attachments.push_back(maskBlend);
+    pipelineDesc.blend.attachments.push_back(maskBlend);
     pipelineDesc.depthFormat = RhiTextureFormat::Undefined;
     m_deferredPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
 

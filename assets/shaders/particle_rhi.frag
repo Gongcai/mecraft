@@ -5,6 +5,10 @@ layout(location = 1) in float vLayer;
 layout(location = 2) in float vAlpha;
 layout(location = 3) in float vBiomeTintFactor;
 layout(location = 0) out vec4 fragColor;
+#ifdef PARTICLE_DEFERRED
+layout(location = 1) out float fragReactiveMask;
+layout(location = 2) out float fragTransparencyMask;
+#endif
 
 layout(binding = 0) uniform sampler2DArray uTextureArray;
 #ifdef PARTICLE_DEFERRED
@@ -51,5 +55,10 @@ void main() {
     vec2 voxelLight = texture(uVoxelLightTexture, textureUv).rg;
     albedo *= max(max(voxelLight.r, voxelLight.g), 0.05);
 #endif
-    fragColor = vec4(albedo, texel.a * vAlpha);
+    float finalAlpha = texel.a * vAlpha;
+    fragColor = vec4(albedo, finalAlpha);
+#ifdef PARTICLE_DEFERRED
+    fragReactiveMask = clamp(finalAlpha * 2.0, 0.0, 1.0);
+    fragTransparencyMask = clamp(finalAlpha, 0.0, 1.0);
+#endif
 }

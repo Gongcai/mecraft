@@ -2,6 +2,10 @@
 
 layout(location = 0) in vec2 vUv;
 layout(location = 0) out vec4 fragColor;
+#ifdef RAIN_TEMPORAL_MASKS
+layout(location = 1) out float fragReactiveMask;
+layout(location = 2) out float fragTransparencyMask;
+#endif
 
 layout(binding = 0) uniform sampler2D uPrecipTexture;
 #ifdef RAIN_SCENE_DEPTH
@@ -45,5 +49,10 @@ void main() {
         discard;
     }
 
-    fragColor = vec4(uPrecipColorStrength.rgb, alpha * uPrecipColorStrength.a);
+    float finalAlpha = alpha * uPrecipColorStrength.a;
+    fragColor = vec4(uPrecipColorStrength.rgb, finalAlpha);
+#ifdef RAIN_TEMPORAL_MASKS
+    fragReactiveMask = clamp(finalAlpha * 2.0, 0.0, 1.0);
+    fragTransparencyMask = clamp(finalAlpha, 0.0, 1.0);
+#endif
 }

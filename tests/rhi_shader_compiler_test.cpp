@@ -10,6 +10,7 @@ struct ShaderCase {
     const char* path;
     RhiShaderStage stage;
     const char* definition = nullptr;
+    const char* secondDefinition = nullptr;
 };
 
 [[nodiscard]] bool compileForBackend(const ShaderCase& shaderCase,
@@ -38,7 +39,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 46> kShaderCases{{
+    constexpr std::array<ShaderCase, 48> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
@@ -86,6 +87,10 @@ int main() {
          "RHI_TERRAIN_WATER_MDI"},
         {"assets/shaders/transparent_composite.frag", RhiShaderStage::Fragment,
          "RHI_TERRAIN_LIT_MDI"},
+        {"assets/shaders/particle_rhi.frag", RhiShaderStage::Fragment,
+         "PARTICLE_DEFERRED"},
+        {"assets/shaders/rain_rhi.frag", RhiShaderStage::Fragment,
+         "RAIN_SCENE_DEPTH", "RAIN_TEMPORAL_MASKS"},
         {"assets/shaders/ui_glass_rhi.frag", RhiShaderStage::Fragment}
     }};
 
@@ -94,6 +99,9 @@ int main() {
         renderer::rhi::RhiShaderSourceOptions sourceOptions;
         if (shaderCase.definition != nullptr) {
             sourceOptions.preprocessorDefinitions.emplace_back(shaderCase.definition);
+        }
+        if (shaderCase.secondDefinition != nullptr) {
+            sourceOptions.preprocessorDefinitions.emplace_back(shaderCase.secondDefinition);
         }
         const auto source = renderer::rhi::loadShaderSource(shaderCase.path, sourceOptions);
         if (!source.has_value()) {

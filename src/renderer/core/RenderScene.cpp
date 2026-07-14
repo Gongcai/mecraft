@@ -162,6 +162,57 @@ RhiCommandList* beginSceneCaptureRendering(RhiCommandListPool& commandListPool,
     return beginSceneCaptureRendering(commandList, ctx, debugName);
 }
 
+RhiCommandList* beginWeatherRendering(RhiCommandList& commandList,
+                                      const FrameContext& ctx,
+                                      DeferredRenderTargets* targets,
+                                      const bool writeTemporalMasks) {
+    if (!writeTemporalMasks) {
+        return beginSceneCaptureRendering(commandList, ctx, "SceneCapture.Weather");
+    }
+    if (targets == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid() ||
+        !targets->ensureReactiveMaskTextureView(*ctx.shared->rhiDevice) ||
+        !targets->ensureTransparencyMaskTextureView(*ctx.shared->rhiDevice)) {
+        return nullptr;
+    }
+
+    RhiColorAttachment colorAttachments[3];
+    colorAttachments[0].view = ctx.sceneCaptureColorView;
+    colorAttachments[0].loadOp = RhiLoadOp::Load;
+    colorAttachments[0].storeOp = RhiStoreOp::Store;
+    colorAttachments[1].view = targets->reactiveMaskTextureViewHandle();
+    colorAttachments[1].loadOp = RhiLoadOp::Load;
+    colorAttachments[1].storeOp = RhiStoreOp::Store;
+    colorAttachments[2].view = targets->transparencyMaskTextureViewHandle();
+    colorAttachments[2].loadOp = RhiLoadOp::Load;
+    colorAttachments[2].storeOp = RhiStoreOp::Store;
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = ctx.sceneCaptureDepthView;
+    depthAttachment.depthLoadOp = RhiLoadOp::Load;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SceneCapture.Weather";
+    renderingInfo.renderArea = {0, 0, ctx.renderExtent.width, ctx.renderExtent.height};
+    renderingInfo.colorAttachments = colorAttachments;
+    renderingInfo.colorAttachmentCount = 3u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    commandList.textureBarrier({ctx.sceneCaptureColorTexture,
+                                RhiResourceState::ShaderRead,
+                                RhiResourceState::RenderTarget});
+    commandList.textureBarrier({ctx.sceneCaptureDepthTexture,
+                                RhiResourceState::DepthRead,
+                                RhiResourceState::DepthWrite});
+    targets->transitionTexture(commandList, targets->reactiveMaskTextureHandle(),
+                               RhiResourceState::RenderTarget);
+    targets->transitionTexture(commandList, targets->transparencyMaskTextureHandle(),
+                               RhiResourceState::RenderTarget);
+    commandList.beginRendering(renderingInfo);
+    return &commandList;
+}
+
 void endSceneCaptureRendering(RhiDevice& rhiDevice,
                               RhiCommandList* commandList,
                               const FrameContext& ctx) {
@@ -185,6 +236,39 @@ void endSceneCaptureRendering(RhiDevice& rhiDevice,
     }
     RhiCommandList* submittedCommandLists[] = {commandList};
     if (!rhiDevice.submit({"SceneCapture.Submit", submittedCommandLists, 1u})) {
+        std::abort();
+    }
+}
+
+void endWeatherRendering(RhiDevice& rhiDevice,
+                         RhiCommandList* commandList,
+                         const FrameContext& ctx,
+                         DeferredRenderTargets* targets,
+                         const bool writeTemporalMasks) {
+    if (!writeTemporalMasks) {
+        endSceneCaptureRendering(rhiDevice, commandList, ctx);
+        return;
+    }
+    if (commandList == nullptr || targets == nullptr) {
+        return;
+    }
+
+    commandList->endRendering();
+    commandList->textureBarrier({ctx.sceneCaptureColorTexture,
+                                 RhiResourceState::RenderTarget,
+                                 RhiResourceState::ShaderRead});
+    commandList->textureBarrier({ctx.sceneCaptureDepthTexture,
+                                 RhiResourceState::DepthWrite,
+                                 RhiResourceState::DepthRead});
+    targets->transitionTexture(*commandList, targets->reactiveMaskTextureHandle(),
+                               RhiResourceState::ShaderRead);
+    targets->transitionTexture(*commandList, targets->transparencyMaskTextureHandle(),
+                               RhiResourceState::ShaderRead);
+    if (!commandList->end()) {
+        std::abort();
+    }
+    RhiCommandList* submittedCommandLists[] = {commandList};
+    if (!rhiDevice.submit({"Weather.Submit", submittedCommandLists, 1u})) {
         std::abort();
     }
 }
@@ -384,6 +468,14 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                               weather.rainStrength,
                                               weather.snowStrength,
                                               request.frameTime);
+            const bool forwardVanillaActive = isNewPipelineActive() &&
+                                               getPipelineMode() == PipelineMode::Forward;
+            const RhiTextureHandle depthTexture = forwardVanillaActive
+                ? RhiTextureHandle{}
+                : m_lastFrameOutput.gbufferDepth;
+            const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
+            const bool writeTemporalMasks = !hardwareDepthTest &&
+                                             m_shared.deferredTargets != nullptr;
             RhiCommandList* weatherCommandList = nullptr;
             if (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f) {
                 RhiCommandList* commandListStorage =
@@ -395,19 +487,16 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 }
                 RhiCommandList& commandList = *commandListStorage;
                 request.rainRenderer.uploadFrame(commandList);
-                weatherCommandList = beginSceneCaptureRendering(
-                    commandList, m_currentContext, "SceneCapture.Weather");
+                weatherCommandList = beginWeatherRendering(
+                    commandList,
+                    m_currentContext,
+                    m_shared.deferredTargets,
+                    writeTemporalMasks);
             }
             const float frameAspect = static_cast<float>(frameRenderSize.x) /
                                       static_cast<float>(std::max(1, frameRenderSize.y));
             auto projMat = request.camera.getProjectionMatrix(frameAspect);
             const float alphaScale = m_settings.weather.rainAlphaScale;
-            const bool forwardVanillaActive = isNewPipelineActive() &&
-                                               getPipelineMode() == PipelineMode::Forward;
-            const RhiTextureHandle depthTexture = forwardVanillaActive
-                ? RhiTextureHandle{}
-                : m_lastFrameOutput.gbufferDepth;
-            const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
             const glm::vec2 precipitationScreenSize(
                 static_cast<float>(frameRenderSize.x),
                 static_cast<float>(frameRenderSize.y));
@@ -426,7 +515,11 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                                 precipitationScreenSize,
                                                 hardwareDepthTest);
             }
-            endSceneCaptureRendering(*m_shared.rhiDevice, weatherCommandList, m_currentContext);
+            endWeatherRendering(*m_shared.rhiDevice,
+                                weatherCommandList,
+                                m_currentContext,
+                                m_shared.deferredTargets,
+                                writeTemporalMasks);
         }
     }
 

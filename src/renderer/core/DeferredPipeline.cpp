@@ -1157,14 +1157,22 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
     auto& targets = *m_shared->deferredTargets;
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
-    if (!targets.ensureSceneCompositeTextureView(rhiDevice)) {
+    if (!targets.ensureSceneCompositeTextureView(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(rhiDevice)) {
         return;
     }
 
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.sceneCompositeTextureViewHandle();
-    colorAttachment.loadOp = RhiLoadOp::Load;
-    colorAttachment.storeOp = RhiStoreOp::Store;
+    RhiColorAttachment colorAttachments[3];
+    colorAttachments[0].view = targets.sceneCompositeTextureViewHandle();
+    colorAttachments[0].loadOp = RhiLoadOp::Load;
+    colorAttachments[0].storeOp = RhiStoreOp::Store;
+    colorAttachments[1].view = targets.reactiveMaskTextureViewHandle();
+    colorAttachments[1].loadOp = RhiLoadOp::Load;
+    colorAttachments[1].storeOp = RhiStoreOp::Store;
+    colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
+    colorAttachments[2].loadOp = RhiLoadOp::Load;
+    colorAttachments[2].storeOp = RhiStoreOp::Store;
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "Particles.SceneComposite";
@@ -1174,8 +1182,8 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
         static_cast<uint32_t>(std::max(1, targets.width())),
         static_cast<uint32_t>(std::max(1, targets.height()))
     };
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.colorAttachments = colorAttachments;
+    renderingInfo.colorAttachmentCount = 3u;
 
     RhiCommandList* commandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
     if (commandListStorage == nullptr ||
@@ -1188,6 +1196,10 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
         : GpuTimerSegmentToken{};
     m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
     targets.transitionTexture(commandList, targets.sceneCompositeTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
                               RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
 
@@ -1207,6 +1219,10 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
 
     commandList.endRendering();
     targets.transitionTexture(commandList, targets.sceneCompositeTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
                               RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, gpuTimer);

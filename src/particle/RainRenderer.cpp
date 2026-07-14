@@ -277,6 +277,7 @@ bool RainRenderer::createRhiResources() {
         renderer::rhi::loadShaderSource("assets/shaders/rain_rhi.frag");
     renderer::rhi::RhiShaderSourceOptions depthOptions;
     depthOptions.preprocessorDefinitions.push_back("RAIN_SCENE_DEPTH");
+    depthOptions.preprocessorDefinitions.push_back("RAIN_TEMPORAL_MASKS");
     const std::optional<std::string> depthFragmentSource =
         renderer::rhi::loadShaderSource("assets/shaders/rain_rhi.frag", depthOptions);
     if (!vertexSource.has_value() || !fragmentSource.has_value() ||
@@ -373,6 +374,21 @@ bool RainRenderer::createRhiResources() {
     pipelineDesc.fragmentShader = m_depthFragmentShader;
     pipelineDesc.layout = m_depthPipelineLayout;
     pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.colorFormats = {
+        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::R8Unorm,
+        RhiTextureFormat::R8Unorm
+    };
+    RhiBlendAttachmentState maskBlend;
+    maskBlend.blendEnabled = true;
+    maskBlend.srcColor = RhiBlendFactor::One;
+    maskBlend.dstColor = RhiBlendFactor::One;
+    maskBlend.colorOp = RhiBlendOp::Max;
+    maskBlend.srcAlpha = RhiBlendFactor::One;
+    maskBlend.dstAlpha = RhiBlendFactor::One;
+    maskBlend.alphaOp = RhiBlendOp::Max;
+    pipelineDesc.blend.attachments.push_back(maskBlend);
+    pipelineDesc.blend.attachments.push_back(maskBlend);
     m_depthSamplePipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
 
     if (!m_vertexBuffer.isValid() || !m_rainTextureView.isValid() ||
