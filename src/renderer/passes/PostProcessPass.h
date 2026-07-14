@@ -81,6 +81,17 @@ public:
     /// Start capturing world-space rendering into an off-screen scene target.
     [[nodiscard]] bool beginSceneCapture(RhiDevice& rhiDevice, int width, int height);
 
+    /// Select the HDR texture produced by temporal reconstruction for post-processing.
+    /// @param texture HDR texture sampled by bloom, exposure, and final composition.
+    /// @param view Two-dimensional view covering the selected HDR texture.
+    /// @param width HDR input width in pixels.
+    /// @param height HDR input height in pixels.
+    /// @return True when the input is valid and processing targets match its extent.
+    [[nodiscard]] bool setHdrInput(RhiTextureHandle texture,
+                                   RhiTextureViewHandle view,
+                                   int width,
+                                   int height);
+
     /// Composite captured scene to back buffer with active effects.
     void compositeToBackbuffer(RhiDevice& rhiDevice,
                                RhiTextureViewHandle swapchainColorView,
@@ -117,8 +128,8 @@ public:
     [[nodiscard]] bool isAutoExposureGpuResolved() const {
         return m_effects.autoExposureEnabled && m_autoExposureInitialized;
     }
-    [[nodiscard]] int targetWidth() const { return m_targetWidth; }
-    [[nodiscard]] int targetHeight() const { return m_targetHeight; }
+    [[nodiscard]] int targetWidth() const { return m_processingWidth; }
+    [[nodiscard]] int targetHeight() const { return m_processingHeight; }
     [[nodiscard]] RhiTextureHandle sceneColorTextureHandle() const { return m_sceneColorHandle; }
     [[nodiscard]] RhiTextureHandle sceneDepthTextureHandle() const { return m_sceneDepthHandle; }
     [[nodiscard]] RhiTextureViewHandle sceneColorTextureViewHandle() const { return m_sceneColorView; }
@@ -143,7 +154,8 @@ private:
     void submitCommandList(RhiDevice& rhiDevice,
                            RhiCommandList& commandList,
                            const char* debugName) const;
-    bool ensureRenderTargets(RhiDevice& rhiDevice, int width, int height);
+    bool ensureSceneCaptureTargets(RhiDevice& rhiDevice, int width, int height);
+    bool ensureProcessingTargets(RhiDevice& rhiDevice, int width, int height);
     bool ensureCompositeTarget(RhiDevice& rhiDevice, int width, int height);
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
     bool ensureSwapchainCompositePipeline(RhiDevice& rhiDevice,
@@ -152,7 +164,8 @@ private:
     bool ensureGbufferDepthTextureView(RhiDevice& rhiDevice, RhiTextureHandle texture);
     bool rebuildTargetBindGroups();
     bool rebuildCompositeBindGroups();
-    void destroyRenderTargets();
+    void destroySceneCaptureTargets();
+    void destroyProcessingTargets();
     void destroyTargetBindGroups();
     void destroyCompositeBindGroups();
     void destroyRhiResources();
@@ -243,6 +256,8 @@ private:
     RhiTextureViewHandle m_sceneColorView;
     RhiTextureHandle m_sceneDepthHandle;
     RhiTextureViewHandle m_sceneDepthView;
+    RhiTextureHandle m_hdrInputHandle;
+    RhiTextureViewHandle m_hdrInputView;
 
     RhiTextureHandle m_compositeHandle;
     RhiTextureViewHandle m_compositeView;
@@ -262,8 +277,10 @@ private:
     int m_exposureStateReadIndex = 0;
     double m_autoExposureSampleAccumulator = 0.0;
 
-    int m_targetWidth = 0;
-    int m_targetHeight = 0;
+    int m_captureWidth = 0;
+    int m_captureHeight = 0;
+    int m_processingWidth = 0;
+    int m_processingHeight = 0;
     bool m_sceneCaptured = false;
     bool m_autoExposureInitialized = false;
     float m_adaptedExposure = 1.0f;

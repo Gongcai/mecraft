@@ -18,6 +18,7 @@ struct TemporalUpscaleResult {
     TemporalUpscaleStatus status = TemporalUpscaleStatus::InvalidFrame;
     std::optional<TemporalFrameValidationError> validationError;
     RhiTextureHandle outputHdrColor;
+    RhiTextureViewHandle outputHdrColorView;
     TemporalExtent outputExtent;
 
     [[nodiscard]] bool succeeded() const {

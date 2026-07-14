@@ -175,8 +175,10 @@ void PostProcessPass::shutdown() {
     destroyRhiResources();
     m_noiseTexture = {};
     m_sceneCaptured = false;
-    m_targetWidth = 0;
-    m_targetHeight = 0;
+    m_captureWidth = 0;
+    m_captureHeight = 0;
+    m_processingWidth = 0;
+    m_processingHeight = 0;
     m_autoExposureSampleAccumulator = 0.0;
     m_commandListPool = nullptr;
 }
@@ -251,10 +253,39 @@ bool PostProcessPass::beginSceneCapture(RhiDevice& rhiDevice,
                                         const int requestedHeight) {
     m_sceneCaptured = false;
     if (requestedWidth <= 0 || requestedHeight <= 0 ||
-        !ensureRenderTargets(rhiDevice, requestedWidth, requestedHeight)) {
+        !ensureSceneCaptureTargets(rhiDevice, requestedWidth, requestedHeight)) {
+        return false;
+    }
+    if (!setHdrInput(m_sceneColorHandle,
+                     m_sceneColorView,
+                     requestedWidth,
+                     requestedHeight)) {
         return false;
     }
     m_sceneCaptured = true;
+    return true;
+}
+
+bool PostProcessPass::setHdrInput(const RhiTextureHandle texture,
+                                  const RhiTextureViewHandle view,
+                                  const int width,
+                                  const int height) {
+    if (m_rhiDevice == nullptr || !texture.isValid() || !view.isValid() ||
+        width <= 0 || height <= 0) {
+        return false;
+    }
+    if (!ensureProcessingTargets(*m_rhiDevice, width, height)) {
+        return false;
+    }
+    if (m_hdrInputHandle.index != texture.index ||
+        m_hdrInputHandle.generation != texture.generation ||
+        m_hdrInputView.index != view.index ||
+        m_hdrInputView.generation != view.generation) {
+        destroyCompositeBindGroups();
+        destroyTargetBindGroups();
+    }
+    m_hdrInputHandle = texture;
+    m_hdrInputView = view;
     return true;
 }
 
@@ -314,7 +345,7 @@ RhiTextureHandle PostProcessPass::compositeToTexture(
     const RhiTextureHandle gbufferDepthTexture,
     RenderDebugService& debugService) {
     if (!m_sceneCaptured ||
-        !ensureCompositeTarget(rhiDevice, m_targetWidth, m_targetHeight) ||
+        !ensureCompositeTarget(rhiDevice, m_processingWidth, m_processingHeight) ||
         !ensureRhiPipelines(rhiDevice) || !ensureNoiseTextureView(rhiDevice) ||
         !ensureGbufferDepthTextureView(rhiDevice, gbufferDepthTexture) ||
         !rebuildTargetBindGroups() || !rebuildCompositeBindGroups()) {
@@ -339,7 +370,7 @@ RhiTextureHandle PostProcessPass::compositeToTexture(
         RhiResourceState::ShaderRead,
         RhiResourceState::RenderTarget
     });
-    bindCompositeOutput(commandList, m_targetWidth, m_targetHeight);
+    bindCompositeOutput(commandList, m_processingWidth, m_processingHeight);
     renderComposite(commandList, m_compositeTexturePipeline);
     commandList.endRendering();
     commandList.textureBarrier({
@@ -426,9 +457,9 @@ bool PostProcessPass::updateAutoExposure(RhiDevice& rhiDevice,
         const int exposureLod = std::min(
             kAutoExposureLod,
             std::max(0, static_cast<int>(std::floor(std::log2(static_cast<float>(
-                std::max(m_targetWidth, m_targetHeight)))))));
-        glm::ivec2 sourceSize(std::max(1, m_targetWidth >> exposureLod),
-                              std::max(1, m_targetHeight >> exposureLod));
+                std::max(m_processingWidth, m_processingHeight)))))));
+        glm::ivec2 sourceSize(std::max(1, m_processingWidth >> exposureLod),
+                              std::max(1, m_processingHeight >> exposureLod));
         bool sourceIsScene = true;
         for (int mip = 0; mip < m_exposureMipCount; ++mip) {
             commandList.textureBarrier({
@@ -738,9 +769,9 @@ PostProcessPass::PostProcessCompositeParams PostProcessPass::buildCompositeParam
     };
 }
 
-bool PostProcessPass::ensureRenderTargets(RhiDevice& rhiDevice,
-                                          const int width,
-                                          const int height) {
+bool PostProcessPass::ensureSceneCaptureTargets(RhiDevice& rhiDevice,
+                                                const int width,
+                                                const int height) {
     if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         destroyRhiResources();
     }
@@ -749,11 +780,11 @@ bool PostProcessPass::ensureRenderTargets(RhiDevice& rhiDevice,
         return false;
     }
     if (m_sceneColorHandle.isValid() && m_sceneDepthHandle.isValid() &&
-        m_targetWidth == width && m_targetHeight == height) {
+        m_captureWidth == width && m_captureHeight == height) {
         return true;
     }
 
-    destroyRenderTargets();
+    destroySceneCaptureTargets();
     const RhiTextureUsageFlags colorUsage =
         rhiFlag(RhiTextureUsage::Sampled) |
         rhiFlag(RhiTextureUsage::ColorAttachment) |
@@ -780,9 +811,45 @@ bool PostProcessPass::ensureRenderTargets(RhiDevice& rhiDevice,
                               depthUsage,
                               m_sceneDepthHandle,
                               m_sceneDepthView)) {
-        destroyRenderTargets();
+        destroySceneCaptureTargets();
         return false;
     }
+
+    RhiCommandList& initializeCommandList = beginCommandList(
+        "PostProcess.SceneCaptureInitialization.Commands");
+    initializeCommandList.textureBarrier({
+        m_sceneColorHandle,
+        RhiResourceState::Undefined,
+        RhiResourceState::ShaderRead
+    });
+    initializeCommandList.textureBarrier({
+        m_sceneDepthHandle,
+        RhiResourceState::Undefined,
+        RhiResourceState::DepthRead
+    });
+    submitCommandList(rhiDevice, initializeCommandList,
+                      "PostProcess.SceneCaptureInitialization.Submit");
+    m_captureWidth = width;
+    m_captureHeight = height;
+    return true;
+}
+
+bool PostProcessPass::ensureProcessingTargets(RhiDevice& rhiDevice,
+                                              const int width,
+                                              const int height) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        destroyRhiResources();
+    }
+    m_rhiDevice = &rhiDevice;
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    if (m_bloomHandle[0][0].isValid() && m_exposureStateHandle[0].isValid() &&
+        m_processingWidth == width && m_processingHeight == height) {
+        return true;
+    }
+
+    destroyProcessingTargets();
 
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         const int divisor = 1 << (mip + 1);
@@ -798,7 +865,7 @@ bool PostProcessPass::ensureRenderTargets(RhiDevice& rhiDevice,
                                           rhiFlag(RhiTextureUsage::ColorAttachment),
                                       m_bloomHandle[mip][ping],
                                       m_bloomView[mip][ping])) {
-                destroyRenderTargets();
+                destroyProcessingTargets();
                 return false;
             }
         }
@@ -824,7 +891,7 @@ bool PostProcessPass::ensureRenderTargets(RhiDevice& rhiDevice,
                                       rhiFlag(RhiTextureUsage::ColorAttachment),
                                   m_exposureHandle[mip],
                                   m_exposureView[mip])) {
-            destroyRenderTargets();
+            destroyProcessingTargets();
             return false;
         }
         ++m_exposureMipCount;
@@ -845,23 +912,13 @@ bool PostProcessPass::ensureRenderTargets(RhiDevice& rhiDevice,
                                       rhiFlag(RhiTextureUsage::ColorAttachment),
                                   m_exposureStateHandle[index],
                                   m_exposureStateView[index])) {
-            destroyRenderTargets();
+            destroyProcessingTargets();
             return false;
         }
     }
 
     RhiCommandList& initializeCommandList = beginCommandList(
-        "PostProcess.TargetInitialization.Commands");
-    initializeCommandList.textureBarrier({
-        m_sceneColorHandle,
-        RhiResourceState::Undefined,
-        RhiResourceState::ShaderRead
-    });
-    initializeCommandList.textureBarrier({
-        m_sceneDepthHandle,
-        RhiResourceState::Undefined,
-        RhiResourceState::DepthRead
-    });
+        "PostProcess.ProcessingInitialization.Commands");
     for (int mip = 0; mip < kBloomMipCount; ++mip) {
         for (int ping = 0; ping < 2; ++ping) {
             initializeCommandList.textureBarrier({
@@ -886,10 +943,10 @@ bool PostProcessPass::ensureRenderTargets(RhiDevice& rhiDevice,
         });
     }
     submitCommandList(rhiDevice, initializeCommandList,
-                      "PostProcess.TargetInitialization.Submit");
+                      "PostProcess.ProcessingInitialization.Submit");
 
-    m_targetWidth = width;
-    m_targetHeight = height;
+    m_processingWidth = width;
+    m_processingHeight = height;
     m_autoExposureInitialized = false;
     m_autoExposureSampleAccumulator = 0.0;
     return true;
@@ -1286,7 +1343,7 @@ bool PostProcessPass::rebuildTargetBindGroups() {
         desc.entries.push_back(entry);
         return m_rhiDevice->createBindGroup(desc);
     };
-    m_bloomExtractBindGroup = createSingleTextureBindGroup(m_sceneColorView,
+    m_bloomExtractBindGroup = createSingleTextureBindGroup(m_hdrInputView,
                                                             m_linearClampSampler);
     if (!m_bloomExtractBindGroup.isValid()) {
         destroyTargetBindGroups();
@@ -1307,7 +1364,7 @@ bool PostProcessPass::rebuildTargetBindGroups() {
     }
     for (int mip = 0; mip < m_exposureMipCount; ++mip) {
         const RhiTextureViewHandle source = mip == 0
-            ? m_sceneColorView
+            ? m_hdrInputView
             : m_exposureView[mip - 1];
         m_exposureDownsampleBindGroup[mip] = createSingleTextureBindGroup(
             source,
@@ -1348,14 +1405,14 @@ bool PostProcessPass::rebuildCompositeBindGroups() {
         return true;
     }
     if (m_rhiDevice == nullptr || !m_compositeBindGroupLayout.isValid() ||
-        !m_sceneColorView.isValid() || !m_noiseTextureView.isValid() ||
+        !m_hdrInputView.isValid() || !m_noiseTextureView.isValid() ||
         !m_gbufferDepthTextureView.isValid() || !m_sceneDepthView.isValid()) {
         return false;
     }
     destroyCompositeBindGroups();
 
     const RhiTextureViewHandle commonViews[12] = {
-        m_sceneColorView,
+        m_hdrInputView,
         m_bloomView[0][0],
         m_bloomView[1][0],
         m_bloomView[2][0],
@@ -1474,7 +1531,31 @@ void PostProcessPass::destroyCompositeBindGroups() {
     }
 }
 
-void PostProcessPass::destroyRenderTargets() {
+void PostProcessPass::destroySceneCaptureTargets() {
+    destroyCompositeBindGroups();
+    destroyTargetBindGroups();
+    if (m_rhiDevice != nullptr) {
+        auto destroyTextureAndView = [&](RhiTextureHandle& texture,
+                                         RhiTextureViewHandle& view) {
+            if (view.isValid()) {
+                m_rhiDevice->destroyTextureView(view);
+            }
+            if (texture.isValid()) {
+                m_rhiDevice->destroyTexture(texture);
+            }
+            view = {};
+            texture = {};
+        };
+        destroyTextureAndView(m_sceneColorHandle, m_sceneColorView);
+        destroyTextureAndView(m_sceneDepthHandle, m_sceneDepthView);
+    }
+    m_hdrInputHandle = {};
+    m_hdrInputView = {};
+    m_captureWidth = 0;
+    m_captureHeight = 0;
+}
+
+void PostProcessPass::destroyProcessingTargets() {
     destroyCompositeBindGroups();
     destroyTargetBindGroups();
     if (m_rhiDevice != nullptr) {
@@ -1490,8 +1571,6 @@ void PostProcessPass::destroyRenderTargets() {
             texture = {};
         };
         destroyTextureAndView(m_compositeHandle, m_compositeView);
-        destroyTextureAndView(m_sceneColorHandle, m_sceneColorView);
-        destroyTextureAndView(m_sceneDepthHandle, m_sceneDepthView);
         for (int mip = 0; mip < kBloomMipCount; ++mip) {
             m_bloomMipSize[mip] = glm::ivec2(0);
             for (int ping = 0; ping < 2; ++ping) {
@@ -1512,13 +1591,14 @@ void PostProcessPass::destroyRenderTargets() {
     m_exposureStateReadIndex = 0;
     m_autoExposureInitialized = false;
     m_autoExposureSampleAccumulator = 0.0;
-    m_targetWidth = 0;
-    m_targetHeight = 0;
+    m_processingWidth = 0;
+    m_processingHeight = 0;
 }
 
 void PostProcessPass::destroyRhiResources() {
     destroyCompositeBindGroups();
-    destroyRenderTargets();
+    destroySceneCaptureTargets();
+    destroyProcessingTargets();
     if (m_rhiDevice != nullptr) {
         if (m_noiseTextureView.isValid()) {
             m_rhiDevice->destroyTextureView(m_noiseTextureView);

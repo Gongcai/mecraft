@@ -18,6 +18,10 @@ RhiTextureHandle textureHandle(const uint32_t index) {
     return {index, 1u};
 }
 
+RhiTextureViewHandle textureViewHandle(const uint32_t index) {
+    return {index, 1u};
+}
+
 TemporalFrameInput completeFrame() {
     TemporalFrameInput frame;
     frame.renderExtent = {1280u, 720u};
@@ -38,12 +42,14 @@ TemporalFrameInput completeFrame() {
     frame.verticalFovRadians = 1.22173048f;
     frame.reset = false;
     frame.textures.hdrColor = textureHandle(1u);
+    frame.textures.hdrColorView = textureViewHandle(1u);
     frame.textures.depth = textureHandle(2u);
     frame.textures.velocity = textureHandle(3u);
     frame.textures.exposure = textureHandle(4u);
     frame.textures.reactiveMask = textureHandle(5u);
     frame.textures.transparencyMask = textureHandle(6u);
     frame.textures.outputHdrColor = textureHandle(7u);
+    frame.textures.outputHdrColorView = textureViewHandle(7u);
     return frame;
 }
 
@@ -103,10 +109,26 @@ bool testFrameValidation() {
     }
 
     frame = completeFrame();
+    frame.textures.hdrColorView = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::MissingHdrColorView,
+                     "missing HDR color view must be rejected explicitly")) {
+        return false;
+    }
+
+    frame = completeFrame();
     frame.textures.reactiveMask = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::MissingReactiveMask,
+                     "missing reactive mask must be rejected explicitly")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.textures.outputHdrColorView = {};
     return requireTrue(validateTemporalFrame(frame) ==
-                           TemporalFrameValidationError::MissingReactiveMask,
-                       "missing reactive mask must be rejected explicitly");
+                           TemporalFrameValidationError::MissingOutputHdrColorView,
+                       "missing HDR output view must be rejected explicitly");
 }
 
 bool testTemporalUpscaleDispatch() {
@@ -120,7 +142,12 @@ bool testTemporalUpscaleDispatch() {
     if (!requireTrue(nativeResult.succeeded(),
                      "native temporal reconstruction must accept matching extents") ||
         !requireTrue(nativeResult.outputHdrColor.index == frame.textures.hdrColor.index,
-                     "native temporal reconstruction must preserve the HDR scene input")) {
+                     "native temporal reconstruction must preserve the HDR scene input") ||
+        !requireTrue(nativeResult.outputHdrColorView.index ==
+                         frame.textures.hdrColorView.index,
+                     "native temporal reconstruction must preserve the HDR scene view") ||
+        !requireTrue(nativeResult.outputExtent == frame.outputExtent,
+                     "native temporal reconstruction must preserve the output extent")) {
         return false;
     }
 

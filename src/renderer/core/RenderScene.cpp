@@ -561,12 +561,13 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             m_terrainStreamingService.endFrame();
             return;
         }
-        if (m_temporalUpscaleResult->outputHdrColor.index !=
-                m_postProcessPass.sceneColorTextureHandle().index ||
-            m_temporalUpscaleResult->outputHdrColor.generation !=
-                m_postProcessPass.sceneColorTextureHandle().generation) {
+        if (!m_postProcessPass.setHdrInput(
+                m_temporalUpscaleResult->outputHdrColor,
+                m_temporalUpscaleResult->outputHdrColorView,
+                static_cast<int>(m_temporalUpscaleResult->outputExtent.width),
+                static_cast<int>(m_temporalUpscaleResult->outputExtent.height))) {
             MECRAFT_LOG_STREAM(
-                std::cerr << "[RenderScene] Post-process HDR input does not match temporal output\n");
+                std::cerr << "[RenderScene] Failed to configure the post-process HDR input\n");
             m_terrainStreamingService.endFrame();
             return;
         }
@@ -1217,12 +1218,14 @@ void RenderScene::refreshTemporalFrameInput() {
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);
     input.reset = m_currentContext.temporalReset;
     input.textures.hdrColor = m_lastFrameOutput.sceneColor;
+    input.textures.hdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     input.textures.depth = m_lastFrameOutput.gbufferDepth;
     input.textures.velocity = m_shared.deferredTargets->velocityTextureHandle();
     input.textures.exposure = m_postProcessPass.exposureTextureHandle();
     input.textures.reactiveMask = m_lastFrameOutput.reactiveMask;
     input.textures.transparencyMask = m_lastFrameOutput.transparencyMask;
     input.textures.outputHdrColor = m_lastFrameOutput.sceneColor;
+    input.textures.outputHdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     m_temporalFrameInput = input;
 }
 

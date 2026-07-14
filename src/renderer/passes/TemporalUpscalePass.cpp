@@ -6,26 +6,27 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
     const std::optional<TemporalFrameValidationError> validationError =
         validateTemporalFrame(frame);
     if (validationError.has_value()) {
-        return {TemporalUpscaleStatus::InvalidFrame, validationError, {}, {}};
+        return {TemporalUpscaleStatus::InvalidFrame, validationError, {}, {}, {}};
     }
 
     switch (type) {
         case TemporalUpscalerType::Native:
             if (frame.renderExtent != frame.outputExtent) {
-                return {TemporalUpscaleStatus::NativeExtentMismatch, std::nullopt, {}, {}};
+                return {TemporalUpscaleStatus::NativeExtentMismatch, std::nullopt, {}, {}, {}};
             }
             return {
                 TemporalUpscaleStatus::Success,
                 std::nullopt,
                 frame.textures.hdrColor,
+                frame.textures.hdrColorView,
                 frame.outputExtent
             };
         case TemporalUpscalerType::Fsr31:
-            return {TemporalUpscaleStatus::Fsr31Unavailable, std::nullopt, {}, {}};
+            return {TemporalUpscaleStatus::Fsr31Unavailable, std::nullopt, {}, {}, {}};
         case TemporalUpscalerType::Dlss:
-            return {TemporalUpscaleStatus::DlssUnavailable, std::nullopt, {}, {}};
+            return {TemporalUpscaleStatus::DlssUnavailable, std::nullopt, {}, {}, {}};
     }
-    return {TemporalUpscaleStatus::InvalidFrame, std::nullopt, {}, {}};
+    return {TemporalUpscaleStatus::InvalidFrame, std::nullopt, {}, {}, {}};
 }
 
 const char* TemporalUpscalePass::statusText(const TemporalUpscaleStatus status) {

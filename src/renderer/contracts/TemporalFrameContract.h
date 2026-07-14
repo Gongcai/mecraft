@@ -68,12 +68,14 @@ struct TemporalJitter {
 /// RHI resources consumed and produced by one temporal reconstruction dispatch.
 struct TemporalFrameTextures {
     RhiTextureHandle hdrColor;
+    RhiTextureViewHandle hdrColorView;
     RhiTextureHandle depth;
     RhiTextureHandle velocity;
     RhiTextureHandle exposure;
     RhiTextureHandle reactiveMask;
     RhiTextureHandle transparencyMask;
     RhiTextureHandle outputHdrColor;
+    RhiTextureViewHandle outputHdrColorView;
 };
 
 /// Backend-independent input contract shared by native, FSR 3.1, and DLSS paths.
@@ -99,12 +101,14 @@ enum class TemporalFrameValidationError {
     InvalidCameraRange,
     InvalidVerticalFov,
     MissingHdrColor,
+    MissingHdrColorView,
     MissingDepth,
     MissingVelocity,
     MissingExposure,
     MissingReactiveMask,
     MissingTransparencyMask,
-    MissingOutputHdrColor
+    MissingOutputHdrColor,
+    MissingOutputHdrColorView
 };
 
 /// Validate that a temporal frame is complete before it reaches a native SDK bridge.
@@ -128,12 +132,18 @@ enum class TemporalFrameValidationError {
         return TemporalFrameValidationError::InvalidVerticalFov;
     }
     if (!frame.textures.hdrColor.isValid()) return TemporalFrameValidationError::MissingHdrColor;
+    if (!frame.textures.hdrColorView.isValid()) {
+        return TemporalFrameValidationError::MissingHdrColorView;
+    }
     if (!frame.textures.depth.isValid()) return TemporalFrameValidationError::MissingDepth;
     if (!frame.textures.velocity.isValid()) return TemporalFrameValidationError::MissingVelocity;
     if (!frame.textures.exposure.isValid()) return TemporalFrameValidationError::MissingExposure;
     if (!frame.textures.reactiveMask.isValid()) return TemporalFrameValidationError::MissingReactiveMask;
     if (!frame.textures.transparencyMask.isValid()) return TemporalFrameValidationError::MissingTransparencyMask;
     if (!frame.textures.outputHdrColor.isValid()) return TemporalFrameValidationError::MissingOutputHdrColor;
+    if (!frame.textures.outputHdrColorView.isValid()) {
+        return TemporalFrameValidationError::MissingOutputHdrColorView;
+    }
     return std::nullopt;
 }
 
