@@ -4920,7 +4920,8 @@ RhiShaderHandle GlRhiDevice::createShader(const RhiShaderDesc& desc) {
 
     std::string errorMessage;
     std::optional<renderer::rhi::RhiCompiledShader> shader =
-        renderer::rhi::compileShaderToSpirv(desc, errorMessage);
+        renderer::rhi::compileShaderToSpirv(
+            desc, renderer::rhi::RhiShaderBackend::OpenGl, errorMessage);
     if (!shader.has_value()) {
         std::cerr << "GlRhiDevice: canonical shader compilation failed ["
                   << rhiDebugName(desc.debugName) << "]\n" << errorMessage << '\n';

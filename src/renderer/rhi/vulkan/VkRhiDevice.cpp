@@ -1628,7 +1628,8 @@ RhiSamplerHandle VkRhiDevice::createSampler(const RhiSamplerDesc& desc) {
 RhiShaderHandle VkRhiDevice::createShader(const RhiShaderDesc& desc) {
     if (!m_initialized) return {};
     std::string error;
-    auto compiled = renderer::rhi::compileShaderToSpirv(desc, error);
+    auto compiled = renderer::rhi::compileShaderToSpirv(
+        desc, renderer::rhi::RhiShaderBackend::Vulkan, error);
     if (!compiled.has_value()) {
         std::cerr << "VkRhiDevice: shader compilation failed: " << error << '\n';
         return {};

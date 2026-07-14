@@ -10,6 +10,61 @@
 
 namespace renderer::rhi {
 namespace {
+[[nodiscard]] const char* backendDefinition(const RhiShaderBackend backend) {
+    switch (backend) {
+        case RhiShaderBackend::Vulkan: return "#define RHI_VULKAN 1\n";
+        case RhiShaderBackend::OpenGl: return "#define RHI_OPENGL 1\n";
+    }
+    return nullptr;
+}
+
+// Injects the selected RHI backend definition immediately after the GLSL version directive.
+// The source parameter must contain one canonical GLSL stage, and backend identifies the device
+// that will execute the compiled shader. The returned source preserves every original line while
+// making exactly one backend macro visible to shared shader helpers.
+[[nodiscard]] std::optional<std::string> injectBackendDefinition(
+    const std::string& source,
+    const RhiShaderBackend backend,
+    std::string& errorMessage) {
+    const char* definition = backendDefinition(backend);
+    if (definition == nullptr) {
+        errorMessage = "shader compilation received an invalid RHI backend";
+        return std::nullopt;
+    }
+
+    size_t lineStart = 0u;
+    while (lineStart < source.size()) {
+        const size_t lineEnd = source.find('\n', lineStart);
+        const size_t lineLength = lineEnd == std::string::npos
+            ? source.size() - lineStart
+            : lineEnd - lineStart;
+        const size_t directiveStart = source.find_first_not_of(" \t", lineStart);
+        if (directiveStart != std::string::npos &&
+            directiveStart < lineStart + lineLength &&
+            source.compare(directiveStart, 8u, "#version") == 0) {
+            const size_t insertionPoint = lineEnd == std::string::npos
+                ? source.size()
+                : lineEnd + 1u;
+            std::string result;
+            result.reserve(source.size() + std::char_traits<char>::length(definition));
+            result.append(source, 0u, insertionPoint);
+            if (lineEnd == std::string::npos) {
+                result.push_back('\n');
+            }
+            result += definition;
+            result.append(source, insertionPoint, std::string::npos);
+            return result;
+        }
+        if (lineEnd == std::string::npos) {
+            break;
+        }
+        lineStart = lineEnd + 1u;
+    }
+
+    errorMessage = "shader source does not contain a GLSL version directive";
+    return std::nullopt;
+}
+
 [[nodiscard]] EShLanguage toGlslangStage(const RhiShaderStage stage) {
     switch (stage) {
         case RhiShaderStage::Vertex: return EShLangVertex;
@@ -202,6 +257,7 @@ private:
 } // namespace
 
 std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc,
+                                                       const RhiShaderBackend backend,
                                                        std::string& errorMessage) {
     errorMessage.clear();
     if (desc.source == nullptr || desc.sourceSize == 0u || desc.bytecode != nullptr ||
@@ -227,9 +283,18 @@ std::optional<RhiCompiledShader> compileShaderToSpirv(const RhiShaderDesc& desc,
         errorMessage = "shader source exceeds the compiler length limit";
         return std::nullopt;
     }
-    const std::string source(desc.source, static_cast<size_t>(desc.sourceSize));
-    const char* sourcePointer = source.c_str();
-    const int sourceLength = static_cast<int>(source.size());
+    const std::string canonicalSource(desc.source, static_cast<size_t>(desc.sourceSize));
+    const std::optional<std::string> source =
+        injectBackendDefinition(canonicalSource, backend, errorMessage);
+    if (!source.has_value()) {
+        return std::nullopt;
+    }
+    if (source->size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        errorMessage = "shader source exceeds the compiler length limit after backend injection";
+        return std::nullopt;
+    }
+    const char* sourcePointer = source->c_str();
+    const int sourceLength = static_cast<int>(source->size());
     glslang::TShader shader(language);
     shader.setStringsWithLengths(&sourcePointer, &sourceLength, 1);
     shader.setEntryPoint(desc.entryPoint);
