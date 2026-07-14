@@ -114,7 +114,7 @@ enum class TemporalFrameValidationError {
     const TemporalFrameInput& frame) {
     if (!frame.renderExtent.isValid()) return TemporalFrameValidationError::InvalidRenderExtent;
     if (!frame.outputExtent.isValid()) return TemporalFrameValidationError::InvalidOutputExtent;
-    if (!std::isfinite(frame.frameDeltaMilliseconds) || frame.frameDeltaMilliseconds <= 0.0f) {
+    if (!std::isfinite(frame.frameDeltaMilliseconds) || frame.frameDeltaMilliseconds < 0.0f) {
         return TemporalFrameValidationError::InvalidFrameDelta;
     }
     if (!std::isfinite(frame.preExposure) || frame.preExposure <= 0.0f) {

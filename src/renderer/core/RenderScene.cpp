@@ -421,12 +421,6 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
 }
 
 void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
-    if (m_settings.upscale.type != TemporalUpscalerType::Native) {
-        MECRAFT_LOG_STREAM(
-            std::cerr << "[RenderScene] Selected temporal upscaler is not initialized\n");
-        return;
-    }
-
     // Activate the pipeline when shared resources become available after target initialization.
     if (!isNewPipelineActive() && isNewPipelineReady()) {
         setNewPipelineActive(true);
@@ -455,8 +449,6 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 frameRenderSize, displaySize, frameAspectRatio,
                 request.target, request.blockBreak,
                 request.dayNightSystem, request.weatherSystem);
-    refreshTemporalFrameInput();
-
     if (!lightDebugActive) {
         cameraRainVisibility = m_currentContext.cameraRainVisibility;
         if (m_settings.weather.rainLinesEnabled) {
@@ -553,6 +545,36 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             commandList, m_currentContext, "SceneCapture.FirstPersonHeldItem");
         request.firstPersonHeldItemRenderer->renderPrepared(commandList);
         endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList, m_currentContext);
+    }
+
+    refreshTemporalFrameInput();
+    m_temporalUpscaleResult.reset();
+    if (m_temporalFrameInput.has_value()) {
+        m_temporalUpscaleResult = m_temporalUpscalePass.execute(
+            m_settings.upscale.type,
+            *m_temporalFrameInput);
+        if (!m_temporalUpscaleResult->succeeded()) {
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[RenderScene] "
+                          << TemporalUpscalePass::statusText(m_temporalUpscaleResult->status)
+                          << '\n');
+            m_terrainStreamingService.endFrame();
+            return;
+        }
+        if (m_temporalUpscaleResult->outputHdrColor.index !=
+                m_postProcessPass.sceneColorTextureHandle().index ||
+            m_temporalUpscaleResult->outputHdrColor.generation !=
+                m_postProcessPass.sceneColorTextureHandle().generation) {
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[RenderScene] Post-process HDR input does not match temporal output\n");
+            m_terrainStreamingService.endFrame();
+            return;
+        }
+    } else if (!skipPostProcess && !isFsr1RuntimeEnabled()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Temporal frame input is unavailable\n");
+        m_terrainStreamingService.endFrame();
+        return;
     }
 
     if (skipPostProcess) {
@@ -1166,6 +1188,7 @@ bool RenderScene::isFsr1RuntimeEnabled() const {
 void RenderScene::invalidateFrameHistory() {
     m_hasPreviousContext = false;
     m_temporalFrameInput.reset();
+    m_temporalUpscaleResult.reset();
     if (m_deferredPipeline) {
         m_deferredPipeline->invalidateHistory();
     }

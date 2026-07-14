@@ -1,5 +1,6 @@
 #include "renderer/contracts/TemporalFrameContract.h"
 #include "renderer/core/RenderSettings.h"
+#include "renderer/passes/TemporalUpscalePass.h"
 
 #include <iostream>
 
@@ -108,6 +109,41 @@ bool testFrameValidation() {
                        "missing reactive mask must be rejected explicitly");
 }
 
+bool testTemporalUpscaleDispatch() {
+    const TemporalUpscalePass pass;
+    TemporalFrameInput frame = completeFrame();
+    frame.outputExtent = frame.renderExtent;
+
+    const TemporalUpscaleResult nativeResult = pass.execute(
+        TemporalUpscalerType::Native,
+        frame);
+    if (!requireTrue(nativeResult.succeeded(),
+                     "native temporal reconstruction must accept matching extents") ||
+        !requireTrue(nativeResult.outputHdrColor.index == frame.textures.hdrColor.index,
+                     "native temporal reconstruction must preserve the HDR scene input")) {
+        return false;
+    }
+
+    frame.outputExtent = {1920u, 1080u};
+    if (!requireTrue(pass.execute(TemporalUpscalerType::Native, frame).status ==
+                         TemporalUpscaleStatus::NativeExtentMismatch,
+                     "native temporal reconstruction must reject mismatched extents")) {
+        return false;
+    }
+
+    frame.outputExtent = frame.renderExtent;
+    if (!requireTrue(pass.execute(TemporalUpscalerType::Fsr31, frame).status ==
+                         TemporalUpscaleStatus::Fsr31Unavailable,
+                     "FSR 3.1 must report unavailable before SDK initialization")) {
+        return false;
+    }
+
+    frame.textures.exposure = {};
+    return requireTrue(pass.execute(TemporalUpscalerType::Native, frame).status ==
+                           TemporalUpscaleStatus::InvalidFrame,
+                       "temporal dispatch must reject incomplete frame resources");
+}
+
 } // namespace
 
 int main() {
@@ -115,5 +151,6 @@ int main() {
     if (!testMotionVectorConvention()) return 1;
     if (!testTemporalReset()) return 1;
     if (!testFrameValidation()) return 1;
+    if (!testTemporalUpscaleDispatch()) return 1;
     return 0;
 }

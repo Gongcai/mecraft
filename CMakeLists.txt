@@ -309,6 +309,7 @@ set(SRC_RENDERER
         src/renderer/passes/VelocityPass.cpp
         src/renderer/passes/ReflectionPass.cpp
         src/renderer/passes/TemporalResolvePass.cpp
+        src/renderer/passes/TemporalUpscalePass.cpp
         src/renderer/passes/MotionBlurPass.cpp
         src/renderer/passes/DepthOfFieldPass.cpp
         src/renderer/passes/DeferredLightingPass.cpp

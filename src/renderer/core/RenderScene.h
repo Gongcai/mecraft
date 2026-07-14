@@ -7,6 +7,7 @@
 #include "FrameOutput.h"
 #include "../passes/PostProcessPass.h"
 #include "../passes/Fsr1Pass.h"
+#include "../passes/TemporalUpscalePass.h"
 #include "../mesh/TerrainStreamingService.h"
 #include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "../debug/RenderDebugService.h"
@@ -182,6 +183,9 @@ public:
     [[nodiscard]] const std::optional<TemporalFrameInput>& temporalFrameInput() const {
         return m_temporalFrameInput;
     }
+    [[nodiscard]] const std::optional<TemporalUpscaleResult>& temporalUpscaleResult() const {
+        return m_temporalUpscaleResult;
+    }
 
     /// Access the shared post-process pass.
     /// Used by Dashboard for exposure diagnostics and by Game for legacy API.
@@ -266,6 +270,7 @@ private:
     // Shared post-processing pass (used by both Forward and Deferred pipelines)
     PostProcessPass m_postProcessPass;
     Fsr1Pass m_fsr1Pass;
+    TemporalUpscalePass m_temporalUpscalePass;
     bool m_fsr1Supported = false;
 
     // Frame state
@@ -273,6 +278,7 @@ private:
     FrameContext m_currentContext;
     FrameContext m_previousContext;
     std::optional<TemporalFrameInput> m_temporalFrameInput;
+    std::optional<TemporalUpscaleResult> m_temporalUpscaleResult;
     bool m_hasPreviousContext = false;
     uint64_t m_frameCounter = 0;
     bool m_eyeInWater = false;
