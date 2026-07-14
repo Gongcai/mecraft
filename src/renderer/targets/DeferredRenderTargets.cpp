@@ -271,6 +271,8 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
         m_velocityHandle,
         m_perObjectVelocityHandle,
         m_weatherMaskHandle,
+        m_reactiveMaskHandle,
+        m_transparencyMaskHandle,
         m_ssaoFilteredHandle,
         m_ssaoHalfResHandle,
         m_ssaoHalfResFilteredHandle,
@@ -1087,7 +1089,11 @@ bool DeferredRenderTargets::createMotionTextures() {
         !createTexture("DeferredTargets.PerObjectVelocity", RhiTextureFormat::Rg16Float,
                        attachmentUsage, m_perObjectVelocityHandle) ||
         !createTexture("DeferredTargets.WeatherMask", RhiTextureFormat::R8Unorm,
-                       attachmentUsage, m_weatherMaskHandle)) {
+                       attachmentUsage, m_weatherMaskHandle) ||
+        !createTexture("DeferredTargets.ReactiveMask", RhiTextureFormat::R8Unorm,
+                       attachmentUsage, m_reactiveMaskHandle) ||
+        !createTexture("DeferredTargets.TransparencyMask", RhiTextureFormat::R8Unorm,
+                       attachmentUsage, m_transparencyMaskHandle)) {
         destroyMotionTextures();
         return false;
     }
@@ -1103,7 +1109,9 @@ void DeferredRenderTargets::destroyMotionTextures() {
         &m_temporalCurrentHandle,
         &m_velocityHandle,
         &m_perObjectVelocityHandle,
-        &m_weatherMaskHandle
+        &m_weatherMaskHandle,
+        &m_reactiveMaskHandle,
+        &m_transparencyMaskHandle
     };
     for (RhiTextureHandle* texture : textures) {
         if (texture->isValid()) {
@@ -1364,6 +1372,8 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_velocityHandle.isValid() &&
                             m_perObjectVelocityHandle.isValid() &&
                             m_weatherMaskHandle.isValid() &&
+                            m_reactiveMaskHandle.isValid() &&
+                            m_transparencyMaskHandle.isValid() &&
                             m_skyCaptureHandle.isValid() &&
                             m_atmosphereLutHandle.isValid() &&
                             m_ssaoFilteredHandle.isValid() &&
@@ -2744,6 +2754,58 @@ bool DeferredRenderTargets::ensureWeatherMaskTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool DeferredRenderTargets::ensureReactiveMaskTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_reactiveMaskView.isValid()) {
+        return true;
+    }
+    if (!m_reactiveMaskHandle.isValid()) {
+        return false;
+    }
+    RhiTextureViewDesc desc;
+    desc.texture = m_reactiveMaskHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::R8Unorm;
+    desc.baseMip = 0u;
+    desc.mipCount = 1u;
+    desc.baseLayer = 0u;
+    desc.layerCount = 1u;
+    m_reactiveMaskView = rhiDevice.createTextureView(desc);
+    if (!m_reactiveMaskView.isValid()) {
+        return false;
+    }
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool DeferredRenderTargets::ensureTransparencyMaskTextureView(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_transparencyMaskView.isValid()) {
+        return true;
+    }
+    if (!m_transparencyMaskHandle.isValid()) {
+        return false;
+    }
+    RhiTextureViewDesc desc;
+    desc.texture = m_transparencyMaskHandle;
+    desc.viewType = RhiTextureViewType::Texture2D;
+    desc.format = RhiTextureFormat::R8Unorm;
+    desc.baseMip = 0u;
+    desc.mipCount = 1u;
+    desc.baseLayer = 0u;
+    desc.layerCount = 1u;
+    m_transparencyMaskView = rhiDevice.createTextureView(desc);
+    if (!m_transparencyMaskView.isValid()) {
+        return false;
+    }
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_gAlbedoView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_gAlbedoView);
@@ -2922,6 +2984,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_weatherMaskView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_weatherMaskView);
     }
+    if (m_rhiViewDevice != nullptr && m_reactiveMaskView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_reactiveMaskView);
+    }
+    if (m_rhiViewDevice != nullptr && m_transparencyMaskView.isValid()) {
+        m_rhiViewDevice->destroyTextureView(m_transparencyMaskView);
+    }
     m_gAlbedoView = {};
     m_gNormalAoView = {};
     m_gVoxelLightView = {};
@@ -2971,6 +3039,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_historyCloudView[1] = {};
     m_temporalCurrentView = {};
     m_weatherMaskView = {};
+    m_reactiveMaskView = {};
+    m_transparencyMaskView = {};
     m_rhiViewDevice = nullptr;
 }
 

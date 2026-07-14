@@ -125,6 +125,13 @@ public:
     [[nodiscard]] RhiTextureViewHandle sceneDepthTextureViewHandle() const { return m_sceneDepthView; }
     [[nodiscard]] RhiTextureHandle compositeTextureHandle() const { return m_compositeHandle; }
     [[nodiscard]] RhiTextureViewHandle compositeTextureViewHandle() const { return m_compositeView; }
+    /// Expose the current 1x1 HDR exposure state for temporal reconstruction bridges.
+    [[nodiscard]] RhiTextureHandle exposureTextureHandle() const {
+        return m_exposureStateHandle[m_exposureStateReadIndex];
+    }
+    [[nodiscard]] RhiTextureViewHandle exposureTextureViewHandle() const {
+        return m_exposureStateView[m_exposureStateReadIndex];
+    }
 
 private:
     static constexpr int kBloomMipCount = 7;

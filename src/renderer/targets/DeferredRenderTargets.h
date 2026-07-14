@@ -195,6 +195,12 @@ public:
     [[nodiscard]] RhiTextureHandle weatherMaskTextureHandle() const { return m_weatherMaskHandle; }
     [[nodiscard]] RhiTextureViewHandle weatherMaskTextureViewHandle() const { return m_weatherMaskView; }
     bool ensureWeatherMaskTextureView(RhiDevice& rhiDevice);
+    [[nodiscard]] RhiTextureHandle reactiveMaskTextureHandle() const { return m_reactiveMaskHandle; }
+    [[nodiscard]] RhiTextureViewHandle reactiveMaskTextureViewHandle() const { return m_reactiveMaskView; }
+    bool ensureReactiveMaskTextureView(RhiDevice& rhiDevice);
+    [[nodiscard]] RhiTextureHandle transparencyMaskTextureHandle() const { return m_transparencyMaskHandle; }
+    [[nodiscard]] RhiTextureViewHandle transparencyMaskTextureViewHandle() const { return m_transparencyMaskView; }
+    bool ensureTransparencyMaskTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle atmosphereLutTextureHandle() const { return m_atmosphereLutHandle; }
     [[nodiscard]] RhiTextureViewHandle atmosphereLutTextureViewHandle() const { return m_atmosphereLutView; }
     [[nodiscard]] RhiTextureViewHandle csmShadowDepthArrayTextureViewHandle() const { return m_csmShadowDepthArrayView; }
@@ -418,6 +424,12 @@ private:
     // Written with additive blending by weather geometry, read by postprocess.
     RhiTextureHandle m_weatherMaskHandle;
     RhiTextureViewHandle m_weatherMaskView;
+    // Reactive mask for temporally unstable materials and animated transparency.
+    RhiTextureHandle m_reactiveMaskHandle;
+    RhiTextureViewHandle m_reactiveMaskView;
+    // Transparency/composition mask for effects not fully represented by depth and velocity.
+    RhiTextureHandle m_transparencyMaskHandle;
+    RhiTextureViewHandle m_transparencyMaskView;
     RhiTextureViewHandle m_atmosphereLutView;
 
     // Atmosphere precomputed scattering LUT (256x128x33 RGBA32F 3D texture)

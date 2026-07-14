@@ -576,7 +576,9 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
         !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
         !targets.ensureSsgiDenoiseTextureView(rhiDevice, 1) ||
         !targets.ensureSsgiTemporalTextureViews(rhiDevice) ||
-        !targets.ensureWeatherMaskTextureView(rhiDevice)) {
+        !targets.ensureWeatherMaskTextureView(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(rhiDevice)) {
         return;
     }
 
@@ -609,6 +611,10 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
                               RhiResourceState::RenderTarget);
     targets.transitionTexture(commandList, targets.weatherMaskTextureHandle(),
                               RhiResourceState::RenderTarget);
+    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
 
     RhiColorAttachment sceneAttachments[3];
     setClearAttachment(sceneAttachments[0], targets.reflectionTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
@@ -623,15 +629,17 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
     clearColorAttachments(commandList, "DeferredAuxiliaryHalfResClear",
                           targets.halfWidth(), targets.halfHeight(), halfResAttachments, 2u);
 
-    RhiColorAttachment ssgiAttachments[6];
+    RhiColorAttachment ssgiAttachments[8];
     setClearAttachment(ssgiAttachments[0], targets.ssgiTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
     setClearAttachment(ssgiAttachments[1], targets.ssgiDenoiseTextureViewHandle(0), 0.0f, 0.0f, 0.0f, 0.0f);
     setClearAttachment(ssgiAttachments[2], targets.ssgiDenoiseTextureViewHandle(1), 0.0f, 0.0f, 0.0f, 0.0f);
     setClearAttachment(ssgiAttachments[3], targets.ssgiTemporalTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
     setClearAttachment(ssgiAttachments[4], targets.ssgiTemporalMomentsTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
     setClearAttachment(ssgiAttachments[5], targets.weatherMaskTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[6], targets.reactiveMaskTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(ssgiAttachments[7], targets.transparencyMaskTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
     clearColorAttachments(commandList, "DeferredAuxiliarySsgiClear",
-                          targets.width(), targets.height(), ssgiAttachments, 6u);
+                          targets.width(), targets.height(), ssgiAttachments, 8u);
 
     const RhiTextureHandle clearedTextures[] = {
         targets.reflectionTextureHandle(),
@@ -644,7 +652,9 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
         targets.ssgiDenoiseTextureHandle(1),
         targets.ssgiTemporalTextureHandle(),
         targets.ssgiTemporalMomentsTextureHandle(),
-        targets.weatherMaskTextureHandle()
+        targets.weatherMaskTextureHandle(),
+        targets.reactiveMaskTextureHandle(),
+        targets.transparencyMaskTextureHandle()
     };
     for (const RhiTextureHandle texture : clearedTextures) {
         targets.transitionTexture(commandList, texture, RhiResourceState::ShaderRead);
@@ -1232,6 +1242,8 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
         output.sceneDepth = m_shared->deferredTargets->depthTextureHandle();
         output.gbufferDepth = m_shared->deferredTargets->depthTextureHandle();
         output.weatherMask = m_shared->deferredTargets->weatherMaskTextureHandle();
+        output.reactiveMask = m_shared->deferredTargets->reactiveMaskTextureHandle();
+        output.transparencyMask = m_shared->deferredTargets->transparencyMaskTextureHandle();
     }
 
     if (m_shared && m_shared->deferredTargets && m_shared->shadowRenderer) {

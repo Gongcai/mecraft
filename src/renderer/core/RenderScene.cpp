@@ -371,6 +371,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 frameRenderSize, displaySize, frameAspectRatio,
                 request.target, request.blockBreak,
                 request.dayNightSystem, request.weatherSystem);
+    refreshTemporalFrameInput();
 
     if (!lightDebugActive) {
         cameraRainVisibility = m_currentContext.cameraRainVisibility;
@@ -1071,10 +1072,42 @@ bool RenderScene::isFsr1RuntimeEnabled() const {
 
 void RenderScene::invalidateFrameHistory() {
     m_hasPreviousContext = false;
+    m_temporalFrameInput.reset();
     if (m_deferredPipeline) {
         m_deferredPipeline->invalidateHistory();
     }
     m_lastFrameOutput = {};
+}
+
+void RenderScene::refreshTemporalFrameInput() {
+    m_temporalFrameInput.reset();
+    if (!m_lastFrameOutput.hasDeferredInputs || m_shared.deferredTargets == nullptr ||
+        isFsr1RuntimeEnabled()) {
+        return;
+    }
+
+    TemporalFrameInput input;
+    input.renderExtent = m_currentContext.renderExtent;
+    input.outputExtent = m_currentContext.outputExtent;
+    input.jitter = m_currentContext.jitter;
+    input.motionVectorScale = {
+        static_cast<float>(m_currentContext.renderExtent.width),
+        static_cast<float>(m_currentContext.renderExtent.height)
+    };
+    input.frameDeltaMilliseconds = m_currentContext.deltaTime * 1000.0f;
+    input.preExposure = 1.0f;
+    input.cameraNear = m_currentContext.camera.nearPlane;
+    input.cameraFar = m_currentContext.camera.farPlane;
+    input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);
+    input.reset = m_currentContext.temporalReset;
+    input.textures.hdrColor = m_lastFrameOutput.sceneColor;
+    input.textures.depth = m_lastFrameOutput.gbufferDepth;
+    input.textures.velocity = m_shared.deferredTargets->velocityTextureHandle();
+    input.textures.exposure = m_postProcessPass.exposureTextureHandle();
+    input.textures.reactiveMask = m_lastFrameOutput.reactiveMask;
+    input.textures.transparencyMask = m_lastFrameOutput.transparencyMask;
+    input.textures.outputHdrColor = m_lastFrameOutput.sceneColor;
+    m_temporalFrameInput = input;
 }
 
 float RenderScene::computeCameraRainVisibility(const IWorldView& worldView, const glm::vec3& cameraPos) const {

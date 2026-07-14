@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <functional>
+#include <optional>
 
 // Forward declarations
 class RenderResourceHub;
@@ -178,6 +179,9 @@ public:
 
     // Frame output access
     const FrameOutput& getLastFrameOutput() const;
+    [[nodiscard]] const std::optional<TemporalFrameInput>& temporalFrameInput() const {
+        return m_temporalFrameInput;
+    }
 
     /// Access the shared post-process pass.
     /// Used by Dashboard for exposure diagnostics and by Game for legacy API.
@@ -241,6 +245,7 @@ private:
 
     /// Invalidate temporal/history resources when pipeline changes
     void invalidateFrameHistory();
+    void refreshTemporalFrameInput();
 
     // Configuration
     RenderSettings m_settings;
@@ -267,6 +272,7 @@ private:
     FrameOutput m_lastFrameOutput;
     FrameContext m_currentContext;
     FrameContext m_previousContext;
+    std::optional<TemporalFrameInput> m_temporalFrameInput;
     bool m_hasPreviousContext = false;
     uint64_t m_frameCounter = 0;
     bool m_eyeInWater = false;

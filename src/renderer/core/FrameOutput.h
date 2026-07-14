@@ -46,6 +46,10 @@ struct FrameOutput {
     // Weather mask (for rain/snow particles in post-process)
     RhiTextureHandle weatherMask;
 
+    // Temporal reconstruction masks at render resolution.
+    RhiTextureHandle reactiveMask;
+    RhiTextureHandle transparencyMask;
+
     // Deferred pipeline capabilities
     bool hasDeferredInputs = false;
     bool hasDebugView = false;
