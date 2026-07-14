@@ -142,10 +142,19 @@ enum class FrameAttempt {
         return false;
     }
     const Fsr31VulkanContextDestroyResult destroyed = context.shutdown();
-    return destroyed.succeeded() && !context.isInitialized() &&
-           context.scratchMemorySize() == 0u &&
-           context.shutdown().status ==
-               Fsr31VulkanContextDestroyStatus::NotInitialized;
+    if (!destroyed.succeeded() || context.isInitialized() ||
+        context.scratchMemorySize() != 0u ||
+        context.shutdown().status != Fsr31VulkanContextDestroyStatus::NotInitialized) {
+        return false;
+    }
+    for (uint32_t iteration = 0u; iteration < 3u; ++iteration) {
+        const Fsr31VulkanContextCreateResult recreated = context.initialize(
+            device, {kRenderExtent, kOutputExtent, false, iteration == 1u});
+        if (!recreated.succeeded() || !context.shutdown().succeeded()) {
+            return false;
+        }
+    }
+    return !context.isInitialized() && context.scratchMemorySize() == 0u;
 }
 
 struct Fsr31SmokeTexture {
@@ -273,6 +282,7 @@ void destroyFsr31SmokeTexture(
     UpscaleSettings settings;
     settings.type = TemporalUpscalerType::Fsr31;
     settings.quality = TemporalUpscaleQuality::Quality;
+    settings.debugVisualizationEnabled = true;
     if (!pass.prepareOutputTarget(settings, kRenderExtent, kOutputExtent)) {
         std::cerr << "FSR 3.1 smoke test failed to prepare the output target: texture "
                   << pass.outputTextureHandle().index << ", view "

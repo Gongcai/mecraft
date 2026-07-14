@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 
 #if defined(_MSC_VER)
@@ -185,6 +186,8 @@ Fsr31VulkanContextCreateResult Fsr31VulkanContext::initialize(
     if (m_impl->scratchMemory == nullptr) {
         return {Fsr31VulkanContextCreateStatus::ScratchMemoryAllocationError, 0};
     }
+    std::memset(
+        m_impl->scratchMemory.get(), 0, alignedScratchMemorySize);
     m_impl->scratchMemorySize = scratchMemorySize;
 
     VkDeviceContext deviceContext{

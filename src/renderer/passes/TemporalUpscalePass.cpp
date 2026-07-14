@@ -154,7 +154,7 @@ bool TemporalUpscalePass::prepareOutputTarget(
                  settings.dynamicResolutionEnabled,
                  settings.debugVisualizationEnabled});
             if (!created.succeeded()) {
-                std::cerr << "TemporalUpscalePass: FSR 3.1 context creation failed with status "
+                std::cerr << "TemporalUpscalePass: FSR 3.1 initialization failed with status "
                           << static_cast<uint32_t>(created.status)
                           << " and SDK error " << created.sdkError << '\n';
                 m_fsr31Context.reset();
