@@ -1212,7 +1212,9 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "80: TAA Wet Reject Mask",
             "81: SSGI",
             "82: SSGI x8",
-            "83: SSGI Confidence"
+            "83: SSGI Confidence",
+            "84: Reactive Mask",
+            "85: Transparency Mask"
         };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;

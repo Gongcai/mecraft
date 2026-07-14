@@ -1144,7 +1144,20 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.depthStencil.depthTestEnabled = true;
     pipelineDesc.depthStencil.depthWriteEnabled = false;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
-    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.colorFormats = {
+        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::R8Unorm,
+        RhiTextureFormat::R8Unorm
+    };
+    RhiBlendAttachmentState maskBlend;
+    maskBlend.blendEnabled = true;
+    maskBlend.srcColor = RhiBlendFactor::One;
+    maskBlend.dstColor = RhiBlendFactor::One;
+    maskBlend.colorOp = RhiBlendOp::Max;
+    maskBlend.srcAlpha = RhiBlendFactor::One;
+    maskBlend.dstAlpha = RhiBlendFactor::One;
+    maskBlend.alphaOp = RhiBlendOp::Max;
+    pipelineDesc.blend.attachments = {{}, maskBlend, maskBlend};
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     m_waterPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_waterPipeline.isValid()) {
@@ -1472,8 +1485,22 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
     blend.srcAlpha = RhiBlendFactor::SrcAlpha;
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
-    pipelineDesc.blend.attachments.push_back(blend);
-    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba16Float};
+    pipelineDesc.blend.attachments = {blend};
+    RhiBlendAttachmentState maskBlend;
+    maskBlend.blendEnabled = true;
+    maskBlend.srcColor = RhiBlendFactor::One;
+    maskBlend.dstColor = RhiBlendFactor::One;
+    maskBlend.colorOp = RhiBlendOp::Max;
+    maskBlend.srcAlpha = RhiBlendFactor::One;
+    maskBlend.dstAlpha = RhiBlendFactor::One;
+    maskBlend.alphaOp = RhiBlendOp::Max;
+    pipelineDesc.blend.attachments.push_back(maskBlend);
+    pipelineDesc.blend.attachments.push_back(maskBlend);
+    pipelineDesc.colorFormats = {
+        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::R8Unorm,
+        RhiTextureFormat::R8Unorm
+    };
     pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
     m_transparentPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_transparentPipeline.isValid()) {

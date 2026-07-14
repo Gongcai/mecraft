@@ -16,7 +16,7 @@
 #include <glm/glm.hpp>
 
 namespace {
-constexpr size_t kDebugTextureCount = 21u;
+constexpr size_t kDebugTextureCount = DebugPass::kTextureCount;
 
 [[nodiscard]] bool sameTextureHandle(const RhiTextureHandle lhs, const RhiTextureHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -129,6 +129,8 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         !targets.ensureHistoryCloudTextureViews(rhiDevice) ||
         !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
         !targets.ensureSsgiTextureView(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
         !ensureNoiseTextureView(rhiDevice)) {
         return;
     }
@@ -176,7 +178,9 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         targets.temporalCurrentTextureViewHandle(),
         targets.ssgiTextureViewHandle(),
         targets.csmShadowColor0ArrayTextureViewHandle(),
-        targets.csmShadowColor1ArrayTextureViewHandle()
+        targets.csmShadowColor1ArrayTextureViewHandle(),
+        targets.reactiveMaskTextureViewHandle(),
+        targets.transparencyMaskTextureViewHandle()
     };
     if (!ensureRhiBindGroup(rhiDevice, debugViewMode, views)) {
         return;
@@ -424,7 +428,7 @@ bool DebugPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
 bool DebugPass::ensureRhiBindGroup(
     RhiDevice& rhiDevice,
     const int debugViewMode,
-    const std::array<RhiTextureViewHandle, 21>& views) {
+    const std::array<RhiTextureViewHandle, kDebugTextureCount>& views) {
     for (const RhiTextureViewHandle view : views) {
         if (!view.isValid()) {
             return false;
@@ -439,7 +443,7 @@ bool DebugPass::ensureRhiBindGroup(
     std::array<RhiSamplerHandle, kDebugTextureCount> samplers;
     samplers.fill(m_linearSampler);
     const size_t nearestBindings[] = {
-        0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u, 19u, 20u
+        0u, 1u, 2u, 3u, 4u, 5u, 9u, 12u, 16u, 19u, 20u, 21u, 22u
     };
     for (const size_t binding : nearestBindings) {
         samplers[binding] = m_nearestSampler;

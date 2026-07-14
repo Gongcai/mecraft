@@ -7,6 +7,7 @@
 #include "../rhi/RhiHandles.h"
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 
 class DeferredRenderTargets;
@@ -19,6 +20,7 @@ namespace shadow { class ShadowRenderer; }
 /// Displays all intermediate render targets for visual inspection.
 class DebugPass : public RenderPass {
 public:
+    static constexpr std::size_t kTextureCount = 23u;
     void init(ResourceMgr& resourceMgr);
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Debug"; }
@@ -39,7 +41,7 @@ private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice, int debugViewMode,
-                            const std::array<RhiTextureViewHandle, 21>& views);
+                            const std::array<RhiTextureViewHandle, kTextureCount>& views);
     void destroyRhiBindGroup();
     void destroyRhiResources();
 
@@ -57,7 +59,7 @@ private:
     RhiShaderHandle m_fragmentShader;
     RhiPipelineHandle m_pipeline;
     RhiBindGroupHandle m_bindGroup;
-    std::array<RhiTextureViewHandle, 21> m_boundViews = {};
+    std::array<RhiTextureViewHandle, kTextureCount> m_boundViews = {};
     int m_boundDebugViewMode = -1;
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
 };

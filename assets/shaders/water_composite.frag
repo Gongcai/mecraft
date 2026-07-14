@@ -80,6 +80,8 @@ uniform float uWaterFlowLayerCount;
 #endif
 
 layout(location = 0) out vec4 FragColor;
+layout(location = 1) out float FragReactiveMask;
+layout(location = 2) out float FragTransparencyMask;
 
 #include "lighting_environment.glsl"
 #ifdef RHI_TERRAIN_WATER_MDI
@@ -576,4 +578,6 @@ void main() {
     }
 
     FragColor = vec4(max(color, vec3(0.0)), fogTransmittance);
+    FragReactiveMask = 1.0;
+    FragTransparencyMask = 1.0;
 }

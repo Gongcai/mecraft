@@ -47,8 +47,10 @@ layout(binding = 17) uniform sampler2D uTemporalCurrentTex;
 layout(binding = 18) uniform sampler2D uSsgiTex;
 layout(binding = 19) uniform sampler2DArray uCsmShadowColor0Tex;
 layout(binding = 20) uniform sampler2DArray uCsmShadowColor1Tex;
+layout(binding = 21) uniform sampler2D uReactiveMaskTex;
+layout(binding = 22) uniform sampler2D uTransparencyMaskTex;
 
-layout(std140, binding = 21) uniform DebugParams {
+layout(std140, binding = 23) uniform DebugParams {
     mat4 pShadowModelView;
     mat4 pShadowProjection;
     mat4 pShadowProjectionInverse;
@@ -885,6 +887,16 @@ void main() {
 
     if (uDebugViewMode == 83) {
         FragColor = vec4(vec3(texture(uSsgiTex, textureUv).a), 1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 84) {
+        FragColor = vec4(vec3(texture(uReactiveMaskTex, textureUv).r), 1.0);
+        return;
+    }
+
+    if (uDebugViewMode == 85) {
+        FragColor = vec4(vec3(texture(uTransparencyMaskTex, textureUv).r), 1.0);
         return;
     }
 

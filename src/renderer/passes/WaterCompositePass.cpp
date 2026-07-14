@@ -75,13 +75,15 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
 
     RhiCommandList* commandList = nullptr;
     RhiDevice* rhiDevice = nullptr;
-    RhiColorAttachment colorAttachment;
+    RhiColorAttachment colorAttachments[3];
     RhiDepthStencilAttachment depthAttachment;
     RhiRenderingInfo renderingInfo;
 
     if (compositeInputsEnabled) {
         rhiDevice = ctx.shared->rhiDevice;
-        if (!targets.ensureTransparentCompositeTextureViews(*rhiDevice)) {
+        if (!targets.ensureTransparentCompositeTextureViews(*rhiDevice) ||
+            !targets.ensureReactiveMaskTextureView(*rhiDevice) ||
+            !targets.ensureTransparencyMaskTextureView(*rhiDevice)) {
             return false;
         }
 
@@ -98,9 +100,15 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         submitCommandList(*rhiDevice, copyCommandList,
                           "WaterComposite.InputCopy.Submit");
 
-        colorAttachment.view = targets.transparentCompositeTextureViewHandle();
-        colorAttachment.loadOp = RhiLoadOp::Load;
-        colorAttachment.storeOp = RhiStoreOp::Store;
+        colorAttachments[0].view = targets.transparentCompositeTextureViewHandle();
+        colorAttachments[0].loadOp = RhiLoadOp::Load;
+        colorAttachments[0].storeOp = RhiStoreOp::Store;
+        colorAttachments[1].view = targets.reactiveMaskTextureViewHandle();
+        colorAttachments[1].loadOp = RhiLoadOp::Load;
+        colorAttachments[1].storeOp = RhiStoreOp::Store;
+        colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
+        colorAttachments[2].loadOp = RhiLoadOp::Load;
+        colorAttachments[2].storeOp = RhiStoreOp::Store;
 
         depthAttachment.view = targets.transparentCompositeDepthTextureViewHandle();
         depthAttachment.depthLoadOp = RhiLoadOp::Load;
@@ -113,23 +121,31 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
             static_cast<uint32_t>(std::max(1, targets.width())),
             static_cast<uint32_t>(std::max(1, targets.height()))
         };
-        renderingInfo.colorAttachments = &colorAttachment;
-        renderingInfo.colorAttachmentCount = 1u;
+        renderingInfo.colorAttachments = colorAttachments;
+        renderingInfo.colorAttachmentCount = 3u;
         renderingInfo.depthStencilAttachment = &depthAttachment;
 
         commandList = &beginCommandList(*ctx.shared->commandListPool,
                                         "WaterComposite.TransparentComposite.Commands");
     } else if (deferredFrameActive) {
         if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-            !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
+            !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid() ||
+            !targets.ensureReactiveMaskTextureView(*ctx.shared->rhiDevice) ||
+            !targets.ensureTransparencyMaskTextureView(*ctx.shared->rhiDevice)) {
             return false;
         }
 
         rhiDevice = ctx.shared->rhiDevice;
 
-        colorAttachment.view = ctx.sceneCaptureColorView;
-        colorAttachment.loadOp = RhiLoadOp::Load;
-        colorAttachment.storeOp = RhiStoreOp::Store;
+        colorAttachments[0].view = ctx.sceneCaptureColorView;
+        colorAttachments[0].loadOp = RhiLoadOp::Load;
+        colorAttachments[0].storeOp = RhiStoreOp::Store;
+        colorAttachments[1].view = targets.reactiveMaskTextureViewHandle();
+        colorAttachments[1].loadOp = RhiLoadOp::Load;
+        colorAttachments[1].storeOp = RhiStoreOp::Store;
+        colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
+        colorAttachments[2].loadOp = RhiLoadOp::Load;
+        colorAttachments[2].storeOp = RhiStoreOp::Store;
 
         depthAttachment.view = ctx.sceneCaptureDepthView;
         depthAttachment.depthLoadOp = RhiLoadOp::Load;
@@ -142,8 +158,8 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
             ctx.renderExtent.width,
             ctx.renderExtent.height
         };
-        renderingInfo.colorAttachments = &colorAttachment;
-        renderingInfo.colorAttachmentCount = 1u;
+        renderingInfo.colorAttachments = colorAttachments;
+        renderingInfo.colorAttachmentCount = 3u;
         renderingInfo.depthStencilAttachment = &depthAttachment;
 
         commandList = &beginCommandList(*ctx.shared->commandListPool,
@@ -239,12 +255,24 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
                                   ctx.sceneCaptureDepthTexture,
                                   RhiResourceState::DepthWrite);
     }
+    targets.transitionTexture(*commandList,
+                              targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    targets.transitionTexture(*commandList,
+                              targets.transparencyMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList->beginRendering(renderingInfo);
     worldRenderBuffer.recordRhiWater(*commandList, ctx.shared->terrainRhiPipelines->waterPipeline(),
                                      ctx.shared->terrainRhiPipelines->waterBindGroup());
     worldRenderBuffer.mergeSceneWaterFrameStats();
 
     commandList->endRendering();
+    targets.transitionTexture(*commandList,
+                              targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(*commandList,
+                              targets.transparencyMaskTextureHandle(),
+                              RhiResourceState::ShaderRead);
     if (compositeInputsEnabled) {
         targets.transitionTexture(*commandList,
                                   targets.transparentCompositeTextureHandle(),

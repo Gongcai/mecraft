@@ -38,7 +38,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 45> kShaderCases{{
+    constexpr std::array<ShaderCase, 46> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
@@ -84,6 +84,8 @@ int main() {
         {"assets/shaders/gameplay_sky_capture_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/water_composite.frag", RhiShaderStage::Fragment,
          "RHI_TERRAIN_WATER_MDI"},
+        {"assets/shaders/transparent_composite.frag", RhiShaderStage::Fragment,
+         "RHI_TERRAIN_LIT_MDI"},
         {"assets/shaders/ui_glass_rhi.frag", RhiShaderStage::Fragment}
     }};
 

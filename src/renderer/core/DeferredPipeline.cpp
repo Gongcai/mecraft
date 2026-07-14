@@ -899,7 +899,9 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     auto& worldBuffer = *m_shared->worldRenderBuffer;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
-    if (!targets.ensureTransparentCompositeTextureViews(rhiDevice)) {
+    if (!targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(rhiDevice)) {
         return;
     }
 
@@ -930,10 +932,16 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     }
     }
 
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.transparentCompositeTextureViewHandle();
-    colorAttachment.loadOp = RhiLoadOp::Load;
-    colorAttachment.storeOp = RhiStoreOp::Store;
+    RhiColorAttachment colorAttachments[3];
+    colorAttachments[0].view = targets.transparentCompositeTextureViewHandle();
+    colorAttachments[0].loadOp = RhiLoadOp::Load;
+    colorAttachments[0].storeOp = RhiStoreOp::Store;
+    colorAttachments[1].view = targets.reactiveMaskTextureViewHandle();
+    colorAttachments[1].loadOp = RhiLoadOp::Load;
+    colorAttachments[1].storeOp = RhiStoreOp::Store;
+    colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
+    colorAttachments[2].loadOp = RhiLoadOp::Load;
+    colorAttachments[2].storeOp = RhiStoreOp::Store;
 
     RhiDepthStencilAttachment depthAttachment;
     depthAttachment.view = targets.transparentCompositeDepthTextureViewHandle();
@@ -948,8 +956,8 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
         static_cast<uint32_t>(std::max(1, targets.width())),
         static_cast<uint32_t>(std::max(1, targets.height()))
     };
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.colorAttachments = colorAttachments;
+    renderingInfo.colorAttachmentCount = 3u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
     RhiCommandList* commandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
@@ -1065,6 +1073,10 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
         return;
     }
 
+    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     worldBuffer.recordRhiTransparent(
         commandList,
@@ -1072,6 +1084,10 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
         m_shared->terrainRhiPipelines->transparentBindGroup());
 
     commandList.endRendering();
+    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
+                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }

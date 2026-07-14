@@ -1,4 +1,8 @@
 layout(location = 0) out vec4 FragColor;
+#if MECRAFT_TRANSPARENT_COMPOSITE != 0
+layout(location = 1) out float FragReactiveMask;
+layout(location = 2) out float FragTransparencyMask;
+#endif
 #include "gbuffer_contract.glsl"
 #include "lighting_environment.glsl"
 #ifdef RHI_TERRAIN_LIT_MDI
@@ -377,6 +381,10 @@ uniform vec3 uCameraPos;
     }
 
     void main() {
+#if MECRAFT_TRANSPARENT_COMPOSITE != 0
+        FragReactiveMask = 0.0;
+        FragTransparencyMask = 0.0;
+#endif
         // Debug light visualization modes
         if (uDebugLightMode != 0) {
             float val;
@@ -604,4 +612,9 @@ uniform vec3 uCameraPos;
         }
 
         FragColor = vec4(finalColor, alpha);
+#if MECRAFT_TRANSPARENT_COMPOSITE != 0
+        const float animatedReactive = vAnimated > 0.5 ? 1.0 : 0.0;
+        FragReactiveMask = clamp(max(alpha, animatedReactive), 0.0, 1.0);
+        FragTransparencyMask = clamp(alpha, 0.0, 1.0);
+#endif
     }
