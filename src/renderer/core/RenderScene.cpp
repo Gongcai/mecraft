@@ -355,6 +355,7 @@ void RenderScene::shutdown() {
     // Phase 5: Shutdown shared post-process pass
     m_fsr1Pass.shutdown();
     m_fsr1Supported = false;
+    m_temporalUpscalePass.shutdown();
     m_postProcessPass.shutdown();
 }
 
@@ -547,6 +548,13 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList, m_currentContext);
     }
 
+    if (!m_temporalUpscalePass.prepareOutputTarget(
+            m_settings.upscale.type, m_currentContext.outputExtent)) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Failed to prepare temporal HDR output target\n");
+        m_terrainStreamingService.endFrame();
+        return;
+    }
     refreshTemporalFrameInput();
     m_temporalUpscaleResult.reset();
     if (m_temporalFrameInput.has_value()) {
@@ -804,6 +812,7 @@ void RenderScene::setupResources(
     m_shared.rhiDevice = rhiDevice;
     m_shared.commandListPool = commandListPool;
     if (rhiDevice == nullptr || commandListPool == nullptr) std::abort();
+    m_temporalUpscalePass.init(*rhiDevice);
     m_postProcessPass.init(*m_shared.resources, *commandListPool);
     m_fsr1Supported = Fsr1Pass::isSupported(*rhiDevice);
     if (m_fsr1Supported) {
@@ -1231,8 +1240,15 @@ void RenderScene::refreshTemporalFrameInput() {
     input.textures.transparencyMask = m_lastFrameOutput.transparencyMask;
     input.textures.transparencyMaskView =
         m_shared.deferredTargets->transparencyMaskTextureViewHandle();
-    input.textures.outputHdrColor = m_lastFrameOutput.sceneColor;
-    input.textures.outputHdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
+    if (m_settings.upscale.type == TemporalUpscalerType::Native) {
+        input.textures.outputHdrColor = m_lastFrameOutput.sceneColor;
+        input.textures.outputHdrColorView =
+            m_postProcessPass.sceneColorTextureViewHandle();
+    } else {
+        input.textures.outputHdrColor = m_temporalUpscalePass.outputTextureHandle();
+        input.textures.outputHdrColorView =
+            m_temporalUpscalePass.outputTextureViewHandle();
+    }
     m_temporalFrameInput = input;
 }
 

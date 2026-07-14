@@ -2,6 +2,7 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
+#include "renderer/passes/TemporalUpscalePass.h"
 
 #include <GLFW/glfw3.h>
 
@@ -37,6 +38,9 @@ enum class FrameAttempt {
         textureInfo->format != VK_FORMAT_R32G32B32A32_SFLOAT ||
         textureInfo->extent.width != width || textureInfo->extent.height != height ||
         textureInfo->extent.depth != depth || textureInfo->arrayLayers != 1u ||
+        textureInfo->imageType != VK_IMAGE_TYPE_3D ||
+        textureInfo->viewType != VK_IMAGE_VIEW_TYPE_3D ||
+        textureInfo->mipCount != 1u || textureInfo->layerCount != 1u ||
         textureInfo->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
         VkRhiInterop::textureInfo(device, {}, view).has_value() ||
         VkRhiInterop::resourceLayout(RhiResourceState::ShaderRead) !=
@@ -54,6 +58,50 @@ enum class FrameAttempt {
         !commands->end() || VkRhiInterop::commandBuffer(device, *commands).has_value()) {
         return false;
     }
+    return true;
+}
+
+[[nodiscard]] bool validateTemporalOutputTarget(VkRhiDevice& device) {
+    TemporalUpscalePass pass;
+    pass.init(device);
+    constexpr TemporalExtent kInitialExtent{640u, 360u};
+    if (!pass.prepareOutputTarget(TemporalUpscalerType::Fsr31, kInitialExtent)) {
+        return false;
+    }
+    const RhiTextureHandle initialTexture = pass.outputTextureHandle();
+    const RhiTextureViewHandle initialView = pass.outputTextureViewHandle();
+    const auto initialInfo = VkRhiInterop::textureInfo(
+        device, initialTexture, initialView);
+    if (!initialInfo.has_value() ||
+        initialInfo->format != VK_FORMAT_R16G16B16A16_SFLOAT ||
+        initialInfo->extent.width != kInitialExtent.width ||
+        initialInfo->extent.height != kInitialExtent.height ||
+        (initialInfo->usage & VK_IMAGE_USAGE_SAMPLED_BIT) == 0u ||
+        (initialInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) == 0u ||
+        !pass.prepareOutputTarget(TemporalUpscalerType::Fsr31, kInitialExtent) ||
+        pass.outputTextureHandle().index != initialTexture.index ||
+        pass.outputTextureHandle().generation != initialTexture.generation) {
+        return false;
+    }
+
+    constexpr TemporalExtent kResizedExtent{960u, 540u};
+    if (!pass.prepareOutputTarget(TemporalUpscalerType::Fsr31, kResizedExtent)) {
+        return false;
+    }
+    const RhiTextureHandle resizedTexture = pass.outputTextureHandle();
+    const bool targetRecreated = resizedTexture.index != initialTexture.index ||
+                                 resizedTexture.generation != initialTexture.generation;
+    const auto resizedInfo = VkRhiInterop::textureInfo(
+        device, resizedTexture, pass.outputTextureViewHandle());
+    if (!targetRecreated || !resizedInfo.has_value() ||
+        resizedInfo->extent.width != kResizedExtent.width ||
+        resizedInfo->extent.height != kResizedExtent.height ||
+        !pass.prepareOutputTarget(TemporalUpscalerType::Native, kResizedExtent) ||
+        pass.outputTextureHandle().isValid() ||
+        pass.outputTextureViewHandle().isValid()) {
+        return false;
+    }
+    pass.shutdown();
     return true;
 }
 
@@ -658,6 +706,7 @@ int main() {
          renderStableFrame(device, *commandPool, window) &&
          device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo);
     if (commandPool == nullptr || !immediateModeValidated ||
+        !validateTemporalOutputTarget(device) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView,
                                textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||

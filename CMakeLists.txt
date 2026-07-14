@@ -385,6 +385,8 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
             src/renderer/rhi/vulkan/VkRhiDevice.h
             src/renderer/rhi/vulkan/VkRhiInterop.cpp
             src/renderer/rhi/vulkan/VkRhiInterop.h
+            src/renderer/upscaling/Fsr31VulkanResourceContract.cpp
+            src/renderer/upscaling/Fsr31VulkanResourceContract.h
     )
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         set_source_files_properties(
@@ -825,6 +827,7 @@ if(MECRAFT_BUILD_TESTS)
             $<$<STREQUAL:${MECRAFT_DEFAULT_RHI_BACKEND},Vulkan>:MECRAFT_TEST_DEFAULT_RHI_VULKAN>
     )
     if(MECRAFT_RHI_BACKEND_VULKAN)
+        add_mecraft_test(fsr31_resource_contract_test tests/fsr31_resource_contract_test.cpp)
         add_mecraft_test(vulkan_rhi_smoke_test tests/vulkan_rhi_smoke_test.cpp)
         set(MECRAFT_VULKAN_LAYER_DIR
                 "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/vulkan/explicit_layer.d")

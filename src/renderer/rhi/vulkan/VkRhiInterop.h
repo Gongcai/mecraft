@@ -32,8 +32,15 @@ struct VkRhiTextureInteropInfo {
     VkImageView view = VK_NULL_HANDLE;
     VkFormat format = VK_FORMAT_UNDEFINED;
     VkExtent3D extent{};
+    VkImageUsageFlags usage = 0u;
+    VkImageType imageType = VK_IMAGE_TYPE_MAX_ENUM;
+    VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
     uint32_t mipLevels = 0u;
     uint32_t arrayLayers = 0u;
+    uint32_t baseMip = 0u;
+    uint32_t mipCount = 0u;
+    uint32_t baseLayer = 0u;
+    uint32_t layerCount = 0u;
     VkImageAspectFlags aspectMask = 0u;
 };
 

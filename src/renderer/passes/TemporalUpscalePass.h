@@ -6,6 +6,8 @@
 
 #include <optional>
 
+class RhiDevice;
+
 enum class TemporalUpscaleStatus {
     Success,
     InvalidFrame,
@@ -29,6 +31,28 @@ struct TemporalUpscaleResult {
 /// Dispatches the selected HDR temporal reconstruction implementation.
 class TemporalUpscalePass {
 public:
+    TemporalUpscalePass() = default;
+    ~TemporalUpscalePass();
+    TemporalUpscalePass(const TemporalUpscalePass&) = delete;
+    TemporalUpscalePass& operator=(const TemporalUpscalePass&) = delete;
+
+    void init(RhiDevice& device);
+    void shutdown();
+
+    /// Create the output-resolution HDR storage target required by SDK upscalers.
+    /// @param type Selected temporal reconstruction implementation.
+    /// @param outputExtent Required display-resolution output extent.
+    /// @return True when Native needs no target or the SDK target is ready.
+    [[nodiscard]] bool prepareOutputTarget(TemporalUpscalerType type,
+                                           TemporalExtent outputExtent);
+
+    [[nodiscard]] RhiTextureHandle outputTextureHandle() const {
+        return m_outputTexture;
+    }
+    [[nodiscard]] RhiTextureViewHandle outputTextureViewHandle() const {
+        return m_outputView;
+    }
+
     /// Execute one temporal reconstruction frame.
     /// @param type Explicitly selected temporal reconstruction technology.
     /// @param frame Fully populated backend-independent frame contract.
@@ -38,6 +62,14 @@ public:
         const TemporalFrameInput& frame) const;
 
     [[nodiscard]] static const char* statusText(TemporalUpscaleStatus status);
+
+private:
+    void destroyOutputTarget();
+
+    RhiDevice* m_device = nullptr;
+    RhiTextureHandle m_outputTexture;
+    RhiTextureViewHandle m_outputView;
+    TemporalExtent m_outputExtent;
 };
 
 #endif // MECRAFT_TEMPORAL_UPSCALE_PASS_H

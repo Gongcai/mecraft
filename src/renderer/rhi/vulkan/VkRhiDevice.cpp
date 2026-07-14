@@ -280,17 +280,39 @@ std::optional<VkRhiTextureInteropInfo> VkRhiInterop::textureInfo(
     const RhiTextureFormat viewFormat =
         viewRecord->desc.format == RhiTextureFormat::Undefined
             ? textureRecord->desc.format : viewRecord->desc.format;
+    const uint32_t mipCount = viewRecord->desc.mipCount == kRhiRemainingMipLevels
+        ? textureRecord->desc.mipLevels - viewRecord->desc.baseMip
+        : viewRecord->desc.mipCount;
+    const uint32_t textureLayers = textureRecord->desc.dimension ==
+            RhiTextureDimension::Texture3D
+        ? 1u : textureRecord->desc.depthOrLayers;
+    const bool texture3D = textureRecord->desc.dimension ==
+        RhiTextureDimension::Texture3D;
+    const uint32_t layerCount = texture3D
+        ? 1u
+        : (viewRecord->desc.layerCount == kRhiRemainingArrayLayers
+            ? textureLayers - viewRecord->desc.baseLayer
+            : viewRecord->desc.layerCount);
+    const uint32_t viewDepth = textureRecord->desc.dimension ==
+            RhiTextureDimension::Texture3D
+        ? std::max(1u, textureRecord->desc.depthOrLayers >> viewRecord->desc.baseMip)
+        : 1u;
     return VkRhiTextureInteropInfo{
         textureRecord->image,
         viewRecord->view,
         toVkFormat(viewFormat),
-        {textureRecord->desc.width,
-         textureRecord->desc.height,
-         textureRecord->desc.dimension == RhiTextureDimension::Texture3D
-             ? textureRecord->desc.depthOrLayers : 1u},
+        {std::max(1u, textureRecord->desc.width >> viewRecord->desc.baseMip),
+         std::max(1u, textureRecord->desc.height >> viewRecord->desc.baseMip),
+         viewDepth},
+        toVkImageUsage(textureRecord->desc.usage),
+        toVkImageType(textureRecord->desc.dimension),
+        toVkImageViewType(viewRecord->desc.viewType),
         textureRecord->desc.mipLevels,
-        textureRecord->desc.dimension == RhiTextureDimension::Texture3D
-            ? 1u : textureRecord->desc.depthOrLayers,
+        textureLayers,
+        viewRecord->desc.baseMip,
+        mipCount,
+        texture3D ? 0u : viewRecord->desc.baseLayer,
+        layerCount,
         defaultAspectForFormat(viewFormat)
     };
 }
