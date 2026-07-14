@@ -197,6 +197,7 @@ enum class RhiTextureFormat {
     Rgba32Float,
     R16Float,
     R32Float,
+    R32Uint,
     Depth16,
     Depth24,
     Depth24Stencil8,

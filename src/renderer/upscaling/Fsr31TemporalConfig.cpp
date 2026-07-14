@@ -100,8 +100,8 @@ Fsr31JitterResult queryFsr31Jitter(
         return result;
     }
     jitter.projectionOffset = {
-        jitter.pixels.x / static_cast<float>(renderExtent.width),
-        -jitter.pixels.y / static_cast<float>(renderExtent.height)
+        2.0f * jitter.pixels.x / static_cast<float>(renderExtent.width),
+        -2.0f * jitter.pixels.y / static_cast<float>(renderExtent.height)
     };
     Fsr31JitterResult result;
     result.status = Fsr31TemporalConfigStatus::Success;
@@ -109,4 +109,8 @@ Fsr31JitterResult queryFsr31Jitter(
     result.phaseCount = phaseCount;
     result.phaseIndex = phaseIndex;
     return result;
+}
+
+glm::vec2 fsr31MotionVectorScale(const glm::vec2 motionVectorScale) {
+    return -motionVectorScale;
 }

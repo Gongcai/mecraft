@@ -3,16 +3,27 @@
 
 #include "renderer/contracts/TemporalFrameContract.h"
 #include "renderer/core/RenderSettings.h"
+#include "renderer/rhi/RhiTypes.h"
 
+#include <cstdint>
+#include <memory>
 #include <optional>
 
 class RhiDevice;
+class RhiCommandListPool;
+#if defined(MECRAFT_ENABLE_FSR31)
+class Fsr31VulkanContext;
+#endif
 
 enum class TemporalUpscaleStatus {
     Success,
     InvalidFrame,
     NativeExtentMismatch,
     Fsr31Unavailable,
+    Fsr31InvalidResources,
+    Fsr31CommandError,
+    Fsr31DispatchError,
+    Fsr31SubmitError,
     DlssUnavailable
 };
 
@@ -22,6 +33,7 @@ struct TemporalUpscaleResult {
     RhiTextureHandle outputHdrColor;
     RhiTextureViewHandle outputHdrColorView;
     TemporalExtent outputExtent;
+    int32_t sdkError = 0;
 
     [[nodiscard]] bool succeeded() const {
         return status == TemporalUpscaleStatus::Success;
@@ -31,20 +43,23 @@ struct TemporalUpscaleResult {
 /// Dispatches the selected HDR temporal reconstruction implementation.
 class TemporalUpscalePass {
 public:
-    TemporalUpscalePass() = default;
+    TemporalUpscalePass();
     ~TemporalUpscalePass();
     TemporalUpscalePass(const TemporalUpscalePass&) = delete;
     TemporalUpscalePass& operator=(const TemporalUpscalePass&) = delete;
 
-    void init(RhiDevice& device);
+    void init(RhiDevice& device, RhiCommandListPool& commandListPool);
     void shutdown();
 
     /// Create the output-resolution HDR storage target required by SDK upscalers.
-    /// @param type Selected temporal reconstruction implementation.
+    /// @param settings Selected implementation and immutable SDK context flags.
+    /// @param renderExtent Maximum scene-rendering extent for the SDK context.
     /// @param outputExtent Required display-resolution output extent.
     /// @return True when Native needs no target or the SDK target is ready.
-    [[nodiscard]] bool prepareOutputTarget(TemporalUpscalerType type,
-                                           TemporalExtent outputExtent);
+    [[nodiscard]] bool prepareOutputTarget(
+        const UpscaleSettings& settings,
+        TemporalExtent renderExtent,
+        TemporalExtent outputExtent);
 
     [[nodiscard]] RhiTextureHandle outputTextureHandle() const {
         return m_outputTexture;
@@ -54,22 +69,32 @@ public:
     }
 
     /// Execute one temporal reconstruction frame.
-    /// @param type Explicitly selected temporal reconstruction technology.
+    /// @param settings Selected implementation and per-dispatch SDK settings.
     /// @param frame Fully populated backend-independent frame contract.
     /// @return Status and HDR output consumed by display post-processing.
     [[nodiscard]] TemporalUpscaleResult execute(
-        TemporalUpscalerType type,
-        const TemporalFrameInput& frame) const;
+        const UpscaleSettings& settings,
+        const TemporalFrameInput& frame);
 
     [[nodiscard]] static const char* statusText(TemporalUpscaleStatus status);
 
 private:
     void destroyOutputTarget();
+#if defined(MECRAFT_ENABLE_FSR31)
+    [[nodiscard]] bool releaseFsr31Context();
+#endif
 
     RhiDevice* m_device = nullptr;
+    RhiCommandListPool* m_commandListPool = nullptr;
     RhiTextureHandle m_outputTexture;
     RhiTextureViewHandle m_outputView;
     TemporalExtent m_outputExtent;
+    bool m_outputInitialized = false;
+#if defined(MECRAFT_ENABLE_FSR31)
+    std::unique_ptr<Fsr31VulkanContext> m_fsr31Context;
+    bool m_fsr31DynamicResolution = false;
+    bool m_fsr31DebugChecking = false;
+#endif
 };
 
 #endif // MECRAFT_TEMPORAL_UPSCALE_PASS_H

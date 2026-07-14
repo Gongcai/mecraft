@@ -132,6 +132,14 @@ bool testFrameValidation() {
     }
 
     frame = completeFrame();
+    frame.motionVectorScale.x = 0.0f;
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::InvalidMotionVectorScale,
+                     "motion-vector scale must match the render extent")) {
+        return false;
+    }
+
+    frame = completeFrame();
     frame.textures.hdrColorView = {};
     if (!requireTrue(validateTemporalFrame(frame) ==
                          TemporalFrameValidationError::MissingHdrColorView,
@@ -195,12 +203,13 @@ bool testFrameValidation() {
 }
 
 bool testTemporalUpscaleDispatch() {
-    const TemporalUpscalePass pass;
+    TemporalUpscalePass pass;
+    UpscaleSettings settings;
     TemporalFrameInput frame = completeFrame();
     frame.outputExtent = frame.renderExtent;
 
     const TemporalUpscaleResult nativeResult = pass.execute(
-        TemporalUpscalerType::Native,
+        settings,
         frame);
     if (!requireTrue(nativeResult.succeeded(),
                      "native temporal reconstruction must accept matching extents") ||
@@ -215,21 +224,23 @@ bool testTemporalUpscaleDispatch() {
     }
 
     frame.outputExtent = {1920u, 1080u};
-    if (!requireTrue(pass.execute(TemporalUpscalerType::Native, frame).status ==
+    if (!requireTrue(pass.execute(settings, frame).status ==
                          TemporalUpscaleStatus::NativeExtentMismatch,
                      "native temporal reconstruction must reject mismatched extents")) {
         return false;
     }
 
     frame.outputExtent = frame.renderExtent;
-    if (!requireTrue(pass.execute(TemporalUpscalerType::Fsr31, frame).status ==
+    settings.type = TemporalUpscalerType::Fsr31;
+    if (!requireTrue(pass.execute(settings, frame).status ==
                          TemporalUpscaleStatus::Fsr31Unavailable,
                      "FSR 3.1 must report unavailable before SDK initialization")) {
         return false;
     }
 
     frame.textures.exposure = {};
-    return requireTrue(pass.execute(TemporalUpscalerType::Native, frame).status ==
+    settings.type = TemporalUpscalerType::Native;
+    return requireTrue(pass.execute(settings, frame).status ==
                            TemporalUpscaleStatus::InvalidFrame,
                        "temporal dispatch must reject incomplete frame resources");
 }

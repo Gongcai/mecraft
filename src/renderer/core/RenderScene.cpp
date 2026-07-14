@@ -568,7 +568,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
 
     if (!m_temporalUpscalePass.prepareOutputTarget(
-            m_settings.upscale.type, m_currentContext.outputExtent)) {
+            m_settings.upscale,
+            m_currentContext.renderExtent,
+            m_currentContext.outputExtent)) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[RenderScene] Failed to prepare temporal HDR output target\n");
         m_terrainStreamingService.endFrame();
@@ -578,7 +580,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     m_temporalUpscaleResult.reset();
     if (m_temporalFrameInput.has_value()) {
         m_temporalUpscaleResult = m_temporalUpscalePass.execute(
-            m_settings.upscale.type,
+            m_settings.upscale,
             *m_temporalFrameInput);
         if (!m_temporalUpscaleResult->succeeded()) {
             MECRAFT_LOG_STREAM(
@@ -831,7 +833,7 @@ void RenderScene::setupResources(
     m_shared.rhiDevice = rhiDevice;
     m_shared.commandListPool = commandListPool;
     if (rhiDevice == nullptr || commandListPool == nullptr) std::abort();
-    m_temporalUpscalePass.init(*rhiDevice);
+    m_temporalUpscalePass.init(*rhiDevice, *commandListPool);
     m_postProcessPass.init(*m_shared.resources, *commandListPool);
     m_fsr1Supported = Fsr1Pass::isSupported(*rhiDevice);
     if (m_fsr1Supported) {

@@ -185,6 +185,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         case RhiTextureFormat::Rgb10A2Unorm:
         case RhiTextureFormat::Rg16Float:
         case RhiTextureFormat::R32Float:
+        case RhiTextureFormat::R32Uint:
         case RhiTextureFormat::Depth24:
         case RhiTextureFormat::Depth24Stencil8:
         case RhiTextureFormat::Depth32Float: return 4u;
@@ -1160,6 +1161,11 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         VkPhysicalDeviceFeatures2 features2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                             &features11};
         vkGetPhysicalDeviceFeatures2(candidate, &features2);
+#if defined(MECRAFT_ENABLE_FSR31)
+        if (features2.features.shaderInt16 != VK_TRUE) {
+            continue;
+        }
+#endif
         if (features2.features.samplerAnisotropy != VK_TRUE ||
             features11.shaderDrawParameters != VK_TRUE ||
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
@@ -1235,6 +1241,9 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
                                         &features11};
     features2.features.samplerAnisotropy = VK_TRUE;
     features2.features.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect;
+#if defined(MECRAFT_ENABLE_FSR31)
+    features2.features.shaderInt16 = VK_TRUE;
+#endif
     std::vector<const char*> deviceExtensions{
         VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME};
 #if defined(MECRAFT_ENABLE_FSR31)

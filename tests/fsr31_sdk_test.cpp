@@ -98,11 +98,14 @@ bool testProjectJitterQueries() {
                            std::abs(first.jitter.pixels.y + 1.0f / 6.0f) < 0.000001f &&
                            std::abs(first.jitter.projectionOffset.x) < 0.000001f &&
                            std::abs(first.jitter.projectionOffset.y -
-                                    1.0f / (6.0f * 720.0f)) < 0.000001f,
+                                    2.0f / (6.0f * 720.0f)) < 0.000001f,
                        "project FSR jitter must preserve pixel and projection conventions") &&
            requireTrue(wrapped.succeeded() && wrapped.phaseIndex == 0 &&
                            wrapped.jitter.pixels == first.jitter.pixels,
-                       "project FSR jitter must wrap at the official phase count");
+                       "project FSR jitter must wrap at the official phase count") &&
+           requireTrue(fsr31MotionVectorScale({1280.0f, 720.0f}) ==
+                           glm::vec2(-1280.0f, -720.0f),
+                       "FSR motion-vector bridge must invert current-minus-previous velocity");
 }
 
 } // namespace

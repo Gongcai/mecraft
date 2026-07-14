@@ -65,11 +65,17 @@ enum class FrameAttempt {
     return true;
 }
 
-[[nodiscard]] bool validateTemporalOutputTarget(VkRhiDevice& device) {
+[[nodiscard]] bool validateTemporalOutputTarget(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool) {
     TemporalUpscalePass pass;
-    pass.init(device);
+    pass.init(device, commandPool);
+    UpscaleSettings settings;
+    settings.type = TemporalUpscalerType::Fsr31;
+    settings.quality = TemporalUpscaleQuality::Quality;
     constexpr TemporalExtent kInitialExtent{640u, 360u};
-    if (!pass.prepareOutputTarget(TemporalUpscalerType::Fsr31, kInitialExtent)) {
+    if (!pass.prepareOutputTarget(
+            settings, kInitialExtent, kInitialExtent)) {
         return false;
     }
     const RhiTextureHandle initialTexture = pass.outputTextureHandle();
@@ -82,14 +88,15 @@ enum class FrameAttempt {
         initialInfo->extent.height != kInitialExtent.height ||
         (initialInfo->usage & VK_IMAGE_USAGE_SAMPLED_BIT) == 0u ||
         (initialInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) == 0u ||
-        !pass.prepareOutputTarget(TemporalUpscalerType::Fsr31, kInitialExtent) ||
+        !pass.prepareOutputTarget(settings, kInitialExtent, kInitialExtent) ||
         pass.outputTextureHandle().index != initialTexture.index ||
         pass.outputTextureHandle().generation != initialTexture.generation) {
         return false;
     }
 
     constexpr TemporalExtent kResizedExtent{960u, 540u};
-    if (!pass.prepareOutputTarget(TemporalUpscalerType::Fsr31, kResizedExtent)) {
+    if (!pass.prepareOutputTarget(
+            settings, kResizedExtent, kResizedExtent)) {
         return false;
     }
     const RhiTextureHandle resizedTexture = pass.outputTextureHandle();
@@ -97,10 +104,11 @@ enum class FrameAttempt {
                                  resizedTexture.generation != initialTexture.generation;
     const auto resizedInfo = VkRhiInterop::textureInfo(
         device, resizedTexture, pass.outputTextureViewHandle());
+    settings.type = TemporalUpscalerType::Native;
     if (!targetRecreated || !resizedInfo.has_value() ||
         resizedInfo->extent.width != kResizedExtent.width ||
         resizedInfo->extent.height != kResizedExtent.height ||
-        !pass.prepareOutputTarget(TemporalUpscalerType::Native, kResizedExtent) ||
+        !pass.prepareOutputTarget(settings, kResizedExtent, kResizedExtent) ||
         pass.outputTextureHandle().isValid() ||
         pass.outputTextureViewHandle().isValid()) {
         return false;
@@ -121,13 +129,16 @@ enum class FrameAttempt {
     constexpr TemporalExtent kRenderExtent{1280u, 720u};
     constexpr TemporalExtent kOutputExtent{1920u, 1080u};
     const Fsr31VulkanContextCreateResult created = context.initialize(
-        device, {kRenderExtent, kOutputExtent, false, true});
+        device, {kRenderExtent, kOutputExtent, false, false});
     if (!created.succeeded() || !context.isInitialized() ||
         context.maxRenderExtent() != kRenderExtent ||
         context.maxOutputExtent() != kOutputExtent ||
         context.scratchMemorySize() == 0u ||
-        context.initialize(device, {kRenderExtent, kOutputExtent, false, true}).status !=
+        context.initialize(device, {kRenderExtent, kOutputExtent, false, false}).status !=
             Fsr31VulkanContextCreateStatus::AlreadyInitialized) {
+        std::cerr << "FSR 3.1 Vulkan context creation failed: status "
+                  << static_cast<uint32_t>(created.status)
+                  << ", SDK error " << created.sdkError << '\n';
         return false;
     }
     const Fsr31VulkanContextDestroyResult destroyed = context.shutdown();
@@ -135,6 +146,193 @@ enum class FrameAttempt {
            context.scratchMemorySize() == 0u &&
            context.shutdown().status ==
                Fsr31VulkanContextDestroyStatus::NotInitialized;
+}
+
+struct Fsr31SmokeTexture {
+    RhiTextureHandle texture;
+    RhiTextureViewHandle view;
+};
+
+[[nodiscard]] bool createFsr31SmokeTexture(
+    VkRhiDevice& device,
+    const char* const debugName,
+    const RhiTextureFormat format,
+    const TemporalExtent extent,
+    const RhiTextureUsageFlags usage,
+    const void* const pixels,
+    const size_t sizeBytes,
+    const RhiResourceState finalState,
+    Fsr31SmokeTexture& output) {
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = debugName;
+    textureDesc.format = format;
+    textureDesc.width = extent.width;
+    textureDesc.height = extent.height;
+    textureDesc.usage = usage;
+    RhiTextureInitialData initialData;
+    initialData.pixels = pixels;
+    initialData.sizeBytes = sizeBytes;
+    initialData.finalState = finalState;
+    output.texture = device.createTexture(textureDesc, &initialData);
+    if (!output.texture.isValid()) {
+        return false;
+    }
+
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = output.texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = format;
+    output.view = device.createTextureView(viewDesc);
+    if (!output.view.isValid()) {
+        device.destroyTexture(output.texture);
+        output.texture = {};
+        return false;
+    }
+    return true;
+}
+
+void destroyFsr31SmokeTexture(
+    VkRhiDevice& device,
+    Fsr31SmokeTexture& resource) {
+    if (resource.view.isValid()) {
+        device.destroyTextureView(resource.view);
+    }
+    if (resource.texture.isValid()) {
+        device.destroyTexture(resource.texture);
+    }
+    resource = {};
+}
+
+[[nodiscard]] bool validateFsr31VulkanDispatch(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool) {
+    constexpr TemporalExtent kRenderExtent{320u, 180u};
+    constexpr TemporalExtent kOutputExtent{480u, 270u};
+    const size_t renderPixelCount =
+        static_cast<size_t>(kRenderExtent.width) * kRenderExtent.height;
+    std::vector<uint16_t> hdrPixels(renderPixelCount * 4u, 0u);
+    std::vector<float> depthPixels(renderPixelCount, 1.0f);
+    std::vector<uint16_t> velocityPixels(renderPixelCount * 2u, 0u);
+    constexpr uint16_t kHalfFloatOne = 0x3c00u;
+    const uint16_t exposurePixels[4] = {kHalfFloatOne, 0u, 0u, 0u};
+    std::vector<uint8_t> maskPixels(renderPixelCount, 0u);
+
+    Fsr31SmokeTexture hdr;
+    Fsr31SmokeTexture depth;
+    Fsr31SmokeTexture velocity;
+    Fsr31SmokeTexture exposure;
+    Fsr31SmokeTexture reactive;
+    Fsr31SmokeTexture transparency;
+    const auto destroyInputs = [&]() {
+        destroyFsr31SmokeTexture(device, transparency);
+        destroyFsr31SmokeTexture(device, reactive);
+        destroyFsr31SmokeTexture(device, exposure);
+        destroyFsr31SmokeTexture(device, velocity);
+        destroyFsr31SmokeTexture(device, depth);
+        destroyFsr31SmokeTexture(device, hdr);
+    };
+
+    const RhiTextureUsageFlags sampledUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::TransferDst);
+    const bool inputsCreated = createFsr31SmokeTexture(
+            device, "VulkanSmoke.FSR31.Hdr", RhiTextureFormat::Rgba16Float,
+            kRenderExtent, sampledUsage, hdrPixels.data(),
+            hdrPixels.size() * sizeof(uint16_t), RhiResourceState::ShaderRead, hdr) &&
+        createFsr31SmokeTexture(
+            device, "VulkanSmoke.FSR31.Depth", RhiTextureFormat::Depth32Float,
+            kRenderExtent,
+            sampledUsage | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+            depthPixels.data(), depthPixels.size() * sizeof(float),
+            RhiResourceState::DepthRead, depth) &&
+        createFsr31SmokeTexture(
+            device, "VulkanSmoke.FSR31.Velocity", RhiTextureFormat::Rg16Float,
+            kRenderExtent, sampledUsage, velocityPixels.data(),
+            velocityPixels.size() * sizeof(uint16_t),
+            RhiResourceState::ShaderRead, velocity) &&
+        createFsr31SmokeTexture(
+            device, "VulkanSmoke.FSR31.Exposure", RhiTextureFormat::Rgba16Float,
+            {1u, 1u}, sampledUsage, exposurePixels, sizeof(exposurePixels),
+            RhiResourceState::ShaderRead, exposure) &&
+        createFsr31SmokeTexture(
+            device, "VulkanSmoke.FSR31.Reactive", RhiTextureFormat::R8Unorm,
+            kRenderExtent, sampledUsage, maskPixels.data(), maskPixels.size(),
+            RhiResourceState::ShaderRead, reactive) &&
+        createFsr31SmokeTexture(
+            device, "VulkanSmoke.FSR31.Transparency", RhiTextureFormat::R8Unorm,
+            kRenderExtent, sampledUsage, maskPixels.data(), maskPixels.size(),
+            RhiResourceState::ShaderRead, transparency);
+    if (!inputsCreated) {
+        std::cerr << "FSR 3.1 smoke test failed to create input resources\n";
+        destroyInputs();
+        return false;
+    }
+
+    TemporalUpscalePass pass;
+    pass.init(device, commandPool);
+    UpscaleSettings settings;
+    settings.type = TemporalUpscalerType::Fsr31;
+    settings.quality = TemporalUpscaleQuality::Quality;
+    if (!pass.prepareOutputTarget(settings, kRenderExtent, kOutputExtent)) {
+        std::cerr << "FSR 3.1 smoke test failed to prepare the output target: texture "
+                  << pass.outputTextureHandle().index << ", view "
+                  << pass.outputTextureViewHandle().index << '\n';
+        pass.shutdown();
+        destroyInputs();
+        return false;
+    }
+
+    TemporalFrameInput frame;
+    frame.renderExtent = kRenderExtent;
+    frame.outputExtent = kOutputExtent;
+    frame.motionVectorScale = glm::vec2(
+        static_cast<float>(kRenderExtent.width),
+        static_cast<float>(kRenderExtent.height));
+    frame.frameDeltaMilliseconds = 1000.0f / 60.0f;
+    frame.preExposure = 1.0f;
+    frame.cameraNear = 0.1f;
+    frame.cameraFar = 1000.0f;
+    frame.verticalFovRadians = 1.0f;
+    frame.reset = true;
+    frame.textures.hdrColor = hdr.texture;
+    frame.textures.hdrColorView = hdr.view;
+    frame.textures.depth = depth.texture;
+    frame.textures.depthView = depth.view;
+    frame.textures.velocity = velocity.texture;
+    frame.textures.velocityView = velocity.view;
+    frame.textures.exposure = exposure.texture;
+    frame.textures.exposureView = exposure.view;
+    frame.textures.reactiveMask = reactive.texture;
+    frame.textures.reactiveMaskView = reactive.view;
+    frame.textures.transparencyMask = transparency.texture;
+    frame.textures.transparencyMaskView = transparency.view;
+    frame.textures.outputHdrColor = pass.outputTextureHandle();
+    frame.textures.outputHdrColorView = pass.outputTextureViewHandle();
+
+    const TemporalUpscaleResult firstResult = pass.execute(settings, frame);
+    TemporalUpscaleResult secondResult;
+    if (firstResult.succeeded()) {
+        frame.reset = false;
+        secondResult = pass.execute(settings, frame);
+    }
+    device.waitIdle();
+    const bool dispatched = firstResult.succeeded() &&
+        secondResult.succeeded() && secondResult.outputHdrColor.isValid() &&
+        secondResult.outputHdrColorView.isValid() &&
+        secondResult.outputExtent == kOutputExtent;
+    if (!dispatched) {
+        std::cerr << "FSR 3.1 smoke dispatch failed: "
+                  << TemporalUpscalePass::statusText(
+                         firstResult.succeeded() ? secondResult.status
+                                                 : firstResult.status)
+                  << ", SDK error "
+                  << (firstResult.succeeded() ? secondResult.sdkError
+                                              : firstResult.sdkError)
+                  << '\n';
+    }
+    pass.shutdown();
+    destroyInputs();
+    return dispatched;
 }
 #endif
 
@@ -740,9 +938,10 @@ int main() {
          device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo);
     if (commandPool == nullptr || !immediateModeValidated ||
 #if defined(MECRAFT_ENABLE_FSR31)
+        !validateFsr31VulkanDispatch(device, *commandPool) ||
         !validateFsr31VulkanContext(device) ||
 #endif
-        !validateTemporalOutputTarget(device) ||
+        !validateTemporalOutputTarget(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView,
                                textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||

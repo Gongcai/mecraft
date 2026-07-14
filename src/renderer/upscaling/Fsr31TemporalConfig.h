@@ -58,4 +58,9 @@ struct Fsr31JitterResult {
     TemporalExtent renderExtent,
     TemporalExtent outputExtent);
 
+/// Convert Mecraft current-minus-previous UV velocity into the FSR convention.
+/// @param motionVectorScale Positive pixel scale from the temporal frame contract.
+/// @return Negative pixel scale that converts stored velocity to previous-minus-current.
+[[nodiscard]] glm::vec2 fsr31MotionVectorScale(glm::vec2 motionVectorScale);
+
 #endif // MECRAFT_FSR31_TEMPORAL_CONFIG_H

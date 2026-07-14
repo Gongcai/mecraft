@@ -758,7 +758,7 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
 endif()
 if(MECRAFT_ENABLE_FSR31)
     target_link_libraries(mecraft_core PRIVATE mecraft_fidelityfx_fsr31)
-    target_compile_definitions(mecraft_core PRIVATE MECRAFT_ENABLE_FSR31)
+    target_compile_definitions(mecraft_core PUBLIC MECRAFT_ENABLE_FSR31)
 endif()
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）
@@ -883,9 +883,6 @@ if(MECRAFT_BUILD_TESTS)
             target_link_libraries(fsr31_sdk_test PRIVATE mecraft_fidelityfx_fsr31)
         endif()
         add_mecraft_test(vulkan_rhi_smoke_test tests/vulkan_rhi_smoke_test.cpp)
-        if(MECRAFT_ENABLE_FSR31)
-            target_compile_definitions(vulkan_rhi_smoke_test PRIVATE MECRAFT_ENABLE_FSR31)
-        endif()
         set(MECRAFT_VULKAN_LAYER_DIR
                 "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/vulkan/explicit_layer.d")
         set_tests_properties(vulkan_rhi_smoke_test PROPERTIES

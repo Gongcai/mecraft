@@ -28,6 +28,7 @@ struct VkResourceStateMapping {
         case RhiTextureFormat::Rgba32Float: return VK_FORMAT_R32G32B32A32_SFLOAT;
         case RhiTextureFormat::R16Float: return VK_FORMAT_R16_SFLOAT;
         case RhiTextureFormat::R32Float: return VK_FORMAT_R32_SFLOAT;
+        case RhiTextureFormat::R32Uint: return VK_FORMAT_R32_UINT;
         case RhiTextureFormat::Depth16: return VK_FORMAT_D16_UNORM;
         case RhiTextureFormat::Depth24: return VK_FORMAT_X8_D24_UNORM_PACK32;
         case RhiTextureFormat::Depth24Stencil8: return VK_FORMAT_D24_UNORM_S8_UINT;
@@ -51,6 +52,7 @@ struct VkResourceStateMapping {
         case VK_FORMAT_R32G32B32A32_SFLOAT: return RhiTextureFormat::Rgba32Float;
         case VK_FORMAT_R16_SFLOAT: return RhiTextureFormat::R16Float;
         case VK_FORMAT_R32_SFLOAT: return RhiTextureFormat::R32Float;
+        case VK_FORMAT_R32_UINT: return RhiTextureFormat::R32Uint;
         case VK_FORMAT_D16_UNORM: return RhiTextureFormat::Depth16;
         case VK_FORMAT_X8_D24_UNORM_PACK32: return RhiTextureFormat::Depth24;
         case VK_FORMAT_D24_UNORM_S8_UINT: return RhiTextureFormat::Depth24Stencil8;

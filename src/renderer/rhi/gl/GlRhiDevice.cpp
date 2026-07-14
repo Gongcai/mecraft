@@ -176,6 +176,9 @@ template <typename Handle>
         case RhiTextureFormat::R32Float:
             out = {GL_R32F, GL_RED, GL_FLOAT, false, false};
             return true;
+        case RhiTextureFormat::R32Uint:
+            out = {GL_R32UI, GL_RED_INTEGER, GL_UNSIGNED_INT, false, false};
+            return true;
         case RhiTextureFormat::Depth16:
             out = {GL_DEPTH_COMPONENT16, GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT, true, false};
             return true;
@@ -204,6 +207,7 @@ template <typename Handle>
         case RhiTextureFormat::Bgra8Srgb:
         case RhiTextureFormat::Rgb10A2Unorm:
         case RhiTextureFormat::R32Float:
+        case RhiTextureFormat::R32Uint:
         case RhiTextureFormat::Depth24:
         case RhiTextureFormat::Depth24Stencil8:
         case RhiTextureFormat::Depth32Float: return 4u;
@@ -239,6 +243,7 @@ template <typename Handle>
         case RhiTextureFormat::Rgba32Float:
         case RhiTextureFormat::R16Float:
         case RhiTextureFormat::R32Float:
+        case RhiTextureFormat::R32Uint:
             return rhiFlag(RhiTextureAspect::Color);
         case RhiTextureFormat::Undefined:
             return 0u;

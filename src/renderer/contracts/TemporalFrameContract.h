@@ -101,6 +101,8 @@ struct TemporalFrameInput {
 enum class TemporalFrameValidationError {
     InvalidRenderExtent,
     InvalidOutputExtent,
+    InvalidJitter,
+    InvalidMotionVectorScale,
     InvalidFrameDelta,
     InvalidPreExposure,
     InvalidCameraRange,
@@ -128,6 +130,18 @@ enum class TemporalFrameValidationError {
     const TemporalFrameInput& frame) {
     if (!frame.renderExtent.isValid()) return TemporalFrameValidationError::InvalidRenderExtent;
     if (!frame.outputExtent.isValid()) return TemporalFrameValidationError::InvalidOutputExtent;
+    if (!std::isfinite(frame.jitter.pixels.x) ||
+        !std::isfinite(frame.jitter.pixels.y) ||
+        !std::isfinite(frame.jitter.projectionOffset.x) ||
+        !std::isfinite(frame.jitter.projectionOffset.y)) {
+        return TemporalFrameValidationError::InvalidJitter;
+    }
+    if (!std::isfinite(frame.motionVectorScale.x) ||
+        !std::isfinite(frame.motionVectorScale.y) ||
+        frame.motionVectorScale.x != static_cast<float>(frame.renderExtent.width) ||
+        frame.motionVectorScale.y != static_cast<float>(frame.renderExtent.height)) {
+        return TemporalFrameValidationError::InvalidMotionVectorScale;
+    }
     if (!std::isfinite(frame.frameDeltaMilliseconds) || frame.frameDeltaMilliseconds < 0.0f) {
         return TemporalFrameValidationError::InvalidFrameDelta;
     }
