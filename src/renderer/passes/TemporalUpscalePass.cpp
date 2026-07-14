@@ -36,6 +36,66 @@ namespace {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
+#if defined(MECRAFT_ENABLE_FSR31)
+[[nodiscard]] const char* fsr31ResourceRoleText(const Fsr31ResourceRole role) {
+    switch (role) {
+        case Fsr31ResourceRole::HdrColor: return "HDR color";
+        case Fsr31ResourceRole::Depth: return "depth";
+        case Fsr31ResourceRole::Velocity: return "velocity";
+        case Fsr31ResourceRole::Exposure: return "exposure";
+        case Fsr31ResourceRole::ReactiveMask: return "reactive mask";
+        case Fsr31ResourceRole::TransparencyMask: return "transparency mask";
+        case Fsr31ResourceRole::OutputHdrColor: return "output HDR color";
+    }
+    return "unknown resource";
+}
+
+[[nodiscard]] const char* fsr31ResourceErrorText(
+    const Fsr31ResourceValidationError error) {
+    switch (error) {
+        case Fsr31ResourceValidationError::MissingNativeObject:
+            return "missing Vulkan image or view";
+        case Fsr31ResourceValidationError::InvalidImageType:
+            return "invalid image type";
+        case Fsr31ResourceValidationError::InvalidViewType:
+            return "invalid view type";
+        case Fsr31ResourceValidationError::InvalidFormat:
+            return "invalid format";
+        case Fsr31ResourceValidationError::InvalidExtent:
+            return "invalid extent";
+        case Fsr31ResourceValidationError::InvalidAspectMask:
+            return "invalid aspect mask";
+        case Fsr31ResourceValidationError::InvalidSubresourceRange:
+            return "invalid subresource range";
+        case Fsr31ResourceValidationError::MissingSampledUsage:
+            return "missing sampled usage";
+        case Fsr31ResourceValidationError::MissingStorageUsage:
+            return "missing storage usage";
+    }
+    return "unknown validation error";
+}
+
+void reportFsr31ResourceFailure(const Fsr31VulkanDispatchResult& result) {
+    std::cerr << "TemporalUpscalePass: FSR 3.1 resource resolution failed";
+    if (result.validationFailure.has_value()) {
+        std::cerr << " for "
+                  << fsr31ResourceRoleText(result.validationFailure->role)
+                  << ": "
+                  << fsr31ResourceErrorText(result.validationFailure->error);
+    } else if (result.resourceRole.has_value()) {
+        std::cerr << " for " << fsr31ResourceRoleText(*result.resourceRole);
+        if (result.resourceStatus ==
+            Fsr31ResourceResolveStatus::MissingNativeResource) {
+            std::cerr << ": the RHI texture handle and view do not resolve to one Vulkan image";
+        }
+    } else if (result.resourceStatus ==
+               Fsr31ResourceResolveStatus::MissingNativeResource) {
+        std::cerr << ": the RHI texture handle and view do not resolve to one Vulkan image";
+    }
+    std::cerr << '\n';
+}
+#endif
+
 } // namespace
 
 TemporalUpscalePass::TemporalUpscalePass() = default;
@@ -267,6 +327,10 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
                         dispatched.status == Fsr31VulkanDispatchStatus::InvalidResources
                         ? TemporalUpscaleStatus::Fsr31InvalidResources
                         : TemporalUpscaleStatus::Fsr31DispatchError;
+                    if (dispatched.status ==
+                        Fsr31VulkanDispatchStatus::InvalidResources) {
+                        reportFsr31ResourceFailure(dispatched);
+                    }
                     static_cast<void>(releaseFsr31Context());
                     return temporalFailure(status, std::nullopt, dispatched.sdkError);
                 }

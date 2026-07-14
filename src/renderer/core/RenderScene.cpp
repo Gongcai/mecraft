@@ -1298,7 +1298,7 @@ void RenderScene::refreshTemporalFrameInput() {
     input.cameraFar = m_currentContext.camera.farPlane;
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);
     input.reset = m_currentContext.temporalReset;
-    input.textures.hdrColor = m_lastFrameOutput.sceneColor;
+    input.textures.hdrColor = m_postProcessPass.sceneColorTextureHandle();
     input.textures.hdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     input.textures.depth = m_lastFrameOutput.gbufferDepth;
     input.textures.depthView = m_shared.deferredTargets->depthTextureViewHandle();
