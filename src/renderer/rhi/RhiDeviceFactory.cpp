@@ -2,6 +2,8 @@
 
 #include "renderer/rhi/RhiDevice.h"
 
+#include <cstdlib>
+
 #ifdef MECRAFT_RHI_BACKEND_OPENGL
 #include "renderer/rhi/gl/GlRhiDevice.h"
 #endif
@@ -19,6 +21,54 @@ RhiBackend defaultRhiBackend() {
 #else
 #error "A valid default RHI backend compile definition is required"
 #endif
+}
+
+const char* rhiBackendDisplayName(const RhiBackend backend) {
+    switch (backend) {
+        case RhiBackend::OpenGL:
+            return "OpenGL";
+        case RhiBackend::Vulkan:
+            return "Vulkan";
+    }
+    std::abort();
+}
+
+const char* rhiBackendConfigName(const RhiBackend backend) {
+    switch (backend) {
+        case RhiBackend::OpenGL:
+            return "opengl";
+        case RhiBackend::Vulkan:
+            return "vulkan";
+    }
+    std::abort();
+}
+
+std::optional<RhiBackend> parseRhiBackend(const std::string_view name) {
+    if (name == "opengl") {
+        return RhiBackend::OpenGL;
+    }
+    if (name == "vulkan") {
+        return RhiBackend::Vulkan;
+    }
+    return std::nullopt;
+}
+
+bool isRhiBackendAvailable(const RhiBackend backend) {
+    switch (backend) {
+        case RhiBackend::OpenGL:
+#ifdef MECRAFT_RHI_BACKEND_OPENGL
+            return true;
+#else
+            return false;
+#endif
+        case RhiBackend::Vulkan:
+#ifdef MECRAFT_RHI_BACKEND_VULKAN
+            return true;
+#else
+            return false;
+#endif
+    }
+    return false;
 }
 
 std::unique_ptr<RhiDevice> createRhiDevice(const RhiBackend backend) {

@@ -1,4 +1,5 @@
 #include "src/app/GameManager.h"
+#include "src/renderer/rhi/RhiDeviceFactory.h"
 
 #include <cerrno>
 #include <charconv>
@@ -157,15 +158,13 @@ bool parseLaunchOptions(int argc, char** argv, AppLaunchOptions& options, std::s
             if (!requireValue(argc, argv, index, "--rhi-backend", value, error)) {
                 return false;
             }
-            const std::string backend = value;
-            if (backend == "opengl") {
-                options.rhiBackend = RhiBackend::OpenGL;
-            } else if (backend == "vulkan") {
-                options.rhiBackend = RhiBackend::Vulkan;
-            } else {
+            const std::optional<RhiBackend> backend = renderer::rhi::parseRhiBackend(value);
+            if (!backend) {
                 error = "RHI backend must be opengl or vulkan";
                 return false;
             }
+            options.rhiBackend = *backend;
+            options.rhiBackendExplicit = true;
         } else if (arg == "--rhi-debug-output") {
             options.enableRhiDebugOutput = true;
             rhiDebugOutputSet = true;

@@ -1,6 +1,7 @@
 #include "AppSettings.h"
 
 #include "../Paths.h"
+#include "../renderer/rhi/RhiDeviceFactory.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -661,6 +662,27 @@ RenderSettings loadRenderSettings(const RenderSettings& fallback) {
     return settings;
 }
 
+RhiBackendSettingResult loadRhiBackend() {
+    const json root = readSettingsFile();
+    const auto appIt = root.find("app");
+    if (appIt == root.end()) {
+        return {};
+    }
+    if (!appIt->is_object()) {
+        return {false, std::nullopt};
+    }
+    const auto backendIt = appIt->find("rhiBackend");
+    if (backendIt == appIt->end()) {
+        return {};
+    }
+    if (!backendIt->is_string()) {
+        return {false, std::nullopt};
+    }
+    const std::optional<RhiBackend> backend =
+        renderer::rhi::parseRhiBackend(backendIt->get<std::string>());
+    return {backend.has_value(), backend};
+}
+
 bool saveSettings(const AppSettingsData& settings) {
     json root = readSettingsFile();
     json& game = root["game"];
@@ -685,6 +707,16 @@ bool saveRenderDistance(const int renderDistance) {
 bool saveRenderSettings(const RenderSettings& settings) {
     json root = readSettingsFile();
     root["render"] = toJson(settings);
+    return writeSettingsFile(root);
+}
+
+bool saveRhiBackend(const RhiBackend backend) {
+    json root = readSettingsFile();
+    json& app = root["app"];
+    if (!app.is_object()) {
+        app = json::object();
+    }
+    app["rhiBackend"] = renderer::rhi::rhiBackendConfigName(backend);
     return writeSettingsFile(root);
 }
 

@@ -12,10 +12,14 @@
 #include "../../locale/LocaleManager.h"
 #include "../../renderer/core/RenderSettings.h"
 #include "../../renderer/core/RenderScene.h"
+#include "../../renderer/rhi/RhiDevice.h"
+#include "../../renderer/rhi/RhiDeviceFactory.h"
+#include "../../resource/ResourceMgr.h"
 #include "../../world/World.h"
 #include "../../app/AppSettings.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iomanip>
 #include <sstream>
@@ -491,6 +495,46 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
                          app::saveRenderDistance(distance);
                      });
     }
+
+    const RhiBackend currentBackend = resourceMgr.rhiDevice().backend();
+    const app::RhiBackendSettingResult backendSetting = app::loadRhiBackend();
+    const RhiBackend selectedBackend = backendSetting.backend.value_or(currentBackend);
+    const std::array<RhiBackend, 2> knownBackends = {
+        RhiBackend::OpenGL,
+        RhiBackend::Vulkan,
+    };
+    std::vector<RhiBackend> availableBackends;
+    std::vector<std::string> backendNames;
+    int selectedIndex = 0;
+    for (const RhiBackend backend : knownBackends) {
+        if (!renderer::rhi::isRhiBackendAvailable(backend)) {
+            continue;
+        }
+        if (backend == selectedBackend) {
+            selectedIndex = static_cast<int>(availableBackends.size());
+        }
+        availableBackends.push_back(backend);
+        backendNames.emplace_back(renderer::rhi::rhiBackendDisplayName(backend));
+    }
+
+    const std::string backendSection =
+        loc(getLocaleManager(), "setting_graphics_backend", "Graphics Backend") +
+        " - " + loc(getLocaleManager(), "setting_restart_to_apply", "Applies After Restart");
+    addSectionHeader(stack, resourceMgr, backendSection);
+
+    const std::string currentBackendLabel =
+        loc(getLocaleManager(), "setting_current_backend", "Current") +
+        ": " + renderer::rhi::rhiBackendDisplayName(currentBackend);
+    addDropdownRow(stack, resourceMgr,
+                   currentBackendLabel,
+                   backendNames,
+                   selectedIndex,
+                   [availableBackends = std::move(availableBackends)](const int index, const std::string&) {
+                       if (index < 0 || index >= static_cast<int>(availableBackends.size())) {
+                           return;
+                       }
+                       app::saveRhiBackend(availableBackends[static_cast<size_t>(index)]);
+                   });
 
     finalizeScrollTab(tabLayout.scroll, stack);
 }

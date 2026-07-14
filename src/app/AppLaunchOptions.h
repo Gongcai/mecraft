@@ -4,6 +4,7 @@
 #include "renderer/rhi/RhiTypes.h"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 
 struct AppLaunchOptions {
@@ -34,7 +35,12 @@ struct AppLaunchOptions {
     bool exitWhenPlaybackEnds = true;
     bool enableDebugDashboard = true;
     bool enableRhiDebugOutput = false;
+    bool rhiBackendExplicit = false;
     RhiBackend rhiBackend;
 };
+
+[[nodiscard]] RhiBackend resolveLaunchRhiBackend(
+    const AppLaunchOptions& options,
+    std::optional<RhiBackend> savedBackend);
 
 #endif // MECRAFT_APP_LAUNCH_OPTIONS_H

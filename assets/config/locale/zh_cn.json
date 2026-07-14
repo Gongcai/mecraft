@@ -35,7 +35,10 @@
     "tab_postprocess": "后处理",
     "tab_volumetric": "体积效果",
     "tab_upscale": "升频",
-    "setting_render_distance": "渲染距离"
+    "setting_render_distance": "渲染距离",
+    "setting_graphics_backend": "图形后端",
+    "setting_current_backend": "当前",
+    "setting_restart_to_apply": "重启后生效"
   },
   "blocks": {
     "air": "空气",

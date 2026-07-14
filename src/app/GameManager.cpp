@@ -42,9 +42,21 @@ GameManager::~GameManager() = default;
 
 bool GameManager::init(int width, int height, const char* title, AppLaunchOptions launchOptions) {
     m_launchOptions = std::move(launchOptions);
+    std::optional<RhiBackend> savedBackend;
+    if (!m_launchOptions.rhiBackendExplicit) {
+        const app::RhiBackendSettingResult backendSetting = app::loadRhiBackend();
+        if (!backendSetting.isValid) {
+            MECRAFT_LOG_STREAM(std::cerr << "GameManager: invalid app.rhiBackend setting\n");
+            return false;
+        }
+        savedBackend = backendSetting.backend;
+    }
+    m_launchOptions.rhiBackend = resolveLaunchRhiBackend(m_launchOptions, savedBackend);
     m_rhiDevice = renderer::rhi::createRhiDevice(m_launchOptions.rhiBackend);
     if (!m_rhiDevice) {
-        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to create app RHI device\n");
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: requested RHI backend is unavailable: "
+                                    << renderer::rhi::rhiBackendDisplayName(m_launchOptions.rhiBackend)
+                                    << '\n');
         return false;
     }
     if (!initWindow(width, height, title)) {

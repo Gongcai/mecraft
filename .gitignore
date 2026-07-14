@@ -1,5 +1,6 @@
 /cmake-build-*/
 /compile_commands.json
+/imgui.ini
 /saves/
 /cmake-build-relwithdebinfo/
 /x64-Debug/
