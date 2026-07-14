@@ -155,10 +155,12 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
          (ctx.volumetric.fogEnabled && ctx.volumetric.fogDensityScale > 0.001f)) &&
         settings.volumetric.fogEnabled;
     DeferredLightingParams params{};
-    params.viewProj = settings.taa.enabled
+    const bool projectionJitter = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled);
+    params.viewProj = projectionJitter
         ? ctx.camera.jitteredViewProj
         : ctx.camera.viewProj;
-    params.invViewProj = settings.taa.enabled
+    params.invViewProj = projectionJitter
         ? ctx.camera.jitteredInvViewProj
         : ctx.camera.invViewProj;
     params.projection = ctx.camera.projection;

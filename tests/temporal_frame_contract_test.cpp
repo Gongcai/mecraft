@@ -70,6 +70,24 @@ bool testSettingsDefaults() {
                        "temporal debug visualization must default to disabled");
 }
 
+bool testTemporalReconstructionSelection() {
+    return requireTrue(
+               usesTemporalProjectionJitter(TemporalUpscalerType::Native, true),
+               "native TAA must jitter scene rasterization") &&
+           requireTrue(
+               !usesTemporalProjectionJitter(TemporalUpscalerType::Native, false),
+               "native rendering without TAA must not jitter scene rasterization") &&
+           requireTrue(
+               usesTemporalProjectionJitter(TemporalUpscalerType::Fsr31, false),
+               "FSR 3.1 must jitter scene rasterization independently of native TAA") &&
+           requireTrue(
+               usesNativeTaaResolve(TemporalUpscalerType::Native, true),
+               "native TAA must execute only in Native reconstruction mode") &&
+           requireTrue(
+               !usesNativeTaaResolve(TemporalUpscalerType::Fsr31, true),
+               "FSR 3.1 must exclude the native TAA resolve");
+}
+
 bool testMotionVectorConvention() {
     return requireTrue(TemporalMotionVectorConvention::currentMinusPrevious,
                        "motion vectors must store current minus previous UV") &&
@@ -220,6 +238,7 @@ bool testTemporalUpscaleDispatch() {
 
 int main() {
     if (!testSettingsDefaults()) return 1;
+    if (!testTemporalReconstructionSelection()) return 1;
     if (!testMotionVectorConvention()) return 1;
     if (!testTemporalReset()) return 1;
     if (!testFrameValidation()) return 1;

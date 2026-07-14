@@ -87,8 +87,11 @@ void ReflectionPass::renderReflection(const FrameContext& ctx, const RenderSetti
     }
 
     ReflectionBaseParams params{};
-    params.viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    params.invViewProj = settings.taa.enabled
+    const bool projectionJitter = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled);
+    params.viewProj = projectionJitter
+        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    params.invViewProj = projectionJitter
         ? ctx.camera.jitteredInvViewProj
         : ctx.camera.invViewProj;
     params.cameraPosNear = glm::vec4(ctx.camera.position, ctx.camera.nearPlane);

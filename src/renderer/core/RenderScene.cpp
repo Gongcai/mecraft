@@ -13,6 +13,10 @@
 #include "engine/camera/Camera.h"
 #include "../mesh/TerrainStreamingService.h"
 
+#if defined(MECRAFT_ENABLE_FSR31)
+#include "renderer/upscaling/Fsr31TemporalConfig.h"
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -393,9 +397,16 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     }
 
     // Build frame context
-    m_currentContext = buildFrameContext(
+    const std::optional<FrameContext> frameContext = buildFrameContext(
         worldView, camera, window, frameRenderSize, frameOutputSize, frameAspectRatio,
         dayNightSystem, weatherSystem);
+    if (!frameContext.has_value()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Failed to resolve temporal frame parameters\n");
+        m_terrainStreamingService.endFrame();
+        return;
+    }
+    m_currentContext = *frameContext;
 
     // Phase 9: Use active pipeline only if fully initialized and ready.
     // All shared resources must be populated AND pipeline must have been init'd.
@@ -430,9 +441,17 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
     const glm::ivec2 displaySize(std::max(1, request.framebufferWidth),
                                 std::max(1, request.framebufferHeight));
-    const glm::ivec2 frameRenderSize = skipPostProcess
-        ? displaySize
-        : internalRenderSize(displaySize);
+    glm::ivec2 frameRenderSize = displaySize;
+    if (!skipPostProcess) {
+        const std::optional<glm::ivec2> resolvedRenderSize =
+            internalRenderSize(displaySize);
+        if (!resolvedRenderSize.has_value()) {
+            MECRAFT_LOG_STREAM(
+                std::cerr << "[RenderScene] Invalid temporal upscaler resolution settings\n");
+            return;
+        }
+        frameRenderSize = *resolvedRenderSize;
+    }
     const float frameAspectRatio = static_cast<float>(displaySize.x) /
                                    static_cast<float>(displaySize.y);
     if (!m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice,
@@ -986,11 +1005,15 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
     return effects;
 }
 
-FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
-                                            const glm::ivec2& frameRenderSize,
-                                            const glm::ivec2& frameOutputSize,
-                                            const float frameAspectRatio,
-                                            const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
+std::optional<FrameContext> RenderScene::buildFrameContext(
+    const IWorldView& worldView,
+    const Camera& camera,
+    const Window& window,
+    const glm::ivec2& frameRenderSize,
+    const glm::ivec2& frameOutputSize,
+    const float frameAspectRatio,
+    const DayNightSystem& dayNightSystem,
+    const WeatherSystem& weatherSystem) {
     FrameContext ctx;
 
     // Camera matrices
@@ -1033,8 +1056,21 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.animationTime = static_cast<float>(std::fmod(gameTime, 16.0));
     ctx.shaderTime = static_cast<float>(std::fmod(visualTime, 8192.0));
 
-    // TAA jitter (DerivativeMain shaders.properties)
-    if (m_shared.deferredTargets) {
+    if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
+#if defined(MECRAFT_ENABLE_FSR31)
+        const Fsr31JitterResult jitter = queryFsr31Jitter(
+            ctx.frameIndex, ctx.renderExtent, ctx.outputExtent);
+        if (!jitter.succeeded()) {
+            return std::nullopt;
+        }
+        ctx.jitter = jitter.jitter;
+#else
+        return std::nullopt;
+#endif
+    } else if (m_settings.upscale.type == TemporalUpscalerType::Dlss) {
+        return std::nullopt;
+    } else if (m_shared.deferredTargets) {
+        // Native TAA uses the existing DerivativeMain quasi-random sequence.
         const float invW = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->width()));
         const float invH = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->height()));
         const float frameCounter = static_cast<float>(ctx.frameIndex);
@@ -1178,9 +1214,29 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     return ctx;
 }
 
-glm::ivec2 RenderScene::internalRenderSize(const glm::ivec2& displaySize) const {
+std::optional<glm::ivec2> RenderScene::internalRenderSize(
+    const glm::ivec2& displaySize) const {
     const int displayWidth = std::max(1, displaySize.x);
     const int displayHeight = std::max(1, displaySize.y);
+    if (m_settings.upscale.type == TemporalUpscalerType::Fsr31) {
+#if defined(MECRAFT_ENABLE_FSR31)
+        const Fsr31RenderExtentResult renderExtent = queryFsr31RenderExtent(
+            m_settings.upscale.quality,
+            {static_cast<uint32_t>(displayWidth),
+             static_cast<uint32_t>(displayHeight)});
+        if (!renderExtent.succeeded()) {
+            return std::nullopt;
+        }
+        return glm::ivec2(
+            static_cast<int>(renderExtent.extent.width),
+            static_cast<int>(renderExtent.extent.height));
+#else
+        return std::nullopt;
+#endif
+    }
+    if (m_settings.upscale.type == TemporalUpscalerType::Dlss) {
+        return std::nullopt;
+    }
     if (!isFsr1RuntimeEnabled()) {
         return glm::ivec2(displayWidth, displayHeight);
     }

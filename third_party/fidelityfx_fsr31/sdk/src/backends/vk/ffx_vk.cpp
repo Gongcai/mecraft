@@ -286,8 +286,9 @@ FFX_API size_t ffxGetScratchMemorySizeVK(VkPhysicalDevice physicalDevice, size_t
     uint32_t pipelineArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_PASS_COUNT * sizeof(BackendContext_VK::PipelineLayout), sizeof(uint32_t));
     uint32_t resourceArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_RESOURCE_COUNT * sizeof(BackendContext_VK::Resource), sizeof(uint32_t));
     uint32_t contextArraySize = FFX_ALIGN_UP(maxContexts * sizeof(BackendContext_VK::EffectContext), sizeof(uint32_t));
+    size_t contextAlignmentPadding = alignof(BackendContext_VK::EffectContext) - 1u;
     
-    return FFX_ALIGN_UP(sizeof(BackendContext_VK) + extensionPropArraySize + gpuJobDescArraySize + resourceViewArraySize + stagingRingBufferArraySize +
+    return FFX_ALIGN_UP(sizeof(BackendContext_VK) + extensionPropArraySize + gpuJobDescArraySize + resourceViewArraySize + stagingRingBufferArraySize + contextAlignmentPadding +
                             pipelineArraySize + resourceArraySize + contextArraySize,
                         sizeof(uint64_t));
 }
@@ -341,7 +342,12 @@ FfxErrorCode ffxGetInterfaceVK(
     backendInterface->fpBreadcrumbsWrite = BreadcrumbsWriteVK;
     backendInterface->fpBreadcrumbsPrintDeviceInfo = BreadcrumbsPrintDeviceInfoVK;
     backendInterface->fpRegisterConstantBufferAllocator = RegisterConstantBufferAllocatorVK;
+#if defined(FFX_FSR3UPSCALER)
+    // The upscaler-only backend does not link the platform-specific frame-generation swapchain.
+    backendInterface->fpSwapChainConfigureFrameGeneration = nullptr;
+#else
     backendInterface->fpSwapChainConfigureFrameGeneration = ffxSetFrameGenerationConfigToSwapchainVK;
+#endif
 
     // Memory assignments
     backendInterface->scratchBuffer = scratchBuffer;
@@ -1441,6 +1447,9 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
         }
 
         // Map context array
+        pMem = reinterpret_cast<uint8_t*>(FFX_ALIGN_UP(
+            reinterpret_cast<uintptr_t>(pMem),
+            alignof(BackendContext_VK::EffectContext)));
         backendContext->pEffectContexts = (BackendContext_VK::EffectContext*)pMem;
         memset(backendContext->pEffectContexts, 0, contextArraySize);
         pMem += contextArraySize;

@@ -197,7 +197,8 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         worldRenderBuffer.addWater(entry->range);
     }
 
-    const bool useJitteredWater = preTemporalResolve && settings.taa.enabled;
+    const bool useJitteredWater = preTemporalResolve &&
+        usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled);
     TerrainWaterFrameData waterFrame;
     waterFrame.view = ctx.camera.view;
     waterFrame.viewProj = useJitteredWater ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;

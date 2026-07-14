@@ -4,6 +4,10 @@
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
 #include "renderer/passes/TemporalUpscalePass.h"
 
+#if defined(MECRAFT_ENABLE_FSR31)
+#include "renderer/upscaling/Fsr31VulkanContext.h"
+#endif
+
 #include <GLFW/glfw3.h>
 
 #include <cstdint>
@@ -104,6 +108,35 @@ enum class FrameAttempt {
     pass.shutdown();
     return true;
 }
+
+#if defined(MECRAFT_ENABLE_FSR31)
+[[nodiscard]] bool validateFsr31VulkanContext(VkRhiDevice& device) {
+    Fsr31VulkanContext context;
+    const Fsr31VulkanContextCreateResult invalid = context.initialize(
+        device, {{}, {1920u, 1080u}, false, false});
+    if (invalid.status != Fsr31VulkanContextCreateStatus::InvalidRenderExtent) {
+        return false;
+    }
+
+    constexpr TemporalExtent kRenderExtent{1280u, 720u};
+    constexpr TemporalExtent kOutputExtent{1920u, 1080u};
+    const Fsr31VulkanContextCreateResult created = context.initialize(
+        device, {kRenderExtent, kOutputExtent, false, true});
+    if (!created.succeeded() || !context.isInitialized() ||
+        context.maxRenderExtent() != kRenderExtent ||
+        context.maxOutputExtent() != kOutputExtent ||
+        context.scratchMemorySize() == 0u ||
+        context.initialize(device, {kRenderExtent, kOutputExtent, false, true}).status !=
+            Fsr31VulkanContextCreateStatus::AlreadyInitialized) {
+        return false;
+    }
+    const Fsr31VulkanContextDestroyResult destroyed = context.shutdown();
+    return destroyed.succeeded() && !context.isInitialized() &&
+           context.scratchMemorySize() == 0u &&
+           context.shutdown().status ==
+               Fsr31VulkanContextDestroyStatus::NotInitialized;
+}
+#endif
 
 [[nodiscard]] FrameAttempt renderFrame(VkRhiDevice& device,
                                        RhiCommandListPool& commandPool,
@@ -706,6 +739,9 @@ int main() {
          renderStableFrame(device, *commandPool, window) &&
          device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo);
     if (commandPool == nullptr || !immediateModeValidated ||
+#if defined(MECRAFT_ENABLE_FSR31)
+        !validateFsr31VulkanContext(device) ||
+#endif
         !validateTemporalOutputTarget(device) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView,
                                textureWidth, textureHeight, textureDepth) ||

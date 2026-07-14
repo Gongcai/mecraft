@@ -98,7 +98,8 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     }
 
     SceneCompositeParams params{};
-    params.invViewProj = settings.taa.enabled
+    params.invViewProj = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled)
         ? ctx.camera.jitteredInvViewProj
         : ctx.camera.invViewProj;
     params.cameraPosSkyIntensity = glm::vec4(ctx.camera.position, ctx.skyIntensity);

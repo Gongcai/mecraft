@@ -248,6 +248,26 @@ enum class TemporalUpscaleQuality {
     UltraPerformance = 4
 };
 
+/// Determine whether scene rasterization must use the frame jitter.
+/// @param type Selected temporal reconstruction implementation.
+/// @param nativeTaaEnabled Whether the native TAA resolve is enabled.
+/// @return True for native TAA and every SDK temporal upscaler.
+[[nodiscard]] constexpr bool usesTemporalProjectionJitter(
+    const TemporalUpscalerType type,
+    const bool nativeTaaEnabled) {
+    return type != TemporalUpscalerType::Native || nativeTaaEnabled;
+}
+
+/// Determine whether the renderer-owned TAA resolve participates in this frame.
+/// @param type Selected temporal reconstruction implementation.
+/// @param nativeTaaEnabled Whether the native TAA resolve is enabled.
+/// @return True only when Native reconstruction explicitly enables TAA.
+[[nodiscard]] constexpr bool usesNativeTaaResolve(
+    const TemporalUpscalerType type,
+    const bool nativeTaaEnabled) {
+    return type == TemporalUpscalerType::Native && nativeTaaEnabled;
+}
+
 /// Temporal reconstruction settings plus the existing OpenGL spatial upscaler.
 struct UpscaleSettings {
     TemporalUpscalerType type = TemporalUpscalerType::Native;

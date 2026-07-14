@@ -1128,6 +1128,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     vkEnumeratePhysicalDevices(m_data->instance, &physicalDeviceCount, physicalDevices.data());
     int bestScore = -1;
     VkPhysicalDeviceVulkan12Features selected12{};
+    VkPhysicalDeviceVulkan13Features selected13{};
     VkPhysicalDeviceFeatures selectedCoreFeatures{};
     for (const VkPhysicalDevice candidate : physicalDevices) {
         uint32_t extensionCount = 0u;
@@ -1138,6 +1139,12 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             !hasExtension(extensions, VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME)) {
             continue;
         }
+#if defined(MECRAFT_ENABLE_FSR31)
+        if (!hasExtension(extensions, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME) ||
+            !hasExtension(extensions, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME)) {
+            continue;
+        }
+#endif
         const QueueFamilies families = queryQueueFamilies(candidate, m_data->surface);
         if (!families.complete()) {
             continue;
@@ -1170,6 +1177,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             m_data->queueFamilies = families;
             m_data->properties = properties;
             selected12 = features12;
+            selected13 = features13;
             selectedCoreFeatures = features2.features;
         }
     }
@@ -1199,10 +1207,14 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
+    features13.subgroupSizeControl = selected13.subgroupSizeControl;
+    features13.computeFullSubgroups = selected13.computeFullSubgroups;
     VkPhysicalDeviceVulkan12Features features12{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &features13};
     features12.timelineSemaphore = VK_TRUE;
     features12.bufferDeviceAddress = VK_TRUE;
+    features12.shaderFloat16 = selected12.shaderFloat16;
+    features12.shaderInt8 = selected12.shaderInt8;
     features12.descriptorIndexing = selected12.descriptorIndexing;
     features12.shaderSampledImageArrayNonUniformIndexing =
         selected12.shaderSampledImageArrayNonUniformIndexing;
@@ -1223,8 +1235,12 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
                                         &features11};
     features2.features.samplerAnisotropy = VK_TRUE;
     features2.features.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect;
-    const std::array<const char*, 2u> deviceExtensions{
+    std::vector<const char*> deviceExtensions{
         VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME};
+#if defined(MECRAFT_ENABLE_FSR31)
+    deviceExtensions.push_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+    deviceExtensions.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+#endif
     VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &features2};
     deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size());
     deviceInfo.pQueueCreateInfos = queueInfos.data();

@@ -392,6 +392,14 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
             src/renderer/upscaling/Fsr31VulkanResourceContract.cpp
             src/renderer/upscaling/Fsr31VulkanResourceContract.h
     )
+    if(MECRAFT_ENABLE_FSR31)
+        list(APPEND SRC_RENDERER
+                src/renderer/upscaling/Fsr31TemporalConfig.cpp
+                src/renderer/upscaling/Fsr31TemporalConfig.h
+                src/renderer/upscaling/Fsr31VulkanContext.cpp
+                src/renderer/upscaling/Fsr31VulkanContext.h
+        )
+    endif()
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         set_source_files_properties(
                 src/renderer/rhi/vulkan/VkRhiDevice.cpp
@@ -875,6 +883,9 @@ if(MECRAFT_BUILD_TESTS)
             target_link_libraries(fsr31_sdk_test PRIVATE mecraft_fidelityfx_fsr31)
         endif()
         add_mecraft_test(vulkan_rhi_smoke_test tests/vulkan_rhi_smoke_test.cpp)
+        if(MECRAFT_ENABLE_FSR31)
+            target_compile_definitions(vulkan_rhi_smoke_test PRIVATE MECRAFT_ENABLE_FSR31)
+        endif()
         set(MECRAFT_VULKAN_LAYER_DIR
                 "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/vulkan/explicit_layer.d")
         set_tests_properties(vulkan_rhi_smoke_test PROPERTIES

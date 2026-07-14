@@ -1,5 +1,7 @@
 #include <FidelityFX/host/ffx_fsr3upscaler.h>
 
+#include "renderer/upscaling/Fsr31TemporalConfig.h"
+
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -51,6 +53,23 @@ bool testRenderExtentQueries() {
                        "FSR extent query must reject invalid quality modes");
 }
 
+bool testProjectRenderExtentQueries() {
+    const Fsr31RenderExtentResult quality = queryFsr31RenderExtent(
+        TemporalUpscaleQuality::Quality, {1920u, 1080u});
+    const Fsr31RenderExtentResult balanced = queryFsr31RenderExtent(
+        TemporalUpscaleQuality::Balanced, {1920u, 1080u});
+    const Fsr31RenderExtentResult invalid = queryFsr31RenderExtent(
+        TemporalUpscaleQuality::Native, {1920u, 1080u});
+    return requireTrue(quality.succeeded() &&
+                           quality.extent == TemporalExtent{1280u, 720u},
+                       "project FSR Quality query must return 1280x720") &&
+           requireTrue(balanced.succeeded() &&
+                           balanced.extent == TemporalExtent{1129u, 635u},
+                       "project FSR Balanced query must preserve the SDK result") &&
+           requireTrue(invalid.status == Fsr31TemporalConfigStatus::InvalidQuality,
+                       "project FSR query must reject Native quality");
+}
+
 bool testJitterQueries() {
     const int32_t phaseCount = ffxFsr3UpscalerGetJitterPhaseCount(1280, 1920);
     float jitterX = 0.0f;
@@ -67,11 +86,32 @@ bool testJitterQueries() {
                        "FSR jitter query must return the official Halton sequence");
 }
 
+bool testProjectJitterQueries() {
+    const Fsr31JitterResult first = queryFsr31Jitter(
+        0u, {1280u, 720u}, {1920u, 1080u});
+    const Fsr31JitterResult wrapped = queryFsr31Jitter(
+        18u, {1280u, 720u}, {1920u, 1080u});
+    return requireTrue(first.succeeded() && first.phaseCount == 18 &&
+                           first.phaseIndex == 0,
+                       "project FSR jitter must expose the official phase metadata") &&
+           requireTrue(std::abs(first.jitter.pixels.x) < 0.000001f &&
+                           std::abs(first.jitter.pixels.y + 1.0f / 6.0f) < 0.000001f &&
+                           std::abs(first.jitter.projectionOffset.x) < 0.000001f &&
+                           std::abs(first.jitter.projectionOffset.y -
+                                    1.0f / (6.0f * 720.0f)) < 0.000001f,
+                       "project FSR jitter must preserve pixel and projection conventions") &&
+           requireTrue(wrapped.succeeded() && wrapped.phaseIndex == 0 &&
+                           wrapped.jitter.pixels == first.jitter.pixels,
+                       "project FSR jitter must wrap at the official phase count");
+}
+
 } // namespace
 
 int main() {
     if (!testVersion()) return 1;
     if (!testRenderExtentQueries()) return 1;
+    if (!testProjectRenderExtentQueries()) return 1;
     if (!testJitterQueries()) return 1;
+    if (!testProjectJitterQueries()) return 1;
     return 0;
 }

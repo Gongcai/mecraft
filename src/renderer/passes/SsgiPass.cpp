@@ -156,8 +156,11 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
     const int halfW = std::max(1, targets.width() / 2);
     const int halfH = std::max(1, targets.height() / 2);
     SsgiBaseParams params{};
-    params.viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    params.invViewProj = settings.taa.enabled
+    const bool projectionJitter = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled);
+    params.viewProj = projectionJitter
+        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    params.invViewProj = projectionJitter
         ? ctx.camera.jitteredInvViewProj
         : ctx.camera.invViewProj;
     params.cameraPosRadius = glm::vec4(ctx.camera.position, ssgi.radius);

@@ -237,11 +237,17 @@ public:
 
 private:
     /// Build FrameContext from world state
-    FrameContext buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
-                                   const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
-                                   float frameAspectRatio,
-                                   const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem);
-    glm::ivec2 internalRenderSize(const glm::ivec2& displaySize) const;
+    std::optional<FrameContext> buildFrameContext(
+        const IWorldView& worldView,
+        const Camera& camera,
+        const Window& window,
+        const glm::ivec2& frameRenderSize,
+        const glm::ivec2& frameOutputSize,
+        float frameAspectRatio,
+        const DayNightSystem& dayNightSystem,
+        const WeatherSystem& weatherSystem);
+    [[nodiscard]] std::optional<glm::ivec2> internalRenderSize(
+        const glm::ivec2& displaySize) const;
     [[nodiscard]] bool isFsr1RuntimeEnabled() const;
 
     /// Prepare active pipeline targets that FrameContext depends on.

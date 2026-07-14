@@ -506,8 +506,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Water composite (before TAA)
-    if (m_currentSettings.taa.enabled) {
+    // Water composite before the selected temporal reconstruction stage.
+    if (usesTemporalProjectionJitter(
+            m_currentSettings.upscale.type, m_currentSettings.taa.enabled)) {
         renderWaterCompositePass(ctx, true);
     }
 
@@ -525,7 +526,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     }
 
     // TAA resolve
-    if (m_taaPass && m_currentSettings.taa.enabled && m_hasPreviousFrameData && !ctx.temporalReset) {
+    if (m_taaPass && usesNativeTaaResolve(
+            m_currentSettings.upscale.type, m_currentSettings.taa.enabled) &&
+        m_hasPreviousFrameData && !ctx.temporalReset) {
         m_taaPass->execute(ctx, m_currentSettings, targets);
     }
 
@@ -731,7 +734,9 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     // Build terrain frame data from FrameContext
     TerrainFrameData tfd;
     tfd.view = ctx.camera.view;
-    tfd.viewProj = settings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    tfd.viewProj = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled)
+        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     tfd.cameraPos = ctx.camera.position;
     tfd.animationTime = ctx.animationTime;
     tfd.shaderTime = ctx.shaderTime;
@@ -972,7 +977,9 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
 
     TerrainFrameData tfd;
     tfd.view = ctx.camera.view;
-    tfd.viewProj = m_currentSettings.taa.enabled ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    tfd.viewProj = usesTemporalProjectionJitter(
+        m_currentSettings.upscale.type, m_currentSettings.taa.enabled)
+        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     tfd.cameraPos = ctx.camera.position;
     tfd.animationTime = ctx.animationTime;
     tfd.shaderTime = ctx.shaderTime;
@@ -1203,7 +1210,8 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
                               RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
 
-    const glm::mat4& viewProj = m_currentSettings.taa.enabled
+    const glm::mat4& viewProj = usesTemporalProjectionJitter(
+        m_currentSettings.upscale.type, m_currentSettings.taa.enabled)
         ? ctx.camera.jitteredViewProj
         : ctx.camera.viewProj;
     const glm::vec2 screenSize(
