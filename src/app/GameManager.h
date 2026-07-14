@@ -2,6 +2,7 @@
 #define MECRAFT_GAMEMANAGER_H
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <array>
 #include <vector>
@@ -72,6 +73,7 @@ private:
 
     AppStateMachine m_appStateMachine;
     AppLaunchOptions m_launchOptions{};
+    std::optional<bool> m_vsyncEnabled;
     BenchmarkFrameStats m_benchmarkStats{};
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;

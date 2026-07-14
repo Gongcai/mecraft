@@ -54,6 +54,8 @@ public:
     [[nodiscard]] virtual RhiTextureHandle currentSwapchainColorTexture() const = 0;
     [[nodiscard]] virtual RhiTextureFormat swapchainColorFormat() const = 0;
     [[nodiscard]] virtual RhiTextureFormat swapchainDepthStencilFormat() const = 0;
+    [[nodiscard]] virtual bool vsyncEnabled() const = 0;
+    virtual bool setVsyncEnabled(bool enabled) = 0;
     virtual bool resizeSwapchain(uint32_t width, uint32_t height) = 0;
 
     /// Acquires exactly one presentation image and opens its frame lifetime.

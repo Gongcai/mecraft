@@ -253,6 +253,8 @@ public:
     [[nodiscard]] RhiTextureFormat swapchainDepthStencilFormat() const override {
         return RhiTextureFormat::Depth24;
     }
+    [[nodiscard]] bool vsyncEnabled() const override { return false; }
+    bool setVsyncEnabled(bool) override { return true; }
     bool resizeSwapchain(uint32_t, uint32_t) override { return true; }
     [[nodiscard]] RhiFrameAcquireResult acquireFrame() override {
         return {RhiFrameStatus::Success, 0u, 0u, 1u, 1u, {}, {}, {}};

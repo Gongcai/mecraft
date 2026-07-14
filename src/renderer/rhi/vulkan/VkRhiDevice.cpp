@@ -528,6 +528,32 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
         return false;
     }
 
+    uint32_t presentModeCount = 0u;
+    if (!vkSucceeded(vkGetPhysicalDeviceSurfacePresentModesKHR(
+                         data.physicalDevice, data.surface, &presentModeCount, nullptr),
+                     "vkGetPhysicalDeviceSurfacePresentModesKHR") ||
+        presentModeCount == 0u) {
+        return false;
+    }
+    std::vector<VkPresentModeKHR> presentModes(presentModeCount);
+    if (!vkSucceeded(vkGetPhysicalDeviceSurfacePresentModesKHR(
+                         data.physicalDevice, data.surface, &presentModeCount,
+                         presentModes.data()),
+                     "vkGetPhysicalDeviceSurfacePresentModesKHR")) {
+        return false;
+    }
+    presentModes.resize(presentModeCount);
+    data.immediatePresentSupported =
+        std::find(presentModes.begin(), presentModes.end(), VK_PRESENT_MODE_IMMEDIATE_KHR) !=
+        presentModes.end();
+    const VkPresentModeKHR requestedPresentMode = data.vsyncEnabled
+        ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+    if (std::find(presentModes.begin(), presentModes.end(), requestedPresentMode) ==
+        presentModes.end()) {
+        std::cerr << "VkRhiDevice: the requested presentation mode is unavailable\n";
+        return false;
+    }
+
     int framebufferWidth = 0;
     int framebufferHeight = 0;
     glfwGetFramebufferSize(data.window, &framebufferWidth, &framebufferHeight);
@@ -577,7 +603,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
     }
     swapchainInfo.preTransform = capabilities.currentTransform;
     swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-    swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    swapchainInfo.presentMode = requestedPresentMode;
     swapchainInfo.clipped = VK_TRUE;
     if (!vkSucceeded(vkCreateSwapchainKHR(data.device, &swapchainInfo, nullptr,
                                          &data.swapchain),
@@ -586,6 +612,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
     }
     data.swapchainFormat = formatIt->format;
     data.swapchainExtent = extent;
+    data.presentMode = requestedPresentMode;
 
     uint32_t actualImageCount = 0u;
     if (!vkSucceeded(vkGetSwapchainImagesKHR(
@@ -924,6 +951,9 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_data->window = static_cast<GLFWwindow*>(desc.nativeWindow);
     m_data->requestedWidth = static_cast<uint32_t>(std::max(desc.width, 1));
     m_data->requestedHeight = static_cast<uint32_t>(std::max(desc.height, 1));
+    if (desc.vsyncEnabled.has_value()) {
+        m_data->vsyncEnabled = *desc.vsyncEnabled;
+    }
 
     uint32_t glfwExtensionCount = 0u;
     const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
@@ -1232,9 +1262,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.dedicatedTransferQueue =
         m_data->queueFamilies.transfer != m_data->queueFamilies.graphics &&
         m_data->queueFamilies.transfer != m_data->queueFamilies.compute;
-    m_capabilities.swapchainImageCount = static_cast<uint32_t>(m_data->swapchainTextures.size());
-    m_capabilities.swapchainColorSpace = RhiColorSpace::SrgbNonlinear;
-    m_capabilities.swapchainPresentMode = RhiPresentMode::Fifo;
+    refreshSwapchainCapabilities();
 
     m_deviceThread = std::this_thread::get_id();
     m_deviceId = g_nextVkRhiDeviceId.fetch_add(1u, std::memory_order_relaxed);
@@ -2036,6 +2064,34 @@ RhiTextureFormat VkRhiDevice::swapchainDepthStencilFormat() const {
     return m_initialized ? RhiTextureFormat::Depth32Float : RhiTextureFormat::Undefined;
 }
 
+bool VkRhiDevice::vsyncEnabled() const {
+    return m_initialized && m_data != nullptr && m_data->vsyncEnabled;
+}
+
+bool VkRhiDevice::setVsyncEnabled(const bool enabled) {
+    if (!m_initialized || m_data == nullptr || m_data->frameAcquired ||
+        std::this_thread::get_id() != m_deviceThread) {
+        return false;
+    }
+    if (!enabled && !m_data->immediatePresentSupported) {
+        return false;
+    }
+    if (m_data->vsyncEnabled == enabled) {
+        return true;
+    }
+    m_data->vsyncEnabled = enabled;
+    m_data->swapchainDirty = true;
+    return true;
+}
+
+void VkRhiDevice::refreshSwapchainCapabilities() {
+    m_capabilities.swapchainImageCount = static_cast<uint32_t>(m_data->swapchainTextures.size());
+    m_capabilities.swapchainColorSpace = RhiColorSpace::SrgbNonlinear;
+    m_capabilities.swapchainPresentMode = m_data->presentMode == VK_PRESENT_MODE_IMMEDIATE_KHR
+        ? RhiPresentMode::Immediate : RhiPresentMode::Fifo;
+    m_capabilities.vsyncControl = m_data->immediatePresentSupported;
+}
+
 bool VkRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
     if (!m_initialized || width == 0u || height == 0u || m_data->frameAcquired) return false;
     if (m_data->requestedWidth == width && m_data->requestedHeight == height) {
@@ -2069,7 +2125,7 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
                 ? RhiFrameStatus::SurfaceLost : RhiFrameStatus::Error;
             return result;
         }
-        m_capabilities.swapchainImageCount = static_cast<uint32_t>(m_data->swapchainTextures.size());
+        refreshSwapchainCapabilities();
     }
     auto& frame = m_data->frames[m_data->frameSlot];
     if (frame.fencePending) {
@@ -2151,8 +2207,7 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
             m_data->swapchainDirty = true;
             return RhiFrameStatus::Error;
         }
-        m_capabilities.swapchainImageCount =
-            static_cast<uint32_t>(m_data->swapchainTextures.size());
+        refreshSwapchainCapabilities();
         return RhiFrameStatus::OutOfDate;
     }
     std::array<VkSemaphoreSubmitInfo, 2u> waits{};

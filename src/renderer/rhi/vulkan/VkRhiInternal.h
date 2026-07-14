@@ -134,6 +134,9 @@ struct VkRhiDeviceData {
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     VkFormat swapchainFormat = VK_FORMAT_UNDEFINED;
     VkExtent2D swapchainExtent{};
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    bool immediatePresentSupported = false;
+    bool vsyncEnabled = true;
     std::vector<RhiTextureHandle> swapchainTextures;
     std::vector<RhiTextureViewHandle> swapchainViews;
     std::vector<RhiTextureHandle> depthTextures;

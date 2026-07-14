@@ -544,6 +544,21 @@ int main() {
         glfwTerminate();
         return 1;
     }
+    if (!device.vsyncEnabled() ||
+        device.capabilities().swapchainPresentMode != RhiPresentMode::Fifo) {
+        device.shutdown();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    if (device.capabilities().vsyncControl) {
+        if (!device.setVsyncEnabled(false) || device.vsyncEnabled()) {
+            device.shutdown();
+            glfwDestroyWindow(window);
+            glfwTerminate();
+            return 1;
+        }
+    }
     if (!createDrawParametersShader(device)) {
         device.shutdown();
         glfwDestroyWindow(window);
@@ -594,7 +609,15 @@ int main() {
     }
     std::unique_ptr<RhiCommandListPool> commandPool = device.createCommandListPool(
         {"VulkanSmoke.CommandPool", 4u, 64u * 1024u});
-    if (commandPool == nullptr ||
+    const bool immediateModeValidated =
+        !device.capabilities().vsyncControl ||
+        (commandPool != nullptr &&
+         renderStableFrame(device, *commandPool, window) &&
+         device.capabilities().swapchainPresentMode == RhiPresentMode::Immediate &&
+         device.setVsyncEnabled(true) && device.vsyncEnabled() &&
+         renderStableFrame(device, *commandPool, window) &&
+         device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo);
+    if (commandPool == nullptr || !immediateModeValidated ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||

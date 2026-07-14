@@ -38,7 +38,9 @@
     "setting_render_distance": "渲染距离",
     "setting_graphics_backend": "图形后端",
     "setting_current_backend": "当前",
-    "setting_restart_to_apply": "重启后生效"
+    "setting_restart_to_apply": "重启后生效",
+    "setting_display": "显示",
+    "setting_vsync": "垂直同步"
   },
   "blocks": {
     "air": "空气",

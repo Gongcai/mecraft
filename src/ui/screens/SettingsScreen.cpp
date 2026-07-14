@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <sstream>
 
@@ -535,6 +536,20 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
                        }
                        app::saveRhiBackend(availableBackends[static_cast<size_t>(index)]);
                    });
+
+    addSectionHeader(stack, resourceMgr,
+                     loc(getLocaleManager(), "setting_display", "Display"));
+    RhiDevice* const rhiDevice = &resourceMgr.rhiDevice();
+    addToggle(stack, resourceMgr,
+              loc(getLocaleManager(), "setting_vsync", "Vertical Sync"),
+              rhiDevice->vsyncEnabled(),
+              [rhiDevice](const bool enabled) {
+                  if (!rhiDevice->setVsyncEnabled(enabled)) {
+                      std::abort();
+                  }
+                  app::saveVsyncEnabled(enabled);
+              },
+              rhiDevice->capabilities().vsyncControl);
 
     finalizeScrollTab(tabLayout.scroll, stack);
 }

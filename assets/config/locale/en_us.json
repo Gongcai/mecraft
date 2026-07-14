@@ -38,7 +38,9 @@
     "setting_render_distance": "Render Distance",
     "setting_graphics_backend": "Graphics Backend",
     "setting_current_backend": "Current",
-    "setting_restart_to_apply": "Applies After Restart"
+    "setting_restart_to_apply": "Applies After Restart",
+    "setting_display": "Display",
+    "setting_vsync": "Vertical Sync"
   },
   "blocks": {
     "air": "Air",

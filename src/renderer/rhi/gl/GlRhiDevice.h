@@ -243,6 +243,8 @@ public:
     [[nodiscard]] RhiTextureHandle currentSwapchainColorTexture() const override;
     [[nodiscard]] RhiTextureFormat swapchainColorFormat() const override;
     [[nodiscard]] RhiTextureFormat swapchainDepthStencilFormat() const override;
+    [[nodiscard]] bool vsyncEnabled() const override;
+    bool setVsyncEnabled(bool enabled) override;
     bool resizeSwapchain(uint32_t width, uint32_t height) override;
     [[nodiscard]] RhiFrameAcquireResult acquireFrame() override;
     RhiFrameStatus presentFrame(const RhiPresentInfo& info) override;

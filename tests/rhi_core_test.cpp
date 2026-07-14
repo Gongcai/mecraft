@@ -993,6 +993,20 @@ bool testGlRhiSwapchainBackbuffer() {
     if (!requireTrue(device.init(deviceDesc), "OpenGL RHI device must initialize for swapchain draw")) {
         return false;
     }
+    if (!requireTrue(device.capabilities().vsyncControl,
+                     "OpenGL RHI must expose runtime vertical sync control") ||
+        !requireTrue(!device.vsyncEnabled() &&
+                         device.capabilities().swapchainPresentMode == RhiPresentMode::Immediate,
+                     "OpenGL RHI default presentation must remain immediate") ||
+        !requireTrue(device.setVsyncEnabled(true) && device.vsyncEnabled() &&
+                         device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo,
+                     "OpenGL RHI must enable vertical sync at runtime") ||
+        !requireTrue(device.setVsyncEnabled(false) && !device.vsyncEnabled() &&
+                         device.capabilities().swapchainPresentMode == RhiPresentMode::Immediate,
+                     "OpenGL RHI must disable vertical sync at runtime")) {
+        device.shutdown();
+        return false;
+    }
     if (!requireTrue(device.resizeSwapchain(32u, 32u), "swapchain resize must accept live framebuffer dimensions")) {
         device.shutdown();
         return false;

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 
 class RhiCommandList;
 
@@ -119,6 +120,7 @@ struct RhiDeviceDesc {
     int height = 1;
     bool enableDebugMarkers = false;
     bool enableDebugOutput = false;
+    std::optional<bool> vsyncEnabled;
 };
 
 struct RhiCapabilities {
@@ -135,6 +137,7 @@ struct RhiCapabilities {
     uint32_t swapchainImageCount = 0u;
     RhiColorSpace swapchainColorSpace = RhiColorSpace::SrgbNonlinear;
     RhiPresentMode swapchainPresentMode = RhiPresentMode::Fifo;
+    bool vsyncControl = false;
     uint32_t vulkanApiVersion = 0u;
     bool dynamicRendering = false;
     bool synchronization2 = false;

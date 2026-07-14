@@ -52,6 +52,12 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
         savedBackend = backendSetting.backend;
     }
     m_launchOptions.rhiBackend = resolveLaunchRhiBackend(m_launchOptions, savedBackend);
+    const app::VsyncSettingResult vsyncSetting = app::loadVsyncEnabled();
+    if (!vsyncSetting.isValid) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: invalid app.vsyncEnabled setting\n");
+        return false;
+    }
+    m_vsyncEnabled = vsyncSetting.enabled;
     m_rhiDevice = renderer::rhi::createRhiDevice(m_launchOptions.rhiBackend);
     if (!m_rhiDevice) {
         MECRAFT_LOG_STREAM(std::cerr << "GameManager: requested RHI backend is unavailable: "
@@ -108,6 +114,7 @@ bool GameManager::initRhiDevice() {
     desc.width = m_window.getWidth();
     desc.height = m_window.getHeight();
     desc.enableDebugOutput = m_launchOptions.enableRhiDebugOutput;
+    desc.vsyncEnabled = m_vsyncEnabled;
     if (!m_rhiDevice->init(desc)) {
         MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to initialize app RHI device\n");
         m_rhiDevice.reset();

@@ -683,6 +683,25 @@ RhiBackendSettingResult loadRhiBackend() {
     return {backend.has_value(), backend};
 }
 
+VsyncSettingResult loadVsyncEnabled() {
+    const json root = readSettingsFile();
+    const auto appIt = root.find("app");
+    if (appIt == root.end()) {
+        return {};
+    }
+    if (!appIt->is_object()) {
+        return {false, std::nullopt};
+    }
+    const auto vsyncIt = appIt->find("vsyncEnabled");
+    if (vsyncIt == appIt->end()) {
+        return {};
+    }
+    if (!vsyncIt->is_boolean()) {
+        return {false, std::nullopt};
+    }
+    return {true, vsyncIt->get<bool>()};
+}
+
 bool saveSettings(const AppSettingsData& settings) {
     json root = readSettingsFile();
     json& game = root["game"];
@@ -717,6 +736,16 @@ bool saveRhiBackend(const RhiBackend backend) {
         app = json::object();
     }
     app["rhiBackend"] = renderer::rhi::rhiBackendConfigName(backend);
+    return writeSettingsFile(root);
+}
+
+bool saveVsyncEnabled(const bool enabled) {
+    json root = readSettingsFile();
+    json& app = root["app"];
+    if (!app.is_object()) {
+        app = json::object();
+    }
+    app["vsyncEnabled"] = enabled;
     return writeSettingsFile(root);
 }
 

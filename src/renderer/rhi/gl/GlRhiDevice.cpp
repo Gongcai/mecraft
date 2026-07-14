@@ -894,6 +894,7 @@ struct GlRhiDeviceData {
     RhiResourceState swapchainDepthStencilState = RhiResourceState::DepthWrite;
     uint32_t swapchainWidth = 1u;
     uint32_t swapchainHeight = 1u;
+    bool vsyncEnabled = false;
     GLFWwindow* nativeWindow = nullptr;
     GLuint pushConstantBuffer = 0u;
     uint32_t pushConstantCapacity = 0u;
@@ -4339,7 +4340,10 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
 #else
     (void)desc.enableDebugOutput;
 #endif
-    glfwSwapInterval(0);
+    if (desc.vsyncEnabled.has_value()) {
+        m_data->vsyncEnabled = *desc.vsyncEnabled;
+    }
+    glfwSwapInterval(m_data->vsyncEnabled ? 1 : 0);
     {
         std::lock_guard<std::mutex> poolRegistryLock(m_commandPoolRegistry->mutex);
         m_commandPoolRegistry->device = this;
@@ -4388,7 +4392,9 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.maxSampledTexturesPerStage = static_cast<uint32_t>(maxTextureUnits);
     m_capabilities.swapchainImageCount = 1u;
     m_capabilities.swapchainColorSpace = RhiColorSpace::SrgbNonlinear;
-    m_capabilities.swapchainPresentMode = RhiPresentMode::Immediate;
+    m_capabilities.swapchainPresentMode = m_data->vsyncEnabled
+        ? RhiPresentMode::Fifo : RhiPresentMode::Immediate;
+    m_capabilities.vsyncControl = true;
     glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &m_capabilities.maxSamplerAnisotropy);
 
     m_data->swapchainWidth = static_cast<uint32_t>(desc.width);
@@ -5444,6 +5450,25 @@ RhiTextureFormat GlRhiDevice::swapchainColorFormat() const {
 
 RhiTextureFormat GlRhiDevice::swapchainDepthStencilFormat() const {
     return m_data ? m_data->swapchainDepthStencilFormat : RhiTextureFormat::Undefined;
+}
+
+bool GlRhiDevice::vsyncEnabled() const {
+    return m_initialized && m_data != nullptr && m_data->vsyncEnabled;
+}
+
+bool GlRhiDevice::setVsyncEnabled(const bool enabled) {
+    if (!m_initialized || m_data == nullptr || m_data->nativeWindow == nullptr ||
+        std::this_thread::get_id() != m_deviceThread) {
+        return false;
+    }
+    if (m_data->vsyncEnabled == enabled) {
+        return true;
+    }
+    glfwSwapInterval(enabled ? 1 : 0);
+    m_data->vsyncEnabled = enabled;
+    m_capabilities.swapchainPresentMode = enabled
+        ? RhiPresentMode::Fifo : RhiPresentMode::Immediate;
+    return true;
 }
 
 bool GlRhiDevice::resizeSwapchain(const uint32_t width, const uint32_t height) {
