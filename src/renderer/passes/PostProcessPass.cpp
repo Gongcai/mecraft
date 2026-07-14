@@ -177,6 +177,8 @@ void PostProcessPass::shutdown() {
     m_sceneCaptured = false;
     m_captureWidth = 0;
     m_captureHeight = 0;
+    m_hdrInputWidth = 0;
+    m_hdrInputHeight = 0;
     m_processingWidth = 0;
     m_processingHeight = 0;
     m_autoExposureSampleAccumulator = 0.0;
@@ -274,7 +276,13 @@ bool PostProcessPass::setHdrInput(const RhiTextureHandle texture,
         width <= 0 || height <= 0) {
         return false;
     }
-    if (!ensureProcessingTargets(*m_rhiDevice, width, height)) {
+    // Temporal upscaling changes the HDR input extent within a frame. Preserve
+    // exposure history here and resize processing targets only at composition.
+    const bool processingTargetsMissing =
+        !m_bloomHandle[0][0].isValid() ||
+        !m_exposureStateHandle[0].isValid();
+    if (processingTargetsMissing &&
+        !ensureProcessingTargets(*m_rhiDevice, width, height)) {
         return false;
     }
     if (m_hdrInputHandle.index != texture.index ||
@@ -286,6 +294,8 @@ bool PostProcessPass::setHdrInput(const RhiTextureHandle texture,
     }
     m_hdrInputHandle = texture;
     m_hdrInputView = view;
+    m_hdrInputWidth = width;
+    m_hdrInputHeight = height;
     return true;
 }
 
@@ -298,6 +308,7 @@ void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
                                             const RhiTextureHandle gbufferDepthTexture,
                                             RenderDebugService& debugService) {
     if (!m_sceneCaptured || !swapchainColorView.isValid() ||
+        !ensureProcessingTargets(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) ||
         !ensureRhiPipelines(rhiDevice) || !ensureNoiseTextureView(rhiDevice) ||
         !ensureSwapchainCompositePipeline(rhiDevice, swapchainColorFormat) ||
         !ensureGbufferDepthTextureView(rhiDevice, gbufferDepthTexture) ||
@@ -345,7 +356,8 @@ RhiTextureHandle PostProcessPass::compositeToTexture(
     const RhiTextureHandle gbufferDepthTexture,
     RenderDebugService& debugService) {
     if (!m_sceneCaptured ||
-        !ensureCompositeTarget(rhiDevice, m_processingWidth, m_processingHeight) ||
+        !ensureProcessingTargets(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) ||
+        !ensureCompositeTarget(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) ||
         !ensureRhiPipelines(rhiDevice) || !ensureNoiseTextureView(rhiDevice) ||
         !ensureGbufferDepthTextureView(rhiDevice, gbufferDepthTexture) ||
         !rebuildTargetBindGroups() || !rebuildCompositeBindGroups()) {
@@ -935,10 +947,30 @@ bool PostProcessPass::ensureProcessingTargets(RhiDevice& rhiDevice,
             RhiResourceState::ShaderRead
         });
     }
-    for (const RhiTextureHandle texture : m_exposureStateHandle) {
+    for (int index = 0; index < 2; ++index) {
         initializeCommandList.textureBarrier({
-            texture,
+            m_exposureStateHandle[index],
             RhiResourceState::Undefined,
+            RhiResourceState::RenderTarget
+        });
+        RhiColorAttachment exposureStateAttachment;
+        exposureStateAttachment.view = m_exposureStateView[index];
+        exposureStateAttachment.loadOp = RhiLoadOp::Clear;
+        exposureStateAttachment.storeOp = RhiStoreOp::Store;
+        exposureStateAttachment.clearColor[0] = 1.0f;
+        exposureStateAttachment.clearColor[1] = 0.0f;
+        exposureStateAttachment.clearColor[2] = 1.0f;
+        exposureStateAttachment.clearColor[3] = 1.0f;
+        RhiRenderingInfo exposureStateRendering;
+        exposureStateRendering.debugName = "PostProcess.ExposureStateInitialization";
+        exposureStateRendering.renderArea = {0, 0, 1u, 1u};
+        exposureStateRendering.colorAttachments = &exposureStateAttachment;
+        exposureStateRendering.colorAttachmentCount = 1u;
+        initializeCommandList.beginRendering(exposureStateRendering);
+        initializeCommandList.endRendering();
+        initializeCommandList.textureBarrier({
+            m_exposureStateHandle[index],
+            RhiResourceState::RenderTarget,
             RhiResourceState::ShaderRead
         });
     }
@@ -1551,6 +1583,8 @@ void PostProcessPass::destroySceneCaptureTargets() {
     }
     m_hdrInputHandle = {};
     m_hdrInputView = {};
+    m_hdrInputWidth = 0;
+    m_hdrInputHeight = 0;
     m_captureWidth = 0;
     m_captureHeight = 0;
 }

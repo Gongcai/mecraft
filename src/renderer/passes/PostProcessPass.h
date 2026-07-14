@@ -258,6 +258,8 @@ private:
     RhiTextureViewHandle m_sceneDepthView;
     RhiTextureHandle m_hdrInputHandle;
     RhiTextureViewHandle m_hdrInputView;
+    int m_hdrInputWidth = 0;
+    int m_hdrInputHeight = 0;
 
     RhiTextureHandle m_compositeHandle;
     RhiTextureViewHandle m_compositeView;
