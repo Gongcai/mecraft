@@ -65,6 +65,8 @@ void GameplayHudPresenter::renderPrepared(const UIRenderContext& context,
 
 bool GameplayHudPresenter::prepareDashboard(
     RhiCommandList& commandList,
+    const int framebufferWidth,
+    const int framebufferHeight,
     ecs::GameplayRegistry& reg,
     World& world,
     const Camera& camera,
@@ -77,7 +79,10 @@ bool GameplayHudPresenter::prepareDashboard(
         return false;
     }
     Camera mutableCamera = camera;
-    return m_dashboard->prepareFrame(commandList, reg, world, mutableCamera, renderer,
+    return m_dashboard->prepareFrame(commandList,
+                                     framebufferWidth,
+                                     framebufferHeight,
+                                     reg, world, mutableCamera, renderer,
                                      renderScene, postProcess, m_uiRenderer,
                                      profilerStats, renderDistanceSetter);
 }

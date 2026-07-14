@@ -46,6 +46,8 @@ public:
     /// Build ImGui draw data and upload its GPU resources before rendering begins.
     [[nodiscard]] bool prepareDashboard(
         RhiCommandList& commandList,
+        int framebufferWidth,
+        int framebufferHeight,
         ecs::GameplayRegistry& reg,
         World& world,
         const Camera& camera,

@@ -125,6 +125,8 @@ void Dashboard::setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* rend
 }
 
 bool Dashboard::prepareFrame(RhiCommandList& commandList,
+                             const int framebufferWidth,
+                             const int framebufferHeight,
                              ecs::GameplayRegistry& registry,
                              World& world,
                              Camera& camera,
@@ -137,10 +139,24 @@ bool Dashboard::prepareFrame(RhiCommandList& commandList,
     if (!m_initialized || m_rhiDevice == nullptr) {
         return false;
     }
+    if (framebufferWidth <= 0 || framebufferHeight <= 0) {
+        return false;
+    }
     m_framePrepared = false;
     ImGui_ImplGlfw_NewFrame();
+    ImGuiIO& io = ImGui::GetIO();
+    if (!std::isfinite(io.DisplayFramebufferScale.x) ||
+        !std::isfinite(io.DisplayFramebufferScale.y) ||
+        io.DisplayFramebufferScale.x <= 0.0f ||
+        io.DisplayFramebufferScale.y <= 0.0f) {
+        return false;
+    }
+    io.DisplaySize = {
+        static_cast<float>(framebufferWidth) / io.DisplayFramebufferScale.x,
+        static_cast<float>(framebufferHeight) / io.DisplayFramebufferScale.y
+    };
     ImGui::NewFrame();
-    ImGui::GetIO().FontGlobalScale = m_fontScale;
+    io.FontGlobalScale = m_fontScale;
 
     if (ImGui::Begin("Debug Dashboard")) {
         ImGui::SliderFloat("Font Scale", &m_fontScale, 0.8f, 3.0f, "%.1f");
@@ -161,7 +177,8 @@ bool Dashboard::prepareFrame(RhiCommandList& commandList,
     ImGui::End();
     ImGui::Render();
     const ImDrawData* drawData = ImGui::GetDrawData();
-    if (drawData == nullptr || !buildPreparedDraws(*drawData)) {
+    if (drawData == nullptr ||
+        !buildPreparedDraws(*drawData, framebufferWidth, framebufferHeight)) {
         return false;
     }
     if (m_fontTextureState != RhiResourceState::ShaderRead) {
@@ -374,7 +391,9 @@ void Dashboard::destroyRhiResources() {
     m_preparedDraws.clear();
 }
 
-bool Dashboard::buildPreparedDraws(const ImDrawData& drawData) {
+bool Dashboard::buildPreparedDraws(const ImDrawData& drawData,
+                                   const int framebufferWidth,
+                                   const int framebufferHeight) {
     m_vertices.clear();
     m_indexBytes.clear();
     m_preparedDraws.clear();
@@ -382,18 +401,11 @@ bool Dashboard::buildPreparedDraws(const ImDrawData& drawData) {
     m_displaySize = drawData.DisplaySize;
     m_framebufferScale = drawData.FramebufferScale;
 
-    const float framebufferWidth = drawData.DisplaySize.x * drawData.FramebufferScale.x;
-    const float framebufferHeight = drawData.DisplaySize.y * drawData.FramebufferScale.y;
-    if (!std::isfinite(framebufferWidth) || !std::isfinite(framebufferHeight) ||
-        framebufferWidth > static_cast<float>(std::numeric_limits<int32_t>::max()) ||
-        framebufferHeight > static_cast<float>(std::numeric_limits<int32_t>::max())) {
+    if (framebufferWidth <= 0 || framebufferHeight <= 0) {
         return false;
     }
-    m_framebufferWidth = static_cast<int32_t>(framebufferWidth);
-    m_framebufferHeight = static_cast<int32_t>(framebufferHeight);
-    if (m_framebufferWidth <= 0 || m_framebufferHeight <= 0) {
-        return true;
-    }
+    m_framebufferWidth = framebufferWidth;
+    m_framebufferHeight = framebufferHeight;
     if (drawData.TotalVtxCount < 0 || drawData.TotalIdxCount < 0) {
         return false;
     }
@@ -466,10 +478,14 @@ bool Dashboard::buildPreparedDraws(const ImDrawData& drawData) {
                 !std::isfinite(clipMaxX) || !std::isfinite(clipMaxY)) {
                 return false;
             }
-            const float clampedMinX = std::clamp(clipMinX, 0.0f, framebufferWidth);
-            const float clampedMinY = std::clamp(clipMinY, 0.0f, framebufferHeight);
-            const float clampedMaxX = std::clamp(clipMaxX, 0.0f, framebufferWidth);
-            const float clampedMaxY = std::clamp(clipMaxY, 0.0f, framebufferHeight);
+            const float clampedMinX = std::clamp(
+                clipMinX, 0.0f, static_cast<float>(framebufferWidth));
+            const float clampedMinY = std::clamp(
+                clipMinY, 0.0f, static_cast<float>(framebufferHeight));
+            const float clampedMaxX = std::clamp(
+                clipMaxX, 0.0f, static_cast<float>(framebufferWidth));
+            const float clampedMaxY = std::clamp(
+                clipMaxY, 0.0f, static_cast<float>(framebufferHeight));
             if (clampedMaxX <= clampedMinX || clampedMaxY <= clampedMinY) {
                 continue;
             }

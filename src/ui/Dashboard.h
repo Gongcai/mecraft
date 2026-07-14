@@ -127,6 +127,8 @@ public:
     void setFirstPersonHeldItemRenderer(FirstPersonHeldItemRenderer* renderer);
     [[nodiscard]] bool prepareFrame(
         RhiCommandList& commandList,
+        int framebufferWidth,
+        int framebufferHeight,
         ecs::GameplayRegistry& registry,
         World& world,
         Camera& camera,
@@ -170,7 +172,9 @@ private:
     void refreshWorldMetricsIfNeeded(World& world, double now, bool forceRefresh);
     [[nodiscard]] bool createRhiResources(RhiDevice& rhiDevice);
     void destroyRhiResources();
-    [[nodiscard]] bool buildPreparedDraws(const ImDrawData& drawData);
+    [[nodiscard]] bool buildPreparedDraws(const ImDrawData& drawData,
+                                          int framebufferWidth,
+                                          int framebufferHeight);
     [[nodiscard]] bool uploadDrawBuffers(RhiCommandList& commandList);
     void bindRenderState(RhiCommandList& commandList) const;
 

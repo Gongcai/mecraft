@@ -436,6 +436,8 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
             const auto dashboardPrepareStart = std::chrono::steady_clock::now();
             dashboardPrepared = hudPresenter->prepareDashboard(
                 *uiCommandList,
+                static_cast<int>(frame.width),
+                static_cast<int>(frame.height),
                 reg,
                 session.world(),
                 snap.renderCamera,
