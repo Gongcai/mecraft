@@ -154,8 +154,8 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     renderingInfo.renderArea = {
         0,
         0,
-        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
-        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+        ctx.renderExtent.width,
+        ctx.renderExtent.height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -175,8 +175,8 @@ bool ForwardPipeline::beginBackbufferFrame(const FrameContext& ctx) {
     m_backbufferCommandList->setViewport({
         0.0f,
         0.0f,
-        static_cast<float>(std::max(1, ctx.frameWidth)),
-        static_cast<float>(std::max(1, ctx.frameHeight)),
+        static_cast<float>(ctx.renderExtent.width),
+        static_cast<float>(ctx.renderExtent.height),
         0.0f,
         1.0f
     });
@@ -208,8 +208,8 @@ bool ForwardPipeline::beginBackbufferScenePass(const FrameContext& ctx) {
     renderingInfo.renderArea = {
         0,
         0,
-        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
-        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+        ctx.renderExtent.width,
+        ctx.renderExtent.height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -219,8 +219,8 @@ bool ForwardPipeline::beginBackbufferScenePass(const FrameContext& ctx) {
     m_backbufferCommandList->setViewport({
         0.0f,
         0.0f,
-        static_cast<float>(std::max(1, ctx.frameWidth)),
-        static_cast<float>(std::max(1, ctx.frameHeight)),
+        static_cast<float>(ctx.renderExtent.width),
+        static_cast<float>(ctx.renderExtent.height),
         0.0f,
         1.0f
     });
@@ -262,9 +262,8 @@ void ForwardPipeline::renderSky(const FrameContext& ctx) {
     if (!m_skyRenderer || !ctx.dayNightSystem || !ctx.cameraPtr) return;
 
     const auto& dayNight = *ctx.dayNightSystem;
-    const float aspect = (ctx.frameHeight > 0)
-        ? static_cast<float>(ctx.frameWidth) / static_cast<float>(ctx.frameHeight)
-        : 1.0f;
+    const float aspect = static_cast<float>(ctx.renderExtent.width) /
+                         static_cast<float>(ctx.renderExtent.height);
 
     m_skyRenderer->render(*ctx.cameraPtr, aspect, dayNight, *m_backbufferCommandList);
 }

@@ -234,7 +234,7 @@ void VolumetricPass::renderFog(const FrameContext& ctx, const RenderSettings& se
         params.cascades[cascadeIndex].depthExtent = glm::vec4(cascade.depthExtent, 0.0f, 0.0f, 0.0f);
     }
     params.cameraPosSkyIntensity = glm::vec4(ctx.camera.position, ctx.skyIntensity);
-    params.jitterTimeMoonFlux = glm::vec4(ctx.jitter, ctx.shaderTime, 0.0f);
+    params.jitterTimeMoonFlux = glm::vec4(ctx.jitter.projectionOffset, ctx.shaderTime, 0.0f);
     params.sunDirection = glm::vec4(ctx.skyColors.sunDirection, 0.0f);
     params.shadowLightDirection = glm::vec4(m_shadowRenderer->lightDirection(), 0.0f);
     params.sunLightColor = glm::vec4(ctx.skyColors.sunLightColor, 0.0f);

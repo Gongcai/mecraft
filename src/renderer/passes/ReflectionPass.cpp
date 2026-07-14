@@ -57,7 +57,7 @@ void ReflectionPass::execute(const FrameContext& ctx, const RenderSettings& sett
     }
     if (settings.reflection.temporalEnabled &&
         settings.debug.reflectionDebugMode == 0 &&
-        ctx.hasPreviousFrame) {
+        !ctx.temporalReset) {
         renderTemporal(ctx, settings.reflection, targets);
     }
 }

@@ -1,6 +1,7 @@
 #ifndef MECRAFT_FRAME_CONTEXT_H
 #define MECRAFT_FRAME_CONTEXT_H
 
+#include "renderer/contracts/TemporalFrameContract.h"
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
 
@@ -151,9 +152,9 @@ struct FrameContext {
     float animationTime = 0.0f;
     float shaderTime = 0.0f;
 
-    // Screen dimensions (populated from Window at frame start)
-    int frameWidth = 0;
-    int frameHeight = 0;
+    // Scene rendering and presentation dimensions are independent contracts.
+    TemporalExtent renderExtent;
+    TemporalExtent outputExtent;
 
     // Current swapchain output target.
     RhiTextureHandle swapchainColorTexture;
@@ -166,9 +167,8 @@ struct FrameContext {
     RhiTextureViewHandle sceneCaptureColorView;
     RhiTextureViewHandle sceneCaptureDepthView;
 
-    // Projection-space UV jitter. Positive Y follows the bottom-left clip UV domain.
-    glm::vec2 jitter = glm::vec2(0.0f);
-    glm::vec2 prevJitter = glm::vec2(0.0f);
+    TemporalJitter jitter;
+    TemporalJitter previousJitter;
 
     // Previous frame matrices (for velocity/temporal passes)
     glm::mat4 previousViewProj = glm::mat4(1.0f);
@@ -198,7 +198,7 @@ struct FrameContext {
     // State flags
     bool eyeInWater = false;
     bool moonShadowActive = false;
-    bool hasPreviousFrame = false;
+    bool temporalReset = true;
     float cameraRainVisibility = 1.0f; // 0=indoors, 1=outdoors (from multi-ray check)
 
     // Shared resources (non-owning pointer)

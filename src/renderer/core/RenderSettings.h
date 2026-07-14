@@ -3,6 +3,8 @@
 
 #include <glm/glm.hpp>
 
+#include <cstdint>
+
 /// Pipeline mode selection
 enum class PipelineMode {
     Forward = 0,
@@ -232,11 +234,35 @@ struct PostProcessSettings {
     float dofFocusDistance = 5.0f;
 };
 
-/// Spatial upscaling settings.
+enum class TemporalUpscalerType {
+    Native = 0,
+    Fsr31 = 1,
+    Dlss = 2
+};
+
+enum class TemporalUpscaleQuality {
+    Native = 0,
+    Quality = 1,
+    Balanced = 2,
+    Performance = 3,
+    UltraPerformance = 4
+};
+
+/// Temporal reconstruction settings plus the existing OpenGL spatial upscaler.
 struct UpscaleSettings {
+    TemporalUpscalerType type = TemporalUpscalerType::Native;
+    TemporalUpscaleQuality quality = TemporalUpscaleQuality::Native;
+    uint32_t outputWidth = 0u;
+    uint32_t outputHeight = 0u;
+    bool sharpeningEnabled = true;
+    float sharpeningStrength = 0.2f;
+    bool dynamicResolutionEnabled = false;
+    bool debugVisualizationEnabled = false;
+
+    // OpenGL-only FSR 1 spatial upscaling remains an independent legacy feature.
     bool fsr1Enabled = false;
-    float renderScale = 0.77f;
-    float sharpness = 0.2f;
+    float fsr1RenderScale = 0.77f;
+    float fsr1Sharpness = 0.2f;
 };
 
 /// Debug visualization settings

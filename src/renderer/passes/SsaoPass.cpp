@@ -53,7 +53,7 @@ void SsaoPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         renderSsaoFilter(ctx, targets);
     }
     renderSsaoUpsample(ctx, settings.ssao, targets);
-    if (settings.ssao.temporalEnabled) {
+    if (settings.ssao.temporalEnabled && !ctx.temporalReset) {
         renderSsaoTemporal(ctx, settings.ssao, targets);
     }
 }

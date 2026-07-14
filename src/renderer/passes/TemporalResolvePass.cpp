@@ -94,7 +94,7 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
     commandList.setBindGroup(0u, m_bindGroup[historyPrevIndex]);
 
     // Convert bottom-left clip UV jitter to the native texture UV delta stored by temporal passes.
-    glm::vec2 textureJitter = ctx.jitter;
+    glm::vec2 textureJitter = ctx.jitter.projectionOffset;
     if (rhiDevice.backend() == RhiBackend::Vulkan) {
         textureJitter.y = -textureJitter.y;
     }

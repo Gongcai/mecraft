@@ -1378,8 +1378,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.upscale.fsr1Enabled = fsr1EnabledUi;
             pipelineChanged = true;
         }
-        pipelineChanged |= ImGui::SliderFloat("FSR1 Render Scale", &settings.upscale.renderScale, 0.50f, 1.00f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("FSR1 Sharpness", &settings.upscale.sharpness, 0.00f, 2.00f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("FSR1 Render Scale", &settings.upscale.fsr1RenderScale, 0.50f, 1.00f, "%.2f");
+        pipelineChanged |= ImGui::SliderFloat("FSR1 Sharpness", &settings.upscale.fsr1Sharpness, 0.00f, 2.00f, "%.2f");
         ImGui::EndDisabled();
         pipelineChanged |= ImGui::Checkbox("Bloom Flag", &settings.postProcess.bloomEnabled);
         pipelineChanged |= ImGui::SliderInt("Bloom Mips", &settings.postProcess.bloomMipCount, 1, 7);

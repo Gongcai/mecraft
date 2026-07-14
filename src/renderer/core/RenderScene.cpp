@@ -127,8 +127,8 @@ RhiCommandList* beginSceneCaptureRendering(RhiCommandList& commandList,
     renderingInfo.renderArea = {
         0,
         0,
-        static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
-        static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+        ctx.renderExtent.width,
+        ctx.renderExtent.height
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -275,7 +275,8 @@ void RenderScene::shutdown() {
 }
 
 void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
-                              const glm::ivec2& frameRenderSize, const float frameAspectRatio,
+                              const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
+                              const float frameAspectRatio,
                               const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak,
                               const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
     if (!prepareFrameResources(frameRenderSize)) {
@@ -308,7 +309,7 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
 
     // Build frame context
     m_currentContext = buildFrameContext(
-        worldView, camera, window, frameRenderSize, frameAspectRatio,
+        worldView, camera, window, frameRenderSize, frameOutputSize, frameAspectRatio,
         dayNightSystem, weatherSystem);
 
     // Phase 9: Use active pipeline only if fully initialized and ready.
@@ -336,6 +337,12 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
 }
 
 void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
+    if (m_settings.upscale.type != TemporalUpscalerType::Native) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Selected temporal upscaler is not initialized\n");
+        return;
+    }
+
     // Activate the pipeline when shared resources become available after target initialization.
     if (!isNewPipelineActive() && isNewPipelineReady()) {
         setNewPipelineActive(true);
@@ -361,7 +368,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     float cameraRainVisibility = 1.0f;
 
     renderFrame(request.worldView, request.camera, request.window,
-                frameRenderSize, frameAspectRatio,
+                frameRenderSize, displaySize, frameAspectRatio,
                 request.target, request.blockBreak,
                 request.dayNightSystem, request.weatherSystem);
 
@@ -489,7 +496,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                         inputHeight,
                         displaySize.x,
                         displaySize.y,
-                        m_settings.upscale.sharpness,
+                        m_settings.upscale.fsr1Sharpness,
                         m_debugService)) {
                     std::abort();
                 }
@@ -566,8 +573,12 @@ void RenderScene::setSettings(const RenderSettings& settings) {
     }
 
     const bool upscaleChanged =
+        settings.upscale.type != m_settings.upscale.type ||
+        settings.upscale.quality != m_settings.upscale.quality ||
+        settings.upscale.outputWidth != m_settings.upscale.outputWidth ||
+        settings.upscale.outputHeight != m_settings.upscale.outputHeight ||
         settings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled ||
-        std::abs(settings.upscale.renderScale - m_settings.upscale.renderScale) > 0.0001f;
+        std::abs(settings.upscale.fsr1RenderScale - m_settings.upscale.fsr1RenderScale) > 0.0001f;
 
     m_settings = settings;
 
@@ -851,6 +862,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
 
 FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
                                             const glm::ivec2& frameRenderSize,
+                                            const glm::ivec2& frameOutputSize,
                                             const float frameAspectRatio,
                                             const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
     FrameContext ctx;
@@ -869,9 +881,14 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.debugService = &m_debugService;
     ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
 
-    // Internal scene dimensions. UI and final presentation still use the real window size.
-    ctx.frameWidth = frameRenderSize.x;
-    ctx.frameHeight = frameRenderSize.y;
+    ctx.renderExtent = {
+        static_cast<uint32_t>(std::max(1, frameRenderSize.x)),
+        static_cast<uint32_t>(std::max(1, frameRenderSize.y))
+    };
+    ctx.outputExtent = {
+        static_cast<uint32_t>(std::max(1, frameOutputSize.x)),
+        static_cast<uint32_t>(std::max(1, frameOutputSize.y))
+    };
     ctx.swapchainColorTexture = m_shared.rhiDevice->currentSwapchainColorTexture();
     ctx.swapchainColorView = m_shared.rhiDevice->currentSwapchainColorView();
     ctx.swapchainDepthStencilView = m_shared.rhiDevice->currentSwapchainDepthStencilView();
@@ -897,36 +914,42 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
         const float frameCounter = static_cast<float>(ctx.frameIndex);
         const float frameX = glm::fract(frameCounter / 1.3247179572f + 0.5f) * 2.0f - 1.0f;
         const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
-        ctx.jitter.x = frameX * invW;
-        ctx.jitter.y = frameY * invH;
+        ctx.jitter.projectionOffset.x = frameX * invW;
+        ctx.jitter.projectionOffset.y = frameY * invH;
+        ctx.jitter.pixels.x = frameX;
+        ctx.jitter.pixels.y = -frameY;
     }
 
     // Jittered projection matrix
     {
         glm::mat4 jitteredProj = ctx.camera.projection;
         for (int column = 0; column < 4; ++column) {
-            jitteredProj[column][0] += ctx.jitter.x * ctx.camera.projection[column][3];
-            jitteredProj[column][1] += ctx.jitter.y * ctx.camera.projection[column][3];
+            jitteredProj[column][0] += ctx.jitter.projectionOffset.x * ctx.camera.projection[column][3];
+            jitteredProj[column][1] += ctx.jitter.projectionOffset.y * ctx.camera.projection[column][3];
         }
         ctx.camera.jitteredViewProj = jitteredProj * ctx.camera.view;
         ctx.camera.jitteredInvViewProj = glm::inverse(ctx.camera.jitteredViewProj);
     }
 
     // Previous frame data (temporal)
-    if (m_hasPreviousContext) {
+    ctx.temporalReset = requiresTemporalReset(
+        m_hasPreviousContext,
+        m_previousContext.renderExtent,
+        m_previousContext.outputExtent,
+        ctx.renderExtent,
+        ctx.outputExtent);
+    if (!ctx.temporalReset) {
         ctx.prevCamera = m_previousContext.camera;
-        ctx.prevJitter = m_previousContext.jitter;
+        ctx.previousJitter = m_previousContext.jitter;
         ctx.previousViewProj = m_previousContext.camera.viewProj;
         ctx.previousInvViewProj = m_previousContext.camera.invViewProj;
         ctx.previousJitteredViewProj = m_previousContext.camera.jitteredViewProj;
-        ctx.hasPreviousFrame = true;
     } else {
         ctx.prevCamera = ctx.camera;
-        ctx.prevJitter = ctx.jitter;
+        ctx.previousJitter = ctx.jitter;
         ctx.previousViewProj = ctx.camera.viewProj;
         ctx.previousInvViewProj = ctx.camera.invViewProj;
         ctx.previousJitteredViewProj = ctx.camera.jitteredViewProj;
-        ctx.hasPreviousFrame = false;
     }
 
     // Weather state from WeatherSystem
@@ -1035,14 +1058,14 @@ glm::ivec2 RenderScene::internalRenderSize(const glm::ivec2& displaySize) const 
     if (!isFsr1RuntimeEnabled()) {
         return glm::ivec2(displayWidth, displayHeight);
     }
-    const float scale = std::clamp(m_settings.upscale.renderScale, 0.5f, 1.0f);
+    const float scale = std::clamp(m_settings.upscale.fsr1RenderScale, 0.5f, 1.0f);
     return glm::ivec2(std::max(1, static_cast<int>(std::round(static_cast<float>(displayWidth) * scale))),
                       std::max(1, static_cast<int>(std::round(static_cast<float>(displayHeight) * scale))));
 }
 
 bool RenderScene::isFsr1RuntimeEnabled() const {
     return m_fsr1Supported && m_settings.upscale.fsr1Enabled &&
-           m_settings.upscale.renderScale < 0.999f &&
+           m_settings.upscale.fsr1RenderScale < 0.999f &&
            m_settings.pipelineMode == PipelineMode::Deferred;
 }
 

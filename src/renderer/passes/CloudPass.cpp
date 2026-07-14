@@ -62,7 +62,7 @@ void CloudPass::invalidateHistory() {
 
 bool CloudPass::shouldRenderClouds(const FrameContext& ctx, const RenderSettings& settings) {
     const int updateInterval = std::clamp(settings.cloud.updateInterval, 1, 8);
-    if (!m_hasRenderedClouds || !ctx.hasPreviousFrame || updateInterval <= 1) {
+    if (!m_hasRenderedClouds || ctx.temporalReset || updateInterval <= 1) {
         return true;
     }
 
@@ -139,7 +139,7 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         return;
     }
 
-    const bool historyAvailable = m_hasRenderedClouds && ctx.hasPreviousFrame;
+    const bool historyAvailable = m_hasRenderedClouds && !ctx.temporalReset;
     CloudParams params{};
     params.invViewProj = ctx.camera.invViewProj;
     params.previousViewProj = ctx.previousViewProj;

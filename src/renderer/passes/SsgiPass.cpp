@@ -61,7 +61,7 @@ void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
 
     renderSsgiBase(ctx, settings, targets);
     renderSsgiUpsample(ctx, targets);
-    const bool temporalActive = settings.ssgi.temporalEnabled;
+    const bool temporalActive = settings.ssgi.temporalEnabled && !ctx.temporalReset;
     if (temporalActive) {
         renderSsgiTemporal(ctx, settings.ssgi, targets);
     }

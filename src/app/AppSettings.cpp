@@ -4,8 +4,10 @@
 #include "../renderer/rhi/RhiDeviceFactory.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 
 #include <nlohmann/json.hpp>
 
@@ -56,6 +58,16 @@ void readInt(const json& obj, const char* key, int& out) {
     auto it = obj.find(key);
     if (it != obj.end() && it->is_number()) {
         out = it->get<int>();
+    }
+}
+
+void readUint32(const json& obj, const char* key, uint32_t& out) {
+    auto it = obj.find(key);
+    if (it != obj.end() && it->is_number_unsigned()) {
+        const uint64_t value = it->get<uint64_t>();
+        if (value <= static_cast<uint64_t>(std::numeric_limits<uint32_t>::max())) {
+            out = static_cast<uint32_t>(value);
+        }
     }
 }
 
@@ -470,16 +482,44 @@ json toJson(const PostProcessSettings& s) {
 }
 
 void applyUpscaleSettings(const json& j, UpscaleSettings& s) {
+    int type = static_cast<int>(s.type);
+    readInt(j, "type", type);
+    if (type >= static_cast<int>(TemporalUpscalerType::Native) &&
+        type <= static_cast<int>(TemporalUpscalerType::Dlss)) {
+        s.type = static_cast<TemporalUpscalerType>(type);
+    }
+
+    int quality = static_cast<int>(s.quality);
+    readInt(j, "quality", quality);
+    if (quality >= static_cast<int>(TemporalUpscaleQuality::Native) &&
+        quality <= static_cast<int>(TemporalUpscaleQuality::UltraPerformance)) {
+        s.quality = static_cast<TemporalUpscaleQuality>(quality);
+    }
+
+    readUint32(j, "outputWidth", s.outputWidth);
+    readUint32(j, "outputHeight", s.outputHeight);
+    readBool(j, "sharpeningEnabled", s.sharpeningEnabled);
+    readFloat(j, "sharpeningStrength", s.sharpeningStrength);
+    readBool(j, "dynamicResolutionEnabled", s.dynamicResolutionEnabled);
+    readBool(j, "debugVisualizationEnabled", s.debugVisualizationEnabled);
     readBool(j, "fsr1Enabled", s.fsr1Enabled);
-    readFloat(j, "renderScale", s.renderScale);
-    readFloat(j, "sharpness", s.sharpness);
+    readFloat(j, "renderScale", s.fsr1RenderScale);
+    readFloat(j, "sharpness", s.fsr1Sharpness);
 }
 
 json toJson(const UpscaleSettings& s) {
     return {
+        {"type", static_cast<int>(s.type)},
+        {"quality", static_cast<int>(s.quality)},
+        {"outputWidth", s.outputWidth},
+        {"outputHeight", s.outputHeight},
+        {"sharpeningEnabled", s.sharpeningEnabled},
+        {"sharpeningStrength", s.sharpeningStrength},
+        {"dynamicResolutionEnabled", s.dynamicResolutionEnabled},
+        {"debugVisualizationEnabled", s.debugVisualizationEnabled},
         {"fsr1Enabled", s.fsr1Enabled},
-        {"renderScale", s.renderScale},
-        {"sharpness", s.sharpness},
+        {"renderScale", s.fsr1RenderScale},
+        {"sharpness", s.fsr1Sharpness},
     };
 }
 

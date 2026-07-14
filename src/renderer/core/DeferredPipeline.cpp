@@ -362,8 +362,8 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     auto& targets = *m_shared->deferredTargets;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
-    const int windowWidth = ctx.frameWidth;
-    const int windowHeight = ctx.frameHeight;
+    const int windowWidth = static_cast<int>(ctx.renderExtent.width);
+    const int windowHeight = static_cast<int>(ctx.renderExtent.height);
 
     // Use settings from RenderScene
     m_currentSettings = settings;
@@ -520,16 +520,18 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     // Volumetric fog
     if (m_volumetricPass) {
-        m_volumetricPass->execute(ctx, m_currentSettings, targets, m_hasPreviousFrameData);
+        m_volumetricPass->execute(
+            ctx, m_currentSettings, targets, m_hasPreviousFrameData && !ctx.temporalReset);
     }
 
     // TAA resolve
-    if (m_taaPass && m_currentSettings.taa.enabled && m_hasPreviousFrameData) {
+    if (m_taaPass && m_currentSettings.taa.enabled && m_hasPreviousFrameData && !ctx.temporalReset) {
         m_taaPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Motion blur
-    if (m_motionBlurPass && m_currentSettings.postProcess.motionBlurEnabled && m_hasPreviousFrameData) {
+    if (m_motionBlurPass && m_currentSettings.postProcess.motionBlurEnabled &&
+        m_hasPreviousFrameData && !ctx.temporalReset) {
         m_motionBlurPass->execute(ctx, m_currentSettings, targets);
     }
 

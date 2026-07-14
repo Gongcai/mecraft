@@ -1402,15 +1402,15 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
                   m_renderScene->setSettings(s);
               }, fsr1Supported);
     addSliderRow(stack, resourceMgr, "FSR1 Render Scale",
-                 0.50f, 1.0f, s.upscale.renderScale, 0.01f,
+                 0.50f, 1.0f, s.upscale.fsr1RenderScale, 0.01f,
                  [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.upscale.renderScale = v;
+                     auto s = m_renderScene->getSettings(); s.upscale.fsr1RenderScale = v;
                      m_renderScene->setSettings(s);
                  }, fsr1Supported);
     addSliderRow(stack, resourceMgr, "FSR1 Sharpness",
-                 0.0f, 2.0f, s.upscale.sharpness, 0.01f,
+                 0.0f, 2.0f, s.upscale.fsr1Sharpness, 0.01f,
                  [this](float v) {
-                     auto s = m_renderScene->getSettings(); s.upscale.sharpness = v;
+                     auto s = m_renderScene->getSettings(); s.upscale.fsr1Sharpness = v;
                      m_renderScene->setSettings(s);
                  }, fsr1Supported);
 

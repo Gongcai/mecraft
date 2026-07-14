@@ -139,8 +139,8 @@ bool WaterCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         renderingInfo.renderArea = {
             0,
             0,
-            static_cast<uint32_t>(std::max(1, ctx.frameWidth)),
-            static_cast<uint32_t>(std::max(1, ctx.frameHeight))
+            ctx.renderExtent.width,
+            ctx.renderExtent.height
         };
         renderingInfo.colorAttachments = &colorAttachment;
         renderingInfo.colorAttachmentCount = 1u;
