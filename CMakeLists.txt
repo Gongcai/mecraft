@@ -38,11 +38,15 @@ option(MECRAFT_BUILD_TESTS "Build Mecraft tests" ON)
 option(MECRAFT_USE_SOURCE_ASSETS "Use the source-tree assets directory directly instead of packaged assets" OFF)
 option(MECRAFT_RHI_BACKEND_OPENGL "Build OpenGL RHI backend" ON)
 option(MECRAFT_RHI_BACKEND_VULKAN "Build Vulkan RHI backend" ON)
+option(MECRAFT_ENABLE_FSR31 "Build AMD FidelityFX FSR 3.1.4 Vulkan upscaling" ON)
 set(MECRAFT_DEFAULT_RHI_BACKEND "OpenGL" CACHE STRING "Default RHI backend")
 set_property(CACHE MECRAFT_DEFAULT_RHI_BACKEND PROPERTY STRINGS OpenGL Vulkan)
 
 if(NOT MECRAFT_RHI_BACKEND_OPENGL AND NOT MECRAFT_RHI_BACKEND_VULKAN)
     message(FATAL_ERROR "At least one RHI backend must be enabled")
+endif()
+if(MECRAFT_ENABLE_FSR31 AND NOT MECRAFT_RHI_BACKEND_VULKAN)
+    message(FATAL_ERROR "MECRAFT_ENABLE_FSR31 requires the Vulkan RHI backend")
 endif()
 if(NOT MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "OpenGL" AND
    NOT MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "Vulkan")
@@ -642,6 +646,40 @@ else()
 endif()
 mecraft_apply_msvc_defaults(mecraft_third_party)
 
+if(MECRAFT_ENABLE_FSR31)
+    set(MECRAFT_FSR31_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fidelityfx_fsr31")
+    add_library(mecraft_fidelityfx_fsr31 STATIC
+            ${MECRAFT_FSR31_ROOT}/sdk/src/components/fsr3upscaler/ffx_fsr3upscaler.cpp
+            ${MECRAFT_FSR31_ROOT}/sdk/src/backends/vk/ffx_vk.cpp
+            ${MECRAFT_FSR31_ROOT}/sdk/src/backends/shared/ffx_shader_blobs.cpp
+            ${MECRAFT_FSR31_ROOT}/sdk/src/backends/shared/blob_accessors/ffx_fsr3upscaler_shaderblobs.cpp
+            ${MECRAFT_FSR31_ROOT}/sdk/src/shared/ffx_assert.cpp
+            ${MECRAFT_FSR31_ROOT}/sdk/src/shared/ffx_breadcrumbs_list.cpp
+            ${MECRAFT_FSR31_ROOT}/sdk/src/shared/ffx_message.cpp
+            ${MECRAFT_FSR31_ROOT}/sdk/src/shared/ffx_object_management.cpp
+    )
+    target_compile_features(mecraft_fidelityfx_fsr31 PUBLIC cxx_std_17)
+    target_compile_definitions(mecraft_fidelityfx_fsr31 PRIVATE FFX_FSR3UPSCALER)
+    target_include_directories(mecraft_fidelityfx_fsr31 SYSTEM PUBLIC
+            ${MECRAFT_FSR31_ROOT}/sdk/include
+    )
+    target_include_directories(mecraft_fidelityfx_fsr31 SYSTEM PRIVATE
+            ${MECRAFT_FSR31_ROOT}/sdk/src/shared
+            ${MECRAFT_FSR31_ROOT}/sdk/src/components
+            ${MECRAFT_FSR31_ROOT}/sdk/src/backends/shared
+            ${MECRAFT_FSR31_ROOT}/generated/vk
+    )
+    target_link_libraries(mecraft_fidelityfx_fsr31 PUBLIC Vulkan::Vulkan)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(mecraft_fidelityfx_fsr31 PRIVATE
+                -w
+                -include ${MECRAFT_FSR31_ROOT}/sdk/ffx_linux_compat.h
+        )
+    elseif(MSVC)
+        target_compile_options(mecraft_fidelityfx_fsr31 PRIVATE /W0)
+    endif()
+endif()
+
 # ===========================================================================
 # 5. 构建核心库
 # ===========================================================================
@@ -709,6 +747,10 @@ target_compile_definitions(mecraft_core PUBLIC
 
 if(MECRAFT_RHI_BACKEND_VULKAN)
     target_link_libraries(mecraft_core PRIVATE Vulkan::Vulkan ${MECRAFT_VMA_TARGET})
+endif()
+if(MECRAFT_ENABLE_FSR31)
+    target_link_libraries(mecraft_core PRIVATE mecraft_fidelityfx_fsr31)
+    target_compile_definitions(mecraft_core PRIVATE MECRAFT_ENABLE_FSR31)
 endif()
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）
@@ -828,6 +870,10 @@ if(MECRAFT_BUILD_TESTS)
     )
     if(MECRAFT_RHI_BACKEND_VULKAN)
         add_mecraft_test(fsr31_resource_contract_test tests/fsr31_resource_contract_test.cpp)
+        if(MECRAFT_ENABLE_FSR31)
+            add_mecraft_test(fsr31_sdk_test tests/fsr31_sdk_test.cpp)
+            target_link_libraries(fsr31_sdk_test PRIVATE mecraft_fidelityfx_fsr31)
+        endif()
         add_mecraft_test(vulkan_rhi_smoke_test tests/vulkan_rhi_smoke_test.cpp)
         set(MECRAFT_VULKAN_LAYER_DIR
                 "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/vulkan/explicit_layer.d")

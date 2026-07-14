@@ -1,5 +1,6 @@
 /cmake-build-*/
 /.cache/
+/third_party/fidelityfx_fsr31/generated/vk/*.d
 /compile_commands.json
 /imgui.ini
 /saves/

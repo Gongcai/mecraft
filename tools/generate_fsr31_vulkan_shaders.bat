@@ -87,7 +87,7 @@ for %%S in (%SHADERS%) do (
 )
 
 set GENERATED_COUNT=0
-for %%F in ("%OUTPUT_DIR%\ffx_fsr3upscaler*_permutations.h") do set /a GENERATED_COUNT+=1
+for /f %%C in ('dir /b /a-d "%OUTPUT_DIR%\ffx_fsr3upscaler*_permutations.h" 2^>nul ^| find /c /v ""') do set GENERATED_COUNT=%%C
 if not "%GENERATED_COUNT%"=="40" (
     echo Expected 40 permutation headers but found %GENERATED_COUNT%.
     exit /b 7
