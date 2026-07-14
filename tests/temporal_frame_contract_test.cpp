@@ -44,10 +44,15 @@ TemporalFrameInput completeFrame() {
     frame.textures.hdrColor = textureHandle(1u);
     frame.textures.hdrColorView = textureViewHandle(1u);
     frame.textures.depth = textureHandle(2u);
+    frame.textures.depthView = textureViewHandle(2u);
     frame.textures.velocity = textureHandle(3u);
+    frame.textures.velocityView = textureViewHandle(3u);
     frame.textures.exposure = textureHandle(4u);
+    frame.textures.exposureView = textureViewHandle(4u);
     frame.textures.reactiveMask = textureHandle(5u);
+    frame.textures.reactiveMaskView = textureViewHandle(5u);
     frame.textures.transparencyMask = textureHandle(6u);
+    frame.textures.transparencyMaskView = textureViewHandle(6u);
     frame.textures.outputHdrColor = textureHandle(7u);
     frame.textures.outputHdrColorView = textureViewHandle(7u);
     return frame;
@@ -117,10 +122,50 @@ bool testFrameValidation() {
     }
 
     frame = completeFrame();
+    frame.textures.depthView = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::MissingDepthView,
+                     "missing depth view must be rejected explicitly")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.textures.velocityView = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::MissingVelocityView,
+                     "missing velocity view must be rejected explicitly")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.textures.exposureView = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::MissingExposureView,
+                     "missing exposure view must be rejected explicitly")) {
+        return false;
+    }
+
+    frame = completeFrame();
     frame.textures.reactiveMask = {};
     if (!requireTrue(validateTemporalFrame(frame) ==
                          TemporalFrameValidationError::MissingReactiveMask,
                      "missing reactive mask must be rejected explicitly")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.textures.reactiveMaskView = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::MissingReactiveMaskView,
+                     "missing reactive-mask view must be rejected explicitly")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.textures.transparencyMaskView = {};
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::MissingTransparencyMaskView,
+                     "missing transparency-mask view must be rejected explicitly")) {
         return false;
     }
 

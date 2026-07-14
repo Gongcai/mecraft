@@ -1220,10 +1220,17 @@ void RenderScene::refreshTemporalFrameInput() {
     input.textures.hdrColor = m_lastFrameOutput.sceneColor;
     input.textures.hdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     input.textures.depth = m_lastFrameOutput.gbufferDepth;
+    input.textures.depthView = m_shared.deferredTargets->depthTextureViewHandle();
     input.textures.velocity = m_shared.deferredTargets->velocityTextureHandle();
+    input.textures.velocityView = m_shared.deferredTargets->velocityTextureViewHandle();
     input.textures.exposure = m_postProcessPass.exposureTextureHandle();
+    input.textures.exposureView = m_postProcessPass.exposureTextureViewHandle();
     input.textures.reactiveMask = m_lastFrameOutput.reactiveMask;
+    input.textures.reactiveMaskView =
+        m_shared.deferredTargets->reactiveMaskTextureViewHandle();
     input.textures.transparencyMask = m_lastFrameOutput.transparencyMask;
+    input.textures.transparencyMaskView =
+        m_shared.deferredTargets->transparencyMaskTextureViewHandle();
     input.textures.outputHdrColor = m_lastFrameOutput.sceneColor;
     input.textures.outputHdrColorView = m_postProcessPass.sceneColorTextureViewHandle();
     m_temporalFrameInput = input;

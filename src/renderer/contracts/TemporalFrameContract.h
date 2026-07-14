@@ -70,10 +70,15 @@ struct TemporalFrameTextures {
     RhiTextureHandle hdrColor;
     RhiTextureViewHandle hdrColorView;
     RhiTextureHandle depth;
+    RhiTextureViewHandle depthView;
     RhiTextureHandle velocity;
+    RhiTextureViewHandle velocityView;
     RhiTextureHandle exposure;
+    RhiTextureViewHandle exposureView;
     RhiTextureHandle reactiveMask;
+    RhiTextureViewHandle reactiveMaskView;
     RhiTextureHandle transparencyMask;
+    RhiTextureViewHandle transparencyMaskView;
     RhiTextureHandle outputHdrColor;
     RhiTextureViewHandle outputHdrColorView;
 };
@@ -103,10 +108,15 @@ enum class TemporalFrameValidationError {
     MissingHdrColor,
     MissingHdrColorView,
     MissingDepth,
+    MissingDepthView,
     MissingVelocity,
+    MissingVelocityView,
     MissingExposure,
+    MissingExposureView,
     MissingReactiveMask,
+    MissingReactiveMaskView,
     MissingTransparencyMask,
+    MissingTransparencyMaskView,
     MissingOutputHdrColor,
     MissingOutputHdrColorView
 };
@@ -136,10 +146,23 @@ enum class TemporalFrameValidationError {
         return TemporalFrameValidationError::MissingHdrColorView;
     }
     if (!frame.textures.depth.isValid()) return TemporalFrameValidationError::MissingDepth;
+    if (!frame.textures.depthView.isValid()) return TemporalFrameValidationError::MissingDepthView;
     if (!frame.textures.velocity.isValid()) return TemporalFrameValidationError::MissingVelocity;
+    if (!frame.textures.velocityView.isValid()) {
+        return TemporalFrameValidationError::MissingVelocityView;
+    }
     if (!frame.textures.exposure.isValid()) return TemporalFrameValidationError::MissingExposure;
+    if (!frame.textures.exposureView.isValid()) {
+        return TemporalFrameValidationError::MissingExposureView;
+    }
     if (!frame.textures.reactiveMask.isValid()) return TemporalFrameValidationError::MissingReactiveMask;
+    if (!frame.textures.reactiveMaskView.isValid()) {
+        return TemporalFrameValidationError::MissingReactiveMaskView;
+    }
     if (!frame.textures.transparencyMask.isValid()) return TemporalFrameValidationError::MissingTransparencyMask;
+    if (!frame.textures.transparencyMaskView.isValid()) {
+        return TemporalFrameValidationError::MissingTransparencyMaskView;
+    }
     if (!frame.textures.outputHdrColor.isValid()) return TemporalFrameValidationError::MissingOutputHdrColor;
     if (!frame.textures.outputHdrColorView.isValid()) {
         return TemporalFrameValidationError::MissingOutputHdrColorView;
