@@ -47,8 +47,8 @@ void main() {
 #endif
     }
 #ifdef PARTICLE_DEFERRED
-    vec2 screenUv = gl_FragCoord.xy / max(uScreenParams.xy, vec2(1.0));
-    vec2 voxelLight = texture(uVoxelLightTexture, screenUv).rg;
+    vec2 textureUv = gl_FragCoord.xy / max(uScreenParams.xy, vec2(1.0));
+    vec2 voxelLight = texture(uVoxelLightTexture, textureUv).rg;
     albedo *= max(max(voxelLight.r, voxelLight.g), 0.05);
 #endif
     fragColor = vec4(albedo, texel.a * vAlpha);

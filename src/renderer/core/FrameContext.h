@@ -166,7 +166,7 @@ struct FrameContext {
     RhiTextureViewHandle sceneCaptureColorView;
     RhiTextureViewHandle sceneCaptureDepthView;
 
-    // TAA jitter
+    // Projection-space UV jitter. Positive Y follows the bottom-left clip UV domain.
     glm::vec2 jitter = glm::vec2(0.0f);
     glm::vec2 prevJitter = glm::vec2(0.0f);
 

@@ -1,8 +1,10 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
 #include "render_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneLightingTex;
@@ -77,8 +79,8 @@ vec3 tonemapDebugSafe(vec3 color) {
     return max(color, vec3(0.0));
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
@@ -205,16 +207,17 @@ void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment
 }
 
 void main() {
-    vec4 scene = texture(uSceneLightingTex, vTexCoord);
-    float depth = texture(uDepthTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    vec4 scene = texture(uSceneLightingTex, textureUv);
+    float depth = texture(uDepthTex, textureUv).r;
     vec3 color = scene.rgb;
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
 
     // DerivativeMain deferred5.fsh:168-176: clouds composited ONLY on sky pixels.
     // Geometry pixels never get cloud blending (clouds are always behind geometry).
-    vec4 cloud = texture(uCloudTex, vTexCoord);
+    vec4 cloud = texture(uCloudTex, textureUv);
     if (depth >= 0.9999) {
-        vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
+        vec3 skyPos = reconstructWorldPosition(vClipUv, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
         // DerivativeMain composites live cloud data over raw colortex5 sky.
         // Using the cloudy atlas half here double-applies sky/cloud attenuation.
@@ -240,14 +243,14 @@ void main() {
     // DerivativeMain composite1 convention:
     // - translucent surfaces use reflection.a as scene pass-through
     // - opaque reflective surfaces add reflection.rgb directly
-    vec4 reflection = texture(uReflectionTex, vTexCoord);
+    vec4 reflection = texture(uReflectionTex, textureUv);
 
     // Reflection debug: bypass composite, output raw reflection data.
     if (uReflectionDebugMode > 0) {
         if (uReflectionDebugMode == 6) {
             // Composite delta: actual contribution of reflection to final scene.
             float compositeStr = clamp(uReflectionCompositeStrength, 0.0, 1.0);
-            SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+            SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
             TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
             vec3 delta = transMask.isTranslucent
                 ? compositeStr * (reflection.rgb - color * (1.0 - reflection.a))
@@ -268,15 +271,15 @@ void main() {
         return;
     }
 
-    SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
-    SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+    SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
+    SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
 #ifdef MECRAFT_SCENE_VOXEL_GI
     if (uVoxelGiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
-        vec4 normalAo = texture(uNormalAoTex, vTexCoord);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
+        vec4 normalAo = texture(uNormalAoTex, textureUv);
         vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
-        vec3 albedo = texture(uAlbedoTex, vTexCoord).rgb;
+        vec3 albedo = texture(uAlbedoTex, textureUv).rgb;
         vec3 voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, normalAo.a, color);
         if (uVoxelGiDebugEnabled != 0) {
             FragColor = vec4(max(voxelGi, vec3(0.0)) * 6.0, 1.0);
@@ -286,7 +289,7 @@ void main() {
     }
 #endif
     if (uSsgiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
-        vec4 ssgi = texture(uSsgiTex, vTexCoord);
+        vec4 ssgi = texture(uSsgiTex, textureUv);
         float confidence = smoothstep(0.06, 0.45, ssgi.a);
         float lowLightWeight = 1.0 - smoothstep(0.08, 0.85, luminance(color));
         float surfaceWeight = mix(0.28, 1.0, lowLightWeight);
@@ -308,7 +311,7 @@ void main() {
     // For stained glass: absorb light through colored medium.
     // For ice: tint by squared albedo (approximates volumetric absorption).
     if (scene.a > 0.5 && depth < 0.9999) {
-        vec3 transAlbedo = texture(uAlbedoTex, vTexCoord).rgb;
+        vec3 transAlbedo = texture(uAlbedoTex, textureUv).rgb;
         if (transMask.isStainedGlass) {
             // Beer-Lambert absorption: darker albedo = more absorption.
             vec3 absorbColor = mix(vec3(1.0), transAlbedo, 0.72);
@@ -322,7 +325,8 @@ void main() {
     // Water uses detailed Beer-Lambert + sky scatter; lava/powder_snow use CommonFog only.
     // Blindness/darkness CommonFog applies regardless of eye medium.
     {
-        vec3 fogWorldPos = reconstructWorldPosition(vTexCoord, depth < 0.9999 ? depth : 0.9999);
+        vec3 fogWorldPos = reconstructWorldPosition(
+            vClipUv, depth < 0.9999 ? depth : 0.9999);
         float fogDistance = length(fogWorldPos - uCameraPos);
         if (uIsEyeInWater == 1) {
             applyUnderwaterFog(color, fogDistance, env);

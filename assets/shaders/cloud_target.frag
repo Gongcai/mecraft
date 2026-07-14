@@ -1,6 +1,9 @@
 #version 450 core
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uDepthTex;
@@ -57,8 +60,8 @@ const float planetRadius = 6371000.0;
 
 vec3 saturate3(vec3 x) { return clamp(x, vec3(0.0), vec3(1.0)); }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
@@ -264,8 +267,9 @@ float skyLightOcclusionAt(vec3 pos, float height01, float weatherCoverage, float
 }
 
 void main() {
-    float depth = texture(uDepthTex, vTexCoord).r;
-    vec3 targetPos = reconstructWorldPosition(vTexCoord, depth >= 0.9999 ? 1.0 : depth);
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float depth = texture(uDepthTex, textureUv).r;
+    vec3 targetPos = reconstructWorldPosition(vClipUv, depth >= 0.9999 ? 1.0 : depth);
     vec3 ray = normalize(targetPos - uCameraPos);
 
     // --- Lighting environment from SkyCapture ---
@@ -284,7 +288,7 @@ void main() {
     vec3 skyRadiance = sampleSkyRadiance(uSkyCaptureTex, ray);
     float LdotV = dot(ray, sunDir);
     float moonLdotV = dot(ray, moonDir);
-    float jitter = sampleCloudNoise(vTexCoord * 23.0 + (uTime * uCloudTimeScale) * 0.01);
+    float jitter = sampleCloudNoise(vScreenUv * 23.0 + (uTime * uCloudTimeScale) * 0.01);
 
     // ---- Planar clouds (cirrus layer) ----
     // DerivativeMain Deferred1.glsl:337-338: cirrus gated by cloudDynamicWeather.y < 0.5
@@ -446,9 +450,11 @@ void main() {
         if (cloudDist <= 0.0) cloudDist = 10000.0;
         vec3 cloudWorldPos = uCameraPos + ray * cloudDist;
         vec4 prevClip = uPreviousViewProj * vec4(cloudWorldPos, 1.0);
-        vec2 prevUv = prevClip.xy / max(prevClip.w, 0.0001) * 0.5 + 0.5;
-        if (prevUv == clamp(prevUv, 0.0, 1.0)) {
-            historyCloud = texture(uHistoryCloudTex, prevUv);
+        vec2 prevClipUv = prevClip.xy / max(prevClip.w, 0.0001) * 0.5 + 0.5;
+        vec2 prevScreenUv = rhiScreenUvToClipUv(prevClipUv);
+        if (prevScreenUv == clamp(prevScreenUv, 0.0, 1.0)) {
+            historyCloud = texture(
+                uHistoryCloudTex, rhiScreenUvToTextureUv(prevScreenUv));
             historyValid = true;
         }
     }

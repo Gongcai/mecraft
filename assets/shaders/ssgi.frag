@@ -1,8 +1,10 @@
 #version 450 core
 
 #include "gbuffer_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneLightingTex;
@@ -37,8 +39,8 @@ layout(std140, binding = 6) uniform SsgiBaseParams {
 const float PI = 3.14159265359;
 const float GOLDEN_ANGLE = 2.39996322973;
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
@@ -54,8 +56,9 @@ float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
-vec3 filteredRadiance(vec2 uv, float depth, vec3 worldPos, vec3 normal) {
-    vec3 centerRadiance = max(texture(uSceneLightingTex, uv).rgb, vec3(0.0));
+vec3 filteredRadiance(vec2 screenUv, float depth, vec3 worldPos, vec3 normal) {
+    vec2 textureUv = rhiScreenUvToTextureUv(screenUv);
+    vec3 centerRadiance = max(texture(uSceneLightingTex, textureUv).rgb, vec3(0.0));
     float filterStrength = clamp(uRadianceFilterStrength, 0.0, 1.0);
     if (filterStrength <= 1e-4) {
         return centerRadiance;
@@ -72,22 +75,25 @@ vec3 filteredRadiance(vec2 uv, float depth, vec3 worldPos, vec3 normal) {
     );
 
     for (int i = 0; i < 4; ++i) {
-        vec2 sampleUv = uv + offsets[i] * texelSize;
-        if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
+        vec2 sampleScreenUv = screenUv + offsets[i] * texelSize;
+        if (sampleScreenUv.x <= 0.0 || sampleScreenUv.y <= 0.0 ||
+            sampleScreenUv.x >= 1.0 || sampleScreenUv.y >= 1.0) {
             continue;
         }
 
-        float sampleDepth = texture(uDepthTex, sampleUv).r;
+        vec2 sampleTextureUv = rhiScreenUvToTextureUv(sampleScreenUv);
+        float sampleDepth = texture(uDepthTex, sampleTextureUv).r;
         if (sampleDepth >= 0.9999) {
             continue;
         }
 
-        vec3 sampleWorld = reconstructWorldPosition(sampleUv, sampleDepth);
-        vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleUv).rgb * 2.0 - 1.0);
+        vec3 sampleWorld = reconstructWorldPosition(
+            rhiScreenUvToClipUv(sampleScreenUv), sampleDepth);
+        vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleTextureUv).rgb * 2.0 - 1.0);
         float depthWeight = exp2(-length(sampleWorld - worldPos) * 1.75);
         float normalWeight = pow(max(dot(sampleNormal, normal), 0.0), 24.0);
         float weight = depthWeight * normalWeight * 0.5;
-        radianceSum += max(texture(uSceneLightingTex, sampleUv).rgb, vec3(0.0)) * weight;
+        radianceSum += max(texture(uSceneLightingTex, sampleTextureUv).rgb, vec3(0.0)) * weight;
         weightSum += weight;
     }
 
@@ -96,21 +102,22 @@ vec3 filteredRadiance(vec2 uv, float depth, vec3 worldPos, vec3 normal) {
 }
 
 void main() {
-    float centerDepth = texture(uDepthTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float centerDepth = texture(uDepthTex, textureUv).r;
     if (centerDepth >= 0.9999) {
         FragColor = vec4(0.0);
         return;
     }
 
-    SurfaceMaterialAux centerAux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+    SurfaceMaterialAux centerAux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
     if (decodeTranslucentMask(centerAux.materialKind).isTranslucent) {
         FragColor = vec4(0.0);
         return;
     }
 
-    vec3 centerWorld = reconstructWorldPosition(vTexCoord, centerDepth);
-    vec3 centerNormal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
-    vec3 centerAlbedo = texture(uAlbedoTex, vTexCoord).rgb;
+    vec3 centerWorld = reconstructWorldPosition(vClipUv, centerDepth);
+    vec3 centerNormal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+    vec3 centerAlbedo = texture(uAlbedoTex, textureUv).rgb;
     float viewDistance = max(length(centerWorld - uCameraPos), 0.5);
 
     ivec2 noiseSize = textureSize(uNoiseTex, 0);
@@ -127,22 +134,26 @@ void main() {
 
     for (int i = 0; i < sampleCount; ++i) {
         vec2 offset = spiralSample(i, sampleCount, jitter) * projectedRadius * aspectScale;
-        vec2 sampleUv = vTexCoord + offset;
-        if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
+        vec2 sampleScreenUv = vScreenUv + offset;
+        if (sampleScreenUv.x <= 0.0 || sampleScreenUv.y <= 0.0 ||
+            sampleScreenUv.x >= 1.0 || sampleScreenUv.y >= 1.0) {
             continue;
         }
 
-        float sampleDepth = texture(uDepthTex, sampleUv).r;
+        vec2 sampleTextureUv = rhiScreenUvToTextureUv(sampleScreenUv);
+        float sampleDepth = texture(uDepthTex, sampleTextureUv).r;
         if (sampleDepth >= 0.9999) {
             continue;
         }
 
-        SurfaceMaterialAux sampleAux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, sampleUv));
+        SurfaceMaterialAux sampleAux = unpackGBufferMaterialAux(
+            texture(uMaterialAuxTex, sampleTextureUv));
         if (decodeTranslucentMask(sampleAux.materialKind).isTranslucent) {
             continue;
         }
 
-        vec3 sampleWorld = reconstructWorldPosition(sampleUv, sampleDepth);
+        vec3 sampleWorld = reconstructWorldPosition(
+            rhiScreenUvToClipUv(sampleScreenUv), sampleDepth);
         vec3 toSample = sampleWorld - centerWorld;
         float distSq = dot(toSample, toSample);
         if (distSq <= 1e-5) {
@@ -155,7 +166,7 @@ void main() {
         }
 
         vec3 dir = toSample / dist;
-        vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleUv).rgb * 2.0 - 1.0);
+        vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleTextureUv).rgb * 2.0 - 1.0);
         float receiverTerm = max(dot(centerNormal, dir), 0.0);
         float emitterTerm = max(dot(sampleNormal, -dir), 0.0);
         if (receiverTerm <= 0.018 || emitterTerm <= 0.018) {
@@ -168,8 +179,9 @@ void main() {
         float attenuation = distanceFade / (1.0 + distSq * 0.18);
         float weight = facing * attenuation * mix(0.74, 1.0, contactThickness);
 
-        vec3 sampleAlbedo = texture(uAlbedoTex, sampleUv).rgb;
-        vec3 radiance = filteredRadiance(sampleUv, sampleDepth, sampleWorld, sampleNormal);
+        vec3 sampleAlbedo = texture(uAlbedoTex, sampleTextureUv).rgb;
+        vec3 radiance = filteredRadiance(
+            sampleScreenUv, sampleDepth, sampleWorld, sampleNormal);
         radiance *= min(1.0, 10.0 / max(luminance(radiance), 1e-4));
         vec3 albedoChroma = min(sampleAlbedo / max(luminance(sampleAlbedo), 0.18), vec3(3.0));
         radiance = mix(radiance, albedoChroma * luminance(radiance), clamp(uColorBleedStrength, 0.0, 1.0));

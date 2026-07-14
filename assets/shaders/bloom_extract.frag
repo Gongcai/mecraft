@@ -2,11 +2,13 @@
 
 // DerivativeMain/program/Post/DownSample.glsl::DualBlurDownSample.
 // Mecraft adaptation: each bloom mip is a separate FBO. The C++ pass binds
-// DerivativeMain lod 1..7 to Mecraft bloom mip 0..6, so vTexCoord is already
+// DerivativeMain lod 1..7 to Mecraft bloom mip 0..6, so the texture UV is already
 // the tile-local coord after DerivativeMain's CalculateTileOffset mapping.
 // BLUR_SAMPLES=1 matches DerivativeMain default.
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneTex;
@@ -34,7 +36,7 @@ vec3 DualBlurDownSample(vec2 uv, int lod) {
 
 void main() {
     int lod = clamp(uSourceLod, 1, 7);
-    vec3 bloom = DualBlurDownSample(vTexCoord, lod);
+    vec3 bloom = DualBlurDownSample(rhiScreenUvToTextureUv(vScreenUv), lod);
 
     // DerivativeMain DownSample: raw HDR downsample, no brightness threshold.
     // Exposure compensation in Grade (bloomAmount /= fma(max(exposure,1.0),0.7,0.3))

@@ -7,8 +7,9 @@
 //   translucent: rgb = reflected radiance * specular, a = scene pass-through
 
 #include "gbuffer_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uCurrentTex;
@@ -32,7 +33,7 @@ vec3 reconstructNormal(vec3 packedNormal) {
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
-    vec2 screenCoord = gl_FragCoord.xy * texelSize;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
 
     vec4 current = texelFetch(uCurrentTex, texel, 0);
     float depth = texelFetch(uDepthTex, texel, 0).r;
@@ -54,7 +55,7 @@ void main() {
 
     // Reproject using velocity buffer
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
-    vec2 prevCoord = screenCoord - velocity;
+    vec2 prevCoord = textureUv - velocity;
 
     // Out-of-bounds history: use current frame
     if (prevCoord.x < 0.0 || prevCoord.x > 1.0 ||

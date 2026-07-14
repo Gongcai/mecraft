@@ -1,4 +1,6 @@
 #version 450 core
+
+#include "rhi_screen_coordinates.glsl"
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec2 aUv;
 layout(location = 2) in int aNormal;
@@ -39,5 +41,9 @@ void main() {
     vec4 previousClip = uPreviousModelViewProj * vec4(aPosition, 1.0);
     vec2 currentNdc = gl_Position.xy / max(gl_Position.w, 0.00001);
     vec2 previousNdc = previousClip.xy / max(previousClip.w, 0.00001);
-    vVelocity = (currentNdc - previousNdc) * 0.5;
+    vec2 currentClipUv = currentNdc * 0.5 + 0.5;
+    vec2 previousClipUv = previousNdc * 0.5 + 0.5;
+    vec2 currentTextureUv = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(currentClipUv));
+    vec2 previousTextureUv = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(previousClipUv));
+    vVelocity = currentTextureUv - previousTextureUv;
 }

@@ -1,4 +1,5 @@
 #version 450 core
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 fragColor;
 layout(binding = 0) uniform sampler3D uAtmosphereLut;
 layout(push_constant) uniform RhiPushConstants {
@@ -8,8 +9,9 @@ layout(push_constant) uniform RhiPushConstants {
 #define MECRAFT_ATMOSPHERE_EXTERNAL_UNIFORMS 1
 #define uMoonPhaseFlux uCloudDynamicWeatherMoonFlux.w
 #include "atmosphere_lut.glsl"
+#include "rhi_screen_coordinates.glsl"
 void main() {
-    int row = int(gl_FragCoord.y);
+    int row = int(rhiScreenUvToTextureUv(vScreenUv).y * 6.0);
     vec3 camera = vec3(0.0, atmPlanetRadius + max(uSunDirectionAltitude.w, 0.0), 0.0);
     vec3 sunIrradiance;
     vec3 moonIrradiance;

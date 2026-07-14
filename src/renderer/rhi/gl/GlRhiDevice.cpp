@@ -1979,7 +1979,6 @@ bool GlRhiCommandList::replay(const bool validationOnly) {
                 bool hasDepth = false;
                 uint64_t colorCount = 0u;
                 valid = readValue(offset, info.renderArea) &&
-                        readValue(offset, info.coordinateSpace) &&
                         readValue(offset, colorCount) &&
                         readValue(offset, hasDepth);
                 if (!valid || colorCount > static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) ||
@@ -2383,7 +2382,6 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         }
         if (!beginRecordedCommand(CommandType::BeginRendering)) return;
         appendValue(info.renderArea);
-        appendValue(info.coordinateSpace);
         appendValue(static_cast<uint64_t>(info.colorAttachmentCount));
         appendValue(info.depthStencilAttachment != nullptr);
         appendBytes(info.colorAttachments,

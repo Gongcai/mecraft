@@ -1,5 +1,6 @@
 #version 450 core
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 fragColor;
 layout(binding = 0) uniform sampler3D uAtmosphereLut;
 layout(push_constant) uniform RhiPushConstants {
@@ -12,7 +13,9 @@ layout(push_constant) uniform RhiPushConstants {
 const float kPi = 3.14159265359;
 const float kTwoPi = 6.28318530718;
 void main() {
-    vec2 uv = clamp(vTexCoord, vec2(0.0), vec2(1.0));
+    // Convert only the local raw-atlas viewport coordinate. Atlas region placement is handled
+    // separately by render_contract.glsl and must not use a whole-texture Y flip.
+    vec2 uv = clamp(rhiScreenUvToTextureUv(vScreenUv), vec2(0.0), vec2(1.0));
     float u = fract((uv.x - 2.0 / float(skyCaptureRes.x)) /
                     (1.0 - 4.0 / float(skyCaptureRes.x)));
     float phi = u * kTwoPi;

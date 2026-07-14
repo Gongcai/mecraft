@@ -7,6 +7,8 @@
 #ifndef MECRAFT_RENDER_CONTRACT_GLSL
 #define MECRAFT_RENDER_CONTRACT_GLSL
 
+#include "rhi_screen_coordinates.glsl"
+
 // Sky capture resolution — matches DerivativeMain Settings.glsl skyCaptureRes.
 // Texture is 256 wide x 514 tall (skyCaptureRes.x + 1 metadata column, skyCaptureRes.y * 2 + 2 rows).
 // Rows 0..skyCaptureRes.y+1 (0..257):  raw atmospheric sky radiance (equirectangular).
@@ -19,7 +21,13 @@ const ivec2 skyCaptureRes = ivec2(255, 256);
 //----------------------------------------------------------------------------//
 
 vec3 sampleSkyMetadata(sampler2D skyCapture, int row) {
+#if defined(RHI_VULKAN)
+    const int metadataRowCount = 6;
+    int nativeRow = skyCaptureRes.y * 2 + 2 - metadataRowCount + row;
+    return texelFetch(skyCapture, ivec2(skyCaptureRes.x, nativeRow), 0).rgb;
+#else
     return texelFetch(skyCapture, ivec2(skyCaptureRes.x, row), 0).rgb;
+#endif
 }
 
 // Sun irradiance on horizontal ground plane (lux, physically scaled).
@@ -87,14 +95,29 @@ vec3 unprojectSky(vec2 uv) {
     return normalize(vec3(sin(phi) * sinTheta, cos(theta), cos(phi) * sinTheta));
 }
 
+// Converts a logical SkyCapture atlas UV to the backend-native atlas placement.
+// Vulkan render-area conversion swaps the raw and cloudy vertical regions while preserving
+// each region's internal row order, so this mapping must not use a whole-texture Y flip.
+vec2 skyCaptureTextureUv(vec2 atlasUv) {
+#if defined(RHI_VULKAN)
+    float rawRegionEnd = rawSkyRows / skyTexHeight;
+    float nativeV = atlasUv.y < rawRegionEnd
+        ? atlasUv.y + float(skyCaptureRes.y) / skyTexHeight
+        : atlasUv.y - rawSkyRows / skyTexHeight;
+    return vec2(atlasUv.x, nativeV);
+#else
+    return atlasUv;
+#endif
+}
+
 // Convenience: sample raw sky radiance from a world direction.
 vec3 sampleSkyRadiance(sampler2D skyCapture, vec3 worldDir) {
-    return texture(skyCapture, projectSky(worldDir)).rgb;
+    return texture(skyCapture, skyCaptureTextureUv(projectSky(worldDir))).rgb;
 }
 
 // Convenience: sample cloudy sky radiance (sky + baked clouds) from a world direction.
 vec3 sampleSkyRadianceCloudy(sampler2D skyCapture, vec3 worldDir) {
-    return texture(skyCapture, projectSkyCloudy(worldDir)).rgb;
+    return texture(skyCapture, skyCaptureTextureUv(projectSkyCloudy(worldDir))).rgb;
 }
 
 #endif

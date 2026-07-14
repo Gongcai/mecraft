@@ -32,8 +32,9 @@ void main() {
 #ifdef RAIN_SCENE_DEPTH
     {
         ivec2 depthSize = textureSize(uSceneDepthTexture, 0);
-        vec2 screenUv = gl_FragCoord.xy / max(uAlphaScreenDepth.yz, vec2(1.0));
-        ivec2 depthTexel = ivec2(clamp(screenUv, vec2(0.0), vec2(0.999999)) * vec2(depthSize));
+        vec2 nativeUv = gl_FragCoord.xy / max(uAlphaScreenDepth.yz, vec2(1.0));
+        ivec2 depthTexel = ivec2(
+            clamp(nativeUv, vec2(0.0), vec2(0.999999)) * vec2(depthSize));
         float sceneDepth = texelFetch(uSceneDepthTexture, depthTexel, 0).r;
         if (sceneDepth < 0.999999) {
             alpha *= smoothstep(0.00004, 0.0012, sceneDepth - gl_FragCoord.z);

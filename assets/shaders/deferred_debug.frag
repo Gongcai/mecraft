@@ -4,6 +4,7 @@
 #define MECRAFT_SHADOW_CASCADE_TYPE_DEFINED
 #define MECRAFT_SHADOW_EXTERNAL_UNIFORMS
 #define MECRAFT_SHADOW_NO_SAMPLER
+#include "rhi_screen_coordinates.glsl"
 
 struct CsmCascade {
     mat4 viewProj;
@@ -14,7 +15,8 @@ struct CsmCascade {
     float depthExtent;
 };
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uAlbedoTex;
@@ -120,7 +122,7 @@ float linearizeDepthPreview(float depth) {
     return clamp(linearDepth / 192.0, 0.0, 1.0);
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth);
 
 float vfogLinearDepthFromDepth(float depth) {
     if (depth >= 0.9999) {
@@ -166,8 +168,8 @@ vec4 debugSpatialUpscaleVolumetric(vec2 uv) {
     return sum / max(weightSum, 0.0001);
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 world = uInvViewProj * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 world = uInvViewProj * vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     return world.xyz / max(world.w, 0.0001);
 }
 
@@ -215,101 +217,102 @@ bool shadowUvOutOfBounds(vec3 shadowUv) {
 }
 
 void main() {
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
     if (uDebugViewMode == 1) {
-        FragColor = vec4(texture(uAlbedoTex, vTexCoord).rgb, 1.0);
+        FragColor = vec4(texture(uAlbedoTex, textureUv).rgb, 1.0);
         return;
     }
     if (uDebugViewMode == 2) {
-        FragColor = vec4(texture(uNormalAoTex, vTexCoord).rgb, 1.0);
+        FragColor = vec4(texture(uNormalAoTex, textureUv).rgb, 1.0);
         return;
     }
     if (uDebugViewMode == 3) {
-        float ao = texture(uNormalAoTex, vTexCoord).a;
+        float ao = texture(uNormalAoTex, textureUv).a;
         FragColor = vec4(vec3(ao), 1.0);
         return;
     }
     if (uDebugViewMode == 4) {
-        vec2 light = texture(uVoxelLightTex, vTexCoord).rg;
+        vec2 light = texture(uVoxelLightTex, textureUv).rg;
         FragColor = vec4(light.r, light.g, 0.0, 1.0);
         return;
     }
     if (uDebugViewMode == 5) {
-        SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
+        SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
         FragColor = vec4(material.roughness, material.f0 * 3.0, material.emission, 1.0);
         return;
     }
     if (uDebugViewMode == 6) {
-        SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
+        SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
         FragColor = vec4(heatmap(material.sss), 1.0);
         return;
     }
     if (uDebugViewMode == 7) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         FragColor = vec4(heatmap(1.0 - linearizeDepthPreview(depth)), 1.0);
         return;
     }
     if (uDebugViewMode == 8) {
-        FragColor = vec4(vec3(texture(uShadowMapRaw, vec3(vTexCoord, 0.0)).r), 1.0);
+        FragColor = vec4(vec3(texture(uShadowMapRaw, vec3(textureUv, 0.0)).r), 1.0);
         return;
     }
     if (uDebugViewMode == 9) {
-        FragColor = vec4(vec3(texture(uSsaoTex, vTexCoord).r), 1.0);
+        FragColor = vec4(vec3(texture(uSsaoTex, textureUv).r), 1.0);
         return;
     }
     if (uDebugViewMode == 10) {
-        FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, textureUv).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 11) {
-        FragColor = vec4(tonemapPreview(texture(uSceneCompositeTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uSceneCompositeTex, textureUv).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 12) {
-        FragColor = vec4(tonemapPreview(texture(uTransparentCompositeTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uTransparentCompositeTex, textureUv).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 13) {
-        float depth = texture(uTransparentCompositeDepthTex, vTexCoord).r;
+        float depth = texture(uTransparentCompositeDepthTex, textureUv).r;
         FragColor = vec4(heatmap(1.0 - linearizeDepthPreview(depth)), 1.0);
         return;
     }
     if (uDebugViewMode == 14) {
-        vec4 volumetric = texture(uVolumetricTex, vTexCoord);
+        vec4 volumetric = texture(uVolumetricTex, textureUv);
         FragColor = vec4(tonemapPreview(volumetric.rgb * 4.0), 1.0);
         return;
     }
     if (uDebugViewMode == 15) {
-        float transmittance = texture(uVolumetricTex, vTexCoord).a;
+        float transmittance = texture(uVolumetricTex, textureUv).a;
         FragColor = vec4(vec3(transmittance), 1.0);
         return;
     }
     if (uDebugViewMode == 16) {
-        FragColor = vec4(tonemapPreview(texture(uSkyCaptureTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uSkyCaptureTex, textureUv).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 17) {
-        vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
+        vec2 velocity = texture(uVelocityTex, textureUv).rg;
         float speed = length(velocity);
         FragColor = vec4(heatmap(speed * 50.0), 1.0);
         return;
     }
     if (uDebugViewMode == 18) {
-        FragColor = vec4(tonemapPreview(texture(uHistorySceneTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uHistorySceneTex, textureUv).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 19) {
-        float depth = texture(uHistoryDepthTex, vTexCoord).r;
+        float depth = texture(uHistoryDepthTex, textureUv).r;
         FragColor = vec4(heatmap(1.0 - linearizeDepthPreview(depth)), 1.0);
         return;
     }
     if (uDebugViewMode == 20) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
 
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec3 shadowUv = localShadowUvFromWorld(worldPos);
 
         vec3 outOfBounds = vec3(0.0);
@@ -329,16 +332,16 @@ void main() {
         return;
     }
     if (uDebugViewMode == 21) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec3 cameraRelPos = worldPos - uCameraPos;
         float viewDistance = length(cameraRelPos);
         float offsetWorld = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistance);
@@ -359,16 +362,16 @@ void main() {
         return;
     }
     if (uDebugViewMode == 22) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec3 cameraRelPos = worldPos - uCameraPos;
         float viewDistance = length(cameraRelPos);
         float biasWorld = selectedShadowBiasWorld(ndotl, viewDistance, shadowDither());
@@ -379,13 +382,13 @@ void main() {
         return;
     }
     if (uDebugViewMode == 23) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
 
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         float viewDistance = length(worldPos - uCameraPos);
         int cascadeIndex = selectCsmCascade(viewDistance);
         vec3 proj = csmProjectWorld(worldPos, cascadeIndex);
@@ -401,40 +404,40 @@ void main() {
         return;
     }
     if (uDebugViewMode == 24) {
-        FragColor = vec4(tonemapPreview(texture(uReflectionTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uReflectionTex, textureUv).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 25) {
-        vec4 cloud = texture(uCloudTex, vTexCoord);
+        vec4 cloud = texture(uCloudTex, textureUv);
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
     if (uDebugViewMode == 26) {
-        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
         FragColor = vec4(heatmap(aux.materialKind / MATERIAL_ID_MAX), 1.0);
         return;
     }
     if (uDebugViewMode == 27) {
-        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
         FragColor = vec4(aux.wetnessMask, aux.porosity, aux.metalness, 1.0);
         return;
     }
     if (uDebugViewMode == 28) {
-        FragColor = vec4(tonemapPreview(texture(uHistoryReflectionTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uHistoryReflectionTex, textureUv).rgb), 1.0);
         return;
     }
     if (uDebugViewMode == 29) {
-        vec4 cloud = texture(uHistoryCloudTex, vTexCoord);
+        vec4 cloud = texture(uHistoryCloudTex, textureUv);
         FragColor = vec4(tonemapPreview(cloud.rgb * 4.0), max(cloud.a, 1.0));
         return;
     }
     if (uDebugViewMode == 30) {
-        float reflectionMask = texture(uReflectionTex, vTexCoord).a;
+        float reflectionMask = texture(uReflectionTex, textureUv).a;
         FragColor = vec4(heatmap(reflectionMask), 1.0);
         return;
     }
     if (uDebugViewMode == 31) {
-        FragColor = vec4(tonemapPreview(texture(uSceneResolvedTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uSceneResolvedTex, textureUv).rgb), 1.0);
         return;
     }
 
@@ -442,13 +445,13 @@ void main() {
     // R = shadowUv.x, G = shadowUv.y, B = warp density heatmap
     // Helps identify if ghosting correlates with specific shadow map regions or warp compression.
     if (uDebugViewMode == 32) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
 
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec3 shadowUv = localShadowUvFromWorld(worldPos);
 
         if (shadowUvOutOfBounds(shadowUv)) {
@@ -465,12 +468,12 @@ void main() {
 
     // Debug 33: CSM cascade heatmap (blue=0, green=1, yellow=2, red=3)
     if (uDebugViewMode == 33) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         float viewDist = length(worldPos - uCameraPos);
         int cascadeIdx = selectCsmCascade(viewDist);
         FragColor = vec4(csmCascadeColor(cascadeIdx), 1.0);
@@ -482,16 +485,16 @@ void main() {
     // Green = lit (receiver depth <= shadow depth), Red = shadowed
     // Brightness = depth margin (how much lit/shadowed)
     if (uDebugViewMode == 34) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec3 cameraRelPos = worldPos - uCameraPos;
         float viewDistance = length(cameraRelPos);
         float offsetWorld = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistance);
@@ -521,16 +524,16 @@ void main() {
     // For shadowed pixels, show the shadowcolor0 texel that caused the compare.
     // Blue tint = transparent caster marker, cyan = cleared/default texel.
     if (uDebugViewMode == 35) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec3 cameraRelPos = worldPos - uCameraPos;
         float viewDistance = length(cameraRelPos);
         float offsetWorld = selectedShadowNormalOffsetWorld(cameraRelPos, ndotl, viewDistance);
@@ -542,10 +545,12 @@ void main() {
         }
 
         float bias = selectedShadowCompareBias(ndotl, viewDistance, shadowDither());
-        float shadowDepth = texture(uShadowMapRaw, vec3(shadowUv.xy, 0.0)).r;
+        vec2 shadowTextureUv = rhiScreenUvToTextureUv(
+            rhiScreenUvToClipUv(shadowUv.xy));
+        float shadowDepth = texture(uShadowMapRaw, vec3(shadowTextureUv, 0.0)).r;
         float shadowed = (shadowUv.z - bias > shadowDepth) ? 1.0 : 0.0;
-        vec4 casterColor = texture(uCsmShadowColor0Tex, vec3(shadowUv.xy, 0.0));
-        vec4 casterNormal = texture(uCsmShadowColor1Tex, vec3(shadowUv.xy, 0.0));
+        vec4 casterColor = texture(uCsmShadowColor0Tex, vec3(shadowTextureUv, 0.0));
+        vec4 casterNormal = texture(uCsmShadowColor1Tex, vec3(shadowTextureUv, 0.0));
         float cleared = step(0.995, casterColor.r) * step(0.995, casterColor.g) *
                         step(0.995, casterColor.b) * step(0.995, casterColor.a);
         vec3 normalPreview = vec3(casterNormal.rg, casterNormal.b);
@@ -559,7 +564,7 @@ void main() {
     // Debug 36-39: raw CSM depth array layers.
     if (uDebugViewMode >= 36 && uDebugViewMode <= 39) {
         int layer = clamp(uDebugViewMode - 36, 0, 3);
-        float shadowDepth = texture(uCsmShadowDepthTex, vec3(vTexCoord, float(layer))).r;
+        float shadowDepth = texture(uCsmShadowDepthTex, vec3(textureUv, float(layer))).r;
         if (shadowDepth >= 0.9999) {
             FragColor = vec4(0.015, 0.025, 0.040, 1.0);
             return;
@@ -572,14 +577,14 @@ void main() {
     // For sky pixels (depth >= 0.9999), uses view ray direction. For solid geometry,
     // reconstructs world position and shows the sky radiance in that direction.
     if (uDebugViewMode == 41) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         vec3 worldDir;
         if (depth >= 0.9999) {
             // Sky pixel: reconstruct direction from screen UV
-            vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+            vec4 farPoint = uInvViewProj * vec4(vClipUv * 2.0 - 1.0, 1.0, 1.0);
             worldDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
         } else {
-            vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+            vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
             worldDir = normalize(worldPos - uCameraPos);
         }
         vec3 sky = sampleSkyRadiance(uSkyCaptureTex, worldDir);
@@ -589,13 +594,13 @@ void main() {
 
     // Debug 42: Sky direction — cloudy sky radiance sampled by world direction.
     if (uDebugViewMode == 42) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         vec3 worldDir;
         if (depth >= 0.9999) {
-            vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+            vec4 farPoint = uInvViewProj * vec4(vClipUv * 2.0 - 1.0, 1.0, 1.0);
             worldDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
         } else {
-            vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+            vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
             worldDir = normalize(worldPos - uCameraPos);
         }
         vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, worldDir);
@@ -605,13 +610,13 @@ void main() {
 
     // Debug 43: Sky direction — raw sky with 20x exposure to reveal dim regions.
     if (uDebugViewMode == 43) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         vec3 worldDir;
         if (depth >= 0.9999) {
-            vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0, 1.0, 1.0);
+            vec4 farPoint = uInvViewProj * vec4(vClipUv * 2.0 - 1.0, 1.0, 1.0);
             worldDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
         } else {
-            vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+            vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
             worldDir = normalize(worldPos - uCameraPos);
         }
         vec3 sky = sampleSkyRadiance(uSkyCaptureTex, worldDir) * 20.0;
@@ -621,12 +626,12 @@ void main() {
 
     // Debug 40: cascade info — shows cascade index (color) and texel world size (brightness).
     if (uDebugViewMode == 40) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.02, 0.03, 0.05, 1.0);
             return;
         }
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         float viewDistance = length(worldPos - uCameraPos);
         int cascadeIdx = selectCsmCascade(viewDistance);
         vec3 cascadeColor = csmCascadeColor(cascadeIdx);
@@ -656,7 +661,7 @@ void main() {
     //   Row 3: moonIlluminance
     //   Row 5: cloudDynamicWeather
     if (uDebugViewMode == 44) {
-        vec2 uv = vTexCoord;
+        vec2 uv = textureUv;
         // Metadata region: visible 6-row panel in the bottom-right corner.
         vec2 metaPanelSize = vec2(0.26, 0.24);
         if (uv.x > 1.0 - metaPanelSize.x && uv.y < metaPanelSize.y) {
@@ -707,7 +712,7 @@ void main() {
     // Top-right: CPU sunLightColor, skyAmbientColor, horizonScatterColor, fogColor.
     // Bottom-right: SkyCapture illuminance bars (direct, sky, sun, moon).
     if (uDebugViewMode == 45) {
-        vec2 uv = vTexCoord;
+        vec2 uv = textureUv;
 
         // CPU lighting color patches (top-right, each 0.04 high, 0.12 wide)
         float patchX = 0.88;
@@ -786,7 +791,7 @@ void main() {
     // Debug 67: TAA current scratch (TemporalCurrent buffer).
     // Shows the pre-TAA scene that the temporal resolve reads as "current".
     if (uDebugViewMode == 67) {
-        FragColor = vec4(tonemapPreview(texture(uTemporalCurrentTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uTemporalCurrentTex, textureUv).rgb), 1.0);
         return;
     }
 
@@ -794,8 +799,8 @@ void main() {
     // Shows abs(current - history) amplified 4x. Bright = large divergence.
     // Helps identify where variance clip is rejecting history or where TAA fails to converge.
     if (uDebugViewMode == 68) {
-        vec3 current = texture(uTemporalCurrentTex, vTexCoord).rgb;
-        vec3 history = texture(uHistorySceneTex, vTexCoord).rgb;
+        vec3 current = texture(uTemporalCurrentTex, textureUv).rgb;
+        vec3 history = texture(uHistorySceneTex, textureUv).rgb;
         vec3 delta = abs(current - history) * 4.0;
         FragColor = vec4(clamp(delta, 0.0, 1.0), 1.0);
         return;
@@ -805,8 +810,8 @@ void main() {
     // Non-sky pixels: velocity direction as color, speed as brightness.
     // Sky pixels (depth >= 0.9999): red highlight to identify sky velocity issues.
     if (uDebugViewMode == 69) {
-        float depth = texture(uDepthTex, vTexCoord).r;
-        vec2 velocity = texture(uVelocityTex, vTexCoord).rg;
+        float depth = texture(uDepthTex, textureUv).r;
+        vec2 velocity = texture(uVelocityTex, textureUv).rg;
         float speed = length(velocity);
         if (depth >= 0.9999) {
             // Sky: show velocity magnitude with red tint
@@ -829,7 +834,7 @@ void main() {
 
     // Debug 71: Depth-aware upscaled VFog, matching volumetric_composite.fs.
     if (uDebugViewMode == 71) {
-        vec4 vfog = debugSpatialUpscaleVolumetric(vTexCoord);
+        vec4 vfog = debugSpatialUpscaleVolumetric(textureUv);
         FragColor = vec4(tonemapPreview(max(vfog.rgb, vec3(0.0)) * 4.0), 1.0);
         return;
     }
@@ -837,8 +842,8 @@ void main() {
     // Debug 78: reflection contribution after scene composite.
     // Shows how much SceneComposite differs from SceneLighting before water/VFog/TAA.
     if (uDebugViewMode == 78) {
-        vec3 lighting = texture(uSceneLightingTex, vTexCoord).rgb;
-        vec3 composite = texture(uSceneCompositeTex, vTexCoord).rgb;
+        vec3 lighting = texture(uSceneLightingTex, textureUv).rgb;
+        vec3 composite = texture(uSceneCompositeTex, textureUv).rgb;
         FragColor = vec4(tonemapPreview(abs(composite - lighting) * 32.0), 1.0);
         return;
     }
@@ -846,20 +851,20 @@ void main() {
     // Debug 79: scene TAA loss.
     // Shows the difference between unresolved current scene and resolved scene.
     if (uDebugViewMode == 79) {
-        vec3 current = texture(uTemporalCurrentTex, vTexCoord).rgb;
-        vec3 resolved = texture(uSceneResolvedTex, vTexCoord).rgb;
+        vec3 current = texture(uTemporalCurrentTex, textureUv).rgb;
+        vec3 resolved = texture(uSceneResolvedTex, textureUv).rgb;
         FragColor = vec4(tonemapPreview(abs(current - resolved) * 32.0), 1.0);
         return;
     }
 
     // Debug 80: wet surface mask used by scene TAA rain-ripple history rejection.
     if (uDebugViewMode == 80) {
-        float depth = texture(uDepthTex, vTexCoord).r;
+        float depth = texture(uDepthTex, textureUv).r;
         if (depth >= 0.9999) {
             FragColor = vec4(0.0, 0.0, 0.0, 1.0);
             return;
         }
-        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+        SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
         TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
         float wetHistoryReject = transMask.isTranslucent
             ? 0.0
@@ -869,24 +874,24 @@ void main() {
     }
 
     if (uDebugViewMode == 81) {
-        FragColor = vec4(tonemapPreview(texture(uSsgiTex, vTexCoord).rgb), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uSsgiTex, textureUv).rgb), 1.0);
         return;
     }
 
     if (uDebugViewMode == 82) {
-        FragColor = vec4(tonemapPreview(texture(uSsgiTex, vTexCoord).rgb * 8.0), 1.0);
+        FragColor = vec4(tonemapPreview(texture(uSsgiTex, textureUv).rgb * 8.0), 1.0);
         return;
     }
 
     if (uDebugViewMode == 83) {
-        FragColor = vec4(vec3(texture(uSsgiTex, vTexCoord).a), 1.0);
+        FragColor = vec4(vec3(texture(uSsgiTex, textureUv).a), 1.0);
         return;
     }
 
     // Debug 46-77: Volumetric fog / UW VL / shadow contract debug.
     // The volumetric fog pass outputs debug colors when uVolumetricDebugMode is active.
     if (uDebugViewMode >= 46 && uDebugViewMode <= 77) {
-        vec4 vfog = texture(uVolumetricTex, vTexCoord);
+        vec4 vfog = texture(uVolumetricTex, textureUv);
         if (uDebugViewMode == 48 || uDebugViewMode == 49) {
             // Sky/Sun scattering: use tonemap to reveal small HDR values
             FragColor = vec4(tonemapPreview(max(vfog.rgb, vec3(0.0))), 1.0);
@@ -900,5 +905,5 @@ void main() {
         return;
     }
 
-    FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, vTexCoord).rgb), 1.0);
+    FragColor = vec4(tonemapPreview(texture(uSceneLightingTex, textureUv).rgb), 1.0);
 }

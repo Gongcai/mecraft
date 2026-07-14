@@ -1,6 +1,9 @@
 #version 450 core
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uDepthTex;
@@ -187,8 +190,8 @@ vec3 heatmap(float v) {
     return v < 0.35 ? a : (v < 0.72 ? b : c);
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec2 ndcXY = uv * 2.0 - 1.0 - uJitter;
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec2 ndcXY = clipUv * 2.0 - 1.0 - uJitter;
     vec4 clip = vec4(ndcXY, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
@@ -498,7 +501,8 @@ vec4 UnderwaterVolumetricLight(vec3 worldPos, vec3 worldDir, float dither) {
 }
 
 void main() {
-    float depth = texture(uDepthTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float depth = texture(uDepthTex, textureUv).r;
 
     vec3 viewDir;
     float marchDistance;
@@ -512,11 +516,11 @@ void main() {
             return;
         }
         // Sky pixel: reconstruct view direction and march to max distance
-        vec4 farPoint = uInvViewProj * vec4(vTexCoord * 2.0 - 1.0 - uJitter, 1.0, 1.0);
+        vec4 farPoint = uInvViewProj * vec4(vClipUv * 2.0 - 1.0 - uJitter, 1.0, 1.0);
         viewDir = normalize(farPoint.xyz / max(farPoint.w, 0.0001) - uCameraPos);
         marchDistance = max(uVolumetricMaxDistance, 1.0);
     } else {
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec3 ray = worldPos - uCameraPos;
         float distance = length(ray);
         viewDir = ray / max(distance, 0.0001);
@@ -526,9 +530,9 @@ void main() {
     // Shadow contract debug views (debug view 75-77, shader mode 30-32).
     // Keep this before the underwater branch so UW VL does not hide the contract diagnostics.
     if (uVolumetricDebugMode >= 30 && uVolumetricDebugMode <= 32) {
-        float sceneDepth = texture(uDepthTex, vTexCoord).r;
+        float sceneDepth = texture(uDepthTex, textureUv).r;
         if (sceneDepth < 1.0) {
-            vec3 worldPos = reconstructWorldPosition(vTexCoord, sceneDepth);
+            vec3 worldPos = reconstructWorldPosition(vClipUv, sceneDepth);
             VFogShadowData sd = computeVolumetricShadowSetup(worldPos, normalize(uShadowLightDirection));
             if (sd.valid) {
                 vec2 uv = sd.proj.xy;
@@ -557,7 +561,7 @@ void main() {
     // DerivativeMain composite.fsh:79-85 — UW_VOLUMETRIC_LIGHT replaces overworld VFog
     if (uIsEyeInWater == 1 && uUwVolumetricLightEnabled != 0) {
         float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth < 1.0 ? depth : 0.9999);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth < 1.0 ? depth : 0.9999);
         vec4 uwResult = UnderwaterVolumetricLight(worldPos, viewDir, dither);
 
         // UW debug views (debug view 72-74, shader mode 27-29)
@@ -697,7 +701,7 @@ void main() {
     float jitter;
     if (uVolumetricStaticJitter != 0) {
         // Fixed per-pixel jitter (no camera/time dependence) for stable debug
-        jitter = fract(dot(vTexCoord, vec2(12.9898, 78.233)) + 0.5);
+        jitter = fract(dot(vScreenUv, vec2(12.9898, 78.233)) + 0.5);
     } else {
         // DerivativeMain/world0/composite.fsh computes the half-resolution fog
         // seed as: texel = ivec2(gl_FragCoord.xy); texel *= 2; texel & 255.
@@ -1102,7 +1106,7 @@ void main() {
     if (uVolumetricDebugMode == 22) {
         // Cloud shadow factor at surface position (for CLOUDS_SHADOW validation).
         // White = fully lit, black = fully shadowed.
-        vec3 worldPos = reconstructWorldPosition(vTexCoord, depth < 1.0 ? depth : 0.9999);
+        vec3 worldPos = reconstructWorldPosition(vClipUv, depth < 1.0 ? depth : 0.9999);
         float cs = vfogCloudShadow(worldPos, shadowLightDir);
         FragColor = vec4(vec3(clamp(cs, 0.0, 1.0)), 1.0);
         return;

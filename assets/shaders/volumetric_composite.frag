@@ -1,6 +1,8 @@
 #version 450 core
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneTex;
@@ -66,7 +68,8 @@ vec4 spatialUpscaleVolumetric(vec2 uv) {
 }
 
 void main() {
-    vec3 scene = texture(uSceneTex, vTexCoord).rgb;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    vec3 scene = texture(uSceneTex, textureUv).rgb;
 
     // When volumetric fog is disabled, output transmittance=1.0 (no fog) so that
     // Bloomy Fog in postprocess doesn't misinterpret alpha=0 as "fully fogged".
@@ -76,8 +79,8 @@ void main() {
     }
 
     vec4 volumetric = (uCompositeFlags.z != 0)
-        ? texture(uVolumetricTex, vTexCoord)
-        : spatialUpscaleVolumetric(vTexCoord);
+        ? texture(uVolumetricTex, textureUv)
+        : spatialUpscaleVolumetric(textureUv);
     // Output fog transmittance in alpha for Bloomy Fog in postprocess.
     // volumetric.a = 1 - opacity = transmittance (from volumetric_fog.fs).
     FragColor = vec4(scene * volumetric.a + volumetric.rgb, volumetric.a);

@@ -1,6 +1,8 @@
 #version 450 core
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneTex;
@@ -1191,40 +1193,47 @@ vec3 applyCasLikeSharpen(vec3 center, vec2 sampleUv, vec2 screenUv) {
 void main() {
     g_resolvedExposure = readResolvedExposure();
 
-    vec2 centeredUv = vTexCoord - vec2(0.5, 0.5);
+    vec2 centeredUv = vScreenUv - vec2(0.5, 0.5);
     float roll = uShaderpackGradingEnabled ? 0.0 : uScreenRollRadians;
     float c = cos(roll);
     float s = sin(roll);
     mat2 rot = mat2(c, -s,
                     s,  c);
-    vec2 rolledUv = rot * centeredUv + vec2(0.5, 0.5);
+    vec2 rolledScreenUv = rot * centeredUv + vec2(0.5, 0.5);
 
     // Apply screen raindrop distortion during rain/storm
-    // Use weatherStorm as primary intensity, wetness as fallback
+    // Combine storm intensity with the wetness-driven screen-rain contribution.
     float rainIntensity = max(uWeatherStorm, uWeatherWetness * 0.5);
     vec2 raindropDistortion = vec2(0.0);
     if (rainIntensity > 0.01) {
         // Scale time appropriately - uTime cycles 0-8192 over ~2.3 hours
         // Original shader expects time in seconds with reasonable increment
         float t = uTime * 0.15; // Adjusted scale for visible but not too fast animation
-        raindropDistortion = calculateRaindropDistortion(rolledUv, t, rainIntensity);
+        raindropDistortion = calculateRaindropDistortion(
+            rolledScreenUv, t, rainIntensity);
     }
-    vec2 distortedUv = clamp(rolledUv + raindropDistortion, vec2(0.0), vec2(1.0));
+    vec2 distortedScreenUv = clamp(
+        rolledScreenUv + raindropDistortion, vec2(0.0), vec2(1.0));
+    vec2 distortedTextureUv = rhiScreenUvToTextureUv(distortedScreenUv);
+    vec2 rolledTextureUv = rhiScreenUvToTextureUv(rolledScreenUv);
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
 
-    vec3 color = resolveHdrColor(distortedUv, vTexCoord);
+    vec3 color = resolveHdrColor(distortedTextureUv, vScreenUv);
     if (uBloomEnabled) {
         if (uSunRaysEnabled && uSunVisibility > 0.001 && uSunRayStrength > 0.001) {
-            vec2 toSun = uSunScreenPos - rolledUv;
+            vec2 toSun = uSunScreenPos - rolledScreenUv;
             float screenFade = 1.0 - smoothstep(0.55, 1.15, length(uSunScreenPos - vec2(0.5)));
             float rayMask = clamp(uSunVisibility * screenFade, 0.0, 1.0);
             vec3 rays = vec3(0.0);
             float weight = 0.16;
             for (int i = 1; i <= 8; ++i) {
                 float t = float(i) / 8.0;
-                vec2 sampleUv = rolledUv + toSun * t * 0.86;
-                vec2 inBounds = step(vec2(0.0), sampleUv) * step(sampleUv, vec2(1.0));
+                vec2 sampleScreenUv = rolledScreenUv + toSun * t * 0.86;
+                vec2 inBounds = step(vec2(0.0), sampleScreenUv) *
+                    step(sampleScreenUv, vec2(1.0));
                 float valid = inBounds.x * inBounds.y;
-                rays += texture(uBloomTex, sampleUv).rgb * weight * valid;
+                rays += texture(
+                    uBloomTex, rhiScreenUvToTextureUv(sampleScreenUv)).rgb * weight * valid;
                 weight *= 0.82;
             }
             color += rays * uSunRayStrength * rayMask;
@@ -1240,7 +1249,7 @@ void main() {
     // DerivativeMain Grade.glsl order: Exposure -> Vignette -> Tonemap
     color = applyExposure(color);
     if (uShaderpackGradingEnabled) {
-        color = applyVignette(color, rolledUv);
+        color = applyVignette(color, rolledScreenUv);
     }
     vec3 graded = applyTonemap(color);
 
@@ -1253,7 +1262,7 @@ void main() {
     }
     if (uPostprocessDebugMode == 2) {
         // FogTransmittance: alpha channel heatmap (white=clear, dark=dense fog)
-        float ft = texture(uSceneTex, vTexCoord).a;
+        float ft = texture(uSceneTex, textureUv).a;
         FragColor = vec4(vec3(ft), 1.0);
         return;
     }
@@ -1265,7 +1274,7 @@ void main() {
     }
     if (uPostprocessDebugMode == 4) {
         // Rain mask: white=outdoor/sky (rain visible), black=indoor (rain hidden)
-        FragColor = vec4(vec3(rainMaskAt(rolledUv)), 1.0);
+        FragColor = vec4(vec3(rainMaskAt(rolledTextureUv)), 1.0);
         return;
     }
     if (uPostprocessDebugMode == 5) {
@@ -1278,7 +1287,7 @@ void main() {
         // Debug: visualize raindrop pattern (static, no animation)
         float rainIntensity = max(uWeatherStorm, uWeatherWetness * 0.5);
         if (rainIntensity < 0.01) rainIntensity = 1.0; // Force on for debug
-        vec2 rain = applyScreenRain(rolledUv, uTime);
+        vec2 rain = applyScreenRain(rolledScreenUv, uTime);
         FragColor = vec4(vec3(rain.x), 1.0);
         return;
     }
@@ -1286,12 +1295,13 @@ void main() {
         // Debug: visualize raindrop distortion vectors (should show flowing pattern)
         float rainIntensity = max(uWeatherStorm, uWeatherWetness * 0.5);
         if (rainIntensity < 0.01) rainIntensity = 1.0; // Force on for debug
-        vec2 distortion = calculateRaindropDistortion(rolledUv, uTime, rainIntensity);
+        vec2 distortion = calculateRaindropDistortion(
+            rolledScreenUv, uTime, rainIntensity);
         FragColor = vec4(abs(distortion.x) * 10.0, abs(distortion.y) * 10.0, 0.0, 1.0);
         return;
     }
 
-    graded = applyCasLikeSharpen(graded, rolledUv, vTexCoord);
+    graded = applyCasLikeSharpen(graded, rolledTextureUv, vScreenUv);
     if (uNoiseDitherStrength > 0.0) {
         float noise = texture(uNoiseTex, gl_FragCoord.xy / vec2(textureSize(uNoiseTex, 0))).r - 0.5;
         graded += noise * uNoiseDitherStrength;

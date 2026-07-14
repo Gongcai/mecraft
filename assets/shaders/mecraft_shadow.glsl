@@ -8,6 +8,7 @@
 #define MECRAFT_SHADOW_GLSL
 
 #include "derivative_shadow.glsl"
+#include "rhi_screen_coordinates.glsl"
 
 #ifndef MECRAFT_CSM_CASCADE_COUNT
 #define MECRAFT_CSM_CASCADE_COUNT 4
@@ -98,12 +99,18 @@ float csmDepthBias(float ndotl,
 }
 
 #ifndef MECRAFT_SHADOW_NO_SAMPLER
+vec2 csmTextureUv(vec2 clipUv, int cascadeIndex) {
+    float scale = uCsmCascades[cascadeIndex].resolutionScale;
+    vec2 scaledClipUv = clipUv * scale;
+    return rhiScreenUvToTextureUv(rhiScreenUvToClipUv(scaledClipUv));
+}
+
 float sampleCsmDepthCompare(vec2 uv, int cascadeIndex, float refZ) {
     if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
         return 1.0;
     }
-    float scale = uCsmCascades[cascadeIndex].resolutionScale;
-    return texture(uCsmShadowMap, vec4(uv * scale, float(cascadeIndex), refZ));
+    return texture(uCsmShadowMap, vec4(csmTextureUv(uv, cascadeIndex),
+                                       float(cascadeIndex), refZ));
 }
 
 // Transparent shadow sampling (DerivativeMain shadowtex0/shadowcolor0/1 equivalent)
@@ -112,34 +119,34 @@ float sampleCsmDepthAllCompare(vec2 uv, int cascadeIndex, float refZ) {
     if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
         return 1.0;
     }
-    float scale = uCsmCascades[cascadeIndex].resolutionScale;
-    return texture(uCsmShadowDepthAll, vec4(uv * scale, float(cascadeIndex), refZ));
+    return texture(uCsmShadowDepthAll, vec4(csmTextureUv(uv, cascadeIndex),
+                                            float(cascadeIndex), refZ));
 }
 
 float sampleCsmDepthAllRaw(vec2 uv, int cascadeIndex) {
     if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
         return 1.0;
     }
-    float scale = uCsmCascades[cascadeIndex].resolutionScale;
-    return texture(uCsmShadowDepthAllRaw, vec3(uv * scale, float(cascadeIndex))).r;
+    return texture(uCsmShadowDepthAllRaw,
+                   vec3(csmTextureUv(uv, cascadeIndex), float(cascadeIndex))).r;
 }
 
 float sampleCsmDepthRaw(vec2 uv, int cascadeIndex) {
     if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
         return 1.0;
     }
-    float scale = uCsmCascades[cascadeIndex].resolutionScale;
-    return texture(uCsmShadowDepthRaw, vec3(uv * scale, float(cascadeIndex))).r;
+    return texture(uCsmShadowDepthRaw,
+                   vec3(csmTextureUv(uv, cascadeIndex), float(cascadeIndex))).r;
 }
 
 vec4 sampleCsmShadowColor0(vec2 uv, int cascadeIndex) {
-    float scale = uCsmCascades[cascadeIndex].resolutionScale;
-    return texture(uCsmShadowColor0, vec3(uv * scale, float(cascadeIndex)));
+    return texture(uCsmShadowColor0,
+                   vec3(csmTextureUv(uv, cascadeIndex), float(cascadeIndex)));
 }
 
 vec4 sampleCsmShadowColor1(vec2 uv, int cascadeIndex) {
-    float scale = uCsmCascades[cascadeIndex].resolutionScale;
-    return texture(uCsmShadowColor1, vec3(uv * scale, float(cascadeIndex)));
+    return texture(uCsmShadowColor1,
+                   vec3(csmTextureUv(uv, cascadeIndex), float(cascadeIndex)));
 }
 #endif
 
@@ -147,8 +154,9 @@ ivec2 sampleCsmTexelCoord(vec2 uv, int cascadeIndex, sampler2DArray shadowTex) {
     float scale = uCsmCascades[cascadeIndex].resolutionScale;
     ivec3 size = textureSize(shadowTex, 0);
     ivec2 dims = ivec2(max(size.x, 1), max(size.y, 1));
-    ivec2 logicalDims = max(ivec2(floor(vec2(dims) * scale)), ivec2(1));
-    return clamp(ivec2(floor(uv * vec2(logicalDims))), ivec2(0), logicalDims - ivec2(1));
+    vec2 scaledClipUv = uv * scale;
+    vec2 screenUv = rhiScreenUvToClipUv(scaledClipUv);
+    return clamp(rhiScreenUvToNativeTexel(screenUv, dims), ivec2(0), dims - ivec2(1));
 }
 
 float sampleCsmDepthRawTexel(vec2 uv, int cascadeIndex) {
@@ -234,8 +242,8 @@ float sampleCsmRawDepth(vec2 uv, int cascadeIndex) {
     if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) {
         return 1.0;
     }
-    float scale = uCsmCascades[cascadeIndex].resolutionScale;
-    return texture(uCsmShadowDepthRaw, vec3(uv * scale, float(cascadeIndex))).r;
+    return texture(uCsmShadowDepthRaw,
+                   vec3(csmTextureUv(uv, cascadeIndex), float(cascadeIndex))).r;
 }
 
 // Blocker search: find average depth of blockers in a neighborhood.

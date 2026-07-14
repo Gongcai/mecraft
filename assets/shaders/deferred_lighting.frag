@@ -8,6 +8,7 @@
 #include "sky_sh.glsl"
 #include "derivative_sunlight.glsl"
 #include "weather_surface.glsl"
+#include "rhi_screen_coordinates.glsl"
 
 struct CsmCascade {
     mat4 viewProj;
@@ -18,10 +19,11 @@ struct CsmCascade {
     float depthExtent;
 };
 
-layout(location = 0) in vec2 vTexCoord;
-layout(location = 1) flat in vec4 vSkySH_R;
-layout(location = 2) flat in vec4 vSkySH_G;
-layout(location = 3) flat in vec4 vSkySH_B;
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
+layout(location = 2) flat in vec4 vSkySH_R;
+layout(location = 3) flat in vec4 vSkySH_G;
+layout(location = 4) flat in vec4 vSkySH_B;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uAlbedoTex;
@@ -268,8 +270,8 @@ float computeFogFactor(float fogDistance) {
     return clamp((uFogEnd - fogDistance) / linearRange, 0.0, 1.0);
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
@@ -447,7 +449,7 @@ vec3 sampleTransparentShadowTint(vec3 worldPos, vec3 normal, vec3 lightDir) {
 // Mecraft adaptation: uses world-position reconstruction for depth linearization
 // instead of DerivativeMain's GetDepthLinear() which uses OptiFine builtins.
 // 16 steps with distance-adaptive step size and tighter z-tolerance.
-float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float dither, float sssAmount) {
+float screenSpaceShadow(vec3 worldPos, vec2 clipUv, float sceneDepth, float dither, float sssAmount) {
     if (uContactShadowsEnabled == 0) return 1.0;
 
     vec4 clipPos = uViewProj * vec4(worldPos, 1.0);
@@ -465,7 +467,7 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
     vec3 rayStep = screenDir * stepSize;
 
     // Golden ratio dither to break up banding
-    vec3 rayPos = vec3(screenUv, sceneDepth) + rayStep * (1.0 - sssAmount + dither * 0.75);
+    vec3 rayPos = vec3(clipUv, sceneDepth) + rayStep * (1.0 - sssAmount + dither * 0.75);
 
     // DerivativeMain: float absorption = pow(sssAmount, sqrt(length(viewPos)) * 0.5);
     float absorption = pow(clamp(sssAmount, 0.001, 1.0), sqrt(viewDist) * 0.5);
@@ -477,7 +479,9 @@ float screenSpaceShadow(vec3 worldPos, vec2 screenUv, float sceneDepth, float di
         rayPos += rayStep;
         if (rayPos.x < 0.0 || rayPos.y < 0.0 || rayPos.x > 1.0 || rayPos.y > 1.0 || rayPos.z >= 1.0) break;
 
-        float sampleDepth = texture(uDepthTex, rayPos.xy).r;
+        vec2 sampleScreenUv = rhiScreenUvToClipUv(rayPos.xy);
+        float sampleDepth = texture(
+            uDepthTex, rhiScreenUvToTextureUv(sampleScreenUv)).r;
         vec3 sampleWorld = reconstructWorldPosition(rayPos.xy, sampleDepth);
         vec3 currentWorld = reconstructWorldPosition(rayPos.xy, rayPos.z);
         float linearSample = length(sampleWorld - uCameraPos);
@@ -584,7 +588,8 @@ vec3 applyAerialPerspective(vec3 sceneColor,
 }
 
 void main() {
-    float depth = texture(uDepthTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float depth = texture(uDepthTex, textureUv).r;
     if (depth >= 0.9999) {
         if (uDeferredDebugMode > 0) {
             FragColor = vec4(0.0, 0.0, 0.0, 0.0);
@@ -593,11 +598,11 @@ void main() {
         discard;
     }
 
-    GBufferSurface surface = unpackGBufferSurface(texture(uAlbedoTex, vTexCoord),
-                                                  texture(uNormalAoTex, vTexCoord),
-                                                  texture(uVoxelLightTex, vTexCoord),
-                                                  texture(uMaterialTex, vTexCoord),
-                                                  texture(uMaterialAuxTex, vTexCoord));
+    GBufferSurface surface = unpackGBufferSurface(texture(uAlbedoTex, textureUv),
+                                                  texture(uNormalAoTex, textureUv),
+                                                  texture(uVoxelLightTex, textureUv),
+                                                  texture(uMaterialTex, textureUv),
+                                                  texture(uMaterialAuxTex, textureUv));
     vec3 albedo = surface.albedo;
     albedo = desaturateLinear(albedo, uAlbedoDesaturation);
     float emissiveHint = surface.emissiveHint;
@@ -625,7 +630,7 @@ void main() {
     bool hasDerivativeSpecular = (max(0.625 - roughness, 0.0) + surface.aux.metalness > 0.005) ||
                                  transMask.isTranslucent;
     float derivativeSpecularMask = hasDerivativeSpecular ? 1.0 : 0.0;
-    vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+    vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
     float puddleMask = gbufferRainWetMask;
     float rainSplashMask = hasGBufferRainWetMask ? smoothstep(0.001, 0.08, length(normal.xz)) : 0.0;
     vec2 rainRippleDebug = hasGBufferRainWetMask ? normal.xz : vec2(0.0);
@@ -678,7 +683,7 @@ void main() {
     float NdotH = max((NdotL + NdotV) * halfwayNorm, 0.0);
     float LdotH = max((LdotV + 1.0) * halfwayNorm, 0.0);
 
-    float ssaoRaw = (uSsaoEnabled != 0) ? texture(uSsaoTex, vTexCoord).r : 1.0;
+    float ssaoRaw = (uSsaoEnabled != 0) ? texture(uSsaoTex, textureUv).r : 1.0;
     // Thin alpha-tested vegetation produces noisy SSAO/contact-shadow edges, but
     // it still needs CSM visibility or grass/flowers glow inside tree shadows.
     float ssao = isThinPlantReceiver ? 1.0 : ssaoRaw;
@@ -758,7 +763,8 @@ void main() {
         if (maxOf(shadow) > 1e-6) {
             // DerivativeMain: shadow *= ScreenSpaceShadow (contact shadows)
             if (!isThinPlantReceiver) {
-                dbgContactShadow = screenSpaceShadow(worldPos, vTexCoord, texture(uDepthTex, vTexCoord).r, shadowDither(), sss);
+                dbgContactShadow = screenSpaceShadow(
+                    worldPos, vClipUv, depth, shadowDither(), sss);
                 shadow *= dbgContactShadow;
             }
 

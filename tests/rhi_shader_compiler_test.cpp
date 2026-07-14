@@ -1,23 +1,32 @@
 #include "renderer/rhi/RhiShaderCompiler.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 
+#include <array>
 #include <iostream>
 #include <string>
 
 namespace {
-[[nodiscard]] bool compileForBackend(const std::string& source,
+struct ShaderCase {
+    const char* path;
+    RhiShaderStage stage;
+    const char* definition = nullptr;
+};
+
+[[nodiscard]] bool compileForBackend(const ShaderCase& shaderCase,
+                                     const std::string& source,
                                      const renderer::rhi::RhiShaderBackend backend,
                                      const char* backendName) {
     RhiShaderDesc desc;
-    desc.debugName = "RhiScreenCoordinates.Test";
-    desc.stage = RhiShaderStage::Fragment;
+    desc.debugName = shaderCase.path;
+    desc.stage = shaderCase.stage;
     desc.source = source.c_str();
     desc.sourceSize = source.size();
 
     std::string errorMessage;
     const auto compiled = renderer::rhi::compileShaderToSpirv(desc, backend, errorMessage);
     if (!compiled.has_value()) {
-        std::cerr << backendName << " shader compilation failed: " << errorMessage << '\n';
+        std::cerr << backendName << " shader compilation failed [" << shaderCase.path
+                  << "]: " << errorMessage << '\n';
         return false;
     }
     if (compiled->spirv.empty()) {
@@ -29,15 +38,73 @@ namespace {
 } // namespace
 
 int main() {
-    const auto source = renderer::rhi::loadShaderSource(
-        "tests/shaders/rhi_screen_coordinates_test.frag");
-    if (!source.has_value()) {
-        std::cerr << "RHI screen-coordinate test shader source failed to load\n";
-        return 1;
+    constexpr std::array<ShaderCase, 45> kShaderCases{{
+        {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/skybox_blur_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/gameplay_sky_capture_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/entity_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/item_drop_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/falling_block_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/ssao.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssao_filter.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssao_upsample.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssao_temporal.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/deferred_lighting.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/velocity_resolve.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/temporal_resolve.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/reflection_probe.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/reflection_filter.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/reflection_temporal.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssgi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssgi_upsample.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssgi_denoise_spatial.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssgi_denoise.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/ssgi_temporal.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/cloud_target.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/volumetric_fog.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/volumetric_composite.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/volumetric_temporal.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/scene_composite.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/motion_blur.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/dof.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/postprocess.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/bloom_extract.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/bloom_blur.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/exposure_downsample.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/exposure_resolve.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/blur_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/fsr1_easu.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/fsr1_rcas.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/deferred_debug.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/skybox_blur_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/sky_capture_raw_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/sky_capture_metadata_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/gameplay_sky_capture_rhi.frag", RhiShaderStage::Fragment},
+        {"assets/shaders/water_composite.frag", RhiShaderStage::Fragment,
+         "RHI_TERRAIN_WATER_MDI"},
+        {"assets/shaders/ui_glass_rhi.frag", RhiShaderStage::Fragment}
+    }};
+
+    bool success = true;
+    for (const ShaderCase& shaderCase : kShaderCases) {
+        renderer::rhi::RhiShaderSourceOptions sourceOptions;
+        if (shaderCase.definition != nullptr) {
+            sourceOptions.preprocessorDefinitions.emplace_back(shaderCase.definition);
+        }
+        const auto source = renderer::rhi::loadShaderSource(shaderCase.path, sourceOptions);
+        if (!source.has_value()) {
+            std::cerr << "Shader source failed to load: " << shaderCase.path << '\n';
+            success = false;
+            continue;
+        }
+        success = compileForBackend(shaderCase, *source,
+                                    renderer::rhi::RhiShaderBackend::Vulkan,
+                                    "Vulkan") && success;
+        success = compileForBackend(shaderCase, *source,
+                                    renderer::rhi::RhiShaderBackend::OpenGl,
+                                    "OpenGL") && success;
     }
-    if (!compileForBackend(*source, renderer::rhi::RhiShaderBackend::Vulkan, "Vulkan") ||
-        !compileForBackend(*source, renderer::rhi::RhiShaderBackend::OpenGl, "OpenGL")) {
-        return 1;
-    }
-    return 0;
+    return success ? 0 : 1;
 }

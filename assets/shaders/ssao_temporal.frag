@@ -3,7 +3,9 @@
 // applies 3x3 neighborhood clamp and depth-based disocclusion rejection to
 // prevent ghosting. Single-channel (R8) — no YCoCg needed.
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uCurrentTex;
@@ -20,13 +22,13 @@ layout(push_constant) uniform RhiPushConstants {
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
-    vec2 screenCoord = gl_FragCoord.xy * texelSize;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
 
     float currentAo = texelFetch(uCurrentTex, texel, 0).r;
 
     // Reproject using velocity buffer
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
-    vec2 prevCoord = screenCoord - velocity;
+    vec2 prevCoord = textureUv - velocity;
 
     // Out-of-bounds history: use current frame
     if (prevCoord.x < 0.0 || prevCoord.x > 1.0 ||

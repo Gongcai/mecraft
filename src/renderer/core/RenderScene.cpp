@@ -816,7 +816,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
     effects.gameTime = static_cast<float>(Time::getRawTime());
     effects.postprocessDebugMode = m_settings.debug.postprocessDebugMode;
 
-    // Sun screen position calculation
+    // Calculate the sun position in the top-left screen UV domain used by post-processing.
     {
         const float sunAngle = dayNightSystem.getCelestialAngleRadians();
         glm::vec3 sunDirection(0.25f, std::sin(sunAngle), -std::cos(sunAngle));
@@ -830,7 +830,8 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
         const glm::vec4 clip = viewProj * glm::vec4(camera.getPosition() + sunDirection * 256.0f, 1.0f);
         if (clip.w > 0.0001f) {
             const glm::vec3 ndc = glm::vec3(clip) / clip.w;
-            effects.sunScreenPos = glm::vec2(ndc.x * 0.5f + 0.5f, ndc.y * 0.5f + 0.5f);
+            effects.sunScreenPos = glm::vec2(ndc.x * 0.5f + 0.5f,
+                                             1.0f - (ndc.y * 0.5f + 0.5f));
             const float onScreenX = 1.0f - std::clamp(std::abs(effects.sunScreenPos.x - 0.5f) * 2.0f, 0.0f, 1.0f);
             const float onScreenY = 1.0f - std::clamp(std::abs(effects.sunScreenPos.y - 0.5f) * 2.0f, 0.0f, 1.0f);
             const float horizonFade = std::clamp((sunDirection.y + 0.05f) / 0.45f, 0.0f, 1.0f);

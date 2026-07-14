@@ -1,8 +1,10 @@
 #version 450 core
 
 #include "derivative_shadow.glsl"
+#include "rhi_screen_coordinates.glsl"
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uDepthTex;
@@ -16,21 +18,22 @@ layout(push_constant) uniform RhiPushConstants {
     ivec4 uSsaoParams1;
 };
 
-vec3 screenToViewPos(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 clipUvToViewPos(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 view = uInvProjection * clip;
     return view.xyz / max(view.w, 0.00001);
 }
 
 void main() {
-    float centerDepth = texture(uDepthTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float centerDepth = texture(uDepthTex, textureUv).r;
     if (centerDepth >= 1.0) {
         FragColor = vec4(1.0);
         return;
     }
 
-    vec3 viewPos = screenToViewPos(vTexCoord, centerDepth);
-    vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
+    vec3 viewPos = clipUvToViewPos(vClipUv, centerDepth);
+    vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
 
     // Dither rotation per pixel using tiled noise texture.
     // gl_FragCoord.xy / noiseSize tiles the noise across the screen exactly once per noise repeat.
@@ -65,9 +68,10 @@ void main() {
         radius += rayStep;
 
         // Sample at +rot
-        vec2 sampleUv = vTexCoord + rot * radius;
-        float sampleDepth = texture(uDepthTex, sampleUv).r;
-        vec3 samplePos = screenToViewPos(sampleUv, sampleDepth);
+        vec2 sampleScreenUv = vScreenUv + rot * radius;
+        vec2 sampleTextureUv = rhiScreenUvToTextureUv(sampleScreenUv);
+        float sampleDepth = texture(uDepthTex, sampleTextureUv).r;
+        vec3 samplePos = clipUvToViewPos(rhiScreenUvToClipUv(sampleScreenUv), sampleDepth);
         vec3 diff = samplePos - viewPos;
         float diffSqLen = dotSelf(diff);
         if (diffSqLen > 1e-5 && diffSqLen < maxSqLen) {
@@ -76,9 +80,10 @@ void main() {
         }
 
         // Sample at -rot
-        sampleUv = vTexCoord - rot * radius;
-        sampleDepth = texture(uDepthTex, sampleUv).r;
-        samplePos = screenToViewPos(sampleUv, sampleDepth);
+        sampleScreenUv = vScreenUv - rot * radius;
+        sampleTextureUv = rhiScreenUvToTextureUv(sampleScreenUv);
+        sampleDepth = texture(uDepthTex, sampleTextureUv).r;
+        samplePos = clipUvToViewPos(rhiScreenUvToClipUv(sampleScreenUv), sampleDepth);
         diff = samplePos - viewPos;
         diffSqLen = dotSelf(diff);
         if (diffSqLen > 1e-5 && diffSqLen < maxSqLen) {

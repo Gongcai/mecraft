@@ -1,6 +1,8 @@
 #version 450 core
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 MomentsColor;
 
@@ -44,7 +46,7 @@ void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
     ivec2 maxTexel = ivec2(uScreenSize) - 1;
     vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
-    vec2 screenCoord = gl_FragCoord.xy * texelSize;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
 
     vec4 current = texelFetch(uCurrentTex, texel, 0);
     float depth = texelFetch(uDepthTex, texel, 0).r;
@@ -55,7 +57,7 @@ void main() {
     }
 
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
-    vec2 prevCoord = screenCoord - velocity;
+    vec2 prevCoord = textureUv - velocity;
     if (invalidVec2(velocity) || invalidVec2(prevCoord) ||
         any(greaterThan(abs(velocity), vec2(1.0))) ||
         prevCoord.x < 0.0 || prevCoord.x > 1.0 ||

@@ -104,8 +104,8 @@ float cube(float x) {
     return x * x * x;
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
@@ -153,11 +153,11 @@ vec4 sampleDepthAwareVolumetric(vec2 uv) {
     return sum / max(weightSum, 0.0001);
 }
 
-vec2 projectWorldUv(vec3 worldPos, out float projectedDepth) {
+vec2 projectWorldScreenUv(vec3 worldPos, out float projectedDepth) {
     vec4 clip = uWaterViewProj * vec4(worldPos, 1.0);
     vec3 ndc = clip.xyz / max(clip.w, 0.00001);
     projectedDepth = ndc.z * 0.5 + 0.5;
-    return ndc.xy * 0.5 + 0.5;
+    return rhiScreenUvToClipUv(ndc.xy * 0.5 + 0.5);
 }
 
 vec3 decodeFaceNormal(float face) {
@@ -272,20 +272,22 @@ bool traceWaterScreenSpaceReflection(vec3 worldPos,
     for (int i = 1; i <= kWaterSsrSteps; ++i) {
         vec3 sampleWorld = rayOrigin + reflectedDir * (float(i) * stepLength);
         float rayDepth;
-        vec2 uv = projectWorldUv(sampleWorld, rayDepth);
-        if (uv.x <= 0.001 || uv.x >= 0.999 || uv.y <= 0.001 || uv.y >= 0.999 ||
+        vec2 screenUv = projectWorldScreenUv(sampleWorld, rayDepth);
+        if (screenUv.x <= 0.001 || screenUv.x >= 0.999 ||
+            screenUv.y <= 0.001 || screenUv.y >= 0.999 ||
             rayDepth <= 0.0 || rayDepth >= 1.0) {
             return false;
         }
 
-        float sceneDepth = texture(uOpaqueDepthTex, uv).r;
+        vec2 textureUv = rhiScreenUvToTextureUv(screenUv);
+        float sceneDepth = texture(uOpaqueDepthTex, textureUv).r;
         if (sceneDepth >= 0.9999) {
             continue;
         }
 
         float thickness = mix(0.00025, 0.0045, clamp(float(i) / float(kWaterSsrSteps), 0.0, 1.0));
         if (rayDepth >= sceneDepth && rayDepth - sceneDepth < thickness) {
-            hitColor = texture(uSceneColorTex, uv).rgb;
+            hitColor = texture(uSceneColorTex, textureUv).rgb;
             return true;
         }
     }
@@ -308,20 +310,20 @@ vec2 GetRainNormal(vec3 worldPos, float wetness) {
     return normal * 0.75 * wet;
 }
 
-vec2 calculateDerivativeWaterRefractUv(vec2 screenUv,
+vec2 calculateDerivativeWaterRefractClipUv(vec2 clipUv,
                                         float waterDepthRaw,
                                         float opaqueDepthRaw,
                                         vec3 worldWaveNormal,
                                         out float refractedOpaqueDepthRaw) {
     refractedOpaqueDepthRaw = opaqueDepthRaw;
     if (opaqueDepthRaw >= 0.9999 || opaqueDepthRaw < waterDepthRaw) {
-        return screenUv;
+        return clipUv;
     }
 
     float waterDepth = linearDepthFromDepth(waterDepthRaw);
     float refractionDepth = linearDepthFromDepth(opaqueDepthRaw) - waterDepth;
     if (refractionDepth <= 0.0) {
-        return screenUv;
+        return clipUv;
     }
 
     vec3 wavesNormalView = normalize(mat3(uView) * worldWaveNormal);
@@ -329,14 +331,16 @@ vec2 calculateDerivativeWaterRefractUv(vec2 screenUv,
     vec2 refractOffset = viewUp.xy - wavesNormalView.xy;
     refractOffset *= clamp(refractionDepth, 0.0, 1.0) * 0.5 / (waterDepth + 1e-4);
 
-    vec2 refractUv = clamp(screenUv + refractOffset, vec2(0.0), vec2(1.0));
-    refractedOpaqueDepthRaw = texture(uOpaqueDepthTex, refractUv).r;
+    vec2 refractClipUv = clamp(clipUv + refractOffset, vec2(0.0), vec2(1.0));
+    vec2 refractScreenUv = rhiScreenUvToClipUv(refractClipUv);
+    refractedOpaqueDepthRaw = texture(
+        uOpaqueDepthTex, rhiScreenUvToTextureUv(refractScreenUv)).r;
     if (refractedOpaqueDepthRaw < waterDepthRaw) {
         refractedOpaqueDepthRaw = opaqueDepthRaw;
-        return screenUv;
+        return clipUv;
     }
 
-    return refractUv;
+    return refractClipUv;
 }
 
 // DerivativeMain FresnelDielectricN
@@ -438,7 +442,10 @@ void main() {
     // --- Lighting environment from SkyCapture ---
     LightingEnvironment env = getLightingEnvironment(uSkyCaptureTex);
 
-    vec2 screenUv = gl_FragCoord.xy / vec2(textureSize(uSceneColorTex, 0));
+    vec2 targetExtent = vec2(textureSize(uSceneColorTex, 0));
+    vec2 screenUv = rhiNativeFragCoordToScreenUv(gl_FragCoord.xy, targetExtent);
+    vec2 clipUv = rhiScreenUvToClipUv(screenUv);
+    vec2 textureUv = rhiScreenUvToTextureUv(screenUv);
 
     // ---- DerivativeMain water depth ----
     // DerivativeMain measures water fog through the water volume:
@@ -446,8 +453,8 @@ void main() {
     float depthGap = 0.0;
     float sceneDepth = texelFetch(uOpaqueDepthTex, ivec2(gl_FragCoord.xy), 0).r;
     if (uDepthSofteningEnabled != 0 && sceneDepth > gl_FragCoord.z) {
-        vec3 waterSurfacePos = reconstructWorldPosition(screenUv, gl_FragCoord.z);
-        vec3 opaquePos = reconstructWorldPosition(screenUv, sceneDepth);
+        vec3 waterSurfacePos = reconstructWorldPosition(clipUv, gl_FragCoord.z);
+        vec3 opaquePos = reconstructWorldPosition(clipUv, sceneDepth);
         depthGap = clamp(distance(waterSurfacePos, opaquePos), 0.0, 512.0);
     }
 
@@ -498,17 +505,19 @@ void main() {
 
     // ---- Refraction (DerivativeMain Refraction.glsl line 87-108) ----
     float refractDepthTex = sceneDepth;
-    vec2 refractUv = calculateDerivativeWaterRefractUv(screenUv, gl_FragCoord.z, sceneDepth,
-                                                       refractionNormal, refractDepthTex);
-    vec3 sceneColor = texture(uSceneColorTex, refractUv).rgb;
+    vec2 refractClipUv = calculateDerivativeWaterRefractClipUv(
+        clipUv, gl_FragCoord.z, sceneDepth, refractionNormal, refractDepthTex);
+    vec2 refractScreenUv = rhiScreenUvToClipUv(refractClipUv);
+    vec2 refractTextureUv = rhiScreenUvToTextureUv(refractScreenUv);
+    vec3 sceneColor = texture(uSceneColorTex, refractTextureUv).rgb;
 
     // ---- Water fog (DerivativeMain WaterFog.glsl, applied BEFORE reflection) ----
     float waterSkylight = cube(clamp(vSunlight, 0.0, 1.0));
     float LdotV = dot(normalize(uSunDirection), -viewDir);
     float fogDist = depthGap;
     if (uDepthSofteningEnabled != 0 && refractDepthTex > gl_FragCoord.z && refractDepthTex < 0.9999) {
-        vec3 waterSurfacePos = reconstructWorldPosition(screenUv, gl_FragCoord.z);
-        vec3 opaquePos = reconstructWorldPosition(refractUv, refractDepthTex);
+        vec3 waterSurfacePos = reconstructWorldPosition(clipUv, gl_FragCoord.z);
+        vec3 opaquePos = reconstructWorldPosition(refractClipUv, refractDepthTex);
         fogDist = clamp(distance(waterSurfacePos, opaquePos), 0.0, 512.0);
     }
     if (uIsEyeInWater == 1) {
@@ -561,7 +570,7 @@ void main() {
     // VFog and uVolumetricFogActive is disabled so fog is applied once later.
     float fogTransmittance = 1.0;
     if (uVolumetricFogActive != 0) {
-        vec4 volumetric = sampleDepthAwareVolumetric(screenUv);
+        vec4 volumetric = sampleDepthAwareVolumetric(textureUv);
         fogTransmittance = clamp(volumetric.a, 0.0, 1.0);
         color = color * fogTransmittance + volumetric.rgb;
     }

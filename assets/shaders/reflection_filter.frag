@@ -1,8 +1,10 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
 #include "derivative_shadow.glsl"
+#include "rhi_screen_coordinates.glsl"
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uReflectionTex;
@@ -23,8 +25,8 @@ vec3 reconstructNormal(vec3 packedNormal) {
     return normalize(packedNormal * 2.0 - 1.0);
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
@@ -99,8 +101,9 @@ vec4 derivativeReflectionFilter(ivec2 texel,
 }
 
 void main() {
-    vec4 reflection = texture(uReflectionTex, vTexCoord);
-    float depth = texture(uDepthTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    vec4 reflection = texture(uReflectionTex, textureUv);
+    float depth = texture(uDepthTex, textureUv).r;
 
     // Sky pixels: pass through
     if (depth >= 0.9999) {
@@ -108,15 +111,15 @@ void main() {
         return;
     }
 
-    SurfaceMaterialAux centerAux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+    SurfaceMaterialAux centerAux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
     TranslucentMask centerTransMask = decodeTranslucentMask(centerAux.materialKind);
     if (centerTransMask.isTranslucent) {
         FragColor = reflection;
         return;
     }
 
-    vec3 centerNormal = reconstructNormal(texture(uNormalAoTex, vTexCoord).rgb);
-    SurfaceMaterial centerMaterial = unpackGBufferMaterial(texture(uMaterialTex, vTexCoord));
+    vec3 centerNormal = reconstructNormal(texture(uNormalAoTex, textureUv).rgb);
+    SurfaceMaterial centerMaterial = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
     float centerRoughness = clamp(centerMaterial.roughness, 0.0, 1.0);
     float centerWetness = clamp(centerAux.wetnessMask, 0.0, 1.0);
     bool centerCanReceiveRain = !centerTransMask.isTranslucent &&
@@ -135,7 +138,7 @@ void main() {
         return;
     }
 
-    vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+    vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
     vec3 viewDir = normalize(worldPos - uCameraNearPlane.xyz);
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec4 filtered = derivativeReflectionFilter(texel, reflection, centerRoughness,

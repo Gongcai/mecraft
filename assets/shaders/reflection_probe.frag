@@ -1,7 +1,9 @@
 #version 450 core
 #include "gbuffer_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneLightingTex;
@@ -49,15 +51,16 @@ vec2 GenerateRandomOffset(vec2 screenPos, float time) {
 
 #include "weather_surface.glsl"
 
-vec3 reconstructWorldPosition(vec2 uv, float depth) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     return world.xyz / max(world.w, 0.00001);
 }
 
-vec2 projectWorldUv(vec3 worldPos) {
+vec2 projectWorldScreenUv(vec3 worldPos) {
     vec4 clip = uViewProj * vec4(worldPos, 1.0);
-    return clip.xy / max(clip.w, 0.00001) * 0.5 + 0.5;
+    vec2 clipUv = clip.xy / max(clip.w, 0.00001) * 0.5 + 0.5;
+    return rhiScreenUvToClipUv(clipUv);
 }
 
 // DerivativeMain GetDepthLinear: linearize depth buffer value to view-space distance.
@@ -101,14 +104,15 @@ bool traceScreenSpaceReflection(vec3 worldPos,
         float stepScale = 1.0 + roughness * progress * 0.5;
         float t = float(i) * stepLength * stepScale;
         vec3 sampleWorld = rayOrigin + reflectedDir * t;
-        vec2 uv = projectWorldUv(sampleWorld);
+        vec2 screenUv = projectWorldScreenUv(sampleWorld);
 
         // Screen bounds check with margin for refinement
-        if (uv.x <= 0.002 || uv.x >= 0.998 || uv.y <= 0.002 || uv.y >= 0.998) {
+        if (screenUv.x <= 0.002 || screenUv.x >= 0.998 ||
+            screenUv.y <= 0.002 || screenUv.y >= 0.998) {
             break;
         }
 
-        float sceneDepth = texture(uDepthTex, uv).r;
+        float sceneDepth = texture(uDepthTex, rhiScreenUvToTextureUv(screenUv)).r;
         if (sceneDepth >= 0.9999) {
             prevT = t;
             continue;
@@ -138,8 +142,9 @@ bool traceScreenSpaceReflection(vec3 worldPos,
             vec3 hi = sampleWorld;
             for (int r = 0; r < 6; ++r) {
                 vec3 mid = (lo + hi) * 0.5;
-                vec2 midUv = projectWorldUv(mid);
-                float midDepth = texture(uDepthTex, midUv).r;
+                vec2 midScreenUv = projectWorldScreenUv(mid);
+                float midDepth = texture(
+                    uDepthTex, rhiScreenUvToTextureUv(midScreenUv)).r;
                 vec4 midClip = uViewProj * vec4(mid, 1.0);
                 float midNdcZ = midClip.z / max(midClip.w, 0.00001);
                 float midDepth01 = clamp(midNdcZ * 0.5 + 0.5, 0.0, 1.0);
@@ -150,15 +155,16 @@ bool traceScreenSpaceReflection(vec3 worldPos,
                 }
             }
             vec3 refinedWorld = (lo + hi) * 0.5;
-            vec2 refinedUv = projectWorldUv(refinedWorld);
+            vec2 refinedScreenUv = projectWorldScreenUv(refinedWorld);
 
             // Re-validate refined hit
-            if (refinedUv.x < 0.001 || refinedUv.x > 0.999 || refinedUv.y < 0.001 || refinedUv.y > 0.999) {
+            if (refinedScreenUv.x < 0.001 || refinedScreenUv.x > 0.999 ||
+                refinedScreenUv.y < 0.001 || refinedScreenUv.y > 0.999) {
                 break;
             }
 
             // Edge fade: smooth falloff near screen borders
-            vec2 edgeDist = min(refinedUv, 1.0 - refinedUv);
+            vec2 edgeDist = min(refinedScreenUv, 1.0 - refinedScreenUv);
             float edgeFade = smoothstep(0.0, 0.08, min(edgeDist.x, edgeDist.y));
 
             // Distance fade: reflections weaken with distance
@@ -167,7 +173,9 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 
             // Grazing angle fade: reflections at grazing angles are less reliable
             // (more likely to hit wrong surfaces or self-intersect).
-            vec3 hitNormal = normalize(texture(uNormalAoTex, refinedUv).rgb * 2.0 - 1.0);
+            vec2 refinedTextureUv = rhiScreenUvToTextureUv(refinedScreenUv);
+            vec3 hitNormal = normalize(
+                texture(uNormalAoTex, refinedTextureUv).rgb * 2.0 - 1.0);
             float grazingDot = abs(dot(reflectedDir, hitNormal));
             float grazingFade = smoothstep(0.0, 0.25, grazingDot);
 
@@ -180,7 +188,7 @@ bool traceScreenSpaceReflection(vec3 worldPos,
             float roughnessConfidence = 1.0 - coneWidth * 0.7;
             float distanceRoughnessPenalty = 1.0 - coneWidth * saturate(refinedT / maxDistance) * 0.5;
             hitConfidence = clamp(edgeFade * distanceFade * grazingFade * normalFacing * roughnessConfidence * distanceRoughnessPenalty, 0.0, 1.0);
-            hitColor = texture(uSceneLightingTex, refinedUv).rgb;
+            hitColor = texture(uSceneLightingTex, refinedTextureUv).rgb;
             return hitConfidence > 0.001;
         }
     }
@@ -189,28 +197,29 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 }
 
 void main() {
-    float depth = texture(uDepthTex, vTexCoord).r;
-    vec4 packedMaterial = texture(uMaterialTex, vTexCoord);
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float depth = texture(uDepthTex, textureUv).r;
+    vec4 packedMaterial = texture(uMaterialTex, textureUv);
     SurfaceMaterial material = unpackGBufferMaterial(packedMaterial);
-    SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, vTexCoord));
+    SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
 
     if (depth >= 0.9999) {
-        vec3 skyPos = reconstructWorldPosition(vTexCoord, 1.0);
+        vec3 skyPos = reconstructWorldPosition(vClipUv, 1.0);
         vec3 skyDir = normalize(skyPos - uCameraPos);
         vec3 sky = sampleSkyRadianceCloudy(uSkyCaptureTex, skyDir);
         FragColor = vec4(sky, 0.0);
         return;
     }
 
-    vec3 normal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
-    vec3 worldPos = reconstructWorldPosition(vTexCoord, depth);
+    vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+    vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
     vec3 viewDir = normalize(worldPos - uCameraPos);
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
 
     // DerivativeMain wet surface — shared implementation in weather_surface.glsl
     float roughness = material.roughness;
     float f0Scalar = material.f0;
-    vec2 voxelLightRaw = texture(uVoxelLightTex, vTexCoord).rg;
+    vec2 voxelLightRaw = texture(uVoxelLightTex, textureUv).rg;
     float skyLightRaw01 = clamp(voxelLightRaw.r, 0.0, 1.0);
     float weatherSurfaceWetness = (uRainWetSurfacesEnabled != 0) ? uSurfaceWetness : 0.0;
     bool hasGBufferRainWetMask = uRainWetSurfacesEnabled != 0 &&

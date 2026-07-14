@@ -6,8 +6,9 @@
 // - taaOffset * 0.5 applied to current sample coordinate
 
 #include "gbuffer_contract.glsl"
+#include "rhi_screen_coordinates.glsl"
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uCurrentTex;
@@ -107,10 +108,10 @@ vec4 catmullRomFast(sampler2D tex, vec2 coord) {
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec2 texelSize = 1.0 / max(uScreenSizeJitter.xy, vec2(1.0));
-    vec2 screenCoord = gl_FragCoord.xy * texelSize;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
 
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
-    vec2 previousCoord = screenCoord - velocity;
+    vec2 previousCoord = textureUv - velocity;
 
     // Bad motion vectors make texture() with NaN/Inf coordinates undefined,
     // which appears as stable-shaped regions filled with drifting history.
@@ -129,7 +130,8 @@ void main() {
 
     // DerivativeMain: apply taaOffset * 0.5 to current sample coordinate.
     // Convert UV to pixel, apply jitter in pixel space, clamp.
-    vec2 samplePixel = screenCoord * uScreenSizeJitter.xy + uScreenSizeJitter.zw * uScreenSizeJitter.xy * 0.5;
+    vec2 samplePixel = textureUv * uScreenSizeJitter.xy +
+        uScreenSizeJitter.zw * uScreenSizeJitter.xy * 0.5;
     ivec2 sampleTexel = clamp(ivec2(samplePixel), ivec2(0), ivec2(uScreenSizeJitter.xy) - 1);
 
     vec3 currentSample = texelFetch(uCurrentTex, sampleTexel, 0).rgb;

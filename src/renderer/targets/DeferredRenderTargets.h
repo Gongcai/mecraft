@@ -403,7 +403,7 @@ private:
     RhiTextureHandle m_temporalCurrentHandle;
     RhiTextureViewHandle m_temporalCurrentView;
 
-    // Velocity buffer (RG16F encodes screen-space velocity xy)
+    // Velocity buffer (RG16F encodes native texture UV delta xy).
     RhiTextureHandle m_velocityHandle;
     RhiTextureViewHandle m_velocityView;
     RhiDevice* m_rhiViewDevice = nullptr;

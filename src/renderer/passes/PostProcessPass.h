@@ -34,6 +34,7 @@ struct PostProcessEffects {
     float autoExposureBias = 0.0f;
     float autoExposureDayFactor = 1.0f;
     bool sunRaysEnabled = false;
+    // Top-left screen UV position used by the post-process sun-ray integration.
     glm::vec2 sunScreenPos = glm::vec2(0.5f);
     float sunVisibility = 0.0f;
     float sunRayStrength = 0.18f;

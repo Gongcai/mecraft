@@ -96,7 +96,6 @@ struct VkRhiDeviceData {
         VkPipeline pipeline = VK_NULL_HANDLE;
         VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         RhiPipelineLayoutHandle layoutHandle{};
-        VkFrontFace frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         VkRhiResourceLifetime lifetime{};
     };
     struct BindGroup { VkDescriptorSet set = VK_NULL_HANDLE; RhiBindGroupLayoutHandle layoutHandle{}; RhiBindGroupDesc desc{}; VkRhiResourceLifetime lifetime{}; };
@@ -191,10 +190,8 @@ struct VkRhiCommandListData {
     VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     RhiPipelineLayoutHandle pipelineLayoutHandle{};
-    VkFrontFace graphicsFrontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     uint64_t pendingSequence = 0u;
     bool rendering = false;
-    bool renderingFlipsViewportY = false;
     bool graphicsPipelineBound = false;
     uint32_t renderingTargetWidth = 0u;
     uint32_t renderingTargetHeight = 0u;

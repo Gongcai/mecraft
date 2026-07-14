@@ -1,4 +1,6 @@
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uInputTex;
@@ -66,14 +68,15 @@ float estimateTemporalNoise(vec2 uv, float centerLuminance) {
 #endif
 
 void main() {
-    float centerDepth = texture(uDepthTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float centerDepth = texture(uDepthTex, textureUv).r;
     if (centerDepth >= 0.9999) {
         FragColor = vec4(0.0);
         return;
     }
 
-    vec4 center = texture(uInputTex, vTexCoord);
-    vec3 centerNormal = decodeNormal(vTexCoord);
+    vec4 center = texture(uInputTex, textureUv);
+    vec3 centerNormal = decodeNormal(textureUv);
     float centerLinearDepth = linearizeDepth(centerDepth);
     float centerLuminance = luminance(max(center.rgb, vec3(0.0)));
     vec2 texelSize = 1.0 / max(uScreenSize, vec2(1.0));
@@ -82,7 +85,7 @@ void main() {
     float centerConfidence = smoothstep(0.04, 0.45, center.a);
     float localNoise = estimateLocalNoise(centerTexel, maxTexel, centerLuminance);
 #ifdef MECRAFT_SSGI_DENOISE_MOMENTS
-    localNoise = max(localNoise, estimateTemporalNoise(vTexCoord, centerLuminance));
+    localNoise = max(localNoise, estimateTemporalNoise(textureUv, centerLuminance));
 #endif
 
     const float kernel[5] = float[](0.0625, 0.25, 0.375, 0.25, 0.0625);
@@ -92,7 +95,7 @@ void main() {
 
     for (int y = -2; y <= 2; ++y) {
         for (int x = -2; x <= 2; ++x) {
-            vec2 sampleUv = vTexCoord + vec2(float(x), float(y)) * texelSize * uStepWidth;
+            vec2 sampleUv = textureUv + vec2(float(x), float(y)) * texelSize * uStepWidth;
             if (sampleUv.x <= 0.0 || sampleUv.y <= 0.0 || sampleUv.x >= 1.0 || sampleUv.y >= 1.0) {
                 continue;
             }

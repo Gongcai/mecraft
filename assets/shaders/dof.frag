@@ -2,7 +2,7 @@
 // DerivativeMain-style Depth of Field (program/Post/DoF.glsl)
 // Golden-angle spiral sampling with thin-lens CoC
 
-layout(location = 0) in vec2 vTexCoord;
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneTex;

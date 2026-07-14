@@ -1,6 +1,8 @@
 #version 450 core
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSsaoTex;
@@ -14,9 +16,10 @@ layout(push_constant) uniform RhiPushConstants {
 };
 
 void main() {
-    float centerDepth = texture(uDepthTex, vTexCoord).r;
-    vec3 centerNormal = normalize(texture(uNormalAoTex, vTexCoord).rgb * 2.0 - 1.0);
-    float centerAo = texture(uSsaoTex, vTexCoord).r;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    float centerDepth = texture(uDepthTex, textureUv).r;
+    vec3 centerNormal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+    float centerAo = texture(uSsaoTex, textureUv).r;
 
     // Linearize NDC depth: linearZ = 2*near / (1 - ndc)
     // Used for perspective-correct depth comparison in bilateral filter.
@@ -34,11 +37,12 @@ void main() {
     for (int y = -3; y <= 3; ++y) {
         for (int x = -3; x <= 3; ++x) {
             vec2 offset = vec2(float(x), float(y)) * texelSize;
-            vec2 sampleUv = vTexCoord + offset;
+            vec2 sampleScreenUv = vScreenUv + offset;
+            vec2 sampleTextureUv = rhiScreenUvToTextureUv(sampleScreenUv);
 
-            float sampleDepth = texture(uDepthTex, sampleUv).r;
-            vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleUv).rgb * 2.0 - 1.0);
-            float sampleAo = texture(uSsaoTex, sampleUv).r;
+            float sampleDepth = texture(uDepthTex, sampleTextureUv).r;
+            vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleTextureUv).rgb * 2.0 - 1.0);
+            float sampleAo = texture(uSsaoTex, sampleTextureUv).r;
 
             // Depth weight: relative linear depth difference for perspective-correct rejection.
             // |Δz|/z_mean ≈ 0.05 → weight ~0.71, ≈ 0.5 → weight ~0.003.

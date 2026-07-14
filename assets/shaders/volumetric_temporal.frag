@@ -6,7 +6,9 @@
 //   rgb = volumetric scattering
 //   a   = transmittance
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uCurrentTex;
@@ -31,13 +33,13 @@ float viewDistanceFromDepth(float depth) {
 void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
     vec2 texelSize = 1.0 / max(uTemporalParams0.xy, vec2(1.0));
-    vec2 screenCoord = gl_FragCoord.xy * texelSize;
+    vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
 
     vec4 current = texelFetch(uCurrentTex, texel, 0);
 
     // Reproject using full-resolution velocity texture
-    vec2 velocity = texture(uVelocityTex, screenCoord).rg;
-    vec2 prevCoord = screenCoord - velocity;
+    vec2 velocity = texture(uVelocityTex, textureUv).rg;
+    vec2 prevCoord = textureUv - velocity;
 
     // Out-of-bounds history: use current frame
     if (prevCoord.x < 0.0 || prevCoord.x > 1.0 ||
@@ -47,7 +49,7 @@ void main() {
     }
 
     // Depth disocclusion: compare linearized current depth with linearized depth at prev frame's reprojected position
-    float currentDepth = texture(uDepthTex, screenCoord).r;
+    float currentDepth = texture(uDepthTex, textureUv).r;
     float historyDepth = texture(uHistoryDepthTex, prevCoord).r;
     float linCurrent = viewDistanceFromDepth(currentDepth);
     float linHistory = viewDistanceFromDepth(historyDepth);

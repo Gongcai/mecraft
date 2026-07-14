@@ -359,8 +359,8 @@ void main() {
         return pixel[0] <= 5u && pixel[1] <= 5u && pixel[2] >= 250u && pixel[3] >= 250u;
     };
     const bool orientationCorrect =
-        isRed(pixels + static_cast<size_t>(kRenderY) * kBytesPerRow) &&
-        isBlue(pixels + static_cast<size_t>(kRenderY + kRenderHeight - 1u) * kBytesPerRow);
+        isBlue(pixels + static_cast<size_t>(kRenderY) * kBytesPerRow) &&
+        isRed(pixels + static_cast<size_t>(kRenderY + kRenderHeight - 1u) * kBytesPerRow);
     device.unmapBuffer(readback);
     if (!orientationCorrect) {
         return false;
@@ -419,7 +419,6 @@ void main() {
     presentationRendering.renderArea = {0, 0, frame.width, frame.height};
     presentationRendering.colorAttachments = &presentationAttachment;
     presentationRendering.colorAttachmentCount = 1u;
-    presentationRendering.coordinateSpace = RhiRenderingCoordinateSpace::Texture;
     presentationCommands->beginRendering(presentationRendering);
     presentationCommands->setGraphicsPipeline(presentationPipeline);
     presentationCommands->draw(3u, 1u, 0u, 0u);
@@ -490,8 +489,8 @@ void main() {
         return pixel[0] >= 250u && pixel[1] <= 5u && pixel[2] <= 5u && pixel[3] >= 250u;
     };
     const bool presentationCorrect =
-        isBgraRed(presentationPixels) &&
-        isBgraBlue(presentationPixels + kBytesPerPixel) &&
+        isBgraBlue(presentationPixels) &&
+        isBgraRed(presentationPixels + kBytesPerPixel) &&
         isBgraBlue(presentationPixels + kBytesPerPixel * 2u) &&
         isBgraRed(presentationPixels + kBytesPerPixel * 3u);
     device.unmapBuffer(readback);

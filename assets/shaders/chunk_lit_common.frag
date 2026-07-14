@@ -229,7 +229,7 @@ uniform vec3 uCameraPos;
         return mix(procedural, externalNoise, 0.0);
     }
 
-    vec3 applyWaterComposite(vec3 color, float alpha, float faceNormal, float depthGap, vec2 screenUv) {
+    vec3 applyWaterComposite(vec3 color, float alpha, float faceNormal, float depthGap, vec2 textureUv) {
         float topFace = step(-0.5, faceNormal) * step(faceNormal, 0.5);
         vec2 p = vWorldPos.xz;
         float n = sampleWaterCompositeNoise(p,
@@ -255,7 +255,8 @@ uniform vec3 uCameraPos;
         vec3 waterTint = mix(shallowTint, deepTint, max(absorption, distanceAbsorption * 0.45));
 
         if (compositeInputsActive()) {
-            vec2 refractUv = clamp(screenUv + vec2(wave, nFine - 0.5) * (0.0015 + 0.0040 * fresnel) * topFace,
+            vec2 refractUv = clamp(textureUv + vec2(wave, nFine - 0.5) *
+                                   (0.0015 + 0.0040 * fresnel) * topFace,
                                    vec2(0.0),
                                    vec2(1.0));
             vec3 sceneColor = texture(uSceneColorTex, refractUv).rgb;
@@ -580,13 +581,13 @@ uniform vec3 uCameraPos;
 
         float alpha = texColor.a;
         float waterDepthGap = 0.0;
-        vec2 screenUv = vec2(0.0);
+        vec2 textureUv = vec2(0.0);
         if (uDepthSofteningEnabled != 0 || compositeInputsActive()) {
             vec2 opaqueDepthSize = max(vec2(textureSize(uOpaqueDepthTex, 0)), vec2(1.0));
-            screenUv = gl_FragCoord.xy / opaqueDepthSize;
+            textureUv = gl_FragCoord.xy / opaqueDepthSize;
         }
         if (uDepthSofteningEnabled != 0 && alpha < 0.999) {
-            float opaqueDepth = texture(uOpaqueDepthTex, screenUv).r;
+            float opaqueDepth = texture(uOpaqueDepthTex, textureUv).r;
             if (opaqueDepth < 1.0) {
                 float depthGap = max(opaqueDepth - gl_FragCoord.z, 0.0);
                 waterDepthGap = depthGap;
@@ -598,7 +599,7 @@ uniform vec3 uCameraPos;
         }
 
         if (waterLayer) {
-            finalColor = applyWaterComposite(finalColor, alpha, vNormal, waterDepthGap, screenUv);
+            finalColor = applyWaterComposite(finalColor, alpha, vNormal, waterDepthGap, textureUv);
             alpha = clamp(alpha + 0.08, texColor.a * 0.70, 0.92);
         }
 

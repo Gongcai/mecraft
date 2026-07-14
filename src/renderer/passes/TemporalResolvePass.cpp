@@ -93,11 +93,16 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup[historyPrevIndex]);
 
+    // Convert bottom-left clip UV jitter to the native texture UV delta stored by temporal passes.
+    glm::vec2 textureJitter = ctx.jitter;
+    if (rhiDevice.backend() == RhiBackend::Vulkan) {
+        textureJitter.y = -textureJitter.y;
+    }
     const glm::vec4 pushConstants[2] = {
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
-                  ctx.jitter.x,
-                  ctx.jitter.y),
+                  textureJitter.x,
+                  textureJitter.y),
         glm::vec4(ctx.weather.surfaceWetness,
                   settings.weather.rainLinesEnabled ? 1.0f : 0.0f,
                   0.0f,

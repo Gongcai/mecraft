@@ -1,6 +1,9 @@
 #version 450 core
 
-layout(location = 0) in vec2 vTexCoord;
+#include "rhi_screen_coordinates.glsl"
+
+layout(location = 0) in vec2 vScreenUv;
+layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec2 FragVelocity;
 
 layout(binding = 0) uniform sampler2D uDepthTex;
@@ -37,8 +40,8 @@ vec2 sanitizeVelocity(vec2 velocity) {
     return clamp(velocity, vec2(-2.0), vec2(2.0));
 }
 
-vec3 reconstructWorldPosition(vec2 uv, float depth, out bool valid) {
-    vec4 clip = vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec3 reconstructWorldPosition(vec2 clipUv, float depth, out bool valid) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 world = uInvViewProj * clip;
     valid = !badVec4(world) && abs(world.w) > 0.00001;
     if (!valid) {
@@ -74,29 +77,32 @@ void main() {
     // rotation, not stay pinned to screen space.
     // DerivativeMain/program/Post/Temporal.frag::GetClosestFragment returns
     // closestFragment.xy *= screenPixelSize, without a half-texel offset.
-    vec2 closestUv = closestFragment.xy / uScreenParams.xy;
+    vec2 closestTextureUv = closestFragment.xy / uScreenParams.xy;
+    vec2 closestScreenUv = rhiNativeFragCoordToScreenUv(
+        closestFragment.xy, uScreenParams.xy);
+    vec2 closestClipUv = rhiScreenUvToClipUv(closestScreenUv);
     bool worldValid = false;
-    vec3 worldPos = reconstructWorldPosition(closestUv, closestFragment.z, worldValid);
+    vec3 worldPos = reconstructWorldPosition(closestClipUv, closestFragment.z, worldValid);
     if (!worldValid) {
         FragVelocity = kRejectHistoryVelocity;
         return;
     }
 
-    // Standard world-space reprojection. This velocity buffer is shared by
-    // TAA, SSAO, reflections, volumetric fog, and motion blur; keep it as the
-    // physically correct reprojection and apply effect-specific bias in the
-    // consuming pass instead.
+    // Standard world-space reprojection. The shared velocity buffer stores native texture UV
+    // deltas so TAA, SSAO, reflections, volumetric fog, and motion blur consume one domain.
     vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;
         return;
     }
-    vec2 previousUv = previousClip.xy / previousClip.w * 0.5 + 0.5;
+    vec2 previousClipUv = previousClip.xy / previousClip.w * 0.5 + 0.5;
+    vec2 previousScreenUv = rhiScreenUvToClipUv(previousClipUv);
+    vec2 previousTextureUv = rhiScreenUvToTextureUv(previousScreenUv);
 
-    vec2 cameraVelocity = closestUv - previousUv;
+    vec2 cameraVelocity = closestTextureUv - previousTextureUv;
 
-    // Per-object velocity: entity/drop GBuffer shaders write screen-space
-    // velocity to a separate texture via MRT. Use it when non-zero to
+    // Per-object velocity: entity/drop GBuffer shaders write texture UV velocity to a separate
+    // MRT attachment. Use it when non-zero to
     // override camera-only reprojection for moving objects.
     vec2 perObjectVel = texelFetch(uPerObjectVelocityTex, ivec2(closestFragment.xy), 0).rg;
     vec2 velocity = (!badVec2(perObjectVel) && dot(perObjectVel, perObjectVel) > 1e-10)
