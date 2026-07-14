@@ -1374,6 +1374,68 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             pipelineChanged = true;
         }
         const bool fsr1Supported = renderScene.isFsr1Supported();
+        const bool fsr31Supported = renderScene.isFsr31Supported();
+        static constexpr const char* kTemporalUpscalers[] = {
+            "Native",
+            "AMD FSR 3.1"
+        };
+        int temporalUpscaler =
+            fsr31Supported && settings.upscale.type == TemporalUpscalerType::Fsr31
+                ? 1 : 0;
+        const int temporalUpscalerCount = fsr31Supported ? 2 : 1;
+        if (ImGui::Combo(
+                "Temporal Upscaler", &temporalUpscaler,
+                kTemporalUpscalers, temporalUpscalerCount)) {
+            settings.upscale.type = temporalUpscaler == 1
+                ? TemporalUpscalerType::Fsr31
+                : TemporalUpscalerType::Native;
+            if (settings.upscale.type == TemporalUpscalerType::Fsr31 &&
+                (settings.upscale.quality < TemporalUpscaleQuality::Quality ||
+                 settings.upscale.quality > TemporalUpscaleQuality::Performance)) {
+                settings.upscale.quality = TemporalUpscaleQuality::Quality;
+            }
+            pipelineChanged = true;
+        }
+        static constexpr const char* kFsr31Qualities[] = {
+            "Quality",
+            "Balanced",
+            "Performance"
+        };
+        int fsr31Quality =
+            settings.upscale.quality >= TemporalUpscaleQuality::Quality &&
+            settings.upscale.quality <= TemporalUpscaleQuality::Performance
+                ? static_cast<int>(settings.upscale.quality) -
+                      static_cast<int>(TemporalUpscaleQuality::Quality)
+                : 0;
+        const bool fsr31Active =
+            fsr31Supported &&
+            settings.upscale.type == TemporalUpscalerType::Fsr31;
+        ImGui::BeginDisabled(!fsr31Active);
+        if (ImGui::Combo(
+                "FSR 3.1 Quality", &fsr31Quality,
+                kFsr31Qualities, IM_ARRAYSIZE(kFsr31Qualities))) {
+            settings.upscale.quality = static_cast<TemporalUpscaleQuality>(
+                static_cast<int>(TemporalUpscaleQuality::Quality) + fsr31Quality);
+            pipelineChanged = true;
+        }
+        pipelineChanged |= ImGui::Checkbox(
+            "FSR 3.1 Sharpening", &settings.upscale.sharpeningEnabled);
+        pipelineChanged |= ImGui::SliderFloat(
+            "FSR 3.1 Sharpness", &settings.upscale.sharpeningStrength,
+            0.0f, 1.0f, "%.2f");
+        pipelineChanged |= ImGui::Checkbox(
+            "FSR 3.1 Debug View", &settings.upscale.debugVisualizationEnabled);
+        if (const auto& temporalFrame = renderScene.temporalFrameInput();
+            temporalFrame.has_value()) {
+            ImGui::Text(
+                "Temporal Extent: %ux%u -> %ux%u",
+                temporalFrame->renderExtent.width,
+                temporalFrame->renderExtent.height,
+                temporalFrame->outputExtent.width,
+                temporalFrame->outputExtent.height);
+        }
+        ImGui::EndDisabled();
+
         bool fsr1EnabledUi = fsr1Supported && settings.upscale.fsr1Enabled;
         ImGui::BeginDisabled(!fsr1Supported);
         if (ImGui::Checkbox("FSR1 Upscale (OpenGL only)", &fsr1EnabledUi)) {

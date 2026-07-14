@@ -437,7 +437,8 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
                                      const std::string& label,
                                      const std::vector<std::string>& options,
                                      int currentIndex,
-                                     std::function<void(int, const std::string&)> onSelectionChanged) {
+                                     std::function<void(int, const std::string&)> onSelectionChanged,
+                                     const bool interactive) {
     (void)resourceMgr;
     auto row = std::make_unique<UIStackLayout>();
     row->setDirection(StackDirection::Horizontal);
@@ -455,6 +456,7 @@ void SettingsScreen::addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
     auto dropdown = std::make_unique<UIDropdown>();
     dropdown->setOptions(std::vector<std::string>(options));
     dropdown->setSelectedIndex(currentIndex);
+    dropdown->interactive = interactive;
     dropdown->width = 320.0f;
     dropdown->height = kSettingsRowHeight;
     dropdown->setOnSelectionChanged(std::move(onSelectionChanged));
@@ -1392,8 +1394,73 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
     if (!m_renderScene) { finalizeScrollTab(tabLayout.scroll, stack); return; }
     RenderSettings s = m_renderScene->getSettings();
     const bool fsr1Supported = m_renderScene->isFsr1Supported();
+    const bool fsr31Supported = m_renderScene->isFsr31Supported();
 
-    addSectionHeader(stack, resourceMgr, "Upscaling");
+    addSectionHeader(stack, resourceMgr, "Temporal Upscaling");
+
+    std::vector<std::string> temporalUpscalers{"Native"};
+    if (fsr31Supported) {
+        temporalUpscalers.emplace_back("AMD FSR 3.1");
+    }
+    const int selectedUpscaler =
+        fsr31Supported && s.upscale.type == TemporalUpscalerType::Fsr31 ? 1 : 0;
+    addDropdownRow(
+        stack, resourceMgr, "Temporal Upscaler", temporalUpscalers,
+        selectedUpscaler,
+        [this](const int index, const std::string&) {
+            auto settings = m_renderScene->getSettings();
+            settings.upscale.type = index == 1
+                ? TemporalUpscalerType::Fsr31
+                : TemporalUpscalerType::Native;
+            if (settings.upscale.type == TemporalUpscalerType::Fsr31 &&
+                (settings.upscale.quality < TemporalUpscaleQuality::Quality ||
+                 settings.upscale.quality > TemporalUpscaleQuality::Performance)) {
+                settings.upscale.quality = TemporalUpscaleQuality::Quality;
+            }
+            m_renderScene->setSettings(settings);
+        });
+
+    const int selectedQuality =
+        s.upscale.quality >= TemporalUpscaleQuality::Quality &&
+        s.upscale.quality <= TemporalUpscaleQuality::Performance
+            ? static_cast<int>(s.upscale.quality) -
+                  static_cast<int>(TemporalUpscaleQuality::Quality)
+            : 0;
+    addDropdownRow(
+        stack, resourceMgr, "FSR 3.1 Quality",
+        {"Quality", "Balanced", "Performance"}, selectedQuality,
+        [this](const int index, const std::string&) {
+            auto settings = m_renderScene->getSettings();
+            settings.upscale.quality = static_cast<TemporalUpscaleQuality>(
+                static_cast<int>(TemporalUpscaleQuality::Quality) + index);
+            m_renderScene->setSettings(settings);
+        }, fsr31Supported);
+    addToggle(
+        stack, resourceMgr, "FSR 3.1 Sharpening",
+        s.upscale.sharpeningEnabled,
+        [this](const bool enabled) {
+            auto settings = m_renderScene->getSettings();
+            settings.upscale.sharpeningEnabled = enabled;
+            m_renderScene->setSettings(settings);
+        }, fsr31Supported);
+    addSliderRow(
+        stack, resourceMgr, "FSR 3.1 Sharpness", 0.0f, 1.0f,
+        s.upscale.sharpeningStrength, 0.01f,
+        [this](const float strength) {
+            auto settings = m_renderScene->getSettings();
+            settings.upscale.sharpeningStrength = strength;
+            m_renderScene->setSettings(settings);
+        }, fsr31Supported);
+    addToggle(
+        stack, resourceMgr, "FSR 3.1 Debug View",
+        s.upscale.debugVisualizationEnabled,
+        [this](const bool enabled) {
+            auto settings = m_renderScene->getSettings();
+            settings.upscale.debugVisualizationEnabled = enabled;
+            m_renderScene->setSettings(settings);
+        }, fsr31Supported);
+
+    addSectionHeader(stack, resourceMgr, "Legacy Spatial Upscaling");
 
     addToggle(stack, resourceMgr, "FSR1 Upscale (OpenGL only)",
               fsr1Supported && s.upscale.fsr1Enabled,

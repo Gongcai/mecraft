@@ -723,6 +723,10 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         settings.upscale.quality != m_settings.upscale.quality ||
         settings.upscale.outputWidth != m_settings.upscale.outputWidth ||
         settings.upscale.outputHeight != m_settings.upscale.outputHeight ||
+        settings.upscale.dynamicResolutionEnabled !=
+            m_settings.upscale.dynamicResolutionEnabled ||
+        settings.upscale.debugVisualizationEnabled !=
+            m_settings.upscale.debugVisualizationEnabled ||
         settings.upscale.fsr1Enabled != m_settings.upscale.fsr1Enabled ||
         std::abs(settings.upscale.fsr1RenderScale - m_settings.upscale.fsr1RenderScale) > 0.0001f;
 
@@ -739,6 +743,16 @@ void RenderScene::setSettings(const RenderSettings& settings) {
 
 const RenderSettings& RenderScene::getSettings() const {
     return m_settings;
+}
+
+bool RenderScene::isFsr31Supported() const {
+#if defined(MECRAFT_ENABLE_FSR31)
+    return m_shared.rhiDevice != nullptr &&
+           m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
+           m_settings.pipelineMode == PipelineMode::Deferred;
+#else
+    return false;
+#endif
 }
 
 void RenderScene::setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback) {

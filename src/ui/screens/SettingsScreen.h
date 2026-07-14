@@ -61,7 +61,8 @@ private:
     // Helper to create a labeled dropdown row
     void addDropdownRow(UIWidget* parent, ResourceMgr& resourceMgr,
                         const std::string& label, const std::vector<std::string>& options,
-                        int currentIndex, std::function<void(int, const std::string&)> onSelectionChanged);
+                        int currentIndex, std::function<void(int, const std::string&)> onSelectionChanged,
+                        bool interactive = true);
 
     // Helper to create a toggle
     void addToggle(UIWidget* parent, ResourceMgr& resourceMgr,
