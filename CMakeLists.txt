@@ -383,6 +383,8 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
             src/renderer/rhi/vulkan/VkRhiConversions.h
             src/renderer/rhi/vulkan/VkRhiDevice.cpp
             src/renderer/rhi/vulkan/VkRhiDevice.h
+            src/renderer/rhi/vulkan/VkRhiInterop.cpp
+            src/renderer/rhi/vulkan/VkRhiInterop.h
     )
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         set_source_files_properties(

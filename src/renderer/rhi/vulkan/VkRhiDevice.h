@@ -8,6 +8,7 @@
 
 class VkRhiCommandList;
 class VkRhiCommandListPool;
+class VkRhiInterop;
 struct VkRhiDeviceData;
 
 class VkRhiDevice final : public RhiDevice {
@@ -77,6 +78,7 @@ public:
 private:
     friend class VkRhiCommandList;
     friend class VkRhiCommandListPool;
+    friend class VkRhiInterop;
 
     [[nodiscard]] bool validateSubmissionToken(RhiSubmissionToken token) const;
     void refreshSwapchainCapabilities();

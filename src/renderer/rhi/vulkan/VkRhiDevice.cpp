@@ -5,6 +5,7 @@
 #include "renderer/rhi/RhiShaderCompiler.h"
 #include "renderer/rhi/vulkan/VkRhiCommandList.h"
 #include "renderer/rhi/vulkan/VkRhiConversions.h"
+#include "renderer/rhi/vulkan/VkRhiInterop.h"
 
 #include <GLFW/glfw3.h>
 
@@ -246,6 +247,72 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
 } // namespace
 
 #include "renderer/rhi/vulkan/VkRhiInternal.h"
+
+std::optional<VkRhiDeviceInteropInfo> VkRhiInterop::deviceInfo(
+    const VkRhiDevice& device) {
+    if (!device.m_initialized || device.m_data == nullptr) {
+        return std::nullopt;
+    }
+    const VkRhiDeviceData& data = *device.m_data;
+    return VkRhiDeviceInteropInfo{
+        data.instance, data.physicalDevice, data.device,
+        data.graphicsQueue, data.computeQueue, data.transferQueue, data.presentQueue,
+        data.queueFamilies.graphics, data.queueFamilies.compute,
+        data.queueFamilies.transfer, data.queueFamilies.present
+    };
+}
+
+std::optional<VkRhiTextureInteropInfo> VkRhiInterop::textureInfo(
+    const VkRhiDevice& device,
+    const RhiTextureHandle texture,
+    const RhiTextureViewHandle view) {
+    if (!device.m_initialized || device.m_data == nullptr ||
+        !texture.isValid() || !view.isValid()) {
+        return std::nullopt;
+    }
+    const auto* textureRecord = findRecord(device.m_data->textures, texture);
+    const auto* viewRecord = findRecord(device.m_data->textureViews, view);
+    if (textureRecord == nullptr || viewRecord == nullptr ||
+        viewRecord->desc.texture.index != texture.index ||
+        viewRecord->desc.texture.generation != texture.generation) {
+        return std::nullopt;
+    }
+    const RhiTextureFormat viewFormat =
+        viewRecord->desc.format == RhiTextureFormat::Undefined
+            ? textureRecord->desc.format : viewRecord->desc.format;
+    return VkRhiTextureInteropInfo{
+        textureRecord->image,
+        viewRecord->view,
+        toVkFormat(viewFormat),
+        {textureRecord->desc.width,
+         textureRecord->desc.height,
+         textureRecord->desc.dimension == RhiTextureDimension::Texture3D
+             ? textureRecord->desc.depthOrLayers : 1u},
+        textureRecord->desc.mipLevels,
+        textureRecord->desc.dimension == RhiTextureDimension::Texture3D
+            ? 1u : textureRecord->desc.depthOrLayers,
+        defaultAspectForFormat(viewFormat)
+    };
+}
+
+std::optional<VkCommandBuffer> VkRhiInterop::commandBuffer(
+    const VkRhiDevice& device,
+    const RhiCommandList& commandList) {
+    if (!device.m_initialized || device.m_data == nullptr) {
+        return std::nullopt;
+    }
+    const std::lock_guard<std::mutex> registryLock(device.m_data->commandRegistryMutex);
+    if (device.m_data->commandLists.find(const_cast<RhiCommandList*>(&commandList)) ==
+        device.m_data->commandLists.end()) {
+        return std::nullopt;
+    }
+    const auto& vkCommandList = static_cast<const VkRhiCommandList&>(commandList);
+    if (vkCommandList.state() != RhiCommandListState::Recording) {
+        return std::nullopt;
+    }
+    const auto native = static_cast<VkCommandBuffer>(vkCommandList.nativeCommandBuffer());
+    return native != VK_NULL_HANDLE ? std::optional<VkCommandBuffer>(native) : std::nullopt;
+}
 
 namespace {
 

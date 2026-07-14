@@ -1,6 +1,7 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
+#include "renderer/rhi/vulkan/VkRhiInterop.h"
 
 #include <GLFW/glfw3.h>
 
@@ -16,6 +17,45 @@ enum class FrameAttempt {
     Retry,
     Error
 };
+
+[[nodiscard]] bool validateVulkanInterop(VkRhiDevice& device,
+                                         RhiCommandListPool& commandPool,
+                                         const RhiTextureHandle texture,
+                                         const RhiTextureViewHandle view,
+                                         const uint32_t width,
+                                         const uint32_t height,
+                                         const uint32_t depth) {
+    const auto deviceInfo = VkRhiInterop::deviceInfo(device);
+    const auto textureInfo = VkRhiInterop::textureInfo(device, texture, view);
+    if (!deviceInfo.has_value() || deviceInfo->instance == VK_NULL_HANDLE ||
+        deviceInfo->physicalDevice == VK_NULL_HANDLE ||
+        deviceInfo->device == VK_NULL_HANDLE ||
+        deviceInfo->graphicsQueue == VK_NULL_HANDLE ||
+        deviceInfo->graphicsQueueFamily == VK_QUEUE_FAMILY_IGNORED ||
+        !textureInfo.has_value() || textureInfo->image == VK_NULL_HANDLE ||
+        textureInfo->view == VK_NULL_HANDLE ||
+        textureInfo->format != VK_FORMAT_R32G32B32A32_SFLOAT ||
+        textureInfo->extent.width != width || textureInfo->extent.height != height ||
+        textureInfo->extent.depth != depth || textureInfo->arrayLayers != 1u ||
+        textureInfo->aspectMask != VK_IMAGE_ASPECT_COLOR_BIT ||
+        VkRhiInterop::textureInfo(device, {}, view).has_value() ||
+        VkRhiInterop::resourceLayout(RhiResourceState::ShaderRead) !=
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+        return false;
+    }
+
+    RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+    if (commands == nullptr ||
+        !commands->begin({"VulkanSmoke.Interop", RhiCommandListType::Graphics})) {
+        return false;
+    }
+    const auto nativeCommands = VkRhiInterop::commandBuffer(device, *commands);
+    if (!nativeCommands.has_value() || *nativeCommands == VK_NULL_HANDLE ||
+        !commands->end() || VkRhiInterop::commandBuffer(device, *commands).has_value()) {
+        return false;
+    }
+    return true;
+}
 
 [[nodiscard]] FrameAttempt renderFrame(VkRhiDevice& device,
                                        RhiCommandListPool& commandPool,
@@ -618,6 +658,8 @@ int main() {
          renderStableFrame(device, *commandPool, window) &&
          device.capabilities().swapchainPresentMode == RhiPresentMode::Fifo);
     if (commandPool == nullptr || !immediateModeValidated ||
+        !validateVulkanInterop(device, *commandPool, texture, textureView,
+                               textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||

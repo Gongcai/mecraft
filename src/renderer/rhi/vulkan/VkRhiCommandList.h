@@ -10,6 +10,7 @@
 #include <vector>
 
 class VkRhiDevice;
+class VkRhiInterop;
 struct VkRhiCommandListData;
 
 class VkRhiCommandList final : public RhiCommandList {
@@ -59,6 +60,7 @@ public:
 private:
     friend class VkRhiCommandListPool;
     friend class VkRhiDevice;
+    friend class VkRhiInterop;
 
     VkRhiCommandList(VkRhiDevice& device, void* nativeCommandPool, RhiCommandListType type);
     void resetForPoolReuse();
