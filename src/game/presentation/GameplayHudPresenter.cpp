@@ -1,5 +1,6 @@
 #include "GameplayHudPresenter.h"
 #include "../../ui/core/UIRenderer.h"
+#include "../../engine/platform/Window.h"
 #include "../states/GameStateMachine.h"
 #include "../../engine/input/InputManager.h"
 
@@ -23,15 +24,20 @@ PlayerStatsData toPlayerStatsData(const GameplayPresentationSnapshot& snap) {
 void GameplayHudPresenter::render(const GameplayPresentationSnapshot& snap,
                                    RhiDevice& rhiDevice,
                                    GameStateMachine& stateMachine) {
-    UIRenderContext context = prepareRenderContext(snap, rhiDevice);
+    const Window::FramebufferSize size = m_window.getFramebufferSize();
+    UIRenderContext context = prepareRenderContext(
+        snap, rhiDevice, size.width, size.height);
     renderPrepared(context, stateMachine);
 }
 
 UIRenderContext GameplayHudPresenter::prepareRenderContext(const GameplayPresentationSnapshot& snap,
-                                                           RhiDevice& rhiDevice) {
+                                                           RhiDevice& rhiDevice,
+                                                           const int surfaceWidth,
+                                                           const int surfaceHeight) {
     m_playerStats = toPlayerStatsData(snap);
     return m_uiRenderer.prepareRenderContext(
-        m_window,
+        surfaceWidth,
+        surfaceHeight,
         rhiDevice,
         *snap.inventory,
         m_playerStats,

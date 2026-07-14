@@ -46,7 +46,8 @@ bool prepareUiOverlayFrame(RenderResourceHub& renderer,
 }
 
 bool beginUiOverlayRendering(RenderResourceHub& renderer,
-                             Window& window,
+                             const int frameWidth,
+                             const int frameHeight,
                              RhiCommandList& commandList) {
     RhiDevice& rhiDevice = renderer.rhiDevice();
     const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
@@ -70,8 +71,8 @@ bool beginUiOverlayRendering(RenderResourceHub& renderer,
     renderingInfo.renderArea = {
         0,
         0,
-        static_cast<uint32_t>(std::max(1, window.getWidth())),
-        static_cast<uint32_t>(std::max(1, window.getHeight()))
+        static_cast<uint32_t>(std::max(1, frameWidth)),
+        static_cast<uint32_t>(std::max(1, frameHeight))
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
@@ -316,7 +317,8 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // Obtain renderer references from the aggregate
     auto& renderer = renderRuntime.resourceHub();
-    if (!renderer.resizeRhiSwapchain(window)) {
+    const Window::FramebufferSize requestedSize = window.getFramebufferSize();
+    if (!renderer.resizeRhiSwapchain(requestedSize.width, requestedSize.height)) {
         return false;
     }
     RhiDevice& rhiDevice = renderer.rhiDevice();
@@ -389,6 +391,8 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         session.worldView(),
         snap.renderCamera,
         window,
+        static_cast<int>(frame.width),
+        static_cast<int>(frame.height),
         session.dayNightSystem(),
         session.weatherSystem(),
         targetData,
@@ -417,7 +421,9 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
-        UIRenderContext uiContext = hudPresenter->prepareRenderContext(snap, renderer.rhiDevice());
+        UIRenderContext uiContext = hudPresenter->prepareRenderContext(
+            snap, renderer.rhiDevice(),
+            static_cast<int>(frame.width), static_cast<int>(frame.height));
         RhiCommandList* uiCommandList = nullptr;
         if (!prepareUiOverlayFrame(renderer, *hudPresenter, uiCommandList)) {
             return false;
@@ -449,7 +455,10 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
             }
         }
 #endif
-        if (!beginUiOverlayRendering(renderer, window, *uiCommandList)) {
+        if (!beginUiOverlayRendering(renderer,
+                                     static_cast<int>(frame.width),
+                                     static_cast<int>(frame.height),
+                                     *uiCommandList)) {
             return false;
         }
         hudPresenter->renderPrepared(uiContext, session.stateMachine());

@@ -142,14 +142,12 @@ void RenderResourceHub::shutdown() {
     m_commandListPool = nullptr;
 }
 
-bool RenderResourceHub::resizeRhiSwapchain(const Window& window) {
+bool RenderResourceHub::resizeRhiSwapchain(const int width, const int height) {
     if (!m_rhiDevice) {
         MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: RHI device is not initialized\n");
         return false;
     }
 
-    const int width = window.getWidth();
-    const int height = window.getHeight();
     if (width <= 0 || height <= 0) {
         MECRAFT_LOG_STREAM(std::cerr << "RenderResourceHub: invalid swapchain dimensions\n");
         return false;

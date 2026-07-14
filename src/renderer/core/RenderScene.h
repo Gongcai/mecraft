@@ -94,6 +94,9 @@ struct RenderGameplayFrameRequest {
     const IWorldView& worldView;
     const Camera& camera;
     Window& window;
+    /// Immutable swapchain extent returned by acquireFrame() for this frame.
+    int framebufferWidth = 1;
+    int framebufferHeight = 1;
     const DayNightSystem& dayNightSystem;
     const WeatherSystem& weatherSystem;
     const BlockTargetRenderData& target;
@@ -120,6 +123,7 @@ public:
 
     /// Main render entry point (called from Game)
     void renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
+                     const glm::ivec2& frameRenderSize, float frameAspectRatio,
                      const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak,
                      const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem);
 
@@ -207,7 +211,7 @@ public:
     /// Build PostProcessEffects from current settings and world state.
     /// Replaces the ~70 line parameter assembly in Game::renderFrame().
     PostProcessEffects buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
-                                                const Window& window, float cameraRainVisibility,
+                                                float frameAspectRatio, float cameraRainVisibility,
                                                 float screenRollRadians,
                                                 const DayNightSystem& dayNightSystem,
                                                 const WeatherSystem& weatherSystem) const;
@@ -225,12 +229,13 @@ public:
 private:
     /// Build FrameContext from world state
     FrameContext buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
+                                   const glm::ivec2& frameRenderSize, float frameAspectRatio,
                                    const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem);
-    glm::ivec2 internalRenderSize(const Window& window) const;
+    glm::ivec2 internalRenderSize(const glm::ivec2& displaySize) const;
     [[nodiscard]] bool isFsr1RuntimeEnabled() const;
 
     /// Prepare active pipeline targets that FrameContext depends on.
-    bool prepareFrameResources(const Window& window);
+    bool prepareFrameResources(const glm::ivec2& frameRenderSize);
 
     /// Invalidate temporal/history resources when pipeline changes
     void invalidateFrameHistory();

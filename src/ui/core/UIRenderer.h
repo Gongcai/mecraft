@@ -25,7 +25,6 @@
 #include "UITheme.h"
 #include "UIScaleConfig.h"
 
-class Window;
 class ResourceMgr;
 class RhiDevice;
 class Inventory;
@@ -49,7 +48,8 @@ public:
     void init(ResourceMgr& resourceMgr);
     void shutdown();
 
-    UIRenderContext prepareRenderContext(const Window& window,
+    UIRenderContext prepareRenderContext(int surfaceWidth,
+                                         int surfaceHeight,
                                          RhiDevice& rhiDevice,
                                          const Inventory& inventory,
                                          const PlayerStatsData& playerStats,
@@ -114,7 +114,8 @@ public:
     void setActiveScene(UIScene* scene);
     [[nodiscard]] UIScene* getActiveScene() const;
     [[nodiscard]] ResourceMgr* getResourceMgr() const;
-    UIRenderContext prepareSceneContext(const Window& window,
+    UIRenderContext prepareSceneContext(int surfaceWidth,
+                                        int surfaceHeight,
                                         RhiDevice& rhiDevice,
                                         const InputSnapshot& inputSnapshot);
     void renderSceneOnlyPrepared(const UIRenderContext& context);
@@ -158,7 +159,8 @@ public:
     [[nodiscard]] float getInventoryCountTextScale() const;
 
 private:
-    [[nodiscard]] UIRenderContext makeContextFromWindow(const Window& window,
+    [[nodiscard]] UIRenderContext makeContextFromSurface(int surfaceWidth,
+                                                         int surfaceHeight,
                                                         const Inventory& inventory,
                                                         const PlayerStatsData& playerStats,
                                                         const InputSnapshot& inputSnapshot) const;

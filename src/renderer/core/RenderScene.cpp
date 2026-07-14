@@ -275,9 +275,10 @@ void RenderScene::shutdown() {
 }
 
 void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
+                              const glm::ivec2& frameRenderSize, const float frameAspectRatio,
                               const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak,
                               const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
-    if (!prepareFrameResources(window)) {
+    if (!prepareFrameResources(frameRenderSize)) {
         return;
     }
 
@@ -306,7 +307,9 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
     }
 
     // Build frame context
-    m_currentContext = buildFrameContext(worldView, camera, window, dayNightSystem, weatherSystem);
+    m_currentContext = buildFrameContext(
+        worldView, camera, window, frameRenderSize, frameAspectRatio,
+        dayNightSystem, weatherSystem);
 
     // Phase 9: Use active pipeline only if fully initialized and ready.
     // All shared resources must be populated AND pipeline must have been init'd.
@@ -339,9 +342,13 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
 
     const bool skipPostProcess = getPipelineMode() == PipelineMode::Forward;
+    const glm::ivec2 displaySize(std::max(1, request.framebufferWidth),
+                                std::max(1, request.framebufferHeight));
     const glm::ivec2 frameRenderSize = skipPostProcess
-        ? glm::ivec2(std::max(1, request.window.getWidth()), std::max(1, request.window.getHeight()))
-        : internalRenderSize(request.window);
+        ? displaySize
+        : internalRenderSize(displaySize);
+    const float frameAspectRatio = static_cast<float>(displaySize.x) /
+                                   static_cast<float>(displaySize.y);
     if (!m_postProcessPass.beginSceneCapture(*m_shared.rhiDevice,
                                              frameRenderSize.x,
                                              frameRenderSize.y)) {
@@ -354,6 +361,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     float cameraRainVisibility = 1.0f;
 
     renderFrame(request.worldView, request.camera, request.window,
+                frameRenderSize, frameAspectRatio,
                 request.target, request.blockBreak,
                 request.dayNightSystem, request.weatherSystem);
 
@@ -452,7 +460,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                                        m_debugService);
     } else {
         PostProcessEffects effects = buildPostProcessEffects(
-            request.worldView, request.camera, request.window,
+            request.worldView, request.camera, frameAspectRatio,
             cameraRainVisibility, request.screenRollRadians,
             request.dayNightSystem, request.weatherSystem);
         m_postProcessPass.setFrameEffects(effects);
@@ -465,7 +473,6 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             if (fsrEnabled) {
                 const RhiTextureHandle postTexture = m_postProcessPass.compositeToTexture(
                     *m_shared.rhiDevice,
-                    request.window,
                     request.frameTime,
                     m_lastFrameOutput.gbufferDepth,
                     m_debugService);
@@ -480,8 +487,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                         m_postProcessPass.compositeTextureViewHandle(),
                         inputWidth,
                         inputHeight,
-                        std::max(1, request.window.getWidth()),
-                        std::max(1, request.window.getHeight()),
+                        displaySize.x,
+                        displaySize.y,
                         m_settings.upscale.sharpness,
                         m_debugService)) {
                     std::abort();
@@ -491,7 +498,8 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     *m_shared.rhiDevice,
                     m_currentContext.swapchainColorView,
                     m_currentContext.swapchainColorFormat,
-                    request.window,
+                    displaySize.x,
+                    displaySize.y,
                     request.frameTime,
                     m_lastFrameOutput.gbufferDepth,
                     m_debugService);
@@ -746,18 +754,17 @@ const char* RenderScene::getPipelineStatus() const {
     return "Active";
 }
 
-bool RenderScene::prepareFrameResources(const Window& window) {
+bool RenderScene::prepareFrameResources(const glm::ivec2& frameRenderSize) {
     if (!m_activePipeline || !m_activePipeline->supportsDeferred() || m_shared.deferredTargets == nullptr) {
         return true;
     }
 
     DeferredRenderTargets& targets = *m_shared.deferredTargets;
-    const glm::ivec2 internalSize = internalRenderSize(window);
-    return targets.ensureSize(internalSize.x, internalSize.y, m_settings.shadow.resolution);
+    return targets.ensureSize(frameRenderSize.x, frameRenderSize.y, m_settings.shadow.resolution);
 }
 
 PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldView, const Camera& camera,
-                                                         const Window& window, float cameraRainVisibility,
+                                                         const float frameAspectRatio, float cameraRainVisibility,
                                                          float screenRollRadians,
                                                          const DayNightSystem& dayNightSystem,
                                                          const WeatherSystem& weatherSystem) const {
@@ -826,7 +833,7 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
             sunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
         }
 
-        const glm::mat4 viewProj = camera.getProjectionMatrix(window.getAspectRatio()) * camera.getViewMatrix();
+        const glm::mat4 viewProj = camera.getProjectionMatrix(frameAspectRatio) * camera.getViewMatrix();
         const glm::vec4 clip = viewProj * glm::vec4(camera.getPosition() + sunDirection * 256.0f, 1.0f);
         if (clip.w > 0.0001f) {
             const glm::vec3 ndc = glm::vec3(clip) / clip.w;
@@ -843,12 +850,14 @@ PostProcessEffects RenderScene::buildPostProcessEffects(const IWorldView& worldV
 }
 
 FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const Camera& camera, const Window& window,
+                                            const glm::ivec2& frameRenderSize,
+                                            const float frameAspectRatio,
                                             const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
     FrameContext ctx;
 
     // Camera matrices
     ctx.camera.view = camera.getViewMatrix();
-    ctx.camera.projection = camera.getProjectionMatrix(window.getAspectRatio());
+    ctx.camera.projection = camera.getProjectionMatrix(frameAspectRatio);
     ctx.camera.viewProj = ctx.camera.projection * ctx.camera.view;
     ctx.camera.invViewProj = glm::inverse(ctx.camera.viewProj);
     ctx.camera.position = camera.getPosition();
@@ -861,9 +870,8 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     ctx.renderLocalPlayerModel = m_renderLocalPlayerModel;
 
     // Internal scene dimensions. UI and final presentation still use the real window size.
-    const glm::ivec2 internalSize = internalRenderSize(window);
-    ctx.frameWidth = internalSize.x;
-    ctx.frameHeight = internalSize.y;
+    ctx.frameWidth = frameRenderSize.x;
+    ctx.frameHeight = frameRenderSize.y;
     ctx.swapchainColorTexture = m_shared.rhiDevice->currentSwapchainColorTexture();
     ctx.swapchainColorView = m_shared.rhiDevice->currentSwapchainColorView();
     ctx.swapchainDepthStencilView = m_shared.rhiDevice->currentSwapchainDepthStencilView();
@@ -1021,9 +1029,9 @@ FrameContext RenderScene::buildFrameContext(const IWorldView& worldView, const C
     return ctx;
 }
 
-glm::ivec2 RenderScene::internalRenderSize(const Window& window) const {
-    const int displayWidth = std::max(1, window.getWidth());
-    const int displayHeight = std::max(1, window.getHeight());
+glm::ivec2 RenderScene::internalRenderSize(const glm::ivec2& displaySize) const {
+    const int displayWidth = std::max(1, displaySize.x);
+    const int displayHeight = std::max(1, displaySize.y);
     if (!isFsr1RuntimeEnabled()) {
         return glm::ivec2(displayWidth, displayHeight);
     }

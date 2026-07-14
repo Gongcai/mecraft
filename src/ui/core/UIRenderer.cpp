@@ -9,7 +9,6 @@
 
 #include "engine/platform/Time.h"
 #include "engine/input/InputManager.h"
-#include "engine/platform/Window.h"
 #include "../../player/Inventory.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../renderer/rhi/RhiCommandList.h"
@@ -579,14 +578,15 @@ void UIRenderer::setCraftingSystem(const CraftingSystem* craftingSystem)
     m_inventoryPanel.setCraftingSystem(craftingSystem);
 }
 
-UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
+UIRenderContext UIRenderer::prepareRenderContext(const int surfaceWidth,
+                                                 const int surfaceHeight,
                                                  RhiDevice& rhiDevice,
                                                  const Inventory& inventory,
                                                  const PlayerStatsData& playerStats,
                                                  const InputSnapshot& inputSnapshot)
 {
-    m_surfaceWidth = std::max(1, window.getWidth());
-    m_surfaceHeight = std::max(1, window.getHeight());
+    m_surfaceWidth = std::max(1, surfaceWidth);
+    m_surfaceHeight = std::max(1, surfaceHeight);
 
     m_hotbar.setInventorySource(&inventory);
     m_inventoryPanel.setInventorySource(&inventory);
@@ -595,7 +595,8 @@ UIRenderContext UIRenderer::prepareRenderContext(const Window& window,
     m_creativeInventoryPanel.setInventorySource(&inventory);
     m_commandInput.visible =(m_commandInputRequested);
 
-    UIRenderContext context = makeContextFromWindow(window, inventory, playerStats, inputSnapshot);
+    UIRenderContext context = makeContextFromSurface(
+        m_surfaceWidth, m_surfaceHeight, inventory, playerStats, inputSnapshot);
     if (m_activeScene && m_activeScene->visible) {
         prepareBackdropBlur(context, rhiDevice);
     }
@@ -617,14 +618,15 @@ void UIRenderer::renderPrepared(const UIRenderContext& context)
     m_commandInputRequested = false;
 }
 
-UIRenderContext UIRenderer::makeContextFromWindow(const Window& window,
-                                                  const Inventory& inventory,
-                                                  const PlayerStatsData& playerStats,
-                                                  const InputSnapshot& inputSnapshot) const
+UIRenderContext UIRenderer::makeContextFromSurface(const int surfaceWidth,
+                                                   const int surfaceHeight,
+                                                   const Inventory& inventory,
+                                                   const PlayerStatsData& playerStats,
+                                                   const InputSnapshot& inputSnapshot) const
 {
     UIRenderContext context;
-    const float actualW = static_cast<float>(std::max(1, window.getWidth()));
-    const float actualH = static_cast<float>(std::max(1, window.getHeight()));
+    const float actualW = static_cast<float>(std::max(1, surfaceWidth));
+    const float actualH = static_cast<float>(std::max(1, surfaceHeight));
 
     context.scaleConfig = UIScaleConfig::create(actualW, actualH, m_guiScale);
     context.screenWidth = context.scaleConfig.virtualWidth;
@@ -667,12 +669,13 @@ ResourceMgr* UIRenderer::getResourceMgr() const
     return m_resourceMgr;
 }
 
-UIRenderContext UIRenderer::prepareSceneContext(const Window& window,
+UIRenderContext UIRenderer::prepareSceneContext(const int surfaceWidth,
+                                                const int surfaceHeight,
                                                 RhiDevice& rhiDevice,
                                                 const InputSnapshot& inputSnapshot)
 {
-    const int windowW = std::max(1, window.getWidth());
-    const int windowH = std::max(1, window.getHeight());
+    const int windowW = std::max(1, surfaceWidth);
+    const int windowH = std::max(1, surfaceHeight);
     m_surfaceWidth = windowW;
     m_surfaceHeight = windowH;
 

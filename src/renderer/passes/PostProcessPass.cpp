@@ -8,7 +8,6 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
-#include "engine/platform/Window.h"
 
 #include <algorithm>
 #include <cmath>
@@ -262,7 +261,8 @@ bool PostProcessPass::beginSceneCapture(RhiDevice& rhiDevice,
 void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
                                             const RhiTextureViewHandle swapchainColorView,
                                             const RhiTextureFormat swapchainColorFormat,
-                                            const Window& window,
+                                            const int outputWidth,
+                                            const int outputHeight,
                                             const float frameTime,
                                             const RhiTextureHandle gbufferDepthTexture,
                                             RenderDebugService& debugService) {
@@ -294,8 +294,8 @@ void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
     });
     bindBackbufferOutput(commandList,
                          swapchainColorView,
-                         std::max(1, window.getWidth()),
-                         std::max(1, window.getHeight()),
+                         std::max(1, outputWidth),
+                         std::max(1, outputHeight),
                          false);
     renderComposite(commandList, m_compositeSwapchainPipeline);
     commandList.endRendering();
@@ -310,11 +310,9 @@ void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
 
 RhiTextureHandle PostProcessPass::compositeToTexture(
     RhiDevice& rhiDevice,
-    const Window& window,
     const float frameTime,
     const RhiTextureHandle gbufferDepthTexture,
     RenderDebugService& debugService) {
-    static_cast<void>(window);
     if (!m_sceneCaptured ||
         !ensureCompositeTarget(rhiDevice, m_targetWidth, m_targetHeight) ||
         !ensureRhiPipelines(rhiDevice) || !ensureNoiseTextureView(rhiDevice) ||

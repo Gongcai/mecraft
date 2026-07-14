@@ -15,7 +15,6 @@ class RhiCommandList;
 class RhiCommandListPool;
 class RhiDevice;
 class RenderDebugService;
-class Window;
 
 /// Per-frame post-process effects configuration.
 struct PostProcessEffects {
@@ -86,14 +85,14 @@ public:
     void compositeToBackbuffer(RhiDevice& rhiDevice,
                                RhiTextureViewHandle swapchainColorView,
                                RhiTextureFormat swapchainColorFormat,
-                               const Window& window,
+                               int outputWidth,
+                               int outputHeight,
                                float frameTime,
                                RhiTextureHandle gbufferDepthTexture,
                                RenderDebugService& debugService);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
     [[nodiscard]] RhiTextureHandle compositeToTexture(RhiDevice& rhiDevice,
-                                                      const Window& window,
                                                       float frameTime,
                                                       RhiTextureHandle gbufferDepthTexture,
                                                       RenderDebugService& debugService);

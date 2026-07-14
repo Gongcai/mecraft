@@ -80,30 +80,31 @@ void Window::pollEvents() {
     glfwPollEvents();
 }
 
-int Window::getWidth() const {
+Window::FramebufferSize Window::getFramebufferSize() const {
     if (m_window == nullptr) {
-        return m_width;
+        return {m_width, m_height};
     }
     int framebufferWidth = m_width;
     int framebufferHeight = m_height;
     glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
-    return framebufferWidth > 0 ? framebufferWidth : m_width;
+    if (framebufferWidth > 0 && framebufferHeight > 0) {
+        return {framebufferWidth, framebufferHeight};
+    }
+    return {m_width, m_height};
+}
+
+int Window::getWidth() const {
+    return getFramebufferSize().width;
 }
 
 int Window::getHeight() const {
-    if (m_window == nullptr) {
-        return m_height;
-    }
-    int framebufferWidth = m_width;
-    int framebufferHeight = m_height;
-    glfwGetFramebufferSize(m_window, &framebufferWidth, &framebufferHeight);
-    return framebufferHeight > 0 ? framebufferHeight : m_height;
+    return getFramebufferSize().height;
 }
 
 float Window::getAspectRatio() const {
-    const int width = getWidth();
-    const int height = getHeight();
-    return static_cast<float>(width) / static_cast<float>(height > 0 ? height : 1);
+    const FramebufferSize size = getFramebufferSize();
+    return static_cast<float>(size.width) /
+           static_cast<float>(size.height > 0 ? size.height : 1);
 }
 
 void Window::setTitle(const std::string &title) const {

@@ -162,8 +162,9 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
 
 void LoadingAppState::render(const double frameTime) {
     (void)frameTime;
-    const uint32_t width = static_cast<uint32_t>(std::max(1, m_deps.window.getWidth()));
-    const uint32_t height = static_cast<uint32_t>(std::max(1, m_deps.window.getHeight()));
+    const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
+    const uint32_t width = static_cast<uint32_t>(std::max(1, framebufferSize.width));
+    const uint32_t height = static_cast<uint32_t>(std::max(1, framebufferSize.height));
     if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to resize the RHI swapchain\n");
         return;
@@ -180,7 +181,10 @@ void LoadingAppState::render(const double frameTime) {
     }
 
     UIRenderContext sceneContext =
-        m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
+        m_deps.uiRenderer.prepareSceneContext(static_cast<int>(frame.width),
+                                              static_cast<int>(frame.height),
+                                              m_deps.rhiDevice,
+                                              m_deps.input.snapshot());
 
     RhiCommandList* commandList = nullptr;
     if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool,

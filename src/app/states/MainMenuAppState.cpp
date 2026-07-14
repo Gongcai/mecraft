@@ -380,8 +380,9 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
 
 void MainMenuAppState::render(double frameTime) {
     (void)frameTime;
-    const uint32_t width = static_cast<uint32_t>(std::max(1, m_deps.window.getWidth()));
-    const uint32_t height = static_cast<uint32_t>(std::max(1, m_deps.window.getHeight()));
+    const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
+    const uint32_t width = static_cast<uint32_t>(std::max(1, framebufferSize.width));
+    const uint32_t height = static_cast<uint32_t>(std::max(1, framebufferSize.height));
     if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to resize the RHI swapchain\n");
         return;
@@ -411,7 +412,10 @@ void MainMenuAppState::render(double frameTime) {
                             m_skyboxYaw, 10.0f,
                             m_deps.rhiDevice);
     UIRenderContext sceneContext =
-        m_deps.uiRenderer.prepareSceneContext(m_deps.window, m_deps.rhiDevice, m_deps.input.snapshot());
+        m_deps.uiRenderer.prepareSceneContext(static_cast<int>(frame.width),
+                                              static_cast<int>(frame.height),
+                                              m_deps.rhiDevice,
+                                              m_deps.input.snapshot());
 
     if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.commandListPool,
                               frame.width, frame.height, m_deps.uiRenderer, commandList)) {
