@@ -3,6 +3,7 @@
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
 #include "renderer/passes/TemporalUpscalePass.h"
+#include "renderer/presentation/PresentationController.h"
 
 #if defined(MECRAFT_ENABLE_FSR31)
 #include "renderer/upscaling/Fsr31VulkanContext.h"
@@ -13,6 +14,7 @@
 #include <cstdint>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -22,6 +24,82 @@ enum class FrameAttempt {
     Retry,
     Error
 };
+
+[[nodiscard]] bool validateIndependentUiPresentation(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool,
+    GLFWwindow* window) {
+    std::unique_ptr<PresentationBackend> backend =
+        createNativePresentationBackend(device);
+    PresentationController controller(*backend);
+    if (!controller.initUiComposition(device)) {
+        return false;
+    }
+
+    RhiTextureHandle firstUiTexture;
+    for (uint32_t frameIndex = 0u; frameIndex < 4u; ++frameIndex) {
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        const PresentationFrame frame = controller.beginFrame(width, height);
+        if (!frame.shouldRender()) {
+            return false;
+        }
+        const std::optional<PresentationUiFrame> uiFrame =
+            controller.acquireUiFrame(frame);
+        if (!uiFrame.has_value() ||
+            uiFrame->width != frame.acquired.width ||
+            uiFrame->height != frame.acquired.height ||
+            uiFrame->colorFormat != device.swapchainColorFormat() ||
+            !uiFrame->premultipliedAlpha ||
+            !uiFrame->colorTexture.isValid() ||
+            !uiFrame->colorView.isValid()) {
+            return false;
+        }
+        const std::optional<PresentationFrameResources> resources =
+            controller.frameResources(frame, *uiFrame);
+        if (!resources.has_value() ||
+            resources->realFrameNumber != frame.realFrameNumber ||
+            resources->width != frame.acquired.width ||
+            resources->height != frame.acquired.height ||
+            !resources->uiPremultipliedAlpha) {
+            return false;
+        }
+        if (frameIndex == 0u) {
+            firstUiTexture = uiFrame->colorTexture;
+        } else if (frameIndex == 1u &&
+                   firstUiTexture.index == uiFrame->colorTexture.index &&
+                   firstUiTexture.generation == uiFrame->colorTexture.generation) {
+            return false;
+        }
+
+        RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+        if (commands == nullptr ||
+            !commands->begin({
+                "VulkanSmoke.IndependentUiPresentation",
+                RhiCommandListType::Graphics
+            }) ||
+            !controller.beginUiRendering(*commands, *uiFrame) ||
+            !controller.endUiRenderingAndComposite(*commands, frame, *uiFrame) ||
+            !controller.submitUiFrame(*commands, *uiFrame)) {
+            return false;
+        }
+        const PresentationCompleteResult presented = controller.presentFrame(frame);
+        if (presented.result != PresentationResult::Presented) {
+            return false;
+        }
+    }
+
+    const PresentationStatistics& statistics = controller.statistics();
+    const bool validStatistics =
+        statistics.realFramesAcquired == 4u &&
+        statistics.realFramesPresented == 4u &&
+        statistics.displayedFrames == 4u &&
+        statistics.generatedFramesPresented == 0u &&
+        statistics.failedOperations == 0u;
+    controller.shutdownUiComposition();
+    return validStatistics;
+}
 
 [[nodiscard]] bool validateVulkanInterop(VkRhiDevice& device,
                                          RhiCommandListPool& commandPool,
@@ -955,6 +1033,7 @@ int main() {
         !validateVulkanInterop(device, *commandPool, texture, textureView,
                                textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
+        !validateIndependentUiPresentation(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||
         !renderStableFrame(device, *commandPool, window) ||

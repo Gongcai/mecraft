@@ -34,6 +34,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <optional>
 
 namespace {
 
@@ -46,71 +47,6 @@ bool prepareUiOverlayFrame(RenderResourceHub& renderer,
         return false;
     }
     return hudPresenter.prepareTextFrame(*commandList);
-}
-
-bool beginUiOverlayRendering(RenderResourceHub& renderer,
-                             const int frameWidth,
-                             const int frameHeight,
-                             RhiCommandList& commandList) {
-    RhiDevice& rhiDevice = renderer.rhiDevice();
-    const RhiTextureViewHandle colorView = rhiDevice.currentSwapchainColorView();
-    const RhiTextureViewHandle depthView = rhiDevice.currentSwapchainDepthStencilView();
-    if (!colorView.isValid() || !depthView.isValid()) {
-        return false;
-    }
-
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = colorView;
-    colorAttachment.loadOp = RhiLoadOp::Load;
-    colorAttachment.storeOp = RhiStoreOp::Store;
-
-    RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view = depthView;
-    depthAttachment.depthLoadOp = RhiLoadOp::Load;
-    depthAttachment.depthStoreOp = RhiStoreOp::Store;
-
-    RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "UiOverlay";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, frameWidth)),
-        static_cast<uint32_t>(std::max(1, frameHeight))
-    };
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1u;
-    renderingInfo.depthStencilAttachment = &depthAttachment;
-
-    commandList.textureBarrier({
-        rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
-    commandList.beginRendering(renderingInfo);
-    return true;
-}
-
-void endUiOverlayPass(RenderResourceHub& renderer,
-                      RhiCommandList*& commandList) {
-    if (commandList == nullptr) {
-        return;
-    }
-
-    commandList->endRendering();
-    commandList->textureBarrier({
-        renderer.rhiDevice().currentSwapchainColorTexture(),
-        RhiResourceState::RenderTarget,
-        RhiResourceState::Present
-    });
-    if (!commandList->end()) {
-        std::abort();
-    }
-    RhiCommandList* submittedCommandLists[] = {commandList};
-    if (!renderer.rhiDevice().submit(
-            {"Gameplay.UiOverlay.Submit", submittedCommandLists, 1u})) {
-        std::abort();
-    }
-    commandList = nullptr;
 }
 
 void sendClientInput(GameSession& session, const float fixedStep) {
@@ -424,6 +360,13 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
+        const std::optional<PresentationUiFrame> uiFrame =
+            presentation.acquireUiFrame(presentationFrame);
+        if (!uiFrame.has_value()) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "[GameFrameOrchestrator] Failed to acquire the independent UI target\n");
+            return false;
+        }
         UIRenderContext uiContext = hudPresenter->prepareRenderContext(
             snap, renderer.rhiDevice(),
             static_cast<int>(frame.width), static_cast<int>(frame.height));
@@ -460,10 +403,9 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
             }
         }
 #endif
-        if (!beginUiOverlayRendering(renderer,
-                                     static_cast<int>(frame.width),
-                                     static_cast<int>(frame.height),
-                                     *uiCommandList)) {
+        if (!presentation.beginUiRendering(*uiCommandList, *uiFrame)) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "[GameFrameOrchestrator] Failed to begin independent UI rendering\n");
             return false;
         }
         hudPresenter->renderPrepared(uiContext, session.stateMachine());
@@ -474,7 +416,19 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         }
         dashboardEnd = std::chrono::steady_clock::now();
 #endif
-        endUiOverlayPass(renderer, uiCommandList);
+        if (!presentation.endUiRenderingAndComposite(
+                *uiCommandList,
+                presentationFrame,
+                *uiFrame)) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "[GameFrameOrchestrator] Failed to record independent UI composition\n");
+            return false;
+        }
+        if (!presentation.submitUiFrame(*uiCommandList, *uiFrame)) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "[GameFrameOrchestrator] Failed to submit independent UI composition\n");
+            return false;
+        }
     }
 #ifdef MECRAFT_DEBUG
     const auto preSwapEnd = std::chrono::steady_clock::now();

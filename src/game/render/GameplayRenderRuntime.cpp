@@ -75,6 +75,9 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     m_impl->presentationBackend = createNativePresentationBackend(rhiDevice);
     m_impl->presentationController = std::make_unique<PresentationController>(
         *m_impl->presentationBackend);
+    if (!m_impl->presentationController->initUiComposition(rhiDevice)) {
+        return false;
+    }
 
     // Core GPU infrastructure
     if (!renderer.init(resourceMgr, threadPool, rhiDevice, commandListPool)) {
@@ -146,6 +149,9 @@ void GameplayRenderRuntime::shutdown() {
 #ifdef MECRAFT_DEBUG
     m_impl->dashboard.shutdown();
 #endif
+    if (m_impl->presentationController != nullptr) {
+        m_impl->presentationController->shutdownUiComposition();
+    }
     if (m_impl->rainRenderer != nullptr) {
         m_impl->rainRenderer->shutdown();
         m_impl->rainRenderer = nullptr;

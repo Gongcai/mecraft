@@ -53,9 +53,9 @@ void CrosshairControl::init(ResourceMgr& resourceMgr)
     pipelineDesc.depthFormat = m_rhiDevice->swapchainDepthStencilFormat();
     RhiBlendAttachmentState blend;
     blend.blendEnabled = true;
-    blend.srcColor = RhiBlendFactor::OneMinusDstColor;
+    blend.srcColor = RhiBlendFactor::SrcAlpha;
     blend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
-    blend.srcAlpha = RhiBlendFactor::OneMinusDstColor;
+    blend.srcAlpha = RhiBlendFactor::One;
     blend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
     pipelineDesc.blend.attachments.push_back(blend);
     m_pipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);

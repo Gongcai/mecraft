@@ -99,6 +99,8 @@ void testNativeLifecycleAndIdentityContract() {
             "the first acquired real frame must receive number one");
     require(backend.resizeCalls == 1u && backend.acquireCalls == 1u,
             "the first frame must resize and acquire exactly once");
+    require(!controller.acquireUiFrame(frame).has_value(),
+            "UI target acquisition must require explicit composition initialization");
 
     const PresentationFrame duplicateAcquire = controller.beginFrame(1920, 1080);
     require(duplicateAcquire.failure == PresentationFailure::FrameAlreadyOpen,
