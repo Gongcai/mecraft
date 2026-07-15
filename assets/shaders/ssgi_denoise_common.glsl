@@ -10,7 +10,7 @@ layout(binding = 2) uniform sampler2D uNormalAoTex;
 layout(binding = 3) uniform sampler2D uMomentsTex;
 #endif
 
-layout(std140, binding = 15) uniform RhiPushConstants {
+layout(push_constant) uniform RhiPushConstants {
     vec4 pScreenNearStep;
     vec4 pStrength;
 };
