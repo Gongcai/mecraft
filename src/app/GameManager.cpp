@@ -58,6 +58,13 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
         return false;
     }
     m_vsyncEnabled = vsyncSetting.enabled;
+    const app::FullscreenSettingResult fullscreenSetting = app::loadFullscreenEnabled();
+    if (!fullscreenSetting.isValid) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: invalid app.fullscreenEnabled setting\n");
+        return false;
+    }
+    m_fullscreenEnabled = fullscreenSetting.enabled.has_value() &&
+                          *fullscreenSetting.enabled;
     m_rhiDevice = renderer::rhi::createRhiDevice(m_launchOptions.rhiBackend);
     if (!m_rhiDevice) {
         MECRAFT_LOG_STREAM(std::cerr << "GameManager: requested RHI backend is unavailable: "
@@ -67,6 +74,10 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     }
     if (!initWindow(width, height, title)) {
         m_rhiDevice.reset();
+        return false;
+    }
+    if (m_fullscreenEnabled && !m_window.setFullscreen(true)) {
+        MECRAFT_LOG_STREAM(std::cerr << "GameManager: failed to enter configured fullscreen mode\n");
         return false;
     }
     if (!initRhiDevice()) {

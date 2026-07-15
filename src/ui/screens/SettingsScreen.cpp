@@ -14,9 +14,11 @@
 #include "../../renderer/core/RenderScene.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiDeviceFactory.h"
+#include "../../renderer/presentation/PresentationController.h"
 #include "../../resource/ResourceMgr.h"
 #include "../../world/World.h"
 #include "../../app/AppSettings.h"
+#include "../../engine/platform/Window.h"
 
 #include <algorithm>
 #include <array>
@@ -541,17 +543,30 @@ void SettingsScreen::buildGeneralTab(UIWidget* contentPanel, ResourceMgr& resour
 
     addSectionHeader(stack, resourceMgr,
                      loc(getLocaleManager(), "setting_display", "Display"));
-    RhiDevice* const rhiDevice = &resourceMgr.rhiDevice();
+    if (m_presentationController == nullptr || m_window == nullptr) {
+        std::abort();
+    }
+    PresentationController* const presentation = m_presentationController;
     addToggle(stack, resourceMgr,
               loc(getLocaleManager(), "setting_vsync", "Vertical Sync"),
-              rhiDevice->vsyncEnabled(),
-              [rhiDevice](const bool enabled) {
-                  if (!rhiDevice->setVsyncEnabled(enabled)) {
+              presentation->vsyncEnabled(),
+              [presentation](const bool enabled) {
+                  if (!presentation->requestVsyncEnabled(enabled)) {
                       std::abort();
                   }
                   app::saveVsyncEnabled(enabled);
               },
-              rhiDevice->capabilities().vsyncControl);
+              presentation->vsyncControlAvailable());
+    addToggle(stack, resourceMgr,
+              loc(getLocaleManager(), "setting_fullscreen", "Fullscreen"),
+              presentation->fullscreenEnabled(),
+              [presentation](const bool enabled) {
+                  if (!presentation->requestFullscreenEnabled(enabled)) {
+                      std::abort();
+                  }
+                  app::saveFullscreenEnabled(enabled);
+              },
+              presentation->fullscreenControlAvailable());
 
     finalizeScrollTab(tabLayout.scroll, stack);
 }

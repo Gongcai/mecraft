@@ -40,7 +40,8 @@
     "setting_current_backend": "当前",
     "setting_restart_to_apply": "重启后生效",
     "setting_display": "显示",
-    "setting_vsync": "垂直同步"
+    "setting_vsync": "垂直同步",
+    "setting_fullscreen": "全屏"
   },
   "blocks": {
     "air": "空气",

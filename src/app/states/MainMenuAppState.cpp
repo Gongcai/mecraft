@@ -381,8 +381,11 @@ void MainMenuAppState::update(double frameTime, double& accumulator) {
 void MainMenuAppState::render(double frameTime) {
     (void)frameTime;
     const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
-    const uint32_t width = static_cast<uint32_t>(std::max(1, framebufferSize.width));
-    const uint32_t height = static_cast<uint32_t>(std::max(1, framebufferSize.height));
+    if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
+        return;
+    }
+    const uint32_t width = static_cast<uint32_t>(framebufferSize.width);
+    const uint32_t height = static_cast<uint32_t>(framebufferSize.height);
     if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to resize the RHI swapchain\n");
         return;

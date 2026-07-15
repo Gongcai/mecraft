@@ -256,11 +256,8 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 
     // Obtain renderer references from the aggregate.
     auto& renderer = renderRuntime.resourceHub();
-    const Window::FramebufferSize requestedSize = window.getFramebufferSize();
     PresentationController& presentation = renderRuntime.presentationController();
-    const PresentationFrame presentationFrame = presentation.beginFrame(
-        requestedSize.width,
-        requestedSize.height);
+    const PresentationFrame presentationFrame = presentation.beginFrame(window);
     if (!presentationFrame.shouldContinue()) {
         MECRAFT_LOG_STREAM(std::cerr
             << "[GameFrameOrchestrator] "

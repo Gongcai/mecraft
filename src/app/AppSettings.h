@@ -17,6 +17,11 @@ struct VsyncSettingResult {
     std::optional<bool> enabled;
 };
 
+struct FullscreenSettingResult {
+    bool isValid = true;
+    std::optional<bool> enabled;
+};
+
 struct AppSettingsData {
     int renderDistance = 16;
     RenderSettings renderSettings;
@@ -27,11 +32,13 @@ struct AppSettingsData {
 [[nodiscard]] RenderSettings loadRenderSettings(const RenderSettings& fallback = RenderSettings{});
 [[nodiscard]] RhiBackendSettingResult loadRhiBackend();
 [[nodiscard]] VsyncSettingResult loadVsyncEnabled();
+[[nodiscard]] FullscreenSettingResult loadFullscreenEnabled();
 
 bool saveSettings(const AppSettingsData& settings);
 bool saveRenderDistance(int renderDistance);
 bool saveRenderSettings(const RenderSettings& settings);
 bool saveRhiBackend(RhiBackend backend);
 bool saveVsyncEnabled(bool enabled);
+bool saveFullscreenEnabled(bool enabled);
 
 } // namespace app

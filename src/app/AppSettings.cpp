@@ -742,6 +742,25 @@ VsyncSettingResult loadVsyncEnabled() {
     return {true, vsyncIt->get<bool>()};
 }
 
+FullscreenSettingResult loadFullscreenEnabled() {
+    const json root = readSettingsFile();
+    const auto appIt = root.find("app");
+    if (appIt == root.end()) {
+        return {};
+    }
+    if (!appIt->is_object()) {
+        return {false, std::nullopt};
+    }
+    const auto fullscreenIt = appIt->find("fullscreenEnabled");
+    if (fullscreenIt == appIt->end()) {
+        return {};
+    }
+    if (!fullscreenIt->is_boolean()) {
+        return {false, std::nullopt};
+    }
+    return {true, fullscreenIt->get<bool>()};
+}
+
 bool saveSettings(const AppSettingsData& settings) {
     json root = readSettingsFile();
     json& game = root["game"];
@@ -786,6 +805,16 @@ bool saveVsyncEnabled(const bool enabled) {
         app = json::object();
     }
     app["vsyncEnabled"] = enabled;
+    return writeSettingsFile(root);
+}
+
+bool saveFullscreenEnabled(const bool enabled) {
+    json root = readSettingsFile();
+    json& app = root["app"];
+    if (!app.is_object()) {
+        app = json::object();
+    }
+    app["fullscreenEnabled"] = enabled;
     return writeSettingsFile(root);
 }
 

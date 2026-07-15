@@ -14,6 +14,7 @@
 #include "../../particle/ParticleSystem.h"
 #include "../../particle/RainRenderer.h"
 #include "../../app/AppSettings.h"
+#include "../../engine/platform/Window.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -62,6 +63,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
                                   GameSession& session,
                                   UIRenderer& uiRenderer,
                                   ThreadPool& threadPool,
+                                  Window& window,
                                   RhiDevice& rhiDevice,
                                   RhiCommandListPool& commandListPool) {
     auto& renderer = m_impl->resourceHub;
@@ -76,6 +78,9 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     m_impl->presentationController = std::make_unique<PresentationController>(
         *m_impl->presentationBackend);
     if (!m_impl->presentationController->initUiComposition(rhiDevice)) {
+        return false;
+    }
+    if (!m_impl->presentationController->initWindowState(window)) {
         return false;
     }
 
@@ -253,6 +258,10 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.displayedFrames = presentation.displayedFrames;
     stats.presentationSkippedFrames = presentation.skippedFrames;
     stats.presentationFailedOperations = presentation.failedOperations;
+    stats.presentationVsyncChanges = presentation.vsyncChanges;
+    stats.presentationFullscreenChanges = presentation.fullscreenChanges;
+    stats.presentationVsyncEnabled = presentation.vsyncEnabled;
+    stats.presentationFullscreenEnabled = presentation.fullscreenEnabled;
 
     // Snapshot max-frame-time: when current frame is the worst, record all timings
     if (stats.frameMs > stats.maxFrameMs) {

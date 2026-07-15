@@ -3,6 +3,7 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
+#include "engine/platform/Window.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -52,6 +53,18 @@ public:
         return {status, displayedFrameCount, 0u};
     }
 
+    [[nodiscard]] bool vsyncEnabled() const override {
+        return m_rhiDevice.vsyncEnabled();
+    }
+
+    [[nodiscard]] bool supportsVsyncControl() const override {
+        return m_rhiDevice.capabilities().vsyncControl;
+    }
+
+    bool setVsyncEnabled(const bool enabled) override {
+        return m_rhiDevice.setVsyncEnabled(enabled);
+    }
+
 private:
     RhiDevice& m_rhiDevice;
 };
@@ -73,6 +86,7 @@ PresentationController::PresentationController(
     PresentationBackend& backend)
     : m_backend(backend) {
     m_statistics.mode = m_backend.mode();
+    m_statistics.vsyncEnabled = m_backend.vsyncEnabled();
 }
 
 PresentationController::~PresentationController() {
@@ -93,6 +107,61 @@ bool PresentationController::initUiComposition(RhiDevice& rhiDevice) {
         return false;
     }
     return createUiCompositionPipeline();
+}
+
+bool PresentationController::initWindowState(Window& window) {
+    if (window.getHandle() == nullptr ||
+        (m_window != nullptr && m_window != &window)) {
+        return false;
+    }
+    m_window = &window;
+    m_statistics.fullscreenEnabled = window.isFullscreen();
+    return true;
+}
+
+bool PresentationController::requestVsyncEnabled(const bool enabled) {
+    if (!m_backend.supportsVsyncControl()) {
+        return false;
+    }
+    if (enabled == m_backend.vsyncEnabled()) {
+        m_requestedVsyncEnabled.reset();
+    } else {
+        m_requestedVsyncEnabled = enabled;
+    }
+    return true;
+}
+
+bool PresentationController::requestFullscreenEnabled(const bool enabled) {
+    if (m_window == nullptr || !m_window->fullscreenControlAvailable()) {
+        return false;
+    }
+    if (enabled == m_window->isFullscreen()) {
+        m_requestedFullscreenEnabled.reset();
+    } else {
+        m_requestedFullscreenEnabled = enabled;
+    }
+    return true;
+}
+
+bool PresentationController::vsyncEnabled() const {
+    return m_requestedVsyncEnabled.has_value()
+        ? *m_requestedVsyncEnabled
+        : m_backend.vsyncEnabled();
+}
+
+bool PresentationController::vsyncControlAvailable() const {
+    return m_backend.supportsVsyncControl();
+}
+
+bool PresentationController::fullscreenEnabled() const {
+    if (m_requestedFullscreenEnabled.has_value()) {
+        return *m_requestedFullscreenEnabled;
+    }
+    return m_window != nullptr && m_window->isFullscreen();
+}
+
+bool PresentationController::fullscreenControlAvailable() const {
+    return m_window != nullptr && m_window->fullscreenControlAvailable();
 }
 
 void PresentationController::shutdownUiComposition() {
@@ -540,6 +609,29 @@ bool PresentationController::waitForUiSlot(UiSlot& slot) {
 
 PresentationFrame PresentationController::beginFrame(const int width,
                                                        const int height) {
+    const std::optional<PresentationFailure> displayFailure =
+        applyPendingDisplayState();
+    if (displayFailure.has_value()) {
+        return failBegin(*displayFailure);
+    }
+    return beginFrameExtent(width, height);
+}
+
+PresentationFrame PresentationController::beginFrame(Window& window) {
+    if (m_window != &window) {
+        return failBegin(PresentationFailure::WindowStateUnavailable);
+    }
+    const std::optional<PresentationFailure> displayFailure =
+        applyPendingDisplayState();
+    if (displayFailure.has_value()) {
+        return failBegin(*displayFailure);
+    }
+    const Window::FramebufferSize size = window.getFramebufferSize();
+    return beginFrameExtent(size.width, size.height);
+}
+
+PresentationFrame PresentationController::beginFrameExtent(const int width,
+                                                             const int height) {
     if (m_frameOpen) {
         return failBegin(PresentationFailure::FrameAlreadyOpen);
     }
@@ -597,6 +689,43 @@ PresentationFrame PresentationController::beginFrame(const int width,
         };
     }
     return failBegin(PresentationFailure::AcquireRejected, acquired.status);
+}
+
+std::optional<PresentationFailure>
+PresentationController::applyPendingDisplayState() {
+    if (m_frameOpen) {
+        return PresentationFailure::FrameAlreadyOpen;
+    }
+    if (m_requestedFullscreenEnabled.has_value()) {
+        if (m_window == nullptr) {
+            return PresentationFailure::WindowStateUnavailable;
+        }
+        const bool enabled = *m_requestedFullscreenEnabled;
+        if (!m_window->setFullscreen(enabled) ||
+            m_window->isFullscreen() != enabled) {
+            return PresentationFailure::FullscreenRejected;
+        }
+        m_requestedFullscreenEnabled.reset();
+        m_extentValid = false;
+        ++m_statistics.fullscreenChanges;
+        m_statistics.fullscreenEnabled = enabled;
+    }
+    if (m_requestedVsyncEnabled.has_value()) {
+        const bool enabled = *m_requestedVsyncEnabled;
+        if (!m_backend.setVsyncEnabled(enabled) ||
+            m_backend.vsyncEnabled() != enabled) {
+            return PresentationFailure::VsyncRejected;
+        }
+        m_requestedVsyncEnabled.reset();
+        m_extentValid = false;
+        ++m_statistics.vsyncChanges;
+        m_statistics.vsyncEnabled = enabled;
+    }
+    m_statistics.vsyncEnabled = m_backend.vsyncEnabled();
+    if (m_window != nullptr) {
+        m_statistics.fullscreenEnabled = m_window->isFullscreen();
+    }
+    return std::nullopt;
 }
 
 PresentationCompleteResult PresentationController::presentFrame(
@@ -702,6 +831,12 @@ const char* presentationFailureMessage(const PresentationFailure failure) {
         return "presentation backend failed to present the acquired real frame";
     case PresentationFailure::BackendFrameCountInvalid:
         return "presentation backend reported invalid displayed-frame counters";
+    case PresentationFailure::VsyncRejected:
+        return "presentation backend rejected the queued vertical synchronization state";
+    case PresentationFailure::FullscreenRejected:
+        return "native window rejected the queued fullscreen state";
+    case PresentationFailure::WindowStateUnavailable:
+        return "presentation controller is not bound to the requested native window";
     case PresentationFailure::FrameAlreadyOpen:
         return "presentation controller already owns an acquired real frame";
     case PresentationFailure::FrameNotOpen:

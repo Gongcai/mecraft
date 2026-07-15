@@ -15,6 +15,8 @@ class UIStackLayout;
 struct RenderSettings;
 class RenderScene;
 class World;
+class Window;
+class PresentationController;
 
 /// In-game settings screen accessible from the pause menu.
 /// Provides sliders, toggles, and dropdowns for render settings.
@@ -24,6 +26,10 @@ public:
 
     void setRenderScene(RenderScene* rs) { m_renderScene = rs; }
     void setWorld(World* world) { m_world = world; }
+    void setWindow(Window* window) { m_window = window; }
+    void setPresentationController(PresentationController* controller) {
+        m_presentationController = controller;
+    }
     void setRenderDistanceSetter(std::function<void(int)> setter) { m_renderDistanceSetter = std::move(setter); }
 
     void layout(const UIRenderContext& ctx) override;
@@ -74,6 +80,8 @@ private:
 
     RenderScene* m_renderScene = nullptr;
     World* m_world = nullptr;
+    Window* m_window = nullptr;
+    PresentationController* m_presentationController = nullptr;
     std::function<void(int)> m_renderDistanceSetter;
 
     UIPanel* m_overlay = nullptr;

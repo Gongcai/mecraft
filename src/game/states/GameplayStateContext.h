@@ -11,6 +11,8 @@ class Inventory;
 class LocaleManager;
 class RenderScene;
 class World;
+class Window;
+class PresentationController;
 
 namespace client {
 class GameClient;
@@ -34,6 +36,8 @@ struct GameplayStateContext {
     World* world = nullptr;              ///< Optional; active world for settings and world interactions
     std::function<void(int)> renderDistanceSetter;
     bool isMultiplayer = false;
+    Window* window = nullptr;
+    PresentationController* presentationController = nullptr;
 };
 
 #endif // MECRAFT_GAMEPLAY_STATE_CONTEXT_H

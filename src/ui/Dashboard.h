@@ -79,6 +79,10 @@ public:
         uint64_t displayedFrames = 0u;
         uint64_t presentationSkippedFrames = 0u;
         uint64_t presentationFailedOperations = 0u;
+        uint64_t presentationVsyncChanges = 0u;
+        uint64_t presentationFullscreenChanges = 0u;
+        bool presentationVsyncEnabled = false;
+        bool presentationFullscreenEnabled = false;
 
         // Max-frame-time snapshot: records all timings from the worst frame
         double maxFrameMs = 0.0;

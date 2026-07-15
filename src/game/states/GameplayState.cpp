@@ -58,7 +58,9 @@ GameplayState::GameplayState(StateDependencies deps,
                   client.clientWorld().setRenderDistance(distance);
                   client.sendViewConfig(distance);
               },
-              deps.isMultiplayer
+              deps.isMultiplayer,
+              deps.window,
+              deps.presentationController
           },
           InventoryStateContext{
               deps.fsm,
@@ -251,7 +253,8 @@ bool GameplayState::handleMenuTransition()
 
     // G6: Create UIState with narrow UIStateContext
     UIStateContext uiCtx{m_ctx.fsm, m_ctx.context, m_ctx.input, m_ctx.uiRenderer, m_ctx.localeManager,
-                         m_ctx.renderScene, m_ctx.world, m_ctx.renderDistanceSetter};
+                         m_ctx.renderScene, m_ctx.world, m_ctx.renderDistanceSetter,
+                         m_ctx.window, m_ctx.presentationController};
     m_ctx.fsm.pushState(std::make_unique<UIState>(uiCtx));
     return true;
 }

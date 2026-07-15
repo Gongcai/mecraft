@@ -24,6 +24,8 @@ class GameplayRegistry;
 
 class LocaleManager;
 class RenderScene;
+class Window;
+class PresentationController;
 
 /// Legacy state dependencies (kept for backward compatibility).
 /// New states should use narrow context structs (GameplayStateContext, UIStateContext, etc.)
@@ -44,6 +46,8 @@ struct StateDependencies {
     client::GameClient& gameClient;
     bool isMultiplayer;
     RenderScene* renderScene = nullptr;  ///< Optional; nullable for states that don't need render settings
+    Window* window = nullptr;
+    PresentationController* presentationController = nullptr;
 
 };
 

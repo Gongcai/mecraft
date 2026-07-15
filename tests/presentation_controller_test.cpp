@@ -1,4 +1,5 @@
 #include "renderer/presentation/PresentationController.h"
+#include "engine/platform/Window.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -65,11 +66,32 @@ public:
         return presentResults[nextPresentResult++];
     }
 
+    [[nodiscard]] bool vsyncEnabled() const override {
+        return currentVsyncEnabled;
+    }
+
+    [[nodiscard]] bool supportsVsyncControl() const override {
+        return vsyncSupported;
+    }
+
+    bool setVsyncEnabled(const bool enabled) override {
+        ++setVsyncCalls;
+        if (!setVsyncAccepted) {
+            return false;
+        }
+        currentVsyncEnabled = enabled;
+        return true;
+    }
+
     PresentationMode m_mode = PresentationMode::Native;
     bool resizeAccepted = true;
+    bool vsyncSupported = true;
+    bool setVsyncAccepted = true;
+    bool currentVsyncEnabled = false;
     uint32_t resizeCalls = 0u;
     uint32_t acquireCalls = 0u;
     uint32_t presentCalls = 0u;
+    uint32_t setVsyncCalls = 0u;
     uint32_t lastWidth = 0u;
     uint32_t lastHeight = 0u;
     RhiPresentInfo lastPresentInfo;
@@ -78,6 +100,94 @@ public:
     size_t nextAcquireResult = 0u;
     size_t nextPresentResult = 0u;
 };
+
+void testQueuedVsyncChanges() {
+    FakePresentationBackend backend;
+    backend.acquireResults = {
+        acquiredFrame(RhiFrameStatus::Success, 51u, 0u),
+        acquiredFrame(RhiFrameStatus::Success, 52u, 1u)
+    };
+    backend.presentResults = {
+        {RhiFrameStatus::Success, 1u, 0u},
+        {RhiFrameStatus::Success, 1u, 0u}
+    };
+    PresentationController controller(backend);
+
+    require(controller.requestVsyncEnabled(true),
+            "supported VSync changes must be accepted for the next frame boundary");
+    require(controller.vsyncEnabled() && !backend.currentVsyncEnabled,
+            "the controller must expose the queued VSync state before backend mutation");
+    const PresentationFrame firstFrame = controller.beginFrame(1600, 900);
+    require(firstFrame.shouldRender() && backend.currentVsyncEnabled &&
+            backend.setVsyncCalls == 1u,
+            "queued VSync must apply before frame acquisition");
+
+    require(controller.requestVsyncEnabled(false),
+            "VSync changes requested during an open frame must remain queued");
+    require(backend.currentVsyncEnabled,
+            "an open frame must retain its active VSync state until presentation");
+    require(controller.presentFrame(firstFrame).result == PresentationResult::Presented,
+            "the frame preceding a queued VSync change must present normally");
+
+    const PresentationFrame secondFrame = controller.beginFrame(1600, 900);
+    require(secondFrame.shouldRender() && !backend.currentVsyncEnabled &&
+            backend.setVsyncCalls == 2u,
+            "the second queued VSync state must apply at the next frame boundary");
+    require(controller.presentFrame(secondFrame).result == PresentationResult::Presented,
+            "the frame following a VSync change must present normally");
+    require(controller.statistics().vsyncChanges == 2u,
+            "presentation statistics must count applied VSync changes");
+
+    FakePresentationBackend unsupportedBackend;
+    unsupportedBackend.vsyncSupported = false;
+    PresentationController unsupportedController(unsupportedBackend);
+    require(!unsupportedController.requestVsyncEnabled(true),
+            "unsupported runtime VSync changes must be rejected explicitly");
+}
+
+void testQueuedFullscreenChanges() {
+    Window window;
+    require(window.initializePlatform(),
+            "fullscreen presentation testing requires an initialized window platform");
+    require(window.create(640, 360, "presentation_controller_test"),
+            "fullscreen presentation testing requires a native window");
+
+    FakePresentationBackend backend;
+    backend.acquireResults = {
+        acquiredFrame(RhiFrameStatus::Success, 61u, 0u),
+        acquiredFrame(RhiFrameStatus::Success, 62u, 1u)
+    };
+    backend.presentResults = {
+        {RhiFrameStatus::Success, 1u, 0u},
+        {RhiFrameStatus::Success, 1u, 0u}
+    };
+    PresentationController controller(backend);
+    require(controller.initWindowState(window),
+            "the controller must bind its native presentation window");
+    require(controller.requestFullscreenEnabled(true),
+            "fullscreen changes must be accepted for the next frame boundary");
+    require(controller.fullscreenEnabled() && !window.isFullscreen(),
+            "the controller must expose queued fullscreen state before window mutation");
+
+    const PresentationFrame fullscreenFrame = controller.beginFrame(window);
+    require(fullscreenFrame.shouldRender() && window.isFullscreen(),
+            "queued fullscreen mode must apply before frame acquisition");
+    require(controller.requestFullscreenEnabled(false),
+            "windowed mode requested during an open frame must remain queued");
+    require(window.isFullscreen(),
+            "an open frame must retain its current fullscreen state until presentation");
+    require(controller.presentFrame(fullscreenFrame).result == PresentationResult::Presented,
+            "the fullscreen frame must present before restoring windowed mode");
+
+    const PresentationFrame windowedFrame = controller.beginFrame(window);
+    require(windowedFrame.shouldRender() && !window.isFullscreen(),
+            "queued windowed mode must apply at the next frame boundary");
+    require(controller.presentFrame(windowedFrame).result == PresentationResult::Presented,
+            "the restored windowed frame must present normally");
+    require(controller.statistics().fullscreenChanges == 2u,
+            "presentation statistics must count applied fullscreen changes");
+    window.destroy();
+}
 
 void testNativeLifecycleAndIdentityContract() {
     FakePresentationBackend backend;
@@ -221,6 +331,8 @@ void testExplicitBackendFailures() {
 } // namespace
 
 int main() {
+    testQueuedVsyncChanges();
+    testQueuedFullscreenChanges();
     testNativeLifecycleAndIdentityContract();
     testResizeInvalidationAndGeneratedFrameStatistics();
     testExplicitBackendFailures();

@@ -827,6 +827,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Frame Time: %.3f ms", m_displayFps > 0.0 ? 1000.0 / m_displayFps : 0.0);
         ImGui::Text("Presentation Mode: %s",
                     presentationModeName(displayedProfilerStats.presentationMode));
+        ImGui::Text("Display State: VSync %s, Fullscreen %s",
+                    displayedProfilerStats.presentationVsyncEnabled ? "On" : "Off",
+                    displayedProfilerStats.presentationFullscreenEnabled ? "On" : "Off");
+        ImGui::Text("Display State Changes: VSync %llu, Fullscreen %llu",
+                    static_cast<unsigned long long>(displayedProfilerStats.presentationVsyncChanges),
+                    static_cast<unsigned long long>(displayedProfilerStats.presentationFullscreenChanges));
         ImGui::Text("Real Frames: acquired %llu, presented %llu",
                     static_cast<unsigned long long>(displayedProfilerStats.realFramesAcquired),
                     static_cast<unsigned long long>(displayedProfilerStats.realFramesPresented));

@@ -10,6 +10,7 @@
 
 class RhiDevice;
 class RhiCommandList;
+class Window;
 
 enum class PresentationMode {
     Native,
@@ -31,6 +32,9 @@ enum class PresentationFailure {
     AcquireRejected,
     PresentRejected,
     BackendFrameCountInvalid,
+    VsyncRejected,
+    FullscreenRejected,
+    WindowStateUnavailable,
     FrameAlreadyOpen,
     FrameNotOpen,
     FrameIdentityMismatch
@@ -83,6 +87,10 @@ struct PresentationStatistics {
     uint64_t skippedFrames = 0u;
     uint64_t failedOperations = 0u;
     uint64_t resizeOperations = 0u;
+    uint64_t vsyncChanges = 0u;
+    uint64_t fullscreenChanges = 0u;
+    bool vsyncEnabled = false;
+    bool fullscreenEnabled = false;
     RhiFrameStatus lastAcquireStatus = RhiFrameStatus::Error;
     RhiFrameStatus lastPresentStatus = RhiFrameStatus::Error;
     PresentationFailure lastFailure = PresentationFailure::None;
@@ -135,6 +143,12 @@ public:
     /// Presents the matching acquired real frame.
     virtual PresentationBackendPresentResult presentFrame(
         const RhiPresentInfo& info) = 0;
+    /// Reports the currently active vertical synchronization state.
+    [[nodiscard]] virtual bool vsyncEnabled() const = 0;
+    /// Reports whether the backend can change vertical synchronization at runtime.
+    [[nodiscard]] virtual bool supportsVsyncControl() const = 0;
+    /// Applies a vertical synchronization state before frame acquisition.
+    virtual bool setVsyncEnabled(bool enabled) = 0;
 };
 
 /// Creates the native RHI swapchain presentation backend.
@@ -160,6 +174,11 @@ public:
     /// @return A renderable frame, a non-fatal skip, or an explicit failure.
     [[nodiscard]] PresentationFrame beginFrame(int width, int height);
 
+    /// Applies queued display-state changes and acquires using the live window extent.
+    /// @param window Window bound through initWindowState().
+    /// @return A renderable frame, a non-fatal skip, or an explicit failure.
+    [[nodiscard]] PresentationFrame beginFrame(Window& window);
+
     /// Presents and closes the matching frame returned by beginFrame().
     /// @param frame Live frame identity returned by this controller.
     /// @return Presentation completion state and backend status.
@@ -170,6 +189,33 @@ public:
     /// @param rhiDevice Device used for target, pipeline, and submission resources.
     /// @return True when the independent UI presentation contract is ready.
     [[nodiscard]] bool initUiComposition(RhiDevice& rhiDevice);
+
+    /// Binds the native window whose fullscreen state is controlled at frame boundaries.
+    /// @param window Window used by the active presentation backend.
+    /// @return True when the window binding is valid for this controller.
+    [[nodiscard]] bool initWindowState(Window& window);
+
+    /// Queues a vertical synchronization change for the next frame boundary.
+    /// @param enabled Requested synchronization state.
+    /// @return True when runtime VSync control is available and the request was accepted.
+    [[nodiscard]] bool requestVsyncEnabled(bool enabled);
+
+    /// Queues a fullscreen change for the next frame boundary.
+    /// @param enabled Requested fullscreen state.
+    /// @return True when a native window is bound and the request was accepted.
+    [[nodiscard]] bool requestFullscreenEnabled(bool enabled);
+
+    /// Returns the requested VSync state, including a queued frame-boundary change.
+    [[nodiscard]] bool vsyncEnabled() const;
+
+    /// Returns whether runtime VSync changes are supported by the active backend.
+    [[nodiscard]] bool vsyncControlAvailable() const;
+
+    /// Returns the requested fullscreen state, including a queued change.
+    [[nodiscard]] bool fullscreenEnabled() const;
+
+    /// Returns whether the bound native window supports runtime fullscreen changes.
+    [[nodiscard]] bool fullscreenControlAvailable() const;
 
     /// Releases UI targets and composition resources after GPU work is complete.
     void shutdownUiComposition();
@@ -246,6 +292,8 @@ private:
     void destroyUiTargets();
     void destroyUiCompositionPipeline();
     [[nodiscard]] bool waitForUiSlot(UiSlot& slot);
+    [[nodiscard]] std::optional<PresentationFailure> applyPendingDisplayState();
+    [[nodiscard]] PresentationFrame beginFrameExtent(int width, int height);
 
     PresentationBackend& m_backend;
     PresentationStatistics m_statistics;
@@ -255,6 +303,9 @@ private:
     uint32_t m_height = 0u;
     bool m_extentValid = false;
     bool m_frameOpen = false;
+    Window* m_window = nullptr;
+    std::optional<bool> m_requestedVsyncEnabled;
+    std::optional<bool> m_requestedFullscreenEnabled;
     RhiDevice* m_uiDevice = nullptr;
     RhiTextureFormat m_uiColorFormat = RhiTextureFormat::Undefined;
     RhiTextureFormat m_uiDepthFormat = RhiTextureFormat::Undefined;

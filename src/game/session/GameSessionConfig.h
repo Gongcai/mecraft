@@ -17,6 +17,7 @@ class LocaleManager;
 class RhiDevice;
 class RhiCommandListPool;
 class ThreadPool;
+class PresentationController;
 
 /// Configuration for a gameplay session (seed, render distance, etc.)
 struct GameSessionConfig {
@@ -52,6 +53,7 @@ struct GameSessionDependencies {
     RhiDevice& rhiDevice;
     RhiCommandListPool& commandListPool;
     bool enableDebugDashboard = true;
+    PresentationController* presentationController = nullptr;
 };
 
 #endif // MECRAFT_GAME_SESSION_CONFIG_H

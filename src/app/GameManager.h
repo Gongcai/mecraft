@@ -74,6 +74,7 @@ private:
     AppStateMachine m_appStateMachine;
     AppLaunchOptions m_launchOptions{};
     std::optional<bool> m_vsyncEnabled;
+    bool m_fullscreenEnabled = false;
     BenchmarkFrameStats m_benchmarkStats{};
     bool m_benchmarkReplayWasActive = false;
     bool m_benchmarkReportWritten = false;

@@ -40,6 +40,8 @@ public:
             m_settingsScreen.setRenderScene(m_ctx.renderScene);
             m_settingsScreen.setWorld(m_ctx.world);
             m_settingsScreen.setRenderDistanceSetter(m_ctx.renderDistanceSetter);
+            m_settingsScreen.setWindow(m_ctx.window);
+            m_settingsScreen.setPresentationController(m_ctx.presentationController);
             m_settingsScreen.init(*rm);
             m_settingsScreen.onBack = [this]() {
                 switchToPause();

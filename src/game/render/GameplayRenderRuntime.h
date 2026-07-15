@@ -40,6 +40,7 @@ public:
                             GameSession& session,
                             UIRenderer& uiRenderer,
                             ThreadPool& threadPool,
+                            Window& window,
                             RhiDevice& rhiDevice,
                             RhiCommandListPool& commandListPool);
 

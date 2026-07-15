@@ -163,8 +163,11 @@ void LoadingAppState::update(const double frameTime, double& accumulator) {
 void LoadingAppState::render(const double frameTime) {
     (void)frameTime;
     const Window::FramebufferSize framebufferSize = m_deps.window.getFramebufferSize();
-    const uint32_t width = static_cast<uint32_t>(std::max(1, framebufferSize.width));
-    const uint32_t height = static_cast<uint32_t>(std::max(1, framebufferSize.height));
+    if (framebufferSize.width <= 0 || framebufferSize.height <= 0) {
+        return;
+    }
+    const uint32_t width = static_cast<uint32_t>(framebufferSize.width);
+    const uint32_t height = static_cast<uint32_t>(framebufferSize.height);
     if (!m_deps.rhiDevice.resizeSwapchain(width, height)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to resize the RHI swapchain\n");
         return;
