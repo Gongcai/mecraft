@@ -6,6 +6,7 @@
 #include "renderer/rhi/vulkan/VkRhiCommandList.h"
 #include "renderer/rhi/vulkan/VkRhiConversions.h"
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
+#include "renderer/rhi/vulkan/VulkanRequirementCollector.h"
 
 #include <GLFW/glfw3.h>
 
@@ -194,13 +195,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         case RhiTextureFormat::Undefined: break;
     }
     return 0u;
-}
-
-[[nodiscard]] bool hasExtension(const std::vector<VkExtensionProperties>& extensions,
-                                const char* required) {
-    return std::any_of(extensions.begin(), extensions.end(), [required](const auto& extension) {
-        return std::strcmp(extension.extensionName, required) == 0;
-    });
 }
 
 [[nodiscard]] bool supportsFormatFeatures(const VkPhysicalDevice physicalDevice,
@@ -1052,11 +1046,38 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         shutdown();
         return false;
     }
-    std::vector<const char*> instanceExtensions(glfwExtensions,
-                                                glfwExtensions + glfwExtensionCount);
-    if (desc.enableDebugOutput || desc.enableDebugMarkers) {
-        instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    VulkanRequirementCollector requirements;
+    for (uint32_t i = 0u; i < glfwExtensionCount; ++i) {
+        requirements.requireInstanceExtension(glfwExtensions[i]);
     }
+    if (desc.enableDebugOutput || desc.enableDebugMarkers) {
+        requirements.requireInstanceExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    }
+    requirements.requireDeviceExtension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    requirements.requireDeviceExtension(VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME);
+#if defined(MECRAFT_ENABLE_FSR31)
+    requirements.requireDeviceExtension(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+    requirements.requireDeviceExtension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+#endif
+    requirements.requireQueue(RhiQueueType::Graphics);
+    requirements.requireQueue(RhiQueueType::Compute);
+    requirements.requireQueue(RhiQueueType::Transfer);
+    requirements.requireQueue(RhiQueueType::Present);
+
+    uint32_t instanceExtensionCount = 0u;
+    vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, nullptr);
+    std::vector<VkExtensionProperties> availableInstanceExtensions(instanceExtensionCount);
+    vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount,
+                                           availableInstanceExtensions.data());
+    std::string missingExtension;
+    if (!requirements.validateInstanceExtensions(availableInstanceExtensions, missingExtension)) {
+        std::cerr << "VkRhiDevice: required Vulkan instance extension is unavailable: "
+                  << missingExtension << '\n';
+        shutdown();
+        return false;
+    }
+    const std::vector<const char*> instanceExtensions =
+        requirements.instanceExtensionNames();
     std::vector<const char*> layers;
     if (desc.enableDebugOutput) {
         uint32_t layerCount = 0u;
@@ -1136,16 +1157,9 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         vkEnumerateDeviceExtensionProperties(candidate, nullptr, &extensionCount, nullptr);
         std::vector<VkExtensionProperties> extensions(extensionCount);
         vkEnumerateDeviceExtensionProperties(candidate, nullptr, &extensionCount, extensions.data());
-        if (!hasExtension(extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME) ||
-            !hasExtension(extensions, VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME)) {
+        if (!requirements.validateDeviceExtensions(extensions, missingExtension)) {
             continue;
         }
-#if defined(MECRAFT_ENABLE_FSR31)
-        if (!hasExtension(extensions, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME) ||
-            !hasExtension(extensions, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME)) {
-            continue;
-        }
-#endif
         const QueueFamilies families = queryQueueFamilies(candidate, m_data->surface);
         if (!families.complete()) {
             continue;
@@ -1244,12 +1258,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
 #if defined(MECRAFT_ENABLE_FSR31)
     features2.features.shaderInt16 = VK_TRUE;
 #endif
-    std::vector<const char*> deviceExtensions{
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEPTH_CLIP_CONTROL_EXTENSION_NAME};
-#if defined(MECRAFT_ENABLE_FSR31)
-    deviceExtensions.push_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-    deviceExtensions.push_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-#endif
+    const std::vector<const char*> deviceExtensions = requirements.deviceExtensionNames();
     VkDeviceCreateInfo deviceInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, &features2};
     deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size());
     deviceInfo.pQueueCreateInfos = queueInfos.data();

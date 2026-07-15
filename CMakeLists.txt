@@ -392,6 +392,8 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
             src/renderer/rhi/vulkan/VkRhiDevice.h
             src/renderer/rhi/vulkan/VkRhiInterop.cpp
             src/renderer/rhi/vulkan/VkRhiInterop.h
+            src/renderer/rhi/vulkan/VulkanRequirementCollector.cpp
+            src/renderer/rhi/vulkan/VulkanRequirementCollector.h
             src/renderer/upscaling/Fsr31VulkanResourceContract.cpp
             src/renderer/upscaling/Fsr31VulkanResourceContract.h
     )
@@ -887,6 +889,7 @@ if(MECRAFT_BUILD_TESTS)
             target_link_libraries(fsr31_sdk_test PRIVATE mecraft_fidelityfx_fsr31)
         endif()
         add_mecraft_test(vulkan_rhi_smoke_test tests/vulkan_rhi_smoke_test.cpp)
+        add_mecraft_test(vulkan_requirement_collector_test tests/vulkan_requirement_collector_test.cpp)
         set(MECRAFT_VULKAN_LAYER_DIR
                 "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/vulkan/explicit_layer.d")
         set_tests_properties(vulkan_rhi_smoke_test PROPERTIES
