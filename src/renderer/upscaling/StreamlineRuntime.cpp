@@ -519,26 +519,22 @@ bool StreamlineRuntime::evaluateDlss(const StreamlineDlssDispatchInfo& info) {
         return false;
     }
 
-    std::array<sl::SubresourceRange, 7u> subresources{};
-    std::array<sl::Resource, 7u> resources{
+    std::array<sl::SubresourceRange, 5u> subresources{};
+    std::array<sl::Resource, 5u> resources{
         makeDlssResource(info.inputColor, subresources[0]),
         makeDlssResource(info.outputColor, subresources[1]),
         makeDlssResource(info.depth, subresources[2]),
         makeDlssResource(info.motionVectors, subresources[3]),
-        makeDlssResource(info.exposure, subresources[4]),
-        makeDlssResource(info.reactiveMask, subresources[5]),
-        makeDlssResource(info.transparencyMask, subresources[6])
+        makeDlssResource(info.exposure, subresources[4])
     };
-    std::array<sl::Extent, 7u> extents{
+    std::array<sl::Extent, 5u> extents{
         resourceExtent(info.inputColor),
         resourceExtent(info.outputColor),
         resourceExtent(info.depth),
         resourceExtent(info.motionVectors),
-        resourceExtent(info.exposure),
-        resourceExtent(info.reactiveMask),
-        resourceExtent(info.transparencyMask)
+        resourceExtent(info.exposure)
     };
-    std::array<sl::ResourceTag, 7u> tags{
+    std::array<sl::ResourceTag, 5u> tags{
         sl::ResourceTag{&resources[0], sl::kBufferTypeScalingInputColor,
                         sl::ResourceLifecycle::eValidUntilEvaluate, &extents[0]},
         sl::ResourceTag{&resources[1], sl::kBufferTypeScalingOutputColor,
@@ -548,11 +544,7 @@ bool StreamlineRuntime::evaluateDlss(const StreamlineDlssDispatchInfo& info) {
         sl::ResourceTag{&resources[3], sl::kBufferTypeMotionVectors,
                         sl::ResourceLifecycle::eValidUntilEvaluate, &extents[3]},
         sl::ResourceTag{&resources[4], sl::kBufferTypeExposure,
-                        sl::ResourceLifecycle::eValidUntilEvaluate, &extents[4]},
-        sl::ResourceTag{&resources[5], sl::kBufferTypeBiasCurrentColorHint,
-                        sl::ResourceLifecycle::eValidUntilEvaluate, &extents[5]},
-        sl::ResourceTag{&resources[6], sl::kBufferTypeTransparencyHint,
-                        sl::ResourceLifecycle::eValidUntilEvaluate, &extents[6]}
+                        sl::ResourceLifecycle::eValidUntilEvaluate, &extents[4]}
     };
     auto* commandBuffer = reinterpret_cast<sl::CommandBuffer*>(info.commandBuffer);
     result = m_impl->setTagForFrame(

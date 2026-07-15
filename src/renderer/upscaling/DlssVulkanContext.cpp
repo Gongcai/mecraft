@@ -211,15 +211,9 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
         device, frame.textures.velocity, frame.textures.velocityView);
     const auto exposure = VkRhiInterop::textureInfo(
         device, frame.textures.exposure, frame.textures.exposureView);
-    const auto reactiveMask = VkRhiInterop::textureInfo(
-        device, frame.textures.reactiveMask, frame.textures.reactiveMaskView);
-    const auto transparencyMask = VkRhiInterop::textureInfo(
-        device, frame.textures.transparencyMask,
-        frame.textures.transparencyMaskView);
     if (!inputColor.has_value() || !outputColor.has_value() ||
         !depth.has_value() || !motionVectors.has_value() ||
-        !exposure.has_value() || !reactiveMask.has_value() ||
-        !transparencyMask.has_value() ||
+        !exposure.has_value() ||
         !validResource(*inputColor, VK_FORMAT_R16G16B16A16_SFLOAT,
                        frame.renderExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
         !validResource(*outputColor, VK_FORMAT_R16G16B16A16_SFLOAT,
@@ -229,11 +223,7 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
         !validResource(*motionVectors, VK_FORMAT_R16G16_SFLOAT,
                        frame.renderExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
         !validResource(*exposure, VK_FORMAT_R16G16B16A16_SFLOAT,
-                       {1u, 1u}, VK_IMAGE_USAGE_SAMPLED_BIT) ||
-        !validResource(*reactiveMask, VK_FORMAT_R8_UNORM,
-                       frame.renderExtent, VK_IMAGE_USAGE_SAMPLED_BIT) ||
-        !validResource(*transparencyMask, VK_FORMAT_R8_UNORM,
-                       frame.renderExtent, VK_IMAGE_USAGE_SAMPLED_BIT)) {
+                       {1u, 1u}, VK_IMAGE_USAGE_SAMPLED_BIT)) {
         return {DlssVulkanStatus::InvalidResources};
     }
     const auto commandBuffer = VkRhiInterop::commandBuffer(device, commandList);
@@ -271,10 +261,6 @@ DlssVulkanDispatchResult DlssVulkanContext::dispatch(
     dispatch.motionVectors = toDlssResource(
         *motionVectors, RhiResourceState::ShaderRead);
     dispatch.exposure = toDlssResource(*exposure, RhiResourceState::ShaderRead);
-    dispatch.reactiveMask = toDlssResource(
-        *reactiveMask, RhiResourceState::ShaderRead);
-    dispatch.transparencyMask = toDlssResource(
-        *transparencyMask, RhiResourceState::ShaderRead);
     if (!StreamlineRuntime::instance().evaluateDlss(dispatch)) {
         return {DlssVulkanStatus::SdkError};
     }

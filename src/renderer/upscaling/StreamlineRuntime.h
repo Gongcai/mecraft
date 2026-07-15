@@ -108,8 +108,6 @@ struct StreamlineDlssDispatchInfo {
     StreamlineDlssResource depth;
     StreamlineDlssResource motionVectors;
     StreamlineDlssResource exposure;
-    StreamlineDlssResource reactiveMask;
-    StreamlineDlssResource transparencyMask;
 };
 
 /// Owns the process-wide Streamline runtime used by the Windows Vulkan backend.
