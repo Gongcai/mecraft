@@ -17,13 +17,6 @@ layout(push_constant) uniform RhiPushConstants {
 
 const vec2 kRejectHistoryVelocity = vec2(2.0);
 
-// DerivativeMain: 3x3 neighborhood offsets (excluding center)
-const ivec2 offset3x3N[8] = ivec2[8](
-    ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1),
-    ivec2(-1,  0),                ivec2(1,  0),
-    ivec2(-1,  1), ivec2(0,  1), ivec2(1,  1)
-);
-
 bool badVec2(vec2 v) {
     return any(isnan(v)) || any(isinf(v));
 }
@@ -60,16 +53,10 @@ void main() {
     ivec2 texel = ivec2(gl_FragCoord.xy);
     float depth = texelFetch(uDepthTex, texel, 0).r;
 
-    // DerivativeMain-style closest fragment: search 3x3 neighborhood for the
-    // nearest depth texel. This stabilizes velocity at depth discontinuities.
+    // Use the center pixel depth for reprojection. Replacing it with a nearest
+    // 3x3 neighbor causes alpha-cutout foliage edges to inherit motion from an
+    // unrelated trunk, terrain, or sky pixel.
     vec3 closestFragment = vec3(texel, depth);
-    for (int i = 0; i < 8; ++i) {
-        ivec2 sampleTexel = offset3x3N[i] + texel;
-        float sampleDepth = texelFetch(uDepthTex, clamp(sampleTexel, ivec2(0), ivec2(uScreenParams.xy) - 1), 0).r;
-        if (sampleDepth < closestFragment.z) {
-            closestFragment = vec3(sampleTexel, sampleDepth);
-        }
-    }
 
     // DerivativeMain: no sky early return. depth=1 (sky/far-plane) gets
     // a valid far-plane reprojection velocity. This is critical for TAA
