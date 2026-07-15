@@ -85,6 +85,7 @@ struct TemporalFrameTextures {
 
 /// Backend-independent input contract shared by native, FSR 3.1, and DLSS paths.
 struct TemporalFrameInput {
+    uint64_t frameIndex = 0u;
     TemporalExtent renderExtent;
     TemporalExtent outputExtent;
     TemporalJitter jitter;
@@ -94,6 +95,16 @@ struct TemporalFrameInput {
     float cameraNear = 0.0f;
     float cameraFar = 0.0f;
     float verticalFovRadians = 0.0f;
+    float cameraAspectRatio = 1.0f;
+    glm::mat4 cameraViewToClip = glm::mat4(1.0f);
+    glm::mat4 clipToCameraView = glm::mat4(1.0f);
+    glm::mat4 clipToPrevClip = glm::mat4(1.0f);
+    glm::mat4 prevClipToClip = glm::mat4(1.0f);
+    glm::vec3 cameraPosition = glm::vec3(0.0f);
+    glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 cameraRight = glm::vec3(1.0f, 0.0f, 0.0f);
+    glm::vec3 cameraForward = glm::vec3(0.0f, 0.0f, -1.0f);
+    bool depthInverted = false;
     bool reset = true;
     TemporalFrameTextures textures;
 };
@@ -107,6 +118,9 @@ enum class TemporalFrameValidationError {
     InvalidPreExposure,
     InvalidCameraRange,
     InvalidVerticalFov,
+    InvalidCameraAspectRatio,
+    InvalidCameraMatrices,
+    InvalidCameraVectors,
     MissingHdrColor,
     MissingHdrColorView,
     MissingDepth,
@@ -154,6 +168,41 @@ enum class TemporalFrameValidationError {
     }
     if (!std::isfinite(frame.verticalFovRadians) || frame.verticalFovRadians <= 0.0f) {
         return TemporalFrameValidationError::InvalidVerticalFov;
+    }
+    if (!std::isfinite(frame.cameraAspectRatio) || frame.cameraAspectRatio <= 0.0f) {
+        return TemporalFrameValidationError::InvalidCameraAspectRatio;
+    }
+    const glm::mat4 matrices[] = {
+        frame.cameraViewToClip,
+        frame.clipToCameraView,
+        frame.clipToPrevClip,
+        frame.prevClipToClip
+    };
+    for (const glm::mat4& matrix : matrices) {
+        for (uint32_t column = 0u; column < 4u; ++column) {
+            for (uint32_t row = 0u; row < 4u; ++row) {
+                if (!std::isfinite(matrix[column][row])) {
+                    return TemporalFrameValidationError::InvalidCameraMatrices;
+                }
+            }
+        }
+    }
+    const glm::vec3 vectors[] = {
+        frame.cameraPosition,
+        frame.cameraUp,
+        frame.cameraRight,
+        frame.cameraForward
+    };
+    for (const glm::vec3& vector : vectors) {
+        if (!std::isfinite(vector.x) || !std::isfinite(vector.y) ||
+            !std::isfinite(vector.z)) {
+            return TemporalFrameValidationError::InvalidCameraVectors;
+        }
+    }
+    if (glm::dot(frame.cameraUp, frame.cameraUp) <= 0.0f ||
+        glm::dot(frame.cameraRight, frame.cameraRight) <= 0.0f ||
+        glm::dot(frame.cameraForward, frame.cameraForward) <= 0.0f) {
+        return TemporalFrameValidationError::InvalidCameraVectors;
     }
     if (!frame.textures.hdrColor.isValid()) return TemporalFrameValidationError::MissingHdrColor;
     if (!frame.textures.hdrColorView.isValid()) {

@@ -8,6 +8,10 @@
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
 #include "renderer/upscaling/Fsr31VulkanContext.h"
 #endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+#include "renderer/rhi/vulkan/VkRhiDevice.h"
+#include "renderer/upscaling/DlssVulkanContext.h"
+#endif
 
 #include <iostream>
 
@@ -116,6 +120,9 @@ void TemporalUpscalePass::init(
 }
 
 void TemporalUpscalePass::shutdown() {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    static_cast<void>(releaseDlssContext());
+#endif
 #if defined(MECRAFT_ENABLE_FSR31)
     static_cast<void>(releaseFsr31Context());
 #endif
@@ -133,6 +140,11 @@ bool TemporalUpscalePass::prepareOutputTarget(
         return false;
     }
     if (settings.type == TemporalUpscalerType::Native) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (!releaseDlssContext()) {
+            return false;
+        }
+#endif
 #if defined(MECRAFT_ENABLE_FSR31)
         if (!releaseFsr31Context()) {
             return false;
@@ -155,10 +167,21 @@ bool TemporalUpscalePass::prepareOutputTarget(
         return false;
     }
 #endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (settings.type == TemporalUpscalerType::Fsr31 &&
+        !releaseDlssContext()) {
+        return false;
+    }
+#endif
 
     const bool targetReady = m_outputTexture.isValid() && m_outputView.isValid() &&
                              m_outputExtent == outputExtent;
     if (!targetReady) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (!releaseDlssContext()) {
+            return false;
+        }
+#endif
 #if defined(MECRAFT_ENABLE_FSR31)
         if (!releaseFsr31Context()) {
             return false;
@@ -226,6 +249,32 @@ bool TemporalUpscalePass::prepareOutputTarget(
     }
 #else
     if (settings.type == TemporalUpscalerType::Fsr31) {
+        return false;
+    }
+#endif
+
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (settings.type == TemporalUpscalerType::Dlss) {
+        const bool contextReady = m_dlssContext != nullptr &&
+            m_dlssContext->isInitialized() &&
+            m_dlssContext->renderExtent() == renderExtent &&
+            m_dlssContext->outputExtent() == outputExtent &&
+            m_dlssContext->quality() == settings.quality;
+        if (!contextReady) {
+            if (!releaseDlssContext()) {
+                return false;
+            }
+            m_dlssContext = std::make_unique<DlssVulkanContext>();
+            if (!m_dlssContext->initialize(
+                    settings.quality, renderExtent, outputExtent)) {
+                std::cerr << "TemporalUpscalePass: DLSS initialization failed\n";
+                m_dlssContext.reset();
+                return false;
+            }
+        }
+    }
+#else
+    if (settings.type == TemporalUpscalerType::Dlss) {
         return false;
     }
 #endif
@@ -368,7 +417,95 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
             return temporalFailure(TemporalUpscaleStatus::Fsr31Unavailable);
 #endif
         case TemporalUpscalerType::Dlss:
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+            if (m_device == nullptr || m_commandListPool == nullptr ||
+                m_dlssContext == nullptr || !m_dlssContext->isInitialized() ||
+                !sameHandle(frame.textures.outputHdrColor, m_outputTexture) ||
+                !sameHandle(frame.textures.outputHdrColorView, m_outputView)) {
+                return temporalFailure(TemporalUpscaleStatus::DlssUnavailable);
+            }
+            {
+                RhiCommandList* const commandList = m_commandListPool->acquire(
+                    RhiCommandListType::Graphics);
+                if (commandList == nullptr ||
+                    !commandList->begin(
+                        {"DLSS.Dispatch.Commands", RhiCommandListType::Graphics})) {
+                    return temporalFailure(TemporalUpscaleStatus::DlssCommandError);
+                }
+                const RhiTextureHandle sampledInputs[] = {
+                    frame.textures.hdrColor,
+                    frame.textures.velocity,
+                    frame.textures.exposure
+                };
+                for (const RhiTextureHandle texture : sampledInputs) {
+                    commandList->textureBarrier({
+                        texture,
+                        RhiResourceState::ShaderRead,
+                        RhiResourceState::ShaderRead
+                    });
+                }
+                commandList->textureBarrier({
+                    frame.textures.depth,
+                    RhiResourceState::DepthRead,
+                    RhiResourceState::ShaderRead
+                });
+                commandList->textureBarrier({
+                    m_outputTexture,
+                    m_outputInitialized
+                        ? RhiResourceState::ShaderRead
+                        : RhiResourceState::Undefined,
+                    RhiResourceState::ShaderWrite
+                });
+
+                const DlssVulkanDispatchResult dispatched =
+                    m_dlssContext->dispatch(
+                        static_cast<const VkRhiDevice&>(*m_device),
+                        *commandList,
+                        frame);
+                if (!dispatched.succeeded()) {
+                    static_cast<void>(commandList->end());
+                    const TemporalUpscaleStatus status =
+                        dispatched.status == DlssVulkanStatus::InvalidResources
+                            ? TemporalUpscaleStatus::DlssInvalidResources
+                        : dispatched.status == DlssVulkanStatus::MissingCommandBuffer
+                            ? TemporalUpscaleStatus::DlssCommandError
+                            : TemporalUpscaleStatus::DlssDispatchError;
+                    static_cast<void>(releaseDlssContext());
+                    return temporalFailure(status);
+                }
+
+                commandList->textureBarrier({
+                    m_outputTexture,
+                    RhiResourceState::ShaderWrite,
+                    RhiResourceState::ShaderRead
+                });
+                commandList->textureBarrier({
+                    frame.textures.depth,
+                    RhiResourceState::ShaderRead,
+                    RhiResourceState::DepthRead
+                });
+                if (!commandList->end()) {
+                    static_cast<void>(releaseDlssContext());
+                    return temporalFailure(TemporalUpscaleStatus::DlssCommandError);
+                }
+                RhiCommandList* commandLists[] = {commandList};
+                if (!m_device->submit({
+                        "DLSS.Dispatch.Submit", commandLists, 1u,
+                        RhiQueueType::Graphics})) {
+                    static_cast<void>(releaseDlssContext());
+                    return temporalFailure(TemporalUpscaleStatus::DlssSubmitError);
+                }
+                m_outputInitialized = true;
+                TemporalUpscaleResult result;
+                result.status = TemporalUpscaleStatus::Success;
+                result.outputHdrColor = m_outputTexture;
+                result.outputHdrColorView = m_outputView;
+                result.outputExtent = frame.outputExtent;
+                return result;
+            }
+#else
             return temporalFailure(TemporalUpscaleStatus::DlssUnavailable);
+#endif
     }
     return temporalFailure(TemporalUpscaleStatus::InvalidFrame);
 }
@@ -396,6 +533,25 @@ bool TemporalUpscalePass::releaseFsr31Context() {
 }
 #endif
 
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+bool TemporalUpscalePass::releaseDlssContext() {
+    if (m_dlssContext == nullptr) {
+        return true;
+    }
+    if (m_dlssContext->isInitialized()) {
+        if (m_device == nullptr) {
+            return false;
+        }
+        m_device->waitIdle();
+        if (!m_dlssContext->shutdown()) {
+            return false;
+        }
+    }
+    m_dlssContext.reset();
+    return true;
+}
+#endif
+
 const char* TemporalUpscalePass::statusText(const TemporalUpscaleStatus status) {
     switch (status) {
         case TemporalUpscaleStatus::Success:
@@ -416,6 +572,14 @@ const char* TemporalUpscalePass::statusText(const TemporalUpscaleStatus status) 
             return "FSR 3.1 command submission failed";
         case TemporalUpscaleStatus::DlssUnavailable:
             return "DLSS temporal reconstruction is not initialized";
+        case TemporalUpscaleStatus::DlssInvalidResources:
+            return "DLSS temporal resources violate the dispatch contract";
+        case TemporalUpscaleStatus::DlssCommandError:
+            return "DLSS command recording failed";
+        case TemporalUpscaleStatus::DlssDispatchError:
+            return "DLSS Streamline evaluation failed";
+        case TemporalUpscaleStatus::DlssSubmitError:
+            return "DLSS command submission failed";
     }
     return "unknown temporal reconstruction status";
 }

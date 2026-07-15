@@ -14,6 +14,9 @@ class RhiCommandListPool;
 #if defined(MECRAFT_ENABLE_FSR31)
 class Fsr31VulkanContext;
 #endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+class DlssVulkanContext;
+#endif
 
 enum class TemporalUpscaleStatus {
     Success,
@@ -24,7 +27,11 @@ enum class TemporalUpscaleStatus {
     Fsr31CommandError,
     Fsr31DispatchError,
     Fsr31SubmitError,
-    DlssUnavailable
+    DlssUnavailable,
+    DlssInvalidResources,
+    DlssCommandError,
+    DlssDispatchError,
+    DlssSubmitError
 };
 
 struct TemporalUpscaleResult {
@@ -83,6 +90,9 @@ private:
 #if defined(MECRAFT_ENABLE_FSR31)
     [[nodiscard]] bool releaseFsr31Context();
 #endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    [[nodiscard]] bool releaseDlssContext();
+#endif
 
     RhiDevice* m_device = nullptr;
     RhiCommandListPool* m_commandListPool = nullptr;
@@ -94,6 +104,9 @@ private:
     std::unique_ptr<Fsr31VulkanContext> m_fsr31Context;
     bool m_fsr31DynamicResolution = false;
     bool m_fsr31DebugChecking = false;
+#endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    std::unique_ptr<DlssVulkanContext> m_dlssContext;
 #endif
 };
 

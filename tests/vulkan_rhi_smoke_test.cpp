@@ -9,6 +9,7 @@
 #include "renderer/upscaling/Fsr31VulkanContext.h"
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
+#include "renderer/upscaling/DlssVulkanContext.h"
 #include "renderer/upscaling/StreamlineRuntime.h"
 #endif
 
@@ -420,6 +421,211 @@ void destroyFsr31SmokeTexture(
                   << (firstResult.succeeded() ? secondResult.sdkError
                                               : firstResult.sdkError)
                   << '\n';
+    }
+    pass.shutdown();
+    destroyInputs();
+    return dispatched;
+}
+#endif
+
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+struct DlssSmokeTexture {
+    RhiTextureHandle texture;
+    RhiTextureViewHandle view;
+};
+
+[[nodiscard]] bool renderStableFrame(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool,
+    GLFWwindow* window);
+
+[[nodiscard]] bool createDlssSmokeTexture(
+    VkRhiDevice& device,
+    const char* const debugName,
+    const RhiTextureFormat format,
+    const TemporalExtent extent,
+    const RhiTextureUsageFlags usage,
+    const void* const pixels,
+    const size_t sizeBytes,
+    const RhiResourceState finalState,
+    DlssSmokeTexture& output) {
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = debugName;
+    textureDesc.format = format;
+    textureDesc.width = extent.width;
+    textureDesc.height = extent.height;
+    textureDesc.usage = usage;
+    RhiTextureInitialData initialData;
+    initialData.pixels = pixels;
+    initialData.sizeBytes = sizeBytes;
+    initialData.finalState = finalState;
+    output.texture = device.createTexture(textureDesc, &initialData);
+    if (!output.texture.isValid()) {
+        return false;
+    }
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = output.texture;
+    viewDesc.viewType = RhiTextureViewType::Texture2D;
+    viewDesc.format = format;
+    output.view = device.createTextureView(viewDesc);
+    if (!output.view.isValid()) {
+        device.destroyTexture(output.texture);
+        output.texture = {};
+        return false;
+    }
+    return true;
+}
+
+void destroyDlssSmokeTexture(
+    VkRhiDevice& device,
+    DlssSmokeTexture& resource) {
+    if (resource.view.isValid()) {
+        device.destroyTextureView(resource.view);
+    }
+    if (resource.texture.isValid()) {
+        device.destroyTexture(resource.texture);
+    }
+    resource = {};
+}
+
+[[nodiscard]] bool validateDlssVulkanDispatch(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool,
+    GLFWwindow* window) {
+    constexpr TemporalExtent kOutputExtent{1280u, 720u};
+    const DlssRenderExtentResult queried = queryDlssRenderExtent(
+        TemporalUpscaleQuality::Quality, kOutputExtent);
+    if (!queried.succeeded()) {
+        std::cerr << "DLSS smoke test failed to query the render extent: "
+                  << StreamlineRuntime::instance().lastError() << '\n';
+        return false;
+    }
+    const TemporalExtent renderExtent = queried.extent;
+    const size_t renderPixelCount =
+        static_cast<size_t>(renderExtent.width) * renderExtent.height;
+    std::vector<uint16_t> hdrPixels(renderPixelCount * 4u, 0u);
+    std::vector<float> depthPixels(renderPixelCount, 1.0f);
+    std::vector<uint16_t> velocityPixels(renderPixelCount * 2u, 0u);
+    constexpr uint16_t kHalfFloatOne = 0x3c00u;
+    const uint16_t exposurePixels[4] = {kHalfFloatOne, 0u, 0u, 0u};
+    std::vector<uint8_t> maskPixels(renderPixelCount, 0u);
+
+    DlssSmokeTexture hdr;
+    DlssSmokeTexture depth;
+    DlssSmokeTexture velocity;
+    DlssSmokeTexture exposure;
+    DlssSmokeTexture reactive;
+    DlssSmokeTexture transparency;
+    const auto destroyInputs = [&]() {
+        destroyDlssSmokeTexture(device, transparency);
+        destroyDlssSmokeTexture(device, reactive);
+        destroyDlssSmokeTexture(device, exposure);
+        destroyDlssSmokeTexture(device, velocity);
+        destroyDlssSmokeTexture(device, depth);
+        destroyDlssSmokeTexture(device, hdr);
+    };
+    const RhiTextureUsageFlags sampledUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::TransferDst);
+    const bool inputsCreated = createDlssSmokeTexture(
+            device, "VulkanSmoke.DLSS.Hdr", RhiTextureFormat::Rgba16Float,
+            renderExtent, sampledUsage, hdrPixels.data(),
+            hdrPixels.size() * sizeof(uint16_t), RhiResourceState::ShaderRead, hdr) &&
+        createDlssSmokeTexture(
+            device, "VulkanSmoke.DLSS.Depth", RhiTextureFormat::Depth32Float,
+            renderExtent,
+            sampledUsage | rhiFlag(RhiTextureUsage::DepthStencilAttachment),
+            depthPixels.data(), depthPixels.size() * sizeof(float),
+            RhiResourceState::DepthRead, depth) &&
+        createDlssSmokeTexture(
+            device, "VulkanSmoke.DLSS.Velocity", RhiTextureFormat::Rg16Float,
+            renderExtent, sampledUsage, velocityPixels.data(),
+            velocityPixels.size() * sizeof(uint16_t),
+            RhiResourceState::ShaderRead, velocity) &&
+        createDlssSmokeTexture(
+            device, "VulkanSmoke.DLSS.Exposure", RhiTextureFormat::Rgba16Float,
+            {1u, 1u}, sampledUsage, exposurePixels, sizeof(exposurePixels),
+            RhiResourceState::ShaderRead, exposure) &&
+        createDlssSmokeTexture(
+            device, "VulkanSmoke.DLSS.Reactive", RhiTextureFormat::R8Unorm,
+            renderExtent, sampledUsage, maskPixels.data(), maskPixels.size(),
+            RhiResourceState::ShaderRead, reactive) &&
+        createDlssSmokeTexture(
+            device, "VulkanSmoke.DLSS.Transparency", RhiTextureFormat::R8Unorm,
+            renderExtent, sampledUsage, maskPixels.data(), maskPixels.size(),
+            RhiResourceState::ShaderRead, transparency);
+    if (!inputsCreated) {
+        std::cerr << "DLSS smoke test failed to create input resources\n";
+        destroyInputs();
+        return false;
+    }
+
+    TemporalUpscalePass pass;
+    pass.init(device, commandPool);
+    UpscaleSettings settings;
+    settings.type = TemporalUpscalerType::Dlss;
+    settings.quality = TemporalUpscaleQuality::Quality;
+    if (!pass.prepareOutputTarget(settings, renderExtent, kOutputExtent)) {
+        std::cerr << "DLSS smoke test failed to prepare the output target: "
+                  << StreamlineRuntime::instance().lastError() << '\n';
+        pass.shutdown();
+        destroyInputs();
+        return false;
+    }
+
+    TemporalFrameInput frame;
+    frame.renderExtent = renderExtent;
+    frame.outputExtent = kOutputExtent;
+    frame.motionVectorScale = glm::vec2(
+        static_cast<float>(renderExtent.width),
+        static_cast<float>(renderExtent.height));
+    frame.frameDeltaMilliseconds = 1000.0f / 60.0f;
+    frame.preExposure = 1.0f;
+    frame.cameraNear = 0.1f;
+    frame.cameraFar = 1000.0f;
+    frame.verticalFovRadians = 1.0f;
+    frame.cameraAspectRatio = static_cast<float>(kOutputExtent.width) /
+                              static_cast<float>(kOutputExtent.height);
+    frame.reset = true;
+    frame.textures.hdrColor = hdr.texture;
+    frame.textures.hdrColorView = hdr.view;
+    frame.textures.depth = depth.texture;
+    frame.textures.depthView = depth.view;
+    frame.textures.velocity = velocity.texture;
+    frame.textures.velocityView = velocity.view;
+    frame.textures.exposure = exposure.texture;
+    frame.textures.exposureView = exposure.view;
+    frame.textures.reactiveMask = reactive.texture;
+    frame.textures.reactiveMaskView = reactive.view;
+    frame.textures.transparencyMask = transparency.texture;
+    frame.textures.transparencyMaskView = transparency.view;
+    frame.textures.outputHdrColor = pass.outputTextureHandle();
+    frame.textures.outputHdrColorView = pass.outputTextureViewHandle();
+
+    const DlssJitterResult firstJitter = queryDlssJitter(
+        frame.frameIndex, renderExtent, kOutputExtent);
+    frame.jitter = firstJitter.jitter;
+    const TemporalUpscaleResult firstResult = pass.execute(settings, frame);
+    TemporalUpscaleResult secondResult;
+    if (firstResult.succeeded()) {
+        frame.frameIndex = 1u;
+        frame.jitter = queryDlssJitter(
+            frame.frameIndex, renderExtent, kOutputExtent).jitter;
+        frame.reset = false;
+        secondResult = pass.execute(settings, frame);
+    }
+    device.waitIdle();
+    const bool dispatched = firstResult.succeeded() &&
+        secondResult.succeeded() && secondResult.outputHdrColor.isValid() &&
+        secondResult.outputHdrColorView.isValid() &&
+        secondResult.outputExtent == kOutputExtent &&
+        renderStableFrame(device, commandPool, window);
+    if (!dispatched) {
+        std::cerr << "DLSS smoke dispatch failed: "
+                  << TemporalUpscalePass::statusText(
+                         firstResult.succeeded() ? secondResult.status
+                                                 : firstResult.status)
+                  << ", " << StreamlineRuntime::instance().lastError() << '\n';
     }
     pass.shutdown();
     destroyInputs();
@@ -1047,6 +1253,9 @@ int main() {
 #if defined(MECRAFT_ENABLE_FSR31)
         !validateFsr31VulkanDispatch(device, *commandPool) ||
         !validateFsr31VulkanContext(device) ||
+#endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        !validateDlssVulkanDispatch(device, *commandPool, window) ||
 #endif
         !validateTemporalOutputTarget(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView,

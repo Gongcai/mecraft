@@ -3,6 +3,7 @@
 #include "renderer/passes/TemporalUpscalePass.h"
 
 #include <iostream>
+#include <limits>
 
 namespace {
 
@@ -81,6 +82,9 @@ bool testTemporalReconstructionSelection() {
                usesTemporalProjectionJitter(TemporalUpscalerType::Fsr31, false),
                "FSR 3.1 must jitter scene rasterization independently of native TAA") &&
            requireTrue(
+               usesTemporalProjectionJitter(TemporalUpscalerType::Dlss, false),
+               "DLSS must jitter scene rasterization independently of native TAA") &&
+           requireTrue(
                usesNativeTaaResolve(TemporalUpscalerType::Native, true),
                "native TAA must execute only in Native reconstruction mode") &&
            requireTrue(
@@ -136,6 +140,14 @@ bool testFrameValidation() {
     if (!requireTrue(validateTemporalFrame(frame) ==
                          TemporalFrameValidationError::InvalidMotionVectorScale,
                      "motion-vector scale must match the render extent")) {
+        return false;
+    }
+
+    frame = completeFrame();
+    frame.clipToPrevClip[0][0] = std::numeric_limits<float>::quiet_NaN();
+    if (!requireTrue(validateTemporalFrame(frame) ==
+                         TemporalFrameValidationError::InvalidCameraMatrices,
+                     "non-finite camera matrices must be rejected")) {
         return false;
     }
 
@@ -235,6 +247,13 @@ bool testTemporalUpscaleDispatch() {
     if (!requireTrue(pass.execute(settings, frame).status ==
                          TemporalUpscaleStatus::Fsr31Unavailable,
                      "FSR 3.1 must report unavailable before SDK initialization")) {
+        return false;
+    }
+
+    settings.type = TemporalUpscalerType::Dlss;
+    if (!requireTrue(pass.execute(settings, frame).status ==
+                         TemporalUpscaleStatus::DlssUnavailable,
+                     "DLSS must report unavailable before Streamline initialization")) {
         return false;
     }
 

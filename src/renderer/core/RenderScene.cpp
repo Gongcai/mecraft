@@ -16,6 +16,9 @@
 #if defined(MECRAFT_ENABLE_FSR31)
 #include "renderer/upscaling/Fsr31TemporalConfig.h"
 #endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+#include "renderer/upscaling/DlssVulkanContext.h"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -1084,7 +1087,16 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
         return std::nullopt;
 #endif
     } else if (m_settings.upscale.type == TemporalUpscalerType::Dlss) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        const DlssJitterResult jitter = queryDlssJitter(
+            ctx.frameIndex, ctx.renderExtent, ctx.outputExtent);
+        if (!jitter.succeeded()) {
+            return std::nullopt;
+        }
+        ctx.jitter = jitter.jitter;
+#else
         return std::nullopt;
+#endif
     } else if (m_shared.deferredTargets) {
         // Native TAA uses the existing DerivativeMain quasi-random sequence.
         const float invW = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->width()));
@@ -1251,7 +1263,20 @@ std::optional<glm::ivec2> RenderScene::internalRenderSize(
 #endif
     }
     if (m_settings.upscale.type == TemporalUpscalerType::Dlss) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        const DlssRenderExtentResult renderExtent = queryDlssRenderExtent(
+            m_settings.upscale.quality,
+            {static_cast<uint32_t>(displayWidth),
+             static_cast<uint32_t>(displayHeight)});
+        if (!renderExtent.succeeded()) {
+            return std::nullopt;
+        }
+        return glm::ivec2(
+            static_cast<int>(renderExtent.extent.width),
+            static_cast<int>(renderExtent.extent.height));
+#else
         return std::nullopt;
+#endif
     }
     if (!isFsr1RuntimeEnabled()) {
         return glm::ivec2(displayWidth, displayHeight);
@@ -1285,6 +1310,7 @@ void RenderScene::refreshTemporalFrameInput() {
     }
 
     TemporalFrameInput input;
+    input.frameIndex = m_currentContext.frameIndex;
     input.renderExtent = m_currentContext.renderExtent;
     input.outputExtent = m_currentContext.outputExtent;
     input.jitter = m_currentContext.jitter;
@@ -1297,6 +1323,19 @@ void RenderScene::refreshTemporalFrameInput() {
     input.cameraNear = m_currentContext.camera.nearPlane;
     input.cameraFar = m_currentContext.camera.farPlane;
     input.verticalFovRadians = glm::radians(m_currentContext.camera.fovDegrees);
+    input.cameraAspectRatio = static_cast<float>(m_currentContext.outputExtent.width) /
+                              static_cast<float>(m_currentContext.outputExtent.height);
+    input.cameraViewToClip = m_currentContext.camera.projection;
+    input.clipToCameraView = glm::inverse(m_currentContext.camera.projection);
+    input.clipToPrevClip = m_currentContext.previousViewProj *
+                           glm::inverse(m_currentContext.camera.viewProj);
+    input.prevClipToClip = glm::inverse(input.clipToPrevClip);
+    const glm::mat4 inverseView = glm::inverse(m_currentContext.camera.view);
+    input.cameraPosition = m_currentContext.camera.position;
+    input.cameraRight = glm::normalize(glm::vec3(inverseView[0]));
+    input.cameraUp = glm::normalize(glm::vec3(inverseView[1]));
+    input.cameraForward = glm::normalize(-glm::vec3(inverseView[2]));
+    input.depthInverted = false;
     input.reset = m_currentContext.temporalReset;
     input.textures.hdrColor = m_postProcessPass.sceneColorTextureHandle();
     input.textures.hdrColorView = m_postProcessPass.sceneColorTextureViewHandle();

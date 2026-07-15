@@ -459,6 +459,8 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
     endif()
     if(MECRAFT_ENABLE_STREAMLINE)
         list(APPEND SRC_RENDERER
+                src/renderer/upscaling/DlssVulkanContext.cpp
+                src/renderer/upscaling/DlssVulkanContext.h
                 src/renderer/upscaling/StreamlineRuntime.cpp
                 src/renderer/upscaling/StreamlineRuntime.h
         )
@@ -972,6 +974,7 @@ if(MECRAFT_BUILD_TESTS)
         add_mecraft_test(vulkan_requirement_collector_test tests/vulkan_requirement_collector_test.cpp)
         if(MECRAFT_ENABLE_STREAMLINE)
             mecraft_deploy_streamline(vulkan_rhi_smoke_test)
+            add_mecraft_test(dlss_temporal_config_test tests/dlss_temporal_config_test.cpp)
             add_mecraft_test(streamline_runtime_test tests/streamline_runtime_test.cpp)
             mecraft_deploy_streamline(streamline_runtime_test)
         endif()
