@@ -25,6 +25,28 @@ void VulkanRequirementCollector::requireDeviceExtension(const char* extension) {
     }
 }
 
+void VulkanRequirementCollector::requireVulkan12Feature(const char* feature) {
+    if (feature == nullptr || feature[0] == '\0') {
+        return;
+    }
+    const std::string value(feature);
+    if (std::find(m_vulkan12Features.begin(), m_vulkan12Features.end(), value) ==
+        m_vulkan12Features.end()) {
+        m_vulkan12Features.push_back(value);
+    }
+}
+
+void VulkanRequirementCollector::requireVulkan13Feature(const char* feature) {
+    if (feature == nullptr || feature[0] == '\0') {
+        return;
+    }
+    const std::string value(feature);
+    if (std::find(m_vulkan13Features.begin(), m_vulkan13Features.end(), value) ==
+        m_vulkan13Features.end()) {
+        m_vulkan13Features.push_back(value);
+    }
+}
+
 void VulkanRequirementCollector::requireQueue(const RhiQueueType queue, const uint32_t count) {
     uint32_t* target = nullptr;
     switch (queue) {
@@ -36,6 +58,24 @@ void VulkanRequirementCollector::requireQueue(const RhiQueueType queue, const ui
     if (target != nullptr && count > *target) {
         *target = count;
     }
+}
+
+void VulkanRequirementCollector::requireAdditionalQueues(const RhiQueueType queue,
+                                                          const uint32_t count) {
+    uint32_t* target = nullptr;
+    switch (queue) {
+        case RhiQueueType::Graphics: target = &m_additionalGraphicsQueueCount; break;
+        case RhiQueueType::Compute: target = &m_additionalComputeQueueCount; break;
+        case RhiQueueType::Transfer: target = &m_additionalTransferQueueCount; break;
+        case RhiQueueType::Present: target = &m_additionalPresentQueueCount; break;
+    }
+    if (target != nullptr) {
+        *target += count;
+    }
+}
+
+void VulkanRequirementCollector::requireOpticalFlowQueues(const uint32_t count) {
+    m_opticalFlowQueueCount += count;
 }
 
 std::vector<const char*> VulkanRequirementCollector::instanceExtensionNames() const {
@@ -52,6 +92,24 @@ std::vector<const char*> VulkanRequirementCollector::deviceExtensionNames() cons
     names.reserve(m_deviceExtensions.size());
     for (const std::string& extension : m_deviceExtensions) {
         names.push_back(extension.c_str());
+    }
+    return names;
+}
+
+std::vector<const char*> VulkanRequirementCollector::vulkan12FeatureNames() const {
+    std::vector<const char*> names;
+    names.reserve(m_vulkan12Features.size());
+    for (const std::string& feature : m_vulkan12Features) {
+        names.push_back(feature.c_str());
+    }
+    return names;
+}
+
+std::vector<const char*> VulkanRequirementCollector::vulkan13FeatureNames() const {
+    std::vector<const char*> names;
+    names.reserve(m_vulkan13Features.size());
+    for (const std::string& feature : m_vulkan13Features) {
+        names.push_back(feature.c_str());
     }
     return names;
 }
@@ -90,6 +148,20 @@ uint32_t VulkanRequirementCollector::requiredQueueCount(const RhiQueueType queue
         case RhiQueueType::Present: return m_presentQueueCount;
     }
     return 0u;
+}
+
+uint32_t VulkanRequirementCollector::additionalQueueCount(const RhiQueueType queue) const {
+    switch (queue) {
+        case RhiQueueType::Graphics: return m_additionalGraphicsQueueCount;
+        case RhiQueueType::Compute: return m_additionalComputeQueueCount;
+        case RhiQueueType::Transfer: return m_additionalTransferQueueCount;
+        case RhiQueueType::Present: return m_additionalPresentQueueCount;
+    }
+    return 0u;
+}
+
+uint32_t VulkanRequirementCollector::opticalFlowQueueCount() const {
+    return m_opticalFlowQueueCount;
 }
 
 bool VulkanRequirementCollector::containsExtension(

@@ -8,6 +8,9 @@
 #if defined(MECRAFT_ENABLE_FSR31)
 #include "renderer/upscaling/Fsr31VulkanContext.h"
 #endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+#include "renderer/upscaling/StreamlineRuntime.h"
+#endif
 
 #include <GLFW/glfw3.h>
 
@@ -916,18 +919,34 @@ void main() {
 } // namespace
 
 int main() {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    if (!streamline.initialize()) {
+        std::cerr << streamline.lastError() << '\n';
+        return 1;
+    }
+#endif
     if (glfwInit() != GLFW_TRUE) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        streamline.shutdown();
+#endif
         return 1;
     }
 
     VkRhiDevice device;
     if (!device.prepareWindowCreation()) {
         glfwTerminate();
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        streamline.shutdown();
+#endif
         return 1;
     }
     GLFWwindow* window = glfwCreateWindow(320, 240, "vulkan_rhi_smoke_test", nullptr, nullptr);
     if (window == nullptr) {
         glfwTerminate();
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        streamline.shutdown();
+#endif
         return 1;
     }
     glfwShowWindow(window);

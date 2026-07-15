@@ -122,6 +122,9 @@ struct VkRhiDeviceData {
     VkQueue computeQueue = VK_NULL_HANDLE;
     VkQueue transferQueue = VK_NULL_HANDLE;
     VkQueue presentQueue = VK_NULL_HANDLE;
+    uint32_t streamlineGraphicsQueueIndex = 0u;
+    uint32_t streamlineComputeQueueIndex = 0u;
+    uint32_t streamlineOpticalFlowQueueIndex = 0u;
     VmaAllocator allocator = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;

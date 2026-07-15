@@ -39,6 +39,9 @@ option(MECRAFT_USE_SOURCE_ASSETS "Use the source-tree assets directory directly 
 option(MECRAFT_RHI_BACKEND_OPENGL "Build OpenGL RHI backend" ON)
 option(MECRAFT_RHI_BACKEND_VULKAN "Build Vulkan RHI backend" ON)
 option(MECRAFT_ENABLE_FSR31 "Build AMD FidelityFX FSR 3.1.4 Vulkan upscaling" ON)
+option(MECRAFT_ENABLE_STREAMLINE "Build NVIDIA Streamline 2.12.0 Vulkan integration" OFF)
+set(MECRAFT_STREAMLINE_ROOT "" CACHE PATH "NVIDIA Streamline 2.12.0 SDK root")
+set(MECRAFT_STREAMLINE_APPLICATION_ID "0" CACHE STRING "NVIDIA NGX application ID")
 set(MECRAFT_DEFAULT_RHI_BACKEND "OpenGL" CACHE STRING "Default RHI backend")
 set_property(CACHE MECRAFT_DEFAULT_RHI_BACKEND PROPERTY STRINGS OpenGL Vulkan)
 
@@ -47,6 +50,55 @@ if(NOT MECRAFT_RHI_BACKEND_OPENGL AND NOT MECRAFT_RHI_BACKEND_VULKAN)
 endif()
 if(MECRAFT_ENABLE_FSR31 AND NOT MECRAFT_RHI_BACKEND_VULKAN)
     message(FATAL_ERROR "MECRAFT_ENABLE_FSR31 requires the Vulkan RHI backend")
+endif()
+if(MECRAFT_ENABLE_STREAMLINE AND NOT WIN32)
+    message(FATAL_ERROR "MECRAFT_ENABLE_STREAMLINE requires Windows")
+endif()
+if(MECRAFT_ENABLE_STREAMLINE AND NOT MECRAFT_RHI_BACKEND_VULKAN)
+    message(FATAL_ERROR "MECRAFT_ENABLE_STREAMLINE requires the Vulkan RHI backend")
+endif()
+if(MECRAFT_ENABLE_STREAMLINE)
+    if(MECRAFT_STREAMLINE_ROOT STREQUAL "")
+        message(FATAL_ERROR "MECRAFT_STREAMLINE_ROOT must point to the Streamline 2.12.0 SDK")
+    endif()
+    get_filename_component(MECRAFT_STREAMLINE_ROOT
+            "${MECRAFT_STREAMLINE_ROOT}" ABSOLUTE BASE_DIR "${PROJECT_SOURCE_DIR}")
+    if(NOT MECRAFT_STREAMLINE_APPLICATION_ID MATCHES "^[0-9]+$")
+        message(FATAL_ERROR "MECRAFT_STREAMLINE_APPLICATION_ID must be an unsigned integer")
+    endif()
+    set(MECRAFT_STREAMLINE_INCLUDE_DIR "${MECRAFT_STREAMLINE_ROOT}/include")
+    set(MECRAFT_STREAMLINE_BIN_DIR "${MECRAFT_STREAMLINE_ROOT}/bin/x64")
+    set(MECRAFT_STREAMLINE_RUNTIME_FILES
+            "${MECRAFT_STREAMLINE_BIN_DIR}/sl.interposer.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/sl.common.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/sl.dlss.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/sl.dlss_g.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/sl.reflex.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/sl.pcl.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/nvngx_dlss.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/nvngx_dlssg.dll"
+            "${MECRAFT_STREAMLINE_BIN_DIR}/NvLowLatencyVk.dll"
+    )
+    set(MECRAFT_STREAMLINE_REQUIRED_FILES
+            "${MECRAFT_STREAMLINE_INCLUDE_DIR}/sl.h"
+            "${MECRAFT_STREAMLINE_INCLUDE_DIR}/sl_version.h"
+            ${MECRAFT_STREAMLINE_RUNTIME_FILES}
+    )
+    foreach(MECRAFT_STREAMLINE_FILE IN LISTS MECRAFT_STREAMLINE_REQUIRED_FILES)
+        if(NOT EXISTS "${MECRAFT_STREAMLINE_FILE}")
+            message(FATAL_ERROR "Missing Streamline 2.12.0 file: ${MECRAFT_STREAMLINE_FILE}")
+        endif()
+    endforeach()
+    file(STRINGS "${MECRAFT_STREAMLINE_INCLUDE_DIR}/sl_version.h"
+            MECRAFT_STREAMLINE_VERSION_DEFINES
+            REGEX "^#define SL_VERSION_(MAJOR|MINOR|PATCH) ")
+    string(JOIN ";" MECRAFT_STREAMLINE_VERSION_TEXT
+            ${MECRAFT_STREAMLINE_VERSION_DEFINES})
+    if(NOT MECRAFT_STREAMLINE_VERSION_TEXT MATCHES "SL_VERSION_MAJOR 2" OR
+       NOT MECRAFT_STREAMLINE_VERSION_TEXT MATCHES "SL_VERSION_MINOR 12" OR
+       NOT MECRAFT_STREAMLINE_VERSION_TEXT MATCHES "SL_VERSION_PATCH 0")
+        message(FATAL_ERROR "MECRAFT_STREAMLINE_ROOT must contain Streamline 2.12.0")
+    endif()
 endif()
 if(NOT MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "OpenGL" AND
    NOT MECRAFT_DEFAULT_RHI_BACKEND STREQUAL "Vulkan")
@@ -403,6 +455,12 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
                 src/renderer/upscaling/Fsr31TemporalConfig.h
                 src/renderer/upscaling/Fsr31VulkanContext.cpp
                 src/renderer/upscaling/Fsr31VulkanContext.h
+        )
+    endif()
+    if(MECRAFT_ENABLE_STREAMLINE)
+        list(APPEND SRC_RENDERER
+                src/renderer/upscaling/StreamlineRuntime.cpp
+                src/renderer/upscaling/StreamlineRuntime.h
         )
     endif()
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -765,6 +823,13 @@ if(MECRAFT_ENABLE_FSR31)
     target_link_libraries(mecraft_core PRIVATE mecraft_fidelityfx_fsr31)
     target_compile_definitions(mecraft_core PUBLIC MECRAFT_ENABLE_FSR31)
 endif()
+if(MECRAFT_ENABLE_STREAMLINE)
+    target_include_directories(mecraft_core SYSTEM PRIVATE
+            "${MECRAFT_STREAMLINE_INCLUDE_DIR}")
+    target_compile_definitions(mecraft_core PUBLIC
+            MECRAFT_ENABLE_STREAMLINE
+            MECRAFT_STREAMLINE_APPLICATION_ID=${MECRAFT_STREAMLINE_APPLICATION_ID})
+endif()
 
 # 基于 Target 的编译器选项（更严谨的代码质量控制）
 mecraft_apply_project_warnings(mecraft_core)
@@ -791,6 +856,21 @@ endif()
 mecraft_disable_rtti(mecraft)
 mecraft_disable_exceptions(mecraft)
 mecraft_apply_ipo(mecraft)
+
+if(MECRAFT_ENABLE_STREAMLINE)
+    function(mecraft_deploy_streamline TARGET_NAME)
+        foreach(MECRAFT_STREAMLINE_FILE IN LISTS MECRAFT_STREAMLINE_RUNTIME_FILES)
+            get_filename_component(MECRAFT_STREAMLINE_FILE_NAME
+                    "${MECRAFT_STREAMLINE_FILE}" NAME)
+            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                            "${MECRAFT_STREAMLINE_FILE}"
+                            "$<TARGET_FILE_DIR:${TARGET_NAME}>/${MECRAFT_STREAMLINE_FILE_NAME}"
+                    VERBATIM)
+        endforeach()
+    endfunction()
+    mecraft_deploy_streamline(mecraft)
+endif()
 
 # ===========================================================================
 # 6b. Dedicated Server
@@ -890,6 +970,11 @@ if(MECRAFT_BUILD_TESTS)
         endif()
         add_mecraft_test(vulkan_rhi_smoke_test tests/vulkan_rhi_smoke_test.cpp)
         add_mecraft_test(vulkan_requirement_collector_test tests/vulkan_requirement_collector_test.cpp)
+        if(MECRAFT_ENABLE_STREAMLINE)
+            mecraft_deploy_streamline(vulkan_rhi_smoke_test)
+            add_mecraft_test(streamline_runtime_test tests/streamline_runtime_test.cpp)
+            mecraft_deploy_streamline(streamline_runtime_test)
+        endif()
         set(MECRAFT_VULKAN_LAYER_DIR
                 "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/vulkan/explicit_layer.d")
         set_tests_properties(vulkan_rhi_smoke_test PROPERTIES

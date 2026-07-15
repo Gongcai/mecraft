@@ -83,7 +83,9 @@ struct Fsr31SharedTexture {
     textureDesc.width = extent.width;
     textureDesc.height = extent.height;
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                        rhiFlag(RhiTextureUsage::Storage);
+                        rhiFlag(RhiTextureUsage::Storage) |
+                        rhiFlag(RhiTextureUsage::TransferSrc) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
     output.texture = device.createTexture(textureDesc, nullptr);
     if (!output.texture.isValid()) {
         return false;

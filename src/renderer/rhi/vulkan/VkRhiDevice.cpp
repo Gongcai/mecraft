@@ -7,6 +7,10 @@
 #include "renderer/rhi/vulkan/VkRhiConversions.h"
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
 #include "renderer/rhi/vulkan/VulkanRequirementCollector.h"
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+#include "renderer/upscaling/StreamlineRuntime.h"
+#include <sl_helpers_vk.h>
+#endif
 
 #include <GLFW/glfw3.h>
 
@@ -35,10 +39,12 @@ struct QueueFamilies {
     uint32_t compute = UINT32_MAX;
     uint32_t transfer = UINT32_MAX;
     uint32_t present = UINT32_MAX;
+    uint32_t opticalFlow = UINT32_MAX;
 
-    [[nodiscard]] bool complete() const {
+    [[nodiscard]] bool complete(const bool requireOpticalFlow) const {
         return graphics != UINT32_MAX && compute != UINT32_MAX &&
-               transfer != UINT32_MAX && present != UINT32_MAX;
+               transfer != UINT32_MAX && present != UINT32_MAX &&
+               (!requireOpticalFlow || opticalFlow != UINT32_MAX);
     }
 };
 
@@ -207,7 +213,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
 }
 
 [[nodiscard]] QueueFamilies queryQueueFamilies(const VkPhysicalDevice physicalDevice,
-                                                const VkSurfaceKHR surface) {
+                                                const VkSurfaceKHR surface,
+                                                const bool requireOpticalFlow) {
     uint32_t count = 0u;
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, nullptr);
     std::vector<VkQueueFamilyProperties> properties(count);
@@ -222,10 +229,19 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
         if ((flags & VK_QUEUE_COMPUTE_BIT) != 0u && (flags & VK_QUEUE_GRAPHICS_BIT) == 0u) {
             families.compute = i;
         }
-        if ((flags & VK_QUEUE_TRANSFER_BIT) != 0u &&
-            (flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) == 0u) {
+        if (families.transfer == UINT32_MAX &&
+            (flags & VK_QUEUE_TRANSFER_BIT) != 0u &&
+            (flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |
+                      VK_QUEUE_OPTICAL_FLOW_BIT_NV)) == 0u) {
             families.transfer = i;
         }
+#if defined(VK_NV_optical_flow)
+        if (requireOpticalFlow && families.opticalFlow == UINT32_MAX &&
+            (flags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) != 0u &&
+            (flags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT)) == 0u) {
+            families.opticalFlow = i;
+        }
+#endif
         VkBool32 present = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, i, surface, &present);
         if (families.present == UINT32_MAX && present == VK_TRUE) {
@@ -238,6 +254,93 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBits
     }
     return families;
 }
+
+[[nodiscard]] std::vector<VkQueueFamilyProperties> queryQueueFamilyProperties(
+    const VkPhysicalDevice physicalDevice) {
+    uint32_t count = 0u;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, nullptr);
+    std::vector<VkQueueFamilyProperties> properties(count);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, properties.data());
+    return properties;
+}
+
+[[nodiscard]] uint32_t requiredQueuesForFamily(
+    const QueueFamilies& families,
+    const VulkanRequirementCollector& requirements,
+    const uint32_t family) {
+    uint32_t count = 0u;
+    if (family == families.graphics || family == families.compute ||
+        family == families.transfer || family == families.present) {
+        count = 1u;
+    }
+    if (family == families.compute) {
+        count += requirements.additionalQueueCount(RhiQueueType::Compute);
+    }
+    if (family == families.graphics) {
+        count += requirements.additionalQueueCount(RhiQueueType::Graphics);
+    }
+    if (family == families.opticalFlow) {
+        count += requirements.opticalFlowQueueCount();
+    }
+    return count;
+}
+
+[[nodiscard]] bool queueRequirementsSupported(
+    const VkPhysicalDevice physicalDevice,
+    const QueueFamilies& families,
+    const VulkanRequirementCollector& requirements) {
+    const std::vector<VkQueueFamilyProperties> properties =
+        queryQueueFamilyProperties(physicalDevice);
+    const std::array<uint32_t, 5u> requestedFamilies{
+        families.graphics, families.compute, families.transfer,
+        families.present, families.opticalFlow
+    };
+    for (const uint32_t family : requestedFamilies) {
+        if (family == UINT32_MAX) {
+            continue;
+        }
+        if (family >= properties.size() ||
+            requiredQueuesForFamily(families, requirements, family) >
+                properties[family].queueCount) {
+            return false;
+        }
+    }
+    return true;
+}
+
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+[[nodiscard]] bool supportsStreamlineVulkan12Features(
+    const VkPhysicalDeviceVulkan12Features& supported,
+    const std::vector<const char*>& requiredNames) {
+    for (const char* name : requiredNames) {
+        if (std::strcmp(name, "timelineSemaphore") == 0) {
+            if (supported.timelineSemaphore != VK_TRUE) return false;
+        } else if (std::strcmp(name, "descriptorIndexing") == 0) {
+            if (supported.descriptorIndexing != VK_TRUE) return false;
+        } else if (std::strcmp(name, "bufferDeviceAddress") == 0) {
+            if (supported.bufferDeviceAddress != VK_TRUE) return false;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool supportsStreamlineVulkan13Features(
+    const VkPhysicalDeviceVulkan13Features& supported,
+    const std::vector<const char*>& requiredNames) {
+    for (const char* name : requiredNames) {
+        if (std::strcmp(name, "synchronization2") == 0) {
+            if (supported.synchronization2 != VK_TRUE) return false;
+        } else if (std::strcmp(name, "privateData") == 0) {
+            if (supported.privateData != VK_TRUE) return false;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+#endif
 
 } // namespace
 
@@ -1023,6 +1126,12 @@ VkRhiDevice::~VkRhiDevice() {
 }
 
 bool VkRhiDevice::prepareWindowCreation() {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (!StreamlineRuntime::instance().initialized()) {
+        std::cerr << "VkRhiDevice: Streamline must be initialized before Vulkan discovery\n";
+        return false;
+    }
+#endif
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     return glfwVulkanSupported() == GLFW_TRUE;
 }
@@ -1063,6 +1172,14 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     requirements.requireQueue(RhiQueueType::Compute);
     requirements.requireQueue(RhiQueueType::Transfer);
     requirements.requireQueue(RhiQueueType::Present);
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    if (!streamline.appendVulkanRequirements(requirements)) {
+        std::cerr << "VkRhiDevice: Streamline requirements are unavailable\n";
+        shutdown();
+        return false;
+    }
+#endif
 
     uint32_t instanceExtensionCount = 0u;
     vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionCount, nullptr);
@@ -1152,6 +1269,11 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkPhysicalDeviceVulkan12Features selected12{};
     VkPhysicalDeviceVulkan13Features selected13{};
     VkPhysicalDeviceFeatures selectedCoreFeatures{};
+    const bool requireOpticalFlow = requirements.opticalFlowQueueCount() > 0u;
+    const std::vector<const char*> requiredFeatures12 =
+        requirements.vulkan12FeatureNames();
+    const std::vector<const char*> requiredFeatures13 =
+        requirements.vulkan13FeatureNames();
     for (const VkPhysicalDevice candidate : physicalDevices) {
         uint32_t extensionCount = 0u;
         vkEnumerateDeviceExtensionProperties(candidate, nullptr, &extensionCount, nullptr);
@@ -1160,12 +1282,17 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         if (!requirements.validateDeviceExtensions(extensions, missingExtension)) {
             continue;
         }
-        const QueueFamilies families = queryQueueFamilies(candidate, m_data->surface);
-        if (!families.complete()) {
+        const QueueFamilies families = queryQueueFamilies(candidate, m_data->surface,
+                                                          requireOpticalFlow);
+        if (!families.complete(requireOpticalFlow) ||
+            !queueRequirementsSupported(candidate, families, requirements)) {
             continue;
         }
+        VkPhysicalDeviceOpticalFlowFeaturesNV opticalFlow{
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV};
         VkPhysicalDeviceDepthClipControlFeaturesEXT depthClip{
-            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT};
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT,
+            requireOpticalFlow ? &opticalFlow : nullptr};
         VkPhysicalDeviceVulkan13Features features13{
             VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
         VkPhysicalDeviceVulkan12Features features12{
@@ -1188,6 +1315,13 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             depthClip.depthClipControl != VK_TRUE) {
             continue;
         }
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (!supportsStreamlineVulkan12Features(features12, requiredFeatures12) ||
+            !supportsStreamlineVulkan13Features(features13, requiredFeatures13) ||
+            (requireOpticalFlow && opticalFlow.opticalFlow != VK_TRUE)) {
+            continue;
+        }
+#endif
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(candidate, &properties);
         const int score = properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? 1000 : 100;
@@ -1207,26 +1341,50 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         return false;
     }
 
-    const std::set<uint32_t> uniqueFamilies{
+    std::set<uint32_t> uniqueFamilies{
         m_data->queueFamilies.graphics, m_data->queueFamilies.compute,
         m_data->queueFamilies.transfer, m_data->queueFamilies.present};
-    const float queuePriority = 1.0f;
+    if (m_data->queueFamilies.opticalFlow != UINT32_MAX) {
+        uniqueFamilies.insert(m_data->queueFamilies.opticalFlow);
+    }
+    uint32_t maxQueueCount = 1u;
+    for (const uint32_t family : uniqueFamilies) {
+        maxQueueCount = std::max(
+            maxQueueCount,
+            requiredQueuesForFamily(m_data->queueFamilies, requirements, family));
+    }
+    const std::vector<float> queuePriorities(maxQueueCount, 1.0f);
     std::vector<VkDeviceQueueCreateInfo> queueInfos;
     queueInfos.reserve(uniqueFamilies.size());
     for (const uint32_t family : uniqueFamilies) {
         VkDeviceQueueCreateInfo queueInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
         queueInfo.queueFamilyIndex = family;
-        queueInfo.queueCount = 1u;
-        queueInfo.pQueuePriorities = &queuePriority;
+        queueInfo.queueCount = requiredQueuesForFamily(
+            m_data->queueFamilies, requirements, family);
+        queueInfo.pQueuePriorities = queuePriorities.data();
         queueInfos.push_back(queueInfo);
     }
+    m_data->streamlineComputeQueueIndex = 1u;
+    m_data->streamlineGraphicsQueueIndex =
+        m_data->queueFamilies.graphics == m_data->queueFamilies.compute
+            ? 1u + requirements.additionalQueueCount(RhiQueueType::Compute)
+            : 1u;
+    m_data->streamlineOpticalFlowQueueIndex = 0u;
+    VkPhysicalDeviceOpticalFlowFeaturesNV opticalFlow{
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_OPTICAL_FLOW_FEATURES_NV};
+    opticalFlow.opticalFlow = requireOpticalFlow ? VK_TRUE : VK_FALSE;
     VkPhysicalDeviceDepthClipControlFeaturesEXT depthClip{
-        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT};
+        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_CONTROL_FEATURES_EXT,
+        requireOpticalFlow ? &opticalFlow : nullptr};
     depthClip.depthClipControl = VK_TRUE;
     VkPhysicalDeviceVulkan13Features features13{
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &depthClip};
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
+    features13.privateData = std::any_of(
+        requiredFeatures13.begin(), requiredFeatures13.end(), [](const char* name) {
+            return std::strcmp(name, "privateData") == 0;
+        }) ? VK_TRUE : VK_FALSE;
     features13.subgroupSizeControl = selected13.subgroupSizeControl;
     features13.computeFullSubgroups = selected13.computeFullSubgroups;
     VkPhysicalDeviceVulkan12Features features12{
@@ -1274,6 +1432,24 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     vkGetDeviceQueue(m_data->device, m_data->queueFamilies.compute, 0u, &m_data->computeQueue);
     vkGetDeviceQueue(m_data->device, m_data->queueFamilies.transfer, 0u, &m_data->transferQueue);
     vkGetDeviceQueue(m_data->device, m_data->queueFamilies.present, 0u, &m_data->presentQueue);
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    StreamlineVulkanDeviceInfo streamlineDeviceInfo;
+    streamlineDeviceInfo.instance = m_data->instance;
+    streamlineDeviceInfo.physicalDevice = m_data->physicalDevice;
+    streamlineDeviceInfo.device = m_data->device;
+    streamlineDeviceInfo.graphicsQueueFamily = m_data->queueFamilies.graphics;
+    streamlineDeviceInfo.graphicsQueueIndex = m_data->streamlineGraphicsQueueIndex;
+    streamlineDeviceInfo.computeQueueFamily = m_data->queueFamilies.compute;
+    streamlineDeviceInfo.computeQueueIndex = m_data->streamlineComputeQueueIndex;
+    streamlineDeviceInfo.opticalFlowQueueFamily = m_data->queueFamilies.opticalFlow;
+    streamlineDeviceInfo.opticalFlowQueueIndex = m_data->streamlineOpticalFlowQueueIndex;
+    streamlineDeviceInfo.useNativeOpticalFlow = requireOpticalFlow;
+    if (!streamline.setVulkanDevice(streamlineDeviceInfo)) {
+        std::cerr << streamline.lastError() << '\n';
+        shutdown();
+        return false;
+    }
+#endif
     m_data->setObjectName = reinterpret_cast<PFN_vkSetDebugUtilsObjectNameEXT>(
         vkGetDeviceProcAddr(m_data->device, "vkSetDebugUtilsObjectNameEXT"));
     m_data->beginLabel = reinterpret_cast<PFN_vkCmdBeginDebugUtilsLabelEXT>(
@@ -1404,6 +1580,12 @@ void VkRhiDevice::shutdown() {
         if (vkDeviceWaitIdle(m_data->device) == VK_SUCCESS && m_initialized) {
             reclaimCompletedWorkUnlocked();
         }
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        StreamlineRuntime& streamline = StreamlineRuntime::instance();
+        if (streamline.initialized() && !streamline.shutdown()) {
+            std::cerr << streamline.lastError() << '\n';
+        }
+#endif
         for (VkRhiCommandListPool* pool : m_data->commandListPools) {
             for (const auto& list : pool->m_commandLists) {
                 m_data->commandLists.erase(list.get());
@@ -1491,6 +1673,12 @@ void VkRhiDevice::shutdown() {
         }
         vkDestroyDevice(m_data->device, nullptr);
     }
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    if (streamline.initialized() && !streamline.shutdown()) {
+        std::cerr << streamline.lastError() << '\n';
+    }
+#endif
     if (m_data->surface != VK_NULL_HANDLE && m_data->instance != VK_NULL_HANDLE) {
         vkDestroySurfaceKHR(m_data->instance, m_data->surface, nullptr);
     }
