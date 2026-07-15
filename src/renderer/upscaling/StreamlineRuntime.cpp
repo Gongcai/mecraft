@@ -132,6 +132,8 @@ struct StreamlineRuntime::Implementation {
     PFun_slFreeResources* freeResources = nullptr;
     PFun_slDLSSGetOptimalSettings* dlssGetOptimalSettings = nullptr;
     PFun_slDLSSSetOptions* dlssSetOptions = nullptr;
+    PFN_vkGetDeviceProcAddr getDeviceProcAddr = nullptr;
+    PFN_vkQueuePresentKHR queuePresent = nullptr;
     StreamlineDlssOptions cachedDlssOptions;
     StreamlineDlssOptimalSettings cachedDlssSettings;
     bool cachedDlssSettingsValid = false;
@@ -211,12 +213,15 @@ bool StreamlineRuntime::initialize(const std::filesystem::path& runtimeDirectory
         GetProcAddress(m_impl->module, "slEvaluateFeature"));
     m_impl->freeResources = reinterpret_cast<PFun_slFreeResources*>(
         GetProcAddress(m_impl->module, "slFreeResources"));
+    m_impl->getDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
+        GetProcAddress(m_impl->module, "vkGetDeviceProcAddr"));
     if (m_impl->init == nullptr || m_impl->shutdown == nullptr ||
         m_impl->getFeatureRequirements == nullptr ||
         m_impl->isFeatureSupported == nullptr || m_impl->setVulkanInfo == nullptr ||
         m_impl->getFeatureFunction == nullptr || m_impl->getNewFrameToken == nullptr ||
         m_impl->setConstants == nullptr || m_impl->setTagForFrame == nullptr ||
-        m_impl->evaluateFeature == nullptr || m_impl->freeResources == nullptr) {
+        m_impl->evaluateFeature == nullptr || m_impl->freeResources == nullptr ||
+        m_impl->getDeviceProcAddr == nullptr) {
         m_impl->error = "StreamlineRuntime: the interposer is missing required exports";
         FreeLibrary(m_impl->module);
         m_impl->module = nullptr;
@@ -380,6 +385,12 @@ bool StreamlineRuntime::setVulkanDevice(const StreamlineVulkanDeviceInfo& info) 
         reinterpret_cast<PFun_slDLSSGetOptimalSettings*>(dlssGetOptimalSettings);
     m_impl->dlssSetOptions =
         reinterpret_cast<PFun_slDLSSSetOptions*>(dlssSetOptions);
+    m_impl->queuePresent = reinterpret_cast<PFN_vkQueuePresentKHR>(
+        m_impl->getDeviceProcAddr(info.device, "vkQueuePresentKHR"));
+    if (m_impl->queuePresent == nullptr) {
+        m_impl->error = "StreamlineRuntime: failed to resolve the Vulkan present proxy";
+        return false;
+    }
     m_impl->vulkanDeviceSet = true;
     m_impl->error.clear();
     return true;
@@ -570,6 +581,27 @@ bool StreamlineRuntime::releaseDlssResources(const uint32_t viewport) {
     return true;
 }
 
+VkResult StreamlineRuntime::presentVulkanFrame(
+    const VkQueue queue,
+    const VkPresentInfoKHR& info) {
+    if (!m_impl->vulkanDeviceSet || m_impl->queuePresent == nullptr ||
+        queue == VK_NULL_HANDLE) {
+        m_impl->error = "StreamlineRuntime: Vulkan presentation proxy is not available";
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult result = m_impl->queuePresent(queue, &info);
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR &&
+        result != VK_ERROR_OUT_OF_DATE_KHR &&
+        result != VK_ERROR_SURFACE_LOST_KHR &&
+        result != VK_ERROR_DEVICE_LOST) {
+        m_impl->error = "StreamlineRuntime: Vulkan presentation proxy returned " +
+                        std::to_string(static_cast<int32_t>(result));
+        return result;
+    }
+    m_impl->error.clear();
+    return result;
+}
+
 bool StreamlineRuntime::appendVulkanRequirements(
     VulkanRequirementCollector& collector) const {
     if (!m_impl->initialized) {
@@ -609,6 +641,7 @@ bool StreamlineRuntime::shutdown() {
     m_impl->requirements = {};
     m_impl->dlssGetOptimalSettings = nullptr;
     m_impl->dlssSetOptions = nullptr;
+    m_impl->queuePresent = nullptr;
     m_impl->cachedDlssSettingsValid = false;
     if (m_impl->module != nullptr) {
         FreeLibrary(m_impl->module);

@@ -2558,7 +2558,16 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
     presentInfo.swapchainCount = 1u;
     presentInfo.pSwapchains = &m_data->swapchain;
     presentInfo.pImageIndices = &m_data->acquiredImage;
+    VkResult swapchainResult = VK_SUCCESS;
+    presentInfo.pResults = &swapchainResult;
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    const VkResult proxyResult = StreamlineRuntime::instance().presentVulkanFrame(
+        m_data->presentQueue, presentInfo);
+    const VkResult nativeResult = swapchainResult != VK_SUCCESS
+        ? swapchainResult : proxyResult;
+#else
     const VkResult nativeResult = vkQueuePresentKHR(m_data->presentQueue, &presentInfo);
+#endif
     m_data->frameAcquired = false;
     m_data->frameSubmitted = false;
     m_data->frameImageAvailableWaited = false;

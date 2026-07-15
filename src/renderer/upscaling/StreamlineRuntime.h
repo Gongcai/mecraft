@@ -153,6 +153,12 @@ public:
     /// @return True when the plugin released the viewport resources.
     bool releaseDlssResources(uint32_t viewport);
 
+    /// Presents one Vulkan frame through the Streamline interposer hooks.
+    /// @param queue Vulkan presentation queue.
+    /// @param info Native swapchain presentation description.
+    /// @return Vulkan result returned after Streamline before/after-present hooks.
+    VkResult presentVulkanFrame(VkQueue queue, const VkPresentInfoKHR& info);
+
     /// Shuts Streamline down while the Vulkan device and instance are still alive.
     /// @return True when shutdown completed successfully or the runtime was not initialized.
     bool shutdown();

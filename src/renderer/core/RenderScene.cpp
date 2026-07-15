@@ -18,6 +18,7 @@
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
 #include "renderer/upscaling/DlssVulkanContext.h"
+#include "renderer/upscaling/StreamlineRuntime.h"
 #endif
 
 #include <algorithm>
@@ -753,6 +754,18 @@ bool RenderScene::isFsr31Supported() const {
     return m_shared.rhiDevice != nullptr &&
            m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
            m_settings.pipelineMode == PipelineMode::Deferred;
+#else
+    return false;
+#endif
+}
+
+bool RenderScene::isDlssSupported() const {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    const StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    return m_shared.rhiDevice != nullptr &&
+           m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
+           m_settings.pipelineMode == PipelineMode::Deferred &&
+           streamline.initialized() && streamline.vulkanDeviceSet();
 #else
     return false;
 #endif

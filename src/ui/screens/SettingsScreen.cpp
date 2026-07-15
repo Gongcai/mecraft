@@ -1410,26 +1410,41 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
     RenderSettings s = m_renderScene->getSettings();
     const bool fsr1Supported = m_renderScene->isFsr1Supported();
     const bool fsr31Supported = m_renderScene->isFsr31Supported();
+    const bool dlssSupported = m_renderScene->isDlssSupported();
 
     addSectionHeader(stack, resourceMgr, "Temporal Upscaling");
 
     std::vector<std::string> temporalUpscalers{"Native"};
+    std::vector<TemporalUpscalerType> temporalUpscalerTypes{
+        TemporalUpscalerType::Native};
     if (fsr31Supported) {
         temporalUpscalers.emplace_back("AMD FSR 3.1");
+        temporalUpscalerTypes.emplace_back(TemporalUpscalerType::Fsr31);
     }
-    const int selectedUpscaler =
-        fsr31Supported && s.upscale.type == TemporalUpscalerType::Fsr31 ? 1 : 0;
+    if (dlssSupported) {
+        temporalUpscalers.emplace_back("NVIDIA DLSS");
+        temporalUpscalerTypes.emplace_back(TemporalUpscalerType::Dlss);
+    }
+    int selectedUpscaler = 0;
+    for (size_t i = 0u; i < temporalUpscalerTypes.size(); ++i) {
+        if (temporalUpscalerTypes[i] == s.upscale.type) {
+            selectedUpscaler = static_cast<int>(i);
+            break;
+        }
+    }
     addDropdownRow(
         stack, resourceMgr, "Temporal Upscaler", temporalUpscalers,
         selectedUpscaler,
-        [this](const int index, const std::string&) {
+        [this, temporalUpscalerTypes](const int index, const std::string&) {
+            if (index < 0 ||
+                static_cast<size_t>(index) >= temporalUpscalerTypes.size()) {
+                return;
+            }
             auto settings = m_renderScene->getSettings();
-            settings.upscale.type = index == 1
-                ? TemporalUpscalerType::Fsr31
-                : TemporalUpscalerType::Native;
-            if (settings.upscale.type == TemporalUpscalerType::Fsr31 &&
+            settings.upscale.type = temporalUpscalerTypes[static_cast<size_t>(index)];
+            if (settings.upscale.type != TemporalUpscalerType::Native &&
                 (settings.upscale.quality < TemporalUpscaleQuality::Quality ||
-                 settings.upscale.quality > TemporalUpscaleQuality::Performance)) {
+                 settings.upscale.quality > TemporalUpscaleQuality::UltraPerformance)) {
                 settings.upscale.quality = TemporalUpscaleQuality::Quality;
             }
             m_renderScene->setSettings(settings);
@@ -1437,19 +1452,19 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
 
     const int selectedQuality =
         s.upscale.quality >= TemporalUpscaleQuality::Quality &&
-        s.upscale.quality <= TemporalUpscaleQuality::Performance
+        s.upscale.quality <= TemporalUpscaleQuality::UltraPerformance
             ? static_cast<int>(s.upscale.quality) -
                   static_cast<int>(TemporalUpscaleQuality::Quality)
             : 0;
     addDropdownRow(
-        stack, resourceMgr, "FSR 3.1 Quality",
-        {"Quality", "Balanced", "Performance"}, selectedQuality,
+        stack, resourceMgr, "Temporal Upscale Quality",
+        {"Quality", "Balanced", "Performance", "Ultra Performance"}, selectedQuality,
         [this](const int index, const std::string&) {
             auto settings = m_renderScene->getSettings();
             settings.upscale.quality = static_cast<TemporalUpscaleQuality>(
                 static_cast<int>(TemporalUpscaleQuality::Quality) + index);
             m_renderScene->setSettings(settings);
-        }, fsr31Supported);
+        }, fsr31Supported || dlssSupported);
     addToggle(
         stack, resourceMgr, "FSR 3.1 Sharpening",
         s.upscale.sharpeningEnabled,

@@ -144,6 +144,7 @@ public:
     void setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback);
     [[nodiscard]] bool isFsr1Supported() const { return m_fsr1Supported; }
     [[nodiscard]] bool isFsr31Supported() const;
+    [[nodiscard]] bool isDlssSupported() const;
 
     // Sub-renderer injection (temporary until ECS-driven)
     void setBlockEntityRenderer(BlockEntityRenderer* ber);
