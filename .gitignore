@@ -25,3 +25,4 @@
 # Local unpacked block texture packs used for rendering tests.
 /assets/textures/blocks/
 /assets/textures/blocks_bak/
+/github-pat.txt

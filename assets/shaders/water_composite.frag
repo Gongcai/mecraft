@@ -578,6 +578,9 @@ void main() {
     }
 
     FragColor = vec4(max(color, vec3(0.0)), fogTransmittance);
-    FragReactiveMask = 1.0;
-    FragTransparencyMask = 1.0;
+    // Water changes every frame, but full-strength masks discard nearly all
+    // temporal history and expose projection jitter. Scale both signals by the
+    // actual reflection contribution so calm, face-on water remains stable.
+    FragReactiveMask = clamp(0.20 + fresnel * 0.30, 0.20, 0.50);
+    FragTransparencyMask = clamp(0.15 + fresnel * 0.35, 0.15, 0.50);
 }

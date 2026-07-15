@@ -611,8 +611,13 @@ uniform vec3 uCameraPos;
 
         FragColor = vec4(finalColor, alpha);
 #if MECRAFT_TRANSPARENT_COMPOSITE != 0
-        const float animatedReactive = vAnimated > 0.5 ? 1.0 : 0.0;
-        FragReactiveMask = clamp(max(alpha, animatedReactive), 0.0, 1.0);
-        FragTransparencyMask = clamp(alpha, 0.0, 1.0);
+        if (waterLayer) {
+            FragReactiveMask = 0.35;
+            FragTransparencyMask = 0.30;
+        } else {
+            const float animatedReactive = vAnimated > 0.5 ? 1.0 : 0.0;
+            FragReactiveMask = clamp(max(alpha, animatedReactive), 0.0, 1.0);
+            FragTransparencyMask = clamp(alpha, 0.0, 1.0);
+        }
 #endif
     }
