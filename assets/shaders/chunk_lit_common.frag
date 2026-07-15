@@ -420,14 +420,14 @@ uniform vec3 uCameraPos;
         }
 
         bool waterLayer = (uWaterEffectsEnabled != 0) && isWaterLayer(sampledLayer);
-        bool maskOnlyCutout = false;
         if (MECRAFT_TRANSPARENT_COMPOSITE != 0 && !waterLayer) {
             TranslucentMask transMask = decodeTranslucentMask(vMaterialKind);
-            // Alpha-tested vegetation is already shaded in the opaque G-buffer. Keep
-            // its color out of the composite while still exporting a reactive mask.
-            maskOnlyCutout =
+            bool cutoutVegetation =
                 isCrossVegetation ||
                 (!transMask.isTranslucent && !isDerivativeEmissiveMaterialId(materialKindId(vMaterialKind)));
+            if (cutoutVegetation) {
+                discard;
+            }
         }
         vec2 uv = vUV;
         if (waterLayer) {
@@ -446,15 +446,6 @@ uniform vec3 uCameraPos;
 
         if (texColor.a < 0.1)
             discard;
-
-        if (maskOnlyCutout) {
-            FragColor = vec4(0.0);
-#if MECRAFT_TRANSPARENT_COMPOSITE != 0
-            FragReactiveMask = 1.0;
-            FragTransparencyMask = 0.0;
-#endif
-            return;
-        }
 
         vec3 albedo = srgbToLinear(texColor.rgb);
         if (vTintKind > 0.5 && vTintKind < 1.5) {

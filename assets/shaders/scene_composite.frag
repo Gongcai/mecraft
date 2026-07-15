@@ -91,38 +91,6 @@ float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
 }
 
-bool isLeavesMaterialAt(ivec2 texel, ivec2 extent) {
-    vec4 packedAux = texelFetch(
-        uMaterialAuxTex, clamp(texel, ivec2(0), extent - ivec2(1)), 0);
-    SurfaceMaterialAux aux = unpackGBufferMaterialAux(packedAux);
-    return materialKindId(aux.materialKind) == MATERIAL_LEAVES;
-}
-
-void writeFoliageTemporalHints(vec2 textureUv, bool centerLeaves) {
-    FragReactiveMask = 0.0;
-    FragTransparencyMask = centerLeaves ? 1.0 : 0.0;
-    if (!centerLeaves) {
-        return;
-    }
-
-    ivec2 extent = textureSize(uMaterialAuxTex, 0);
-    ivec2 texel = clamp(ivec2(textureUv * vec2(extent)),
-                        ivec2(0), extent - ivec2(1));
-    bool neighboringNonLeaves = false;
-    const ivec2 offsets[8] = ivec2[8](
-        ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1),
-        ivec2(-1,  0),                 ivec2(1,  0),
-        ivec2(-1,  1), ivec2(0,  1), ivec2(1,  1));
-    for (int index = 0; index < 8; ++index) {
-        bool sampleLeaves = isLeavesMaterialAt(texel + offsets[index], extent);
-        neighboringNonLeaves = neighboringNonLeaves || !sampleLeaves;
-        if (neighboringNonLeaves) {
-            break;
-        }
-    }
-    FragReactiveMask = neighboringNonLeaves ? 1.0 : 0.0;
-}
-
 #ifdef MECRAFT_SCENE_VOXEL_GI
 vec3 voxelGiUv(vec3 worldPos) {
     return (worldPos - uVoxelGiOrigin) / max(uVoxelGiVoxelSize * uVoxelGiResolution, 0.0001);
@@ -242,10 +210,10 @@ void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment
 
 void main() {
     vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    FragReactiveMask = 0.0;
+    FragTransparencyMask = 0.0;
     SurfaceMaterialAux baseAux = unpackGBufferMaterialAux(
         texture(uMaterialAuxTex, textureUv));
-    writeFoliageTemporalHints(
-        textureUv, materialKindId(baseAux.materialKind) == MATERIAL_LEAVES);
     vec4 scene = texture(uSceneLightingTex, textureUv);
     float depth = texture(uDepthTex, textureUv).r;
     vec3 color = scene.rgb;
