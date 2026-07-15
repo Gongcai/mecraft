@@ -9,6 +9,7 @@ class UIRenderer;
 class RenderResourceHub;
 class RenderScene;
 class FirstPersonHeldItemRenderer;
+class PresentationController;
 class RhiDevice;
 class RhiCommandListPool;
 class ThreadPool;
@@ -49,6 +50,7 @@ public:
     [[nodiscard]] RenderResourceHub& resourceHub();
     [[nodiscard]] RenderScene& renderScene();
     [[nodiscard]] FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer();
+    [[nodiscard]] PresentationController& presentationController();
 
 #ifdef MECRAFT_DEBUG
     [[nodiscard]] bool initDebug(Window& window, RhiDevice& rhiDevice);

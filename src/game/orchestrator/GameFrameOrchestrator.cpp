@@ -1,4 +1,5 @@
 #include "GameFrameOrchestrator.h"
+#include "../../Diagnostics.h"
 #include "../session/GameSession.h"
 #include "../states/GameStateMachine.h"
 #include "../../client/GameClient.h"
@@ -14,6 +15,7 @@
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiResources.h"
+#include "../../renderer/presentation/PresentationController.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/passes/PostProcessPass.h"
 #include "../render/GameplayRenderRuntime.h"
@@ -31,6 +33,7 @@
 #include "../camera/CameraController.h"
 
 #include <algorithm>
+#include <iostream>
 
 namespace {
 
@@ -315,23 +318,23 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         return true;
     }
 
-    // Obtain renderer references from the aggregate
+    // Obtain renderer references from the aggregate.
     auto& renderer = renderRuntime.resourceHub();
     const Window::FramebufferSize requestedSize = window.getFramebufferSize();
-    if (!renderer.resizeRhiSwapchain(requestedSize.width, requestedSize.height)) {
+    PresentationController& presentation = renderRuntime.presentationController();
+    const PresentationFrame presentationFrame = presentation.beginFrame(
+        requestedSize.width,
+        requestedSize.height);
+    if (!presentationFrame.shouldContinue()) {
+        MECRAFT_LOG_STREAM(std::cerr
+            << "[GameFrameOrchestrator] "
+            << presentationFailureMessage(presentationFrame.failure) << '\n');
         return false;
     }
-    RhiDevice& rhiDevice = renderer.rhiDevice();
-    const RhiFrameAcquireResult frame = rhiDevice.acquireFrame();
-    if (frame.status == RhiFrameStatus::Minimized ||
-        frame.status == RhiFrameStatus::OutOfDate ||
-        frame.status == RhiFrameStatus::SurfaceLost) {
+    if (!presentationFrame.shouldRender()) {
         return true;
     }
-    if (frame.status != RhiFrameStatus::Success &&
-        frame.status != RhiFrameStatus::Suboptimal) {
-        return false;
-    }
+    const RhiFrameAcquireResult& frame = presentationFrame.acquired;
 
     auto& renderScene = renderRuntime.renderScene();
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
@@ -476,13 +479,12 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
 #ifdef MECRAFT_DEBUG
     const auto preSwapEnd = std::chrono::steady_clock::now();
 #endif
-    const RhiFrameStatus presentStatus = rhiDevice.presentFrame(
-        {frame.frameIndex, frame.imageIndex});
-    if (presentStatus != RhiFrameStatus::Success &&
-        presentStatus != RhiFrameStatus::Suboptimal &&
-        presentStatus != RhiFrameStatus::OutOfDate &&
-        presentStatus != RhiFrameStatus::Minimized &&
-        presentStatus != RhiFrameStatus::SurfaceLost) {
+    const PresentationCompleteResult presentResult =
+        presentation.presentFrame(presentationFrame);
+    if (!presentResult.shouldContinue()) {
+        MECRAFT_LOG_STREAM(std::cerr
+            << "[GameFrameOrchestrator] "
+            << presentationFailureMessage(presentResult.failure) << '\n');
         return false;
     }
 

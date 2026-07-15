@@ -64,6 +64,18 @@ static_assert(sizeof(ImDrawIdx) == sizeof(uint16_t) ||
     }
     return capacity;
 }
+
+[[nodiscard]] const char* presentationModeName(const PresentationMode mode) {
+    switch (mode) {
+    case PresentationMode::Native:
+        return "Native";
+    case PresentationMode::Fsr31FrameGeneration:
+        return "FSR 3.1 Frame Generation";
+    case PresentationMode::DlssFrameGeneration:
+        return "DLSS Frame Generation";
+    }
+    std::abort();
+}
 } // namespace
 
 Dashboard::Dashboard() : m_initialized(false) {
@@ -813,6 +825,17 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
 
         ImGui::Text("FPS: %.1f", m_displayFps);
         ImGui::Text("Frame Time: %.3f ms", m_displayFps > 0.0 ? 1000.0 / m_displayFps : 0.0);
+        ImGui::Text("Presentation Mode: %s",
+                    presentationModeName(displayedProfilerStats.presentationMode));
+        ImGui::Text("Real Frames: acquired %llu, presented %llu",
+                    static_cast<unsigned long long>(displayedProfilerStats.realFramesAcquired),
+                    static_cast<unsigned long long>(displayedProfilerStats.realFramesPresented));
+        ImGui::Text("Displayed Frames: %llu (generated %llu)",
+                    static_cast<unsigned long long>(displayedProfilerStats.displayedFrames),
+                    static_cast<unsigned long long>(displayedProfilerStats.generatedFramesPresented));
+        ImGui::Text("Presentation Skips / Failures: %llu / %llu",
+                    static_cast<unsigned long long>(displayedProfilerStats.presentationSkippedFrames),
+                    static_cast<unsigned long long>(displayedProfilerStats.presentationFailedOperations));
         showMax("Loop Frame (clamped)", displayedProfilerStats.frameMs, displayedProfilerStats.maxFrameMs);
         showMax("App Update Dispatch", displayedProfilerStats.appUpdateDispatchMs, displayedProfilerStats.maxAppUpdateDispatchMs);
         showMax("App Render Dispatch", displayedProfilerStats.appRenderDispatchMs, displayedProfilerStats.maxAppRenderDispatchMs);

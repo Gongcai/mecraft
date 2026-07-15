@@ -27,6 +27,7 @@
 #include "../renderer/rhi/RhiHandles.h"
 #include "../renderer/rhi/RhiResources.h"
 #include "../renderer/rhi/RhiTypes.h"
+#include "../renderer/presentation/PresentationController.h"
 class FirstPersonHeldItemRenderer;
 class PostProcessPass;
 class RhiCommandList;
@@ -71,6 +72,13 @@ public:
         unsigned pollCursorPosEventCount = 0;
         unsigned pollScrollEventCount = 0;
         unsigned pollCharEventCount = 0;
+        PresentationMode presentationMode = PresentationMode::Native;
+        uint64_t realFramesAcquired = 0u;
+        uint64_t realFramesPresented = 0u;
+        uint64_t generatedFramesPresented = 0u;
+        uint64_t displayedFrames = 0u;
+        uint64_t presentationSkippedFrames = 0u;
+        uint64_t presentationFailedOperations = 0u;
 
         // Max-frame-time snapshot: records all timings from the worst frame
         double maxFrameMs = 0.0;

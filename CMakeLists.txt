@@ -328,6 +328,9 @@ set(SRC_RENDERER
         src/renderer/passes/PostProcessPass.cpp
         src/renderer/passes/Fsr1Pass.cpp
 
+        # Presentation
+        src/renderer/presentation/PresentationController.cpp
+
         # Sub-renderers
         src/renderer/renderers/BlockEntityRenderer.cpp
         src/renderer/renderers/DropRenderer.cpp
@@ -866,6 +869,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(rhi_shader_compiler_test tests/rhi_shader_compiler_test.cpp)
     add_mecraft_test(app_launch_options_test tests/app_launch_options_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
+    add_mecraft_test(presentation_controller_test tests/presentation_controller_test.cpp)
     if(MECRAFT_RHI_BACKEND_OPENGL)
         add_mecraft_test(rhi_core_test tests/rhi_core_test.cpp)
     endif()

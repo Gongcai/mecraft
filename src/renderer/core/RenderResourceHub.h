@@ -135,7 +135,6 @@ public:
                             RhiDevice& rhiDevice,
                             RhiCommandListPool& commandListPool);
     void shutdown();
-    [[nodiscard]] bool resizeRhiSwapchain(int width, int height);
     void setMeshingSubmitBudget(int budget);
     void setRegionChunkSize(int chunkSize);
     void setAtlasAnisotropy(float anisotropy);

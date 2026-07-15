@@ -6,6 +6,7 @@
 #include "../../renderer/renderers/FallingBlockRenderer.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
+#include "../../renderer/presentation/PresentationController.h"
 #include "../session/GameSession.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../ecs/GameplayScene.h"
@@ -35,6 +36,8 @@ struct GameplayRenderRuntime::Impl {
     FallingBlockRenderer fallingBlockRenderer;
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
     HumanoidRenderer humanoidRenderer;
+    std::unique_ptr<PresentationBackend> presentationBackend;
+    std::unique_ptr<PresentationController> presentationController;
     RainRenderer* rainRenderer = nullptr;
     ParticleSystem* particleSystem = nullptr;
 
@@ -68,6 +71,10 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& fallingBlockRenderer = m_impl->fallingBlockRenderer;
     auto& firstPersonHeldItemRenderer = m_impl->firstPersonHeldItemRenderer;
     auto& humanoidRenderer = m_impl->humanoidRenderer;
+
+    m_impl->presentationBackend = createNativePresentationBackend(rhiDevice);
+    m_impl->presentationController = std::make_unique<PresentationController>(
+        *m_impl->presentationBackend);
 
     // Core GPU infrastructure
     if (!renderer.init(resourceMgr, threadPool, rhiDevice, commandListPool)) {
@@ -154,6 +161,8 @@ void GameplayRenderRuntime::shutdown() {
     m_impl->blockEntityRenderer.shutdown();
     m_impl->scene.shutdown();
     m_impl->resourceHub.shutdown();
+    m_impl->presentationController.reset();
+    m_impl->presentationBackend.reset();
 }
 
 // --------------------------------------------------------------------------
@@ -170,6 +179,10 @@ RenderScene& GameplayRenderRuntime::renderScene() {
 
 FirstPersonHeldItemRenderer& GameplayRenderRuntime::firstPersonHeldItemRenderer() {
     return m_impl->firstPersonHeldItemRenderer;
+}
+
+PresentationController& GameplayRenderRuntime::presentationController() {
+    return *m_impl->presentationController;
 }
 
 #ifdef MECRAFT_DEBUG
@@ -224,6 +237,16 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.pollCursorPosEventCount = timing.currentPollEventCounts.cursorPosEvents;
     stats.pollScrollEventCount = timing.currentPollEventCounts.scrollEvents;
     stats.pollCharEventCount = timing.currentPollEventCounts.charEvents;
+
+    const PresentationStatistics& presentation =
+        m_impl->presentationController->statistics();
+    stats.presentationMode = presentation.mode;
+    stats.realFramesAcquired = presentation.realFramesAcquired;
+    stats.realFramesPresented = presentation.realFramesPresented;
+    stats.generatedFramesPresented = presentation.generatedFramesPresented;
+    stats.displayedFrames = presentation.displayedFrames;
+    stats.presentationSkippedFrames = presentation.skippedFrames;
+    stats.presentationFailedOperations = presentation.failedOperations;
 
     // Snapshot max-frame-time: when current frame is the worst, record all timings
     if (stats.frameMs > stats.maxFrameMs) {
