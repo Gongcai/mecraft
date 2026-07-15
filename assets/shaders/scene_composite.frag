@@ -6,6 +6,8 @@
 layout(location = 0) in vec2 vScreenUv;
 layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
+layout(location = 1) out float FragReactiveMask;
+layout(location = 2) out float FragTransparencyMask;
 
 layout(binding = 0) uniform sampler2D uSceneLightingTex;
 layout(binding = 1) uniform sampler2D uReflectionTex;
@@ -87,6 +89,38 @@ vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
 
 float luminance(vec3 color) {
     return dot(color, vec3(0.2126, 0.7152, 0.0722));
+}
+
+bool isLeavesMaterialAt(ivec2 texel, ivec2 extent) {
+    vec4 packedAux = texelFetch(
+        uMaterialAuxTex, clamp(texel, ivec2(0), extent - ivec2(1)), 0);
+    SurfaceMaterialAux aux = unpackGBufferMaterialAux(packedAux);
+    return materialKindId(aux.materialKind) == MATERIAL_LEAVES;
+}
+
+void writeFoliageTemporalHints(vec2 textureUv, bool centerLeaves) {
+    FragReactiveMask = 0.0;
+    FragTransparencyMask = centerLeaves ? 1.0 : 0.0;
+    if (!centerLeaves) {
+        return;
+    }
+
+    ivec2 extent = textureSize(uMaterialAuxTex, 0);
+    ivec2 texel = clamp(ivec2(textureUv * vec2(extent)),
+                        ivec2(0), extent - ivec2(1));
+    bool neighboringNonLeaves = false;
+    const ivec2 offsets[8] = ivec2[8](
+        ivec2(-1, -1), ivec2(0, -1), ivec2(1, -1),
+        ivec2(-1,  0),                 ivec2(1,  0),
+        ivec2(-1,  1), ivec2(0,  1), ivec2(1,  1));
+    for (int index = 0; index < 8; ++index) {
+        bool sampleLeaves = isLeavesMaterialAt(texel + offsets[index], extent);
+        neighboringNonLeaves = neighboringNonLeaves || !sampleLeaves;
+        if (neighboringNonLeaves) {
+            break;
+        }
+    }
+    FragReactiveMask = neighboringNonLeaves ? 1.0 : 0.0;
 }
 
 #ifdef MECRAFT_SCENE_VOXEL_GI
@@ -208,6 +242,10 @@ void applyUnderwaterFog(inout vec3 color, float fogDistance, LightingEnvironment
 
 void main() {
     vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
+    SurfaceMaterialAux baseAux = unpackGBufferMaterialAux(
+        texture(uMaterialAuxTex, textureUv));
+    writeFoliageTemporalHints(
+        textureUv, materialKindId(baseAux.materialKind) == MATERIAL_LEAVES);
     vec4 scene = texture(uSceneLightingTex, textureUv);
     float depth = texture(uDepthTex, textureUv).r;
     vec3 color = scene.rgb;
@@ -250,8 +288,7 @@ void main() {
         if (uReflectionDebugMode == 6) {
             // Composite delta: actual contribution of reflection to final scene.
             float compositeStr = clamp(uReflectionCompositeStrength, 0.0, 1.0);
-            SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
-            TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
+            TranslucentMask transMask = decodeTranslucentMask(baseAux.materialKind);
             vec3 delta = transMask.isTranslucent
                 ? compositeStr * (reflection.rgb - color * (1.0 - reflection.a))
                 : compositeStr * reflection.rgb;
@@ -272,7 +309,7 @@ void main() {
     }
 
     SurfaceMaterial material = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
-    SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
+    SurfaceMaterialAux aux = baseAux;
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
 #ifdef MECRAFT_SCENE_VOXEL_GI
     if (uVoxelGiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {

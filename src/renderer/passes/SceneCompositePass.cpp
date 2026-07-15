@@ -66,7 +66,9 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         !targets.ensureCloudTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
         !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
-        !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice)) {
+        !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(*ctx.shared->rhiDevice)) {
         return;
     }
 
@@ -140,14 +142,24 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
                                0,
                                0);
 
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.sceneCompositeTextureViewHandle();
-    colorAttachment.loadOp = RhiLoadOp::Clear;
-    colorAttachment.storeOp = RhiStoreOp::Store;
-    colorAttachment.clearColor[0] = 0.0f;
-    colorAttachment.clearColor[1] = 0.0f;
-    colorAttachment.clearColor[2] = 0.0f;
-    colorAttachment.clearColor[3] = 1.0f;
+    RhiColorAttachment colorAttachments[3];
+    colorAttachments[0].view = targets.sceneCompositeTextureViewHandle();
+    colorAttachments[0].loadOp = RhiLoadOp::Clear;
+    colorAttachments[0].storeOp = RhiStoreOp::Store;
+    colorAttachments[0].clearColor[0] = 0.0f;
+    colorAttachments[0].clearColor[1] = 0.0f;
+    colorAttachments[0].clearColor[2] = 0.0f;
+    colorAttachments[0].clearColor[3] = 1.0f;
+    for (size_t index = 1u; index < 3u; ++index) {
+        colorAttachments[index].loadOp = RhiLoadOp::Clear;
+        colorAttachments[index].storeOp = RhiStoreOp::Store;
+        colorAttachments[index].clearColor[0] = 0.0f;
+        colorAttachments[index].clearColor[1] = 0.0f;
+        colorAttachments[index].clearColor[2] = 0.0f;
+        colorAttachments[index].clearColor[3] = 0.0f;
+    }
+    colorAttachments[1].view = targets.reactiveMaskTextureViewHandle();
+    colorAttachments[2].view = targets.transparencyMaskTextureViewHandle();
 
     RhiRenderingInfo renderingInfo;
     renderingInfo.debugName = "SceneComposite";
@@ -157,8 +169,8 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         static_cast<uint32_t>(std::max(1, targets.width())),
         static_cast<uint32_t>(std::max(1, targets.height()))
     };
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1u;
+    renderingInfo.colorAttachments = colorAttachments;
+    renderingInfo.colorAttachmentCount = 3u;
 
     RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
     if (commandListStorage == nullptr ||
@@ -174,6 +186,12 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     targets.transitionTexture(commandList,
                               targets.sceneCompositeTextureHandle(),
                               RhiResourceState::RenderTarget);
+    targets.transitionTexture(commandList,
+                              targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
+    targets.transitionTexture(commandList,
+                              targets.transparencyMaskTextureHandle(),
+                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(voxelGiEnabled ? m_voxelPipeline : m_basePipeline);
     commandList.setBindGroup(0u, voxelGiEnabled ? m_voxelBindGroup : m_baseBindGroup);
@@ -181,6 +199,12 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     commandList.endRendering();
     targets.transitionTexture(commandList,
                               targets.sceneCompositeTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList,
+                              targets.reactiveMaskTextureHandle(),
+                              RhiResourceState::ShaderRead);
+    targets.transitionTexture(commandList,
+                              targets.transparencyMaskTextureHandle(),
                               RhiResourceState::ShaderRead);
     if (!commandList.end()) {
         std::abort();
@@ -379,8 +403,12 @@ bool SceneCompositePass::ensureRhiPipelines(RhiDevice& rhiDevice) {
         desc.raster.cullMode = RhiCullMode::None;
         desc.depthStencil.depthTestEnabled = false;
         desc.depthStencil.depthWriteEnabled = false;
-        desc.colorFormats.push_back(RhiTextureFormat::Rgba16Float);
-        desc.blend.attachments.push_back({});
+        desc.colorFormats = {
+            RhiTextureFormat::Rgba16Float,
+            RhiTextureFormat::R8Unorm,
+            RhiTextureFormat::R8Unorm
+        };
+        desc.blend.attachments.resize(3u);
         return rhiDevice.createGraphicsPipeline(desc);
     };
     m_basePipeline = createPipeline(
