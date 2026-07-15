@@ -2443,10 +2443,12 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
         const VkResult waitResult = vkWaitForFences(m_data->device, 1u, &frame.fence,
                                                     VK_TRUE, UINT64_MAX);
         if (waitResult == VK_ERROR_DEVICE_LOST) {
+            logVkError("vkWaitForFences(acquire)", waitResult);
             result.status = RhiFrameStatus::DeviceLost;
             return result;
         }
         if (waitResult != VK_SUCCESS) {
+            logVkError("vkWaitForFences(acquire)", waitResult);
             result.status = RhiFrameStatus::Error;
             return result;
         }
@@ -2467,6 +2469,7 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
         return result;
     }
     if (acquireResult == VK_ERROR_DEVICE_LOST) {
+        logVkError("vkAcquireNextImageKHR", acquireResult);
         result.status = RhiFrameStatus::DeviceLost;
         return result;
     }
@@ -2509,7 +2512,10 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
         releaseSubmit.pWaitSemaphoreInfos = &wait;
         const VkResult submitResult = vkQueueSubmit2(
             m_data->graphicsQueue, 1u, &releaseSubmit, VK_NULL_HANDLE);
-        if (submitResult == VK_ERROR_DEVICE_LOST) return RhiFrameStatus::DeviceLost;
+        if (submitResult == VK_ERROR_DEVICE_LOST) {
+            logVkError("vkQueueSubmit2(frame cancel)", submitResult);
+            return RhiFrameStatus::DeviceLost;
+        }
         if (!vkSucceeded(submitResult, "vkQueueSubmit2(frame cancel)") ||
             !vkSucceeded(vkDeviceWaitIdle(m_data->device), "vkDeviceWaitIdle(frame cancel)")) {
             return RhiFrameStatus::Error;
@@ -2545,6 +2551,7 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
     const VkResult tailResult = vkQueueSubmit2(m_data->graphicsQueue, 1u, &tailSubmit,
                                                frame.fence);
     if (tailResult == VK_ERROR_DEVICE_LOST) {
+        logVkError("vkQueueSubmit2(frame tail)", tailResult);
         return RhiFrameStatus::DeviceLost;
     }
     if (tailResult != VK_SUCCESS) {
@@ -2587,7 +2594,10 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
         m_data->surfaceLost = true;
         return RhiFrameStatus::SurfaceLost;
     }
-    if (nativeResult == VK_ERROR_DEVICE_LOST) return RhiFrameStatus::DeviceLost;
+    if (nativeResult == VK_ERROR_DEVICE_LOST) {
+        logVkError("vkQueuePresentKHR", nativeResult);
+        return RhiFrameStatus::DeviceLost;
+    }
     logVkError("vkQueuePresentKHR", nativeResult);
     return RhiFrameStatus::Error;
 }
