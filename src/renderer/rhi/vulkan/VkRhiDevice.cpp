@@ -2559,6 +2559,15 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
         return RhiFrameStatus::Error;
     }
     frame.fencePending = true;
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (info.trackingFrameIndex != 0u &&
+        !StreamlineRuntime::instance().setPclMarker(
+            info.trackingFrameIndex,
+            StreamlinePclMarker::RenderSubmitEnd)) {
+        std::cerr << StreamlineRuntime::instance().lastError() << '\n';
+        return RhiFrameStatus::Error;
+    }
+#endif
     VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
     presentInfo.waitSemaphoreCount = 1u;
     presentInfo.pWaitSemaphores = &presentReady;
@@ -2568,10 +2577,24 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
     VkResult swapchainResult = VK_SUCCESS;
     presentInfo.pResults = &swapchainResult;
 #if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (info.trackingFrameIndex != 0u &&
+        !StreamlineRuntime::instance().setPclMarker(
+            info.trackingFrameIndex,
+            StreamlinePclMarker::PresentStart)) {
+        std::cerr << StreamlineRuntime::instance().lastError() << '\n';
+        return RhiFrameStatus::Error;
+    }
     const VkResult proxyResult = StreamlineRuntime::instance().presentVulkanFrame(
         m_data->presentQueue, presentInfo);
     const VkResult nativeResult = swapchainResult != VK_SUCCESS
         ? swapchainResult : proxyResult;
+    if (info.trackingFrameIndex != 0u &&
+        !StreamlineRuntime::instance().setPclMarker(
+            info.trackingFrameIndex,
+            StreamlinePclMarker::PresentEnd)) {
+        std::cerr << StreamlineRuntime::instance().lastError() << '\n';
+        return RhiFrameStatus::Error;
+    }
 #else
     const VkResult nativeResult = vkQueuePresentKHR(m_data->presentQueue, &presentInfo);
 #endif

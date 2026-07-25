@@ -6,6 +6,7 @@
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiResources.h"
 #include "../../save/SaveManager.h"
+#include "../../engine/platform/Time.h"
 
 #include <algorithm>
 #include <iostream>
@@ -405,7 +406,8 @@ void MainMenuAppState::render(double frameTime) {
     if (!beginMenuClearPass(m_deps.rhiDevice, m_deps.commandListPool,
                             frame.width, frame.height, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu clear pass\n");
-        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex});
+        (void)m_deps.rhiDevice.presentFrame(
+            {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
         return;
     }
     endMenuPass(m_deps.rhiDevice, commandList, true);
@@ -423,7 +425,8 @@ void MainMenuAppState::render(double frameTime) {
     if (!beginMenuOverlayPass(m_deps.rhiDevice, m_deps.commandListPool,
                               frame.width, frame.height, m_deps.uiRenderer, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[MainMenuAppState] Failed to begin RHI menu overlay pass\n");
-        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex});
+        (void)m_deps.rhiDevice.presentFrame(
+            {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
         return;
     }
     sceneContext.commandList = commandList;
@@ -436,7 +439,7 @@ void MainMenuAppState::render(double frameTime) {
 
     endMenuPass(m_deps.rhiDevice, commandList, true);
     const RhiFrameStatus presentStatus = m_deps.rhiDevice.presentFrame(
-        {frame.frameIndex, frame.imageIndex});
+        {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
     if (presentStatus != RhiFrameStatus::Success &&
         presentStatus != RhiFrameStatus::Suboptimal &&
         presentStatus != RhiFrameStatus::OutOfDate &&

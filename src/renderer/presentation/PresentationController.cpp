@@ -4,6 +4,7 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 #include "engine/platform/Window.h"
+#include "engine/platform/Time.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -742,7 +743,8 @@ PresentationCompleteResult PresentationController::presentFrame(
 
     const PresentationBackendPresentResult backendResult = m_backend.presentFrame({
         m_openFrame.frameIndex,
-        m_openFrame.imageIndex
+        m_openFrame.imageIndex,
+        Time::getFrameIndex()
     });
     const RhiFrameStatus status = backendResult.status;
     m_statistics.lastPresentStatus = status;

@@ -97,6 +97,7 @@ struct RhiFrameAcquireResult {
 struct RhiPresentInfo {
     uint64_t frameIndex = 0u;
     uint32_t imageIndex = 0u;
+    uint32_t trackingFrameIndex = 0u;
 };
 
 enum class RhiColorSpace {

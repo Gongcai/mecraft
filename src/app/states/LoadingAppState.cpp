@@ -7,6 +7,7 @@
 #include "../../renderer/rhi/RhiCommandList.h"
 #include "../../renderer/rhi/RhiDevice.h"
 #include "../../renderer/rhi/RhiResources.h"
+#include "../../engine/platform/Time.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -193,7 +194,8 @@ void LoadingAppState::render(const double frameTime) {
     if (!beginLoadingPass(m_deps.rhiDevice, m_deps.commandListPool,
                           frame.width, frame.height, m_deps.uiRenderer, commandList)) {
         MECRAFT_LOG_STREAM(std::cerr << "[LoadingAppState] Failed to begin RHI loading pass\n");
-        (void)m_deps.rhiDevice.presentFrame({frame.frameIndex, frame.imageIndex});
+        (void)m_deps.rhiDevice.presentFrame(
+            {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
         return;
     }
 
@@ -201,7 +203,7 @@ void LoadingAppState::render(const double frameTime) {
     m_deps.uiRenderer.renderSceneOnlyPrepared(sceneContext);
     endLoadingPass(m_deps.rhiDevice, commandList);
     const RhiFrameStatus presentStatus = m_deps.rhiDevice.presentFrame(
-        {frame.frameIndex, frame.imageIndex});
+        {frame.frameIndex, frame.imageIndex, Time::getFrameIndex()});
     if (presentStatus == RhiFrameStatus::OutOfDate ||
         presentStatus == RhiFrameStatus::Minimized) {
         return;

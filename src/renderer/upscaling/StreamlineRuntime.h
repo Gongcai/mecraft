@@ -46,6 +46,29 @@ enum class StreamlineDlssMode {
     UltraPerformance
 };
 
+enum class StreamlineReflexMode {
+    Off,
+    LowLatency,
+    LowLatencyWithBoost
+};
+
+enum class StreamlinePclMarker {
+    SimulationStart,
+    SimulationEnd,
+    RenderSubmitStart,
+    RenderSubmitEnd,
+    PresentStart,
+    PresentEnd,
+    TriggerFlash,
+    LatencyPing
+};
+
+struct StreamlineReflexState {
+    bool lowLatencyAvailable = false;
+    bool flashIndicatorDriverControlled = false;
+    uint32_t statsWindowMessage = 0u;
+};
+
 struct StreamlineDlssOptimalSettings {
     uint32_t renderWidth = 0u;
     uint32_t renderHeight = 0u;
@@ -153,6 +176,42 @@ public:
     /// @return True when the plugin released the viewport resources.
     bool releaseDlssResources(uint32_t viewport);
 
+    /// Configures the process-wide Reflex low-latency mode.
+    /// @param mode Off, low-latency, or low-latency with boost.
+    /// @param frameLimitMicroseconds Optional Reflex frame limiter period; zero disables it.
+    /// @return True when the Reflex plugin accepted the complete option set.
+    bool configureReflex(
+        StreamlineReflexMode mode,
+        uint32_t frameLimitMicroseconds = 0u);
+
+    /// Queries Reflex availability and the PCL latency-message identifier.
+    /// @param state Receives low-latency, flash-indicator, and message state.
+    /// @return True when both Reflex and PCL state queries completed successfully.
+    bool queryReflexState(StreamlineReflexState& state);
+
+    /// Starts Streamline tracking for one application frame and invokes Reflex sleep.
+    /// @param frameIndex Monotonically increasing application frame identifier.
+    /// @return True when Streamline returned a frame token and Reflex sleep completed.
+    bool beginReflexFrame(uint32_t frameIndex);
+
+    /// Emits one PCL marker for the currently tracked application frame.
+    /// @param frameIndex Frame identifier passed to beginReflexFrame.
+    /// @param marker Latency phase or input marker to emit.
+    /// @return True when the marker was accepted or was already emitted for this frame.
+    bool setPclMarker(uint32_t frameIndex, StreamlinePclMarker marker);
+
+    /// Installs the Win32 message hook used for PCL latency pings and flash triggers.
+    /// @param nativeWindowHandle HWND for the main application window.
+    /// @return True when the window procedure was chained successfully.
+    bool attachLatencyWindow(void* nativeWindowHandle);
+
+    /// Restores the original Win32 window procedure.
+    void detachLatencyWindow();
+
+    /// Processes one Win32 message received by the installed latency hook.
+    /// @param message Native Win32 message identifier.
+    void processLatencyWindowMessage(uint32_t message);
+
     /// Presents one Vulkan frame through the Streamline interposer hooks.
     /// @param queue Vulkan presentation queue.
     /// @param info Native swapchain presentation description.
@@ -165,6 +224,7 @@ public:
 
     [[nodiscard]] bool initialized() const;
     [[nodiscard]] bool vulkanDeviceSet() const;
+    [[nodiscard]] bool reflexLowLatencyAvailable() const;
     [[nodiscard]] const StreamlineVulkanRequirements& vulkanRequirements() const;
     [[nodiscard]] const std::string& lastError() const;
 

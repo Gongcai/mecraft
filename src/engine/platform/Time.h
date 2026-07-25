@@ -6,6 +6,8 @@
 #define MECRAFT_TIME_H
 #include <GLFW/glfw3.h>
 
+#include <cstdint>
+
 
 class Time {
 public:
@@ -13,12 +15,20 @@ public:
     static double lastRawTime;
     static double deltaTime;
     static double rawDeltaTime;
+    static uint32_t frameIndex;
     static void init() {
         currentGameTime = 0.0;
         lastRawTime = getRawTime();
         deltaTime = 0.0;
         rawDeltaTime = 0.0;
+        frameIndex = 0u;
         timeSpeed = 1.0;
+    }
+    static uint32_t beginFrame() {
+        return ++frameIndex;
+    }
+    static uint32_t getFrameIndex() {
+        return frameIndex;
     }
     static void setTimeSpeed(double speed) {
         timeSpeed = speed < 0.0 ? 0.0 : speed;

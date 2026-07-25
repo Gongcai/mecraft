@@ -5,6 +5,8 @@
 #include <sl.h>
 #include <sl_dlss.h>
 #include <sl_helpers_vk.h>
+#include <sl_pcl.h>
+#include <sl_reflex.h>
 #include <sl_security.h>
 
 #include <Windows.h>
@@ -12,9 +14,26 @@
 #include <array>
 #include <cstddef>
 #include <iostream>
+#include <limits>
 #include <system_error>
 
 namespace {
+
+StreamlineRuntime* g_latencyRuntime = nullptr;
+HWND g_latencyWindow = nullptr;
+WNDPROC g_previousLatencyWindowProc = nullptr;
+
+LRESULT CALLBACK streamlineLatencyWindowProcedure(
+    const HWND window,
+    const UINT message,
+    const WPARAM wordParameter,
+    const LPARAM longParameter) {
+    if (g_latencyRuntime != nullptr) {
+        g_latencyRuntime->processLatencyWindowMessage(message);
+    }
+    return CallWindowProcW(
+        g_previousLatencyWindowProc, window, message, wordParameter, longParameter);
+}
 
 std::filesystem::path executableDirectory() {
     std::array<wchar_t, 32768u> path{};
@@ -56,6 +75,44 @@ sl::DLSSMode toDlssMode(const StreamlineDlssMode mode) {
             return sl::DLSSMode::eUltraPerformance;
     }
     return sl::DLSSMode::eOff;
+}
+
+sl::ReflexMode toReflexMode(const StreamlineReflexMode mode) {
+    switch (mode) {
+        case StreamlineReflexMode::Off:
+            return sl::ReflexMode::eOff;
+        case StreamlineReflexMode::LowLatency:
+            return sl::ReflexMode::eLowLatency;
+        case StreamlineReflexMode::LowLatencyWithBoost:
+            return sl::ReflexMode::eLowLatencyWithBoost;
+    }
+    return sl::ReflexMode::eOff;
+}
+
+sl::PCLMarker toPclMarker(const StreamlinePclMarker marker) {
+    switch (marker) {
+        case StreamlinePclMarker::SimulationStart:
+            return sl::PCLMarker::eSimulationStart;
+        case StreamlinePclMarker::SimulationEnd:
+            return sl::PCLMarker::eSimulationEnd;
+        case StreamlinePclMarker::RenderSubmitStart:
+            return sl::PCLMarker::eRenderSubmitStart;
+        case StreamlinePclMarker::RenderSubmitEnd:
+            return sl::PCLMarker::eRenderSubmitEnd;
+        case StreamlinePclMarker::PresentStart:
+            return sl::PCLMarker::ePresentStart;
+        case StreamlinePclMarker::PresentEnd:
+            return sl::PCLMarker::ePresentEnd;
+        case StreamlinePclMarker::TriggerFlash:
+            return sl::PCLMarker::eTriggerFlash;
+        case StreamlinePclMarker::LatencyPing:
+            return sl::PCLMarker::ePCLatencyPing;
+    }
+    return sl::PCLMarker::eMaximum;
+}
+
+uint32_t pclMarkerBit(const StreamlinePclMarker marker) {
+    return 1u << static_cast<uint32_t>(marker);
 }
 
 sl::DLSSOptions makeDlssOptions(const StreamlineDlssOptions& options) {
@@ -132,6 +189,12 @@ struct StreamlineRuntime::Implementation {
     PFun_slFreeResources* freeResources = nullptr;
     PFun_slDLSSGetOptimalSettings* dlssGetOptimalSettings = nullptr;
     PFun_slDLSSSetOptions* dlssSetOptions = nullptr;
+    PFun_slReflexGetState* reflexGetState = nullptr;
+    PFun_slReflexSleep* reflexSleep = nullptr;
+    PFun_slReflexSetOptions* reflexSetOptions = nullptr;
+    PFun_slPCLGetState* pclGetState = nullptr;
+    PFun_slPCLSetMarker* pclSetMarker = nullptr;
+    PFun_slPCLSetOptions* pclSetOptions = nullptr;
     PFN_vkGetDeviceProcAddr getDeviceProcAddr = nullptr;
     PFN_vkQueuePresentKHR queuePresent = nullptr;
     StreamlineDlssOptions cachedDlssOptions;
@@ -140,8 +203,12 @@ struct StreamlineRuntime::Implementation {
     StreamlineVulkanRequirements requirements;
     std::filesystem::path runtimeDirectory;
     std::string error;
+    StreamlineReflexState reflexState;
+    uint32_t currentFrameIndex = 0u;
+    uint32_t emittedPclMarkers = 0u;
     bool initialized = false;
     bool vulkanDeviceSet = false;
+    bool reflexFrameActive = false;
 };
 
 StreamlineRuntime& StreamlineRuntime::instance() {
@@ -385,6 +452,56 @@ bool StreamlineRuntime::setVulkanDevice(const StreamlineVulkanDeviceInfo& info) 
         reinterpret_cast<PFun_slDLSSGetOptimalSettings*>(dlssGetOptimalSettings);
     m_impl->dlssSetOptions =
         reinterpret_cast<PFun_slDLSSSetOptions*>(dlssSetOptions);
+
+    const auto resolveFeatureFunction = [this](
+        const sl::Feature feature,
+        const char* name,
+        void*& function) {
+        const sl::Result result = m_impl->getFeatureFunction(
+            feature, name, function);
+        if (result != sl::Result::eOk) {
+            m_impl->error = streamlineResultMessage(name, result);
+            return false;
+        }
+        if (function == nullptr) {
+            m_impl->error = std::string("StreamlineRuntime: ") + name +
+                            " resolved to null";
+            return false;
+        }
+        return true;
+    };
+    void* reflexGetState = nullptr;
+    void* reflexSleep = nullptr;
+    void* reflexSetOptions = nullptr;
+    void* pclGetState = nullptr;
+    void* pclSetMarker = nullptr;
+    void* pclSetOptions = nullptr;
+    if (!resolveFeatureFunction(
+            sl::kFeatureReflex, "slReflexGetState", reflexGetState) ||
+        !resolveFeatureFunction(
+            sl::kFeatureReflex, "slReflexSleep", reflexSleep) ||
+        !resolveFeatureFunction(
+            sl::kFeatureReflex, "slReflexSetOptions", reflexSetOptions) ||
+        !resolveFeatureFunction(
+            sl::kFeaturePCL, "slPCLGetState", pclGetState) ||
+        !resolveFeatureFunction(
+            sl::kFeaturePCL, "slPCLSetMarker", pclSetMarker) ||
+        !resolveFeatureFunction(
+            sl::kFeaturePCL, "slPCLSetOptions", pclSetOptions)) {
+        return false;
+    }
+    m_impl->reflexGetState =
+        reinterpret_cast<PFun_slReflexGetState*>(reflexGetState);
+    m_impl->reflexSleep =
+        reinterpret_cast<PFun_slReflexSleep*>(reflexSleep);
+    m_impl->reflexSetOptions =
+        reinterpret_cast<PFun_slReflexSetOptions*>(reflexSetOptions);
+    m_impl->pclGetState =
+        reinterpret_cast<PFun_slPCLGetState*>(pclGetState);
+    m_impl->pclSetMarker =
+        reinterpret_cast<PFun_slPCLSetMarker*>(pclSetMarker);
+    m_impl->pclSetOptions =
+        reinterpret_cast<PFun_slPCLSetOptions*>(pclSetOptions);
     m_impl->queuePresent = reinterpret_cast<PFN_vkQueuePresentKHR>(
         m_impl->getDeviceProcAddr(info.device, "vkQueuePresentKHR"));
     if (m_impl->queuePresent == nullptr) {
@@ -392,6 +509,20 @@ bool StreamlineRuntime::setVulkanDevice(const StreamlineVulkanDeviceInfo& info) 
         return false;
     }
     m_impl->vulkanDeviceSet = true;
+
+    sl::PCLOptions pclOptions{};
+    const sl::Result pclOptionsResult = m_impl->pclSetOptions(pclOptions);
+    if (pclOptionsResult != sl::Result::eOk) {
+        m_impl->vulkanDeviceSet = false;
+        m_impl->error = streamlineResultMessage(
+            "slPCLSetOptions", pclOptionsResult);
+        return false;
+    }
+    if (!configureReflex(StreamlineReflexMode::LowLatency) ||
+        !queryReflexState(m_impl->reflexState)) {
+        m_impl->vulkanDeviceSet = false;
+        return false;
+    }
     m_impl->error.clear();
     return true;
 }
@@ -581,6 +712,179 @@ bool StreamlineRuntime::releaseDlssResources(const uint32_t viewport) {
     return true;
 }
 
+bool StreamlineRuntime::configureReflex(
+    const StreamlineReflexMode mode,
+    const uint32_t frameLimitMicroseconds) {
+    if (!m_impl->vulkanDeviceSet || m_impl->reflexSetOptions == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: Reflex configuration is not valid in the current state";
+        return false;
+    }
+    sl::ReflexOptions options{};
+    options.mode = toReflexMode(mode);
+    options.frameLimitUs = frameLimitMicroseconds;
+    const sl::Result result = m_impl->reflexSetOptions(options);
+    if (result != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slReflexSetOptions", result);
+        return false;
+    }
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::queryReflexState(StreamlineReflexState& state) {
+    if (!m_impl->vulkanDeviceSet || m_impl->reflexGetState == nullptr ||
+        m_impl->pclGetState == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: Reflex state query is not valid in the current state";
+        return false;
+    }
+    sl::ReflexState reflexState{};
+    const sl::Result reflexResult = m_impl->reflexGetState(reflexState);
+    if (reflexResult != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slReflexGetState", reflexResult);
+        return false;
+    }
+    sl::PCLState pclState{};
+    const sl::Result pclResult = m_impl->pclGetState(pclState);
+    if (pclResult != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slPCLGetState", pclResult);
+        return false;
+    }
+    state.lowLatencyAvailable = reflexState.lowLatencyAvailable;
+    state.flashIndicatorDriverControlled =
+        reflexState.flashIndicatorDriverControlled;
+    state.statsWindowMessage = pclState.statsWindowMessage;
+    m_impl->reflexState = state;
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::beginReflexFrame(const uint32_t frameIndex) {
+    if (!m_impl->vulkanDeviceSet || m_impl->getNewFrameToken == nullptr ||
+        m_impl->reflexSleep == nullptr || frameIndex == 0u) {
+        m_impl->error =
+            "StreamlineRuntime: Reflex frame start is not valid in the current state";
+        return false;
+    }
+    sl::FrameToken* frameToken = nullptr;
+    const sl::Result tokenResult = m_impl->getNewFrameToken(
+        frameToken, &frameIndex);
+    if (tokenResult != sl::Result::eOk || frameToken == nullptr) {
+        m_impl->error = streamlineResultMessage(
+            "slGetNewFrameToken(Reflex)", tokenResult);
+        return false;
+    }
+    const sl::Result sleepResult = m_impl->reflexSleep(*frameToken);
+    if (sleepResult != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slReflexSleep", sleepResult);
+        return false;
+    }
+    m_impl->currentFrameIndex = frameIndex;
+    m_impl->emittedPclMarkers = 0u;
+    m_impl->reflexFrameActive = true;
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::setPclMarker(
+    const uint32_t frameIndex,
+    const StreamlinePclMarker marker) {
+    if (!m_impl->vulkanDeviceSet || !m_impl->reflexFrameActive ||
+        m_impl->pclSetMarker == nullptr ||
+        frameIndex != m_impl->currentFrameIndex) {
+        m_impl->error =
+            "StreamlineRuntime: PCL marker does not match the active frame";
+        return false;
+    }
+    const uint32_t markerBit = pclMarkerBit(marker);
+    if ((m_impl->emittedPclMarkers & markerBit) != 0u) {
+        m_impl->error.clear();
+        return true;
+    }
+    const sl::PCLMarker pclMarker = toPclMarker(marker);
+    if (pclMarker == sl::PCLMarker::eMaximum) {
+        m_impl->error = "StreamlineRuntime: invalid PCL marker";
+        return false;
+    }
+    sl::FrameToken* frameToken = nullptr;
+    const sl::Result tokenResult = m_impl->getNewFrameToken(
+        frameToken, &frameIndex);
+    if (tokenResult != sl::Result::eOk || frameToken == nullptr) {
+        m_impl->error = streamlineResultMessage(
+            "slGetNewFrameToken(PCL)", tokenResult);
+        return false;
+    }
+    const sl::Result markerResult = m_impl->pclSetMarker(
+        pclMarker, *frameToken);
+    if (markerResult != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slPCLSetMarker", markerResult);
+        return false;
+    }
+    m_impl->emittedPclMarkers |= markerBit;
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::attachLatencyWindow(void* nativeWindowHandle) {
+    if (!m_impl->vulkanDeviceSet || nativeWindowHandle == nullptr ||
+        g_latencyWindow != nullptr || g_latencyRuntime != nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: latency window attachment is not valid in the current state";
+        return false;
+    }
+    StreamlineReflexState state;
+    if (!queryReflexState(state) || state.statsWindowMessage == 0u) {
+        if (m_impl->error.empty()) {
+            m_impl->error =
+                "StreamlineRuntime: PCL returned an invalid latency message identifier";
+        }
+        return false;
+    }
+    const HWND window = static_cast<HWND>(nativeWindowHandle);
+    SetLastError(ERROR_SUCCESS);
+    const LONG_PTR previous = SetWindowLongPtrW(
+        window, GWLP_WNDPROC,
+        reinterpret_cast<LONG_PTR>(&streamlineLatencyWindowProcedure));
+    if (previous == 0 && GetLastError() != ERROR_SUCCESS) {
+        m_impl->error =
+            "StreamlineRuntime: failed to install the latency window procedure, Win32 error " +
+            std::to_string(GetLastError());
+        return false;
+    }
+    g_latencyRuntime = this;
+    g_latencyWindow = window;
+    g_previousLatencyWindowProc = reinterpret_cast<WNDPROC>(previous);
+    m_impl->error.clear();
+    return true;
+}
+
+void StreamlineRuntime::detachLatencyWindow() {
+    if (g_latencyRuntime != this || g_latencyWindow == nullptr ||
+        g_previousLatencyWindowProc == nullptr) {
+        return;
+    }
+    SetWindowLongPtrW(
+        g_latencyWindow, GWLP_WNDPROC,
+        reinterpret_cast<LONG_PTR>(g_previousLatencyWindowProc));
+    g_latencyRuntime = nullptr;
+    g_latencyWindow = nullptr;
+    g_previousLatencyWindowProc = nullptr;
+}
+
+void StreamlineRuntime::processLatencyWindowMessage(const uint32_t message) {
+    if (!m_impl->reflexFrameActive) {
+        return;
+    }
+    if (message == m_impl->reflexState.statsWindowMessage) {
+        static_cast<void>(setPclMarker(
+            m_impl->currentFrameIndex, StreamlinePclMarker::LatencyPing));
+    } else if (message == WM_LBUTTONDOWN) {
+        static_cast<void>(setPclMarker(
+            m_impl->currentFrameIndex, StreamlinePclMarker::TriggerFlash));
+    }
+}
+
 VkResult StreamlineRuntime::presentVulkanFrame(
     const VkQueue queue,
     const VkPresentInfoKHR& info) {
@@ -635,14 +939,25 @@ bool StreamlineRuntime::shutdown() {
     if (!m_impl->initialized) {
         return true;
     }
+    detachLatencyWindow();
     const sl::Result result = m_impl->shutdown();
     m_impl->initialized = false;
     m_impl->vulkanDeviceSet = false;
     m_impl->requirements = {};
     m_impl->dlssGetOptimalSettings = nullptr;
     m_impl->dlssSetOptions = nullptr;
+    m_impl->reflexGetState = nullptr;
+    m_impl->reflexSleep = nullptr;
+    m_impl->reflexSetOptions = nullptr;
+    m_impl->pclGetState = nullptr;
+    m_impl->pclSetMarker = nullptr;
+    m_impl->pclSetOptions = nullptr;
     m_impl->queuePresent = nullptr;
     m_impl->cachedDlssSettingsValid = false;
+    m_impl->reflexState = {};
+    m_impl->currentFrameIndex = 0u;
+    m_impl->emittedPclMarkers = 0u;
+    m_impl->reflexFrameActive = false;
     if (m_impl->module != nullptr) {
         FreeLibrary(m_impl->module);
         m_impl->module = nullptr;
@@ -661,6 +976,10 @@ bool StreamlineRuntime::initialized() const {
 
 bool StreamlineRuntime::vulkanDeviceSet() const {
     return m_impl->vulkanDeviceSet;
+}
+
+bool StreamlineRuntime::reflexLowLatencyAvailable() const {
+    return m_impl->vulkanDeviceSet && m_impl->reflexState.lowLatencyAvailable;
 }
 
 const StreamlineVulkanRequirements& StreamlineRuntime::vulkanRequirements() const {

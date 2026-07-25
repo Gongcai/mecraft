@@ -21,6 +21,13 @@
 #include <iostream>
 #include <string>
 #include <GLFW/glfw3.h>
+#if defined(MECRAFT_ENABLE_STREAMLINE) && defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 #include <nlohmann/json.hpp>
 #ifdef MECRAFT_DEBUG
 #include <chrono>
@@ -95,6 +102,16 @@ bool GameManager::init(int width, int height, const char* title, AppLaunchOption
     if (!initRhiDevice()) {
         return false;
     }
+#if defined(MECRAFT_ENABLE_STREAMLINE) && defined(_WIN32)
+    if (m_launchOptions.rhiBackend == RhiBackend::Vulkan) {
+        StreamlineRuntime& streamline = StreamlineRuntime::instance();
+        if (!streamline.attachLatencyWindow(
+                glfwGetWin32Window(m_window.getHandle()))) {
+            MECRAFT_LOG_STREAM(std::cerr << streamline.lastError() << '\n');
+            return false;
+        }
+    }
+#endif
     m_threadPool.start();
     if (!app::bootstrapGameResources(m_resourceMgr, *m_rhiDevice, *m_commandListPool)) {
         return false;
@@ -268,6 +285,18 @@ double GameManager::clampFrameTime(const double dt) {
 void GameManager::run() {
     double accumulator = 0.0;
     while (!m_window.shouldClose()) {
+        Time::beginFrame();
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        const uint32_t trackingFrameIndex = Time::getFrameIndex();
+        StreamlineRuntime* streamline = nullptr;
+        if (m_launchOptions.rhiBackend == RhiBackend::Vulkan) {
+            streamline = &StreamlineRuntime::instance();
+            if (!streamline->beginReflexFrame(trackingFrameIndex)) {
+                MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
+                break;
+            }
+        }
+#endif
 #ifdef MECRAFT_DEBUG
         m_input.resetDebugEventStats();
         ImGui_ImplGlfw_ResetDebugPollStats();
@@ -296,6 +325,15 @@ void GameManager::run() {
 #endif
         Time::update();
 
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (streamline != nullptr && !streamline->setPclMarker(
+                trackingFrameIndex,
+                StreamlinePclMarker::SimulationStart)) {
+            MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
+            break;
+        }
+#endif
+
         const double frameTime = clampFrameTime(Time::getRawDeltaTime());
         accumulator += frameTime;
 
@@ -303,12 +341,36 @@ void GameManager::run() {
         const auto updateStart = std::chrono::steady_clock::now();
 #endif
         m_appStateMachine.update(frameTime, accumulator);
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (streamline != nullptr && !streamline->setPclMarker(
+                trackingFrameIndex,
+                StreamlinePclMarker::SimulationEnd)) {
+            MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
+            break;
+        }
+#endif
 #ifdef MECRAFT_DEBUG
         const auto updateEnd = std::chrono::steady_clock::now();
         m_appStateMachine.recordAppUpdateDispatch(std::chrono::duration<double, std::milli>(updateEnd - updateStart).count());
         const auto renderStart = std::chrono::steady_clock::now();
 #endif
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (streamline != nullptr && !streamline->setPclMarker(
+                trackingFrameIndex,
+                StreamlinePclMarker::RenderSubmitStart)) {
+            MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
+            break;
+        }
+#endif
         m_appStateMachine.render(frameTime);
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (streamline != nullptr && !streamline->setPclMarker(
+                trackingFrameIndex,
+                StreamlinePclMarker::RenderSubmitEnd)) {
+            MECRAFT_LOG_STREAM(std::cerr << streamline->lastError() << '\n');
+            break;
+        }
+#endif
 #ifdef MECRAFT_DEBUG
         const auto renderEnd = std::chrono::steady_clock::now();
         m_appStateMachine.recordAppRenderDispatch(std::chrono::duration<double, std::milli>(renderEnd - renderStart).count());

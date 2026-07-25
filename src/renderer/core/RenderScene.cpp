@@ -1081,7 +1081,7 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
     ctx.sceneCaptureDepthView = m_postProcessPass.sceneDepthTextureViewHandle();
 
     // Frame timing
-    ctx.frameIndex = m_frameCounter++;
+    ctx.frameIndex = Time::getFrameIndex();
     ctx.deltaTime = static_cast<float>(Time::deltaTime);
     const double gameTime = Time::getGameTime();
     const double visualTime = Time::getRawTime();

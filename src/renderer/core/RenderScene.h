@@ -288,7 +288,6 @@ private:
     std::optional<TemporalFrameInput> m_temporalFrameInput;
     std::optional<TemporalUpscaleResult> m_temporalUpscaleResult;
     bool m_hasPreviousContext = false;
-    uint64_t m_frameCounter = 0;
     bool m_eyeInWater = false;
     bool m_renderLocalPlayerModel = false;
 
