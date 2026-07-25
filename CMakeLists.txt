@@ -341,6 +341,7 @@ set(SRC_RENDERER
         # RHI
         src/renderer/rhi/RhiGrowableBuffer.cpp
         src/renderer/rhi/RhiHash.cpp
+        src/renderer/rhi/RhiRenderGraph.cpp
         src/renderer/rhi/RhiDeviceFactory.cpp
         src/renderer/rhi/RhiShaderCompiler.cpp
         src/renderer/rhi/RhiShaderSourceLoader.cpp
@@ -955,6 +956,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(rhi_shader_compiler_test tests/rhi_shader_compiler_test.cpp)
     add_mecraft_test(app_launch_options_test tests/app_launch_options_test.cpp)
     add_mecraft_test(temporal_frame_contract_test tests/temporal_frame_contract_test.cpp)
+    add_mecraft_test(rhi_render_graph_test tests/rhi_render_graph_test.cpp)
     add_mecraft_test(presentation_controller_test tests/presentation_controller_test.cpp)
     add_mecraft_test(presented_frame_rate_sampler_test tests/presented_frame_rate_sampler_test.cpp)
     if(MECRAFT_RHI_BACKEND_OPENGL)
