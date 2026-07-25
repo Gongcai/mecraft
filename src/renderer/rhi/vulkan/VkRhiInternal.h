@@ -131,6 +131,7 @@ struct VkRhiDeviceData {
     VkSemaphore timeline = VK_NULL_HANDLE;
     VkSemaphore externalFrameCompletionSemaphore = VK_NULL_HANDLE;
     uint64_t externalFrameCompletionValue = 0u;
+    bool frameGenerationAcquireLayoutPending = false;
     VkPhysicalDeviceProperties properties{};
     PFN_vkSetDebugUtilsObjectNameEXT setObjectName = nullptr;
     PFN_vkCmdBeginDebugUtilsLabelEXT beginLabel = nullptr;

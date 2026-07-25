@@ -76,6 +76,7 @@ namespace {
 
 [[nodiscard]] bool applyNvidiaFeatureSettings(
     const RenderSettings& settings,
+    const RenderScene& renderScene,
     PresentationController& presentation,
     std::optional<StreamlineReflexMode>& pendingReflexMode) {
     const bool frameGenerationEnabled =
@@ -86,9 +87,8 @@ namespace {
         return false;
     }
     if (frameGenerationEnabled &&
-        (settings.pipelineMode != PipelineMode::Deferred ||
-         (settings.upscale.fsr1Enabled &&
-          settings.upscale.fsr1RenderScale < 0.999f))) {
+        !supportsDlssFrameGenerationInputs(
+            settings, renderScene.isFsr1Supported())) {
         std::cerr << "GameplayRenderRuntime: the selected renderer cannot produce DLSS Frame Generation inputs\n";
         return false;
     }
@@ -202,7 +202,8 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     if (rhiDevice.backend() == RhiBackend::Vulkan &&
         !applyNvidiaFeatureSettings(
-            initialSettings, *m_impl->presentationController,
+            initialSettings, renderScene,
+            *m_impl->presentationController,
             m_impl->pendingReflexMode)) {
         return false;
     }
@@ -211,7 +212,8 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         if (m_impl->resourceHub.rhiDevice().backend() == RhiBackend::Vulkan &&
             !applyNvidiaFeatureSettings(
-                settings, *m_impl->presentationController,
+                settings, m_impl->scene,
+                *m_impl->presentationController,
                 m_impl->pendingReflexMode)) {
             return false;
         }

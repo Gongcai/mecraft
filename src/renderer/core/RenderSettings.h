@@ -362,4 +362,18 @@ struct RenderSettings {
     WeatherRenderSettings weather;
 };
 
+/// Reports whether a renderer configuration provides the temporal inputs required by DLSS-G.
+/// @param settings Candidate renderer configuration.
+/// @param fsr1Supported True when the active RHI can execute the configured FSR 1 pass.
+/// @return True when deferred depth, dense motion vectors, and output-resolution color remain available.
+[[nodiscard]] inline bool supportsDlssFrameGenerationInputs(
+    const RenderSettings& settings,
+    const bool fsr1Supported) {
+    const bool fsr1RuntimeEnabled =
+        fsr1Supported && settings.upscale.fsr1Enabled &&
+        settings.upscale.fsr1RenderScale < 0.999f;
+    return settings.pipelineMode == PipelineMode::Deferred &&
+           !fsr1RuntimeEnabled;
+}
+
 #endif // MECRAFT_RENDER_SETTINGS_H

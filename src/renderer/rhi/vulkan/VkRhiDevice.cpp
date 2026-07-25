@@ -2610,6 +2610,10 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
     m_data->frameAcquired = true;
     m_data->frameSubmitted = false;
     m_data->frameImageAvailableWaited = false;
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    m_data->frameGenerationAcquireLayoutPending =
+        StreamlineRuntime::instance().dlssFrameGenerationLoaded();
+#endif
     m_data->frameLastGraphicsSequence = 0u;
     ++m_data->acquiredFrameIndex;
     result.status = acquireResult == VK_SUBOPTIMAL_KHR
@@ -3359,7 +3363,16 @@ void VkRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
         StreamlineRuntime::instance().dlssFrameGenerationLoaded();
     if (frameGenerationSwapchain &&
         barrier.oldState == RhiResourceState::Present) {
-        oldState = toVkResourceState(RhiResourceState::TransferSrc);
+        if (m_device->m_data->frameGenerationAcquireLayoutPending) {
+            oldState = {
+                VK_PIPELINE_STAGE_2_NONE,
+                VK_ACCESS_2_NONE,
+                VK_IMAGE_LAYOUT_GENERAL
+            };
+            m_device->m_data->frameGenerationAcquireLayoutPending = false;
+        } else {
+            oldState = toVkResourceState(RhiResourceState::TransferSrc);
+        }
     }
     if (frameGenerationSwapchain &&
         barrier.newState == RhiResourceState::Present) {

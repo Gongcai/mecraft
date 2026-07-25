@@ -1,4 +1,5 @@
 #include "renderer/upscaling/DlssVulkanContext.h"
+#include "renderer/core/RenderSettings.h"
 
 #include <cmath>
 #include <iostream>
@@ -49,10 +50,24 @@ bool testInvalidJitterExtent() {
         "DLSS jitter must reject an invalid render extent");
 }
 
+bool testFrameGenerationInputCompatibility() {
+    RenderSettings settings;
+    settings.pipelineMode = PipelineMode::Deferred;
+    settings.upscale.fsr1Enabled = true;
+    settings.upscale.fsr1RenderScale = 0.77f;
+    return requireTrue(
+               supportsDlssFrameGenerationInputs(settings, false),
+               "an unavailable FSR 1 pass must not block DLSS-G inputs") &&
+           requireTrue(
+               !supportsDlssFrameGenerationInputs(settings, true),
+               "an active sub-native FSR 1 pass must block DLSS-G inputs");
+}
+
 } // namespace
 
 int main() {
     if (!testJitterSequence()) return 1;
     if (!testInvalidJitterExtent()) return 1;
+    if (!testFrameGenerationInputCompatibility()) return 1;
     return 0;
 }

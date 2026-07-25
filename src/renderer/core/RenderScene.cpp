@@ -786,8 +786,8 @@ bool RenderScene::isReflexSupported() const {
 }
 
 bool RenderScene::supportsFrameGenerationInputs() const {
-    return m_settings.pipelineMode == PipelineMode::Deferred &&
-           !isFsr1RuntimeEnabled();
+    return supportsDlssFrameGenerationInputs(
+        m_settings, m_fsr1Supported);
 }
 
 void RenderScene::setSettingsChangedCallback(
