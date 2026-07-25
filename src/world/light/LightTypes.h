@@ -104,6 +104,11 @@ struct LightFrameStats {
     int requeued = 0;
     float workerMs = 0.0f;
     float mergeMs = 0.0f;
+    // Main-thread cost of building job payloads (block/light snapshots plus
+    // base-light copy), accumulated over both the async submit path and the
+    // interactive inline path. captureCount is the number of jobs captured.
+    float captureMs = 0.0f;
+    int captureCount = 0;
 };
 
 #endif // MECRAFT_LIGHTTYPES_H

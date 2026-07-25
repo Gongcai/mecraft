@@ -2114,6 +2114,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Light Stale Dropped: %d", lightStats.staleDropped);
         ImGui::Text("Light Requeued: %d", lightStats.requeued);
         ImGui::Text("Light Worker: %.3f ms, Merge: %.3f ms", lightStats.workerMs, lightStats.mergeMs);
+        ImGui::Text("Light Capture: %.3f ms (%d jobs, avg %.3f ms)",
+                    lightStats.captureMs,
+                    lightStats.captureCount,
+                    lightStats.captureCount > 0
+                        ? lightStats.captureMs / static_cast<float>(lightStats.captureCount)
+                        : 0.0f);
 
         const uint32_t greedyBefore = meshingStats.lastOpaqueFacesBeforeGreedy;
         const uint32_t greedyAfter = meshingStats.lastOpaqueFacesAfterGreedy;

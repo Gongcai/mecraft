@@ -275,6 +275,8 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
     m_frameStats.submittedChunkLoaded = 0;
     m_frameStats.submittedBlockChanged = 0;
     m_frameStats.submittedNeighborBoundary = 0;
+    m_frameStats.captureMs = 0.0f;
+    m_frameStats.captureCount = 0;
 
     if (!m_running || m_pool == nullptr || submitBudget <= 0) {
         return;
@@ -348,6 +350,7 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     job.neighborNegZ = findSharedByCoords(m_world,
                                                           chunkIt->second->m_chunkX,
                                                           chunkIt->second->m_chunkZ - 1);
+                    const auto captureStart = std::chrono::steady_clock::now();
                     job.blockSnapshot = captureBlockSnapshot(*chunkIt->second);
                     job.blockChanges = state.pendingBlockChanges;
                     job.previousInbox = collectBoundaryInputs(state.pendingPreviousBoundaryCache);
@@ -366,6 +369,10 @@ void LightService::submitJobs(const glm::vec3& cameraPos, const int submitBudget
                     if (cacheIt != m_baseLightCaches.end()) {
                         job.baseLightPacked = cacheIt->second.packed;
                     }
+                    m_frameStats.captureMs += static_cast<float>(
+                        std::chrono::duration<double, std::milli>(
+                            std::chrono::steady_clock::now() - captureStart).count());
+                    ++m_frameStats.captureCount;
 
                     state.inFlightRevision = job.revision;
                     chunkIt->second->setLightQueued(false);
@@ -641,6 +648,7 @@ int LightService::processInteractiveJobsInline(const glm::vec3& cameraPos,
                     job.neighborNegZ = findSharedByCoords(m_world,
                                                           chunkIt->second->m_chunkX,
                                                           chunkIt->second->m_chunkZ - 1);
+                    const auto captureStart = std::chrono::steady_clock::now();
                     job.blockSnapshot = captureBlockSnapshot(*chunkIt->second);
                     job.blockChanges = state.pendingBlockChanges;
                     job.previousInbox = collectBoundaryInputs(state.pendingPreviousBoundaryCache);
@@ -657,6 +665,10 @@ int LightService::processInteractiveJobsInline(const glm::vec3& cameraPos,
                     if (cacheIt != m_baseLightCaches.end()) {
                         job.baseLightPacked = cacheIt->second.packed;
                     }
+                    m_frameStats.captureMs += static_cast<float>(
+                        std::chrono::duration<double, std::milli>(
+                            std::chrono::steady_clock::now() - captureStart).count());
+                    ++m_frameStats.captureCount;
 
                     state.inFlightRevision = job.revision;
                     chunkIt->second->setLightQueued(false);
