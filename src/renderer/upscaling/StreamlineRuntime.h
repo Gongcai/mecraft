@@ -133,6 +133,41 @@ struct StreamlineDlssDispatchInfo {
     StreamlineDlssResource exposure;
 };
 
+struct StreamlineDlssFrameGenerationOptions {
+    bool enabled = false;
+    uint32_t renderWidth = 0u;
+    uint32_t renderHeight = 0u;
+    uint32_t outputWidth = 0u;
+    uint32_t outputHeight = 0u;
+    uint32_t backBufferCount = 0u;
+    VkFormat colorFormat = VK_FORMAT_UNDEFINED;
+    VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+    VkFormat motionVectorFormat = VK_FORMAT_UNDEFINED;
+    VkFormat hudlessFormat = VK_FORMAT_UNDEFINED;
+    VkFormat uiFormat = VK_FORMAT_UNDEFINED;
+};
+
+struct StreamlineDlssFrameGenerationState {
+    uint64_t estimatedVramUsageBytes = 0u;
+    uint32_t status = 0u;
+    uint32_t minimumWidthOrHeight = 0u;
+    uint32_t framesPresented = 0u;
+    uint32_t maximumGeneratedFrames = 0u;
+    bool vsyncAvailable = false;
+    void* inputsProcessingCompletionFence = nullptr;
+    uint64_t inputsProcessingCompletionValue = 0u;
+};
+
+struct StreamlineDlssFrameGenerationDispatchInfo {
+    uint64_t frameIndex = 0u;
+    uint32_t viewport = 0u;
+    StreamlineDlssFrameConstants constants;
+    StreamlineDlssResource depth;
+    StreamlineDlssResource motionVectors;
+    StreamlineDlssResource hudlessColor;
+    StreamlineDlssResource uiColorAndAlpha;
+};
+
 /// Owns the process-wide Streamline runtime used by the Windows Vulkan backend.
 class StreamlineRuntime final {
 public:
@@ -140,7 +175,7 @@ public:
 
     /// Verifies and loads the signed Streamline runtime, then queries feature requirements.
     /// @param runtimeDirectory Absolute directory containing the production Streamline DLLs.
-    /// @return True when every requested feature initialized and exposed Vulkan requirements.
+    /// @return True when required features initialized and optional feature support was recorded.
     bool initialize(const std::filesystem::path& runtimeDirectory = {});
 
     /// Adds queried Streamline extensions, features, and queue counts to Vulkan planning.
@@ -175,6 +210,56 @@ public:
     /// @param viewport Stable viewport identifier used during configuration.
     /// @return True when the plugin released the viewport resources.
     bool releaseDlssResources(uint32_t viewport);
+
+    /// Sets common camera and temporal constants once for one tracked frame.
+    /// @param frameIndex Application frame identifier shared by Reflex and presentation.
+    /// @param viewport Stable Streamline viewport identifier.
+    /// @param constants Camera, motion-vector, depth, and reset state.
+    /// @return True when constants were accepted or already set for this frame.
+    bool setFrameConstants(
+        uint64_t frameIndex,
+        uint32_t viewport,
+        const StreamlineDlssFrameConstants& constants);
+
+    /// Loads or unloads the DLSS Frame Generation plugin at a swapchain boundary.
+    /// @param loaded True before creating an interpolated swapchain, false before a native one.
+    /// @return True when the plugin load state changed successfully.
+    bool setDlssFrameGenerationLoaded(bool loaded);
+
+    /// Configures fixed 2x DLSS Frame Generation for one viewport.
+    /// @param viewport Stable viewport identifier shared by tags and presentation markers.
+    /// @param options Output, render, swapchain, format, and activation state.
+    /// @return True when the DLSS-G plugin accepted the options.
+    bool configureDlssFrameGeneration(
+        uint32_t viewport,
+        const StreamlineDlssFrameGenerationOptions& options);
+
+    /// Tags depth, motion vectors, HUD-less color, and premultiplied UI for present-time use.
+    /// @param info Complete frame resources and common constants.
+    /// @return True when every DLSS-G input was tagged for the tracked frame.
+    bool tagDlssFrameGenerationResources(
+        const StreamlineDlssFrameGenerationDispatchInfo& info);
+
+    /// Clears present-time DLSS-G input tags for a frame without valid gameplay resources.
+    /// @param frameIndex Application frame identifier shared by present markers.
+    /// @param viewport Stable viewport identifier.
+    /// @return True when the null tags were accepted.
+    bool clearDlssFrameGenerationResources(
+        uint64_t frameIndex,
+        uint32_t viewport);
+
+    /// Queries DLSS-G status, displayed-frame count, and input-completion synchronization.
+    /// @param viewport Stable viewport identifier.
+    /// @param state Receives current plugin status and completion fence data.
+    /// @return True when the state query completed successfully.
+    bool queryDlssFrameGenerationState(
+        uint32_t viewport,
+        StreamlineDlssFrameGenerationState& state);
+
+    /// Releases retained DLSS-G resources for one viewport.
+    /// @param viewport Stable viewport identifier.
+    /// @return True when the plugin released its viewport resources.
+    bool releaseDlssFrameGenerationResources(uint32_t viewport);
 
     /// Configures the process-wide Reflex low-latency mode.
     /// @param mode Off, low-latency, or low-latency with boost.
@@ -218,6 +303,44 @@ public:
     /// @return Vulkan result returned after Streamline before/after-present hooks.
     VkResult presentVulkanFrame(VkQueue queue, const VkPresentInfoKHR& info);
 
+    /// Creates the main Win32 Vulkan surface through the Streamline manual hook.
+    VkResult createVulkanWin32Surface(
+        VkInstance instance,
+        void* applicationInstance,
+        void* window,
+        VkSurfaceKHR& surface);
+
+    /// Destroys the main Vulkan surface through the Streamline manual hook.
+    void destroyVulkanSurface(VkInstance instance, VkSurfaceKHR surface);
+
+    /// Creates the main Vulkan swapchain through the Streamline manual hook.
+    VkResult createVulkanSwapchain(
+        VkDevice device,
+        const VkSwapchainCreateInfoKHR& info,
+        VkSwapchainKHR& swapchain);
+
+    /// Destroys the main Vulkan swapchain through the Streamline manual hook.
+    void destroyVulkanSwapchain(VkDevice device, VkSwapchainKHR swapchain);
+
+    /// Queries Vulkan swapchain images through the Streamline manual hook.
+    VkResult getVulkanSwapchainImages(
+        VkDevice device,
+        VkSwapchainKHR swapchain,
+        uint32_t& imageCount,
+        VkImage* images);
+
+    /// Acquires the next Vulkan image through the Streamline manual hook.
+    VkResult acquireVulkanImage(
+        VkDevice device,
+        VkSwapchainKHR swapchain,
+        uint64_t timeout,
+        VkSemaphore semaphore,
+        VkFence fence,
+        uint32_t& imageIndex);
+
+    /// Waits for the Vulkan device through the Streamline manual hook.
+    VkResult waitVulkanDeviceIdle(VkDevice device);
+
     /// Shuts Streamline down while the Vulkan device and instance are still alive.
     /// @return True when shutdown completed successfully or the runtime was not initialized.
     bool shutdown();
@@ -225,6 +348,8 @@ public:
     [[nodiscard]] bool initialized() const;
     [[nodiscard]] bool vulkanDeviceSet() const;
     [[nodiscard]] bool reflexLowLatencyAvailable() const;
+    [[nodiscard]] bool dlssFrameGenerationSupported() const;
+    [[nodiscard]] bool dlssFrameGenerationLoaded() const;
     [[nodiscard]] const StreamlineVulkanRequirements& vulkanRequirements() const;
     [[nodiscard]] const std::string& lastError() const;
 

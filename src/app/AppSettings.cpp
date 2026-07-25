@@ -523,6 +523,31 @@ json toJson(const UpscaleSettings& s) {
     };
 }
 
+void applyNvidiaFeatureSettings(
+    const json& j,
+    NvidiaFeatureSettings& settings) {
+    int frameGeneration = static_cast<int>(settings.frameGeneration);
+    readInt(j, "frameGeneration", frameGeneration);
+    if (frameGeneration >= static_cast<int>(FrameGenerationType::Disabled) &&
+        frameGeneration <= static_cast<int>(FrameGenerationType::Dlss)) {
+        settings.frameGeneration =
+            static_cast<FrameGenerationType>(frameGeneration);
+    }
+    int reflexMode = static_cast<int>(settings.reflexMode);
+    readInt(j, "reflexMode", reflexMode);
+    if (reflexMode >= static_cast<int>(ReflexLowLatencyMode::Off) &&
+        reflexMode <= static_cast<int>(ReflexLowLatencyMode::OnWithBoost)) {
+        settings.reflexMode = static_cast<ReflexLowLatencyMode>(reflexMode);
+    }
+}
+
+json toJson(const NvidiaFeatureSettings& settings) {
+    return {
+        {"frameGeneration", static_cast<int>(settings.frameGeneration)},
+        {"reflexMode", static_cast<int>(settings.reflexMode)}
+    };
+}
+
 void applyDebugSettings(const json& j, DebugSettings& s) {
     readInt(j, "viewMode", s.viewMode);
     readInt(j, "lightDebugMode", s.lightDebugMode);
@@ -641,6 +666,9 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("taa", [&s](const json& value) { applyTaaSettings(value, s.taa); });
     applyObject("postProcess", [&s](const json& value) { applyPostProcessSettings(value, s.postProcess); });
     applyObject("upscale", [&s](const json& value) { applyUpscaleSettings(value, s.upscale); });
+    applyObject("nvidia", [&s](const json& value) {
+        applyNvidiaFeatureSettings(value, s.nvidia);
+    });
     applyObject("debug", [&s](const json& value) { applyDebugSettings(value, s.debug); });
     applyObject("fog", [&s](const json& value) { applyFogSettings(value, s.fog); });
     applyObject("weather", [&s](const json& value) { applyWeatherSettings(value, s.weather); });
@@ -661,6 +689,7 @@ json toJson(const RenderSettings& s) {
         {"taa", toJson(s.taa)},
         {"postProcess", toJson(s.postProcess)},
         {"upscale", toJson(s.upscale)},
+        {"nvidia", toJson(s.nvidia)},
         {"debug", toJson(s.debug)},
         {"fog", toJson(s.fog)},
         {"weather", toJson(s.weather)},

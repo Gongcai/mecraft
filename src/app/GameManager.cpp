@@ -512,22 +512,17 @@ void GameManager::shutdown() {
     if (m_rhiDevice) {
         m_rhiDevice->waitIdle();
         m_commandListPool.reset();
-#if defined(MECRAFT_ENABLE_STREAMLINE)
-        StreamlineRuntime& streamline = StreamlineRuntime::instance();
-        if (streamline.initialized() && !streamline.shutdown()) {
-            MECRAFT_LOG_STREAM(std::cerr << streamline.lastError() << '\n');
-        }
-#endif
         m_rhiDevice->shutdown();
         m_rhiDevice.reset();
+    }
 #if defined(MECRAFT_ENABLE_STREAMLINE)
-    } else {
+    {
         StreamlineRuntime& streamline = StreamlineRuntime::instance();
         if (streamline.initialized() && !streamline.shutdown()) {
             MECRAFT_LOG_STREAM(std::cerr << streamline.lastError() << '\n');
         }
-#endif
     }
+#endif
     net::ENetTransport::deinitialize();
     m_threadPool.shutdown();
     m_input.shutdownInputReplay();

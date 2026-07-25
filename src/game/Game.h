@@ -80,6 +80,9 @@ public:
     /// Capture a screenshot of the current framebuffer for save thumbnail.
     void captureExitScreenshot();
 
+    /// Schedules save-thumbnail capture during the next normal gameplay frame.
+    void requestExitScreenshot();
+
 private:
     // G1: Structured config and dependencies
     GameSessionConfig m_config;

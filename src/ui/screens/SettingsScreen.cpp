@@ -1411,6 +1411,46 @@ void SettingsScreen::buildUpscaleTab(UIWidget* contentPanel, ResourceMgr& resour
     const bool fsr1Supported = m_renderScene->isFsr1Supported();
     const bool fsr31Supported = m_renderScene->isFsr31Supported();
     const bool dlssSupported = m_renderScene->isDlssSupported();
+    const bool reflexSupported = m_renderScene->isReflexSupported();
+    const bool dlssFrameGenerationSupported =
+        m_presentationController != nullptr &&
+        m_presentationController->frameGenerationAvailable() &&
+        m_renderScene->supportsFrameGenerationInputs();
+
+    addSectionHeader(stack, resourceMgr, "NVIDIA Low Latency and Frame Generation");
+    addDropdownRow(
+        stack, resourceMgr, "NVIDIA Reflex",
+        {"Off", "On", "On + Boost"},
+        static_cast<int>(s.nvidia.reflexMode),
+        [this](const int index, const std::string&) {
+            if (index < static_cast<int>(ReflexLowLatencyMode::Off) ||
+                index > static_cast<int>(ReflexLowLatencyMode::OnWithBoost)) {
+                return;
+            }
+            auto settings = m_renderScene->getSettings();
+            settings.nvidia.reflexMode =
+                static_cast<ReflexLowLatencyMode>(index);
+            if (settings.nvidia.reflexMode == ReflexLowLatencyMode::Off) {
+                settings.nvidia.frameGeneration = FrameGenerationType::Disabled;
+            }
+            m_renderScene->setSettings(settings);
+        },
+        reflexSupported);
+    addToggle(
+        stack, resourceMgr, "DLSS Frame Generation (2x)",
+        s.nvidia.frameGeneration == FrameGenerationType::Dlss,
+        [this](const bool enabled) {
+            auto settings = m_renderScene->getSettings();
+            settings.nvidia.frameGeneration = enabled
+                ? FrameGenerationType::Dlss
+                : FrameGenerationType::Disabled;
+            if (enabled &&
+                settings.nvidia.reflexMode == ReflexLowLatencyMode::Off) {
+                settings.nvidia.reflexMode = ReflexLowLatencyMode::On;
+            }
+            m_renderScene->setSettings(settings);
+        },
+        dlssFrameGenerationSupported);
 
     addSectionHeader(stack, resourceMgr, "Temporal Upscaling");
 

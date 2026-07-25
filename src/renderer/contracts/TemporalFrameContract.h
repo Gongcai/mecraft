@@ -106,6 +106,7 @@ struct TemporalFrameInput {
     glm::vec3 cameraForward = glm::vec3(0.0f, 0.0f, -1.0f);
     bool depthInverted = false;
     bool reset = true;
+    bool renderingGameFrames = true;
     TemporalFrameTextures textures;
 };
 

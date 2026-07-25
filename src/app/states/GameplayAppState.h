@@ -44,6 +44,8 @@ private:
     GameSessionConfig m_config;
     std::unique_ptr<Game> m_game;
     bool m_enterFailed = false;
+    bool m_quitToMenuPending = false;
+    bool m_closeAppAfterExitScreenshot = false;
 };
 
 #endif // MECRAFT_GAMEPLAYAPPSTATE_H

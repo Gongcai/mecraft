@@ -248,6 +248,7 @@ public:
     bool resizeSwapchain(uint32_t width, uint32_t height) override;
     [[nodiscard]] RhiFrameAcquireResult acquireFrame() override;
     RhiFrameStatus presentFrame(const RhiPresentInfo& info) override;
+    bool cancelFrame(const RhiPresentInfo& info) override;
 
     void destroyBuffer(RhiBufferHandle handle) override;
     void destroyTexture(RhiTextureHandle handle) override;

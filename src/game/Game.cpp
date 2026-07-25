@@ -231,14 +231,6 @@ void Game::shutdown() {
         return;
     }
 
-    if (m_loadPhase == LoadPhase::Complete) {
-        // Capture screenshot during next frame's render (before UI overlay)
-        m_captureScreenshotOnNextFrame = true;
-
-        // Render one more frame to capture the screenshot
-        (void)renderFrame(0.0f);
-    }
-
     // Render runtime holds non-owning references to session-owned render systems,
     // so it must release GPU resources before the session destroys those systems.
     m_renderRuntime->shutdown();
@@ -410,4 +402,10 @@ void Game::captureExitScreenshot() {
 
 void Game::clearQuitToMenuRequest() {
     m_session.stateMachine().clearQuitToMenuRequest();
+}
+
+void Game::requestExitScreenshot() {
+    if (m_loadPhase == LoadPhase::Complete) {
+        m_captureScreenshotOnNextFrame = true;
+    }
 }

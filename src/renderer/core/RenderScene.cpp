@@ -581,6 +581,9 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
         return;
     }
     refreshTemporalFrameInput();
+    if (m_temporalFrameInput.has_value()) {
+        m_temporalFrameInput->renderingGameFrames = request.renderingGameFrames;
+    }
     m_temporalUpscaleResult.reset();
     if (m_temporalFrameInput.has_value()) {
         m_temporalUpscaleResult = m_temporalUpscalePass.execute(
@@ -717,6 +720,9 @@ const char* RenderScene::activePipelineName() const {
 }
 
 void RenderScene::setSettings(const RenderSettings& settings) {
+    if (m_settingsChangedCallback && !m_settingsChangedCallback(settings)) {
+        return;
+    }
     // Detect pipeline mode change and trigger switch
     if (settings.pipelineMode != m_settings.pipelineMode) {
         setPipelineMode(settings.pipelineMode);
@@ -740,9 +746,6 @@ void RenderScene::setSettings(const RenderSettings& settings) {
         invalidateFrameHistory();
     }
 
-    if (m_settingsChangedCallback) {
-        m_settingsChangedCallback(m_settings);
-    }
 }
 
 const RenderSettings& RenderScene::getSettings() const {
@@ -771,7 +774,24 @@ bool RenderScene::isDlssSupported() const {
 #endif
 }
 
-void RenderScene::setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback) {
+bool RenderScene::isReflexSupported() const {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    const StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    return m_shared.rhiDevice != nullptr &&
+           m_shared.rhiDevice->backend() == RhiBackend::Vulkan &&
+           streamline.reflexLowLatencyAvailable();
+#else
+    return false;
+#endif
+}
+
+bool RenderScene::supportsFrameGenerationInputs() const {
+    return m_settings.pipelineMode == PipelineMode::Deferred &&
+           !isFsr1RuntimeEnabled();
+}
+
+void RenderScene::setSettingsChangedCallback(
+    std::function<bool(const RenderSettings&)> callback) {
     m_settingsChangedCallback = std::move(callback);
 }
 

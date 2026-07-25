@@ -66,6 +66,12 @@ public:
         return presentResults[nextPresentResult++];
     }
 
+    bool cancelFrame(const RhiPresentInfo& info) override {
+        ++cancelCalls;
+        lastCancelInfo = info;
+        return cancelAccepted;
+    }
+
     [[nodiscard]] bool vsyncEnabled() const override {
         return currentVsyncEnabled;
     }
@@ -83,20 +89,86 @@ public:
         return true;
     }
 
+    [[nodiscard]] bool supportsFrameGeneration() const override {
+        return frameGenerationSupported;
+    }
+
+    [[nodiscard]] bool frameGenerationEnabled() const override {
+        return frameGenerationUserEnabled;
+    }
+
+    [[nodiscard]] bool frameGenerationActive() const override {
+        return frameGenerationUserEnabled && renderingGameFrames;
+    }
+
+    bool setFrameGenerationEnabled(const bool enabled) override {
+        ++setFrameGenerationCalls;
+        if (!frameGenerationSupported || !setFrameGenerationAccepted) {
+            return false;
+        }
+        frameGenerationUserEnabled = enabled;
+        if (!enabled) {
+            renderingGameFrames = false;
+        }
+        m_mode = enabled
+            ? PresentationMode::DlssFrameGeneration
+            : PresentationMode::Native;
+        return true;
+    }
+
+    bool setRenderingGameFrames(const bool enabled) override {
+        ++setRenderingGameFramesCalls;
+        renderingGameFrameRequests.push_back(enabled);
+        if ((enabled && !resumeFrameGenerationAccepted) ||
+            (!enabled && !suspendFrameGenerationAccepted)) {
+            return false;
+        }
+        if (frameGenerationUserEnabled) {
+            renderingGameFrames = enabled;
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool requiresFrameGenerationInputs() const override {
+        return requireFrameGenerationInputs && frameGenerationActive();
+    }
+
+    bool prepareFrameGeneration(
+        const PresentationFrameResources&,
+        const TemporalFrameInput&) override {
+        ++prepareFrameGenerationCalls;
+        return prepareFrameGenerationAccepted;
+    }
+
     PresentationMode m_mode = PresentationMode::Native;
     bool resizeAccepted = true;
     bool vsyncSupported = true;
     bool setVsyncAccepted = true;
     bool currentVsyncEnabled = false;
+    bool frameGenerationSupported = false;
+    bool frameGenerationUserEnabled = false;
+    bool renderingGameFrames = false;
+    bool setFrameGenerationAccepted = true;
+    bool requireFrameGenerationInputs = false;
+    bool prepareFrameGenerationAccepted = true;
+    bool resumeFrameGenerationAccepted = true;
+    bool suspendFrameGenerationAccepted = true;
+    bool cancelAccepted = true;
     uint32_t resizeCalls = 0u;
     uint32_t acquireCalls = 0u;
     uint32_t presentCalls = 0u;
+    uint32_t cancelCalls = 0u;
     uint32_t setVsyncCalls = 0u;
+    uint32_t setFrameGenerationCalls = 0u;
+    uint32_t setRenderingGameFramesCalls = 0u;
+    uint32_t prepareFrameGenerationCalls = 0u;
     uint32_t lastWidth = 0u;
     uint32_t lastHeight = 0u;
     RhiPresentInfo lastPresentInfo;
+    RhiPresentInfo lastCancelInfo;
     std::vector<RhiFrameAcquireResult> acquireResults;
     std::vector<PresentationBackendPresentResult> presentResults;
+    std::vector<bool> renderingGameFrameRequests;
     size_t nextAcquireResult = 0u;
     size_t nextPresentResult = 0u;
 };
@@ -328,6 +400,195 @@ void testExplicitBackendFailures() {
             "generated-frame counts must be smaller than total displayed-frame counts");
 }
 
+void testFrameGenerationLifecycle() {
+    FakePresentationBackend backend;
+    backend.frameGenerationSupported = true;
+    backend.acquireResults = {
+        acquiredFrame(RhiFrameStatus::Success, 71u, 0u),
+        acquiredFrame(RhiFrameStatus::Success, 72u, 1u),
+        acquiredFrame(RhiFrameStatus::Success, 73u, 0u),
+        acquiredFrame(RhiFrameStatus::Success, 74u, 1u),
+        acquiredFrame(RhiFrameStatus::Success, 75u, 0u)
+    };
+    backend.presentResults = {
+        {RhiFrameStatus::Success, 1u, 0u},
+        {RhiFrameStatus::Success, 2u, 1u},
+        {RhiFrameStatus::Success, 1u, 0u},
+        {RhiFrameStatus::Success, 2u, 1u},
+        {RhiFrameStatus::Success, 1u, 0u}
+    };
+    PresentationController controller(backend);
+
+    const PresentationFrame nativeFrame = controller.beginFrame(1920, 1080);
+    require(nativeFrame.shouldRender() &&
+            controller.presentFrame(nativeFrame).result == PresentationResult::Presented,
+            "the native frame preceding DLSS-G activation must present normally");
+
+    require(controller.requestFrameGenerationEnabled(true) &&
+            controller.requestRenderingGameFrames(true),
+            "DLSS-G enable and gameplay activity requests must be accepted");
+    require(!controller.requestVsyncEnabled(true) &&
+            !controller.vsyncControlAvailable(),
+            "a queued DLSS-G swapchain must reject application-controlled VSync changes");
+    const PresentationFrame enabledFrame = controller.beginFrame(1920, 1080);
+    require(enabledFrame.shouldRender() && backend.frameGenerationUserEnabled &&
+            backend.renderingGameFrames && backend.resizeCalls == 1u,
+            "DLSS-G activation must not invalidate an unchanged framebuffer extent");
+    require(controller.presentFrame(enabledFrame).result == PresentationResult::Presented,
+            "an active DLSS-G frame must present two display images");
+
+    require(controller.requestRenderingGameFrames(false),
+            "gameplay pause must queue interpolation suspension");
+    const PresentationFrame pausedFrame = controller.beginFrame(1920, 1080);
+    require(pausedFrame.shouldRender() && !backend.renderingGameFrames &&
+            controller.presentFrame(pausedFrame).result == PresentationResult::Presented,
+            "a paused gameplay frame must retain the DLSS-G swapchain without interpolation");
+
+    require(controller.requestRenderingGameFrames(true),
+            "gameplay resume must queue interpolation activation");
+    const PresentationFrame resizedFrame = controller.beginFrame(1600, 900);
+    require(resizedFrame.shouldRender() && backend.renderingGameFrames &&
+            backend.resizeCalls == 2u,
+            "framebuffer resize must suspend DLSS-G, resize once, and resume after acquire");
+    require(backend.renderingGameFrameRequests.size() >= 5u &&
+            backend.renderingGameFrameRequests[backend.renderingGameFrameRequests.size() - 3u] &&
+            !backend.renderingGameFrameRequests[backend.renderingGameFrameRequests.size() - 2u] &&
+            backend.renderingGameFrameRequests.back(),
+            "resize processing must issue the expected active, suspended, active sequence");
+    require(controller.presentFrame(resizedFrame).result == PresentationResult::Presented,
+            "DLSS-G must remain active after a successful resize");
+
+    require(controller.requestRenderingGameFrames(false) &&
+            controller.requestFrameGenerationEnabled(false),
+            "DLSS-G disable must be accepted at a frame boundary");
+    const PresentationFrame disabledFrame = controller.beginFrame(1600, 900);
+    require(disabledFrame.shouldRender() && !backend.frameGenerationUserEnabled &&
+            controller.mode() == PresentationMode::Native &&
+            controller.vsyncControlAvailable(),
+            "disabling DLSS-G must restore native presentation mode");
+    require(controller.presentFrame(disabledFrame).result == PresentationResult::Presented,
+            "the first native frame after DLSS-G shutdown must present normally");
+
+    const PresentationStatistics& stats = controller.statistics();
+    require(stats.realFramesPresented == 5u &&
+            stats.generatedFramesPresented == 2u &&
+            stats.displayedFrames == 7u,
+            "DLSS-G lifecycle statistics must separate real and interpolated images");
+}
+
+void testFrameGenerationInputRequirement() {
+    FakePresentationBackend backend(PresentationMode::DlssFrameGeneration);
+    backend.frameGenerationSupported = true;
+    backend.frameGenerationUserEnabled = true;
+    backend.renderingGameFrames = true;
+    backend.requireFrameGenerationInputs = true;
+    backend.acquireResults.push_back(
+        acquiredFrame(RhiFrameStatus::Success, 81u, 0u));
+    PresentationController controller(backend);
+    require(controller.requestRenderingGameFrames(true),
+            "the DLSS-G input-contract test must request active gameplay interpolation");
+
+    const PresentationFrame frame = controller.beginFrame(1280, 720);
+    require(frame.shouldRender(),
+            "the DLSS-G input-contract test requires an acquired frame");
+    const PresentationCompleteResult result = controller.presentFrame(frame);
+    require(result.failure == PresentationFailure::FrameGenerationInputsRejected &&
+            backend.presentCalls == 0u && backend.cancelCalls == 1u,
+            "active DLSS-G must reject presentation before the backend sees incomplete inputs");
+}
+
+void testFrameGenerationSuspendsWhileMinimized() {
+    FakePresentationBackend backend(PresentationMode::DlssFrameGeneration);
+    backend.frameGenerationSupported = true;
+    backend.frameGenerationUserEnabled = true;
+    backend.renderingGameFrames = true;
+    backend.acquireResults.push_back(
+        acquiredFrame(RhiFrameStatus::Success, 91u, 0u));
+    backend.presentResults.push_back({RhiFrameStatus::Success, 2u, 1u});
+    PresentationController controller(backend);
+    require(controller.requestRenderingGameFrames(true),
+            "the minimized-window test must start with active interpolation");
+
+    const PresentationFrame minimizedFrame = controller.beginFrame(0, 0);
+    require(minimizedFrame.result == PresentationResult::Skipped &&
+            minimizedFrame.rhiStatus == RhiFrameStatus::Minimized &&
+            !backend.renderingGameFrames && backend.acquireCalls == 0u,
+            "minimization must suspend DLSS-G before skipping acquisition");
+
+    const PresentationFrame restoredFrame = controller.beginFrame(1280, 720);
+    require(restoredFrame.shouldRender() && backend.renderingGameFrames &&
+            backend.acquireCalls == 1u,
+            "restoring the window must resume DLSS-G only after acquisition");
+    require(controller.presentFrame(restoredFrame).result ==
+                PresentationResult::Presented,
+            "the first restored DLSS-G frame must present normally");
+}
+
+void testFrameGenerationResumeFailureCancelsAcquiredFrame() {
+    FakePresentationBackend backend(PresentationMode::DlssFrameGeneration);
+    backend.frameGenerationSupported = true;
+    backend.frameGenerationUserEnabled = true;
+    backend.renderingGameFrames = true;
+    backend.resumeFrameGenerationAccepted = false;
+    backend.acquireResults.push_back(
+        acquiredFrame(RhiFrameStatus::Success, 101u, 1u));
+    PresentationController controller(backend);
+    require(controller.requestRenderingGameFrames(true),
+            "the resume-failure test must start with active interpolation");
+
+    const PresentationFrame frame = controller.beginFrame(1280, 720);
+    require(frame.failure == PresentationFailure::FrameGenerationRejected &&
+            backend.cancelCalls == 1u &&
+            backend.lastCancelInfo.frameIndex == 101u &&
+            backend.lastCancelInfo.imageIndex == 1u,
+            "a failed DLSS-G resume must release the image acquired after resize");
+}
+
+void testFrameGenerationInputCancellationFailureIsReported() {
+    FakePresentationBackend backend(PresentationMode::DlssFrameGeneration);
+    backend.frameGenerationSupported = true;
+    backend.frameGenerationUserEnabled = true;
+    backend.renderingGameFrames = true;
+    backend.requireFrameGenerationInputs = true;
+    backend.cancelAccepted = false;
+    backend.acquireResults.push_back(
+        acquiredFrame(RhiFrameStatus::Success, 111u, 0u));
+    PresentationController controller(backend);
+    require(controller.requestRenderingGameFrames(true),
+            "the cancellation-failure test must start with active interpolation");
+
+    const PresentationFrame frame = controller.beginFrame(1280, 720);
+    require(frame.shouldRender(),
+            "the cancellation-failure test requires an acquired frame");
+    const PresentationCompleteResult result = controller.presentFrame(frame);
+    require(result.failure == PresentationFailure::FrameCancellationRejected &&
+            backend.cancelCalls == 1u && backend.presentCalls == 0u,
+            "a failed frame cancellation must not be reported as an input error");
+}
+
+void testFrameGenerationSuspensionFailureStillReleasesFrame() {
+    FakePresentationBackend backend(PresentationMode::DlssFrameGeneration);
+    backend.frameGenerationSupported = true;
+    backend.frameGenerationUserEnabled = true;
+    backend.renderingGameFrames = true;
+    backend.acquireResults = {
+        acquiredFrame(RhiFrameStatus::Success, 121u, 0u),
+        acquiredFrame(RhiFrameStatus::Success, 122u, 1u)
+    };
+    PresentationController controller(backend);
+    require(controller.requestRenderingGameFrames(true),
+            "the suspension-failure test must start with active interpolation");
+
+    const PresentationFrame firstFrame = controller.beginFrame(1280, 720);
+    backend.suspendFrameGenerationAccepted = false;
+    require(firstFrame.shouldRender() && !controller.cancelFrame(firstFrame) &&
+            backend.cancelCalls == 1u,
+            "a failed interpolation suspension must still release the acquired frame");
+    const PresentationFrame secondFrame = controller.beginFrame(1280, 720);
+    require(secondFrame.shouldRender(),
+            "the controller must close its frame identity after backend release");
+}
+
 } // namespace
 
 int main() {
@@ -336,6 +597,12 @@ int main() {
     testNativeLifecycleAndIdentityContract();
     testResizeInvalidationAndGeneratedFrameStatistics();
     testExplicitBackendFailures();
+    testFrameGenerationLifecycle();
+    testFrameGenerationInputRequirement();
+    testFrameGenerationSuspendsWhileMinimized();
+    testFrameGenerationResumeFailureCancelsAcquiredFrame();
+    testFrameGenerationInputCancellationFailureIsReported();
+    testFrameGenerationSuspensionFailureStillReleasesFrame();
     std::printf("[presentation_controller_test] PASS\n");
     return EXIT_SUCCESS;
 }

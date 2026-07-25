@@ -129,6 +129,8 @@ struct VkRhiDeviceData {
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     VkSemaphore timeline = VK_NULL_HANDLE;
+    VkSemaphore externalFrameCompletionSemaphore = VK_NULL_HANDLE;
+    uint64_t externalFrameCompletionValue = 0u;
     VkPhysicalDeviceProperties properties{};
     PFN_vkSetDebugUtilsObjectNameEXT setObjectName = nullptr;
     PFN_vkCmdBeginDebugUtilsLabelEXT beginLabel = nullptr;

@@ -262,6 +262,7 @@ public:
     RhiFrameStatus presentFrame(const RhiPresentInfo&) override {
         return RhiFrameStatus::Success;
     }
+    bool cancelFrame(const RhiPresentInfo&) override { return true; }
 
     void destroyBuffer(const RhiBufferHandle handle) override { destroyedBuffers.push_back(handle); }
     void destroyTexture(const RhiTextureHandle handle) override { destroyedTextures.push_back(handle); }

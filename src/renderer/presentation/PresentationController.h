@@ -2,6 +2,7 @@
 #define MECRAFT_PRESENTATION_CONTROLLER_H
 
 #include "renderer/rhi/RhiTypes.h"
+#include "renderer/contracts/TemporalFrameContract.h"
 
 #include <cstdint>
 #include <memory>
@@ -35,6 +36,9 @@ enum class PresentationFailure {
     VsyncRejected,
     FullscreenRejected,
     WindowStateUnavailable,
+    FrameGenerationRejected,
+    FrameGenerationInputsRejected,
+    FrameCancellationRejected,
     FrameAlreadyOpen,
     FrameNotOpen,
     FrameIdentityMismatch
@@ -143,12 +147,30 @@ public:
     /// Presents the matching acquired real frame.
     virtual PresentationBackendPresentResult presentFrame(
         const RhiPresentInfo& info) = 0;
+    /// Cancels the matching acquired frame without displaying it.
+    virtual bool cancelFrame(const RhiPresentInfo& info) = 0;
     /// Reports the currently active vertical synchronization state.
     [[nodiscard]] virtual bool vsyncEnabled() const = 0;
     /// Reports whether the backend can change vertical synchronization at runtime.
     [[nodiscard]] virtual bool supportsVsyncControl() const = 0;
     /// Applies a vertical synchronization state before frame acquisition.
     virtual bool setVsyncEnabled(bool enabled) = 0;
+    /// Reports whether this backend can create DLSS frame-generation swapchains.
+    [[nodiscard]] virtual bool supportsFrameGeneration() const = 0;
+    /// Reports whether the user-selected frame-generation swapchain is active.
+    [[nodiscard]] virtual bool frameGenerationEnabled() const = 0;
+    /// Reports whether interpolation is enabled for the current gameplay state.
+    [[nodiscard]] virtual bool frameGenerationActive() const = 0;
+    /// Recreates the swapchain after changing the user-selected DLSS-G state.
+    virtual bool setFrameGenerationEnabled(bool enabled) = 0;
+    /// Enables or suspends interpolation without unloading retained resources.
+    virtual bool setRenderingGameFrames(bool renderingGameFrames) = 0;
+    /// Reports whether the current frame must preserve and tag DLSS-G inputs.
+    [[nodiscard]] virtual bool requiresFrameGenerationInputs() const = 0;
+    /// Tags complete output-resolution and temporal resources for the next present.
+    virtual bool prepareFrameGeneration(
+        const PresentationFrameResources& resources,
+        const TemporalFrameInput& temporalFrame) = 0;
 };
 
 /// Creates the native RHI swapchain presentation backend.
@@ -185,6 +207,11 @@ public:
     [[nodiscard]] PresentationCompleteResult presentFrame(
         const PresentationFrame& frame);
 
+    /// Cancels and closes a matching acquired frame without displaying it.
+    /// @param frame Live frame identity returned by beginFrame().
+    /// @return True when interpolation suspension and backend frame release both succeed.
+    [[nodiscard]] bool cancelFrame(const PresentationFrame& frame);
+
     /// Creates presentation-owned UI targets and the UI composition pipeline.
     /// @param rhiDevice Device used for target, pipeline, and submission resources.
     /// @return True when the independent UI presentation contract is ready.
@@ -205,6 +232,16 @@ public:
     /// @return True when a native window is bound and the request was accepted.
     [[nodiscard]] bool requestFullscreenEnabled(bool enabled);
 
+    /// Queues a DLSS Frame Generation user-setting change for the next frame boundary.
+    /// @param enabled True to create a DLSS-G swapchain, false to create a native one.
+    /// @return True when the active backend supports the requested technology.
+    [[nodiscard]] bool requestFrameGenerationEnabled(bool enabled);
+
+    /// Queues gameplay interpolation activity for the next frame boundary.
+    /// @param renderingGameFrames True while gameplay produces valid temporal frames.
+    /// @return True when the request is valid for the active backend state.
+    [[nodiscard]] bool requestRenderingGameFrames(bool renderingGameFrames);
+
     /// Returns the requested VSync state, including a queued frame-boundary change.
     [[nodiscard]] bool vsyncEnabled() const;
 
@@ -216,6 +253,18 @@ public:
 
     /// Returns whether the bound native window supports runtime fullscreen changes.
     [[nodiscard]] bool fullscreenControlAvailable() const;
+
+    /// Reports whether DLSS Frame Generation is supported by the active backend.
+    [[nodiscard]] bool frameGenerationAvailable() const;
+
+    /// Returns the requested DLSS Frame Generation user-setting state.
+    [[nodiscard]] bool frameGenerationEnabled() const;
+
+    /// Returns whether the backend has applied the DLSS-G swapchain state.
+    [[nodiscard]] bool frameGenerationSwapchainEnabled() const;
+
+    /// Returns whether interpolation is active for the current gameplay frame.
+    [[nodiscard]] bool frameGenerationActive() const;
 
     /// Releases UI targets and composition resources after GPU work is complete.
     void shutdownUiComposition();
@@ -258,6 +307,16 @@ public:
     [[nodiscard]] bool submitUiFrame(RhiCommandList& commandList,
                                       const PresentationUiFrame& uiFrame);
 
+    /// Validates and tags presentation and temporal inputs for DLSS-G.
+    /// @param frame Matching real frame returned by beginFrame().
+    /// @param uiFrame Matching UI target returned by acquireUiFrame().
+    /// @param temporalFrame Complete temporal resources and common camera constants.
+    /// @return True when DLSS-G inputs are ready or interpolation is inactive.
+    [[nodiscard]] bool prepareFrameGeneration(
+        const PresentationFrame& frame,
+        const PresentationUiFrame& uiFrame,
+        const TemporalFrameInput& temporalFrame);
+
     /// Returns the immutable cumulative presentation statistics.
     [[nodiscard]] const PresentationStatistics& statistics() const {
         return m_statistics;
@@ -270,10 +329,13 @@ public:
 
 private:
     struct UiSlot {
+        RhiTextureHandle hudlessColorTexture;
+        RhiTextureViewHandle hudlessColorView;
         RhiTextureHandle colorTexture;
         RhiTextureViewHandle colorView;
         RhiTextureHandle depthTexture;
         RhiTextureViewHandle depthView;
+        RhiResourceState hudlessColorState = RhiResourceState::Undefined;
         RhiResourceState colorState = RhiResourceState::Undefined;
         RhiResourceState depthState = RhiResourceState::Undefined;
         RhiSubmissionToken completionToken;
@@ -294,6 +356,8 @@ private:
     [[nodiscard]] bool waitForUiSlot(UiSlot& slot);
     [[nodiscard]] std::optional<PresentationFailure> applyPendingDisplayState();
     [[nodiscard]] PresentationFrame beginFrameExtent(int width, int height);
+    [[nodiscard]] bool suspendFrameGenerationForSwapchainChange();
+    [[nodiscard]] bool resumeFrameGenerationAfterAcquire();
 
     PresentationBackend& m_backend;
     PresentationStatistics m_statistics;
@@ -306,6 +370,11 @@ private:
     Window* m_window = nullptr;
     std::optional<bool> m_requestedVsyncEnabled;
     std::optional<bool> m_requestedFullscreenEnabled;
+    std::optional<bool> m_requestedFrameGenerationEnabled;
+    std::optional<bool> m_requestedRenderingGameFrames;
+    bool m_renderingGameFrames = false;
+    bool m_resumeFrameGeneration = false;
+    bool m_frameGenerationPrepared = false;
     RhiDevice* m_uiDevice = nullptr;
     RhiTextureFormat m_uiColorFormat = RhiTextureFormat::Undefined;
     RhiTextureFormat m_uiDepthFormat = RhiTextureFormat::Undefined;

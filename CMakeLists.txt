@@ -459,6 +459,8 @@ if(MECRAFT_RHI_BACKEND_VULKAN)
     endif()
     if(MECRAFT_ENABLE_STREAMLINE)
         list(APPEND SRC_RENDERER
+                src/renderer/upscaling/DlssFrameGeneration.cpp
+                src/renderer/upscaling/DlssFrameGeneration.h
                 src/renderer/upscaling/DlssVulkanContext.cpp
                 src/renderer/upscaling/DlssVulkanContext.h
                 src/renderer/upscaling/StreamlineRuntime.cpp

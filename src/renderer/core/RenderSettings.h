@@ -285,6 +285,23 @@ struct UpscaleSettings {
     float fsr1Sharpness = 0.2f;
 };
 
+enum class FrameGenerationType {
+    Disabled = 0,
+    Dlss = 1
+};
+
+enum class ReflexLowLatencyMode {
+    Off = 0,
+    On = 1,
+    OnWithBoost = 2
+};
+
+/// NVIDIA presentation and latency settings persisted with the renderer profile.
+struct NvidiaFeatureSettings {
+    FrameGenerationType frameGeneration = FrameGenerationType::Disabled;
+    ReflexLowLatencyMode reflexMode = ReflexLowLatencyMode::On;
+};
+
 /// Debug visualization settings
 struct DebugSettings {
     int viewMode = 0;
@@ -339,6 +356,7 @@ struct RenderSettings {
     TaaSettings taa;
     PostProcessSettings postProcess;
     UpscaleSettings upscale;
+    NvidiaFeatureSettings nvidia;
     DebugSettings debug;
     FogSettings fog;
     WeatherRenderSettings weather;

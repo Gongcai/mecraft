@@ -730,6 +730,61 @@ void destroyDlssSmokeTexture(
     return false;
 }
 
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+[[nodiscard]] bool validateDlssFrameGenerationSwapchainLifecycle(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool,
+    GLFWwindow* window) {
+    StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    if (!streamline.dlssFrameGenerationSupported()) {
+        return !streamline.dlssFrameGenerationLoaded();
+    }
+    if (streamline.dlssFrameGenerationLoaded()) {
+        return false;
+    }
+
+    const bool restoreVsync = device.vsyncEnabled();
+    if (restoreVsync && !device.setVsyncEnabled(false)) {
+        return false;
+    }
+    if (!VkRhiInterop::recreateFrameGenerationSwapchain(device, true) ||
+        !streamline.dlssFrameGenerationLoaded()) {
+        return false;
+    }
+    int width = 0;
+    int height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    StreamlineDlssFrameGenerationOptions options;
+    options.enabled = false;
+    options.renderWidth = static_cast<uint32_t>(width);
+    options.renderHeight = static_cast<uint32_t>(height);
+    options.outputWidth = static_cast<uint32_t>(width);
+    options.outputHeight = static_cast<uint32_t>(height);
+    options.backBufferCount = device.capabilities().swapchainImageCount;
+    options.colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    options.depthFormat = VK_FORMAT_D32_SFLOAT;
+    options.motionVectorFormat = VK_FORMAT_R16G16_SFLOAT;
+    options.hudlessFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    options.uiFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    if (width <= 0 || height <= 0 ||
+        !streamline.configureDlssFrameGeneration(0u, options)) {
+        return false;
+    }
+    const bool loadedFramePresented =
+        renderStableFrame(device, commandPool, window);
+    if (!VkRhiInterop::recreateFrameGenerationSwapchain(device, false) ||
+        streamline.dlssFrameGenerationLoaded()) {
+        return false;
+    }
+    if (device.vsyncEnabled() != restoreVsync &&
+        !device.setVsyncEnabled(restoreVsync)) {
+        return false;
+    }
+    return loadedFramePresented &&
+           renderStableFrame(device, commandPool, window);
+}
+#endif
+
 [[nodiscard]] bool rejectDestroyedResourceSubmission(VkRhiDevice& device,
                                                       RhiCommandListPool& commandPool) {
     RhiBufferDesc bufferDesc;
@@ -786,8 +841,43 @@ void destroyDlssSmokeTexture(
         frame.status != RhiFrameStatus::Suboptimal) {
         return false;
     }
-    return device.presentFrame({frame.frameIndex, frame.imageIndex}) ==
-           RhiFrameStatus::OutOfDate;
+    if (!device.cancelFrame({frame.frameIndex, frame.imageIndex})) {
+        std::cerr << "Vulkan cancel-frame smoke check failed\n";
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool cancelSubmittedFrame(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool,
+    GLFWwindow* window) {
+    int width = 0;
+    int height = 0;
+    glfwGetFramebufferSize(window, &width, &height);
+    if (width <= 0 || height <= 0 ||
+        !device.resizeSwapchain(static_cast<uint32_t>(width),
+                                static_cast<uint32_t>(height))) {
+        return false;
+    }
+    const RhiFrameAcquireResult frame = device.acquireFrame();
+    if (frame.status != RhiFrameStatus::Success &&
+        frame.status != RhiFrameStatus::Suboptimal) {
+        return false;
+    }
+    RhiCommandList* commands = commandPool.acquire(RhiCommandListType::Graphics);
+    if (commands == nullptr ||
+        !commands->begin({"VulkanSmoke.CancelSubmitted", RhiCommandListType::Graphics}) ||
+        !commands->end()) {
+        return false;
+    }
+    RhiCommandList* submissions[] = {commands};
+    if (!device.submit({"VulkanSmoke.CancelSubmitted", submissions, 1u}) ||
+        !device.cancelFrame({frame.frameIndex, frame.imageIndex})) {
+        std::cerr << "Vulkan submitted cancel-frame smoke check failed\n";
+        return false;
+    }
+    return true;
 }
 
 [[nodiscard]] bool createDrawParametersShader(VkRhiDevice& device) {
@@ -1256,6 +1346,8 @@ int main() {
 #endif
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         !validateDlssVulkanDispatch(device, *commandPool, window) ||
+        !validateDlssFrameGenerationSwapchainLifecycle(
+            device, *commandPool, window) ||
 #endif
         !validateTemporalOutputTarget(device, *commandPool) ||
         !validateVulkanInterop(device, *commandPool, texture, textureView,
@@ -1264,6 +1356,7 @@ int main() {
         !validateIndependentUiPresentation(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||
+        !cancelSubmittedFrame(device, *commandPool, window) ||
         !renderStableFrame(device, *commandPool, window) ||
         !renderStableFrame(device, *commandPool, window)) {
         commandPool.reset();

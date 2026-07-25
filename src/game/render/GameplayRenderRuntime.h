@@ -53,6 +53,10 @@ public:
     [[nodiscard]] FirstPersonHeldItemRenderer& firstPersonHeldItemRenderer();
     [[nodiscard]] PresentationController& presentationController();
 
+    /// Applies latency settings that must wait for a frame-generation swapchain change.
+    /// @return True when no deferred setting remains or the setting was applied successfully.
+    [[nodiscard]] bool applyFrameBoundaryNvidiaSettings();
+
 #ifdef MECRAFT_DEBUG
     [[nodiscard]] bool initDebug(Window& window, RhiDevice& rhiDevice);
     void publishDebugStats(double frameTime);

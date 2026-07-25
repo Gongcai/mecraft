@@ -67,6 +67,11 @@ public:
     /// @return Presentation status reported by the backend or window system.
     virtual RhiFrameStatus presentFrame(const RhiPresentInfo& info) = 0;
 
+    /// Cancels the currently acquired image without displaying it and closes its frame lifetime.
+    /// @param info Frame and image indices returned by the matching acquireFrame call.
+    /// @return True when submitted work completed and the presentation image was released.
+    virtual bool cancelFrame(const RhiPresentInfo& info) = 0;
+
     // Destruction invalidates the public handle immediately. Backends with deferred
     // command execution must retain the native resource until recorded work completes.
     virtual void destroyBuffer(RhiBufferHandle handle) = 0;

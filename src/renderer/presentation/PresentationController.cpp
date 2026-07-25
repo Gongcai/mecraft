@@ -54,6 +54,10 @@ public:
         return {status, displayedFrameCount, 0u};
     }
 
+    bool cancelFrame(const RhiPresentInfo& info) override {
+        return m_rhiDevice.cancelFrame(info);
+    }
+
     [[nodiscard]] bool vsyncEnabled() const override {
         return m_rhiDevice.vsyncEnabled();
     }
@@ -64,6 +68,36 @@ public:
 
     bool setVsyncEnabled(const bool enabled) override {
         return m_rhiDevice.setVsyncEnabled(enabled);
+    }
+
+    [[nodiscard]] bool supportsFrameGeneration() const override {
+        return false;
+    }
+
+    [[nodiscard]] bool frameGenerationEnabled() const override {
+        return false;
+    }
+
+    [[nodiscard]] bool frameGenerationActive() const override {
+        return false;
+    }
+
+    bool setFrameGenerationEnabled(const bool enabled) override {
+        return !enabled;
+    }
+
+    bool setRenderingGameFrames(const bool) override {
+        return true;
+    }
+
+    [[nodiscard]] bool requiresFrameGenerationInputs() const override {
+        return false;
+    }
+
+    bool prepareFrameGeneration(
+        const PresentationFrameResources&,
+        const TemporalFrameInput&) override {
+        return true;
     }
 
 private:
@@ -121,7 +155,7 @@ bool PresentationController::initWindowState(Window& window) {
 }
 
 bool PresentationController::requestVsyncEnabled(const bool enabled) {
-    if (!m_backend.supportsVsyncControl()) {
+    if (frameGenerationEnabled() || !m_backend.supportsVsyncControl()) {
         return false;
     }
     if (enabled == m_backend.vsyncEnabled()) {
@@ -144,6 +178,43 @@ bool PresentationController::requestFullscreenEnabled(const bool enabled) {
     return true;
 }
 
+bool PresentationController::requestFrameGenerationEnabled(const bool enabled) {
+    if (!m_backend.supportsFrameGeneration()) {
+        return false;
+    }
+    if (enabled && m_requestedVsyncEnabled.has_value()) {
+        return false;
+    }
+    if (!enabled) {
+        m_resumeFrameGeneration = false;
+        m_requestedRenderingGameFrames.reset();
+    }
+    if (enabled == m_backend.frameGenerationEnabled()) {
+        m_requestedFrameGenerationEnabled.reset();
+    } else {
+        m_requestedFrameGenerationEnabled = enabled;
+    }
+    return true;
+}
+
+bool PresentationController::requestRenderingGameFrames(
+    const bool renderingGameFrames) {
+    m_renderingGameFrames = renderingGameFrames;
+    if (!renderingGameFrames) {
+        m_resumeFrameGeneration = false;
+    }
+    if (!frameGenerationEnabled()) {
+        m_requestedRenderingGameFrames.reset();
+        return true;
+    }
+    if (renderingGameFrames == m_backend.frameGenerationActive()) {
+        m_requestedRenderingGameFrames.reset();
+    } else {
+        m_requestedRenderingGameFrames = renderingGameFrames;
+    }
+    return true;
+}
+
 bool PresentationController::vsyncEnabled() const {
     return m_requestedVsyncEnabled.has_value()
         ? *m_requestedVsyncEnabled
@@ -151,7 +222,7 @@ bool PresentationController::vsyncEnabled() const {
 }
 
 bool PresentationController::vsyncControlAvailable() const {
-    return m_backend.supportsVsyncControl();
+    return !frameGenerationEnabled() && m_backend.supportsVsyncControl();
 }
 
 bool PresentationController::fullscreenEnabled() const {
@@ -163,6 +234,24 @@ bool PresentationController::fullscreenEnabled() const {
 
 bool PresentationController::fullscreenControlAvailable() const {
     return m_window != nullptr && m_window->fullscreenControlAvailable();
+}
+
+bool PresentationController::frameGenerationAvailable() const {
+    return m_backend.supportsFrameGeneration();
+}
+
+bool PresentationController::frameGenerationEnabled() const {
+    return m_requestedFrameGenerationEnabled.has_value()
+        ? *m_requestedFrameGenerationEnabled
+        : m_backend.frameGenerationEnabled();
+}
+
+bool PresentationController::frameGenerationSwapchainEnabled() const {
+    return m_backend.frameGenerationEnabled();
+}
+
+bool PresentationController::frameGenerationActive() const {
+    return m_backend.frameGenerationActive();
 }
 
 void PresentationController::shutdownUiComposition() {
@@ -221,9 +310,20 @@ std::optional<PresentationFrameResources> PresentationController::frameResources
         !frame.acquired.colorView.isValid()) {
         return std::nullopt;
     }
+    const UiSlot& slot = m_uiSlots[uiFrame.slotIndex];
+    const bool preserveHudlessColor = m_backend.requiresFrameGenerationInputs();
+    const RhiTextureHandle hudlessTexture = preserveHudlessColor
+        ? slot.hudlessColorTexture
+        : frame.acquired.colorTexture;
+    const RhiTextureViewHandle hudlessView = preserveHudlessColor
+        ? slot.hudlessColorView
+        : frame.acquired.colorView;
+    if (!hudlessTexture.isValid() || !hudlessView.isValid()) {
+        return std::nullopt;
+    }
     return PresentationFrameResources{
-        frame.acquired.colorTexture,
-        frame.acquired.colorView,
+        hudlessTexture,
+        hudlessView,
         uiFrame.colorTexture,
         uiFrame.colorView,
         m_uiColorFormat,
@@ -307,14 +407,46 @@ bool PresentationController::endUiRenderingAndComposite(
         RhiResourceState::RenderTarget,
         RhiResourceState::ShaderRead
     });
-
-    commandList.textureBarrier({
-        resources->hudlessColorTexture,
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
+    if (m_backend.requiresFrameGenerationInputs()) {
+        if (slot.hudlessColorState != RhiResourceState::Undefined &&
+            slot.hudlessColorState != RhiResourceState::ShaderRead) {
+            return false;
+        }
+        commandList.textureBarrier({
+            frame.acquired.colorTexture,
+            RhiResourceState::Present,
+            RhiResourceState::TransferSrc
+        });
+        commandList.textureBarrier({
+            slot.hudlessColorTexture,
+            slot.hudlessColorState,
+            RhiResourceState::TransferDst
+        });
+        RhiTextureCopy copy;
+        copy.src = frame.acquired.colorTexture;
+        copy.dst = slot.hudlessColorTexture;
+        copy.extent = {resources->width, resources->height, 1u};
+        commandList.copyTexture(copy);
+        commandList.textureBarrier({
+            slot.hudlessColorTexture,
+            RhiResourceState::TransferDst,
+            RhiResourceState::ShaderRead
+        });
+        commandList.textureBarrier({
+            frame.acquired.colorTexture,
+            RhiResourceState::TransferSrc,
+            RhiResourceState::RenderTarget
+        });
+        slot.hudlessColorState = RhiResourceState::ShaderRead;
+    } else {
+        commandList.textureBarrier({
+            frame.acquired.colorTexture,
+            RhiResourceState::Present,
+            RhiResourceState::RenderTarget
+        });
+    }
     RhiColorAttachment swapchainAttachment;
-    swapchainAttachment.view = resources->hudlessColorView;
+    swapchainAttachment.view = frame.acquired.colorView;
     swapchainAttachment.loadOp = RhiLoadOp::Load;
     swapchainAttachment.storeOp = RhiStoreOp::Store;
     RhiRenderingInfo renderingInfo;
@@ -337,7 +469,7 @@ bool PresentationController::endUiRenderingAndComposite(
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     commandList.textureBarrier({
-        resources->hudlessColorTexture,
+        frame.acquired.colorTexture,
         RhiResourceState::RenderTarget,
         RhiResourceState::Present
     });
@@ -364,6 +496,28 @@ bool PresentationController::submitUiFrame(
         return false;
     }
     m_uiSlots[uiFrame.slotIndex].completionToken = completionToken;
+    return true;
+}
+
+bool PresentationController::prepareFrameGeneration(
+    const PresentationFrame& frame,
+    const PresentationUiFrame& uiFrame,
+    const TemporalFrameInput& temporalFrame) {
+    m_frameGenerationPrepared = false;
+    if (!m_backend.requiresFrameGenerationInputs()) {
+        return true;
+    }
+    const std::optional<PresentationFrameResources> resources =
+        frameResources(frame, uiFrame);
+    if (!resources.has_value() || validateTemporalFrame(temporalFrame).has_value() ||
+        !temporalFrame.renderingGameFrames ||
+        temporalFrame.frameIndex != Time::getFrameIndex() ||
+        temporalFrame.outputExtent.width != resources->width ||
+        temporalFrame.outputExtent.height != resources->height ||
+        !m_backend.prepareFrameGeneration(*resources, temporalFrame)) {
+        return false;
+    }
+    m_frameGenerationPrepared = true;
     return true;
 }
 
@@ -410,6 +564,16 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
 
     for (uint32_t index = 0u; index < slotCount; ++index) {
         UiSlot& slot = m_uiSlots[index];
+        RhiTextureDesc hudlessColorDesc;
+        hudlessColorDesc.debugName = "Presentation.HudlessColor";
+        hudlessColorDesc.format = m_uiColorFormat;
+        hudlessColorDesc.width = width;
+        hudlessColorDesc.height = height;
+        hudlessColorDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                                 rhiFlag(RhiTextureUsage::TransferDst);
+        slot.hudlessColorTexture =
+            m_uiDevice->createTexture(hudlessColorDesc, nullptr);
+
         RhiTextureDesc colorDesc;
         colorDesc.debugName = "Presentation.UiColor";
         colorDesc.format = m_uiColorFormat;
@@ -426,10 +590,18 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         depthDesc.height = height;
         depthDesc.usage = rhiFlag(RhiTextureUsage::DepthStencilAttachment);
         slot.depthTexture = m_uiDevice->createTexture(depthDesc, nullptr);
-        if (!slot.colorTexture.isValid() || !slot.depthTexture.isValid()) {
+        if (!slot.hudlessColorTexture.isValid() ||
+            !slot.colorTexture.isValid() || !slot.depthTexture.isValid()) {
             destroyUiTargets();
             return false;
         }
+
+        RhiTextureViewDesc hudlessColorViewDesc;
+        hudlessColorViewDesc.texture = slot.hudlessColorTexture;
+        hudlessColorViewDesc.viewType = RhiTextureViewType::Texture2D;
+        hudlessColorViewDesc.format = m_uiColorFormat;
+        slot.hudlessColorView =
+            m_uiDevice->createTextureView(hudlessColorViewDesc);
 
         RhiTextureViewDesc colorViewDesc;
         colorViewDesc.texture = slot.colorTexture;
@@ -442,7 +614,8 @@ bool PresentationController::ensureUiTargets(const uint32_t width,
         depthViewDesc.viewType = RhiTextureViewType::Texture2D;
         depthViewDesc.format = m_uiDepthFormat;
         slot.depthView = m_uiDevice->createTextureView(depthViewDesc);
-        if (!slot.colorView.isValid() || !slot.depthView.isValid()) {
+        if (!slot.hudlessColorView.isValid() ||
+            !slot.colorView.isValid() || !slot.depthView.isValid()) {
             destroyUiTargets();
             return false;
         }
@@ -559,8 +732,14 @@ void PresentationController::destroyUiTargets() {
         bindGroup = {};
     }
     for (UiSlot& slot : m_uiSlots) {
+        if (slot.hudlessColorView.isValid()) {
+            m_uiDevice->destroyTextureView(slot.hudlessColorView);
+        }
         if (slot.colorView.isValid()) m_uiDevice->destroyTextureView(slot.colorView);
         if (slot.depthView.isValid()) m_uiDevice->destroyTextureView(slot.depthView);
+        if (slot.hudlessColorTexture.isValid()) {
+            m_uiDevice->destroyTexture(slot.hudlessColorTexture);
+        }
         if (slot.colorTexture.isValid()) m_uiDevice->destroyTexture(slot.colorTexture);
         if (slot.depthTexture.isValid()) m_uiDevice->destroyTexture(slot.depthTexture);
         slot = {};
@@ -636,7 +815,11 @@ PresentationFrame PresentationController::beginFrameExtent(const int width,
     if (m_frameOpen) {
         return failBegin(PresentationFailure::FrameAlreadyOpen);
     }
+    m_frameGenerationPrepared = false;
     if (width <= 0 || height <= 0) {
+        if (!suspendFrameGenerationForSwapchainChange()) {
+            return failBegin(PresentationFailure::FrameGenerationRejected);
+        }
         ++m_statistics.skippedFrames;
         m_statistics.lastAcquireStatus = RhiFrameStatus::Minimized;
         m_statistics.lastFailure = PresentationFailure::None;
@@ -652,6 +835,9 @@ PresentationFrame PresentationController::beginFrameExtent(const int width,
     const uint32_t requestedWidth = static_cast<uint32_t>(width);
     const uint32_t requestedHeight = static_cast<uint32_t>(height);
     if (!m_extentValid || requestedWidth != m_width || requestedHeight != m_height) {
+        if (!suspendFrameGenerationForSwapchainChange()) {
+            return failBegin(PresentationFailure::FrameGenerationRejected);
+        }
         if (!m_backend.resize(requestedWidth, requestedHeight)) {
             return failBegin(PresentationFailure::ResizeRejected);
         }
@@ -665,6 +851,17 @@ PresentationFrame PresentationController::beginFrameExtent(const int width,
     RhiFrameAcquireResult acquired = m_backend.acquireFrame();
     m_statistics.lastAcquireStatus = acquired.status;
     if (isRenderableAcquireStatus(acquired.status)) {
+        if (!resumeFrameGenerationAfterAcquire()) {
+            const bool canceled = m_backend.cancelFrame({
+                acquired.frameIndex,
+                acquired.imageIndex,
+                Time::getFrameIndex()
+            });
+            return failBegin(
+                canceled
+                    ? PresentationFailure::FrameGenerationRejected
+                    : PresentationFailure::FrameCancellationRejected);
+        }
         m_frameOpen = true;
         m_openFrame = acquired;
         m_openRealFrameNumber = ++m_statistics.realFramesAcquired;
@@ -697,7 +894,19 @@ PresentationController::applyPendingDisplayState() {
     if (m_frameOpen) {
         return PresentationFailure::FrameAlreadyOpen;
     }
+    if (m_requestedFrameGenerationEnabled.has_value()) {
+        const bool enabled = *m_requestedFrameGenerationEnabled;
+        if (!m_backend.setFrameGenerationEnabled(enabled) ||
+            m_backend.frameGenerationEnabled() != enabled) {
+            return PresentationFailure::FrameGenerationRejected;
+        }
+        m_requestedFrameGenerationEnabled.reset();
+        m_statistics.mode = m_backend.mode();
+    }
     if (m_requestedFullscreenEnabled.has_value()) {
+        if (!suspendFrameGenerationForSwapchainChange()) {
+            return PresentationFailure::FrameGenerationRejected;
+        }
         if (m_window == nullptr) {
             return PresentationFailure::WindowStateUnavailable;
         }
@@ -712,6 +921,9 @@ PresentationController::applyPendingDisplayState() {
         m_statistics.fullscreenEnabled = enabled;
     }
     if (m_requestedVsyncEnabled.has_value()) {
+        if (!suspendFrameGenerationForSwapchainChange()) {
+            return PresentationFailure::FrameGenerationRejected;
+        }
         const bool enabled = *m_requestedVsyncEnabled;
         if (!m_backend.setVsyncEnabled(enabled) ||
             m_backend.vsyncEnabled() != enabled) {
@@ -722,11 +934,44 @@ PresentationController::applyPendingDisplayState() {
         ++m_statistics.vsyncChanges;
         m_statistics.vsyncEnabled = enabled;
     }
+    if (m_requestedRenderingGameFrames.has_value() &&
+        !m_resumeFrameGeneration) {
+        const bool renderingGameFrames = *m_requestedRenderingGameFrames;
+        if (!m_backend.setRenderingGameFrames(renderingGameFrames)) {
+            return PresentationFailure::FrameGenerationRejected;
+        }
+        m_requestedRenderingGameFrames.reset();
+        m_statistics.mode = m_backend.mode();
+    }
     m_statistics.vsyncEnabled = m_backend.vsyncEnabled();
     if (m_window != nullptr) {
         m_statistics.fullscreenEnabled = m_window->isFullscreen();
     }
     return std::nullopt;
+}
+
+bool PresentationController::suspendFrameGenerationForSwapchainChange() {
+    if (!m_backend.frameGenerationActive()) {
+        return true;
+    }
+    if (!m_backend.setRenderingGameFrames(false)) {
+        return false;
+    }
+    m_resumeFrameGeneration = m_renderingGameFrames;
+    return true;
+}
+
+bool PresentationController::resumeFrameGenerationAfterAcquire() {
+    if (!m_resumeFrameGeneration) {
+        return true;
+    }
+    if (!m_backend.setRenderingGameFrames(true)) {
+        return false;
+    }
+    m_resumeFrameGeneration = false;
+    m_requestedRenderingGameFrames.reset();
+    m_statistics.mode = m_backend.mode();
+    return true;
 }
 
 PresentationCompleteResult PresentationController::presentFrame(
@@ -739,6 +984,13 @@ PresentationCompleteResult PresentationController::presentFrame(
         frame.acquired.frameIndex != m_openFrame.frameIndex ||
         frame.acquired.imageIndex != m_openFrame.imageIndex) {
         return failPresent(PresentationFailure::FrameIdentityMismatch);
+    }
+    if (m_backend.requiresFrameGenerationInputs() &&
+        !m_frameGenerationPrepared) {
+        if (!cancelFrame(frame)) {
+            return failPresent(PresentationFailure::FrameCancellationRejected);
+        }
+        return failPresent(PresentationFailure::FrameGenerationInputsRejected);
     }
 
     const PresentationBackendPresentResult backendResult = m_backend.presentFrame({
@@ -780,6 +1032,36 @@ PresentationCompleteResult PresentationController::presentFrame(
         };
     }
     return failPresent(PresentationFailure::PresentRejected, status);
+}
+
+bool PresentationController::cancelFrame(const PresentationFrame& frame) {
+    if (!m_frameOpen || !frame.shouldRender() ||
+        frame.realFrameNumber != m_openRealFrameNumber ||
+        frame.acquired.frameIndex != m_openFrame.frameIndex ||
+        frame.acquired.imageIndex != m_openFrame.imageIndex) {
+        return false;
+    }
+    bool interpolationSuspended = true;
+    if (m_backend.frameGenerationActive()) {
+        interpolationSuspended =
+            m_backend.setRenderingGameFrames(false);
+        if (interpolationSuspended) {
+            m_resumeFrameGeneration = m_renderingGameFrames;
+        }
+    }
+    const bool frameReleased = m_backend.cancelFrame({
+        m_openFrame.frameIndex,
+        m_openFrame.imageIndex,
+        Time::getFrameIndex()
+    });
+    if (!frameReleased) {
+        return false;
+    }
+    m_frameOpen = false;
+    m_openFrame = {};
+    m_openRealFrameNumber = 0u;
+    m_frameGenerationPrepared = false;
+    return interpolationSuspended;
 }
 
 PresentationFrame PresentationController::failBegin(
@@ -839,6 +1121,12 @@ const char* presentationFailureMessage(const PresentationFailure failure) {
         return "native window rejected the queued fullscreen state";
     case PresentationFailure::WindowStateUnavailable:
         return "presentation controller is not bound to the requested native window";
+    case PresentationFailure::FrameGenerationRejected:
+        return "presentation backend rejected the DLSS Frame Generation state";
+    case PresentationFailure::FrameGenerationInputsRejected:
+        return "presentation backend rejected the DLSS Frame Generation inputs";
+    case PresentationFailure::FrameCancellationRejected:
+        return "presentation backend failed to release the acquired frame";
     case PresentationFailure::FrameAlreadyOpen:
         return "presentation controller already owns an acquired real frame";
     case PresentationFailure::FrameNotOpen:

@@ -7,6 +7,10 @@
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
 #include "../../renderer/presentation/PresentationController.h"
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+#include "../../renderer/upscaling/DlssFrameGeneration.h"
+#include "../../renderer/upscaling/StreamlineRuntime.h"
+#endif
 #include "../session/GameSession.h"
 #include "../../ui/core/UIRenderer.h"
 #include "../../ecs/GameplayScene.h"
@@ -18,6 +22,8 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <iostream>
+#include <optional>
 
 #ifdef MECRAFT_DEBUG
 #include "../../engine/platform/Window.h"
@@ -41,6 +47,9 @@ struct GameplayRenderRuntime::Impl {
     std::unique_ptr<PresentationController> presentationController;
     RainRenderer* rainRenderer = nullptr;
     ParticleSystem* particleSystem = nullptr;
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    std::optional<StreamlineReflexMode> pendingReflexMode;
+#endif
 
 #ifdef MECRAFT_DEBUG
     Dashboard dashboard;
@@ -48,6 +57,80 @@ struct GameplayRenderRuntime::Impl {
     Dashboard::FrameProfilerStats dashboardProfilerStats;
 #endif
 };
+
+namespace {
+
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+[[nodiscard]] StreamlineReflexMode toStreamlineReflexMode(
+    const ReflexLowLatencyMode mode) {
+    switch (mode) {
+        case ReflexLowLatencyMode::Off:
+            return StreamlineReflexMode::Off;
+        case ReflexLowLatencyMode::On:
+            return StreamlineReflexMode::LowLatency;
+        case ReflexLowLatencyMode::OnWithBoost:
+            return StreamlineReflexMode::LowLatencyWithBoost;
+    }
+    return StreamlineReflexMode::Off;
+}
+
+[[nodiscard]] bool applyNvidiaFeatureSettings(
+    const RenderSettings& settings,
+    PresentationController& presentation,
+    std::optional<StreamlineReflexMode>& pendingReflexMode) {
+    const bool frameGenerationEnabled =
+        settings.nvidia.frameGeneration == FrameGenerationType::Dlss;
+    if (frameGenerationEnabled &&
+        settings.nvidia.reflexMode == ReflexLowLatencyMode::Off) {
+        std::cerr << "GameplayRenderRuntime: DLSS Frame Generation requires NVIDIA Reflex\n";
+        return false;
+    }
+    if (frameGenerationEnabled &&
+        (settings.pipelineMode != PipelineMode::Deferred ||
+         (settings.upscale.fsr1Enabled &&
+          settings.upscale.fsr1RenderScale < 0.999f))) {
+        std::cerr << "GameplayRenderRuntime: the selected renderer cannot produce DLSS Frame Generation inputs\n";
+        return false;
+    }
+
+    StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    const StreamlineReflexMode reflexMode =
+        toStreamlineReflexMode(settings.nvidia.reflexMode);
+    const bool frameGenerationWasEnabled =
+        presentation.frameGenerationSwapchainEnabled();
+    if (frameGenerationEnabled) {
+        if (!presentation.frameGenerationAvailable()) {
+            std::cerr << "GameplayRenderRuntime: DLSS Frame Generation is unavailable\n";
+            return false;
+        }
+        if (!streamline.configureReflex(reflexMode)) {
+            std::cerr << streamline.lastError() << '\n';
+            return false;
+        }
+        pendingReflexMode.reset();
+        return presentation.requestFrameGenerationEnabled(true);
+    }
+
+    if (presentation.frameGenerationAvailable() &&
+        !presentation.requestFrameGenerationEnabled(false)) {
+        std::cerr << "GameplayRenderRuntime: the frame-generation disable request was rejected\n";
+        return false;
+    }
+    if (reflexMode == StreamlineReflexMode::Off &&
+        frameGenerationWasEnabled) {
+        pendingReflexMode = reflexMode;
+        return true;
+    }
+    if (!streamline.configureReflex(reflexMode)) {
+        std::cerr << streamline.lastError() << '\n';
+        return false;
+    }
+    pendingReflexMode.reset();
+    return true;
+}
+#endif
+
+} // namespace
 
 // --------------------------------------------------------------------------
 // Lifecycle
@@ -74,7 +157,19 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& firstPersonHeldItemRenderer = m_impl->firstPersonHeldItemRenderer;
     auto& humanoidRenderer = m_impl->humanoidRenderer;
 
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (rhiDevice.backend() == RhiBackend::Vulkan) {
+        m_impl->presentationBackend =
+            createDlssFrameGenerationPresentationBackend(rhiDevice);
+    } else {
+        m_impl->presentationBackend = createNativePresentationBackend(rhiDevice);
+    }
+#else
     m_impl->presentationBackend = createNativePresentationBackend(rhiDevice);
+#endif
+    if (m_impl->presentationBackend == nullptr) {
+        return false;
+    }
     m_impl->presentationController = std::make_unique<PresentationController>(
         *m_impl->presentationBackend);
     if (!m_impl->presentationController->initUiComposition(rhiDevice)) {
@@ -104,8 +199,25 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
         &renderer.getShadowRenderer(),
         initialSettings
     );
-    renderScene.setSettingsChangedCallback([](const RenderSettings& settings) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (rhiDevice.backend() == RhiBackend::Vulkan &&
+        !applyNvidiaFeatureSettings(
+            initialSettings, *m_impl->presentationController,
+            m_impl->pendingReflexMode)) {
+        return false;
+    }
+#endif
+    renderScene.setSettingsChangedCallback([this](const RenderSettings& settings) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        if (m_impl->resourceHub.rhiDevice().backend() == RhiBackend::Vulkan &&
+            !applyNvidiaFeatureSettings(
+                settings, *m_impl->presentationController,
+                m_impl->pendingReflexMode)) {
+            return false;
+        }
+#endif
         app::saveRenderSettings(settings);
+        return true;
     });
 
     // Inject RenderScene services into RenderResourceHub
@@ -154,6 +266,15 @@ void GameplayRenderRuntime::shutdown() {
 #ifdef MECRAFT_DEBUG
     m_impl->dashboard.shutdown();
 #endif
+    if (m_impl->presentationBackend != nullptr &&
+        m_impl->presentationBackend->frameGenerationEnabled() &&
+        !m_impl->presentationBackend->setFrameGenerationEnabled(false)) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+        std::cerr << StreamlineRuntime::instance().lastError() << '\n';
+#else
+        std::cerr << "GameplayRenderRuntime: failed to disable frame generation during shutdown\n";
+#endif
+    }
     if (m_impl->presentationController != nullptr) {
         m_impl->presentationController->shutdownUiComposition();
     }
@@ -194,6 +315,26 @@ FirstPersonHeldItemRenderer& GameplayRenderRuntime::firstPersonHeldItemRenderer(
 
 PresentationController& GameplayRenderRuntime::presentationController() {
     return *m_impl->presentationController;
+}
+
+bool GameplayRenderRuntime::applyFrameBoundaryNvidiaSettings() {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (!m_impl->pendingReflexMode.has_value()) {
+        return true;
+    }
+    if (m_impl->presentationController == nullptr ||
+        m_impl->presentationController->frameGenerationSwapchainEnabled()) {
+        std::cerr << "GameplayRenderRuntime: NVIDIA Reflex cannot be disabled while DLSS Frame Generation is enabled\n";
+        return false;
+    }
+    StreamlineRuntime& streamline = StreamlineRuntime::instance();
+    if (!streamline.configureReflex(*m_impl->pendingReflexMode)) {
+        std::cerr << streamline.lastError() << '\n';
+        return false;
+    }
+    m_impl->pendingReflexMode.reset();
+#endif
+    return true;
 }
 
 #ifdef MECRAFT_DEBUG

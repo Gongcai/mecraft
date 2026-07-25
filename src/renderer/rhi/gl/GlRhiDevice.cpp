@@ -5894,6 +5894,29 @@ void GlRhiDevice::waitIdle() {
     }
 }
 
+bool GlRhiDevice::cancelFrame(const RhiPresentInfo& info) {
+    if (!m_initialized || m_data == nullptr ||
+        std::this_thread::get_id() != m_deviceThread ||
+        !m_frameAcquired || info.frameIndex != m_acquiredFrameIndex ||
+        info.imageIndex != m_acquiredImageIndex) {
+        logRhiError("cancelFrame requires the currently acquired frame identity");
+        return false;
+    }
+    glFinish();
+    GlTextureRecord* swapchain = recordForHandle(
+        m_data->textures, m_data->textureRecords,
+        m_data->swapchainColorTexture);
+    if (swapchain == nullptr) {
+        logRhiError("cancelFrame requires a live swapchain color texture");
+        return false;
+    }
+    setTextureRangeState(
+        *swapchain, {0u, 1u, 0u, 1u}, RhiResourceState::Present);
+    m_frameAcquired = false;
+    reclaimAllRetiredResources(*m_data);
+    return true;
+}
+
 RhiFrameStatus GlRhiDevice::presentFrame(const RhiPresentInfo& info) {
     if (!m_initialized || std::this_thread::get_id() != m_deviceThread) {
         logRhiError("presentFrame requires an initialized device on the device thread");

@@ -257,6 +257,12 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
     // Obtain renderer references from the aggregate.
     auto& renderer = renderRuntime.resourceHub();
     PresentationController& presentation = renderRuntime.presentationController();
+    const bool renderingGameFrames = !session.stateMachine().pausesSimulation();
+    if (!presentation.requestRenderingGameFrames(renderingGameFrames)) {
+        MECRAFT_LOG_STREAM(std::cerr
+            << "[GameFrameOrchestrator] Failed to update frame-generation activity\n");
+        return false;
+    }
     const PresentationFrame presentationFrame = presentation.beginFrame(window);
     if (!presentationFrame.shouldContinue()) {
         MECRAFT_LOG_STREAM(std::cerr
@@ -264,10 +270,30 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
             << presentationFailureMessage(presentationFrame.failure) << '\n');
         return false;
     }
+    const auto cancelAcquiredFrame = [&presentation, &presentationFrame]() {
+        return !presentationFrame.shouldRender() ||
+               presentation.cancelFrame(presentationFrame);
+    };
+    if (!renderRuntime.applyFrameBoundaryNvidiaSettings()) {
+        MECRAFT_LOG_STREAM(std::cerr
+            << "[GameFrameOrchestrator] Failed to apply NVIDIA frame-boundary settings\n");
+        if (!cancelAcquiredFrame()) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "[GameFrameOrchestrator] Failed to cancel the acquired presentation frame\n");
+        }
+        return false;
+    }
     if (!presentationFrame.shouldRender()) {
         return true;
     }
     const RhiFrameAcquireResult& frame = presentationFrame.acquired;
+    const auto failOpenFrame = [&cancelAcquiredFrame]() {
+        if (!cancelAcquiredFrame()) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "[GameFrameOrchestrator] Failed to cancel the acquired presentation frame\n");
+        }
+        return false;
+    };
 
     auto& renderScene = renderRuntime.renderScene();
     auto& firstPersonHeldItemRenderer = renderRuntime.firstPersonHeldItemRenderer();
@@ -339,7 +365,8 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         &firstPersonHeldItemRenderer,
         snap.inventory,
         &firstPersonMotion,
-        snap.inventory != nullptr && !snap.renderLocalPlayerModel
+        snap.inventory != nullptr && !snap.renderLocalPlayerModel,
+        !session.stateMachine().pausesSimulation()
     };
     renderScene.renderGameplayFrame(renderRequest);
 #ifdef MECRAFT_DEBUG
@@ -355,21 +382,22 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
         m_preUiCallback = nullptr; // One-shot
     }
 
+    std::optional<PresentationUiFrame> uiFrame;
+
     // G3: Delegate UI rendering to GameplayHudPresenter
     if (hudPresenter) {
-        const std::optional<PresentationUiFrame> uiFrame =
-            presentation.acquireUiFrame(presentationFrame);
+        uiFrame = presentation.acquireUiFrame(presentationFrame);
         if (!uiFrame.has_value()) {
             MECRAFT_LOG_STREAM(std::cerr
                 << "[GameFrameOrchestrator] Failed to acquire the independent UI target\n");
-            return false;
+            return failOpenFrame();
         }
         UIRenderContext uiContext = hudPresenter->prepareRenderContext(
             snap, renderer.rhiDevice(),
             static_cast<int>(frame.width), static_cast<int>(frame.height));
         RhiCommandList* uiCommandList = nullptr;
         if (!prepareUiOverlayFrame(renderer, *hudPresenter, uiCommandList)) {
-            return false;
+            return failOpenFrame();
         }
         uiContext.commandList = uiCommandList;
 
@@ -396,14 +424,14 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
             dashboardPrepareMs = std::chrono::duration<double, std::milli>(
                 std::chrono::steady_clock::now() - dashboardPrepareStart).count();
             if (!dashboardPrepared) {
-                return false;
+                return failOpenFrame();
             }
         }
 #endif
         if (!presentation.beginUiRendering(*uiCommandList, *uiFrame)) {
             MECRAFT_LOG_STREAM(std::cerr
                 << "[GameFrameOrchestrator] Failed to begin independent UI rendering\n");
-            return false;
+            return failOpenFrame();
         }
         hudPresenter->renderPrepared(uiContext, session.stateMachine());
 #ifdef MECRAFT_DEBUG
@@ -419,12 +447,23 @@ bool GameFrameOrchestrator::renderFrame(GameSession& session,
                 *uiFrame)) {
             MECRAFT_LOG_STREAM(std::cerr
                 << "[GameFrameOrchestrator] Failed to record independent UI composition\n");
-            return false;
+            return failOpenFrame();
         }
         if (!presentation.submitUiFrame(*uiCommandList, *uiFrame)) {
             MECRAFT_LOG_STREAM(std::cerr
                 << "[GameFrameOrchestrator] Failed to submit independent UI composition\n");
-            return false;
+            return failOpenFrame();
+        }
+    }
+    if (presentation.frameGenerationActive()) {
+        const std::optional<TemporalFrameInput>& temporalFrame =
+            renderScene.temporalFrameInput();
+        if (!uiFrame.has_value() || !temporalFrame.has_value() ||
+            !presentation.prepareFrameGeneration(
+                presentationFrame, *uiFrame, *temporalFrame)) {
+            MECRAFT_LOG_STREAM(std::cerr
+                << "[GameFrameOrchestrator] Failed to prepare DLSS Frame Generation inputs\n");
+            return failOpenFrame();
         }
     }
 #ifdef MECRAFT_DEBUG

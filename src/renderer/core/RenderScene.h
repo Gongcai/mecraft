@@ -110,6 +110,7 @@ struct RenderGameplayFrameRequest {
     const Inventory* firstPersonInventory = nullptr;
     const FirstPersonHeldItemMotion* firstPersonHeldItemMotion = nullptr;
     bool renderFirstPersonHeldItem = false;
+    bool renderingGameFrames = true;
 };
 
 /// Entry point for all rendering
@@ -141,10 +142,17 @@ public:
     // Settings
     void setSettings(const RenderSettings& settings);
     const RenderSettings& getSettings() const;
-    void setSettingsChangedCallback(std::function<void(const RenderSettings&)> callback);
+    /// Installs a settings transaction callback that can reject invalid runtime changes.
+    /// @param callback Invoked before renderer state changes; return false to reject the settings.
+    void setSettingsChangedCallback(
+        std::function<bool(const RenderSettings&)> callback);
     [[nodiscard]] bool isFsr1Supported() const { return m_fsr1Supported; }
     [[nodiscard]] bool isFsr31Supported() const;
     [[nodiscard]] bool isDlssSupported() const;
+    /// Reports whether NVIDIA Reflex is available on the active Vulkan device.
+    [[nodiscard]] bool isReflexSupported() const;
+    /// Reports whether current renderer settings produce dense temporal inputs for DLSS-G.
+    [[nodiscard]] bool supportsFrameGenerationInputs() const;
 
     // Sub-renderer injection (temporary until ECS-driven)
     void setBlockEntityRenderer(BlockEntityRenderer* ber);
@@ -261,7 +269,7 @@ private:
 
     // Configuration
     RenderSettings m_settings;
-    std::function<void(const RenderSettings&)> m_settingsChangedCallback;
+    std::function<bool(const RenderSettings&)> m_settingsChangedCallback;
 
     // Shared infrastructure
     SharedRenderResources m_shared;

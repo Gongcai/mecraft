@@ -56,6 +56,22 @@ public:
     [[nodiscard]] static std::optional<VkCommandBuffer> commandBuffer(
         const VkRhiDevice& device,
         const RhiCommandList& commandList);
+    /// Queues one SDK-owned timeline semaphore wait before the next graphics submission.
+    /// @param device Vulkan RHI device receiving the external dependency.
+    /// @param semaphore Opaque Vulkan timeline semaphore returned by the SDK.
+    /// @param value Timeline value that must complete before frame resources are reused.
+    /// @return True when the dependency was recorded for the next graphics submission.
+    [[nodiscard]] static bool queueExternalTimelineWait(
+        VkRhiDevice& device,
+        void* semaphore,
+        uint64_t value);
+    /// Recreates the main swapchain across a Streamline DLSS-G load-state change.
+    /// @param device Vulkan RHI device that owns the main swapchain.
+    /// @param frameGenerationLoaded Desired DLSS-G plugin state for the new swapchain.
+    /// @return True when the old swapchain was destroyed and the new one was created.
+    [[nodiscard]] static bool recreateFrameGenerationSwapchain(
+        VkRhiDevice& device,
+        bool frameGenerationLoaded);
     [[nodiscard]] static VkPipelineStageFlags2 resourceStages(RhiResourceState state);
     [[nodiscard]] static VkAccessFlags2 resourceAccess(RhiResourceState state);
     [[nodiscard]] static VkImageLayout resourceLayout(RhiResourceState state);

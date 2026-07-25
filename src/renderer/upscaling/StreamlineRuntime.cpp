@@ -4,12 +4,14 @@
 
 #include <sl.h>
 #include <sl_dlss.h>
+#include <sl_dlss_g.h>
 #include <sl_helpers_vk.h>
 #include <sl_pcl.h>
 #include <sl_reflex.h>
 #include <sl_security.h>
 
 #include <Windows.h>
+#include <vulkan/vulkan_win32.h>
 
 #include <array>
 #include <cstddef>
@@ -132,6 +134,30 @@ sl::DLSSOptions makeDlssOptions(const StreamlineDlssOptions& options) {
     return result;
 }
 
+sl::DLSSGOptions makeDlssFrameGenerationOptions(
+    const StreamlineDlssFrameGenerationOptions& options) {
+    sl::DLSSGOptions result{};
+    result.mode = options.enabled
+        ? sl::DLSSGMode::eOn
+        : sl::DLSSGMode::eOff;
+    result.numFramesToGenerate = 1u;
+    result.flags = sl::DLSSGFlags::eRetainResourcesWhenOff;
+    result.numBackBuffers = options.backBufferCount;
+    result.mvecDepthWidth = options.renderWidth;
+    result.mvecDepthHeight = options.renderHeight;
+    result.colorWidth = options.outputWidth;
+    result.colorHeight = options.outputHeight;
+    result.colorBufferFormat = static_cast<uint32_t>(options.colorFormat);
+    result.mvecBufferFormat = static_cast<uint32_t>(options.motionVectorFormat);
+    result.depthBufferFormat = static_cast<uint32_t>(options.depthFormat);
+    result.hudLessBufferFormat = static_cast<uint32_t>(options.hudlessFormat);
+    result.uiBufferFormat = static_cast<uint32_t>(options.uiFormat);
+    result.queueParallelismMode =
+        sl::DLSSGQueueParallelismMode::eBlockNoClientQueues;
+    result.enableUserInterfaceRecomposition = sl::Boolean::eTrue;
+    return result;
+}
+
 void copyMatrix(const std::array<float, 16u>& source, sl::float4x4& destination) {
     for (uint32_t row = 0u; row < 4u; ++row) {
         destination[row] = {
@@ -141,6 +167,46 @@ void copyMatrix(const std::array<float, 16u>& source, sl::float4x4& destination)
             source[row * 4u + 3u]
         };
     }
+}
+
+sl::Constants makeFrameConstants(
+    const StreamlineDlssFrameConstants& source) {
+    sl::Constants constants{};
+    copyMatrix(source.cameraViewToClip, constants.cameraViewToClip);
+    copyMatrix(source.clipToCameraView, constants.clipToCameraView);
+    copyMatrix(source.clipToPrevClip, constants.clipToPrevClip);
+    copyMatrix(source.prevClipToClip, constants.prevClipToClip);
+    constants.jitterOffset = {
+        source.jitterOffset[0], source.jitterOffset[1]};
+    constants.mvecScale = {
+        source.motionVectorScale[0], source.motionVectorScale[1]};
+    constants.cameraPinholeOffset = {0.0f, 0.0f};
+    constants.cameraPos = {
+        source.cameraPosition[0],
+        source.cameraPosition[1],
+        source.cameraPosition[2]};
+    constants.cameraUp = {
+        source.cameraUp[0], source.cameraUp[1], source.cameraUp[2]};
+    constants.cameraRight = {
+        source.cameraRight[0], source.cameraRight[1], source.cameraRight[2]};
+    constants.cameraFwd = {
+        source.cameraForward[0],
+        source.cameraForward[1],
+        source.cameraForward[2]};
+    constants.cameraNear = source.cameraNear;
+    constants.cameraFar = source.cameraFar;
+    constants.cameraFOV = source.verticalFovRadians;
+    constants.cameraAspectRatio = source.cameraAspectRatio;
+    constants.depthInverted = source.depthInverted
+        ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+    constants.cameraMotionIncluded = sl::Boolean::eTrue;
+    constants.motionVectors3D = sl::Boolean::eFalse;
+    constants.reset = source.reset
+        ? sl::Boolean::eTrue : sl::Boolean::eFalse;
+    constants.orthographicProjection = sl::Boolean::eFalse;
+    constants.motionVectorsDilated = sl::Boolean::eTrue;
+    constants.motionVectorsJittered = sl::Boolean::eFalse;
+    return constants;
 }
 
 sl::Resource makeDlssResource(
@@ -180,6 +246,8 @@ struct StreamlineRuntime::Implementation {
     PFun_slShutdown* shutdown = nullptr;
     PFun_slGetFeatureRequirements* getFeatureRequirements = nullptr;
     PFun_slIsFeatureSupported* isFeatureSupported = nullptr;
+    PFun_slIsFeatureLoaded* isFeatureLoaded = nullptr;
+    PFun_slSetFeatureLoaded* setFeatureLoaded = nullptr;
     PFun_slSetVulkanInfo* setVulkanInfo = nullptr;
     PFun_slGetFeatureFunction* getFeatureFunction = nullptr;
     PFun_slGetNewFrameToken* getNewFrameToken = nullptr;
@@ -195,7 +263,17 @@ struct StreamlineRuntime::Implementation {
     PFun_slPCLGetState* pclGetState = nullptr;
     PFun_slPCLSetMarker* pclSetMarker = nullptr;
     PFun_slPCLSetOptions* pclSetOptions = nullptr;
+    PFun_slDLSSGGetState* dlssGGetState = nullptr;
+    PFun_slDLSSGSetOptions* dlssGSetOptions = nullptr;
+    PFN_vkGetInstanceProcAddr getInstanceProcAddr = nullptr;
     PFN_vkGetDeviceProcAddr getDeviceProcAddr = nullptr;
+    PFN_vkCreateWin32SurfaceKHR createWin32Surface = nullptr;
+    PFN_vkDestroySurfaceKHR destroySurface = nullptr;
+    PFN_vkCreateSwapchainKHR createSwapchain = nullptr;
+    PFN_vkDestroySwapchainKHR destroySwapchain = nullptr;
+    PFN_vkGetSwapchainImagesKHR getSwapchainImages = nullptr;
+    PFN_vkAcquireNextImageKHR acquireNextImage = nullptr;
+    PFN_vkDeviceWaitIdle deviceWaitIdle = nullptr;
     PFN_vkQueuePresentKHR queuePresent = nullptr;
     StreamlineDlssOptions cachedDlssOptions;
     StreamlineDlssOptimalSettings cachedDlssSettings;
@@ -206,9 +284,14 @@ struct StreamlineRuntime::Implementation {
     StreamlineReflexState reflexState;
     uint32_t currentFrameIndex = 0u;
     uint32_t emittedPclMarkers = 0u;
+    uint32_t constantsFrameIndex = 0u;
+    uint32_t constantsViewport = 0u;
     bool initialized = false;
     bool vulkanDeviceSet = false;
     bool reflexFrameActive = false;
+    bool constantsSet = false;
+    bool dlssGSupported = false;
+    bool dlssGLoaded = false;
 };
 
 StreamlineRuntime& StreamlineRuntime::instance() {
@@ -266,6 +349,10 @@ bool StreamlineRuntime::initialize(const std::filesystem::path& runtimeDirectory
         GetProcAddress(m_impl->module, "slGetFeatureRequirements"));
     m_impl->isFeatureSupported = reinterpret_cast<PFun_slIsFeatureSupported*>(
         GetProcAddress(m_impl->module, "slIsFeatureSupported"));
+    m_impl->isFeatureLoaded = reinterpret_cast<PFun_slIsFeatureLoaded*>(
+        GetProcAddress(m_impl->module, "slIsFeatureLoaded"));
+    m_impl->setFeatureLoaded = reinterpret_cast<PFun_slSetFeatureLoaded*>(
+        GetProcAddress(m_impl->module, "slSetFeatureLoaded"));
     m_impl->setVulkanInfo = reinterpret_cast<PFun_slSetVulkanInfo*>(
         GetProcAddress(m_impl->module, "slSetVulkanInfo"));
     m_impl->getFeatureFunction = reinterpret_cast<PFun_slGetFeatureFunction*>(
@@ -280,14 +367,20 @@ bool StreamlineRuntime::initialize(const std::filesystem::path& runtimeDirectory
         GetProcAddress(m_impl->module, "slEvaluateFeature"));
     m_impl->freeResources = reinterpret_cast<PFun_slFreeResources*>(
         GetProcAddress(m_impl->module, "slFreeResources"));
+    m_impl->getInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(
+        GetProcAddress(m_impl->module, "vkGetInstanceProcAddr"));
     m_impl->getDeviceProcAddr = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
         GetProcAddress(m_impl->module, "vkGetDeviceProcAddr"));
     if (m_impl->init == nullptr || m_impl->shutdown == nullptr ||
         m_impl->getFeatureRequirements == nullptr ||
-        m_impl->isFeatureSupported == nullptr || m_impl->setVulkanInfo == nullptr ||
+        m_impl->isFeatureSupported == nullptr ||
+        m_impl->isFeatureLoaded == nullptr ||
+        m_impl->setFeatureLoaded == nullptr ||
+        m_impl->setVulkanInfo == nullptr ||
         m_impl->getFeatureFunction == nullptr || m_impl->getNewFrameToken == nullptr ||
         m_impl->setConstants == nullptr || m_impl->setTagForFrame == nullptr ||
         m_impl->evaluateFeature == nullptr || m_impl->freeResources == nullptr ||
+        m_impl->getInstanceProcAddr == nullptr ||
         m_impl->getDeviceProcAddr == nullptr) {
         m_impl->error = "StreamlineRuntime: the interposer is missing required exports";
         FreeLibrary(m_impl->module);
@@ -328,6 +421,17 @@ bool StreamlineRuntime::initialize(const std::filesystem::path& runtimeDirectory
         return false;
     }
     m_impl->initialized = true;
+    bool dlssGLoaded = false;
+    const sl::Result loadedResult = m_impl->isFeatureLoaded(
+        sl::kFeatureDLSS_G, dlssGLoaded);
+    if (loadedResult != sl::Result::eOk) {
+        const std::string error = streamlineResultMessage(
+            "slIsFeatureLoaded(DLSS-G)", loadedResult);
+        shutdown();
+        m_impl->error = error;
+        return false;
+    }
+    m_impl->dlssGLoaded = dlssGLoaded;
     m_impl->runtimeDirectory = directory;
     m_impl->requirements = {};
 
@@ -417,6 +521,10 @@ bool StreamlineRuntime::setVulkanDevice(const StreamlineVulkanDeviceInfo& info) 
     for (size_t i = 0u; i < features.size(); ++i) {
         const sl::Result supportResult =
             m_impl->isFeatureSupported(features[i], adapterInfo);
+        if (features[i] == sl::kFeatureDLSS_G) {
+            m_impl->dlssGSupported = supportResult == sl::Result::eOk;
+            continue;
+        }
         if (supportResult != sl::Result::eOk) {
             m_impl->error = std::string("StreamlineRuntime: ") + featureNames[i] +
                             " is unavailable, result " +
@@ -504,8 +612,23 @@ bool StreamlineRuntime::setVulkanDevice(const StreamlineVulkanDeviceInfo& info) 
         reinterpret_cast<PFun_slPCLSetOptions*>(pclSetOptions);
     m_impl->queuePresent = reinterpret_cast<PFN_vkQueuePresentKHR>(
         m_impl->getDeviceProcAddr(info.device, "vkQueuePresentKHR"));
-    if (m_impl->queuePresent == nullptr) {
-        m_impl->error = "StreamlineRuntime: failed to resolve the Vulkan present proxy";
+    m_impl->createSwapchain = reinterpret_cast<PFN_vkCreateSwapchainKHR>(
+        m_impl->getDeviceProcAddr(info.device, "vkCreateSwapchainKHR"));
+    m_impl->destroySwapchain = reinterpret_cast<PFN_vkDestroySwapchainKHR>(
+        m_impl->getDeviceProcAddr(info.device, "vkDestroySwapchainKHR"));
+    m_impl->getSwapchainImages = reinterpret_cast<PFN_vkGetSwapchainImagesKHR>(
+        m_impl->getDeviceProcAddr(info.device, "vkGetSwapchainImagesKHR"));
+    m_impl->acquireNextImage = reinterpret_cast<PFN_vkAcquireNextImageKHR>(
+        m_impl->getDeviceProcAddr(info.device, "vkAcquireNextImageKHR"));
+    m_impl->deviceWaitIdle = reinterpret_cast<PFN_vkDeviceWaitIdle>(
+        m_impl->getDeviceProcAddr(info.device, "vkDeviceWaitIdle"));
+    if (m_impl->queuePresent == nullptr || m_impl->createSwapchain == nullptr ||
+        m_impl->destroySwapchain == nullptr ||
+        m_impl->getSwapchainImages == nullptr ||
+        m_impl->acquireNextImage == nullptr ||
+        m_impl->deviceWaitIdle == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: failed to resolve mandatory Vulkan manual hooks";
         return false;
     }
     m_impl->vulkanDeviceSet = true;
@@ -520,6 +643,10 @@ bool StreamlineRuntime::setVulkanDevice(const StreamlineVulkanDeviceInfo& info) 
     }
     if (!configureReflex(StreamlineReflexMode::LowLatency) ||
         !queryReflexState(m_impl->reflexState)) {
+        m_impl->vulkanDeviceSet = false;
+        return false;
+    }
+    if (!setDlssFrameGenerationLoaded(false)) {
         m_impl->vulkanDeviceSet = false;
         return false;
     }
@@ -595,6 +722,9 @@ bool StreamlineRuntime::evaluateDlss(const StreamlineDlssDispatchInfo& info) {
         m_impl->error = "StreamlineRuntime: DLSS evaluation is not valid in the current state";
         return false;
     }
+    if (!setFrameConstants(info.frameIndex, info.viewport, info.constants)) {
+        return false;
+    }
     const uint32_t frameIndex = static_cast<uint32_t>(info.frameIndex);
     sl::FrameToken* frameToken = nullptr;
     sl::Result result = m_impl->getNewFrameToken(frameToken, &frameIndex);
@@ -602,53 +732,7 @@ bool StreamlineRuntime::evaluateDlss(const StreamlineDlssDispatchInfo& info) {
         m_impl->error = streamlineResultMessage("slGetNewFrameToken", result);
         return false;
     }
-
-    sl::Constants constants{};
-    copyMatrix(info.constants.cameraViewToClip, constants.cameraViewToClip);
-    copyMatrix(info.constants.clipToCameraView, constants.clipToCameraView);
-    copyMatrix(info.constants.clipToPrevClip, constants.clipToPrevClip);
-    copyMatrix(info.constants.prevClipToClip, constants.prevClipToClip);
-    constants.jitterOffset = {
-        info.constants.jitterOffset[0], info.constants.jitterOffset[1]};
-    constants.mvecScale = {
-        info.constants.motionVectorScale[0],
-        info.constants.motionVectorScale[1]};
-    constants.cameraPinholeOffset = {0.0f, 0.0f};
-    constants.cameraPos = {
-        info.constants.cameraPosition[0],
-        info.constants.cameraPosition[1],
-        info.constants.cameraPosition[2]};
-    constants.cameraUp = {
-        info.constants.cameraUp[0],
-        info.constants.cameraUp[1],
-        info.constants.cameraUp[2]};
-    constants.cameraRight = {
-        info.constants.cameraRight[0],
-        info.constants.cameraRight[1],
-        info.constants.cameraRight[2]};
-    constants.cameraFwd = {
-        info.constants.cameraForward[0],
-        info.constants.cameraForward[1],
-        info.constants.cameraForward[2]};
-    constants.cameraNear = info.constants.cameraNear;
-    constants.cameraFar = info.constants.cameraFar;
-    constants.cameraFOV = info.constants.verticalFovRadians;
-    constants.cameraAspectRatio = info.constants.cameraAspectRatio;
-    constants.depthInverted = info.constants.depthInverted
-        ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-    constants.cameraMotionIncluded = sl::Boolean::eTrue;
-    constants.motionVectors3D = sl::Boolean::eFalse;
-    constants.reset = info.constants.reset
-        ? sl::Boolean::eTrue : sl::Boolean::eFalse;
-    constants.orthographicProjection = sl::Boolean::eFalse;
-    constants.motionVectorsDilated = sl::Boolean::eTrue;
-    constants.motionVectorsJittered = sl::Boolean::eFalse;
     const sl::ViewportHandle viewportHandle{info.viewport};
-    result = m_impl->setConstants(constants, *frameToken, viewportHandle);
-    if (result != sl::Result::eOk) {
-        m_impl->error = streamlineResultMessage("slSetConstants", result);
-        return false;
-    }
 
     std::array<sl::SubresourceRange, 5u> subresources{};
     std::array<sl::Resource, 5u> resources{
@@ -706,6 +790,316 @@ bool StreamlineRuntime::releaseDlssResources(const uint32_t viewport) {
         sl::kFeatureDLSS, viewportHandle);
     if (result != sl::Result::eOk) {
         m_impl->error = streamlineResultMessage("slFreeResources(DLSS)", result);
+        return false;
+    }
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::setFrameConstants(
+    const uint64_t frameIndex,
+    const uint32_t viewport,
+    const StreamlineDlssFrameConstants& constants) {
+    if (!m_impl->vulkanDeviceSet || m_impl->setConstants == nullptr ||
+        frameIndex > static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)())) {
+        m_impl->error =
+            "StreamlineRuntime: common constants are not valid in the current state";
+        return false;
+    }
+    const uint32_t trackedFrameIndex = static_cast<uint32_t>(frameIndex);
+    if (m_impl->constantsSet &&
+        m_impl->constantsFrameIndex == trackedFrameIndex &&
+        m_impl->constantsViewport == viewport) {
+        m_impl->error.clear();
+        return true;
+    }
+    sl::FrameToken* frameToken = nullptr;
+    const sl::Result tokenResult = m_impl->getNewFrameToken(
+        frameToken, &trackedFrameIndex);
+    if (tokenResult != sl::Result::eOk || frameToken == nullptr) {
+        m_impl->error = streamlineResultMessage(
+            "slGetNewFrameToken(Constants)", tokenResult);
+        return false;
+    }
+    const sl::Constants values = makeFrameConstants(constants);
+    const sl::ViewportHandle viewportHandle{viewport};
+    const sl::Result result = m_impl->setConstants(
+        values, *frameToken, viewportHandle);
+    if (result != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slSetConstants", result);
+        return false;
+    }
+    m_impl->constantsFrameIndex = trackedFrameIndex;
+    m_impl->constantsViewport = viewport;
+    m_impl->constantsSet = true;
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::setDlssFrameGenerationLoaded(const bool loaded) {
+    if (!m_impl->vulkanDeviceSet || m_impl->isFeatureLoaded == nullptr ||
+        m_impl->setFeatureLoaded == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: DLSS Frame Generation load control is unavailable";
+        return false;
+    }
+    if (loaded && !m_impl->dlssGSupported) {
+        m_impl->error =
+            "StreamlineRuntime: DLSS Frame Generation is unsupported on the active device";
+        return false;
+    }
+
+    bool currentlyLoaded = false;
+    const sl::Result loadedResult = m_impl->isFeatureLoaded(
+        sl::kFeatureDLSS_G, currentlyLoaded);
+    if (loadedResult != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage(
+            "slIsFeatureLoaded(DLSS-G)", loadedResult);
+        return false;
+    }
+    m_impl->dlssGLoaded = currentlyLoaded;
+    if (currentlyLoaded == loaded &&
+        (!loaded || (m_impl->dlssGGetState != nullptr &&
+                     m_impl->dlssGSetOptions != nullptr))) {
+        if (!loaded) {
+            m_impl->dlssGGetState = nullptr;
+            m_impl->dlssGSetOptions = nullptr;
+        }
+        m_impl->error.clear();
+        return true;
+    }
+
+    if (currentlyLoaded != loaded) {
+        const sl::Result loadResult = m_impl->setFeatureLoaded(
+            sl::kFeatureDLSS_G, loaded);
+        if (loadResult != sl::Result::eOk) {
+            m_impl->error = streamlineResultMessage(
+                "slSetFeatureLoaded(DLSS-G)", loadResult);
+            return false;
+        }
+    }
+    m_impl->dlssGGetState = nullptr;
+    m_impl->dlssGSetOptions = nullptr;
+    if (!loaded) {
+        m_impl->dlssGLoaded = false;
+        m_impl->error.clear();
+        return true;
+    }
+    void* getState = nullptr;
+    void* setOptions = nullptr;
+    sl::Result result = m_impl->getFeatureFunction(
+        sl::kFeatureDLSS_G, "slDLSSGGetState", getState);
+    if (result != sl::Result::eOk || getState == nullptr) {
+        const std::string functionError = streamlineResultMessage(
+            "slGetFeatureFunction(slDLSSGGetState)", result);
+        const sl::Result unloadResult = m_impl->setFeatureLoaded(
+            sl::kFeatureDLSS_G, false);
+        m_impl->dlssGLoaded = unloadResult != sl::Result::eOk;
+        m_impl->error = unloadResult == sl::Result::eOk
+            ? functionError
+            : functionError + "; " + streamlineResultMessage(
+                  "slSetFeatureLoaded(DLSS-G cleanup)", unloadResult);
+        return false;
+    }
+    result = m_impl->getFeatureFunction(
+        sl::kFeatureDLSS_G, "slDLSSGSetOptions", setOptions);
+    if (result != sl::Result::eOk || setOptions == nullptr) {
+        const std::string functionError = streamlineResultMessage(
+            "slGetFeatureFunction(slDLSSGSetOptions)", result);
+        const sl::Result unloadResult = m_impl->setFeatureLoaded(
+            sl::kFeatureDLSS_G, false);
+        m_impl->dlssGLoaded = unloadResult != sl::Result::eOk;
+        m_impl->error = unloadResult == sl::Result::eOk
+            ? functionError
+            : functionError + "; " + streamlineResultMessage(
+                  "slSetFeatureLoaded(DLSS-G cleanup)", unloadResult);
+        return false;
+    }
+    m_impl->dlssGGetState =
+        reinterpret_cast<PFun_slDLSSGGetState*>(getState);
+    m_impl->dlssGSetOptions =
+        reinterpret_cast<PFun_slDLSSGSetOptions*>(setOptions);
+    m_impl->dlssGLoaded = true;
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::configureDlssFrameGeneration(
+    const uint32_t viewport,
+    const StreamlineDlssFrameGenerationOptions& options) {
+    if (!m_impl->vulkanDeviceSet || !m_impl->dlssGLoaded ||
+        m_impl->dlssGSetOptions == nullptr ||
+        options.renderWidth == 0u || options.renderHeight == 0u ||
+        options.outputWidth == 0u || options.outputHeight == 0u ||
+        options.backBufferCount == 0u ||
+        options.colorFormat == VK_FORMAT_UNDEFINED ||
+        options.depthFormat == VK_FORMAT_UNDEFINED ||
+        options.motionVectorFormat == VK_FORMAT_UNDEFINED ||
+        options.hudlessFormat == VK_FORMAT_UNDEFINED ||
+        options.uiFormat == VK_FORMAT_UNDEFINED) {
+        m_impl->error =
+            "StreamlineRuntime: DLSS Frame Generation options are incomplete";
+        return false;
+    }
+    const sl::ViewportHandle viewportHandle{viewport};
+    const sl::DLSSGOptions dlssGOptions =
+        makeDlssFrameGenerationOptions(options);
+    const sl::Result result = m_impl->dlssGSetOptions(
+        viewportHandle, dlssGOptions);
+    if (result != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slDLSSGSetOptions", result);
+        return false;
+    }
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::tagDlssFrameGenerationResources(
+    const StreamlineDlssFrameGenerationDispatchInfo& info) {
+    if (!m_impl->vulkanDeviceSet || !m_impl->dlssGLoaded ||
+        m_impl->setTagForFrame == nullptr ||
+        info.frameIndex >
+            static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)())) {
+        m_impl->error =
+            "StreamlineRuntime: DLSS Frame Generation tagging is unavailable";
+        return false;
+    }
+    if (!setFrameConstants(info.frameIndex, info.viewport, info.constants)) {
+        return false;
+    }
+    const uint32_t frameIndex = static_cast<uint32_t>(info.frameIndex);
+    sl::FrameToken* frameToken = nullptr;
+    const sl::Result tokenResult = m_impl->getNewFrameToken(
+        frameToken, &frameIndex);
+    if (tokenResult != sl::Result::eOk || frameToken == nullptr) {
+        m_impl->error = streamlineResultMessage(
+            "slGetNewFrameToken(DLSS-G)", tokenResult);
+        return false;
+    }
+    std::array<sl::SubresourceRange, 4u> subresources{};
+    std::array<sl::Resource, 4u> resources{
+        makeDlssResource(info.depth, subresources[0]),
+        makeDlssResource(info.motionVectors, subresources[1]),
+        makeDlssResource(info.hudlessColor, subresources[2]),
+        makeDlssResource(info.uiColorAndAlpha, subresources[3])
+    };
+    std::array<sl::Extent, 4u> extents{
+        resourceExtent(info.depth),
+        resourceExtent(info.motionVectors),
+        resourceExtent(info.hudlessColor),
+        resourceExtent(info.uiColorAndAlpha)
+    };
+    std::array<sl::ResourceTag, 4u> tags{
+        sl::ResourceTag{&resources[0], sl::kBufferTypeDepth,
+                        sl::ResourceLifecycle::eValidUntilPresent, &extents[0]},
+        sl::ResourceTag{&resources[1], sl::kBufferTypeMotionVectors,
+                        sl::ResourceLifecycle::eValidUntilPresent, &extents[1]},
+        sl::ResourceTag{&resources[2], sl::kBufferTypeHUDLessColor,
+                        sl::ResourceLifecycle::eValidUntilPresent, &extents[2]},
+        sl::ResourceTag{&resources[3], sl::kBufferTypeUIColorAndAlpha,
+                        sl::ResourceLifecycle::eValidUntilPresent, &extents[3]}
+    };
+    const sl::ViewportHandle viewportHandle{info.viewport};
+    const sl::Result result = m_impl->setTagForFrame(
+        *frameToken, viewportHandle, tags.data(),
+        static_cast<uint32_t>(tags.size()), nullptr);
+    if (result != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage(
+            "slSetTagForFrame(DLSS-G)", result);
+        return false;
+    }
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::clearDlssFrameGenerationResources(
+    const uint64_t frameIndex,
+    const uint32_t viewport) {
+    if (!m_impl->vulkanDeviceSet || !m_impl->dlssGLoaded ||
+        m_impl->setTagForFrame == nullptr ||
+        frameIndex > static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)())) {
+        m_impl->error =
+            "StreamlineRuntime: DLSS Frame Generation tag clearing is unavailable";
+        return false;
+    }
+    const uint32_t trackedFrameIndex = static_cast<uint32_t>(frameIndex);
+    sl::FrameToken* frameToken = nullptr;
+    const sl::Result tokenResult = m_impl->getNewFrameToken(
+        frameToken, &trackedFrameIndex);
+    if (tokenResult != sl::Result::eOk || frameToken == nullptr) {
+        m_impl->error = streamlineResultMessage(
+            "slGetNewFrameToken(DLSS-G clear)", tokenResult);
+        return false;
+    }
+    std::array<sl::ResourceTag, 4u> tags{
+        sl::ResourceTag{nullptr, sl::kBufferTypeDepth,
+                        sl::ResourceLifecycle::eValidUntilPresent, nullptr},
+        sl::ResourceTag{nullptr, sl::kBufferTypeMotionVectors,
+                        sl::ResourceLifecycle::eValidUntilPresent, nullptr},
+        sl::ResourceTag{nullptr, sl::kBufferTypeHUDLessColor,
+                        sl::ResourceLifecycle::eValidUntilPresent, nullptr},
+        sl::ResourceTag{nullptr, sl::kBufferTypeUIColorAndAlpha,
+                        sl::ResourceLifecycle::eValidUntilPresent, nullptr}
+    };
+    const sl::ViewportHandle viewportHandle{viewport};
+    const sl::Result result = m_impl->setTagForFrame(
+        *frameToken, viewportHandle, tags.data(),
+        static_cast<uint32_t>(tags.size()), nullptr);
+    if (result != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage(
+            "slSetTagForFrame(DLSS-G clear)", result);
+        return false;
+    }
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::queryDlssFrameGenerationState(
+    const uint32_t viewport,
+    StreamlineDlssFrameGenerationState& state) {
+    if (!m_impl->vulkanDeviceSet || !m_impl->dlssGLoaded ||
+        m_impl->dlssGGetState == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: DLSS Frame Generation state is unavailable";
+        return false;
+    }
+    sl::DLSSGState dlssGState{};
+    const sl::ViewportHandle viewportHandle{viewport};
+    const sl::Result result = m_impl->dlssGGetState(
+        viewportHandle, dlssGState, nullptr);
+    if (result != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage("slDLSSGGetState", result);
+        return false;
+    }
+    state.estimatedVramUsageBytes = dlssGState.estimatedVRAMUsageInBytes;
+    state.status = static_cast<uint32_t>(dlssGState.status);
+    state.minimumWidthOrHeight = dlssGState.minWidthOrHeight;
+    state.framesPresented = dlssGState.numFramesActuallyPresented;
+    state.maximumGeneratedFrames = dlssGState.numFramesToGenerateMax;
+    state.vsyncAvailable =
+        dlssGState.bIsVsyncSupportAvailable == sl::Boolean::eTrue;
+    state.inputsProcessingCompletionFence =
+        dlssGState.inputsProcessingCompletionFence;
+    state.inputsProcessingCompletionValue =
+        dlssGState.lastPresentInputsProcessingCompletionFenceValue;
+    m_impl->error.clear();
+    return true;
+}
+
+bool StreamlineRuntime::releaseDlssFrameGenerationResources(
+    const uint32_t viewport) {
+    if (!m_impl->vulkanDeviceSet || !m_impl->dlssGLoaded ||
+        m_impl->freeResources == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: DLSS Frame Generation resource release is unavailable";
+        return false;
+    }
+    const sl::ViewportHandle viewportHandle{viewport};
+    const sl::Result result = m_impl->freeResources(
+        sl::kFeatureDLSS_G, viewportHandle);
+    if (result != sl::Result::eOk) {
+        m_impl->error = streamlineResultMessage(
+            "slFreeResources(DLSS-G)", result);
         return false;
     }
     m_impl->error.clear();
@@ -906,6 +1300,158 @@ VkResult StreamlineRuntime::presentVulkanFrame(
     return result;
 }
 
+VkResult StreamlineRuntime::createVulkanWin32Surface(
+    const VkInstance instance,
+    void* applicationInstance,
+    void* window,
+    VkSurfaceKHR& surface) {
+    surface = VK_NULL_HANDLE;
+    if (!m_impl->initialized || m_impl->getInstanceProcAddr == nullptr ||
+        instance == VK_NULL_HANDLE || applicationInstance == nullptr ||
+        window == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: Vulkan Win32 surface creation is unavailable";
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    if (m_impl->createWin32Surface == nullptr) {
+        m_impl->createWin32Surface =
+            reinterpret_cast<PFN_vkCreateWin32SurfaceKHR>(
+                m_impl->getInstanceProcAddr(instance, "vkCreateWin32SurfaceKHR"));
+    }
+    if (m_impl->createWin32Surface == nullptr) {
+        m_impl->error =
+            "StreamlineRuntime: failed to resolve vkCreateWin32SurfaceKHR proxy";
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    VkWin32SurfaceCreateInfoKHR createInfo{
+        VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
+    createInfo.hinstance = static_cast<HINSTANCE>(applicationInstance);
+    createInfo.hwnd = static_cast<HWND>(window);
+    const VkResult result = m_impl->createWin32Surface(
+        instance, &createInfo, nullptr, &surface);
+    if (result != VK_SUCCESS) {
+        m_impl->error = "StreamlineRuntime: vkCreateWin32SurfaceKHR returned " +
+                        std::to_string(static_cast<int32_t>(result));
+        return result;
+    }
+    m_impl->error.clear();
+    return result;
+}
+
+void StreamlineRuntime::destroyVulkanSurface(
+    const VkInstance instance,
+    const VkSurfaceKHR surface) {
+    if (!m_impl->initialized || m_impl->getInstanceProcAddr == nullptr ||
+        instance == VK_NULL_HANDLE || surface == VK_NULL_HANDLE) {
+        return;
+    }
+    if (m_impl->destroySurface == nullptr) {
+        m_impl->destroySurface = reinterpret_cast<PFN_vkDestroySurfaceKHR>(
+            m_impl->getInstanceProcAddr(instance, "vkDestroySurfaceKHR"));
+    }
+    if (m_impl->destroySurface != nullptr) {
+        m_impl->destroySurface(instance, surface, nullptr);
+    }
+}
+
+VkResult StreamlineRuntime::createVulkanSwapchain(
+    const VkDevice device,
+    const VkSwapchainCreateInfoKHR& info,
+    VkSwapchainKHR& swapchain) {
+    swapchain = VK_NULL_HANDLE;
+    if (!m_impl->vulkanDeviceSet || m_impl->createSwapchain == nullptr ||
+        device == VK_NULL_HANDLE) {
+        m_impl->error =
+            "StreamlineRuntime: Vulkan swapchain creation proxy is unavailable";
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult result = m_impl->createSwapchain(
+        device, &info, nullptr, &swapchain);
+    if (result != VK_SUCCESS) {
+        m_impl->error = "StreamlineRuntime: vkCreateSwapchainKHR returned " +
+                        std::to_string(static_cast<int32_t>(result));
+        return result;
+    }
+    m_impl->error.clear();
+    return result;
+}
+
+void StreamlineRuntime::destroyVulkanSwapchain(
+    const VkDevice device,
+    const VkSwapchainKHR swapchain) {
+    if (!m_impl->vulkanDeviceSet || m_impl->destroySwapchain == nullptr ||
+        device == VK_NULL_HANDLE || swapchain == VK_NULL_HANDLE) {
+        return;
+    }
+    m_impl->destroySwapchain(device, swapchain, nullptr);
+}
+
+VkResult StreamlineRuntime::getVulkanSwapchainImages(
+    const VkDevice device,
+    const VkSwapchainKHR swapchain,
+    uint32_t& imageCount,
+    VkImage* images) {
+    if (!m_impl->vulkanDeviceSet || m_impl->getSwapchainImages == nullptr ||
+        device == VK_NULL_HANDLE || swapchain == VK_NULL_HANDLE) {
+        m_impl->error =
+            "StreamlineRuntime: Vulkan swapchain image proxy is unavailable";
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult result = m_impl->getSwapchainImages(
+        device, swapchain, &imageCount, images);
+    if (result != VK_SUCCESS && result != VK_INCOMPLETE) {
+        m_impl->error = "StreamlineRuntime: vkGetSwapchainImagesKHR returned " +
+                        std::to_string(static_cast<int32_t>(result));
+        return result;
+    }
+    m_impl->error.clear();
+    return result;
+}
+
+VkResult StreamlineRuntime::acquireVulkanImage(
+    const VkDevice device,
+    const VkSwapchainKHR swapchain,
+    const uint64_t timeout,
+    const VkSemaphore semaphore,
+    const VkFence fence,
+    uint32_t& imageIndex) {
+    if (!m_impl->vulkanDeviceSet || m_impl->acquireNextImage == nullptr ||
+        device == VK_NULL_HANDLE || swapchain == VK_NULL_HANDLE) {
+        m_impl->error =
+            "StreamlineRuntime: Vulkan image acquisition proxy is unavailable";
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult result = m_impl->acquireNextImage(
+        device, swapchain, timeout, semaphore, fence, &imageIndex);
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR &&
+        result != VK_ERROR_OUT_OF_DATE_KHR &&
+        result != VK_ERROR_SURFACE_LOST_KHR &&
+        result != VK_ERROR_DEVICE_LOST) {
+        m_impl->error = "StreamlineRuntime: vkAcquireNextImageKHR returned " +
+                        std::to_string(static_cast<int32_t>(result));
+        return result;
+    }
+    m_impl->error.clear();
+    return result;
+}
+
+VkResult StreamlineRuntime::waitVulkanDeviceIdle(const VkDevice device) {
+    if (!m_impl->vulkanDeviceSet || m_impl->deviceWaitIdle == nullptr ||
+        device == VK_NULL_HANDLE) {
+        m_impl->error =
+            "StreamlineRuntime: Vulkan device wait proxy is unavailable";
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+    const VkResult result = m_impl->deviceWaitIdle(device);
+    if (result != VK_SUCCESS && result != VK_ERROR_DEVICE_LOST) {
+        m_impl->error = "StreamlineRuntime: vkDeviceWaitIdle returned " +
+                        std::to_string(static_cast<int32_t>(result));
+        return result;
+    }
+    m_impl->error.clear();
+    return result;
+}
+
 bool StreamlineRuntime::appendVulkanRequirements(
     VulkanRequirementCollector& collector) const {
     if (!m_impl->initialized) {
@@ -952,12 +1498,27 @@ bool StreamlineRuntime::shutdown() {
     m_impl->pclGetState = nullptr;
     m_impl->pclSetMarker = nullptr;
     m_impl->pclSetOptions = nullptr;
+    m_impl->isFeatureLoaded = nullptr;
+    m_impl->dlssGGetState = nullptr;
+    m_impl->dlssGSetOptions = nullptr;
+    m_impl->createWin32Surface = nullptr;
+    m_impl->destroySurface = nullptr;
+    m_impl->createSwapchain = nullptr;
+    m_impl->destroySwapchain = nullptr;
+    m_impl->getSwapchainImages = nullptr;
+    m_impl->acquireNextImage = nullptr;
+    m_impl->deviceWaitIdle = nullptr;
     m_impl->queuePresent = nullptr;
     m_impl->cachedDlssSettingsValid = false;
     m_impl->reflexState = {};
     m_impl->currentFrameIndex = 0u;
     m_impl->emittedPclMarkers = 0u;
     m_impl->reflexFrameActive = false;
+    m_impl->constantsFrameIndex = 0u;
+    m_impl->constantsViewport = 0u;
+    m_impl->constantsSet = false;
+    m_impl->dlssGSupported = false;
+    m_impl->dlssGLoaded = false;
     if (m_impl->module != nullptr) {
         FreeLibrary(m_impl->module);
         m_impl->module = nullptr;
@@ -980,6 +1541,14 @@ bool StreamlineRuntime::vulkanDeviceSet() const {
 
 bool StreamlineRuntime::reflexLowLatencyAvailable() const {
     return m_impl->vulkanDeviceSet && m_impl->reflexState.lowLatencyAvailable;
+}
+
+bool StreamlineRuntime::dlssFrameGenerationSupported() const {
+    return m_impl->vulkanDeviceSet && m_impl->dlssGSupported;
+}
+
+bool StreamlineRuntime::dlssFrameGenerationLoaded() const {
+    return m_impl->vulkanDeviceSet && m_impl->dlssGLoaded;
 }
 
 const StreamlineVulkanRequirements& StreamlineRuntime::vulkanRequirements() const {

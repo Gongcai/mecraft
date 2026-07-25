@@ -13,6 +13,14 @@
 #endif
 
 #include <GLFW/glfw3.h>
+#if defined(MECRAFT_ENABLE_STREAMLINE) && defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#include <Windows.h>
+#endif
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -434,7 +442,110 @@ std::optional<VkCommandBuffer> VkRhiInterop::commandBuffer(
     return native != VK_NULL_HANDLE ? std::optional<VkCommandBuffer>(native) : std::nullopt;
 }
 
+bool VkRhiInterop::queueExternalTimelineWait(
+    VkRhiDevice& device,
+    void* semaphore,
+    const uint64_t value) {
+    if (!device.m_initialized || device.m_data == nullptr ||
+        std::this_thread::get_id() != device.m_deviceThread ||
+        semaphore == nullptr || value == 0u ||
+        device.m_data->externalFrameCompletionSemaphore != VK_NULL_HANDLE) {
+        return false;
+    }
+    device.m_data->externalFrameCompletionSemaphore =
+        reinterpret_cast<VkSemaphore>(semaphore);
+    device.m_data->externalFrameCompletionValue = value;
+    return true;
+}
+
 namespace {
+
+[[nodiscard]] VkResult waitDeviceIdle(VkRhiDeviceData& data) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    return StreamlineRuntime::instance().waitVulkanDeviceIdle(data.device);
+#else
+    return vkDeviceWaitIdle(data.device);
+#endif
+}
+
+[[nodiscard]] VkResult createMainSurface(VkRhiDeviceData& data) {
+#if defined(MECRAFT_ENABLE_STREAMLINE) && defined(_WIN32)
+    return StreamlineRuntime::instance().createVulkanWin32Surface(
+        data.instance,
+        GetModuleHandleW(nullptr),
+        glfwGetWin32Window(data.window),
+        data.surface);
+#else
+    return glfwCreateWindowSurface(
+        data.instance, data.window, nullptr, &data.surface);
+#endif
+}
+
+void destroyMainSurface(VkRhiDeviceData& data) {
+    if (data.surface == VK_NULL_HANDLE) {
+        return;
+    }
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    StreamlineRuntime::instance().destroyVulkanSurface(
+        data.instance, data.surface);
+#else
+    vkDestroySurfaceKHR(data.instance, data.surface, nullptr);
+#endif
+    data.surface = VK_NULL_HANDLE;
+}
+
+[[nodiscard]] VkResult createMainSwapchain(
+    VkRhiDeviceData& data,
+    const VkSwapchainCreateInfoKHR& info) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    return StreamlineRuntime::instance().createVulkanSwapchain(
+        data.device, info, data.swapchain);
+#else
+    return vkCreateSwapchainKHR(
+        data.device, &info, nullptr, &data.swapchain);
+#endif
+}
+
+void destroyMainSwapchain(VkRhiDeviceData& data) {
+    if (data.swapchain == VK_NULL_HANDLE) {
+        return;
+    }
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    StreamlineRuntime::instance().destroyVulkanSwapchain(
+        data.device, data.swapchain);
+#else
+    vkDestroySwapchainKHR(data.device, data.swapchain, nullptr);
+#endif
+    data.swapchain = VK_NULL_HANDLE;
+}
+
+[[nodiscard]] VkResult queryMainSwapchainImages(
+    VkRhiDeviceData& data,
+    uint32_t& imageCount,
+    VkImage* images) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    return StreamlineRuntime::instance().getVulkanSwapchainImages(
+        data.device, data.swapchain, imageCount, images);
+#else
+    return vkGetSwapchainImagesKHR(
+        data.device, data.swapchain, &imageCount, images);
+#endif
+}
+
+[[nodiscard]] VkResult acquireMainSwapchainImage(
+    VkRhiDeviceData& data,
+    const uint64_t timeout,
+    const VkSemaphore semaphore,
+    const VkFence fence,
+    uint32_t& imageIndex) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    return StreamlineRuntime::instance().acquireVulkanImage(
+        data.device, data.swapchain, timeout, semaphore, fence, imageIndex);
+#else
+    return vkAcquireNextImageKHR(
+        data.device, data.swapchain, timeout, semaphore, fence, &imageIndex);
+#endif
+}
 
 template <typename DeferredQueue, typename DeferredItem>
 void enqueueDeferred(DeferredQueue& queue, DeferredItem item) {
@@ -605,10 +716,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
     data.depthViews.clear();
     data.depthTextures.clear();
     data.swapchainImageInitialized.clear();
-    if (data.swapchain != VK_NULL_HANDLE) {
-        vkDestroySwapchainKHR(data.device, data.swapchain, nullptr);
-        data.swapchain = VK_NULL_HANDLE;
-    }
+    destroyMainSwapchain(data);
     data.acquiredImage = UINT32_MAX;
     data.frameAcquired = false;
     data.frameSubmitted = false;
@@ -792,8 +900,7 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
     swapchainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     swapchainInfo.presentMode = requestedPresentMode;
     swapchainInfo.clipped = VK_TRUE;
-    if (!vkSucceeded(vkCreateSwapchainKHR(data.device, &swapchainInfo, nullptr,
-                                         &data.swapchain),
+    if (!vkSucceeded(createMainSwapchain(data, swapchainInfo),
                      "vkCreateSwapchainKHR")) {
         return false;
     }
@@ -802,16 +909,16 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
     data.presentMode = requestedPresentMode;
 
     uint32_t actualImageCount = 0u;
-    if (!vkSucceeded(vkGetSwapchainImagesKHR(
-                         data.device, data.swapchain, &actualImageCount, nullptr),
+    if (!vkSucceeded(queryMainSwapchainImages(
+                         data, actualImageCount, nullptr),
                      "vkGetSwapchainImagesKHR") ||
         actualImageCount == 0u) {
         destroySwapchainResources(data);
         return false;
     }
     std::vector<VkImage> images(actualImageCount);
-    if (!vkSucceeded(vkGetSwapchainImagesKHR(
-                         data.device, data.swapchain, &actualImageCount, images.data()),
+    if (!vkSucceeded(queryMainSwapchainImages(
+                         data, actualImageCount, images.data()),
                      "vkGetSwapchainImagesKHR") ||
         actualImageCount == 0u) {
         destroySwapchainResources(data);
@@ -936,24 +1043,54 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
     if (width <= 0 || height <= 0) {
         return false;
     }
-    if (!vkSucceeded(vkDeviceWaitIdle(data.device), "vkDeviceWaitIdle(swapchain)")) {
+    if (!vkSucceeded(waitDeviceIdle(data), "vkDeviceWaitIdle(swapchain)")) {
         return false;
     }
     destroySwapchainResources(data);
     return createSwapchain(data);
 }
 
+} // namespace
+
+bool VkRhiInterop::recreateFrameGenerationSwapchain(
+    VkRhiDevice& device,
+    const bool frameGenerationLoaded) {
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    if (!device.m_initialized || device.m_data == nullptr ||
+        device.m_data->frameAcquired ||
+        std::this_thread::get_id() != device.m_deviceThread ||
+        waitDeviceIdle(*device.m_data) != VK_SUCCESS) {
+        return false;
+    }
+    device.reclaimCompletedWork();
+    device.m_data->externalFrameCompletionSemaphore = VK_NULL_HANDLE;
+    device.m_data->externalFrameCompletionValue = 0u;
+    destroySwapchainResources(*device.m_data);
+    if (!StreamlineRuntime::instance().setDlssFrameGenerationLoaded(
+            frameGenerationLoaded)) {
+        return false;
+    }
+    if (!createSwapchain(*device.m_data)) {
+        return false;
+    }
+    device.refreshSwapchainCapabilities();
+    return true;
+#else
+    static_cast<void>(device);
+    static_cast<void>(frameGenerationLoaded);
+    return false;
+#endif
+}
+
+namespace {
+
 [[nodiscard]] bool recreateSurfaceAndSwapchain(VkRhiDeviceData& data) {
-    if (!vkSucceeded(vkDeviceWaitIdle(data.device), "vkDeviceWaitIdle(surface)")) {
+    if (!vkSucceeded(waitDeviceIdle(data), "vkDeviceWaitIdle(surface)")) {
         return false;
     }
     destroySwapchainResources(data);
-    if (data.surface != VK_NULL_HANDLE) {
-        vkDestroySurfaceKHR(data.instance, data.surface, nullptr);
-        data.surface = VK_NULL_HANDLE;
-    }
-    if (!vkSucceeded(glfwCreateWindowSurface(data.instance, data.window, nullptr, &data.surface),
-                     "glfwCreateWindowSurface")) {
+    destroyMainSurface(data);
+    if (!vkSucceeded(createMainSurface(data), "vkCreateWin32SurfaceKHR")) {
         return false;
     }
     VkBool32 presentSupported = VK_FALSE;
@@ -1254,9 +1391,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             return false;
         }
     }
-    if (!vkSucceeded(glfwCreateWindowSurface(m_data->instance, m_data->window, nullptr,
-                                             &m_data->surface),
-                     "glfwCreateWindowSurface")) {
+    if (!vkSucceeded(createMainSurface(*m_data), "vkCreateWin32SurfaceKHR")) {
         shutdown();
         return false;
     }
@@ -1577,15 +1712,9 @@ void VkRhiDevice::shutdown() {
     }
     if (m_data->device != VK_NULL_HANDLE) {
         const std::lock_guard<std::mutex> registryLock(m_data->commandRegistryMutex);
-        if (vkDeviceWaitIdle(m_data->device) == VK_SUCCESS && m_initialized) {
+        if (waitDeviceIdle(*m_data) == VK_SUCCESS && m_initialized) {
             reclaimCompletedWorkUnlocked();
         }
-#if defined(MECRAFT_ENABLE_STREAMLINE)
-        StreamlineRuntime& streamline = StreamlineRuntime::instance();
-        if (streamline.initialized() && !streamline.shutdown()) {
-            std::cerr << streamline.lastError() << '\n';
-        }
-#endif
         for (VkRhiCommandListPool* pool : m_data->commandListPools) {
             for (const auto& list : pool->m_commandLists) {
                 m_data->commandLists.erase(list.get());
@@ -1671,16 +1800,16 @@ void VkRhiDevice::shutdown() {
         if (m_data->allocator != VK_NULL_HANDLE) {
             vmaDestroyAllocator(m_data->allocator);
         }
-        vkDestroyDevice(m_data->device, nullptr);
     }
+    destroyMainSurface(*m_data);
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     StreamlineRuntime& streamline = StreamlineRuntime::instance();
     if (streamline.initialized() && !streamline.shutdown()) {
         std::cerr << streamline.lastError() << '\n';
     }
 #endif
-    if (m_data->surface != VK_NULL_HANDLE && m_data->instance != VK_NULL_HANDLE) {
-        vkDestroySurfaceKHR(m_data->instance, m_data->surface, nullptr);
+    if (m_data->device != VK_NULL_HANDLE) {
+        vkDestroyDevice(m_data->device, nullptr);
     }
     if (m_data->debugMessenger != VK_NULL_HANDLE && m_data->instance != VK_NULL_HANDLE) {
         const auto destroyMessenger = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
@@ -2455,9 +2584,9 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
         vkResetFences(m_data->device, 1u, &frame.fence);
         frame.fencePending = false;
     }
-    const VkResult acquireResult = vkAcquireNextImageKHR(
-        m_data->device, m_data->swapchain, UINT64_MAX, frame.imageAvailable,
-        VK_NULL_HANDLE, &m_data->acquiredImage);
+    const VkResult acquireResult = acquireMainSwapchainImage(
+        *m_data, UINT64_MAX, frame.imageAvailable,
+        VK_NULL_HANDLE, m_data->acquiredImage);
     if (acquireResult == VK_ERROR_OUT_OF_DATE_KHR) {
         m_data->swapchainDirty = true;
         result.status = RhiFrameStatus::OutOfDate;
@@ -2496,6 +2625,80 @@ RhiFrameAcquireResult VkRhiDevice::acquireFrame() {
     return result;
 }
 
+RhiFrameStatus VkRhiDevice::cancelAcquiredFrame(
+    const RhiPresentInfo& info) {
+    if (!m_initialized || m_data == nullptr ||
+        std::this_thread::get_id() != m_deviceThread ||
+        !m_data->frameAcquired ||
+        info.frameIndex != m_data->acquiredFrameIndex ||
+        info.imageIndex != m_data->acquiredImage) {
+        return RhiFrameStatus::Error;
+    }
+    auto& frame = m_data->frames[m_data->frameSlot];
+    std::array<VkSemaphoreSubmitInfo, 2u> waits{};
+    uint32_t waitCount = 0u;
+    const bool consumeExternalFrameCompletion =
+        m_data->externalFrameCompletionSemaphore != VK_NULL_HANDLE;
+    if (consumeExternalFrameCompletion) {
+        waits[waitCount++] = {
+            VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            nullptr,
+            m_data->externalFrameCompletionSemaphore,
+            m_data->externalFrameCompletionValue,
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            0u
+        };
+    }
+    if (!m_data->frameImageAvailableWaited) {
+        waits[waitCount++] = {
+            VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            nullptr,
+            frame.imageAvailable,
+            0u,
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            0u
+        };
+    }
+    if (waitCount != 0u) {
+        VkSubmitInfo2 releaseSubmit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+        releaseSubmit.waitSemaphoreInfoCount = waitCount;
+        releaseSubmit.pWaitSemaphoreInfos = waits.data();
+        const VkResult submitResult = vkQueueSubmit2(
+            m_data->graphicsQueue, 1u, &releaseSubmit, VK_NULL_HANDLE);
+        if (submitResult == VK_ERROR_DEVICE_LOST) {
+            logVkError("vkQueueSubmit2(frame cancel)", submitResult);
+            return RhiFrameStatus::DeviceLost;
+        }
+        if (!vkSucceeded(submitResult, "vkQueueSubmit2(frame cancel)")) {
+            return RhiFrameStatus::Error;
+        }
+        if (consumeExternalFrameCompletion) {
+            m_data->externalFrameCompletionSemaphore = VK_NULL_HANDLE;
+            m_data->externalFrameCompletionValue = 0u;
+        }
+    }
+    const VkResult idleResult = waitDeviceIdle(*m_data);
+    if (idleResult == VK_ERROR_DEVICE_LOST) {
+        logVkError("vkDeviceWaitIdle(frame cancel)", idleResult);
+        return RhiFrameStatus::DeviceLost;
+    }
+    if (!vkSucceeded(idleResult, "vkDeviceWaitIdle(frame cancel)")) {
+        return RhiFrameStatus::Error;
+    }
+    reclaimCompletedWork();
+    destroySwapchainResources(*m_data);
+    if (!createSwapchain(*m_data)) {
+        m_data->swapchainDirty = true;
+        return RhiFrameStatus::Error;
+    }
+    refreshSwapchainCapabilities();
+    return RhiFrameStatus::Success;
+}
+
+bool VkRhiDevice::cancelFrame(const RhiPresentInfo& info) {
+    return cancelAcquiredFrame(info) == RhiFrameStatus::Success;
+}
+
 RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
     if (!m_initialized || std::this_thread::get_id() != m_deviceThread ||
         !m_data->frameAcquired ||
@@ -2504,28 +2707,10 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
     }
     auto& frame = m_data->frames[m_data->frameSlot];
     if (!m_data->frameSubmitted) {
-        const VkSemaphoreSubmitInfo wait{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, nullptr,
-                                         frame.imageAvailable, 0u,
-                                         VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, 0u};
-        VkSubmitInfo2 releaseSubmit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
-        releaseSubmit.waitSemaphoreInfoCount = 1u;
-        releaseSubmit.pWaitSemaphoreInfos = &wait;
-        const VkResult submitResult = vkQueueSubmit2(
-            m_data->graphicsQueue, 1u, &releaseSubmit, VK_NULL_HANDLE);
-        if (submitResult == VK_ERROR_DEVICE_LOST) {
-            logVkError("vkQueueSubmit2(frame cancel)", submitResult);
-            return RhiFrameStatus::DeviceLost;
-        }
-        if (!vkSucceeded(submitResult, "vkQueueSubmit2(frame cancel)") ||
-            !vkSucceeded(vkDeviceWaitIdle(m_data->device), "vkDeviceWaitIdle(frame cancel)")) {
-            return RhiFrameStatus::Error;
-        }
-        if (!recreateSwapchain(*m_data)) {
-            m_data->swapchainDirty = true;
-            return RhiFrameStatus::Error;
-        }
-        refreshSwapchainCapabilities();
-        return RhiFrameStatus::OutOfDate;
+        const RhiFrameStatus cancelStatus = cancelAcquiredFrame(info);
+        return cancelStatus == RhiFrameStatus::Success
+            ? RhiFrameStatus::OutOfDate
+            : cancelStatus;
     }
     std::array<VkSemaphoreSubmitInfo, 2u> waits{};
     uint32_t waitCount = 0u;
@@ -2785,7 +2970,7 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
     }
     const uint64_t sequence = m_lastSubmittedSequence + 1u;
     std::vector<VkSemaphoreSubmitInfo> waits;
-    waits.reserve(info.waitCount + 1u);
+    waits.reserve(info.waitCount + 2u);
     for (uint32_t i = 0u; i < info.waitCount; ++i) {
         const auto& wait = info.waits[i];
         if (!validateSubmissionToken(wait.token) || wait.token.sequence > m_lastSubmittedSequence) return false;
@@ -2793,6 +2978,18 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
         if (value > wait.token.sequence) return false;
         waits.push_back({VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, nullptr, m_data->timeline,
                          value, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, 0u});
+    }
+    const bool consumeExternalFrameCompletion =
+        m_data->externalFrameCompletionSemaphore != VK_NULL_HANDLE;
+    if (consumeExternalFrameCompletion) {
+        waits.push_back({
+            VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+            nullptr,
+            m_data->externalFrameCompletionSemaphore,
+            m_data->externalFrameCompletionValue,
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            0u
+        });
     }
     const bool consumeAcquire = m_data->frameAcquired && !m_data->frameImageAvailableWaited;
     VkRhiDeviceData::FrameContext* frame = nullptr;
@@ -2817,6 +3014,10 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
     if (nativeResult != VK_SUCCESS) {
         logVkError("vkQueueSubmit2", nativeResult);
         return false;
+    }
+    if (consumeExternalFrameCompletion) {
+        m_data->externalFrameCompletionSemaphore = VK_NULL_HANDLE;
+        m_data->externalFrameCompletionValue = 0u;
     }
     m_lastSubmittedSequence = sequence;
     for (size_t index = 0u; index < lists.size(); ++index) {
@@ -2873,7 +3074,7 @@ bool VkRhiDevice::waitForSubmission(const RhiSubmissionToken token) {
 }
 
 void VkRhiDevice::waitIdle() {
-    if (m_initialized && vkDeviceWaitIdle(m_data->device) == VK_SUCCESS) reclaimCompletedWork();
+    if (m_initialized && waitDeviceIdle(*m_data) == VK_SUCCESS) reclaimCompletedWork();
 }
 
 void VkRhiDevice::reclaimCompletedWork() {
@@ -2950,7 +3151,7 @@ VkRhiCommandListPool::~VkRhiCommandListPool() {
         }
         const std::lock_guard<std::mutex> registryLock(
             m_device->m_data->commandRegistryMutex);
-        if (vkDeviceWaitIdle(m_device->m_data->device) == VK_SUCCESS) {
+        if (waitDeviceIdle(*m_device->m_data) == VK_SUCCESS) {
             m_device->reclaimCompletedWorkUnlocked();
         }
         for (const auto& list : m_commandLists) {
@@ -3150,8 +3351,21 @@ void VkRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
         m_data->valid = false;
         return;
     }
-    const auto oldState = toVkResourceState(barrier.oldState);
-    const auto newState = toVkResourceState(barrier.newState);
+    auto oldState = toVkResourceState(barrier.oldState);
+    auto newState = toVkResourceState(barrier.newState);
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+    const bool frameGenerationSwapchain =
+        texture->swapchainOwned &&
+        StreamlineRuntime::instance().dlssFrameGenerationLoaded();
+    if (frameGenerationSwapchain &&
+        barrier.oldState == RhiResourceState::Present) {
+        oldState = toVkResourceState(RhiResourceState::TransferSrc);
+    }
+    if (frameGenerationSwapchain &&
+        barrier.newState == RhiResourceState::Present) {
+        newState = toVkResourceState(RhiResourceState::TransferSrc);
+    }
+#endif
     VkImageMemoryBarrier2 native{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
     native.srcStageMask = oldState.stages;
     native.srcAccessMask = oldState.access;
