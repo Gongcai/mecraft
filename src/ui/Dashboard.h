@@ -77,6 +77,7 @@ public:
         uint64_t realFramesPresented = 0u;
         uint64_t generatedFramesPresented = 0u;
         uint64_t displayedFrames = 0u;
+        double presentedFps = 0.0;
         uint64_t presentationSkippedFrames = 0u;
         uint64_t presentationFailedOperations = 0u;
         uint64_t presentationVsyncChanges = 0u;

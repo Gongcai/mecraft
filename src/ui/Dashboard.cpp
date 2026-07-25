@@ -824,6 +824,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         };
 
         ImGui::Text("FPS: %.1f", m_displayFps);
+        ImGui::Text("Presented FPS: %.1f", displayedProfilerStats.presentedFps);
         ImGui::Text("Frame Time: %.3f ms", m_displayFps > 0.0 ? 1000.0 / m_displayFps : 0.0);
         ImGui::Text("Presentation Mode: %s",
                     presentationModeName(displayedProfilerStats.presentationMode));

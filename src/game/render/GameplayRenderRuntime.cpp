@@ -27,6 +27,7 @@
 
 #ifdef MECRAFT_DEBUG
 #include "../../engine/platform/Window.h"
+#include "../../renderer/presentation/PresentedFrameRateSampler.h"
 #include "../debug/DebugFrameProfiler.h"
 #endif
 
@@ -54,6 +55,7 @@ struct GameplayRenderRuntime::Impl {
 #ifdef MECRAFT_DEBUG
     Dashboard dashboard;
     DebugFrameProfiler profiler;
+    PresentedFrameRateSampler presentedFrameRateSampler;
     Dashboard::FrameProfilerStats dashboardProfilerStats;
 #endif
 };
@@ -399,6 +401,12 @@ void GameplayRenderRuntime::publishDebugStats(const double frameTime) {
     stats.realFramesPresented = presentation.realFramesPresented;
     stats.generatedFramesPresented = presentation.generatedFramesPresented;
     stats.displayedFrames = presentation.displayedFrames;
+    const std::optional<double> presentedFps =
+        m_impl->presentedFrameRateSampler.update(presentation.displayedFrames,
+                                                 frameTime);
+    if (presentedFps.has_value()) {
+        stats.presentedFps = *presentedFps;
+    }
     stats.presentationSkippedFrames = presentation.skippedFrames;
     stats.presentationFailedOperations = presentation.failedOperations;
     stats.presentationVsyncChanges = presentation.vsyncChanges;
