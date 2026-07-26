@@ -5,6 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <array>
 #include <cstdint>
@@ -12,6 +13,7 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class RhiDevice;
+class RhiCommandList;
 
 namespace shadow { class ShadowRenderer; }
 
@@ -32,24 +34,52 @@ public:
     /// Check if temporal shader is available.
     [[nodiscard]] bool hasTemporalShader() const { return m_resourceMgr != nullptr; }
 
-    /// Execute volumetric fog march, temporal resolve, and composite.
-    /// @param ctx Frame context
-    /// @param settings Render settings
-    /// @param targets Deferred render targets
-    /// @param hasPreviousFrame Whether temporal history is available
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets, bool hasPreviousFrame);
+    struct GraphResources {
+        RgTextureHandle depth;
+        RgTextureHandle skyCapture;
+        RgTextureHandle noise;
+        RgTextureHandle atmosphereLut;
+        RgTextureHandle shadowDepthOpaque;
+        RgTextureHandle shadowDepthAll;
+        RgTextureHandle shadowColor0;
+        RgTextureHandle shadowColor1;
+        RgTextureHandle velocity;
+        RgTextureHandle historyDepthPrevious;
+        RgTextureHandle halfRes;
+        RgTextureHandle historyPrevious;
+        RgTextureHandle historyCurrent;
+        RgTextureHandle sceneComposite;
+        RgTextureHandle sceneResolved;
+    };
+
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        bool hasPreviousFrame,
+        const GraphResources& resources,
+        RgPassHandle dependency);
+    void finishGraphExecution(bool succeeded);
+    [[nodiscard]] bool graphFramePrepared() const { return m_graphFramePrepared; }
     void invalidateHistory();
 
 private:
     [[nodiscard]] bool shouldRenderFog(const FrameContext& ctx, const RenderSettings& settings,
                                        bool hasPreviousFrame) const;
-    void renderFog(const FrameContext& ctx, const RenderSettings& settings,
-                   DeferredRenderTargets& targets);
-    void renderTemporal(const FrameContext& ctx, const RenderSettings& settings,
-                        DeferredRenderTargets& targets);
-    void composite(const FrameContext& ctx, const RenderSettings& settings,
-                   DeferredRenderTargets& targets, bool hasPreviousFrame);
+    [[nodiscard]] bool recordFogPass(RhiCommandList& commandList,
+                                     const FrameContext& ctx,
+                                     const RenderSettings& settings,
+                                     DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordTemporalPass(RhiCommandList& commandList,
+                                          const FrameContext& ctx,
+                                          const RenderSettings& settings,
+                                          DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordCompositePass(RhiCommandList& commandList,
+                                           const FrameContext& ctx,
+                                           const RenderSettings& settings,
+                                           DeferredRenderTargets& targets,
+                                           bool hasPreviousFrame);
     bool ensureCompositeRhiPipeline(RhiDevice& rhiDevice);
     bool ensureCompositeBindGroup(RhiDevice& rhiDevice,
                                   const std::array<RhiTextureViewHandle, 3>& views);
@@ -113,6 +143,10 @@ private:
     bool m_hasRenderedFog = false;
     glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
     float m_lastWeatherSignal = 0.0f;
+    bool m_graphFramePrepared = false;
+    bool m_pendingRenderedFog = false;
+    glm::vec3 m_pendingCameraPos = glm::vec3(0.0f);
+    float m_pendingWeatherSignal = 0.0f;
 };
 
 #endif // MECRAFT_VOLUMETRIC_PASS_H

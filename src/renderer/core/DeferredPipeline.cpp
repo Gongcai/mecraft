@@ -423,12 +423,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Volumetric fog
-    if (m_volumetricPass) {
-        m_volumetricPass->execute(
-            ctx, m_currentSettings, targets, m_hasPreviousFrameData && !ctx.temporalReset);
-    }
-
     // TAA resolve
     if (m_taaPass && usesNativeTaaResolve(
             m_currentSettings.upscale.type, m_currentSettings.taa.enabled) &&
@@ -507,7 +501,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_shared->deferredTargets == nullptr || ctx.worldView == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
         m_lightingPass == nullptr || m_sceneCompositePass == nullptr ||
-        m_waterCompositePass == nullptr ||
+        m_waterCompositePass == nullptr || m_volumetricPass == nullptr ||
         m_shared->worldRenderBuffer == nullptr ||
         m_shared->terrainRhiPipelines == nullptr ||
         !ctx.sceneCaptureColorTexture.isValid() ||
@@ -534,6 +528,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         settings.reflection.temporalEnabled &&
         settings.debug.reflectionDebugMode == 0 && !ctx.temporalReset;
     const bool cloudEnabled = settings.debug.deferredLightDebugMode <= 0;
+    const bool hasPreviousFrame = m_hasPreviousFrameData && !ctx.temporalReset;
+    const bool volumetricTemporalEnabled =
+        settings.volumetric.temporalEnabled && hasPreviousFrame;
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
@@ -544,6 +541,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !targets.ensureSceneResolvedTextureView(rhiDevice) ||
         !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
         !targets.ensureHalfResTextureView(rhiDevice) ||
+        !targets.ensureHistoryVolumetricTextureViews(rhiDevice) ||
+        !targets.ensureHistoryDepthTextureViews(rhiDevice) ||
         !targets.ensureSsgiTextureView(rhiDevice) ||
         !targets.ensureSsgiHalfResTextureView(rhiDevice) ||
         !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
@@ -595,8 +594,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return false;
     }
     bool cloudGraphPrepared = false;
+    bool volumetricGraphPrepared = false;
     bool voxelGiGraphPrepared = false;
     const auto failGraphSetup = [&]() {
+        if (volumetricGraphPrepared) {
+            m_volumetricPass->finishGraphExecution(false);
+            volumetricGraphPrepared = false;
+        }
         if (voxelGiGraphPrepared) {
             m_voxelGiClipmap->finishGraphExecution(false);
             voxelGiGraphPrepared = false;
@@ -746,6 +750,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle ssgiMomentsHistoryCurrent;
     RgTextureHandle ssgiMomentsHistoryPrevious;
     RgTextureHandle historyDepthPrevious;
+    RgTextureHandle historyVolumetricCurrent;
+    RgTextureHandle historyVolumetricPrevious;
     RgTextureHandle reflectionScratch;
     RgTextureHandle historyReflectionPrevious;
     RgTextureHandle historyCloudPrevious;
@@ -822,6 +828,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        rippleNormal)) {
         return failGraphSetup();
     }
+    if ((ssgiTemporalEnabled || volumetricTemporalEnabled) &&
+        !importTexture(targets.historyDepthTexturePrevHandle(),
+                       targets.historyDepthTexturePrevViewHandle(),
+                       RhiResourceState::DepthRead,
+                       historyDepthPrevious)) {
+        return failGraphSetup();
+    }
     if (ssgiTemporalEnabled &&
         (!importTexture(targets.ssgiHistoryTextureHandle(), {},
                         RhiResourceState::ShaderRead,
@@ -836,11 +849,17 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
          !importTexture(targets.ssgiMomentsHistoryTexturePrevHandle(),
                         targets.ssgiMomentsHistoryTexturePrevViewHandle(),
                         RhiResourceState::ShaderRead,
-                        ssgiMomentsHistoryPrevious) ||
-         !importTexture(targets.historyDepthTexturePrevHandle(),
-                        targets.historyDepthTexturePrevViewHandle(),
-                        RhiResourceState::DepthRead,
-                        historyDepthPrevious))) {
+                        ssgiMomentsHistoryPrevious))) {
+        return failGraphSetup();
+    }
+    if (!importTexture(targets.historyVolumetricTextureHandle(),
+                       targets.historyVolumetricTextureViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       historyVolumetricCurrent) ||
+        !importTexture(targets.historyVolumetricTexturePrevHandle(),
+                       targets.historyVolumetricTexturePrevViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       historyVolumetricPrevious)) {
         return failGraphSetup();
     }
     if ((reflectionFilterEnabled || reflectionTemporalEnabled) &&
@@ -1141,7 +1160,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         });
         graphTail = sceneCompositeCopies.handle();
 
-        if (usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)) {
+        if (settings.debug.reflectionDebugMode <= 0) {
+          if (usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)) {
             RenderGraphPassBuilder water = m_renderGraph.addPass(
                 {"Deferred.WaterPreTemporal", RgPassType::Graphics,
                  RhiQueueType::Graphics});
@@ -1259,7 +1279,32 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                 pass.commandList().blitTexture(blit);
                 return true;
             });
-        graphTail = particleCopy.handle();
+          graphTail = particleCopy.handle();
+
+          VolumetricPass::GraphResources volumetricResources;
+          volumetricResources.depth = depth;
+          volumetricResources.skyCapture = skyCapture;
+          volumetricResources.noise = skyNoise;
+          volumetricResources.atmosphereLut = atmosphereLut;
+          volumetricResources.shadowDepthOpaque = shadowResources.depthOpaque;
+          volumetricResources.shadowDepthAll = shadowResources.depthAll;
+          volumetricResources.shadowColor0 = shadowResources.color0;
+          volumetricResources.shadowColor1 = shadowResources.color1;
+          volumetricResources.velocity = velocity;
+          volumetricResources.historyDepthPrevious = historyDepthPrevious;
+          volumetricResources.halfRes = halfRes;
+          volumetricResources.historyPrevious = historyVolumetricPrevious;
+          volumetricResources.historyCurrent = historyVolumetricCurrent;
+          volumetricResources.sceneComposite = sceneComposite;
+          volumetricResources.sceneResolved = sceneResolved;
+          graphTail = m_volumetricPass->addGraphPasses(
+              m_renderGraph, ctx, settings, targets, hasPreviousFrame,
+              volumetricResources, graphTail);
+          if (!graphTail.isValid()) {
+              return failGraphSetup();
+          }
+          volumetricGraphPrepared = m_volumetricPass->graphFramePrepared();
+        }
     }
 
     const RgCompileResult compiled = m_renderGraph.compile();
@@ -1290,6 +1335,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (cloudGraphPrepared) {
         m_cloudPass->finishGraphExecution(executed.succeeded());
+    }
+    if (volumetricGraphPrepared) {
+        m_volumetricPass->finishGraphExecution(executed.succeeded());
     }
     if (voxelGiGraphPrepared) {
         m_voxelGiClipmap->finishGraphExecution(executed.succeeded());
