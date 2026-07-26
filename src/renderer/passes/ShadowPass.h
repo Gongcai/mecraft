@@ -132,6 +132,13 @@ private:
     std::array<ShadowCascadeStats, 4> m_cascadeStats{};
     std::array<std::array<char, 128>, 4> m_cullerLabels{};
     std::array<uint32_t, 4> m_cascadeResolutions{};
+    // Interleaved far-cascade scheduling state: which cascades render this
+    // frame and the inputs whose changes force a full refresh.
+    std::array<bool, 4> m_cascadeRenderedThisFrame{true, true, true, true};
+    glm::vec3 m_lastShadowLightDirection = glm::vec3(0.0f, 1.0f, 0.0f);
+    int m_lastShadowResolution = 0;
+    float m_lastShadowDistance = 0.0f;
+    bool m_farCascadesPrimed = false;
     const FrameContext* m_frameContext = nullptr;
     DeferredRenderTargets* m_frameTargets = nullptr;
     RenderDebugService* m_frameDebugService = nullptr;

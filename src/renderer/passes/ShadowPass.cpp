@@ -138,7 +138,32 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
     shadow::ShadowMatrices::Settings shadowSettings;
     shadowSettings.shadowDistance = settings.shadow.distance;
     shadowSettings.shadowResolution = settings.shadow.resolution;
-    m_shadowRenderer->updateFromBasis(basis, shadowSettings);
+
+    // Far cascades cover 46m+ where one frame of staleness is not
+    // resolvable, so they update on alternating frames. Abrupt light flips
+    // (sun/moon switch, teleports), settings changes, or temporal resets
+    // force a full refresh because frozen matrices would no longer match
+    // the world the stale shadow map captured.
+    const glm::vec3 lightDirection = m_shadowRenderer->lightDirection();
+    const bool forceAllCascades =
+        !settings.shadow.farCascadeInterleaved || !m_farCascadesPrimed ||
+        ctx.temporalReset ||
+        settings.shadow.resolution != m_lastShadowResolution ||
+        settings.shadow.distance != m_lastShadowDistance ||
+        glm::dot(lightDirection, m_lastShadowLightDirection) < 0.999f;
+    m_cascadeRenderedThisFrame = {true, true, true, true};
+    if (!forceAllCascades) {
+        const bool evenFrame = (ctx.frameIndex % 2u) == 0u;
+        m_cascadeRenderedThisFrame[2] = evenFrame;
+        m_cascadeRenderedThisFrame[3] = !evenFrame;
+    }
+    m_lastShadowLightDirection = lightDirection;
+    m_lastShadowResolution = settings.shadow.resolution;
+    m_lastShadowDistance = settings.shadow.distance;
+    m_farCascadesPrimed = true;
+
+    m_shadowRenderer->updateFromBasis(basis, shadowSettings,
+                                      m_cascadeRenderedThisFrame);
 
     const float shadowDistance = std::max(64.0f, settings.shadow.distance);
     std::array<CascadeAabbCuller, SHADOW_CASCADE_COUNT> cascadeCullers{};
@@ -234,6 +259,35 @@ RgPassHandle ShadowPass::addGraphPasses(RenderGraph& graph,
 
     RgPassHandle previous = dependency;
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        // Frozen far cascades keep last frame's depth layers and matrices.
+        // The shadow timer contract still expects every cascade to stamp its
+        // timestamp triple each frame, so a minimal pass records the three
+        // points back to back (measuring ~0ms) and the stats ring drains.
+        if (!m_cascadeRenderedThisFrame[static_cast<size_t>(cascade)]) {
+            char frozenName[48];
+            std::snprintf(frozenName, sizeof(frozenName),
+                          "Shadow.Cascade%d.Frozen", cascade);
+            RenderGraphPassBuilder frozen = graph.addPass(
+                {frozenName, RgPassType::Copy, RhiQueueType::Graphics});
+            frozen.dependsOn(previous)
+                .setExecute([this, cascade](RgPassContext& pass) {
+                    if (m_shadowStatsActive &&
+                        m_frameDebugService != nullptr) {
+                        m_frameDebugService->markShadowTimestamp(
+                            pass.commandList(), cascade,
+                            ShadowTimestampPoint::Start);
+                        m_frameDebugService->markShadowTimestamp(
+                            pass.commandList(), cascade,
+                            ShadowTimestampPoint::OpaqueEnd);
+                        m_frameDebugService->markShadowTimestamp(
+                            pass.commandList(), cascade,
+                            ShadowTimestampPoint::End);
+                    }
+                    return true;
+                });
+            previous = frozen.handle();
+            continue;
+        }
         const RgTextureSubresourceRange range = cascadeRange(cascade);
         char opaqueName[48];
         std::snprintf(opaqueName, sizeof(opaqueName),

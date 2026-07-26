@@ -17,6 +17,9 @@ struct ShadowSettings {
     bool softShadowsEnabled = true;
     bool pcssShadowsEnabled = true;
     bool contactShadowsEnabled = false;
+    /// Update far cascades (2/3) on alternating frames; they cover 46m+
+    /// where one frame of light/camera staleness is not resolvable.
+    bool farCascadeInterleaved = true;
     int resolution = 2048;
     float distance = 192.0f;
     float softness = 1.0f;

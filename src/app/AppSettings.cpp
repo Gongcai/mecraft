@@ -105,6 +105,7 @@ void applyShadowSettings(const json& j, ShadowSettings& s) {
     readBool(j, "enabled", s.enabled);
     readBool(j, "softShadowsEnabled", s.softShadowsEnabled);
     readBool(j, "pcssShadowsEnabled", s.pcssShadowsEnabled);
+    readBool(j, "farCascadeInterleaved", s.farCascadeInterleaved);
     readBool(j, "contactShadowsEnabled", s.contactShadowsEnabled);
     readInt(j, "resolution", s.resolution);
     readFloat(j, "distance", s.distance);
@@ -121,6 +122,7 @@ json toJson(const ShadowSettings& s) {
         {"enabled", s.enabled},
         {"softShadowsEnabled", s.softShadowsEnabled},
         {"pcssShadowsEnabled", s.pcssShadowsEnabled},
+        {"farCascadeInterleaved", s.farCascadeInterleaved},
         {"contactShadowsEnabled", s.contactShadowsEnabled},
         {"resolution", s.resolution},
         {"distance", s.distance},

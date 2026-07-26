@@ -46,8 +46,13 @@ public:
                 int framebufferHeight);
 
     // Build CSM cascades from a CameraBasis directly (no Camera dependency).
+    // Cascades whose updateCascade entry is false keep their previous
+    // matrices so interleaved far-cascade updates sample a shadow map that
+    // still matches the frozen projection.
     void updateFromBasis(const ShadowMatrices::CameraBasis& basis,
-                         const ShadowMatrices::Settings& settings);
+                         const ShadowMatrices::Settings& settings,
+                         const std::array<bool, CASCADE_COUNT>& updateCascade = {
+                             true, true, true, true});
 
     // Accessors
     const Cascade& cascade(int index) const { return m_cascades[index]; }

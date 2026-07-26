@@ -61,8 +61,16 @@ void ShadowRenderer::update(const Camera& camera,
 }
 
 void ShadowRenderer::updateFromBasis(const ShadowMatrices::CameraBasis& basis,
-                                     const ShadowMatrices::Settings& settings) {
-    m_cascades = ShadowMatrices::buildCascades(basis, m_lightDirection, settings);
+                                     const ShadowMatrices::Settings& settings,
+                                     const std::array<bool, CASCADE_COUNT>& updateCascade) {
+    const std::array<Cascade, CASCADE_COUNT> freshCascades =
+        ShadowMatrices::buildCascades(basis, m_lightDirection, settings);
+    for (int cascade = 0; cascade < CASCADE_COUNT; ++cascade) {
+        if (updateCascade[static_cast<size_t>(cascade)]) {
+            m_cascades[static_cast<size_t>(cascade)] =
+                freshCascades[static_cast<size_t>(cascade)];
+        }
+    }
 
     // Cache legacy cascade-0 matrices for debug/history compatibility.
     m_modelView = m_cascades[0].view;
