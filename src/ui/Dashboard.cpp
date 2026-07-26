@@ -835,6 +835,25 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::Text("Display State Changes: VSync %llu, Fullscreen %llu",
                     static_cast<unsigned long long>(displayedProfilerStats.presentationVsyncChanges),
                     static_cast<unsigned long long>(displayedProfilerStats.presentationFullscreenChanges));
+        {
+            const RenderScene::PresentationDebugInfo presentationInfo =
+                renderScene.presentationDebugInfo();
+            const auto presentModeLabel = [](const RhiPresentMode mode) {
+                switch (mode) {
+                    case RhiPresentMode::Immediate: return "Immediate";
+                    case RhiPresentMode::Mailbox: return "Mailbox";
+                    case RhiPresentMode::Fifo: return "Fifo";
+                    case RhiPresentMode::FifoRelaxed: return "FifoRelaxed";
+                }
+                return "Unknown";
+            };
+            ImGui::Text("Render %ux%u  Output %ux%u  Swapchain Present: %s",
+                        presentationInfo.renderWidth,
+                        presentationInfo.renderHeight,
+                        presentationInfo.outputWidth,
+                        presentationInfo.outputHeight,
+                        presentModeLabel(presentationInfo.presentMode));
+        }
         ImGui::Text("Real Frames: acquired %llu, presented %llu",
                     static_cast<unsigned long long>(displayedProfilerStats.realFramesAcquired),
                     static_cast<unsigned long long>(displayedProfilerStats.realFramesPresented));

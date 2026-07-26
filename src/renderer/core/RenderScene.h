@@ -187,6 +187,20 @@ public:
     /// default-constructed (valid == false) while the pipeline is absent.
     [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
 
+    /// Actual frame extents and swapchain presentation mode for diagnostics.
+    /// Render and output extents come from the latest frame context, so they
+    /// reflect what the renderer really rasterized rather than the nominal
+    /// monitor resolution (XWayland scaling can make the two differ).
+    struct PresentationDebugInfo {
+        uint32_t renderWidth = 0u;
+        uint32_t renderHeight = 0u;
+        uint32_t outputWidth = 0u;
+        uint32_t outputHeight = 0u;
+        RhiPresentMode presentMode = RhiPresentMode::Fifo;
+        bool valid = false;
+    };
+    [[nodiscard]] PresentationDebugInfo presentationDebugInfo() const;
+
     // Pipeline readiness (R2.6a)
     /// Check if the new pipeline path is ready to use.
     bool isNewPipelineReady() const;

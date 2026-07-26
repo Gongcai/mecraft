@@ -1053,6 +1053,19 @@ RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
     return m_deferredPipeline->renderGraphFrameStats();
 }
 
+RenderScene::PresentationDebugInfo RenderScene::presentationDebugInfo() const {
+    PresentationDebugInfo info;
+    info.renderWidth = m_currentContext.renderExtent.width;
+    info.renderHeight = m_currentContext.renderExtent.height;
+    info.outputWidth = m_currentContext.outputExtent.width;
+    info.outputHeight = m_currentContext.outputExtent.height;
+    if (m_shared.rhiDevice != nullptr) {
+        info.presentMode = m_shared.rhiDevice->capabilities().swapchainPresentMode;
+        info.valid = true;
+    }
+    return info;
+}
+
 bool RenderScene::isNewPipelineReady() const {
     if (!m_activePipeline || !m_shared.rhiDevice ||
         !m_shared.rhiDevice->currentSwapchainColorView().isValid() ||
