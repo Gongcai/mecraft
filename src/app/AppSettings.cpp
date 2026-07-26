@@ -137,6 +137,7 @@ json toJson(const ShadowSettings& s) {
 
 void applySsaoSettings(const json& j, SsaoSettings& s) {
     readBool(j, "enabled", s.enabled);
+    readBool(j, "asyncComputeEnabled", s.asyncComputeEnabled);
     readBool(j, "filterEnabled", s.filterEnabled);
     readBool(j, "temporalEnabled", s.temporalEnabled);
     readFloat(j, "historyWeight", s.historyWeight);
@@ -148,6 +149,7 @@ void applySsaoSettings(const json& j, SsaoSettings& s) {
 json toJson(const SsaoSettings& s) {
     return {
         {"enabled", s.enabled},
+        {"asyncComputeEnabled", s.asyncComputeEnabled},
         {"filterEnabled", s.filterEnabled},
         {"temporalEnabled", s.temporalEnabled},
         {"historyWeight", s.historyWeight},

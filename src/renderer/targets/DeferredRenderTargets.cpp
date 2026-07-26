@@ -791,18 +791,22 @@ bool DeferredRenderTargets::createSsaoTextures() {
     const RhiTextureUsageFlags temporalUsage =
         attachmentUsage | rhiFlag(RhiTextureUsage::TransferSrc);
 
+    // Storage usage lets the async-compute SSAO chain write these directly.
+    const RhiTextureUsageFlags ssaoComputeUsage =
+        attachmentUsage | rhiFlag(RhiTextureUsage::Storage);
     if (!createTexture("DeferredTargets.SSAOFiltered", width, height,
-                       attachmentUsage, m_ssaoFilteredHandle) ||
+                       ssaoComputeUsage, m_ssaoFilteredHandle) ||
         !createTexture("DeferredTargets.SSAOHalfRes", halfWidth, halfHeight,
-                       attachmentUsage, m_ssaoHalfResHandle) ||
+                       ssaoComputeUsage, m_ssaoHalfResHandle) ||
         !createTexture("DeferredTargets.SSAOHalfResFiltered", halfWidth, halfHeight,
-                       attachmentUsage, m_ssaoHalfResFilteredHandle) ||
+                       ssaoComputeUsage, m_ssaoHalfResFilteredHandle) ||
         !createTexture("DeferredTargets.SSAOHistory[0]", width, height,
                        historyUsage, m_ssaoHistoryHandle[0]) ||
         !createTexture("DeferredTargets.SSAOHistory[1]", width, height,
                        historyUsage, m_ssaoHistoryHandle[1]) ||
         !createTexture("DeferredTargets.SSAOTemporal", width, height,
-                       temporalUsage, m_ssaoTemporalHandle)) {
+                       temporalUsage | rhiFlag(RhiTextureUsage::Storage),
+                       m_ssaoTemporalHandle)) {
         destroySsaoTextures();
         return false;
     }

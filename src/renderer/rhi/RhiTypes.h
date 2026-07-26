@@ -167,6 +167,8 @@ struct RhiCapabilities {
     uint32_t transferQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
     uint32_t presentQueueFamilyIndex = std::numeric_limits<uint32_t>::max();
     bool dedicatedComputeQueue = false;
+    /// True when r8-style extended storage image formats may be written.
+    bool storageImageExtendedFormats = false;
     bool dedicatedTransferQueue = false;
     bool accelerationStructure = false;
     bool rayQuery = false;

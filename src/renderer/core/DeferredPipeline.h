@@ -128,6 +128,7 @@ private:
     double m_graphCpuSubmitMs = 0.0;
     uint32_t m_graphSubmitCount = 0u;
     bool m_graphCpuStatsValid = false;
+    bool m_asyncComputeGateLogged = false;
 
     // Private orchestration methods
     [[nodiscard]] bool recordDeferredAuxiliaryClear(

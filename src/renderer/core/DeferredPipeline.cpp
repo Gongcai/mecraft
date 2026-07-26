@@ -1023,6 +1023,39 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         cloudGraphAdded = true;
     }
 
+    // SSAO joins the async compute window under the same reasoning: it only
+    // needs the GBuffer products and its own history, so it runs on the
+    // compute queue alongside the shadow rasterization ahead. The r8 outputs
+    // additionally require extended storage image formats.
+    bool ssaoGraphAdded = false;
+    const bool ssaoAsyncCompute = ssaoEnabled && m_ssaoPass != nullptr &&
+        settings.ssao.asyncComputeEnabled &&
+        rhiDevice.backend() == RhiBackend::Vulkan &&
+        rhiDevice.capabilities().dedicatedComputeQueue &&
+        rhiDevice.capabilities().storageImageExtendedFormats;
+    if (!m_asyncComputeGateLogged) {
+        m_asyncComputeGateLogged = true;
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[DeferredPipeline] async compute gates:"
+                      << " vulkan=" << (rhiDevice.backend() == RhiBackend::Vulkan)
+                      << " dedicatedComputeQueue="
+                      << rhiDevice.capabilities().dedicatedComputeQueue
+                      << " storageImageExtendedFormats="
+                      << rhiDevice.capabilities().storageImageExtendedFormats
+                      << " ssaoSetting=" << settings.ssao.asyncComputeEnabled
+                      << " cloudSetting=" << settings.cloud.asyncComputeEnabled
+                      << '\n');
+    }
+    if (ssaoAsyncCompute) {
+        const RgPassHandle ssaoHandle = m_ssaoPass->addGraphPasses(
+            m_renderGraph, ctx, settings.ssao, targets, ssaoResources,
+            graphTail, true);
+        if (!ssaoHandle.isValid()) {
+            return failGraphSetup();
+        }
+        ssaoGraphAdded = true;
+    }
+
     if (shadowEnabled) {
         graphTail = m_shadowPass->addGraphPasses(
             m_renderGraph, shadowResources, graphTail);
@@ -1031,7 +1064,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         }
     }
 
-    if (ssaoEnabled) {
+    if (ssaoEnabled && !ssaoGraphAdded) {
         graphTail = m_ssaoPass->addGraphPasses(
             m_renderGraph, ctx, settings.ssao, targets, ssaoResources,
             graphTail);

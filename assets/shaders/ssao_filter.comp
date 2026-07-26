@@ -1,0 +1,19 @@
+#version 450 core
+
+// Async-compute entry point: identical shading to the fragment path so the
+// SSAO chain can run on the compute queue and overlap shadow rasterization.
+#include "ssao_filter_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(binding = 3, r8) uniform writeonly image2D uOutputImage;
+
+void main() {
+    const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 extent = imageSize(uOutputImage);
+    if (texel.x >= extent.x || texel.y >= extent.y) {
+        return;
+    }
+    const vec2 screenUv = rhiNativeFragCoordToScreenUv(
+        vec2(texel) + 0.5, vec2(extent));
+    imageStore(uOutputImage, texel, renderSsaoFilter(screenUv, texel));
+}

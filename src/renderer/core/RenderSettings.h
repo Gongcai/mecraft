@@ -34,6 +34,9 @@ struct ShadowSettings {
 /// SSAO subsystem settings
 struct SsaoSettings {
     bool enabled = true;
+    /// Run the SSAO chain on the async compute queue (Vulkan devices with a
+    /// dedicated compute queue and extended storage image formats only).
+    bool asyncComputeEnabled = true;
     bool filterEnabled = true;
     bool temporalEnabled = true;
     float historyWeight = 0.85f;

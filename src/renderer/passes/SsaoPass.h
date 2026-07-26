@@ -47,15 +47,67 @@ public:
     /// @param resources Imported graph handles for all SSAO resources.
     /// @param dependency Pass that must complete before SSAO starts.
     /// @return Final SSAO pass handle, or an invalid handle for an invalid contract.
+    /// When useAsyncCompute is true, every stage is declared on the compute
+    /// queue and writes its target through storage images so the chain
+    /// overlaps the graphics work scheduled after it.
     [[nodiscard]] RgPassHandle addGraphPasses(
         RenderGraph& graph,
         const FrameContext& ctx,
         const SsaoSettings& ssao,
         DeferredRenderTargets& targets,
         const GraphResources& resources,
-        RgPassHandle dependency);
+        RgPassHandle dependency,
+        bool useAsyncCompute = false);
 
 private:
+    /// One async-compute mirror of a fragment stage: same bindings plus a
+    /// storage image at the next binding slot, COMPUTE visibility throughout.
+    struct ComputeStage {
+        RhiDevice* device = nullptr;
+        RhiShaderHandle shader;
+        RhiBindGroupLayoutHandle bindGroupLayout;
+        RhiPipelineLayoutHandle pipelineLayout;
+        RhiPipelineHandle pipeline;
+        RhiBindGroupHandle bindGroup;
+        std::array<RhiTextureViewHandle, 5> boundViews = {};
+    };
+    bool ensureComputeStage(RhiDevice& rhiDevice,
+                            ComputeStage& stage,
+                            const char* shaderPath,
+                            const char* debugName,
+                            uint32_t sampledCount,
+                            uint32_t pushConstantBytes);
+    bool ensureComputeStageBindGroup(RhiDevice& rhiDevice,
+                                     ComputeStage& stage,
+                                     const RhiTextureViewHandle* views,
+                                     const RhiSamplerHandle* samplers,
+                                     uint32_t sampledCount,
+                                     RhiTextureViewHandle storageView);
+    void destroyComputeStage(ComputeStage& stage);
+    [[nodiscard]] bool recordSsaoBaseCompute(RhiCommandList& commandList,
+                                             const FrameContext& ctx,
+                                             const SsaoSettings& ssao,
+                                             DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoFilterCompute(RhiCommandList& commandList,
+                                               const FrameContext& ctx,
+                                               DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoUpsampleCompute(RhiCommandList& commandList,
+                                                 const FrameContext& ctx,
+                                                 const SsaoSettings& ssao,
+                                                 DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoTemporalCompute(RhiCommandList& commandList,
+                                                 const FrameContext& ctx,
+                                                 const SsaoSettings& ssao,
+                                                 DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoHistoryCopyCompute(
+        RhiCommandList& commandList,
+        const FrameContext& ctx,
+        DeferredRenderTargets& targets);
+    ComputeStage m_computeBase;
+    ComputeStage m_computeFilter;
+    ComputeStage m_computeUpsample;
+    ComputeStage m_computeTemporal;
+
     [[nodiscard]] bool recordSsaoBase(RhiCommandList& commandList,
                                       const FrameContext& ctx,
                                       const SsaoSettings& ssao,

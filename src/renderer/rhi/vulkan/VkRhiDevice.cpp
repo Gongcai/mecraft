@@ -1578,6 +1578,10 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     features2.features.samplerAnisotropy = VK_TRUE;
     features2.features.independentBlend = VK_TRUE;
     features2.features.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect;
+    // Single-channel (r8) storage images used by async-compute SSAO are an
+    // extended storage format; enable the feature whenever the device has it.
+    features2.features.shaderStorageImageExtendedFormats =
+        selectedCoreFeatures.shaderStorageImageExtendedFormats;
 #if defined(MECRAFT_ENABLE_FSR31)
     features2.features.shaderInt16 = VK_TRUE;
 #endif
@@ -1741,6 +1745,8 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         supportsTimestamps(m_data->queueFamilies.transfer);
     m_capabilities.dedicatedComputeQueue =
         m_data->queueFamilies.compute != m_data->queueFamilies.graphics;
+    m_capabilities.storageImageExtendedFormats =
+        selectedCoreFeatures.shaderStorageImageExtendedFormats == VK_TRUE;
     m_capabilities.dedicatedTransferQueue =
         m_data->queueFamilies.transfer != m_data->queueFamilies.graphics &&
         m_data->queueFamilies.transfer != m_data->queueFamilies.compute;
