@@ -1256,9 +1256,13 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
 #endif
     } else if (m_shared.deferredTargets) {
         // Native TAA uses the existing DerivativeMain quasi-random sequence.
+        // Freezing the sequence holds a zero offset so temporal instability
+        // can be attributed to reprojection instead of sub-pixel jitter.
         const float invW = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->width()));
         const float invH = 1.0f / static_cast<float>(std::max(1, m_shared.deferredTargets->height()));
-        const float frameCounter = static_cast<float>(ctx.frameIndex);
+        const float frameCounter = m_settings.taa.freezeJitter
+            ? 0.0f
+            : static_cast<float>(ctx.frameIndex);
         const float frameX = glm::fract(frameCounter / 1.3247179572f + 0.5f) * 2.0f - 1.0f;
         const float frameY = glm::fract(frameCounter / 1.7548776662f + 0.5f) * 2.0f - 1.0f;
         ctx.jitter.projectionOffset.x = frameX * invW;
@@ -1297,6 +1301,20 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
         ctx.previousViewProj = ctx.camera.viewProj;
         ctx.previousInvViewProj = ctx.camera.invViewProj;
         ctx.previousJitteredViewProj = ctx.camera.jitteredViewProj;
+    }
+
+    // Velocity reprojection matrix: apply the CURRENT frame's jitter to the
+    // previous view-projection. Jitter is a post-divide NDC translation, so
+    // reprojecting with an equally offset previous matrix cancels the jitter
+    // term in "current - previous" exactly and keeps velocity jitter-free.
+    ctx.previousViewProjWithCurrentJitter = ctx.previousViewProj;
+    if (usesTemporalProjectionJitter(m_settings.upscale.type, m_settings.taa.enabled)) {
+        for (int column = 0; column < 4; ++column) {
+            ctx.previousViewProjWithCurrentJitter[column][0] +=
+                ctx.jitter.projectionOffset.x * ctx.previousViewProj[column][3];
+            ctx.previousViewProjWithCurrentJitter[column][1] +=
+                ctx.jitter.projectionOffset.y * ctx.previousViewProj[column][3];
+        }
     }
 
     // Weather state from WeatherSystem

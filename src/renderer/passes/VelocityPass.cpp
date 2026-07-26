@@ -73,11 +73,14 @@ bool VelocityPass::execute(RhiCommandList& commandList,
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
 
+    // Reconstruct with the matrix that produced the raster depth, then
+    // reproject with the previous view-projection carrying the CURRENT
+    // frame's jitter so the sub-pixel offset cancels out of the velocity.
     const VelocityPushConstants pushConstants{
         usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
             ? ctx.camera.jitteredInvViewProj
             : ctx.camera.invViewProj,
-        ctx.previousViewProj,
+        ctx.previousViewProjWithCurrentJitter,
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
                   settings.taa.forceZeroVelocity ? 1.0f : 0.0f,
@@ -131,11 +134,12 @@ bool VelocityPass::executeTransparent(RhiCommandList& commandList,
     commandList.setGraphicsPipeline(m_transparentPipeline);
     commandList.setBindGroup(0u, m_transparentBindGroup);
 
+    // Same jitter-cancelling matrix pairing as the opaque velocity pass.
     const VelocityPushConstants pushConstants{
         usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
             ? ctx.camera.jitteredInvViewProj
             : ctx.camera.invViewProj,
-        ctx.previousViewProj,
+        ctx.previousViewProjWithCurrentJitter,
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
                   settings.taa.forceZeroVelocity ? 1.0f : 0.0f,

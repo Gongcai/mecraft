@@ -110,12 +110,13 @@ bool GBufferPass::executeEntities(RhiCommandList& commandList,
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
 
-    // Rasterize with the same projection flavor as terrain, but reproject
-    // moving objects into the resolved history grid (raw previous view-proj).
+    // Rasterize with the same projection flavor as terrain. The previous
+    // matrix carries the current frame's jitter so the per-object velocity
+    // subtraction cancels the sub-pixel offset and stores true motion only.
     const glm::mat4& viewProj = usesTemporalProjectionJitter(
         settings.upscale.type, settings.taa.enabled)
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    const glm::mat4& previousViewProj = ctx.previousViewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProjWithCurrentJitter;
 
     humanoidRenderer->renderPreparedToGBuffer(commandList, viewProj, previousViewProj);
     humanoidRenderer->finishFrame();
@@ -200,12 +201,12 @@ bool GBufferPass::executeDrops(RhiCommandList& commandList,
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
 
-    // Match entity velocity: current rasterization may be jittered, while
-    // previous positions target the resolved history grid.
+    // Match entity velocity: both matrices carry the current frame's jitter
+    // so the per-object velocity subtraction stays jitter-free.
     const glm::mat4& viewProj = usesTemporalProjectionJitter(
         settings.upscale.type, settings.taa.enabled)
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    const glm::mat4& previousViewProj = ctx.previousViewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProjWithCurrentJitter;
     dropRenderer->renderItemsToGBuffer(commandList, viewProj, previousViewProj);
     dropRenderer->renderBlocksToGBuffer(commandList, viewProj, previousViewProj, ctx.animationTime);
     dropRenderer->finishGBufferFrame();
@@ -245,7 +246,7 @@ bool GBufferPass::executeFallingBlocks(RhiCommandList& commandList,
     const glm::mat4& viewProj = usesTemporalProjectionJitter(
         settings.upscale.type, settings.taa.enabled)
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    const glm::mat4& previousViewProj = ctx.previousViewProj;
+    const glm::mat4& previousViewProj = ctx.previousViewProjWithCurrentJitter;
     fallingBlockRenderer->renderToGBuffer(commandList, viewProj, previousViewProj, ctx.animationTime);
 
     endObjectGBufferRendering(commandList);

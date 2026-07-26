@@ -174,6 +174,11 @@ struct FrameContext {
     glm::mat4 previousViewProj = glm::mat4(1.0f);
     glm::mat4 previousInvViewProj = glm::mat4(1.0f);
     glm::mat4 previousJitteredViewProj = glm::mat4(1.0f);
+    // Previous view-projection with the CURRENT frame's jitter applied.
+    // Velocity passes subtract "current jittered position - previous position";
+    // projecting both ends with the same sub-pixel NDC offset cancels the
+    // jitter exactly, so the shared velocity buffer stores true motion only.
+    glm::mat4 previousViewProjWithCurrentJitter = glm::mat4(1.0f);
 
     // Sky / Atmosphere
     SkyColorsData skyColors;

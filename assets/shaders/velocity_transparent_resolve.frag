@@ -75,6 +75,8 @@ void main() {
         return;
     }
 
+    // uPreviousViewProj carries the current frame's jitter so the sub-pixel
+    // offset cancels between the raster position and the reprojection.
     vec4 previousClip = uPreviousViewProj * vec4(worldPosition, 1.0);
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;

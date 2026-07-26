@@ -77,6 +77,9 @@ void main() {
 
     // Standard world-space reprojection. The shared velocity buffer stores native texture UV
     // deltas so TAA, SSAO, reflections, volumetric fog, and motion blur consume one domain.
+    // uPreviousViewProj carries the CURRENT frame's jitter: the current raster position and
+    // the reprojected previous position then share the same sub-pixel NDC offset, so the
+    // jitter cancels in the subtraction and a static scene yields exactly zero velocity.
     vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;
