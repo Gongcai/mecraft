@@ -40,7 +40,52 @@ namespace {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
+#if defined(MECRAFT_ENABLE_FSR31) || defined(MECRAFT_ENABLE_STREAMLINE)
+[[nodiscard]] bool importTemporalTexture(
+    RenderGraph& graph,
+    RhiDevice& device,
+    const char* const name,
+    const RhiTextureHandle texture,
+    const RhiTextureViewHandle view,
+    const RhiResourceState initialState,
+    const RhiResourceState finalState,
+    RgTextureHandle& graphTexture) {
+    RhiTextureDesc desc;
+    if (!device.getTextureDesc(texture, desc)) {
+        return false;
+    }
+    desc.debugName = name;
+
+    RgImportedTextureDesc imported;
+    imported.name = name;
+    imported.texture = texture;
+    imported.desc = desc;
+    imported.initialState = initialState;
+    imported.finalState = finalState;
+    imported.defaultView = view;
+    graphTexture = graph.importTexture(imported);
+    return graphTexture.isValid();
+}
+#endif
+
 #if defined(MECRAFT_ENABLE_FSR31)
+[[nodiscard]] TemporalUpscaleStatus fsr31DispatchFailureStatus(
+    const Fsr31VulkanDispatchStatus status) {
+    switch (status) {
+        case Fsr31VulkanDispatchStatus::InvalidResources:
+            return TemporalUpscaleStatus::Fsr31InvalidResources;
+        case Fsr31VulkanDispatchStatus::MissingCommandBuffer:
+            return TemporalUpscaleStatus::Fsr31CommandError;
+        case Fsr31VulkanDispatchStatus::NotInitialized:
+        case Fsr31VulkanDispatchStatus::InvalidSettings:
+        case Fsr31VulkanDispatchStatus::ContextExtentExceeded:
+        case Fsr31VulkanDispatchStatus::SdkError:
+        case Fsr31VulkanDispatchStatus::Success:
+            return TemporalUpscaleStatus::Fsr31DispatchError;
+    }
+    return TemporalUpscaleStatus::Fsr31DispatchError;
+}
+
 [[nodiscard]] const char* fsr31ResourceRoleText(const Fsr31ResourceRole role) {
     switch (role) {
         case Fsr31ResourceRole::HdrColor: return "HDR color";
@@ -100,6 +145,25 @@ void reportFsr31ResourceFailure(const Fsr31VulkanDispatchResult& result) {
 }
 #endif
 
+#if defined(MECRAFT_ENABLE_STREAMLINE)
+[[nodiscard]] TemporalUpscaleStatus dlssDispatchFailureStatus(
+    const DlssVulkanStatus status) {
+    switch (status) {
+        case DlssVulkanStatus::InvalidResources:
+            return TemporalUpscaleStatus::DlssInvalidResources;
+        case DlssVulkanStatus::MissingCommandBuffer:
+            return TemporalUpscaleStatus::DlssCommandError;
+        case DlssVulkanStatus::RuntimeUnavailable:
+        case DlssVulkanStatus::InvalidQuality:
+        case DlssVulkanStatus::InvalidExtent:
+        case DlssVulkanStatus::SdkError:
+        case DlssVulkanStatus::Success:
+            return TemporalUpscaleStatus::DlssDispatchError;
+    }
+    return TemporalUpscaleStatus::DlssDispatchError;
+}
+#endif
+
 } // namespace
 
 TemporalUpscalePass::TemporalUpscalePass() = default;
@@ -126,6 +190,10 @@ void TemporalUpscalePass::shutdown() {
 #if defined(MECRAFT_ENABLE_FSR31)
     static_cast<void>(releaseFsr31Context());
 #endif
+    if (m_device != nullptr) {
+        m_renderGraph.releaseTransientResources(*m_device);
+    }
+    m_renderGraph.reset();
     destroyOutputTarget();
     m_commandListPool = nullptr;
     m_device = nullptr;
@@ -327,83 +395,115 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
                 return temporalFailure(TemporalUpscaleStatus::Fsr31Unavailable);
             }
             {
-                RhiCommandList* const commandList = m_commandListPool->acquire(
-                    RhiCommandListType::Graphics);
-                if (commandList == nullptr ||
-                    !commandList->begin(
-                        {"FSR31.Dispatch.Commands", RhiCommandListType::Graphics})) {
-                    return temporalFailure(TemporalUpscaleStatus::Fsr31CommandError);
-                }
-
-                const RhiTextureHandle sampledInputs[] = {
-                    frame.textures.hdrColor,
-                    frame.textures.velocity,
-                    frame.textures.exposure,
-                    frame.textures.reactiveMask,
-                    frame.textures.transparencyMask
-                };
-                for (const RhiTextureHandle texture : sampledInputs) {
-                    commandList->textureBarrier({
-                        texture,
+                m_renderGraph.reset();
+                RgTextureHandle hdrColor;
+                RgTextureHandle depth;
+                RgTextureHandle velocity;
+                RgTextureHandle exposure;
+                RgTextureHandle reactiveMask;
+                RgTextureHandle transparencyMask;
+                RgTextureHandle outputHdrColor;
+                if (!importTemporalTexture(
+                        m_renderGraph, *m_device, "FSR31.HdrColor",
+                        frame.textures.hdrColor, frame.textures.hdrColorView,
                         RhiResourceState::ShaderRead,
-                        RhiResourceState::ShaderRead
-                    });
+                        RhiResourceState::ShaderRead, hdrColor) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "FSR31.Depth",
+                        frame.textures.depth, frame.textures.depthView,
+                        RhiResourceState::DepthRead,
+                        RhiResourceState::DepthRead, depth) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "FSR31.Velocity",
+                        frame.textures.velocity, frame.textures.velocityView,
+                        RhiResourceState::ShaderRead,
+                        RhiResourceState::ShaderRead, velocity) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "FSR31.Exposure",
+                        frame.textures.exposure, frame.textures.exposureView,
+                        RhiResourceState::ShaderRead,
+                        RhiResourceState::ShaderRead, exposure) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "FSR31.ReactiveMask",
+                        frame.textures.reactiveMask,
+                        frame.textures.reactiveMaskView,
+                        RhiResourceState::ShaderRead,
+                        RhiResourceState::ShaderRead, reactiveMask) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "FSR31.TransparencyMask",
+                        frame.textures.transparencyMask,
+                        frame.textures.transparencyMaskView,
+                        RhiResourceState::ShaderRead,
+                        RhiResourceState::ShaderRead, transparencyMask) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "FSR31.OutputHdrColor",
+                        frame.textures.outputHdrColor,
+                        frame.textures.outputHdrColorView,
+                        m_outputInitialized
+                            ? RhiResourceState::ShaderRead
+                            : RhiResourceState::Undefined,
+                        RhiResourceState::ShaderRead, outputHdrColor)) {
+                    static_cast<void>(releaseFsr31Context());
+                    return temporalFailure(
+                        TemporalUpscaleStatus::Fsr31InvalidResources);
                 }
-                commandList->textureBarrier({
-                    frame.textures.depth,
-                    RhiResourceState::DepthRead,
-                    RhiResourceState::ShaderRead
-                });
-                commandList->textureBarrier({
-                    m_outputTexture,
-                    m_outputInitialized
-                        ? RhiResourceState::ShaderRead
-                        : RhiResourceState::Undefined,
-                    RhiResourceState::ShaderWrite
-                });
 
-                const Fsr31VulkanDispatchResult dispatched =
-                    m_fsr31Context->dispatch(
-                        static_cast<const VkRhiDevice&>(*m_device),
-                        *commandList,
-                        frame,
-                        {settings.sharpeningEnabled,
-                         settings.sharpeningStrength,
-                         settings.debugVisualizationEnabled});
-                if (!dispatched.succeeded()) {
-                    static_cast<void>(commandList->end());
-                    const TemporalUpscaleStatus status =
-                        dispatched.status == Fsr31VulkanDispatchStatus::InvalidResources
-                        ? TemporalUpscaleStatus::Fsr31InvalidResources
-                        : TemporalUpscaleStatus::Fsr31DispatchError;
-                    if (dispatched.status ==
-                        Fsr31VulkanDispatchStatus::InvalidResources) {
-                        reportFsr31ResourceFailure(dispatched);
+                bool dispatchAttempted = false;
+                Fsr31VulkanDispatchResult dispatched;
+                const Fsr31VulkanDispatchDesc dispatchDesc{
+                    settings.sharpeningEnabled,
+                    settings.sharpeningStrength,
+                    settings.debugVisualizationEnabled
+                };
+                RenderGraphPassBuilder dispatch = m_renderGraph.addPass(
+                    {"FSR31.Dispatch", RgPassType::External,
+                     RhiQueueType::Graphics});
+                dispatch.readTexture(hdrColor, RhiResourceState::ShaderRead)
+                    .readTexture(depth, RhiResourceState::ShaderRead)
+                    .readTexture(velocity, RhiResourceState::ShaderRead)
+                    .readTexture(exposure, RhiResourceState::ShaderRead)
+                    .readTexture(reactiveMask, RhiResourceState::ShaderRead)
+                    .readTexture(transparencyMask, RhiResourceState::ShaderRead)
+                    .writeTexture(outputHdrColor, RhiResourceState::ShaderWrite)
+                    .setExecute(
+                        [this, frame, dispatchDesc, &dispatchAttempted,
+                         &dispatched](RgPassContext& pass) {
+                            dispatchAttempted = true;
+                            dispatched = m_fsr31Context->dispatch(
+                                static_cast<const VkRhiDevice&>(*m_device),
+                                pass.commandList(), frame, dispatchDesc);
+                            return dispatched.succeeded();
+                        });
+
+                const RgCompileResult compiled = m_renderGraph.compile();
+                if (!compiled.succeeded()) {
+                    std::cerr << "TemporalUpscalePass: FSR 3.1 Render Graph compilation failed: "
+                              << compiled.message << '\n';
+                    static_cast<void>(releaseFsr31Context());
+                    return temporalFailure(
+                        TemporalUpscaleStatus::Fsr31CommandError);
+                }
+                const RgExecuteResult executed = m_renderGraph.execute(
+                    *m_device, *m_commandListPool);
+                if (!executed.succeeded()) {
+                    TemporalUpscaleStatus status =
+                        executed.error == RgExecuteError::SubmissionFailed
+                            ? TemporalUpscaleStatus::Fsr31SubmitError
+                            : TemporalUpscaleStatus::Fsr31CommandError;
+                    int32_t sdkError = 0;
+                    if (dispatchAttempted && !dispatched.succeeded()) {
+                        status = fsr31DispatchFailureStatus(dispatched.status);
+                        sdkError = dispatched.sdkError;
+                        if (dispatched.status ==
+                            Fsr31VulkanDispatchStatus::InvalidResources) {
+                            reportFsr31ResourceFailure(dispatched);
+                        }
+                    } else {
+                        std::cerr << "TemporalUpscalePass: FSR 3.1 Render Graph execution failed: "
+                                  << executed.message << '\n';
                     }
                     static_cast<void>(releaseFsr31Context());
-                    return temporalFailure(status, std::nullopt, dispatched.sdkError);
-                }
-
-                commandList->textureBarrier({
-                    m_outputTexture,
-                    RhiResourceState::ShaderWrite,
-                    RhiResourceState::ShaderRead
-                });
-                commandList->textureBarrier({
-                    frame.textures.depth,
-                    RhiResourceState::ShaderRead,
-                    RhiResourceState::DepthRead
-                });
-                if (!commandList->end()) {
-                    static_cast<void>(releaseFsr31Context());
-                    return temporalFailure(TemporalUpscaleStatus::Fsr31CommandError);
-                }
-                RhiCommandList* commandLists[] = {commandList};
-                if (!m_device->submit({
-                        "FSR31.Dispatch.Submit", commandLists, 1u,
-                        RhiQueueType::Graphics})) {
-                    static_cast<void>(releaseFsr31Context());
-                    return temporalFailure(TemporalUpscaleStatus::Fsr31SubmitError);
+                    return temporalFailure(status, std::nullopt, sdkError);
                 }
                 m_outputInitialized = true;
                 TemporalUpscaleResult result;
@@ -425,75 +525,88 @@ TemporalUpscaleResult TemporalUpscalePass::execute(
                 return temporalFailure(TemporalUpscaleStatus::DlssUnavailable);
             }
             {
-                RhiCommandList* const commandList = m_commandListPool->acquire(
-                    RhiCommandListType::Graphics);
-                if (commandList == nullptr ||
-                    !commandList->begin(
-                        {"DLSS.Dispatch.Commands", RhiCommandListType::Graphics})) {
-                    return temporalFailure(TemporalUpscaleStatus::DlssCommandError);
-                }
-                const RhiTextureHandle sampledInputs[] = {
-                    frame.textures.hdrColor,
-                    frame.textures.velocity,
-                    frame.textures.exposure
-                };
-                for (const RhiTextureHandle texture : sampledInputs) {
-                    commandList->textureBarrier({
-                        texture,
+                m_renderGraph.reset();
+                RgTextureHandle hdrColor;
+                RgTextureHandle depth;
+                RgTextureHandle velocity;
+                RgTextureHandle exposure;
+                RgTextureHandle outputHdrColor;
+                if (!importTemporalTexture(
+                        m_renderGraph, *m_device, "DLSS.HdrColor",
+                        frame.textures.hdrColor, frame.textures.hdrColorView,
                         RhiResourceState::ShaderRead,
-                        RhiResourceState::ShaderRead
-                    });
+                        RhiResourceState::ShaderRead, hdrColor) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "DLSS.Depth",
+                        frame.textures.depth, frame.textures.depthView,
+                        RhiResourceState::DepthRead,
+                        RhiResourceState::DepthRead, depth) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "DLSS.Velocity",
+                        frame.textures.velocity, frame.textures.velocityView,
+                        RhiResourceState::ShaderRead,
+                        RhiResourceState::ShaderRead, velocity) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "DLSS.Exposure",
+                        frame.textures.exposure, frame.textures.exposureView,
+                        RhiResourceState::ShaderRead,
+                        RhiResourceState::ShaderRead, exposure) ||
+                    !importTemporalTexture(
+                        m_renderGraph, *m_device, "DLSS.OutputHdrColor",
+                        frame.textures.outputHdrColor,
+                        frame.textures.outputHdrColorView,
+                        m_outputInitialized
+                            ? RhiResourceState::ShaderRead
+                            : RhiResourceState::Undefined,
+                        RhiResourceState::ShaderRead, outputHdrColor)) {
+                    static_cast<void>(releaseDlssContext());
+                    return temporalFailure(
+                        TemporalUpscaleStatus::DlssInvalidResources);
                 }
-                commandList->textureBarrier({
-                    frame.textures.depth,
-                    RhiResourceState::DepthRead,
-                    RhiResourceState::ShaderRead
-                });
-                commandList->textureBarrier({
-                    m_outputTexture,
-                    m_outputInitialized
-                        ? RhiResourceState::ShaderRead
-                        : RhiResourceState::Undefined,
-                    RhiResourceState::ShaderWrite
-                });
 
-                const DlssVulkanDispatchResult dispatched =
-                    m_dlssContext->dispatch(
-                        static_cast<const VkRhiDevice&>(*m_device),
-                        *commandList,
-                        frame);
-                if (!dispatched.succeeded()) {
-                    static_cast<void>(commandList->end());
-                    const TemporalUpscaleStatus status =
-                        dispatched.status == DlssVulkanStatus::InvalidResources
-                            ? TemporalUpscaleStatus::DlssInvalidResources
-                        : dispatched.status == DlssVulkanStatus::MissingCommandBuffer
-                            ? TemporalUpscaleStatus::DlssCommandError
-                            : TemporalUpscaleStatus::DlssDispatchError;
+                bool dispatchAttempted = false;
+                DlssVulkanDispatchResult dispatched;
+                RenderGraphPassBuilder dispatch = m_renderGraph.addPass(
+                    {"DLSS.Dispatch", RgPassType::External,
+                     RhiQueueType::Graphics});
+                dispatch.readTexture(hdrColor, RhiResourceState::ShaderRead)
+                    .readTexture(depth, RhiResourceState::ShaderRead)
+                    .readTexture(velocity, RhiResourceState::ShaderRead)
+                    .readTexture(exposure, RhiResourceState::ShaderRead)
+                    .writeTexture(outputHdrColor, RhiResourceState::ShaderWrite)
+                    .setExecute(
+                        [this, frame, &dispatchAttempted,
+                         &dispatched](RgPassContext& pass) {
+                            dispatchAttempted = true;
+                            dispatched = m_dlssContext->dispatch(
+                                static_cast<const VkRhiDevice&>(*m_device),
+                                pass.commandList(), frame);
+                            return dispatched.succeeded();
+                        });
+
+                const RgCompileResult compiled = m_renderGraph.compile();
+                if (!compiled.succeeded()) {
+                    std::cerr << "TemporalUpscalePass: DLSS Render Graph compilation failed: "
+                              << compiled.message << '\n';
+                    static_cast<void>(releaseDlssContext());
+                    return temporalFailure(
+                        TemporalUpscaleStatus::DlssCommandError);
+                }
+                const RgExecuteResult executed = m_renderGraph.execute(
+                    *m_device, *m_commandListPool);
+                if (!executed.succeeded()) {
+                    TemporalUpscaleStatus status =
+                        executed.error == RgExecuteError::SubmissionFailed
+                            ? TemporalUpscaleStatus::DlssSubmitError
+                            : TemporalUpscaleStatus::DlssCommandError;
+                    if (dispatchAttempted && !dispatched.succeeded()) {
+                        status = dlssDispatchFailureStatus(dispatched.status);
+                    } else {
+                        std::cerr << "TemporalUpscalePass: DLSS Render Graph execution failed: "
+                                  << executed.message << '\n';
+                    }
                     static_cast<void>(releaseDlssContext());
                     return temporalFailure(status);
-                }
-
-                commandList->textureBarrier({
-                    m_outputTexture,
-                    RhiResourceState::ShaderWrite,
-                    RhiResourceState::ShaderRead
-                });
-                commandList->textureBarrier({
-                    frame.textures.depth,
-                    RhiResourceState::ShaderRead,
-                    RhiResourceState::DepthRead
-                });
-                if (!commandList->end()) {
-                    static_cast<void>(releaseDlssContext());
-                    return temporalFailure(TemporalUpscaleStatus::DlssCommandError);
-                }
-                RhiCommandList* commandLists[] = {commandList};
-                if (!m_device->submit({
-                        "DLSS.Dispatch.Submit", commandLists, 1u,
-                        RhiQueueType::Graphics})) {
-                    static_cast<void>(releaseDlssContext());
-                    return temporalFailure(TemporalUpscaleStatus::DlssSubmitError);
                 }
                 m_outputInitialized = true;
                 TemporalUpscaleResult result;

@@ -3,6 +3,7 @@
 
 #include "renderer/contracts/TemporalFrameContract.h"
 #include "renderer/core/RenderSettings.h"
+#include "renderer/rhi/RhiRenderGraph.h"
 #include "renderer/rhi/RhiTypes.h"
 
 #include <cstdint>
@@ -100,6 +101,7 @@ private:
     RhiTextureViewHandle m_outputView;
     TemporalExtent m_outputExtent;
     bool m_outputInitialized = false;
+    RenderGraph m_renderGraph;
 #if defined(MECRAFT_ENABLE_FSR31)
     std::unique_ptr<Fsr31VulkanContext> m_fsr31Context;
     bool m_fsr31DynamicResolution = false;
