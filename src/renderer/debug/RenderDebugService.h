@@ -97,6 +97,10 @@ struct RenderGraphFrameStats {
     /// Portions of cpuExecuteMs: command recording versus queue submission.
     double cpuRecordMs = 0.0;
     double cpuSubmitMs = 0.0;
+    /// CPU-side shadow preparation (caster collection and culling).
+    double cpuShadowPrepMs = 0.0;
+    /// CPU-side frame context construction in RenderScene.
+    double cpuContextMs = 0.0;
     /// Sum of measured pass durations.
     double gpuTotalMs = 0.0;
     /// Last pass end minus first pass begin on the GPU clock.

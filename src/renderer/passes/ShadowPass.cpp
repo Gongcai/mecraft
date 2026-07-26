@@ -173,6 +173,7 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
         const float worldPadding = std::max(16.0f, cascadeData.texelWorldSize * 16.0f);
         cascadeCullers[cascade] = {
             cascadeData.viewProj,
+            m_cascadeRenderedThisFrame[static_cast<size_t>(cascade)],
             worldPadding / std::max(1.0f, cascadeData.radius),
             std::max(64.0f, cascadeData.texelWorldSize * 64.0f) /
                 std::max(1.0f, cascadeData.depthExtent),

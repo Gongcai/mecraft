@@ -577,11 +577,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
 
     const bool shadowEnabled = settings.shadow.enabled;
-    if (shadowEnabled &&
-        (m_shadowPass == nullptr || m_shared->shadowRenderer == nullptr ||
-         !m_shadowPass->prepareGraphFrame(
-             ctx, settings, targets, *ctx.worldView))) {
-        return false;
+    {
+        const auto shadowPrepStart = std::chrono::steady_clock::now();
+        if (shadowEnabled &&
+            (m_shadowPass == nullptr || m_shared->shadowRenderer == nullptr ||
+             !m_shadowPass->prepareGraphFrame(
+                 ctx, settings, targets, *ctx.worldView))) {
+            return false;
+        }
+        m_graphCpuShadowPrepMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - shadowPrepStart).count();
     }
     bool cloudGraphPrepared = false;
     bool volumetricGraphPrepared = false;
@@ -1913,6 +1918,7 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     stats.cpuExecuteMs = m_graphCpuExecuteMs;
     stats.cpuRecordMs = m_graphCpuRecordMs;
     stats.cpuSubmitMs = m_graphCpuSubmitMs;
+    stats.cpuShadowPrepMs = m_graphCpuShadowPrepMs;
     stats.submitCount = m_graphSubmitCount;
     stats.passCount =
         static_cast<uint32_t>(m_renderGraph.compiledPasses().size());

@@ -11,6 +11,9 @@
 
 struct CascadeAabbCuller {
     glm::mat4 viewProj = glm::mat4(1.0f);
+    /// Frozen far cascades keep last frame's shadow map, so their CPU
+    /// binning is skipped entirely by disabling the culler for the frame.
+    bool enabled = true;
     float xyPaddingNdc = 0.0f;
     float zPaddingNdc = 0.0f;
     bool useZCulling = true;

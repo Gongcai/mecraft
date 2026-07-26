@@ -129,6 +129,7 @@ private:
     double m_graphCpuExecuteMs = 0.0;
     double m_graphCpuRecordMs = 0.0;
     double m_graphCpuSubmitMs = 0.0;
+    double m_graphCpuShadowPrepMs = 0.0;
     uint32_t m_graphSubmitCount = 0u;
     bool m_graphCpuStatsValid = false;
     bool m_asyncComputeGateLogged = false;

@@ -22,6 +22,7 @@
 #endif
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <iostream>
@@ -302,9 +303,12 @@ bool RenderScene::renderFrame(const IWorldView& worldView,
     }
 
     // Build frame context
+    const auto contextBuildStart = std::chrono::steady_clock::now();
     const std::optional<FrameContext> frameContext = buildFrameContext(
         worldView, camera, window, frameRenderSize, frameOutputSize, frameAspectRatio,
         dayNightSystem, weatherSystem);
+    m_contextCpuMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - contextBuildStart).count();
     if (!frameContext.has_value()) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[RenderScene] Failed to resolve temporal frame parameters\n");
@@ -1050,7 +1054,9 @@ RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
     if (m_deferredPipeline == nullptr) {
         return {};
     }
-    return m_deferredPipeline->renderGraphFrameStats();
+    RenderGraphFrameStats stats = m_deferredPipeline->renderGraphFrameStats();
+    stats.cpuContextMs = m_contextCpuMs;
+    return stats;
 }
 
 HiZCullFrameStats RenderScene::hiZCullStats() const {

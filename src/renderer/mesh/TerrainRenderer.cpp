@@ -45,7 +45,7 @@ unsigned int buildCascadeVisibilityMask(const glm::vec3& boundsMin,
                                         const unsigned int candidateMask = 0xFu) {
     unsigned int mask = 0;
     for (int c = 0; c < 4; ++c) {
-        if ((candidateMask & (1u << c)) == 0) {
+        if ((candidateMask & (1u << c)) == 0 || !cascadeCullers[c].enabled) {
             continue;
         }
         if (isCascadeAabbVisible(boundsMin, boundsMax, cascadeCullers[c])) {
