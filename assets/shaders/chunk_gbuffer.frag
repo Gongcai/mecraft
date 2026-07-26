@@ -71,6 +71,11 @@ uniform vec3 uCameraPos;
 
 const int kBlockParallaxMaxSteps = 28;
 const float kBlockParallaxMinViewZ = 0.10;
+// Distance band over which parallax mapping fades to zero. Beyond the end
+// distance one texture texel is already sub-pixel, so the offset is invisible
+// and skipping the ray march removes its per-fragment height sampling cost.
+const float kBlockParallaxFadeStart = 16.0;
+const float kBlockParallaxFadeEnd = 48.0;
 
 vec3 srgbToLinear(vec3 color) {
     return pow(max(color, vec3(0.0)), vec3(2.2));
@@ -151,8 +156,20 @@ vec2 applyBlockParallaxMap(vec3 geometricNormal,
         return baseUv;
     }
 
+    // Parallax displacement is sub-texel beyond a few dozen meters, yet the
+    // grazing-angle branch below costs up to 28 height samples per fragment.
+    // Fade the effect out with view distance so horizon-heavy terrain views
+    // stop paying full price for an invisible offset.
+    vec3 cameraOffset = uCameraPos - position;
+    float viewDistance = length(cameraOffset);
+    float distanceFade = 1.0 -
+        smoothstep(kBlockParallaxFadeStart, kBlockParallaxFadeEnd, viewDistance);
+    if (distanceFade <= 0.0) {
+        return baseUv;
+    }
+
     mat3 frame = tangentFrame(geometricNormal, position, baseUv);
-    vec3 viewDir = normalize(uCameraPos - position);
+    vec3 viewDir = cameraOffset / max(viewDistance, 1.0e-4);
     vec3 tangentViewDir = transpose(frame) * viewDir;
     if (tangentViewDir.z <= 0.001) {
         return baseUv;
@@ -160,9 +177,11 @@ vec2 applyBlockParallaxMap(vec3 geometricNormal,
 
     float viewZ = max(tangentViewDir.z, kBlockParallaxMinViewZ);
     float grazing = 1.0 - clamp(viewZ, 0.0, 1.0);
-    int stepCount = int(mix(8.0, float(kBlockParallaxMaxSteps), grazing));
+    int stepCount = int(mix(8.0, float(kBlockParallaxMaxSteps),
+                            grazing * distanceFade));
     float layerStep = 1.0 / float(stepCount);
-    vec2 parallaxVector = (tangentViewDir.xy / viewZ) * uBlockParallaxDepth;
+    vec2 parallaxVector = (tangentViewDir.xy / viewZ) *
+                          (uBlockParallaxDepth * distanceFade);
     vec2 uvStep = parallaxVector / float(stepCount);
 
     vec2 tileUv = fract(baseUv);
