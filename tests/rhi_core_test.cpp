@@ -2546,7 +2546,7 @@ bool testGlRhiBufferCopyToTexture3DRegion() {
                                 RhiResourceState::TransferDst,
                                 0u,
                                 1u,
-                                2u,
+                                0u,
                                 1u});
     commandList.copyBufferToTexture(copy);
     submitTestCommands(device, commandPool, commandList);
