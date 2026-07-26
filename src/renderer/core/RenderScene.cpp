@@ -113,11 +113,11 @@ float computeHeldItemSceneHdrScale(const FrameContext& ctx,
     return std::clamp(scale, 1.0f, 6.5f);
 }
 
-RhiCommandList* beginSceneCaptureRendering(RhiCommandList& commandList,
-                                           const FrameContext& ctx,
-                                           const char* debugName) {
+bool beginSceneCaptureRendering(RhiCommandList& commandList,
+                                const FrameContext& ctx,
+                                const char* debugName) {
     if (!ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid()) {
-        return nullptr;
+        return false;
     }
 
     RhiColorAttachment colorAttachment;
@@ -142,46 +142,22 @@ RhiCommandList* beginSceneCaptureRendering(RhiCommandList& commandList,
     renderingInfo.colorAttachmentCount = 1u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    commandList.textureBarrier({
-        ctx.sceneCaptureColorTexture,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::RenderTarget
-    });
-    commandList.textureBarrier({
-        ctx.sceneCaptureDepthTexture,
-        RhiResourceState::DepthRead,
-        RhiResourceState::DepthWrite
-    });
     commandList.beginRendering(renderingInfo);
-    return &commandList;
+    return true;
 }
 
-RhiCommandList* beginSceneCaptureRendering(RhiCommandListPool& commandListPool,
-                                           const FrameContext& ctx,
-                                           const char* debugName) {
-    RhiCommandList* commandListStorage =
-        commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin(
-            {"SceneCapture.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    return beginSceneCaptureRendering(commandList, ctx, debugName);
-}
-
-RhiCommandList* beginWeatherRendering(RhiCommandList& commandList,
-                                      const FrameContext& ctx,
-                                      DeferredRenderTargets* targets,
-                                      const bool writeTemporalMasks) {
+bool beginWeatherRendering(RhiCommandList& commandList,
+                           const FrameContext& ctx,
+                           DeferredRenderTargets* targets,
+                           const bool writeTemporalMasks) {
     if (!writeTemporalMasks) {
         return beginSceneCaptureRendering(commandList, ctx, "SceneCapture.Weather");
     }
-    if (targets == nullptr || ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !ctx.sceneCaptureColorView.isValid() || !ctx.sceneCaptureDepthView.isValid() ||
-        !targets->ensureReactiveMaskTextureView(*ctx.shared->rhiDevice) ||
-        !targets->ensureTransparencyMaskTextureView(*ctx.shared->rhiDevice)) {
-        return nullptr;
+    if (targets == nullptr || !ctx.sceneCaptureColorView.isValid() ||
+        !ctx.sceneCaptureDepthView.isValid() ||
+        !targets->reactiveMaskTextureViewHandle().isValid() ||
+        !targets->transparencyMaskTextureViewHandle().isValid()) {
+        return false;
     }
 
     RhiColorAttachment colorAttachments[3];
@@ -207,78 +183,8 @@ RhiCommandList* beginWeatherRendering(RhiCommandList& commandList,
     renderingInfo.colorAttachmentCount = 3u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    commandList.textureBarrier({ctx.sceneCaptureColorTexture,
-                                RhiResourceState::ShaderRead,
-                                RhiResourceState::RenderTarget});
-    commandList.textureBarrier({ctx.sceneCaptureDepthTexture,
-                                RhiResourceState::DepthRead,
-                                RhiResourceState::DepthWrite});
-    targets->transitionTexture(commandList, targets->reactiveMaskTextureHandle(),
-                               RhiResourceState::RenderTarget);
-    targets->transitionTexture(commandList, targets->transparencyMaskTextureHandle(),
-                               RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
-    return &commandList;
-}
-
-void endSceneCaptureRendering(RhiDevice& rhiDevice,
-                              RhiCommandList* commandList,
-                              const FrameContext& ctx) {
-    if (commandList == nullptr) {
-        return;
-    }
-
-    commandList->endRendering();
-    commandList->textureBarrier({
-        ctx.sceneCaptureColorTexture,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
-    commandList->textureBarrier({
-        ctx.sceneCaptureDepthTexture,
-        RhiResourceState::DepthWrite,
-        RhiResourceState::DepthRead
-    });
-    if (!commandList->end()) {
-        std::abort();
-    }
-    RhiCommandList* submittedCommandLists[] = {commandList};
-    if (!rhiDevice.submit({"SceneCapture.Submit", submittedCommandLists, 1u})) {
-        std::abort();
-    }
-}
-
-void endWeatherRendering(RhiDevice& rhiDevice,
-                         RhiCommandList* commandList,
-                         const FrameContext& ctx,
-                         DeferredRenderTargets* targets,
-                         const bool writeTemporalMasks) {
-    if (!writeTemporalMasks) {
-        endSceneCaptureRendering(rhiDevice, commandList, ctx);
-        return;
-    }
-    if (commandList == nullptr || targets == nullptr) {
-        return;
-    }
-
-    commandList->endRendering();
-    commandList->textureBarrier({ctx.sceneCaptureColorTexture,
-                                 RhiResourceState::RenderTarget,
-                                 RhiResourceState::ShaderRead});
-    commandList->textureBarrier({ctx.sceneCaptureDepthTexture,
-                                 RhiResourceState::DepthWrite,
-                                 RhiResourceState::DepthRead});
-    targets->transitionTexture(*commandList, targets->reactiveMaskTextureHandle(),
-                               RhiResourceState::ShaderRead);
-    targets->transitionTexture(*commandList, targets->transparencyMaskTextureHandle(),
-                               RhiResourceState::ShaderRead);
-    if (!commandList->end()) {
-        std::abort();
-    }
-    RhiCommandList* submittedCommandLists[] = {commandList};
-    if (!rhiDevice.submit({"Weather.Submit", submittedCommandLists, 1u})) {
-        std::abort();
-    }
+    return true;
 }
 
 glm::vec2 sampleHeldItemLight(const IWorldView& worldView, const glm::vec3& cameraPosition) {
@@ -342,6 +248,11 @@ void RenderScene::init(ResourceMgr& resourceMgr) {
 }
 
 void RenderScene::shutdown() {
+    if (m_shared.rhiDevice != nullptr) {
+        m_sceneOverlayGraph.releaseTransientResources(*m_shared.rhiDevice);
+        m_frameBeginGraph.releaseTransientResources(*m_shared.rhiDevice);
+    }
+
     // Phase 9: Shutdown pipelines
     if (m_activePipeline) {
         m_activePipeline->shutdown();
@@ -367,33 +278,23 @@ void RenderScene::shutdown() {
     m_postProcessPass.shutdown();
 }
 
-void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
-                              const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
+bool RenderScene::renderFrame(const IWorldView& worldView,
+                              const Camera& camera,
+                              const Window& window,
+                              const glm::ivec2& frameRenderSize,
+                              const glm::ivec2& frameOutputSize,
                               const float frameAspectRatio,
-                              const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak,
-                              const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem) {
+                              const DayNightSystem& dayNightSystem,
+                              const WeatherSystem& weatherSystem) {
     if (!prepareFrameResources(frameRenderSize)) {
-        return;
+        return false;
     }
 
     if (m_shared.commandListPool == nullptr || m_shared.rhiDevice == nullptr) {
         std::abort();
     }
-    RhiCommandList* timerResetCommandList =
-        m_shared.commandListPool->acquire(RhiCommandListType::Graphics);
-    if (timerResetCommandList == nullptr ||
-        !timerResetCommandList->begin(
-            {"RenderDebug.TimerReset.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    m_debugService.beginFrame(*timerResetCommandList);
-    if (!timerResetCommandList->end()) {
-        std::abort();
-    }
-    RhiCommandList* timerResetLists[] = {timerResetCommandList};
-    if (!m_shared.rhiDevice->submit(
-            {"RenderDebug.TimerReset.Submit", timerResetLists, 1u})) {
-        std::abort();
+    if (!executeFrameBeginGraph()) {
+        return false;
     }
     m_terrainStreamingService.beginFrame();
     if (m_blockEntityRenderer != nullptr) {
@@ -408,7 +309,7 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
         MECRAFT_LOG_STREAM(
             std::cerr << "[RenderScene] Failed to resolve temporal frame parameters\n");
         m_terrainStreamingService.endFrame();
-        return;
+        return false;
     }
     m_currentContext = *frameContext;
 
@@ -418,22 +319,325 @@ void RenderScene::renderFrame(const IWorldView& worldView, const Camera& camera,
 
     // R7: New pipeline is the only path (legacy fallback removed)
     if (!newPipelineReady || !m_newPipelineActive) {
-        // This should not happen if Game properly initializes the pipeline
-        return;
+        m_terrainStreamingService.endFrame();
+        return false;
     }
 
-    // New pipeline path
     m_lastFrameOutput = m_activePipeline->renderFrame(m_currentContext, m_settings);
-
-    // R5: Render block interaction overlays (outline + break overlay)
-    const glm::mat4 viewProj = m_currentContext.camera.projection * m_currentContext.camera.view;
-    RhiCommandList* overlayCommandList = beginSceneCaptureRendering(
-        *m_shared.commandListPool,
-        m_currentContext, "SceneCapture.BlockOverlay");
-    if (overlayCommandList != nullptr) {
-        m_overlayRenderer.render(worldView, viewProj, target, blockBreak, *overlayCommandList);
+    if (!m_lastFrameOutput.sceneColor.isValid() ||
+        !m_lastFrameOutput.sceneDepth.isValid()) {
+        m_terrainStreamingService.endFrame();
+        return false;
     }
-    endSceneCaptureRendering(*m_shared.rhiDevice, overlayCommandList, m_currentContext);
+    return true;
+}
+
+bool RenderScene::executeFrameBeginGraph() {
+    if (m_shared.rhiDevice == nullptr || m_shared.commandListPool == nullptr) {
+        return false;
+    }
+
+    m_frameBeginGraph.reset();
+    RenderGraphPassBuilder timerReset = m_frameBeginGraph.addPass(
+        {"RenderDebug.TimerReset", RgPassType::Graphics, RhiQueueType::Graphics});
+    timerReset.setExecute([this](RgPassContext& pass) {
+        m_debugService.beginFrame(pass.commandList());
+        return true;
+    });
+
+    const RgCompileResult compiled = m_frameBeginGraph.compile();
+    if (!compiled.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Frame-begin Render Graph compile failed: "
+                      << compiled.message << '\n');
+        return false;
+    }
+    const RgExecuteResult executed = m_frameBeginGraph.execute(
+        *m_shared.rhiDevice, *m_shared.commandListPool);
+    if (!executed.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Frame-begin Render Graph execution failed: "
+                      << executed.message << '\n');
+        return false;
+    }
+    return true;
+}
+
+bool RenderScene::executeSceneOverlayGraph(
+    const RenderGameplayFrameRequest& request,
+    const glm::ivec2& frameRenderSize,
+    const bool lightDebugActive,
+    float& cameraRainVisibility) {
+    if (m_shared.rhiDevice == nullptr || m_shared.commandListPool == nullptr) {
+        return false;
+    }
+
+    const WeatherDerived weather = request.weatherSystem.getDerived();
+    const bool precipitationConfigured =
+        !lightDebugActive && m_settings.weather.rainLinesEnabled;
+    const bool precipitationVisible =
+        precipitationConfigured &&
+        (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f);
+    if (!lightDebugActive) {
+        cameraRainVisibility = m_currentContext.cameraRainVisibility;
+    }
+
+    const glm::mat4 weatherView = request.camera.getViewMatrix();
+    if (precipitationConfigured) {
+        request.rainRenderer.prepareFrame(
+            request.camera.getPosition(), weatherView,
+            weather.rainStrength, weather.snowStrength, request.frameTime);
+    }
+
+    const bool heldItemVisible = request.renderFirstPersonHeldItem &&
+                                 request.firstPersonHeldItemRenderer != nullptr &&
+                                 request.firstPersonInventory != nullptr &&
+                                 request.firstPersonHeldItemMotion != nullptr;
+    if (heldItemVisible) {
+        request.firstPersonHeldItemRenderer->setShadowData(
+            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(
+                getHeldItemShadowData()));
+        const glm::vec2 heldLight = sampleHeldItemLight(
+            request.worldView, request.camera.getPosition());
+        request.firstPersonHeldItemRenderer->setEnvironmentLight(
+            heldLight.x, heldLight.y);
+        request.firstPersonHeldItemRenderer->setSceneHdrScale(
+            computeHeldItemSceneHdrScale(
+                m_currentContext, m_settings, getPipelineMode()));
+        request.firstPersonHeldItemRenderer->prepareFrameResources(
+            *request.firstPersonInventory);
+        request.firstPersonHeldItemRenderer->prepareFrame(
+            frameRenderSize.x, frameRenderSize.y,
+            *request.firstPersonInventory,
+            *request.firstPersonHeldItemMotion,
+            static_cast<float>(Time::getGameTime()));
+    }
+
+    RhiDevice& rhiDevice = *m_shared.rhiDevice;
+    m_sceneOverlayGraph.reset();
+    const auto importTexture = [&](const RhiTextureHandle texture,
+                                   const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState,
+                                   RgTextureHandle& graphTexture) {
+        RhiTextureDesc desc;
+        if (!rhiDevice.getTextureDesc(texture, desc)) {
+            return false;
+        }
+        RgImportedTextureDesc imported;
+        imported.name = desc.debugName;
+        imported.texture = texture;
+        imported.desc = desc;
+        imported.initialState = stableState;
+        imported.finalState = stableState;
+        imported.defaultView = view;
+        graphTexture = m_sceneOverlayGraph.importTexture(imported);
+        return graphTexture.isValid();
+    };
+
+    RgTextureHandle sceneColor;
+    RgTextureHandle sceneDepth;
+    if (!importTexture(m_currentContext.sceneCaptureColorTexture,
+                       m_currentContext.sceneCaptureColorView,
+                       RhiResourceState::ShaderRead,
+                       sceneColor) ||
+        !importTexture(m_currentContext.sceneCaptureDepthTexture,
+                       m_currentContext.sceneCaptureDepthView,
+                       RhiResourceState::DepthRead,
+                       sceneDepth)) {
+        return false;
+    }
+
+    const glm::mat4 viewProj =
+        m_currentContext.camera.projection * m_currentContext.camera.view;
+    const IWorldView* overlayWorldView = &request.worldView;
+    const BlockTargetRenderData* overlayTarget = &request.target;
+    const BlockBreakRenderData* overlayBlockBreak = &request.blockBreak;
+    RenderGraphPassBuilder overlay = m_sceneOverlayGraph.addPass(
+        {"SceneOverlay.BlockInteraction", RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    overlay.readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
+        .readWriteTexture(sceneDepth, RhiResourceState::DepthWrite)
+        .setExecute([this, overlayWorldView, overlayTarget, overlayBlockBreak,
+                     viewProj](RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            if (!beginSceneCaptureRendering(
+                    commandList, m_currentContext,
+                    "SceneCapture.BlockOverlay")) {
+                return false;
+            }
+            m_overlayRenderer.render(
+                *overlayWorldView, viewProj,
+                *overlayTarget, *overlayBlockBreak, commandList);
+            commandList.endRendering();
+            return true;
+        });
+    RgPassHandle graphTail = overlay.handle();
+
+    if (precipitationVisible) {
+        const bool hardwareDepthTest = getPipelineMode() == PipelineMode::Forward;
+        const bool writeTemporalMasks = !hardwareDepthTest;
+        DeferredRenderTargets* targets = m_shared.deferredTargets;
+        if (writeTemporalMasks &&
+            (targets == nullptr ||
+             !targets->ensureReactiveMaskTextureView(rhiDevice) ||
+             !targets->ensureTransparencyMaskTextureView(rhiDevice))) {
+            return false;
+        }
+
+        RgTextureHandle precipitationDepth;
+        RgTextureHandle reactiveMask;
+        RgTextureHandle transparencyMask;
+        if (!hardwareDepthTest &&
+            !importTexture(m_lastFrameOutput.gbufferDepth, {},
+                           RhiResourceState::DepthRead,
+                           precipitationDepth)) {
+            return false;
+        }
+        if (writeTemporalMasks &&
+            (!importTexture(targets->reactiveMaskTextureHandle(),
+                            targets->reactiveMaskTextureViewHandle(),
+                            RhiResourceState::ShaderRead,
+                            reactiveMask) ||
+             !importTexture(targets->transparencyMaskTextureHandle(),
+                            targets->transparencyMaskTextureViewHandle(),
+                            RhiResourceState::ShaderRead,
+                            transparencyMask))) {
+            return false;
+        }
+
+        const float frameAspect = static_cast<float>(frameRenderSize.x) /
+                                  static_cast<float>(std::max(1, frameRenderSize.y));
+        const glm::mat4 weatherProjection =
+            request.camera.getProjectionMatrix(frameAspect);
+        const float alphaScale = m_settings.weather.rainAlphaScale;
+        const glm::vec2 precipitationScreenSize(
+            static_cast<float>(frameRenderSize.x),
+            static_cast<float>(frameRenderSize.y));
+        const RhiTextureHandle depthTexture = hardwareDepthTest
+            ? RhiTextureHandle{}
+            : m_lastFrameOutput.gbufferDepth;
+        RainRenderer* precipitationRenderer = &request.rainRenderer;
+
+        RenderGraphPassBuilder precipitation = m_sceneOverlayGraph.addPass(
+            {"SceneOverlay.Precipitation", RgPassType::Graphics,
+             RhiQueueType::Graphics});
+        precipitation.dependsOn(graphTail)
+            .readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
+            .readWriteTexture(sceneDepth, RhiResourceState::DepthWrite);
+        if (!hardwareDepthTest) {
+            precipitation.readTexture(
+                precipitationDepth, RhiResourceState::DepthRead);
+        }
+        if (writeTemporalMasks) {
+            precipitation
+                .readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
+                .readWriteTexture(transparencyMask,
+                                  RhiResourceState::RenderTarget);
+        }
+        precipitation.setExecute(
+            [this, precipitationRenderer, weather, weatherProjection, weatherView,
+             targets, writeTemporalMasks, hardwareDepthTest, cameraRainVisibility,
+             alphaScale, depthTexture, precipitationScreenSize](RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            precipitationRenderer->uploadFrame(commandList);
+            if (!beginWeatherRendering(
+                    commandList, m_currentContext, targets,
+                    writeTemporalMasks)) {
+                return false;
+            }
+            if (weather.rainStrength > 0.01f) {
+                precipitationRenderer->render(
+                    commandList, weatherProjection, weatherView,
+                    weather.rainStrength, cameraRainVisibility,
+                    alphaScale, depthTexture,
+                    precipitationScreenSize, hardwareDepthTest);
+            }
+            if (weather.snowStrength > 0.01f) {
+                precipitationRenderer->renderSnow(
+                    commandList, weatherProjection, weatherView,
+                    weather.snowStrength, cameraRainVisibility,
+                    alphaScale * 0.6f, depthTexture,
+                    precipitationScreenSize, hardwareDepthTest);
+            }
+            commandList.endRendering();
+            return true;
+        });
+        graphTail = precipitation.handle();
+    }
+
+    if (heldItemVisible) {
+        const FirstPersonShadowData& shadowData = getHeldItemShadowData();
+        RgTextureHandle shadowDepth;
+        RgTextureHandle shadowDepthAll;
+        RgTextureHandle shadowColor0;
+        RgTextureHandle shadowColor1;
+        if (shadowData.shadowsEnabled != 0) {
+            const bool matchingDepthHandles =
+                shadowData.shadowTextureHandle.index ==
+                    shadowData.shadowDepthRawHandle.index &&
+                shadowData.shadowTextureHandle.generation ==
+                    shadowData.shadowDepthRawHandle.generation &&
+                shadowData.shadowDepthAllHandle.index ==
+                    shadowData.shadowDepthAllRawHandle.index &&
+                shadowData.shadowDepthAllHandle.generation ==
+                    shadowData.shadowDepthAllRawHandle.generation;
+            if (!matchingDepthHandles ||
+                !importTexture(shadowData.shadowDepthRawHandle, {},
+                               RhiResourceState::DepthRead, shadowDepth) ||
+                !importTexture(shadowData.shadowDepthAllRawHandle, {},
+                               RhiResourceState::DepthRead, shadowDepthAll) ||
+                !importTexture(shadowData.shadowColor0Handle, {},
+                               RhiResourceState::ShaderRead, shadowColor0) ||
+                !importTexture(shadowData.shadowColor1Handle, {},
+                               RhiResourceState::ShaderRead, shadowColor1)) {
+                return false;
+            }
+        }
+
+        RenderGraphPassBuilder heldItem = m_sceneOverlayGraph.addPass(
+            {"SceneOverlay.FirstPersonHeldItem", RgPassType::Graphics,
+             RhiQueueType::Graphics});
+        heldItem.dependsOn(graphTail)
+            .readWriteTexture(sceneColor, RhiResourceState::RenderTarget)
+            .readWriteTexture(sceneDepth, RhiResourceState::DepthWrite);
+        if (shadowData.shadowsEnabled != 0) {
+            heldItem.readTexture(shadowDepth, RhiResourceState::DepthRead)
+                .readTexture(shadowDepthAll, RhiResourceState::DepthRead)
+                .readTexture(shadowColor0, RhiResourceState::ShaderRead)
+                .readTexture(shadowColor1, RhiResourceState::ShaderRead);
+        }
+        FirstPersonHeldItemRenderer* heldItemRenderer =
+            request.firstPersonHeldItemRenderer;
+        heldItem.setExecute([this, heldItemRenderer](RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            heldItemRenderer->prepareRhiFrame(commandList);
+            if (!beginSceneCaptureRendering(
+                    commandList, m_currentContext,
+                    "SceneCapture.FirstPersonHeldItem")) {
+                return false;
+            }
+            heldItemRenderer->renderPrepared(commandList);
+            commandList.endRendering();
+            return true;
+        });
+    }
+
+    const RgCompileResult compiled = m_sceneOverlayGraph.compile();
+    if (!compiled.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Scene-overlay Render Graph compile failed: "
+                      << compiled.message << '\n');
+        return false;
+    }
+    const RgExecuteResult executed = m_sceneOverlayGraph.execute(
+        rhiDevice, *m_shared.commandListPool);
+    if (!executed.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[RenderScene] Scene-overlay Render Graph execution failed: "
+                      << executed.message << '\n');
+        return false;
+    }
+    return true;
 }
 
 void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request) {
@@ -462,113 +666,21 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                                              frameRenderSize.x,
                                              frameRenderSize.y)) {
         MECRAFT_LOG_STREAM(std::cerr << "[RenderScene] Failed to begin post-process scene capture\n");
-        m_terrainStreamingService.endFrame();
         return;
     }
 
     const bool lightDebugActive = isLightDebugActive();
     float cameraRainVisibility = 1.0f;
 
-    renderFrame(request.worldView, request.camera, request.window,
-                frameRenderSize, displaySize, frameAspectRatio,
-                request.target, request.blockBreak,
-                request.dayNightSystem, request.weatherSystem);
-    if (!lightDebugActive) {
-        cameraRainVisibility = m_currentContext.cameraRainVisibility;
-        if (m_settings.weather.rainLinesEnabled) {
-            const auto& weather = request.weatherSystem.getDerived();
-            const glm::vec3 camPos = request.camera.getPosition();
-            const auto viewMat = request.camera.getViewMatrix();
-            request.rainRenderer.prepareFrame(camPos,
-                                              viewMat,
-                                              weather.rainStrength,
-                                              weather.snowStrength,
-                                              request.frameTime);
-            const bool forwardVanillaActive = isNewPipelineActive() &&
-                                               getPipelineMode() == PipelineMode::Forward;
-            const RhiTextureHandle depthTexture = forwardVanillaActive
-                ? RhiTextureHandle{}
-                : m_lastFrameOutput.gbufferDepth;
-            const bool hardwareDepthTest = !isNewPipelineActive() || forwardVanillaActive;
-            const bool writeTemporalMasks = !hardwareDepthTest &&
-                                             m_shared.deferredTargets != nullptr;
-            RhiCommandList* weatherCommandList = nullptr;
-            if (weather.rainStrength > 0.01f || weather.snowStrength > 0.01f) {
-                RhiCommandList* commandListStorage =
-                    m_shared.commandListPool->acquire(RhiCommandListType::Graphics);
-                if (commandListStorage == nullptr ||
-                    !commandListStorage->begin(
-                        {"Weather.Commands", RhiCommandListType::Graphics})) {
-                    std::abort();
-                }
-                RhiCommandList& commandList = *commandListStorage;
-                request.rainRenderer.uploadFrame(commandList);
-                weatherCommandList = beginWeatherRendering(
-                    commandList,
-                    m_currentContext,
-                    m_shared.deferredTargets,
-                    writeTemporalMasks);
-            }
-            const float frameAspect = static_cast<float>(frameRenderSize.x) /
-                                      static_cast<float>(std::max(1, frameRenderSize.y));
-            auto projMat = request.camera.getProjectionMatrix(frameAspect);
-            const float alphaScale = m_settings.weather.rainAlphaScale;
-            const glm::vec2 precipitationScreenSize(
-                static_cast<float>(frameRenderSize.x),
-                static_cast<float>(frameRenderSize.y));
-
-            if (weatherCommandList != nullptr && weather.rainStrength > 0.01f) {
-                request.rainRenderer.render(*weatherCommandList, projMat, viewMat,
-                                             weather.rainStrength, cameraRainVisibility,
-                                             alphaScale, depthTexture,
-                                             precipitationScreenSize,
-                                             hardwareDepthTest);
-            }
-            if (weatherCommandList != nullptr && weather.snowStrength > 0.01f) {
-                request.rainRenderer.renderSnow(*weatherCommandList, projMat, viewMat,
-                                                weather.snowStrength, cameraRainVisibility,
-                                                alphaScale * 0.6f, depthTexture,
-                                                precipitationScreenSize,
-                                                hardwareDepthTest);
-            }
-            endWeatherRendering(*m_shared.rhiDevice,
-                                weatherCommandList,
-                                m_currentContext,
-                                m_shared.deferredTargets,
-                                writeTemporalMasks);
-        }
+    if (!renderFrame(request.worldView, request.camera, request.window,
+                     frameRenderSize, displaySize, frameAspectRatio,
+                     request.dayNightSystem, request.weatherSystem)) {
+        return;
     }
-
-    if (request.renderFirstPersonHeldItem &&
-        request.firstPersonHeldItemRenderer != nullptr &&
-        request.firstPersonInventory != nullptr &&
-        request.firstPersonHeldItemMotion != nullptr) {
-        request.firstPersonHeldItemRenderer->setShadowData(
-            FirstPersonHeldItemRenderer::fromFirstPersonShadowData(getHeldItemShadowData()));
-        const glm::vec2 heldLight = sampleHeldItemLight(request.worldView, request.camera.getPosition());
-        request.firstPersonHeldItemRenderer->setEnvironmentLight(heldLight.x, heldLight.y);
-        request.firstPersonHeldItemRenderer->setSceneHdrScale(
-            computeHeldItemSceneHdrScale(m_currentContext, m_settings, getPipelineMode()));
-        request.firstPersonHeldItemRenderer->prepareFrameResources(*request.firstPersonInventory);
-        request.firstPersonHeldItemRenderer->prepareFrame(
-            frameRenderSize.x,
-            frameRenderSize.y,
-            *request.firstPersonInventory,
-            *request.firstPersonHeldItemMotion,
-            static_cast<float>(Time::getGameTime()));
-        RhiCommandList* commandListStorage =
-            m_shared.commandListPool->acquire(RhiCommandListType::Graphics);
-        if (commandListStorage == nullptr ||
-            !commandListStorage->begin(
-                {"FirstPersonHeldItem.Commands", RhiCommandListType::Graphics})) {
-            std::abort();
-        }
-        RhiCommandList& commandList = *commandListStorage;
-        request.firstPersonHeldItemRenderer->prepareRhiFrame(commandList);
-        RhiCommandList* heldItemCommandList = beginSceneCaptureRendering(
-            commandList, m_currentContext, "SceneCapture.FirstPersonHeldItem");
-        request.firstPersonHeldItemRenderer->renderPrepared(commandList);
-        endSceneCaptureRendering(*m_shared.rhiDevice, heldItemCommandList, m_currentContext);
+    if (!executeSceneOverlayGraph(request, frameRenderSize,
+                                  lightDebugActive, cameraRainVisibility)) {
+        m_terrainStreamingService.endFrame();
+        return;
     }
 
     if (!m_temporalUpscalePass.prepareOutputTarget(

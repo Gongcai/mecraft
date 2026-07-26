@@ -12,6 +12,7 @@
 #include "../overlays/BlockInteractionOverlayRenderer.h"
 #include "../debug/RenderDebugService.h"
 #include "../gi/VoxelGiClipmap.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <memory>
 #include <functional>
@@ -125,11 +126,14 @@ public:
     void shutdown();
 
     /// Main render entry point (called from Game)
-    void renderFrame(const IWorldView& worldView, const Camera& camera, const Window& window,
-                     const glm::ivec2& frameRenderSize, const glm::ivec2& frameOutputSize,
-                     float frameAspectRatio,
-                     const BlockTargetRenderData& target, const BlockBreakRenderData& blockBreak,
-                     const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem);
+    [[nodiscard]] bool renderFrame(const IWorldView& worldView,
+                                   const Camera& camera,
+                                   const Window& window,
+                                   const glm::ivec2& frameRenderSize,
+                                   const glm::ivec2& frameOutputSize,
+                                   float frameAspectRatio,
+                                   const DayNightSystem& dayNightSystem,
+                                   const WeatherSystem& weatherSystem);
 
     /// Render a complete gameplay frame, including scene, precipitation, and post-process setup.
     void renderGameplayFrame(const RenderGameplayFrameRequest& request);
@@ -263,6 +267,16 @@ private:
     /// Prepare active pipeline targets that FrameContext depends on.
     bool prepareFrameResources(const glm::ivec2& frameRenderSize);
 
+    /// Reset frame-scoped GPU diagnostics before any pipeline pass records work.
+    [[nodiscard]] bool executeFrameBeginGraph();
+
+    /// Record scene overlays, precipitation, and the first-person item in display order.
+    [[nodiscard]] bool executeSceneOverlayGraph(
+        const RenderGameplayFrameRequest& request,
+        const glm::ivec2& frameRenderSize,
+        bool lightDebugActive,
+        float& cameraRainVisibility);
+
     /// Invalidate temporal/history resources when pipeline changes
     void invalidateFrameHistory();
     void refreshTemporalFrameInput();
@@ -282,6 +296,8 @@ private:
 
     // R6: Debug service (owned by RenderScene)
     RenderDebugService m_debugService;
+    RenderGraph m_frameBeginGraph;
+    RenderGraph m_sceneOverlayGraph;
 
     // Shared post-processing pass (used by both Forward and Deferred pipelines)
     PostProcessPass m_postProcessPass;
