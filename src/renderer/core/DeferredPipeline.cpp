@@ -18,7 +18,9 @@
 #include "../../Diagnostics.h"
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
+#include <limits>
 
 namespace {
 void setClearAttachment(RhiColorAttachment& attachment,
@@ -596,6 +598,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return false;
     };
 
+    const auto graphBuildStart = std::chrono::steady_clock::now();
     m_renderGraph.reset();
     const auto importTexture = [&](const RhiTextureHandle texture,
                                    const RhiTextureViewHandle view,
@@ -1685,7 +1688,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         }
     }
 
+    const auto graphCompileStart = std::chrono::steady_clock::now();
     const RgCompileResult compiled = m_renderGraph.compile();
+    const auto graphCompileEnd = std::chrono::steady_clock::now();
     if (!compiled.succeeded()) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[DeferredPipeline] Render Graph compile failed: "
@@ -1698,8 +1703,20 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (shadowEnabled) {
         m_shadowPass->beginGraphExecution();
     }
+    const auto graphExecuteStart = std::chrono::steady_clock::now();
     const RgExecuteResult executed =
         m_renderGraph.execute(rhiDevice, *m_shared->commandListPool);
+    const auto graphExecuteEnd = std::chrono::steady_clock::now();
+    const auto toMilliseconds = [](const auto begin, const auto end) {
+        return std::chrono::duration<double, std::milli>(end - begin).count();
+    };
+    m_graphCpuBuildMs = toMilliseconds(graphBuildStart, graphCompileStart);
+    m_graphCpuCompileMs = toMilliseconds(graphCompileStart, graphCompileEnd);
+    m_graphCpuExecuteMs = toMilliseconds(graphExecuteStart, graphExecuteEnd);
+    m_graphCpuRecordMs = executed.recordMilliseconds;
+    m_graphCpuSubmitMs = executed.submitMilliseconds;
+    m_graphSubmitCount = static_cast<uint32_t>(executed.submissions.size());
+    m_graphCpuStatsValid = true;
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[DeferredPipeline] Render Graph execution failed: "
@@ -1724,6 +1741,56 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         commitDeferredHistoryState();
     }
     return executed.succeeded();
+}
+
+RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
+    RenderGraphFrameStats stats;
+    stats.valid = m_graphCpuStatsValid;
+    stats.cpuBuildMs = m_graphCpuBuildMs;
+    stats.cpuCompileMs = m_graphCpuCompileMs;
+    stats.cpuExecuteMs = m_graphCpuExecuteMs;
+    stats.cpuRecordMs = m_graphCpuRecordMs;
+    stats.cpuSubmitMs = m_graphCpuSubmitMs;
+    stats.submitCount = m_graphSubmitCount;
+    stats.passCount =
+        static_cast<uint32_t>(m_renderGraph.compiledPasses().size());
+    stats.batchCount =
+        static_cast<uint32_t>(m_renderGraph.submissionBatches().size());
+
+    const RgTimingSnapshot& timings = m_renderGraph.latestTimings();
+    stats.execution = timings.execution;
+    if (!timings.isValid() || timings.passes.empty()) {
+        return stats;
+    }
+
+    constexpr double kNanosecondsToMilliseconds = 1.0e-6;
+    uint64_t firstBegin = std::numeric_limits<uint64_t>::max();
+    uint64_t lastEnd = 0u;
+    uint64_t previousEnd = 0u;
+    stats.passes.reserve(timings.passes.size());
+    for (const RgPassTiming& pass : timings.passes) {
+        RenderGraphPassStats entry;
+        entry.name = pass.name;
+        entry.queue = pass.queue;
+        entry.gpuMs = static_cast<double>(pass.durationNanoseconds) *
+                      kNanosecondsToMilliseconds;
+        if (previousEnd != 0u && pass.beginNanoseconds > previousEnd) {
+            entry.gapMs = static_cast<double>(pass.beginNanoseconds -
+                                              previousEnd) *
+                          kNanosecondsToMilliseconds;
+        }
+        previousEnd = pass.endNanoseconds;
+        firstBegin = std::min(firstBegin, pass.beginNanoseconds);
+        lastEnd = std::max(lastEnd, pass.endNanoseconds);
+        stats.gpuTotalMs += entry.gpuMs;
+        stats.passes.push_back(std::move(entry));
+    }
+    if (lastEnd > firstBegin) {
+        stats.gpuSpanMs = static_cast<double>(lastEnd - firstBegin) *
+                          kNanosecondsToMilliseconds;
+        stats.gpuIdleMs = std::max(0.0, stats.gpuSpanMs - stats.gpuTotalMs);
+    }
+    return stats;
 }
 
 bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,

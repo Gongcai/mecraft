@@ -208,6 +208,11 @@ struct RgExecuteResult {
   RgExecuteError error = RgExecuteError::None;
   std::string message;
   std::vector<RhiSubmissionToken> submissions;
+  /// CPU milliseconds spent resolving transient resources and recording
+  /// every batch command list, measured on the successful path only.
+  double recordMilliseconds = 0.0;
+  /// CPU milliseconds spent submitting recorded batches to device queues.
+  double submitMilliseconds = 0.0;
 
   /// Reports whether every command list was recorded and submitted successfully.
   /// @return True only when no execution error was reported.
@@ -227,6 +232,11 @@ struct RgPassTiming {
   RhiQueueType queue = RhiQueueType::Graphics;
   /// GPU timestamp difference converted to nanoseconds by the RHI backend.
   uint64_t durationNanoseconds = 0u;
+  /// Absolute GPU clock nanoseconds sampled when the pass started and ended.
+  /// Values within one snapshot share a clock, so consumers can measure the
+  /// scheduling gap between consecutive passes and the whole graph span.
+  uint64_t beginNanoseconds = 0u;
+  uint64_t endNanoseconds = 0u;
 };
 
 struct RgTimingSnapshot {

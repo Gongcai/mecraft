@@ -5,6 +5,7 @@
 #include "renderer/rhi/RhiDevice.h"
 
 #include <algorithm>
+#include <chrono>
 #include <limits>
 #include <utility>
 
@@ -1210,6 +1211,7 @@ RgCompileResult RenderGraph::compile() {
 
 RgExecuteResult RenderGraph::execute(RhiDevice &device,
                                      RhiCommandListPool &commandListPool) {
+  const auto executeStart = std::chrono::steady_clock::now();
   if (!m_compiled) {
     return {RgExecuteError::NotCompiled,
             "render graph must compile before execution",
@@ -1762,7 +1764,11 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     }
   }
 
+  const auto submitStart = std::chrono::steady_clock::now();
   RgExecuteResult result;
+  result.recordMilliseconds =
+      std::chrono::duration<double, std::milli>(submitStart - executeStart)
+          .count();
   result.submissions.reserve(prologueBatches.size() +
                              m_submissionBatches.size() +
                              epilogueBatches.size());
@@ -1778,13 +1784,23 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     result.submissions.push_back(prologue.token);
   }
 
+  // Coalesce consecutive same-queue batches into one submission. Queue
+  // submission order already serializes same-queue work, and every pass
+  // records its own acquire barriers, so timeline waits are only required
+  // when a dependency was submitted to a different queue. This collapses a
+  // single-queue frame into one submit and removes the GPU idle bubbles
+  // that per-batch semaphore chains introduce at batch boundaries.
   std::vector<RhiSubmissionToken> batchTokens(m_submissionBatches.size());
-  for (uint32_t batchIndex = 0u; batchIndex < m_submissionBatches.size();
-       ++batchIndex) {
-    const RgSubmissionBatchPlan &batch = m_submissionBatches[batchIndex];
+  uint32_t groupBegin = 0u;
+  while (groupBegin < m_submissionBatches.size()) {
+    const RhiQueueType groupQueue = m_submissionBatches[groupBegin].queue;
+    uint32_t groupEnd = groupBegin + 1u;
+    while (groupEnd < m_submissionBatches.size() &&
+           m_submissionBatches[groupEnd].queue == groupQueue) {
+      ++groupEnd;
+    }
+
     std::vector<RhiQueueDependency> waits;
-    waits.reserve(batch.dependencies.size() +
-                  batchPrologueDependencies[batchIndex].size());
     const auto appendWait = [&](const RhiSubmissionToken token) {
       if (std::find_if(waits.begin(), waits.end(),
                        [token](const RhiQueueDependency &wait) {
@@ -1794,38 +1810,64 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
         waits.push_back({token, 0u});
       }
     };
-    for (const uint32_t dependency : batch.dependencies) {
-      if (dependency >= batchIndex || !batchTokens[dependency].isValid()) {
-        return {RgExecuteError::SubmissionFailed,
-                "render graph submission dependency is not available",
-                result.submissions};
+    std::vector<RhiCommandList *> submitted;
+    submitted.reserve(groupEnd - groupBegin);
+    uint32_t issuedPassCount = 0u;
+    for (uint32_t batchIndex = groupBegin; batchIndex < groupEnd;
+         ++batchIndex) {
+      const RgSubmissionBatchPlan &batch = m_submissionBatches[batchIndex];
+      for (const uint32_t dependency : batch.dependencies) {
+        if (dependency >= batchIndex) {
+          return {RgExecuteError::SubmissionFailed,
+                  "render graph submission dependency is not available",
+                  result.submissions};
+        }
+        if (m_submissionBatches[dependency].queue == groupQueue) {
+          continue;
+        }
+        if (!batchTokens[dependency].isValid()) {
+          return {RgExecuteError::SubmissionFailed,
+                  "render graph submission dependency is not available",
+                  result.submissions};
+        }
+        appendWait(batchTokens[dependency]);
       }
-      appendWait(batchTokens[dependency]);
-    }
-    for (const uint32_t dependency :
-         batchPrologueDependencies[batchIndex]) {
-      if (dependency >= prologueBatches.size() ||
-          !prologueBatches[dependency].token.isValid()) {
-        return {RgExecuteError::SubmissionFailed,
-                "render graph prologue dependency is not available",
-                result.submissions};
+      for (const uint32_t dependency :
+           batchPrologueDependencies[batchIndex]) {
+        if (dependency >= prologueBatches.size() ||
+            !prologueBatches[dependency].token.isValid()) {
+          return {RgExecuteError::SubmissionFailed,
+                  "render graph prologue dependency is not available",
+                  result.submissions};
+        }
+        if (prologueBatches[dependency].queue == groupQueue) {
+          continue;
+        }
+        appendWait(prologueBatches[dependency].token);
       }
-      appendWait(prologueBatches[dependency].token);
+      submitted.push_back(commandLists[batchIndex]);
+      issuedPassCount = std::max(issuedPassCount, batch.passes.back() + 1u);
     }
-    RhiCommandList *submitted[] = {commandLists[batchIndex]};
+
     RhiSubmissionToken token;
-    if (!device.submit({"RenderGraph.Submit", submitted, 1u, batch.queue,
+    if (!device.submit({"RenderGraph.Submit", submitted.data(),
+                        static_cast<uint32_t>(submitted.size()), groupQueue,
                         waits.empty() ? nullptr : waits.data(),
                         static_cast<uint32_t>(waits.size())},
                        &token)) {
       return {RgExecuteError::SubmissionFailed,
               "RHI rejected a render graph submission", result.submissions};
     }
-    batchTokens[batchIndex] = token;
+    for (uint32_t batchIndex = groupBegin; batchIndex < groupEnd;
+         ++batchIndex) {
+      batchTokens[batchIndex] = token;
+    }
     result.submissions.push_back(token);
     timingSlot->pending = true;
-    timingSlot->issuedPassCount = batch.passes.back() + 1u;
+    timingSlot->issuedPassCount =
+        std::max(timingSlot->issuedPassCount, issuedPassCount);
     timingSlot->submissions = result.submissions;
+    groupBegin = groupEnd;
   }
 
   for (TransitionBatch &epilogue : epilogueBatches) {
@@ -1918,6 +1960,10 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     for (const RgBufferBarrierPlan &barrier : epilogue.bufferBarriers)
       setBufferLastUse(barrier, epilogue.token);
   }
+  result.submitMilliseconds =
+      std::chrono::duration<double, std::milli>(
+          std::chrono::steady_clock::now() - submitStart)
+          .count();
   return result;
 }
 
@@ -1959,8 +2005,9 @@ RgTimingPollResult RenderGraph::pollTimings(RhiDevice &device) {
       const uint64_t end = timestamps[passIndex * 2u + 1u];
       if (end < start)
         return RgTimingPollResult::Error;
-      snapshot.passes.push_back(
-          {slot.passNames[passIndex], slot.passQueues[passIndex], end - start});
+      snapshot.passes.push_back({slot.passNames[passIndex],
+                                 slot.passQueues[passIndex], end - start, start,
+                                 end});
     }
     if (snapshot.execution >= m_latestTimings.execution)
       m_latestTimings = std::move(snapshot);

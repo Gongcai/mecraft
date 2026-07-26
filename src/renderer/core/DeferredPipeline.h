@@ -3,6 +3,7 @@
 
 #include "RenderPipeline.h"
 #include "RenderSettings.h"
+#include "../debug/RenderDebugService.h"
 #include "../rhi/RhiRenderGraph.h"
 #include "../mesh/WorldDrawBatch.h"
 #include "../mesh/TerrainRenderer.h"
@@ -71,6 +72,12 @@ public:
     DebugPass* debugPass() const { return m_debugPass.get(); }
     VoxelGiClipmap* voxelGiClipmap() const { return m_voxelGiClipmap.get(); }
 
+    /// Builds dashboard statistics from the most recent Render Graph frame:
+    /// CPU stage costs measured around the last submission plus per-pass GPU
+    /// timings and scheduling gaps from the latest completed snapshot.
+    /// @return Frame statistics; `valid` is false before the first submission.
+    [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
+
 private:
     void initializePasses(ResourceMgr& resourceMgr, shadow::ShadowRenderer* shadowRenderer);
 
@@ -112,6 +119,15 @@ private:
     std::vector<DrawBatchEntry> m_transparentBatch;
     TransparentPassPlan m_transparentPassPlan;
     RenderGraph m_renderGraph;
+
+    // CPU costs of the last frame graph submission (declare/compile/record).
+    double m_graphCpuBuildMs = 0.0;
+    double m_graphCpuCompileMs = 0.0;
+    double m_graphCpuExecuteMs = 0.0;
+    double m_graphCpuRecordMs = 0.0;
+    double m_graphCpuSubmitMs = 0.0;
+    uint32_t m_graphSubmitCount = 0u;
+    bool m_graphCpuStatsValid = false;
 
     // Private orchestration methods
     [[nodiscard]] bool recordDeferredAuxiliaryClear(

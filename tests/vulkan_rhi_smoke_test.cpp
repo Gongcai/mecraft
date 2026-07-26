@@ -1543,6 +1543,7 @@ int main() {
     }
     GLFWwindow* window = glfwCreateWindow(320, 240, "vulkan_rhi_smoke_test", nullptr, nullptr);
     if (window == nullptr) {
+        std::cerr << "vulkan_rhi_smoke_test: window creation failed\n";
         glfwTerminate();
 #if defined(MECRAFT_ENABLE_STREAMLINE)
         streamline.shutdown();
@@ -1560,12 +1561,15 @@ int main() {
     desc.enableDebugMarkers = true;
     desc.enableDebugOutput = true;
     if (!device.init(desc)) {
+        std::cerr << "vulkan_rhi_smoke_test: device init failed\n";
         glfwDestroyWindow(window);
         glfwTerminate();
         return 1;
     }
     if (device.swapchainColorFormat() != RhiTextureFormat::Bgra8Unorm ||
         !validateResourceDescriptionNameOwnership(device)) {
+        std::cerr << "vulkan_rhi_smoke_test: swapchain format or resource "
+                     "name ownership check failed\n";
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -1573,6 +1577,8 @@ int main() {
     }
     if (!device.vsyncEnabled() ||
         device.capabilities().swapchainPresentMode != RhiPresentMode::Fifo) {
+        std::cerr << "vulkan_rhi_smoke_test: default present mode is not "
+                     "vsync Fifo\n";
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();
@@ -1580,6 +1586,7 @@ int main() {
     }
     if (device.capabilities().vsyncControl) {
         if (!device.setVsyncEnabled(false) || device.vsyncEnabled()) {
+            std::cerr << "vulkan_rhi_smoke_test: vsync toggle failed\n";
             device.shutdown();
             glfwDestroyWindow(window);
             glfwTerminate();

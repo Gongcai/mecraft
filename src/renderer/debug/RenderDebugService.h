@@ -4,8 +4,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiTypes.h"
 
 class RhiCommandList;
 class RhiDevice;
@@ -67,6 +70,40 @@ struct GpuFrameStats {
     double cloudMs = 0.0;
     double waterMs = 0.0;
     double postMs = 0.0;
+};
+
+/// One Render Graph pass GPU timing entry in compiled execution order.
+struct RenderGraphPassStats {
+    std::string name;
+    RhiQueueType queue = RhiQueueType::Graphics;
+    double gpuMs = 0.0;
+    /// GPU idle time between the previous pass's end and this pass's start.
+    double gapMs = 0.0;
+};
+
+/// Render Graph frame statistics: CPU stage costs sampled at the most recent
+/// graph submission plus GPU pass timings from the latest completed snapshot.
+struct RenderGraphFrameStats {
+    bool valid = false;
+    /// Execution identity of the GPU timing snapshot (0 while none completed).
+    uint64_t execution = 0u;
+    uint32_t passCount = 0u;
+    uint32_t batchCount = 0u;
+    /// Queue submissions issued for the last frame graph.
+    uint32_t submitCount = 0u;
+    double cpuBuildMs = 0.0;
+    double cpuCompileMs = 0.0;
+    double cpuExecuteMs = 0.0;
+    /// Portions of cpuExecuteMs: command recording versus queue submission.
+    double cpuRecordMs = 0.0;
+    double cpuSubmitMs = 0.0;
+    /// Sum of measured pass durations.
+    double gpuTotalMs = 0.0;
+    /// Last pass end minus first pass begin on the GPU clock.
+    double gpuSpanMs = 0.0;
+    /// Span minus total: scheduling bubbles between passes.
+    double gpuIdleMs = 0.0;
+    std::vector<RenderGraphPassStats> passes;
 };
 
 /// Per-cascade CSM shadow statistics for profiling and baseline capture.

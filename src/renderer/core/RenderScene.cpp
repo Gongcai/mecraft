@@ -1046,6 +1046,13 @@ bool RenderScene::isLightDebugActive() const {
     return m_settings.debug.deferredLightDebugMode > 0 || m_settings.debug.reflectionDebugMode > 0;
 }
 
+RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
+    if (m_deferredPipeline == nullptr) {
+        return {};
+    }
+    return m_deferredPipeline->renderGraphFrameStats();
+}
+
 bool RenderScene::isNewPipelineReady() const {
     if (!m_activePipeline || !m_shared.rhiDevice ||
         !m_shared.rhiDevice->currentSwapchainColorView().isValid() ||

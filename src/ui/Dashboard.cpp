@@ -805,6 +805,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             m_displayProfilerStats = profilerStats;
             m_displayGpuStats = render.getGpuFrameStats();
             m_displayShadowStats = render.getShadowFrameStats();
+            m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
             m_displayRenderWorkStats = render.getRenderWorkStats();
             m_displayLightStats = world.getLightFrameStats();
             refreshWorldMetricsIfNeeded(world, now, false);
@@ -1002,6 +1003,74 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             }
         } else if (gpuStats.supported && gpuTimerEnabled) {
             ImGui::Text("CSM GPU: waiting");
+        }
+
+        const RenderGraphFrameStats& graphStats = m_displayRenderGraphStats;
+        if (graphStats.valid && ImGui::TreeNode("Render Graph")) {
+            ImGui::Text("CPU Build: %.3f ms  Compile: %.3f ms  Record: %.3f ms  Submit: %.3f ms",
+                        graphStats.cpuBuildMs,
+                        graphStats.cpuCompileMs,
+                        graphStats.cpuRecordMs,
+                        graphStats.cpuSubmitMs);
+            ImGui::Text("Passes: %u  Batches: %u  Submits: %u",
+                        graphStats.passCount,
+                        graphStats.batchCount,
+                        graphStats.submitCount);
+            if (graphStats.passes.empty()) {
+                ImGui::Text("GPU timings: waiting");
+            } else {
+                ImGui::Text("GPU Total: %.3f ms  Span: %.3f ms  Idle: %.3f ms",
+                            graphStats.gpuTotalMs,
+                            graphStats.gpuSpanMs,
+                            graphStats.gpuIdleMs);
+                const auto queueLabel = [](const RhiQueueType queue) {
+                    switch (queue) {
+                        case RhiQueueType::Graphics: return "Graphics";
+                        case RhiQueueType::Compute: return "Compute";
+                        case RhiQueueType::Transfer: return "Transfer";
+                        case RhiQueueType::Present: return "Present";
+                    }
+                    return "Unknown";
+                };
+                const ImVec4 hotColor(1.0f, 0.6f, 0.3f, 1.0f);
+                if (ImGui::BeginTable("RenderGraphPasses", 4,
+                                      ImGuiTableFlags_RowBg |
+                                          ImGuiTableFlags_BordersInnerV |
+                                          ImGuiTableFlags_ScrollY |
+                                          ImGuiTableFlags_SizingStretchProp,
+                                      ImVec2(0.0f, 320.0f))) {
+                    ImGui::TableSetupScrollFreeze(0, 1);
+                    ImGui::TableSetupColumn("Pass");
+                    ImGui::TableSetupColumn(
+                        "Queue", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+                    ImGui::TableSetupColumn(
+                        "GPU ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+                    ImGui::TableSetupColumn(
+                        "Gap ms", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+                    ImGui::TableHeadersRow();
+                    for (const RenderGraphPassStats& pass : graphStats.passes) {
+                        ImGui::TableNextRow();
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(pass.name.c_str());
+                        ImGui::TableNextColumn();
+                        ImGui::TextUnformatted(queueLabel(pass.queue));
+                        ImGui::TableNextColumn();
+                        if (pass.gpuMs >= 0.5) {
+                            ImGui::TextColored(hotColor, "%.3f", pass.gpuMs);
+                        } else {
+                            ImGui::Text("%.3f", pass.gpuMs);
+                        }
+                        ImGui::TableNextColumn();
+                        if (pass.gapMs >= 0.05) {
+                            ImGui::TextColored(hotColor, "%.3f", pass.gapMs);
+                        } else {
+                            ImGui::Text("%.3f", pass.gapMs);
+                        }
+                    }
+                    ImGui::EndTable();
+                }
+            }
+            ImGui::TreePop();
         }
 
         const RenderWorkStats& renderWork = m_displayRenderWorkStats;

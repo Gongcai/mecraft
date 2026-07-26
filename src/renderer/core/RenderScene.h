@@ -182,6 +182,11 @@ public:
     // Debug query helpers
     bool isLightDebugActive() const;
 
+    /// Collects Render Graph frame statistics from the deferred pipeline.
+    /// @return CPU stage costs and per-pass GPU timings for the dashboard;
+    /// default-constructed (valid == false) while the pipeline is absent.
+    [[nodiscard]] RenderGraphFrameStats renderGraphFrameStats() const;
+
     // Pipeline readiness (R2.6a)
     /// Check if the new pipeline path is ready to use.
     bool isNewPipelineReady() const;

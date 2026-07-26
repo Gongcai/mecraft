@@ -220,6 +220,7 @@ private:
     FrameProfilerStats m_displayProfilerStats{};
     GpuFrameStats m_displayGpuStats{};
     ShadowFrameStats m_displayShadowStats{};
+    RenderGraphFrameStats m_displayRenderGraphStats{};
     RenderWorkStats m_displayRenderWorkStats{};
     LightFrameStats m_displayLightStats{};
     CachedWorldMetrics m_cachedWorldMetrics{};
