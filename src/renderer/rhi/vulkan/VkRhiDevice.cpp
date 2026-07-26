@@ -2048,6 +2048,22 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
     return handle;
 }
 
+bool VkRhiDevice::getBufferDesc(const RhiBufferHandle buffer,
+                                RhiBufferDesc& desc) const {
+    const auto* record = m_data != nullptr ? findRecord(m_data->buffers, buffer) : nullptr;
+    if (!m_initialized || record == nullptr) return false;
+    desc = record->desc;
+    return true;
+}
+
+bool VkRhiDevice::getTextureDesc(const RhiTextureHandle texture,
+                                 RhiTextureDesc& desc) const {
+    const auto* record = m_data != nullptr ? findRecord(m_data->textures, texture) : nullptr;
+    if (!m_initialized || record == nullptr) return false;
+    desc = record->desc;
+    return true;
+}
+
 RhiTextureViewHandle VkRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
     const auto* texture = m_data != nullptr ? findRecord(m_data->textures, desc.texture) : nullptr;
     if (texture == nullptr) return {};

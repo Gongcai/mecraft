@@ -28,6 +28,21 @@ public:
                                          size_t initialDataSize) = 0;
     virtual RhiTextureHandle createTexture(const RhiTextureDesc& desc,
                                            const RhiTextureInitialData* initialData) = 0;
+
+    /// Returns the immutable creation description for a live buffer.
+    /// @param buffer Buffer handle owned by this device.
+    /// @param desc Receives the exact description used to create the buffer.
+    /// @return True when the handle identifies a live buffer on this device.
+    [[nodiscard]] virtual bool getBufferDesc(RhiBufferHandle buffer,
+                                             RhiBufferDesc& desc) const = 0;
+
+    /// Returns the immutable creation description for a live texture.
+    /// @param texture Texture handle owned by this device.
+    /// @param desc Receives the exact description used to create the texture.
+    /// @return True when the handle identifies a live texture on this device.
+    [[nodiscard]] virtual bool getTextureDesc(RhiTextureHandle texture,
+                                              RhiTextureDesc& desc) const = 0;
+
     virtual RhiTextureViewHandle createTextureView(const RhiTextureViewDesc& desc) = 0;
     virtual RhiSamplerHandle createSampler(const RhiSamplerDesc& desc) = 0;
     virtual RhiShaderHandle createShader(const RhiShaderDesc& desc) = 0;

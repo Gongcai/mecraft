@@ -201,6 +201,20 @@ public:
         textureDescs.push_back(desc);
         return {m_nextTexture++, 1u};
     }
+    [[nodiscard]] bool getBufferDesc(const RhiBufferHandle buffer,
+                                     RhiBufferDesc& desc) const override {
+        if (!buffer.isValid() || buffer.generation != 1u ||
+            buffer.index > bufferDescs.size()) return false;
+        desc = bufferDescs[buffer.index - 1u];
+        return true;
+    }
+    [[nodiscard]] bool getTextureDesc(const RhiTextureHandle texture,
+                                      RhiTextureDesc& desc) const override {
+        if (!texture.isValid() || texture.generation != 1u ||
+            texture.index > textureDescs.size()) return false;
+        desc = textureDescs[texture.index - 1u];
+        return true;
+    }
     RhiTextureViewHandle createTextureView(const RhiTextureViewDesc& desc) override {
         textureViewDescs.push_back(desc);
         return {m_nextTextureView++, 1u};

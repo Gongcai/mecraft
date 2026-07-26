@@ -876,6 +876,77 @@ bool testGlRhiTimestampQueryPool() {
     return true;
 }
 
+bool testGlRhiResourceDescriptionQueries() {
+    GlTestContext context;
+    if (!requireTrue(context.init(),
+                     "OpenGL test context must initialize for resource description queries")) {
+        return false;
+    }
+    GlRhiDevice device;
+    if (!requireTrue(device.init(makeDeviceDesc()),
+                     "OpenGL RHI device must initialize for resource description queries")) {
+        return false;
+    }
+
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = "DescriptionQuery.Buffer";
+    bufferDesc.size = 384u;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    bufferDesc.initialState = RhiResourceState::StorageBuffer;
+    const RhiBufferHandle buffer = device.createBuffer(bufferDesc, nullptr, 0u);
+
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = "DescriptionQuery.Texture";
+    textureDesc.dimension = RhiTextureDimension::Texture2DArray;
+    textureDesc.format = RhiTextureFormat::Rgba16Float;
+    textureDesc.width = 32u;
+    textureDesc.height = 16u;
+    textureDesc.depthOrLayers = 3u;
+    textureDesc.mipLevels = 2u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                        rhiFlag(RhiTextureUsage::ColorAttachment);
+    const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
+
+    RhiBufferDesc queriedBuffer;
+    RhiTextureDesc queriedTexture;
+    if (!requireTrue(buffer.isValid() && texture.isValid(),
+                     "resource description query test requires live resources") ||
+        !requireTrue(device.getBufferDesc(buffer, queriedBuffer),
+                     "live buffer handles must expose their creation description") ||
+        !requireTrue(queriedBuffer.size == bufferDesc.size &&
+                         queriedBuffer.usage == bufferDesc.usage &&
+                         queriedBuffer.memoryUsage == bufferDesc.memoryUsage &&
+                         queriedBuffer.initialState == bufferDesc.initialState,
+                     "buffer description queries must preserve all creation fields") ||
+        !requireTrue(device.getTextureDesc(texture, queriedTexture),
+                     "live texture handles must expose their creation description") ||
+        !requireTrue(queriedTexture.dimension == textureDesc.dimension &&
+                         queriedTexture.format == textureDesc.format &&
+                         queriedTexture.width == textureDesc.width &&
+                         queriedTexture.height == textureDesc.height &&
+                         queriedTexture.depthOrLayers == textureDesc.depthOrLayers &&
+                         queriedTexture.mipLevels == textureDesc.mipLevels &&
+                         queriedTexture.usage == textureDesc.usage,
+                     "texture description queries must preserve all creation fields") ||
+        !requireTrue(!device.getBufferDesc({}, queriedBuffer) &&
+                         !device.getTextureDesc({}, queriedTexture),
+                     "resource description queries must reject invalid handles")) {
+        device.shutdown();
+        return false;
+    }
+
+    device.destroyBuffer(buffer);
+    device.destroyTexture(texture);
+    const bool staleRejected =
+        requireTrue(!device.getBufferDesc(buffer, queriedBuffer) &&
+                        !device.getTextureDesc(texture, queriedTexture),
+                    "resource description queries must reject destroyed handles");
+    device.shutdown();
+    return staleRejected;
+}
+
 bool testRenderDebugServiceTimestampSegments() {
     GlTestContext context;
     if (!requireTrue(context.init(), "OpenGL test context must initialize for debug timestamps")) {
@@ -5105,6 +5176,9 @@ int main() {
         return 1;
     }
     if (!testGlRhiTimestampQueryPool()) {
+        return 1;
+    }
+    if (!testGlRhiResourceDescriptionQueries()) {
         return 1;
     }
     if (!testRenderDebugServiceTimestampSegments()) {
