@@ -447,12 +447,12 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
         !m_rhiTransparentIndirectBuffer.init(
             rhiDevice,
             commandBytes,
-            rhiFlag(RhiBufferUsage::Indirect),
+            rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
             "WorldRenderBuffer.RhiTransparentIndirect") ||
         !m_rhiWaterIndirectBuffer.init(
             rhiDevice,
             commandBytes,
-            rhiFlag(RhiBufferUsage::Indirect),
+            rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
             "WorldRenderBuffer.RhiWaterIndirect") ||
         !m_rhiMetadataBuffer.init(
             rhiDevice,

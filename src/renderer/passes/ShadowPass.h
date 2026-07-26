@@ -119,8 +119,8 @@ private:
     [[nodiscard]] bool ensureCullPipeline(RhiDevice& rhiDevice);
     /// Creates any missing cull counter/readback buffers (per-item recovery).
     [[nodiscard]] bool ensureCullStatsBuffers(RhiDevice& rhiDevice);
-    /// (Re)binds one command buffer slot (0 opaque, 1 cutout) for the cull
-    /// dispatch; rebuilt when the growable command buffer reallocates.
+    /// (Re)binds one command buffer slot (0 opaque, 1 cutout, 2 transparent)
+    /// for the cull dispatch; rebuilt when either bound buffer reallocates.
     [[nodiscard]] bool ensureCullBindGroup(RhiDevice& rhiDevice, int slot,
                                            RhiBufferHandle commandBuffer,
                                            uint64_t commandCapacity,
@@ -132,6 +132,11 @@ private:
     /// frame's counters on the last one. Failures degrade to an uncalled draw.
     void recordCascadeCull(RhiCommandList& commandList, const FrameContext& ctx,
                            int cascade, bool renderCutoutCasters);
+    /// Dispatches the same light-frustum cull over the cascade's transparent
+    /// (including water) shadow commands between their upload and multi-draw.
+    /// Counts land in the cascade's counter slot, zeroed by the opaque pass.
+    void recordTransparentCull(RhiCommandList& commandList,
+                               const FrameContext& ctx, int cascade);
     /// Destroys all GPU cull resources (pipeline, bind groups, buffers).
     void destroyCullResources();
     /// Copies one cascade's primary depth layer into its transparent depth layer.
@@ -189,7 +194,7 @@ private:
     RhiBindGroupLayoutHandle m_cullBindGroupLayout;
     RhiPipelineLayoutHandle m_cullPipelineLayout;
     RhiPipelineHandle m_cullPipeline;
-    std::array<CullBinding, 2> m_cullBindings{};
+    std::array<CullBinding, 3> m_cullBindings{};
     RhiBufferHandle m_cullCounterBuffer;
     std::array<RhiBufferHandle, kCullStatsRingSize> m_cullReadbackBuffers{};
     std::array<bool, kCullStatsRingSize> m_cullRingWritten{};

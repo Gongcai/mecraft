@@ -628,6 +628,61 @@ void ShadowPass::recordCascadeCull(RhiCommandList& commandList,
     }
 }
 
+void ShadowPass::recordTransparentCull(RhiCommandList& commandList,
+                                       const FrameContext& ctx,
+                                       const int cascade) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        cascade < 0 || cascade >= SHADOW_CASCADE_COUNT) {
+        return;
+    }
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!ensureCullPipeline(rhiDevice)) {
+        return;
+    }
+    const RhiBufferHandle commandBuffer =
+        m_worldRenderBuffer->transparentIndirectBufferHandle();
+    const uint32_t commandCount = static_cast<uint32_t>(
+        m_worldRenderBuffer->transparentCommandCount());
+    if (commandCount == 0u || !commandBuffer.isValid()) {
+        return;
+    }
+    if (!ensureCullBindGroup(rhiDevice, 2, commandBuffer,
+                             m_worldRenderBuffer->transparentIndirectBufferCapacity(),
+                             m_worldRenderBuffer->metadataBufferHandle(),
+                             m_worldRenderBuffer->metadataBufferCapacity())) {
+        return;
+    }
+
+    // Same padded light-frustum test as the opaque dispatch. The counter
+    // slot was zeroed by this cascade's opaque pass and ships to the
+    // readback ring only after the last rendered cascade, so transparent
+    // counts recorded here are included.
+    const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
+    const float xyPadWorld = std::max(2.0f, cascadeData.texelWorldSize * 8.0f);
+    const float zPadWorld = std::max(64.0f, cascadeData.texelWorldSize * 64.0f);
+    ShadowCullPushConstants pushConstants{};
+    pushConstants.viewProj = cascadeData.viewProj;
+    pushConstants.params0 = glm::vec4(
+        xyPadWorld / std::max(1.0f, cascadeData.radius),
+        zPadWorld / std::max(1.0f, cascadeData.depthExtent),
+        static_cast<float>(commandCount),
+        static_cast<float>(cascade));
+    pushConstants.params1 = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+
+    commandList.bufferBarrier({commandBuffer,
+                               RhiResourceState::IndirectArgument,
+                               RhiResourceState::StorageBuffer});
+    commandList.setComputePipeline(m_cullPipeline);
+    commandList.setBindGroup(0u, m_cullBindings[2].bindGroup);
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Compute));
+    commandList.dispatch((commandCount + 63u) / 64u, 1u, 1u);
+    commandList.bufferBarrier({commandBuffer,
+                               RhiResourceState::StorageBuffer,
+                               RhiResourceState::IndirectArgument});
+    m_cullTotals[static_cast<size_t>(cascade)] += commandCount;
+}
+
 bool ShadowPass::ensureCullPipeline(RhiDevice& rhiDevice) {
     if (m_cullRhiDevice != nullptr && m_cullRhiDevice != &rhiDevice) {
         destroyCullResources();
@@ -730,7 +785,7 @@ bool ShadowPass::ensureCullBindGroup(RhiDevice& rhiDevice,
                                      const RhiBufferHandle metadataBuffer,
                                      const uint64_t metadataCapacity) {
     if (!commandBuffer.isValid() || !metadataBuffer.isValid() ||
-        slot < 0 || slot >= 2) {
+        slot < 0 || slot >= 3) {
         return false;
     }
     CullBinding& binding = m_cullBindings[static_cast<size_t>(slot)];
@@ -878,6 +933,9 @@ bool ShadowPass::recordTransparentPass(RhiCommandList& commandList,
                 commandList,
                 ctx.shared->terrainRhiPipelines->shadowMetadataLayout())) {
             return false;
+        }
+        if (m_gpuCullEnabledThisFrame) {
+            recordTransparentCull(commandList, ctx, cascade);
         }
     }
 
