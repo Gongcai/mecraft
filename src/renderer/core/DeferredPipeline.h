@@ -131,12 +131,15 @@ private:
     uint32_t m_graphSubmitCount = 0u;
     bool m_graphCpuStatsValid = false;
     bool m_asyncComputeGateLogged = false;
+    bool m_terrainDrawsPrepared = false;
 
     // Private orchestration methods
     [[nodiscard]] bool recordDeferredAuxiliaryClear(
         RhiCommandList& commandList,
         DeferredRenderTargets& targets);
     void commitDeferredHistoryState();
+    [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList,
+                                                    const FrameContext& ctx);
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx,
                                          const RenderSettings& settings);
     [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList,

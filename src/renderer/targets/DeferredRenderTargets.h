@@ -161,6 +161,7 @@ public:
         return mip < m_hiZMipViews.size() ? m_hiZMipViews[mip]
                                           : RhiTextureViewHandle{};
     }
+    [[nodiscard]] RhiTextureViewHandle hiZFullTextureViewHandle() const { return m_hiZFullView; }
     bool ensureHiZTextureViews(RhiDevice& rhiDevice);
 
     // Scene color ping-pong chain shared by TAA, motion blur, and depth of
@@ -396,6 +397,7 @@ private:
     RhiTextureHandle m_hiZHandle;
     std::vector<RhiTextureViewHandle> m_hiZMipViews;
     uint32_t m_hiZMipCount = 0u;
+    RhiTextureViewHandle m_hiZFullView;
     bool m_rebuiltSinceCheck = false;
 
     // TAA current-frame scratch: avoids reading history[current] as TAA input.

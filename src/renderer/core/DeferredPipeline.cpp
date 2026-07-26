@@ -951,6 +951,43 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         });
     graphTail = skyCapturePass.handle();
 
+    // Hi-Z occlusion culling: reduce the previous frame's depth into a
+    // max-depth pyramid, upload this frame's indirect terrain commands in a
+    // dedicated pass, and zero occluded commands before the GBuffer draws
+    // consume them. Skipped on temporal resets when no valid history exists.
+    m_terrainDrawsPrepared = false;
+    const bool hiZCullActive = settings.occlusion.hiZEnabled &&
+        m_hiZPass != nullptr && m_hasPreviousFrameData && !ctx.temporalReset;
+    if (settings.occlusion.hiZEnabled && m_hiZPass != nullptr) {
+        HiZPass::GraphResources hiZResources;
+        hiZResources.historyDepthPrevious = historyDepthPrevious;
+        hiZResources.hiZ = hiZ;
+        const RgPassHandle hiZHandle = m_hiZPass->addGraphPasses(
+            m_renderGraph, ctx, targets, hiZResources, graphTail);
+        if (!hiZHandle.isValid()) {
+            return failGraphSetup();
+        }
+        graphTail = hiZHandle;
+    }
+    if (hiZCullActive) {
+        RenderGraphPassBuilder terrainPrepare = m_renderGraph.addPass(
+            {"Deferred.TerrainPrepare", RgPassType::Copy,
+             RhiQueueType::Graphics});
+        terrainPrepare.dependsOn(graphTail)
+            .setExecute([&](RgPassContext& pass) {
+                return recordTerrainDrawPreparation(pass.commandList(), ctx);
+            });
+        graphTail = terrainPrepare.handle();
+
+        const RgPassHandle cullHandle = m_hiZPass->addCullPass(
+            m_renderGraph, ctx, settings, targets,
+            *m_shared->worldRenderBuffer, hiZ, graphTail);
+        if (!cullHandle.isValid()) {
+            return failGraphSetup();
+        }
+        graphTail = cullHandle;
+    }
+
     RenderGraphPassBuilder gbuffer = m_renderGraph.addPass(
         {"Deferred.GBuffer", RgPassType::Graphics, RhiQueueType::Graphics});
     gbuffer.dependsOn(graphTail)
@@ -1002,20 +1039,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                                                targets);
             });
         graphTail = velocityPass.handle();
-    }
-
-    // Hi-Z pyramid: reduce the previous frame's depth into a max-depth mip
-    // chain right after the early passes; the GPU occlusion cull consumes it
-    // before the indirect terrain draws.
-    if (settings.occlusion.hiZEnabled && m_hiZPass != nullptr) {
-        HiZPass::GraphResources hiZResources;
-        hiZResources.historyDepthPrevious = historyDepthPrevious;
-        hiZResources.hiZ = hiZ;
-        const RgPassHandle hiZHandle = m_hiZPass->addGraphPasses(
-            m_renderGraph, ctx, targets, hiZResources, graphTail);
-        if (!hiZHandle.isValid()) {
-            return failGraphSetup();
-        }
     }
 
     // Async compute pilot: the cloud raymarch depends only on the depth
@@ -1932,51 +1955,20 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     return stats;
 }
 
-bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
-                                            const FrameContext& ctx,
-                                            const RenderSettings& settings) {
-    if (!m_shared || !m_shared->deferredTargets || !m_shared->terrain ||
-        !m_shared->worldRenderBuffer || !m_shared->resources || !m_shared->rhiDevice) {
+bool DeferredPipeline::recordTerrainDrawPreparation(
+    RhiCommandList& commandList,
+    const FrameContext& ctx) {
+    if (m_terrainDrawsPrepared) {
+        return true;
+    }
+    if (!m_shared || !m_shared->terrain || !m_shared->worldRenderBuffer ||
+        !m_shared->terrainRhiPipelines || !m_shared->resources ||
+        ctx.worldView == nullptr) {
         return false;
     }
-
-    auto& targets = *m_shared->deferredTargets;
     auto& terrain = *m_shared->terrain;
     auto& worldBuffer = *m_shared->worldRenderBuffer;
-    RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
-    if (!targets.ensureGBufferTextureViews(rhiDevice)) {
-        return false;
-    }
-
-    RhiColorAttachment gbufferAttachments[5];
-    setClearAttachment(gbufferAttachments[0], targets.albedoTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
-    setClearAttachment(gbufferAttachments[1], targets.normalAoTextureViewHandle(), 0.5f, 0.5f, 1.0f, 1.0f);
-    setClearAttachment(gbufferAttachments[2], targets.voxelLightTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
-    setClearAttachment(gbufferAttachments[3], targets.materialTextureViewHandle(), 0.86f, 0.035f, 0.0f, 0.0f);
-    setClearAttachment(gbufferAttachments[4], targets.materialAuxTextureViewHandle(), 0.0f, 0.0f, 0.65f, 0.0f);
-
-    RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view = targets.depthTextureViewHandle();
-    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
-    depthAttachment.depthStoreOp = RhiStoreOp::Store;
-    depthAttachment.clearDepth = 1.0f;
-
-    RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "GBufferInitialClear";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, targets.width())),
-        static_cast<uint32_t>(std::max(1, targets.height()))
-    };
-    renderingInfo.colorAttachments = gbufferAttachments;
-    renderingInfo.colorAttachmentCount = 5u;
-    renderingInfo.depthStencilAttachment = &depthAttachment;
-
-    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
-        : GpuTimerSegmentToken{};
     if (m_shared->terrainCache) {
         m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
         m_shared->terrainCache->drainMeshingResults(*ctx.worldView, commandList);
@@ -1988,7 +1980,7 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
     TerrainFrameData tfd;
     tfd.view = ctx.camera.view;
     tfd.viewProj = usesTemporalProjectionJitter(
-        settings.upscale.type, settings.taa.enabled)
+        m_currentSettings.upscale.type, m_currentSettings.taa.enabled)
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     tfd.cameraPos = ctx.camera.position;
     tfd.animationTime = ctx.animationTime;
@@ -2037,25 +2029,25 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
 
     // Build terrain render settings from RenderSettings
     TerrainRenderSettings trs;
-    trs.rainWetSurfacesEnabled = settings.weather.wetSurfacesEnabled;
-    trs.rainSurfaceRipplesEnabled = settings.weather.surfaceRipplesEnabled;
-    trs.aerialPerspectiveEnabled = settings.postProcess.aerialPerspectiveEnabled;
-    trs.volumetricLightEnabled = settings.volumetric.lightEnabled;
-    trs.volumetricFogEnabled = settings.volumetric.fogEnabled;
-    trs.volumetricFogStrength = settings.volumetric.fogStrength;
-    trs.directSunStrength = settings.postProcess.directSunStrength;
-    trs.skyAmbientStrength = settings.postProcess.skyAmbientStrength;
-    trs.weatherSkylightScale = settings.weather.skylightScale;
-    trs.minimumAmbient = settings.postProcess.minimumAmbient;
-    trs.blockLightStrength = settings.postProcess.blockLightStrength;
-    trs.fakeBounceStrength = settings.postProcess.fakeBounceStrength;
-    trs.albedoDesaturation = settings.postProcess.albedoDesaturation;
-    trs.shadowDesaturation = settings.postProcess.shadowDesaturation;
-    trs.blockMaterialMapsEnabled = settings.blockMaterialMaps.enabled;
-    trs.blockNormalMapsEnabled = settings.blockMaterialMaps.normalMapsEnabled;
-    trs.blockSpecularMapsEnabled = settings.blockMaterialMaps.specularMapsEnabled;
-    trs.blockParallaxMapsEnabled = settings.blockMaterialMaps.parallaxMapsEnabled;
-    trs.blockParallaxDepth = settings.blockMaterialMaps.parallaxDepth;
+    trs.rainWetSurfacesEnabled = m_currentSettings.weather.wetSurfacesEnabled;
+    trs.rainSurfaceRipplesEnabled = m_currentSettings.weather.surfaceRipplesEnabled;
+    trs.aerialPerspectiveEnabled = m_currentSettings.postProcess.aerialPerspectiveEnabled;
+    trs.volumetricLightEnabled = m_currentSettings.volumetric.lightEnabled;
+    trs.volumetricFogEnabled = m_currentSettings.volumetric.fogEnabled;
+    trs.volumetricFogStrength = m_currentSettings.volumetric.fogStrength;
+    trs.directSunStrength = m_currentSettings.postProcess.directSunStrength;
+    trs.skyAmbientStrength = m_currentSettings.postProcess.skyAmbientStrength;
+    trs.weatherSkylightScale = m_currentSettings.weather.skylightScale;
+    trs.minimumAmbient = m_currentSettings.postProcess.minimumAmbient;
+    trs.blockLightStrength = m_currentSettings.postProcess.blockLightStrength;
+    trs.fakeBounceStrength = m_currentSettings.postProcess.fakeBounceStrength;
+    trs.albedoDesaturation = m_currentSettings.postProcess.albedoDesaturation;
+    trs.shadowDesaturation = m_currentSettings.postProcess.shadowDesaturation;
+    trs.blockMaterialMapsEnabled = m_currentSettings.blockMaterialMaps.enabled;
+    trs.blockNormalMapsEnabled = m_currentSettings.blockMaterialMaps.normalMapsEnabled;
+    trs.blockSpecularMapsEnabled = m_currentSettings.blockMaterialMaps.specularMapsEnabled;
+    trs.blockParallaxMapsEnabled = m_currentSettings.blockMaterialMaps.parallaxMapsEnabled;
+    trs.blockParallaxDepth = m_currentSettings.blockMaterialMaps.parallaxDepth;
 
     if (m_shared->terrainRhiPipelines == nullptr ||
         !m_shared->terrainRhiPipelines->prepareGBuffer(
@@ -2063,9 +2055,6 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
             *m_shared->resources,
             tfd,
             trs)) {
-        if (ctx.debugService != nullptr) {
-            ctx.debugService->cancelGpuTimer(gpuTimer);
-        }
         return false;
     }
 
@@ -2080,6 +2069,58 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
     if (!worldBuffer.prepareRhiOpaqueAndCutout(
             commandList,
             m_shared->terrainRhiPipelines->metadataLayout())) {
+        return false;
+    }
+    m_terrainDrawsPrepared = true;
+    return true;
+}
+
+bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
+                                            const FrameContext& ctx,
+                                            const RenderSettings& settings) {
+    if (!m_shared || !m_shared->deferredTargets || !m_shared->terrain ||
+        !m_shared->worldRenderBuffer || !m_shared->resources || !m_shared->rhiDevice) {
+        return false;
+    }
+
+    auto& targets = *m_shared->deferredTargets;
+    auto& terrain = *m_shared->terrain;
+    auto& worldBuffer = *m_shared->worldRenderBuffer;
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
+
+    if (!targets.ensureGBufferTextureViews(rhiDevice)) {
+        return false;
+    }
+
+    RhiColorAttachment gbufferAttachments[5];
+    setClearAttachment(gbufferAttachments[0], targets.albedoTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    setClearAttachment(gbufferAttachments[1], targets.normalAoTextureViewHandle(), 0.5f, 0.5f, 1.0f, 1.0f);
+    setClearAttachment(gbufferAttachments[2], targets.voxelLightTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
+    setClearAttachment(gbufferAttachments[3], targets.materialTextureViewHandle(), 0.86f, 0.035f, 0.0f, 0.0f);
+    setClearAttachment(gbufferAttachments[4], targets.materialAuxTextureViewHandle(), 0.0f, 0.0f, 0.65f, 0.0f);
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = targets.depthTextureViewHandle();
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "GBufferInitialClear";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = gbufferAttachments;
+    renderingInfo.colorAttachmentCount = 5u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
+        : GpuTimerSegmentToken{};
+    if (!recordTerrainDrawPreparation(commandList, ctx)) {
         if (ctx.debugService != nullptr) {
             ctx.debugService->cancelGpuTimer(gpuTimer);
         }

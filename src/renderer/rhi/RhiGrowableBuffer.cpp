@@ -10,6 +10,16 @@ namespace {
 
 [[nodiscard]] bool resolveSteadyState(const RhiBufferUsageFlags usage,
                                       RhiResourceState& state) {
+    // Indirect buffers may additionally be storage-writable (GPU occlusion
+    // culling patches draw commands in place); their resting state between
+    // uses stays IndirectArgument, the storage role is transient.
+    if ((usage & rhiFlag(RhiBufferUsage::Indirect)) != 0u &&
+        (usage & rhiFlag(RhiBufferUsage::Storage)) != 0u) {
+        state = RhiResourceState::IndirectArgument;
+        return (usage & (rhiFlag(RhiBufferUsage::Vertex) |
+                         rhiFlag(RhiBufferUsage::Index) |
+                         rhiFlag(RhiBufferUsage::Uniform))) == 0u;
+    }
     uint32_t stateCount = 0u;
     const auto select = [&](const RhiBufferUsage bufferUsage,
                             const RhiResourceState candidate) {

@@ -1,0 +1,84 @@
+#version 450 core
+
+// Hi-Z occlusion culling: one thread per indirect draw command. The
+// command's baseInstance indexes the sub-chunk metadata (world origin of a
+// 16^3 box); if the box's nearest depth lies behind the farthest depth the
+// Hi-Z pyramid recorded over its screen rect, the draw cannot contribute
+// any pixel and its vertex count is zeroed in place.
+#include "rhi_screen_coordinates.glsl"
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct DrawCommand {
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+layout(binding = 0, std430) buffer CommandBuffer { DrawCommand uCommands[]; };
+layout(binding = 1, std430) readonly buffer MetadataBuffer { vec4 uOrigins[]; };
+layout(binding = 2) uniform sampler2D uHiZTex;
+
+layout(push_constant) uniform RhiPushConstants {
+    // Raster view-projection of the CURRENT frame (jittered when the raster
+    // itself is jittered) so the test matches what would be drawn.
+    mat4 uViewProj;
+    // x, y: Hi-Z mip 0 extent; z: highest mip index; w: command count.
+    vec4 uParams0;
+    // x: depth slack compensating the pyramid's one-frame latency.
+    vec4 uParams1;
+};
+
+void main() {
+    const uint index = gl_GlobalInvocationID.x;
+    if (index >= uint(uParams0.w)) {
+        return;
+    }
+    const DrawCommand command = uCommands[index];
+    if (command.count == 0u) {
+        return;
+    }
+    const vec3 origin = uOrigins[command.baseInstance].xyz;
+
+    vec3 ndcMin = vec3(1.0e9);
+    vec3 ndcMax = vec3(-1.0e9);
+    for (int corner = 0; corner < 8; ++corner) {
+        const vec3 world = origin + vec3((corner & 1) != 0 ? 16.0 : 0.0,
+                                         (corner & 2) != 0 ? 16.0 : 0.0,
+                                         (corner & 4) != 0 ? 16.0 : 0.0);
+        const vec4 clip = uViewProj * vec4(world, 1.0);
+        if (clip.w <= 1.0e-4) {
+            // A corner behind the near plane makes the projection unreliable;
+            // keep the draw.
+            return;
+        }
+        const vec3 ndc = clip.xyz / clip.w;
+        ndcMin = min(ndcMin, ndc);
+        ndcMax = max(ndcMax, ndc);
+    }
+
+    // The CPU frustum cull already ran; only the occlusion decision is made
+    // here, so a rect clamped to the screen is sufficient.
+    const vec2 clipUvMin = clamp(ndcMin.xy * 0.5 + 0.5, 0.0, 1.0);
+    const vec2 clipUvMax = clamp(ndcMax.xy * 0.5 + 0.5, 0.0, 1.0);
+    // Clip UVs are bottom-left; the pyramid lives in native texture rows.
+    const vec2 uvA = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMin));
+    const vec2 uvB = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMax));
+    const vec2 uvMin = min(uvA, uvB);
+    const vec2 uvMax = max(uvA, uvB);
+
+    const vec2 rectTexels = (uvMax - uvMin) * uParams0.xy;
+    const float mip = clamp(ceil(log2(max(max(rectTexels.x, rectTexels.y), 1.0))),
+                            0.0, uParams0.z);
+    const float far0 = textureLod(uHiZTex, uvMin, mip).r;
+    const float far1 = textureLod(uHiZTex, vec2(uvMax.x, uvMin.y), mip).r;
+    const float far2 = textureLod(uHiZTex, vec2(uvMin.x, uvMax.y), mip).r;
+    const float far3 = textureLod(uHiZTex, uvMax, mip).r;
+    const float sceneFarthest = max(max(far0, far1), max(far2, far3));
+
+    const float boxNearest = ndcMin.z * 0.5 + 0.5;
+    if (boxNearest > sceneFarthest + uParams1.x) {
+        uCommands[index].count = 0u;
+    }
+}

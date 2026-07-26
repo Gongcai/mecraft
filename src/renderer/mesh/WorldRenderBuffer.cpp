@@ -437,12 +437,12 @@ bool WorldRenderBuffer::init(RhiDevice& rhiDevice) {
         !m_rhiOpaqueIndirectBuffer.init(
             rhiDevice,
             commandBytes,
-            rhiFlag(RhiBufferUsage::Indirect),
+            rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
             "WorldRenderBuffer.RhiOpaqueIndirect") ||
         !m_rhiCutoutIndirectBuffer.init(
             rhiDevice,
             commandBytes,
-            rhiFlag(RhiBufferUsage::Indirect),
+            rhiFlag(RhiBufferUsage::Indirect) | rhiFlag(RhiBufferUsage::Storage),
             "WorldRenderBuffer.RhiCutoutIndirect") ||
         !m_rhiTransparentIndirectBuffer.init(
             rhiDevice,

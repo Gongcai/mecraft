@@ -92,6 +92,14 @@ private:
 
 class WorldRenderBuffer {
 public:
+    // GPU occlusion culling contract: raw handles and counts so the Hi-Z
+    // cull pass can patch indirect draw commands in place.
+    [[nodiscard]] RhiBufferHandle opaqueIndirectBufferHandle() const { return m_rhiOpaqueIndirectBuffer.buffer(); }
+    [[nodiscard]] RhiBufferHandle cutoutIndirectBufferHandle() const { return m_rhiCutoutIndirectBuffer.buffer(); }
+    [[nodiscard]] RhiBufferHandle metadataBufferHandle() const { return m_rhiMetadataBuffer.buffer(); }
+    [[nodiscard]] uint64_t opaqueIndirectBufferCapacity() const { return m_rhiOpaqueIndirectBuffer.capacity(); }
+    [[nodiscard]] uint64_t cutoutIndirectBufferCapacity() const { return m_rhiCutoutIndirectBuffer.capacity(); }
+    [[nodiscard]] uint64_t metadataBufferCapacity() const { return m_rhiMetadataBuffer.capacity(); }
     struct SubChunkDrawMetadata {
         glm::vec4 originAndFlags = glm::vec4(0.0f);
     };

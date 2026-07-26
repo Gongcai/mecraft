@@ -1390,7 +1390,7 @@ bool DeferredRenderTargets::ensureHiZTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
-    if (!m_hiZMipViews.empty()) {
+    if (!m_hiZMipViews.empty() && m_hiZFullView.isValid()) {
         return true;
     }
     if (!m_hiZHandle.isValid() || m_hiZMipCount == 0u) {
@@ -1415,6 +1415,20 @@ bool DeferredRenderTargets::ensureHiZTextureViews(RhiDevice& rhiDevice) {
                 }
             }
             m_hiZMipViews.clear();
+            return false;
+        }
+    }
+    if (!m_hiZFullView.isValid()) {
+        RhiTextureViewDesc desc;
+        desc.texture = m_hiZHandle;
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::R32Float;
+        desc.baseMip = 0;
+        desc.mipCount = m_hiZMipCount;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+        m_hiZFullView = rhiDevice.createTextureView(desc);
+        if (!m_hiZFullView.isValid()) {
             return false;
         }
     }
@@ -2554,6 +2568,18 @@ bool DeferredRenderTargets::ensureTransparencyMaskTextureView(RhiDevice& rhiDevi
 }
 
 void DeferredRenderTargets::destroyRhiTextureViews() {
+    if (m_rhiViewDevice != nullptr) {
+        for (RhiTextureViewHandle& view : m_hiZMipViews) {
+            if (view.isValid()) {
+                m_rhiViewDevice->destroyTextureView(view);
+            }
+        }
+        if (m_hiZFullView.isValid()) {
+            m_rhiViewDevice->destroyTextureView(m_hiZFullView);
+        }
+    }
+    m_hiZMipViews.clear();
+    m_hiZFullView = {};
     if (m_rhiViewDevice != nullptr && m_gAlbedoView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_gAlbedoView);
     }

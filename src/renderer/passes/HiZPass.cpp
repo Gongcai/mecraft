@@ -5,12 +5,15 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiShaderSourceLoader.h"
+#include "../core/RenderSettings.h"
+#include "../mesh/WorldRenderBuffer.h"
 #include "../targets/DeferredRenderTargets.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <optional>
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
 namespace {
@@ -231,6 +234,215 @@ bool HiZPass::ensureMipBindGroup(RhiDevice& rhiDevice,
     return true;
 }
 
+
+namespace {
+struct HiZCullPushConstants {
+    glm::mat4 viewProj;
+    glm::vec4 params0;
+    glm::vec4 params1;
+};
+} // namespace
+
+RgPassHandle HiZPass::addCullPass(RenderGraph& graph,
+                                  const FrameContext& ctx,
+                                  const RenderSettings& settings,
+                                  DeferredRenderTargets& targets,
+                                  WorldRenderBuffer& worldBuffer,
+                                  const RgTextureHandle hiZ,
+                                  const RgPassHandle dependency) {
+    if (!dependency.isValid() || !hiZ.isValid()) {
+        return {};
+    }
+    const FrameContext* frame = &ctx;
+    DeferredRenderTargets* frameTargets = &targets;
+    WorldRenderBuffer* frameWorldBuffer = &worldBuffer;
+    RenderGraphPassBuilder cull = graph.addPass(
+        {"HiZ.Cull", RgPassType::Compute, RhiQueueType::Graphics});
+    cull.dependsOn(dependency)
+        .readTexture(hiZ, RhiResourceState::ShaderRead)
+        .setExecute([this, frame, frameTargets, frameWorldBuffer,
+                     settings](RgPassContext& pass) {
+            return recordCull(pass.commandList(), *frame, settings,
+                              *frameTargets, *frameWorldBuffer);
+        });
+    return cull.handle();
+}
+
+bool HiZPass::recordCull(RhiCommandList& commandList,
+                         const FrameContext& ctx,
+                         const RenderSettings& settings,
+                         DeferredRenderTargets& targets,
+                         WorldRenderBuffer& worldBuffer) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
+    }
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!targets.ensureHiZTextureViews(rhiDevice) ||
+        !ensurePipeline(rhiDevice) || !ensureCullPipeline(rhiDevice)) {
+        return false;
+    }
+
+    const RhiBufferHandle commandBuffers[2] = {
+        worldBuffer.opaqueIndirectBufferHandle(),
+        worldBuffer.cutoutIndirectBufferHandle()
+    };
+    const uint64_t commandCapacities[2] = {
+        worldBuffer.opaqueIndirectBufferCapacity(),
+        worldBuffer.cutoutIndirectBufferCapacity()
+    };
+    const uint32_t commandCounts[2] = {
+        static_cast<uint32_t>(worldBuffer.opaqueCommandCount()),
+        static_cast<uint32_t>(worldBuffer.cutoutCommandCount())
+    };
+
+    // The raster uses the jittered projection when temporal jitter is on;
+    // the cull must test exactly what would be drawn.
+    const bool projectionJitter = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled);
+    HiZCullPushConstants pushConstants{};
+    pushConstants.viewProj = projectionJitter ? ctx.camera.jitteredViewProj
+                                              : ctx.camera.viewProj;
+    pushConstants.params0 =
+        glm::vec4(static_cast<float>(std::max(1, targets.width())),
+                  static_cast<float>(std::max(1, targets.height())),
+                  static_cast<float>(targets.hiZMipCount() - 1u),
+                  0.0f);
+    // Depth slack covers the pyramid's one-frame latency plus small vertex
+    // animation; expressed in post-projection 0-1 depth.
+    pushConstants.params1 = glm::vec4(5.0e-4f, 0.0f, 0.0f, 0.0f);
+
+    for (int slot = 0; slot < 2; ++slot) {
+        if (commandCounts[slot] == 0u || !commandBuffers[slot].isValid()) {
+            continue;
+        }
+        if (!ensureCullBindGroup(rhiDevice, slot, commandBuffers[slot],
+                                 commandCapacities[slot],
+                                 worldBuffer.metadataBufferHandle(),
+                                 worldBuffer.metadataBufferCapacity(),
+                                 targets.hiZFullTextureViewHandle())) {
+            return false;
+        }
+        pushConstants.params0.w = static_cast<float>(commandCounts[slot]);
+        commandList.bufferBarrier({commandBuffers[slot],
+                                   RhiResourceState::IndirectArgument,
+                                   RhiResourceState::StorageBuffer});
+        commandList.setComputePipeline(m_cullPipeline);
+        commandList.setBindGroup(0u, m_cullBindings[slot].bindGroup);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Compute));
+        commandList.dispatch((commandCounts[slot] + 63u) / 64u, 1u, 1u);
+        commandList.bufferBarrier({commandBuffers[slot],
+                                   RhiResourceState::StorageBuffer,
+                                   RhiResourceState::IndirectArgument});
+    }
+    return true;
+}
+
+bool HiZPass::ensureCullPipeline(RhiDevice& rhiDevice) {
+    if (m_cullPipeline.isValid()) {
+        return true;
+    }
+    const std::optional<std::string> source =
+        renderer::rhi::loadShaderSource("assets/shaders/hiz_cull.comp");
+    if (!source.has_value()) {
+        return false;
+    }
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "HiZ.Cull";
+    shaderDesc.stage = RhiShaderStage::Compute;
+    shaderDesc.source = source->c_str();
+    shaderDesc.sourceSize = source->size();
+    m_cullShader = rhiDevice.createShader(shaderDesc);
+    if (!m_cullShader.isValid()) {
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc layoutDesc;
+    layoutDesc.debugName = "HiZ.CullBindGroupLayout";
+    layoutDesc.entries.push_back({
+        0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    layoutDesc.entries.push_back({
+        1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    layoutDesc.entries.push_back({
+        2u, RhiBindingType::CombinedTextureSampler,
+        rhiFlag(RhiShaderStage::Compute), 1u});
+    m_cullBindGroupLayout = rhiDevice.createBindGroupLayout(layoutDesc);
+    if (!m_cullBindGroupLayout.isValid()) {
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "HiZ.CullPipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_cullBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes =
+        static_cast<uint32_t>(sizeof(HiZCullPushConstants));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
+    m_cullPipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_cullPipelineLayout.isValid()) {
+        return false;
+    }
+
+    RhiComputePipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "HiZ.CullPipeline";
+    pipelineDesc.computeShader = m_cullShader;
+    pipelineDesc.layout = m_cullPipelineLayout;
+    m_cullPipeline = rhiDevice.createComputePipeline(pipelineDesc);
+    return m_cullPipeline.isValid();
+}
+
+bool HiZPass::ensureCullBindGroup(RhiDevice& rhiDevice,
+                                  const int slot,
+                                  const RhiBufferHandle commandBuffer,
+                                  const uint64_t commandCapacity,
+                                  const RhiBufferHandle metadataBuffer,
+                                  const uint64_t metadataCapacity,
+                                  const RhiTextureViewHandle hiZView) {
+    if (!commandBuffer.isValid() || !metadataBuffer.isValid() ||
+        !hiZView.isValid() || slot < 0 || slot >= 2) {
+        return false;
+    }
+    CullBinding& binding = m_cullBindings[slot];
+    if (binding.bindGroup.isValid() &&
+        binding.boundCommands.index == commandBuffer.index &&
+        binding.boundCommands.generation == commandBuffer.generation &&
+        sameTextureView(binding.boundHiZ, hiZView)) {
+        return true;
+    }
+    if (binding.bindGroup.isValid()) {
+        rhiDevice.destroyBindGroup(binding.bindGroup);
+        binding = {};
+    }
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_cullBindGroupLayout;
+    RhiBindGroupEntry commandsEntry;
+    commandsEntry.binding = 0u;
+    commandsEntry.resource.buffer.buffer = commandBuffer;
+    commandsEntry.resource.buffer.offset = 0u;
+    commandsEntry.resource.buffer.range = commandCapacity;
+    bindGroupDesc.entries.push_back(commandsEntry);
+    RhiBindGroupEntry metadataEntry;
+    metadataEntry.binding = 1u;
+    metadataEntry.resource.buffer.buffer = metadataBuffer;
+    metadataEntry.resource.buffer.offset = 0u;
+    metadataEntry.resource.buffer.range = metadataCapacity;
+    bindGroupDesc.entries.push_back(metadataEntry);
+    RhiBindGroupEntry hiZEntry;
+    hiZEntry.binding = 2u;
+    hiZEntry.resource.combinedTextureSampler.textureView = hiZView;
+    hiZEntry.resource.combinedTextureSampler.sampler = m_sampler;
+    bindGroupDesc.entries.push_back(hiZEntry);
+
+    binding.bindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!binding.bindGroup.isValid()) {
+        binding = {};
+        return false;
+    }
+    binding.boundCommands = commandBuffer;
+    binding.boundHiZ = hiZView;
+    return true;
+}
+
 void HiZPass::destroyRhiResources() {
     if (m_rhiDevice != nullptr) {
         for (MipBinding& binding : m_mipBindings) {
@@ -254,6 +466,30 @@ void HiZPass::destroyRhiResources() {
             m_rhiDevice->destroyShader(m_shader);
         }
     }
+    if (m_rhiDevice != nullptr) {
+        for (CullBinding& binding : m_cullBindings) {
+            if (binding.bindGroup.isValid()) {
+                m_rhiDevice->destroyBindGroup(binding.bindGroup);
+            }
+            binding = {};
+        }
+        if (m_cullPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_cullPipeline);
+        }
+        if (m_cullPipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_cullPipelineLayout);
+        }
+        if (m_cullBindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_cullBindGroupLayout);
+        }
+        if (m_cullShader.isValid()) {
+            m_rhiDevice->destroyShader(m_cullShader);
+        }
+    }
+    m_cullPipeline = {};
+    m_cullPipelineLayout = {};
+    m_cullBindGroupLayout = {};
+    m_cullShader = {};
     m_mipBindings.clear();
     m_pipeline = {};
     m_pipelineLayout = {};
