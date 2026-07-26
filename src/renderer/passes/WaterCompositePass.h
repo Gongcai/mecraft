@@ -24,40 +24,22 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "WaterComposite"; }
 
-    /// Execute water composite rendering.
-    /// @param ctx Frame context
-    /// @param settings Render settings
-    /// @param targets Deferred render targets
-    /// @param deferredFrameActive Whether deferred pipeline is active this frame
-    /// @param preTemporalResolve Whether rendering before TAA (affects jitter)
-    /// @param transparentCompositeEnabled Whether transparent composite is enabled
-    /// @param waterEffectsEnabled Whether water effects are enabled
-    /// @param rainSurfaceRipplesEnabled Whether rain surface ripples are enabled
-    /// @param volumetricFogActive Whether volumetric fog pass is active and has shaders
-    /// @param worldRenderBuffer Main-view world render buffer used for RHI water commands
-    /// @return true if water was rendered before temporal resolve (caller must set m_waterRenderedBeforeTemporal)
-    bool execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets,
-                 bool deferredFrameActive, bool preTemporalResolve,
-                 bool transparentCompositeEnabled,
-                 bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
-                 bool volumetricFogActive,
-                 WorldRenderBuffer& worldRenderBuffer,
-                 const std::vector<DrawBatchEntry>& transparentBatch,
-                 const TransparentPassPlan& transparentPlan);
-
     /// Record water rendering into a caller-owned graphics command list.
     /// The caller owns resource transitions, input copies, and submission.
-    bool recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
-                         DeferredRenderTargets& targets,
-                         bool deferredFrameActive, bool preTemporalResolve,
-                         bool transparentCompositeEnabled,
-                         bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
-                         bool volumetricFogActive,
-                         RhiCommandList& commandList,
-                         WorldRenderBuffer& worldRenderBuffer,
-                         const std::vector<DrawBatchEntry>& transparentBatch,
-                         const TransparentPassPlan& transparentPlan);
+    [[nodiscard]] bool recordGraphPass(
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        bool deferredFrameActive,
+        bool preTemporalResolve,
+        bool transparentCompositeEnabled,
+        bool waterEffectsEnabled,
+        bool rainSurfaceRipplesEnabled,
+        bool volumetricFogActive,
+        RhiCommandList& commandList,
+        WorldRenderBuffer& worldRenderBuffer,
+        const std::vector<DrawBatchEntry>& transparentBatch,
+        const TransparentPassPlan& transparentPlan);
 
 private:
     ResourceMgr* m_resourceMgr = nullptr;

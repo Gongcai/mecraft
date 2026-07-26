@@ -102,7 +102,7 @@ private:
     bool m_deferredFrameActive = false;
     bool m_hasPreviousFrameData = false;
     bool m_waterRenderedBeforeTemporal = false;
-    bool m_deferredHistoryUpdatedThisFrame = false;
+    bool m_waterRenderedAfterTemporal = false;
     int m_heldBlockLightValue = 0;
 
     // Settings (cached from RenderSettings for current frame)
@@ -117,7 +117,7 @@ private:
     [[nodiscard]] bool recordDeferredAuxiliaryClear(
         RhiCommandList& commandList,
         DeferredRenderTargets& targets);
-    void updateDeferredHistoryTargets();
+    void commitDeferredHistoryState();
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx,
                                          const RenderSettings& settings);
     [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList,
@@ -129,7 +129,6 @@ private:
     [[nodiscard]] bool recordParticlesPass(
         RhiCommandList& commandList,
         const FrameContext& ctx);
-    void renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve);
     FrameOutput buildFrameOutput(const FrameContext& ctx);
 };
 

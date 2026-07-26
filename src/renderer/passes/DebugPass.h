@@ -5,6 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <array>
 #include <cstddef>
@@ -13,6 +14,7 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class RhiDevice;
+class RhiCommandList;
 
 namespace shadow { class ShadowRenderer; }
 
@@ -28,14 +30,36 @@ public:
     /// Inject external dependencies (non-owning pointers).
     void setShadowRenderer(shadow::ShadowRenderer* sr) { m_shadowRenderer = sr; }
 
-    /// Execute the debug overlay pass.
-    /// @param ctx Frame context (camera, sky, timing)
-    /// @param settings Render settings (debug view mode, shadow parameters)
-    /// @param targets Deferred render targets (all intermediate textures)
-    /// @param width Destination viewport width
-    /// @param height Destination viewport height
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets, int width, int height);
+    /// Graph handles for every texture that can be selected by a debug mode.
+    struct GraphResources {
+        std::array<RgTextureHandle, kTextureCount> textures;
+        RgTextureHandle output;
+    };
+
+    /// Adds the debug visualization pass to the render graph.
+    /// @param graph Graph receiving the debug pass.
+    /// @param ctx Frame state retained until graph execution completes.
+    /// @param settings Current debug and shadow settings.
+    /// @param targets Persistent render targets used by the recording callback.
+    /// @param resources Imported graph handles matching the shader bindings.
+    /// @param dependency Pass that must complete before debug visualization.
+    /// @return Debug pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPass(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        const GraphResources& resources,
+        RgPassHandle dependency);
+
+    /// Records the debug visualization into an existing graph command list.
+    [[nodiscard]] bool recordGraphPass(
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        int width,
+        int height,
+        RhiCommandList& commandList);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

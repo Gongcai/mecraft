@@ -100,12 +100,56 @@ void DebugPass::shutdown() {
     m_shadowRenderer = nullptr;
 }
 
-void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                        DeferredRenderTargets& targets,
-                        const int width, const int height) {
+RgPassHandle DebugPass::addGraphPass(
+    RenderGraph& graph,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    const GraphResources& resources,
+    const RgPassHandle dependency) {
+    if (!dependency.isValid() || !resources.output.isValid() ||
+        m_shadowRenderer == nullptr) {
+        return {};
+    }
+    for (const RgTextureHandle texture : resources.textures) {
+        if (!texture.isValid()) {
+            return {};
+        }
+    }
+
+    RenderGraphPassBuilder debug = graph.addPass(
+        {"Deferred.DebugView", RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    debug.dependsOn(dependency);
+    for (std::size_t index = 0u; index < resources.textures.size(); ++index) {
+        const bool depthTexture = index == 4u || index == 5u || index == 9u ||
+                                  index == 16u ||
+                                  (index == 13u && settings.debug.viewMode == 19);
+        debug.readTexture(resources.textures[index],
+                          depthTexture ? RhiResourceState::DepthRead
+                                       : RhiResourceState::ShaderRead);
+    }
+    debug.writeTexture(resources.output, RhiResourceState::RenderTarget)
+        .setExecute([this, frame = &ctx, frameSettings = settings,
+                     frameTargets = &targets](RgPassContext& pass) {
+            return recordGraphPass(
+                *frame, frameSettings, *frameTargets,
+                static_cast<int>(frame->renderExtent.width),
+                static_cast<int>(frame->renderExtent.height),
+                pass.commandList());
+        });
+    return debug.handle();
+}
+
+bool DebugPass::recordGraphPass(const FrameContext& ctx,
+                                const RenderSettings& settings,
+                                DeferredRenderTargets& targets,
+                                const int width,
+                                const int height,
+                                RhiCommandList& commandList) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !ctx.sceneCaptureColorView.isValid() || m_shadowRenderer == nullptr) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
@@ -132,7 +176,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         !targets.ensureReactiveMaskTextureView(rhiDevice) ||
         !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
         !ensureNoiseTextureView(rhiDevice)) {
-        return;
+        return false;
     }
     RhiTextureViewHandle binding13 = targets.historySceneTexturePrevViewHandle();
     if (usesShadowNoise(debugViewMode)) {
@@ -183,7 +227,7 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         targets.transparencyMaskTextureViewHandle()
     };
     if (!ensureRhiBindGroup(rhiDevice, debugViewMode, views)) {
-        return;
+        return false;
     }
 
     DebugParams params{};
@@ -239,37 +283,17 @@ void DebugPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
     commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
                                RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
     commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
                                RhiResourceState::UniformBuffer});
-    targets.transitionTexture(commandList,
-                              ctx.sceneCaptureColorTexture,
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList,
-                              ctx.sceneCaptureColorTexture,
-                              RhiResourceState::ShaderRead);
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool DebugPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
