@@ -1049,6 +1049,10 @@ float staticRaindrops(vec2 uv, float t) {
 
 // Combined rain effect with two layers
 vec2 applyScreenRain(vec2 uv, float t) {
+    // Screen UVs are top-left on every backend, but the raindrop pattern is
+    // authored in a bottom-left (y-up) space; flip so the time scroll moves
+    // drops toward the bottom of the screen instead of climbing upward.
+    uv.y = 1.0 - uv.y;
     float s = staticRaindrops(uv, t);
     vec2 r1 = calculateRaindrops(uv, t);
     vec2 r2 = calculateRaindrops(uv * 1.8, t);
