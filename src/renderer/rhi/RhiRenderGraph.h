@@ -9,6 +9,7 @@
 #include <functional>
 #include <limits>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class RhiCommandList;
@@ -418,6 +419,24 @@ private:
   std::vector<uint32_t> m_passToBatch;
   std::vector<std::vector<uint32_t>> m_textureLastPasses;
   std::vector<uint32_t> m_bufferLastPasses;
+  /// Compiled artifacts cached by structural fingerprint. Frame graphs are
+  /// redeclared every frame but alternate between a handful of topologies
+  /// (half-rate passes, interleaved cascades); replaying a cached plan skips
+  /// the dependency/barrier compilation entirely.
+  struct CompiledPlan {
+    std::vector<RgCompiledPass> compiledPasses;
+    std::vector<RgResourceLifetime> textureLifetimes;
+    std::vector<RgResourceLifetime> bufferLifetimes;
+    std::vector<RgTextureBarrierPlan> epilogueTextureBarriers;
+    std::vector<RgBufferBarrierPlan> epilogueBufferBarriers;
+    std::vector<RgSubmissionBatchPlan> submissionBatches;
+    std::vector<uint32_t> passToBatch;
+    std::vector<std::vector<uint32_t>> textureLastPasses;
+    std::vector<uint32_t> bufferLastPasses;
+  };
+  [[nodiscard]] uint64_t computeStructuralFingerprint() const;
+  std::unordered_map<uint64_t, CompiledPlan> m_compiledPlanCache;
+
   std::vector<TransientTexture> m_transientTextures;
   std::vector<TransientBuffer> m_transientBuffers;
   std::vector<TimingSlot> m_timingSlots;

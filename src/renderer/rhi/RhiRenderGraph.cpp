@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace {
@@ -764,6 +765,90 @@ RenderGraph::passRecord(const RgPassHandle handle) const {
   return record.generation == handle.generation ? &record : nullptr;
 }
 
+
+namespace {
+struct FnvHasher {
+  uint64_t state = 1469598103934665603ull;
+  void mix(const void *data, const size_t size) {
+    const auto *bytes = static_cast<const unsigned char *>(data);
+    for (size_t i = 0u; i < size; ++i) {
+      state ^= bytes[i];
+      state *= 1099511628211ull;
+    }
+  }
+  template <typename T> void mixValue(const T &value) {
+    static_assert(std::is_trivially_copyable_v<T>);
+    mix(&value, sizeof(value));
+  }
+  void mixString(const std::string &value) {
+    mix(value.data(), value.size());
+    mixValue<uint64_t>(value.size());
+  }
+};
+} // namespace
+
+uint64_t RenderGraph::computeStructuralFingerprint() const {
+  FnvHasher hasher;
+  hasher.mixValue<uint64_t>(m_textures.size());
+  for (const TextureRecord &record : m_textures) {
+    hasher.mixString(record.name);
+    hasher.mixValue(record.imported);
+    hasher.mixValue(record.desc.dimension);
+    hasher.mixValue(record.desc.format);
+    hasher.mixValue(record.desc.width);
+    hasher.mixValue(record.desc.height);
+    hasher.mixValue(record.desc.depthOrLayers);
+    hasher.mixValue(record.desc.mipLevels);
+    hasher.mixValue(record.desc.sampleCount);
+    hasher.mixValue(record.desc.usage);
+    hasher.mixValue(record.initialState);
+    hasher.mixValue(record.finalState);
+    hasher.mixValue(record.initialQueue);
+    hasher.mixValue(record.finalQueue);
+  }
+  hasher.mixValue<uint64_t>(m_buffers.size());
+  for (const BufferRecord &record : m_buffers) {
+    hasher.mixString(record.name);
+    hasher.mixValue(record.imported);
+    hasher.mixValue(record.desc.size);
+    hasher.mixValue(record.desc.usage);
+    hasher.mixValue(record.initialState);
+    hasher.mixValue(record.finalState);
+    hasher.mixValue(record.initialQueue);
+    hasher.mixValue(record.finalQueue);
+  }
+  hasher.mixValue<uint64_t>(m_passes.size());
+  for (const PassRecord &pass : m_passes) {
+    hasher.mixString(pass.name);
+    hasher.mixValue(pass.type);
+    hasher.mixValue(pass.queue);
+    hasher.mixValue<uint64_t>(pass.textureAccesses.size());
+    for (const RgTextureAccess &access : pass.textureAccesses) {
+      hasher.mixValue(access.texture.index);
+      hasher.mixValue(access.access);
+      hasher.mixValue(access.state);
+      hasher.mixValue(access.range.baseMip);
+      hasher.mixValue(access.range.mipCount);
+      hasher.mixValue(access.range.baseLayer);
+      hasher.mixValue(access.range.layerCount);
+      hasher.mixValue(access.range.aspect);
+    }
+    hasher.mixValue<uint64_t>(pass.bufferAccesses.size());
+    for (const RgBufferAccess &access : pass.bufferAccesses) {
+      hasher.mixValue(access.buffer.index);
+      hasher.mixValue(access.access);
+      hasher.mixValue(access.state);
+      hasher.mixValue(access.range.offset);
+      hasher.mixValue(access.range.size);
+    }
+    hasher.mixValue<uint64_t>(pass.explicitDependencies.size());
+    for (const RgPassHandle dependency : pass.explicitDependencies) {
+      hasher.mixValue(dependency.index);
+    }
+  }
+  return hasher.state;
+}
+
 RgCompileResult RenderGraph::compile() {
   m_compiledPasses.clear();
   m_textureLifetimes.assign(m_textures.size(), {});
@@ -778,6 +863,25 @@ RgCompileResult RenderGraph::compile() {
 
   if (m_builderError) {
     return {m_builderErrorCode, m_builderErrorMessage};
+  }
+
+  // Frame graphs alternate between a small set of topologies; replaying a
+  // cached plan skips the full dependency and barrier compilation.
+  const uint64_t fingerprint = computeStructuralFingerprint();
+  const auto cached = m_compiledPlanCache.find(fingerprint);
+  if (cached != m_compiledPlanCache.end()) {
+    const CompiledPlan &plan = cached->second;
+    m_compiledPasses = plan.compiledPasses;
+    m_textureLifetimes = plan.textureLifetimes;
+    m_bufferLifetimes = plan.bufferLifetimes;
+    m_epilogueTextureBarriers = plan.epilogueTextureBarriers;
+    m_epilogueBufferBarriers = plan.epilogueBufferBarriers;
+    m_submissionBatches = plan.submissionBatches;
+    m_passToBatch = plan.passToBatch;
+    m_textureLastPasses = plan.textureLastPasses;
+    m_bufferLastPasses = plan.bufferLastPasses;
+    m_compiled = true;
+    return {};
   }
   for (const PassRecord &pass : m_passes) {
     if (!pass.execute) {
@@ -1205,6 +1309,19 @@ RgCompileResult RenderGraph::compile() {
     std::sort(batch.dependencies.begin(), batch.dependencies.end());
   }
 
+  if (m_compiledPlanCache.size() >= 8u) {
+    m_compiledPlanCache.clear();
+  }
+  CompiledPlan &plan = m_compiledPlanCache[fingerprint];
+  plan.compiledPasses = m_compiledPasses;
+  plan.textureLifetimes = m_textureLifetimes;
+  plan.bufferLifetimes = m_bufferLifetimes;
+  plan.epilogueTextureBarriers = m_epilogueTextureBarriers;
+  plan.epilogueBufferBarriers = m_epilogueBufferBarriers;
+  plan.submissionBatches = m_submissionBatches;
+  plan.passToBatch = m_passToBatch;
+  plan.textureLastPasses = m_textureLastPasses;
+  plan.bufferLastPasses = m_bufferLastPasses;
   m_compiled = true;
   return {};
 }
