@@ -74,7 +74,7 @@ void main() {
         ? smoothstep(0.34, 0.72, max(luma, peak * 0.72)) * clamp(uLightAnimation.y * 1.25, 0.0, 1.0)
         : 0.0;
     gAlbedoMaterial = vec4(albedo, emissive);
-    gNormalAo = vec4(normal * 0.5 + 0.5, ao);
+    gNormalAo = packGBufferNormalAo(normal, ao);
     gVoxelLight = vec4(clamp(uLightAnimation.x, 0.0, 1.0), clamp(uLightAnimation.y, 0.0, 1.0), 0.0, 1.0);
     gMaterial = packGBufferMaterial(surfaceMaterialForKind(float(vMaterialTint.x), emissive));
     gMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(float(vMaterialTint.x)));

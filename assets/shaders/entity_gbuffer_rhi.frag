@@ -23,7 +23,7 @@ void main() {
                          clamp(uLightHurt.z, 0.0, 1.0) * 0.70);
     vec3 albedo = pow(max(skinColor, vec3(0.0)), vec3(2.2));
     gAlbedoMaterial = vec4(albedo, 0.0);
-    gNormalAo = vec4(normalize(vNormal) * 0.5 + 0.5, 1.0);
+    gNormalAo = packGBufferNormalAo(normalize(vNormal), 1.0);
     gVoxelLight = vec4(clamp(uLightHurt.xy, 0.0, 1.0), 0.0, 1.0);
     gMaterial = packGBufferMaterial(surfaceMaterialForKind(float(MATERIAL_SKIN), 0.0));
     gMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(float(MATERIAL_SKIN)));

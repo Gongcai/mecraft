@@ -26,8 +26,8 @@ layout(push_constant) uniform RhiPushConstants {
     float uNear;
 };
 
-vec3 reconstructNormal(vec3 packedNormal) {
-    return normalize(packedNormal * 2.0 - 1.0);
+vec3 reconstructNormal(vec4 packedNormalAo) {
+    return unpackGBufferNormal(packedNormalAo);
 }
 
 void main() {
@@ -73,8 +73,8 @@ void main() {
     float depthDisocclusion = smoothstep(0.05, 0.5, relDepthDiff);
 
     // Normal disocclusion: reject history where surface orientation changed sharply
-    vec3 currentNormal = reconstructNormal(texelFetch(uNormalAoTex, texel, 0).rgb);
-    vec3 historyNormal = reconstructNormal(texture(uNormalAoTex, prevCoord).rgb);
+    vec3 currentNormal = reconstructNormal(texelFetch(uNormalAoTex, texel, 0));
+    vec3 historyNormal = reconstructNormal(texture(uNormalAoTex, prevCoord));
     float normalDot = max(dot(currentNormal, historyNormal), 0.0);
     float normalDisocclusion = 1.0 - smoothstep(0.5, 0.95, normalDot);
 

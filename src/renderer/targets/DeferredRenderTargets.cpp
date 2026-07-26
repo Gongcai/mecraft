@@ -283,7 +283,7 @@ bool DeferredRenderTargets::createGBufferTextures() {
         rhiFlag(RhiTextureUsage::TransferDst);
 
     if (!createTexture("DeferredTargets.GBufferAlbedo", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gAlbedoHandle) ||
-        !createTexture("DeferredTargets.GBufferNormalAo", RhiTextureFormat::Rgba16Float, colorUsage, m_gNormalAoHandle) ||
+        !createTexture("DeferredTargets.GBufferNormalAo", RhiTextureFormat::Rgb10A2Unorm, colorUsage, m_gNormalAoHandle) ||
         !createTexture("DeferredTargets.GBufferVoxelLight", RhiTextureFormat::Rg8Unorm, colorUsage, m_gVoxelLightHandle) ||
         !createTexture("DeferredTargets.GBufferMaterial", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialHandle) ||
         !createTexture("DeferredTargets.GBufferMaterialAux", RhiTextureFormat::Rgba8Unorm, colorUsage, m_gMaterialAuxHandle) ||
@@ -1353,7 +1353,7 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
     m_gAlbedoView = rhiDevice.createTextureView(desc);
 
     desc.texture = m_gNormalAoHandle;
-    desc.format = RhiTextureFormat::Rgba16Float;
+    desc.format = RhiTextureFormat::Rgb10A2Unorm;
     m_gNormalAoView = rhiDevice.createTextureView(desc);
 
     desc.texture = m_gVoxelLightHandle;

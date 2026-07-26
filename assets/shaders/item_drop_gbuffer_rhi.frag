@@ -21,7 +21,7 @@ void main() {
     if (texel.a < 0.1) discard;
     vec3 albedo = pow(max(texel.rgb, vec3(0.0)), vec3(2.2));
     gAlbedoMaterial = vec4(albedo, 0.0);
-    gNormalAo = vec4(normalize(vNormal) * 0.5 + 0.5, 1.0);
+    gNormalAo = packGBufferNormalAo(normalize(vNormal), 1.0);
     gVoxelLight = vec4(clamp(uLight.xy, 0.0, 1.0), 0.0, 1.0);
     gMaterial = packGBufferMaterial(surfaceMaterialForKind(float(MATERIAL_DEFAULT), 0.0));
     gMaterialAux = packGBufferMaterialAux(surfaceMaterialAuxForKind(float(MATERIAL_DEFAULT)));

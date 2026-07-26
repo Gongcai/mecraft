@@ -1,5 +1,7 @@
 #version 450 core
 
+#include "gbuffer_contract.glsl"
+
 #include "rhi_screen_coordinates.glsl"
 
 layout(location = 0) in vec2 vScreenUv;
@@ -24,8 +26,8 @@ float linearizeDepth(float depth) {
     return 2.0 * uNear / max(1.0 - depth, 1e-7);
 }
 
-vec3 decodeNormal(vec3 packedNormal) {
-    return normalize(packedNormal * 2.0 - 1.0);
+vec3 decodeNormal(vec4 packedNormalAo) {
+    return unpackGBufferNormal(packedNormalAo);
 }
 
 float luminance(vec3 color) {
@@ -101,8 +103,8 @@ void main() {
     float linHistory = linearizeDepth(texture(uHistoryDepthTex, prevCoord).r);
     float relDepthDiff = abs(linCurrent - linHistory) / max(linCurrent, 0.1);
     float depthDisocclusion = smoothstep(0.035, 0.28, relDepthDiff);
-    vec3 currentNormal = decodeNormal(texelFetch(uNormalAoTex, texel, 0).rgb);
-    vec3 historyNormal = decodeNormal(texture(uNormalAoTex, safeHistoryUv).rgb);
+    vec3 currentNormal = decodeNormal(texelFetch(uNormalAoTex, texel, 0));
+    vec3 historyNormal = decodeNormal(texture(uNormalAoTex, safeHistoryUv));
     float normalDisocclusion = 1.0 - smoothstep(0.55, 0.95, max(dot(currentNormal, historyNormal), 0.0));
     float disocclusion = max(depthDisocclusion, normalDisocclusion);
     float pixelMotion = length(velocity * uScreenSize);

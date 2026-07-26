@@ -283,9 +283,9 @@ void main() {
     if (uVoxelGiEnabled != 0 && depth < 0.9999 && !transMask.isTranslucent) {
         vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
         vec4 normalAo = texture(uNormalAoTex, textureUv);
-        vec3 normal = normalize(normalAo.rgb * 2.0 - 1.0);
+        vec3 normal = unpackGBufferNormal(normalAo);
         vec3 albedo = texture(uAlbedoTex, textureUv).rgb;
-        vec3 voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, normalAo.a, color);
+        vec3 voxelGi = sampleVoxelGiContribution(worldPos, normal, albedo, unpackGBufferVertexAo(normalAo), color);
         if (uVoxelGiDebugEnabled != 0) {
             FragColor = vec4(max(voxelGi, vec3(0.0)) * 6.0, 1.0);
             return;

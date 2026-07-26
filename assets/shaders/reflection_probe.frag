@@ -187,8 +187,7 @@ bool traceScreenSpaceReflection(vec3 worldPos,
             // Grazing angle fade: reflections at grazing angles are less reliable
             // (more likely to hit wrong surfaces or self-intersect).
             vec2 refinedTextureUv = rhiScreenUvToTextureUv(refinedScreenUv);
-            vec3 hitNormal = normalize(
-                texture(uNormalAoTex, refinedTextureUv).rgb * 2.0 - 1.0);
+            vec3 hitNormal = unpackGBufferNormal(texture(uNormalAoTex, refinedTextureUv));
             float grazingDot = abs(dot(reflectedDir, hitNormal));
             float grazingFade = smoothstep(0.0, 0.25, grazingDot);
 
@@ -224,7 +223,7 @@ void main() {
         return;
     }
 
-    vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+    vec3 normal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
     vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
     vec3 viewDir = normalize(worldPos - uCameraPos);
     TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);

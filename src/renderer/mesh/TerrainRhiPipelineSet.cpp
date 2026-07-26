@@ -570,7 +570,7 @@ bool TerrainRhiPipelineSet::ensureGBufferPipeline(ResourceMgr& resourceMgr) {
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
     pipelineDesc.colorFormats = {
         RhiTextureFormat::Rgba8Unorm,
-        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::Rgb10A2Unorm,
         RhiTextureFormat::Rg8Unorm,
         RhiTextureFormat::Rgba8Unorm,
         RhiTextureFormat::Rgba8Unorm

@@ -89,7 +89,7 @@ vec3 filteredRadiance(vec2 screenUv, float depth, vec3 worldPos, vec3 normal) {
 
         vec3 sampleWorld = reconstructWorldPosition(
             rhiScreenUvToClipUv(sampleScreenUv), sampleDepth);
-        vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleTextureUv).rgb * 2.0 - 1.0);
+        vec3 sampleNormal = unpackGBufferNormal(texture(uNormalAoTex, sampleTextureUv));
         float depthWeight = exp2(-length(sampleWorld - worldPos) * 1.75);
         float normalWeight = pow(max(dot(sampleNormal, normal), 0.0), 24.0);
         float weight = depthWeight * normalWeight * 0.5;
@@ -116,7 +116,7 @@ void main() {
     }
 
     vec3 centerWorld = reconstructWorldPosition(vClipUv, centerDepth);
-    vec3 centerNormal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+    vec3 centerNormal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
     vec3 centerAlbedo = texture(uAlbedoTex, textureUv).rgb;
     float viewDistance = max(length(centerWorld - uCameraPos), 0.5);
 
@@ -166,7 +166,7 @@ void main() {
         }
 
         vec3 dir = toSample / dist;
-        vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleTextureUv).rgb * 2.0 - 1.0);
+        vec3 sampleNormal = unpackGBufferNormal(texture(uNormalAoTex, sampleTextureUv));
         float receiverTerm = max(dot(centerNormal, dir), 0.0);
         float emitterTerm = max(dot(sampleNormal, -dir), 0.0);
         if (receiverTerm <= 0.018 || emitterTerm <= 0.018) {

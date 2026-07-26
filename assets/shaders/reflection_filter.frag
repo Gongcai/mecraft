@@ -21,8 +21,8 @@ layout(push_constant) uniform RhiPushConstants {
     vec4 uFilterPadding;
 };
 
-vec3 reconstructNormal(vec3 packedNormal) {
-    return normalize(packedNormal * 2.0 - 1.0);
+vec3 reconstructNormal(vec4 packedNormalAo) {
+    return unpackGBufferNormal(packedNormalAo);
 }
 
 vec3 reconstructWorldPosition(vec2 clipUv, float depth) {
@@ -76,7 +76,7 @@ vec4 derivativeReflectionFilter(ivec2 texel,
                                   ivec2(0), maxTexel);
 
         vec4 sampleData = texelFetch(uReflectionTex, sampleTexel, 0);
-        vec3 sampleNormal = reconstructNormal(texelFetch(uNormalAoTex, sampleTexel, 0).rgb);
+        vec3 sampleNormal = reconstructNormal(texelFetch(uNormalAoTex, sampleTexel, 0));
         float sampleLinearDepth = linearDepthFromDepth(texelFetch(uDepthTex, sampleTexel, 0).r);
 
         float weight = pow(max(dot(normal, sampleNormal), 1e-6), roughnessInv) *
@@ -118,7 +118,7 @@ void main() {
         return;
     }
 
-    vec3 centerNormal = reconstructNormal(texture(uNormalAoTex, textureUv).rgb);
+    vec3 centerNormal = reconstructNormal(texture(uNormalAoTex, textureUv));
     SurfaceMaterial centerMaterial = unpackGBufferMaterial(texture(uMaterialTex, textureUv));
     float centerRoughness = clamp(centerMaterial.roughness, 0.0, 1.0);
     float centerWetness = clamp(centerAux.wetnessMask, 0.0, 1.0);

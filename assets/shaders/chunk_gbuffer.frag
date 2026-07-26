@@ -336,7 +336,7 @@ void main() {
     }
 
     GAlbedoMaterial = vec4(albedo, emissiveHint);
-    GNormalAo = vec4(normal * 0.5 + 0.5, ao);
+    GNormalAo = packGBufferNormalAo(normal, ao);
     GVoxelLight = vec4(clamp(vSunlight, 0.0, 1.0), clamp(vBlockLight, 0.0, 1.0), 0.0, 1.0);
     GMaterial = packGBufferMaterial(material);
     GMaterialAux = packGBufferMaterialAux(aux);

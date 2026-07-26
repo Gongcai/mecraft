@@ -225,11 +225,11 @@ void main() {
         return;
     }
     if (uDebugViewMode == 2) {
-        FragColor = vec4(texture(uNormalAoTex, textureUv).rgb, 1.0);
+        FragColor = vec4(unpackGBufferNormal(texture(uNormalAoTex, textureUv)) * 0.5 + 0.5, 1.0);
         return;
     }
     if (uDebugViewMode == 3) {
-        float ao = texture(uNormalAoTex, textureUv).a;
+        float ao = unpackGBufferVertexAo(texture(uNormalAoTex, textureUv));
         FragColor = vec4(vec3(ao), 1.0);
         return;
     }
@@ -340,7 +340,7 @@ void main() {
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+        vec3 normal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
@@ -370,7 +370,7 @@ void main() {
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+        vec3 normal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
@@ -493,7 +493,7 @@ void main() {
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+        vec3 normal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vClipUv, depth);
@@ -532,7 +532,7 @@ void main() {
             return;
         }
 
-        vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+        vec3 normal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
         vec3 lightDir = normalize(uShadowLightDirection);
         float ndotl = clamp(dot(normal, lightDir), 0.0, 1.0);
         vec3 worldPos = reconstructWorldPosition(vClipUv, depth);

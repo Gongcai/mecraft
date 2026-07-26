@@ -1,3 +1,4 @@
+#include "gbuffer_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
 
 layout(location = 0) in vec2 vScreenUv;
@@ -25,7 +26,7 @@ float linearizeDepth(float depth) {
 }
 
 vec3 decodeNormal(vec2 uv) {
-    return normalize(texture(uNormalAoTex, uv).rgb * 2.0 - 1.0);
+    return unpackGBufferNormal(texture(uNormalAoTex, uv));
 }
 
 float luminance(vec3 color) {

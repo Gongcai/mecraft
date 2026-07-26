@@ -1,5 +1,6 @@
 #ifndef SSAO_COMMON_GLSL
 #define SSAO_COMMON_GLSL
+#include "gbuffer_contract.glsl"
 
 #include "derivative_shadow.glsl"
 #include "rhi_screen_coordinates.glsl"
@@ -36,7 +37,7 @@ vec4 renderSsaoBase(vec2 vScreenUv, ivec2 fragTexel) {
     }
 
     vec3 viewPos = clipUvToViewPos(vClipUv, centerDepth);
-    vec3 normal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+    vec3 normal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
 
     // Dither rotation per pixel using tiled noise texture.
     // (vec2(fragTexel) + 0.5) / noiseSize tiles the noise across the screen exactly once per noise repeat.

@@ -1,5 +1,6 @@
 #ifndef SSAO_FILTER_COMMON_GLSL
 #define SSAO_FILTER_COMMON_GLSL
+#include "gbuffer_contract.glsl"
 
 #include "rhi_screen_coordinates.glsl"
 
@@ -20,7 +21,7 @@ layout(push_constant) uniform RhiPushConstants {
 vec4 renderSsaoFilter(vec2 vScreenUv, ivec2 fragTexel) {
     vec2 textureUv = rhiScreenUvToTextureUv(vScreenUv);
     float centerDepth = texture(uDepthTex, textureUv).r;
-    vec3 centerNormal = normalize(texture(uNormalAoTex, textureUv).rgb * 2.0 - 1.0);
+    vec3 centerNormal = unpackGBufferNormal(texture(uNormalAoTex, textureUv));
     float centerAo = texture(uSsaoTex, textureUv).r;
 
     // Linearize NDC depth: linearZ = 2*near / (1 - ndc)
@@ -43,7 +44,7 @@ vec4 renderSsaoFilter(vec2 vScreenUv, ivec2 fragTexel) {
             vec2 sampleTextureUv = rhiScreenUvToTextureUv(sampleScreenUv);
 
             float sampleDepth = texture(uDepthTex, sampleTextureUv).r;
-            vec3 sampleNormal = normalize(texture(uNormalAoTex, sampleTextureUv).rgb * 2.0 - 1.0);
+            vec3 sampleNormal = unpackGBufferNormal(texture(uNormalAoTex, sampleTextureUv));
             float sampleAo = texture(uSsaoTex, sampleTextureUv).r;
 
             // Depth weight: relative linear depth difference for perspective-correct rejection.

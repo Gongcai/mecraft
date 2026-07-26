@@ -241,6 +241,34 @@ SurfaceMaterialAux surfaceMaterialAuxForKind(float materialKind) {
     return aux;
 }
 
+// --- Normal + vertex AO packing (RGB10A2) ---
+// RG: octahedral-encoded world normal (10 bits per axis), B: vertex AO.
+// The +Z normal encodes to (0.5, 0.5), so the legacy clear value
+// (0.5, 0.5, 1.0, 1.0) still means "up-facing, fully unoccluded".
+vec2 octWrapNormal(vec2 v) {
+    return (1.0 - abs(v.yx)) * vec2(v.x >= 0.0 ? 1.0 : -1.0,
+                                    v.y >= 0.0 ? 1.0 : -1.0);
+}
+
+vec4 packGBufferNormalAo(vec3 normal, float vertexAo) {
+    vec3 n = normal / (abs(normal.x) + abs(normal.y) + abs(normal.z));
+    vec2 encoded = n.z >= 0.0 ? n.xy : octWrapNormal(n.xy);
+    return vec4(encoded * 0.5 + 0.5, vertexAo, 0.0);
+}
+
+vec3 unpackGBufferNormal(vec4 packedNormalAo) {
+    vec2 f = packedNormalAo.rg * 2.0 - 1.0;
+    vec3 n = vec3(f.x, f.y, 1.0 - abs(f.x) - abs(f.y));
+    float t = max(-n.z, 0.0);
+    n.x += n.x >= 0.0 ? -t : t;
+    n.y += n.y >= 0.0 ? -t : t;
+    return normalize(n);
+}
+
+float unpackGBufferVertexAo(vec4 packedNormalAo) {
+    return packedNormalAo.b;
+}
+
 vec4 packGBufferMaterial(SurfaceMaterial material) {
     // colortex3Out.zw in DerivativeMain pack specularData.rg/ba. Our target is
     // expanded RGBA: roughness/f0/emission/sss.
@@ -277,8 +305,8 @@ GBufferSurface unpackGBufferSurface(vec4 albedoMaterial, vec4 normalAo, vec4 vox
     GBufferSurface surface;
     surface.albedo = albedoMaterial.rgb;
     surface.emissiveHint = albedoMaterial.a;
-    surface.normal = normalize(normalAo.rgb * 2.0 - 1.0);
-    surface.vertexAo = mix(0.72, 1.0, normalAo.a);
+    surface.normal = unpackGBufferNormal(normalAo);
+    surface.vertexAo = mix(0.72, 1.0, unpackGBufferVertexAo(normalAo));
     surface.voxelLight = voxelLight.rg;
     surface.material = unpackGBufferMaterial(packedMaterial);
     surface.aux = defaultSurfaceMaterialAux();
