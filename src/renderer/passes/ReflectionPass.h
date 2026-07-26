@@ -57,18 +57,18 @@ private:
     [[nodiscard]] bool recordReflection(RhiCommandList& commandList,
                                         const FrameContext& ctx,
                                         const RenderSettings& settings,
-                                        DeferredRenderTargets& targets);
-    [[nodiscard]] bool recordScratchCopy(RhiCommandList& commandList,
-                                         const FrameContext& ctx,
-                                         DeferredRenderTargets& targets);
+                                        DeferredRenderTargets& targets,
+                                        bool writeToScratch);
     [[nodiscard]] bool recordFilter(RhiCommandList& commandList,
                                     const FrameContext& ctx,
                                     const ReflectionSettings& reflection,
-                                    DeferredRenderTargets& targets);
+                                    DeferredRenderTargets& targets,
+                                    bool readScratch);
     [[nodiscard]] bool recordTemporal(RhiCommandList& commandList,
                                       const FrameContext& ctx,
                                       const ReflectionSettings& reflection,
-                                      DeferredRenderTargets& targets);
+                                      DeferredRenderTargets& targets,
+                                      bool readScratch);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
     bool ensureBaseBindGroup(RhiDevice& rhiDevice,
                              const std::array<RhiTextureViewHandle, 7>& views);

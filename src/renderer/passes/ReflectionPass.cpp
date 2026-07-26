@@ -72,6 +72,15 @@ RgPassHandle ReflectionPass::addGraphPasses(
 
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
+    // Ping-pong between reflection and the scratch buffer: with an odd number
+    // of post-stages the base pass renders into scratch, so the chain always
+    // ends on `reflection`, the binding external consumers rely on. This
+    // replaces the former FilterCopy/TemporalCopy snapshot blits.
+    const int postStageCount =
+        (filterActive ? 1 : 0) + (temporalActive ? 1 : 0);
+    bool currentIsScratch = (postStageCount % 2) == 1;
+    const bool baseWritesScratch = currentIsScratch;
+
     RenderGraphPassBuilder base = graph.addPass(
         {"Reflection.Base", RgPassType::Graphics, RhiQueueType::Graphics});
     base.dependsOn(dependency)
@@ -82,63 +91,53 @@ RgPassHandle ReflectionPass::addGraphPasses(
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
         .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
         .readTexture(resources.voxelLight, RhiResourceState::ShaderRead)
-        .writeTexture(resources.reflection, RhiResourceState::RenderTarget)
-        .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
+        .writeTexture(baseWritesScratch ? resources.scratch
+                                        : resources.reflection,
+                      RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets, settings,
+                     baseWritesScratch](RgPassContext& pass) {
             return recordReflection(
-                pass.commandList(), *frame, settings, *frameTargets);
+                pass.commandList(), *frame, settings, *frameTargets,
+                baseWritesScratch);
         });
     RgPassHandle previous = base.handle();
 
     if (filterActive) {
-        RenderGraphPassBuilder copy = graph.addPass(
-            {"Reflection.FilterCopy", RgPassType::Copy,
-             RhiQueueType::Graphics});
-        copy.dependsOn(previous)
-            .readTexture(resources.reflection, RhiResourceState::TransferSrc)
-            .writeTexture(resources.scratch, RhiResourceState::TransferDst)
-            .setExecute([this, frame, frameTargets](RgPassContext& pass) {
-                return recordScratchCopy(
-                    pass.commandList(), *frame, *frameTargets);
-            });
-        previous = copy.handle();
-
+        const bool readScratch = currentIsScratch;
         RenderGraphPassBuilder filter = graph.addPass(
             {"Reflection.Filter", RgPassType::Graphics,
              RhiQueueType::Graphics});
         filter.dependsOn(previous)
-            .readTexture(resources.scratch, RhiResourceState::ShaderRead)
+            .readTexture(readScratch ? resources.scratch
+                                     : resources.reflection,
+                         RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
             .readTexture(resources.material, RhiResourceState::ShaderRead)
             .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
-            .writeTexture(resources.reflection, RhiResourceState::RenderTarget)
+            .writeTexture(readScratch ? resources.reflection
+                                      : resources.scratch,
+                          RhiResourceState::RenderTarget)
             .setExecute(
-                [this, frame, frameTargets, settings](RgPassContext& pass) {
+                [this, frame, frameTargets, settings,
+                 readScratch](RgPassContext& pass) {
                     return recordFilter(
                         pass.commandList(), *frame, settings.reflection,
-                        *frameTargets);
+                        *frameTargets, readScratch);
                 });
+        currentIsScratch = !currentIsScratch;
         previous = filter.handle();
     }
 
     if (temporalActive) {
-        RenderGraphPassBuilder copy = graph.addPass(
-            {"Reflection.TemporalCopy", RgPassType::Copy,
-             RhiQueueType::Graphics});
-        copy.dependsOn(previous)
-            .readTexture(resources.reflection, RhiResourceState::TransferSrc)
-            .writeTexture(resources.scratch, RhiResourceState::TransferDst)
-            .setExecute([this, frame, frameTargets](RgPassContext& pass) {
-                return recordScratchCopy(
-                    pass.commandList(), *frame, *frameTargets);
-            });
-        previous = copy.handle();
-
+        const bool readScratch = currentIsScratch;
         RenderGraphPassBuilder temporal = graph.addPass(
             {"Reflection.Temporal", RgPassType::Graphics,
              RhiQueueType::Graphics});
         temporal.dependsOn(previous)
-            .readTexture(resources.scratch, RhiResourceState::ShaderRead)
+            .readTexture(readScratch ? resources.scratch
+                                     : resources.reflection,
+                         RhiResourceState::ShaderRead)
             .readTexture(resources.historyPrevious,
                          RhiResourceState::ShaderRead)
             .readTexture(resources.velocity, RhiResourceState::ShaderRead)
@@ -146,13 +145,17 @@ RgPassHandle ReflectionPass::addGraphPasses(
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
             .readTexture(resources.material, RhiResourceState::ShaderRead)
             .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
-            .writeTexture(resources.reflection, RhiResourceState::RenderTarget)
+            .writeTexture(readScratch ? resources.reflection
+                                      : resources.scratch,
+                          RhiResourceState::RenderTarget)
             .setExecute(
-                [this, frame, frameTargets, settings](RgPassContext& pass) {
+                [this, frame, frameTargets, settings,
+                 readScratch](RgPassContext& pass) {
                     return recordTemporal(
                         pass.commandList(), *frame, settings.reflection,
-                        *frameTargets);
+                        *frameTargets, readScratch);
                 });
+        currentIsScratch = !currentIsScratch;
         previous = temporal.handle();
     }
 
@@ -162,9 +165,13 @@ RgPassHandle ReflectionPass::addGraphPasses(
 bool ReflectionPass::recordReflection(RhiCommandList& commandList,
                                       const FrameContext& ctx,
                                       const RenderSettings& settings,
-                                      DeferredRenderTargets& targets) {
+                                      DeferredRenderTargets& targets,
+                                      const bool writeToScratch) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
+        (writeToScratch &&
+         !targets.ensureReflectionTemporalScratchTextureView(
+             *ctx.shared->rhiDevice)) ||
         !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
         !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice)) {
@@ -204,7 +211,9 @@ bool ReflectionPass::recordReflection(RhiCommandList& commandList,
                                  0);
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.reflectionTextureViewHandle();
+    colorAttachment.view = writeToScratch
+        ? targets.reflectionTemporalScratchTextureViewHandle()
+        : targets.reflectionTextureViewHandle();
     colorAttachment.loadOp = RhiLoadOp::Clear;
     colorAttachment.storeOp = RhiStoreOp::Store;
     colorAttachment.clearColor[0] = 0.0f;
@@ -458,27 +467,11 @@ void ReflectionPass::destroyBaseRhiResources() {
     m_baseRhiDevice = nullptr;
 }
 
-bool ReflectionPass::recordScratchCopy(RhiCommandList& commandList,
-                                       const FrameContext& ctx,
-                                       DeferredRenderTargets& targets) {
-    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(
-              commandList, GpuTimerPass::Reflection)
-        : GpuTimerSegmentToken{};
-    RhiTextureBlit blit;
-    blit.src = targets.reflectionTextureHandle();
-    blit.dst = targets.reflectionTemporalScratchTextureHandle();
-    commandList.blitTexture(blit);
-    if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(commandList, timerToken);
-    }
-    return true;
-}
-
 bool ReflectionPass::recordFilter(RhiCommandList& commandList,
                                   const FrameContext& ctx,
                                   const ReflectionSettings& reflection,
-                                  DeferredRenderTargets& targets) {
+                                  DeferredRenderTargets& targets,
+                                  const bool readScratch) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureReflectionTemporalScratchTextureView(*ctx.shared->rhiDevice) ||
@@ -487,7 +480,9 @@ bool ReflectionPass::recordFilter(RhiCommandList& commandList,
     }
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.reflectionTextureViewHandle();
+    colorAttachment.view = readScratch
+        ? targets.reflectionTextureViewHandle()
+        : targets.reflectionTemporalScratchTextureViewHandle();
     colorAttachment.loadOp = RhiLoadOp::DontCare;
     colorAttachment.storeOp = RhiStoreOp::Store;
 
@@ -504,7 +499,8 @@ bool ReflectionPass::recordFilter(RhiCommandList& commandList,
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const std::array<RhiTextureViewHandle, 5> views = {
-        targets.reflectionTemporalScratchTextureViewHandle(),
+        readScratch ? targets.reflectionTemporalScratchTextureViewHandle()
+                    : targets.reflectionTextureViewHandle(),
         targets.depthTextureViewHandle(),
         targets.normalAoTextureViewHandle(),
         targets.materialTextureViewHandle(),
@@ -557,7 +553,8 @@ bool ReflectionPass::recordFilter(RhiCommandList& commandList,
 bool ReflectionPass::recordTemporal(RhiCommandList& commandList,
                                     const FrameContext& ctx,
                                     const ReflectionSettings& reflection,
-                                    DeferredRenderTargets& targets) {
+                                    DeferredRenderTargets& targets,
+                                    const bool readScratch) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureReflectionTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureReflectionTemporalScratchTextureView(*ctx.shared->rhiDevice) ||
@@ -568,7 +565,9 @@ bool ReflectionPass::recordTemporal(RhiCommandList& commandList,
     }
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.reflectionTextureViewHandle();
+    colorAttachment.view = readScratch
+        ? targets.reflectionTextureViewHandle()
+        : targets.reflectionTemporalScratchTextureViewHandle();
     colorAttachment.loadOp = RhiLoadOp::DontCare;
     colorAttachment.storeOp = RhiStoreOp::Store;
 
@@ -585,7 +584,8 @@ bool ReflectionPass::recordTemporal(RhiCommandList& commandList,
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const std::array<RhiTextureViewHandle, 7> views = {
-        targets.reflectionTemporalScratchTextureViewHandle(),
+        readScratch ? targets.reflectionTemporalScratchTextureViewHandle()
+                    : targets.reflectionTextureViewHandle(),
         targets.historyReflectionTexturePrevViewHandle(),
         targets.velocityTextureViewHandle(),
         targets.depthTextureViewHandle(),
