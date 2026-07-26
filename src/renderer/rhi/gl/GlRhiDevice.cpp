@@ -550,6 +550,7 @@ struct GlVertexFormatInfo {
 struct GlBufferRecord {
     GLuint buffer = 0u;
     RhiBufferDesc desc;
+    std::string debugName;
     RhiResourceState state = RhiResourceState::Undefined;
     bool mapped = false;
     bool active = false;
@@ -570,6 +571,7 @@ struct GlResolvedTextureRecord {
     GLuint texture = 0u;
     GLenum target = 0u;
     RhiTextureDesc desc;
+    std::string debugName;
     GlFormatInfo format;
     bool swapchainBackbuffer = false;
     bool valid = false;
@@ -1343,6 +1345,7 @@ void setTextureRangeState(GlTextureRecord& record,
     resolved.texture = deviceRecord->texture;
     resolved.target = deviceRecord->target;
     resolved.desc = deviceRecord->desc;
+    resolved.debugName = deviceRecord->debugName;
     resolved.format = deviceRecord->format;
     resolved.swapchainBackbuffer = deviceRecord->swapchainBackbuffer;
     resolved.valid = true;
@@ -2365,7 +2368,7 @@ void GlRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
     }
     if (record->mapped || record->state != barrier.oldState) {
         std::cerr << "GlRhiDevice: bufferBarrier oldState does not match the tracked buffer state"
-                  << " buffer=[" << rhiDebugName(record->desc.debugName) << ']'
+                  << " buffer=[" << rhiDebugName(record->debugName.c_str()) << ']'
                   << " handle=" << barrier.buffer.index << ':' << barrier.buffer.generation
                   << " expected=" << resourceStateName(barrier.oldState)
                   << " tracked=" << resourceStateName(record->state)
@@ -3127,7 +3130,7 @@ void GlRhiCommandList::setVertexBuffer(uint32_t slot, RhiBufferHandle buffer, ui
         std::cerr << "GlRhiDevice: setVertexBuffer requires a graphics pipeline and a valid vertex buffer range"
                   << " pipeline=[" << (pipeline != nullptr ? rhiDebugName(pipeline->graphicsDesc.debugName) : "<invalid>") << ']'
                   << " pipelineHandle=" << m_graphicsPipeline.index << ':' << m_graphicsPipeline.generation
-                  << " buffer=[" << (bufferRecord != nullptr ? rhiDebugName(bufferRecord->desc.debugName) : "<invalid>") << ']'
+                  << " buffer=[" << (bufferRecord != nullptr ? rhiDebugName(bufferRecord->debugName.c_str()) : "<invalid>") << ']'
                   << " bufferHandle=" << buffer.index << ':' << buffer.generation
                   << " slot=" << slot
                   << " offset=" << offset
@@ -4677,7 +4680,14 @@ RhiBufferHandle GlRhiDevice::createBuffer(const RhiBufferDesc& desc,
     if (slot >= m_data->bufferRecords.size()) {
         m_data->bufferRecords.resize(slot + 1u);
     }
-    m_data->bufferRecords[slot] = {buffer, desc, desc.initialState, false, true};
+    m_data->bufferRecords[slot] = {
+        buffer,
+        desc,
+        rhiDebugName(desc.debugName),
+        desc.initialState,
+        false,
+        true
+    };
     return handle;
 }
 
@@ -4804,6 +4814,7 @@ bool GlRhiDevice::getBufferDesc(const RhiBufferHandle buffer,
         recordForHandle(m_data->buffers, m_data->bufferRecords, buffer);
     if (!m_initialized || record == nullptr) return false;
     desc = record->desc;
+    desc.debugName = record->debugName.c_str();
     return true;
 }
 
@@ -4813,6 +4824,7 @@ bool GlRhiDevice::getTextureDesc(const RhiTextureHandle texture,
         recordForHandle(m_data->textures, m_data->textureRecords, texture);
     if (!m_initialized || record == nullptr) return false;
     desc = record->desc;
+    desc.debugName = record->debugName.c_str();
     return true;
 }
 
@@ -4894,7 +4906,7 @@ RhiTextureViewHandle GlRhiDevice::createTextureView(const RhiTextureViewDesc& de
             glTextureParameteri(textureView, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
             glTextureParameteri(textureView, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
         }
-        labelGlObject(GL_TEXTURE, textureView, rhiDebugName(textureRecord.desc.debugName));
+        labelGlObject(GL_TEXTURE, textureView, textureRecord.debugName.c_str());
         ownsTexture = true;
     }
 

@@ -78,11 +78,19 @@ private:
 };
 
 struct VkRhiDeviceData {
-    struct Buffer { VkBuffer buffer = VK_NULL_HANDLE; VmaAllocation allocation = VK_NULL_HANDLE; RhiBufferDesc desc{}; void* mapped = nullptr; VkRhiResourceLifetime lifetime{}; };
+    struct Buffer {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        VmaAllocation allocation = VK_NULL_HANDLE;
+        RhiBufferDesc desc{};
+        std::string debugName;
+        void* mapped = nullptr;
+        VkRhiResourceLifetime lifetime{};
+    };
     struct Texture {
         VkImage image = VK_NULL_HANDLE;
         VmaAllocation allocation = VK_NULL_HANDLE;
         RhiTextureDesc desc{};
+        std::string debugName;
         bool swapchainOwned = false;
         bool swapchainAttachment = false;
         VkRhiResourceLifetime lifetime{};

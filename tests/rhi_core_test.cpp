@@ -888,8 +888,11 @@ bool testGlRhiResourceDescriptionQueries() {
         return false;
     }
 
+    constexpr const char* kBufferDebugName = "DescriptionQuery.Buffer";
+    std::array<char, 64u> bufferDebugName{};
+    std::strcpy(bufferDebugName.data(), kBufferDebugName);
     RhiBufferDesc bufferDesc;
-    bufferDesc.debugName = "DescriptionQuery.Buffer";
+    bufferDesc.debugName = bufferDebugName.data();
     bufferDesc.size = 384u;
     bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage) |
                        rhiFlag(RhiBufferUsage::TransferDst);
@@ -897,8 +900,11 @@ bool testGlRhiResourceDescriptionQueries() {
     bufferDesc.initialState = RhiResourceState::StorageBuffer;
     const RhiBufferHandle buffer = device.createBuffer(bufferDesc, nullptr, 0u);
 
+    constexpr const char* kTextureDebugName = "DescriptionQuery.Texture";
+    std::array<char, 64u> textureDebugName{};
+    std::strcpy(textureDebugName.data(), kTextureDebugName);
     RhiTextureDesc textureDesc;
-    textureDesc.debugName = "DescriptionQuery.Texture";
+    textureDesc.debugName = textureDebugName.data();
     textureDesc.dimension = RhiTextureDimension::Texture2DArray;
     textureDesc.format = RhiTextureFormat::Rgba16Float;
     textureDesc.width = 32u;
@@ -909,6 +915,11 @@ bool testGlRhiResourceDescriptionQueries() {
                         rhiFlag(RhiTextureUsage::ColorAttachment);
     const RhiTextureHandle texture = device.createTexture(textureDesc, nullptr);
 
+    bufferDebugName.fill('B');
+    bufferDebugName.back() = '\0';
+    textureDebugName.fill('T');
+    textureDebugName.back() = '\0';
+
     RhiBufferDesc queriedBuffer;
     RhiTextureDesc queriedTexture;
     if (!requireTrue(buffer.isValid() && texture.isValid(),
@@ -918,7 +929,10 @@ bool testGlRhiResourceDescriptionQueries() {
         !requireTrue(queriedBuffer.size == bufferDesc.size &&
                          queriedBuffer.usage == bufferDesc.usage &&
                          queriedBuffer.memoryUsage == bufferDesc.memoryUsage &&
-                         queriedBuffer.initialState == bufferDesc.initialState,
+                         queriedBuffer.initialState == bufferDesc.initialState &&
+                         queriedBuffer.debugName != nullptr &&
+                         std::strcmp(queriedBuffer.debugName,
+                                     kBufferDebugName) == 0,
                      "buffer description queries must preserve all creation fields") ||
         !requireTrue(device.getTextureDesc(texture, queriedTexture),
                      "live texture handles must expose their creation description") ||
@@ -928,7 +942,10 @@ bool testGlRhiResourceDescriptionQueries() {
                          queriedTexture.height == textureDesc.height &&
                          queriedTexture.depthOrLayers == textureDesc.depthOrLayers &&
                          queriedTexture.mipLevels == textureDesc.mipLevels &&
-                         queriedTexture.usage == textureDesc.usage,
+                         queriedTexture.usage == textureDesc.usage &&
+                         queriedTexture.debugName != nullptr &&
+                         std::strcmp(queriedTexture.debugName,
+                                     kTextureDebugName) == 0,
                      "texture description queries must preserve all creation fields") ||
         !requireTrue(!device.getBufferDesc({}, queriedBuffer) &&
                          !device.getTextureDesc({}, queriedTexture),

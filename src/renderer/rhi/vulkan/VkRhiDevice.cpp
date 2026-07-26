@@ -974,7 +974,9 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
                             rhiFlag(RhiTextureUsage::Present);
         data.textures.emplace(handleKey(textureHandle),
                               VkRhiDeviceData::Texture{images[i], VK_NULL_HANDLE,
-                                                       textureDesc, true, true});
+                                                       textureDesc,
+                                                       textureDesc.debugName,
+                                                       true, true});
         data.swapchainTextures.push_back(textureHandle);
         data.swapchainImageInitialized.push_back(false);
 
@@ -1027,7 +1029,9 @@ void destroySwapchainResources(VkRhiDeviceData& data) {
                           rhiFlag(RhiTextureUsage::Sampled);
         data.textures.emplace(handleKey(depthHandle),
                               VkRhiDeviceData::Texture{depthImage, depthAllocation,
-                                                       depthDesc, false, true});
+                                                       depthDesc,
+                                                       depthDesc.debugName,
+                                                       false, true});
         data.depthTextures.push_back(depthHandle);
 
         VkImageViewCreateInfo depthViewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -1997,6 +2001,9 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc,
     const RhiBufferHandle handle = m_data->bufferHandles.allocate();
     m_data->buffers.emplace(handleKey(handle),
                             VkRhiDeviceData::Buffer{buffer, allocation, desc,
+                                                    desc.debugName != nullptr
+                                                        ? desc.debugName
+                                                        : "",
                                                     nativeAllocationInfo.pMappedData});
     nameObject(*m_data, VK_OBJECT_TYPE_BUFFER, reinterpret_cast<uint64_t>(buffer), desc.debugName);
     return handle;
@@ -2039,7 +2046,14 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
     }
     const RhiTextureHandle handle = m_data->textureHandles.allocate();
     m_data->textures.emplace(handleKey(handle),
-                             VkRhiDeviceData::Texture{image, allocation, desc, false, false});
+                             VkRhiDeviceData::Texture{
+                                 image,
+                                 allocation,
+                                 desc,
+                                 desc.debugName != nullptr ? desc.debugName : "",
+                                 false,
+                                 false
+                             });
     nameObject(*m_data, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image), desc.debugName);
     if (initialData != nullptr && !uploadTextureInitialData(*m_data, image, desc, *initialData)) {
         std::cerr << "VkRhiDevice: texture initial data upload failed ["
@@ -2055,6 +2069,7 @@ bool VkRhiDevice::getBufferDesc(const RhiBufferHandle buffer,
     const auto* record = m_data != nullptr ? findRecord(m_data->buffers, buffer) : nullptr;
     if (!m_initialized || record == nullptr) return false;
     desc = record->desc;
+    desc.debugName = record->debugName.c_str();
     return true;
 }
 
@@ -2063,6 +2078,7 @@ bool VkRhiDevice::getTextureDesc(const RhiTextureHandle texture,
     const auto* record = m_data != nullptr ? findRecord(m_data->textures, texture) : nullptr;
     if (!m_initialized || record == nullptr) return false;
     desc = record->desc;
+    desc.debugName = record->debugName.c_str();
     return true;
 }
 
@@ -2107,7 +2123,7 @@ RhiTextureViewHandle VkRhiDevice::createTextureView(const RhiTextureViewDesc& de
     m_data->textureViews.emplace(handleKey(handle),
                                  VkRhiDeviceData::TextureView{view, desc});
     nameObject(*m_data, VK_OBJECT_TYPE_IMAGE_VIEW, reinterpret_cast<uint64_t>(view),
-               texture->desc.debugName);
+               texture->debugName.c_str());
     return handle;
 }
 

@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -1467,6 +1468,54 @@ void main() {
            device.validationErrorCount() == validationErrorsBefore;
 }
 
+[[nodiscard]] bool validateResourceDescriptionNameOwnership(
+    VkRhiDevice& device) {
+    constexpr const char* kBufferDebugName =
+        "VulkanSmoke.DescriptionQuery.Buffer";
+    std::array<char, 64u> bufferDebugName{};
+    std::strcpy(bufferDebugName.data(), kBufferDebugName);
+    RhiBufferDesc bufferDesc;
+    bufferDesc.debugName = bufferDebugName.data();
+    bufferDesc.size = 256u;
+    bufferDesc.usage = rhiFlag(RhiBufferUsage::Storage);
+    bufferDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    bufferDesc.initialState = RhiResourceState::StorageBuffer;
+    const RhiBufferHandle buffer =
+        device.createBuffer(bufferDesc, nullptr, 0u);
+
+    constexpr const char* kTextureDebugName =
+        "VulkanSmoke.DescriptionQuery.Texture";
+    std::array<char, 64u> textureDebugName{};
+    std::strcpy(textureDebugName.data(), kTextureDebugName);
+    RhiTextureDesc textureDesc;
+    textureDesc.debugName = textureDebugName.data();
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 8u;
+    textureDesc.height = 8u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled);
+    const RhiTextureHandle texture =
+        device.createTexture(textureDesc, nullptr);
+
+    bufferDebugName.fill('B');
+    bufferDebugName.back() = '\0';
+    textureDebugName.fill('T');
+    textureDebugName.back() = '\0';
+
+    RhiBufferDesc queriedBuffer;
+    RhiTextureDesc queriedTexture;
+    const bool valid =
+        buffer.isValid() && texture.isValid() &&
+        device.getBufferDesc(buffer, queriedBuffer) &&
+        queriedBuffer.debugName != nullptr &&
+        std::strcmp(queriedBuffer.debugName, kBufferDebugName) == 0 &&
+        device.getTextureDesc(texture, queriedTexture) &&
+        queriedTexture.debugName != nullptr &&
+        std::strcmp(queriedTexture.debugName, kTextureDebugName) == 0;
+    device.destroyBuffer(buffer);
+    device.destroyTexture(texture);
+    return valid;
+}
+
 } // namespace
 
 int main() {
@@ -1515,7 +1564,8 @@ int main() {
         glfwTerminate();
         return 1;
     }
-    if (device.swapchainColorFormat() != RhiTextureFormat::Bgra8Unorm) {
+    if (device.swapchainColorFormat() != RhiTextureFormat::Bgra8Unorm ||
+        !validateResourceDescriptionNameOwnership(device)) {
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();
