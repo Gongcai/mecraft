@@ -1221,6 +1221,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                 .writeTexture(sceneComposite, RhiResourceState::TransferDst)
                 .writeTexture(sceneResolved, RhiResourceState::TransferDst)
                 .setExecute([&](RgPassContext& pass) {
+                    // Without water draws the working buffer still equals the
+                    // clean scene copies, so the writeback is a no-op.
+                    if (!m_transparentPassPlan.hasWater()) {
+                        return true;
+                    }
                     RhiTextureBlit sceneBlit;
                     sceneBlit.src = targets.transparentCompositeTextureHandle();
                     sceneBlit.dst = targets.sceneCompositeTextureHandle();
@@ -1256,6 +1261,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             .writeTexture(sceneComposite, RhiResourceState::TransferDst)
             .writeTexture(sceneResolved, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& pass) {
+                // Mirrors recordGenericTransparentPass: no generic draws means
+                // the working buffer was untouched and needs no writeback.
+                if (!m_transparentPassPlan.hasGeneric()) {
+                    return true;
+                }
                 RhiTextureBlit sceneBlit;
                 sceneBlit.src = targets.transparentCompositeTextureHandle();
                 sceneBlit.dst = targets.sceneCompositeTextureHandle();
@@ -1290,6 +1300,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             .readTexture(sceneComposite, RhiResourceState::TransferSrc)
             .writeTexture(sceneResolved, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& pass) {
+                // Particles draw into sceneComposite; when none were prepared
+                // this frame, sceneResolved is already identical to it.
+                if (!m_currentSettings.weather.particlesEnabled ||
+                    m_shared->particleSystem == nullptr ||
+                    !m_shared->particleSystem->hasPreparedVertices()) {
+                    return true;
+                }
                 RhiTextureBlit blit;
                 blit.src = targets.sceneCompositeTextureHandle();
                 blit.dst = targets.sceneResolvedTextureHandle();

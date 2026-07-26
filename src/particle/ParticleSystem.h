@@ -26,6 +26,12 @@ public:
     void emit(const glm::ivec3& blockPos, BlockID blockType);
     void update(float dt);
     void prepareFrame(const glm::mat4& view, RhiCommandList& commandList);
+
+    /// Reports whether the latest prepareFrame produced billboard vertices.
+    /// Used to skip scene writeback copies when no particle was rendered.
+    [[nodiscard]] bool hasPreparedVertices() const {
+        return m_preparedVertexCount > 0u;
+    }
     void render(RhiCommandList& commandList, const glm::mat4& viewProj);
     void renderToSceneResolved(RhiCommandList& commandList,
                                RhiTextureHandle voxelLightTexture,
