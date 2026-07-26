@@ -189,7 +189,14 @@ vec2 csmRotateOffset(vec2 offset, float angle) {
 }
 
 float csmKernelAngle(vec2 uv, int cascadeIndex, vec2 texelUv) {
-    return (0.125 + float(cascadeIndex) * 0.173205) * TAU;
+    // Interleaved gradient noise decorrelates the Poisson rotation per
+    // pixel: shadow-map texel quantization then shows up as high-frequency
+    // noise that the temporal resolve integrates away, instead of coherent
+    // texel-sized blocks marching along penumbra edges.
+    float ign = fract(52.9829189 *
+                      fract(dot(gl_FragCoord.xy,
+                                vec2(0.06711056, 0.00583715))));
+    return (ign + float(cascadeIndex) * 0.173205) * TAU;
 }
 
 vec2 csmReceiverPlaneDepthGradient(vec3 proj) {
