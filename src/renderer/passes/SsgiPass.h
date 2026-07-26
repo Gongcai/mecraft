@@ -5,12 +5,14 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <array>
 #include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiCommandList;
 class RhiDevice;
 
 /// Screen-space global illumination pass: half-res gather, depth-aware upsample, denoise, temporal accumulation.
@@ -20,17 +22,69 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SSGI"; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Graph handles for SSGI inputs, intermediates, and temporal history.
+    struct GraphResources {
+        RgTextureHandle sceneLighting;
+        RgTextureHandle albedo;
+        RgTextureHandle normalAo;
+        RgTextureHandle materialAux;
+        RgTextureHandle depth;
+        RgTextureHandle noise;
+        RgTextureHandle halfRes;
+        RgTextureHandle output;
+        std::array<RgTextureHandle, 2> denoise;
+        RgTextureHandle velocity;
+        RgTextureHandle historyDepthPrevious;
+        RgTextureHandle historyPrevious;
+        RgTextureHandle momentsHistoryPrevious;
+        RgTextureHandle temporal;
+        RgTextureHandle temporalMoments;
+        RgTextureHandle historyCurrent;
+        RgTextureHandle momentsHistoryCurrent;
+    };
+
+    /// Adds enabled SSGI stages and their exact texture dependencies to a graph.
+    /// @param graph Graph receiving the SSGI pass declarations.
+    /// @param ctx Frame state retained until immediate graph execution completes.
+    /// @param settings Current SSGI and temporal projection settings.
+    /// @param targets Persistent render targets used by recording callbacks.
+    /// @param resources Imported graph handles for all SSGI resources.
+    /// @param dependency Pass that must complete before SSGI starts.
+    /// @return Final SSGI pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        const GraphResources& resources,
+        RgPassHandle dependency);
 
 private:
-    void renderSsgiBase(const FrameContext& ctx, const RenderSettings& settings,
-                        DeferredRenderTargets& targets);
-    void renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets& targets);
-    void renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
-                           DeferredRenderTargets& targets, bool momentsEnabled);
-    void renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& ssgi,
-                            DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsgiBase(RhiCommandList& commandList,
+                                      const FrameContext& ctx,
+                                      const RenderSettings& settings,
+                                      DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsgiUpsample(RhiCommandList& commandList,
+                                          const FrameContext& ctx,
+                                          DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsgiDenoiseIteration(
+        RhiCommandList& commandList,
+        const FrameContext& ctx,
+        const SsgiSettings& ssgi,
+        DeferredRenderTargets& targets,
+        bool momentsEnabled,
+        int iteration);
+    [[nodiscard]] bool recordSsgiTemporal(RhiCommandList& commandList,
+                                          const FrameContext& ctx,
+                                          const SsgiSettings& ssgi,
+                                          DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsgiHistoryCopy(RhiCommandList& commandList,
+                                             const FrameContext& ctx,
+                                             DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsgiOutputCopy(RhiCommandList& commandList,
+                                            const FrameContext& ctx,
+                                            DeferredRenderTargets& targets,
+                                            RhiTextureHandle source);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
     bool ensureBaseBindGroup(RhiDevice& rhiDevice,
                              const std::array<RhiTextureViewHandle, 6>& views);

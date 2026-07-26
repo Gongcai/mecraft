@@ -15,8 +15,10 @@
 #include "../mesh/TerrainRenderCache.h"
 #include "../../world/World.h"
 #include "../../particle/ParticleSystem.h"
+#include "../../Diagnostics.h"
 
 #include <algorithm>
+#include <iostream>
 
 namespace {
 void setClearAttachment(RhiColorAttachment& attachment,
@@ -413,11 +415,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // SSGI pass
-    if (m_ssgiPass) {
-        m_ssgiPass->execute(ctx, m_currentSettings, targets);
-    }
-
     // Reflection pass
     if (m_reflectionPass) {
         m_reflectionPass->execute(ctx, m_currentSettings, targets);
@@ -556,6 +553,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     const bool ssaoEnabled = settings.ssao.enabled;
     const bool ssaoTemporalEnabled =
         ssaoEnabled && settings.ssao.temporalEnabled && !ctx.temporalReset;
+    const bool ssgiEnabled =
+        settings.ssgi.enabled && settings.debug.deferredLightDebugMode <= 0;
+    const bool ssgiTemporalEnabled =
+        ssgiEnabled && settings.ssgi.temporalEnabled && !ctx.temporalReset;
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
@@ -580,10 +581,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
          !targets.ensureSsaoHalfResFilteredTextureView(rhiDevice)) ||
         (ssaoTemporalEnabled &&
          (!targets.ensureSsaoTemporalTextureView(rhiDevice) ||
-          !targets.ensureSsaoHistoryTextureViews(rhiDevice)))) {
+          !targets.ensureSsaoHistoryTextureViews(rhiDevice))) ||
+        (ssgiTemporalEnabled &&
+         (!targets.ensureSsgiHistoryTextureViews(rhiDevice) ||
+          !targets.ensureHistoryDepthTextureViews(rhiDevice)))) {
         return false;
     }
     if (ssaoEnabled && m_ssaoPass == nullptr) {
+        return false;
+    }
+    if (ssgiEnabled && m_ssgiPass == nullptr) {
         return false;
     }
     const RhiTextureHandle skyNoiseTexture =
@@ -733,6 +740,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle lightmapDay;
     RgTextureHandle lightmapNight;
     RgTextureHandle rippleNormal;
+    RgTextureHandle ssgiHistoryCurrent;
+    RgTextureHandle ssgiHistoryPrevious;
+    RgTextureHandle ssgiMomentsHistoryCurrent;
+    RgTextureHandle ssgiMomentsHistoryPrevious;
+    RgTextureHandle historyDepthPrevious;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
     const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
     const RhiTextureHandle rippleNormalTexture =
@@ -795,6 +807,27 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        lightmapNight) ||
         !importTexture(rippleNormalTexture, {}, RhiResourceState::ShaderRead,
                        rippleNormal)) {
+        return failGraphSetup();
+    }
+    if (ssgiTemporalEnabled &&
+        (!importTexture(targets.ssgiHistoryTextureHandle(), {},
+                        RhiResourceState::ShaderRead,
+                        ssgiHistoryCurrent) ||
+         !importTexture(targets.ssgiHistoryTexturePrevHandle(),
+                        targets.ssgiHistoryTexturePrevViewHandle(),
+                        RhiResourceState::ShaderRead,
+                        ssgiHistoryPrevious) ||
+         !importTexture(targets.ssgiMomentsHistoryTextureHandle(), {},
+                        RhiResourceState::ShaderRead,
+                        ssgiMomentsHistoryCurrent) ||
+         !importTexture(targets.ssgiMomentsHistoryTexturePrevHandle(),
+                        targets.ssgiMomentsHistoryTexturePrevViewHandle(),
+                        RhiResourceState::ShaderRead,
+                        ssgiMomentsHistoryPrevious) ||
+         !importTexture(targets.historyDepthTexturePrevHandle(),
+                        targets.historyDepthTexturePrevViewHandle(),
+                        RhiResourceState::DepthRead,
+                        historyDepthPrevious))) {
         return failGraphSetup();
     }
     ssaoResources.noise = skyNoise;
@@ -951,8 +984,37 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         });
     graphTail = lighting.handle();
 
+    if (ssgiEnabled) {
+        SsgiPass::GraphResources ssgiResources;
+        ssgiResources.sceneLighting = sceneLighting;
+        ssgiResources.albedo = albedo;
+        ssgiResources.normalAo = normalAo;
+        ssgiResources.materialAux = materialAux;
+        ssgiResources.depth = depth;
+        ssgiResources.noise = skyNoise;
+        ssgiResources.halfRes = ssgiHalfRes;
+        ssgiResources.output = ssgi;
+        ssgiResources.denoise = {ssgiDenoise0, ssgiDenoise1};
+        ssgiResources.velocity = velocity;
+        ssgiResources.historyDepthPrevious = historyDepthPrevious;
+        ssgiResources.historyPrevious = ssgiHistoryPrevious;
+        ssgiResources.momentsHistoryPrevious = ssgiMomentsHistoryPrevious;
+        ssgiResources.temporal = ssgiTemporal;
+        ssgiResources.temporalMoments = ssgiTemporalMoments;
+        ssgiResources.historyCurrent = ssgiHistoryCurrent;
+        ssgiResources.momentsHistoryCurrent = ssgiMomentsHistoryCurrent;
+        graphTail = m_ssgiPass->addGraphPasses(
+            m_renderGraph, ctx, settings, targets, ssgiResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
+    }
+
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[DeferredPipeline] Render Graph compile failed: "
+                      << compiled.message << '\n');
         return failGraphSetup();
     }
     const GpuTimerCheckpoint timerCheckpoint = ctx.debugService != nullptr
@@ -963,6 +1025,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     const RgExecuteResult executed =
         m_renderGraph.execute(rhiDevice, *m_shared->commandListPool);
+    if (!executed.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[DeferredPipeline] Render Graph execution failed: "
+                      << executed.message << '\n');
+    }
     if (!executed.succeeded() && ctx.debugService != nullptr) {
         ctx.debugService->cancelGpuTimersSince(timerCheckpoint);
     }

@@ -53,73 +53,178 @@ void SsgiPass::shutdown() {
     m_noiseTexture = {};
 }
 
-void SsgiPass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                       DeferredRenderTargets& targets) {
-    if (!settings.ssgi.enabled) {
-        return;
+RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
+                                      const FrameContext& ctx,
+                                      const RenderSettings& settings,
+                                      DeferredRenderTargets& targets,
+                                      const GraphResources& resources,
+                                      const RgPassHandle dependency) {
+    const bool temporalActive =
+        settings.ssgi.temporalEnabled && !ctx.temporalReset;
+    const int denoiseIterations = settings.ssgi.denoiseEnabled
+        ? std::clamp(settings.ssgi.denoiseIterations, 0, 4)
+        : 0;
+    if (!dependency.isValid() || !resources.sceneLighting.isValid() ||
+        !resources.albedo.isValid() || !resources.normalAo.isValid() ||
+        !resources.materialAux.isValid() || !resources.depth.isValid() ||
+        !resources.noise.isValid() || !resources.halfRes.isValid() ||
+        !resources.output.isValid() ||
+        (denoiseIterations > 0 && !resources.denoise[0].isValid()) ||
+        (denoiseIterations > 1 && !resources.denoise[1].isValid()) ||
+        (temporalActive &&
+         (!resources.velocity.isValid() ||
+          !resources.historyDepthPrevious.isValid() ||
+          !resources.historyPrevious.isValid() ||
+          !resources.momentsHistoryPrevious.isValid() ||
+          !resources.temporal.isValid() ||
+          !resources.temporalMoments.isValid() ||
+          !resources.historyCurrent.isValid() ||
+          !resources.momentsHistoryCurrent.isValid()))) {
+        return {};
     }
 
-    renderSsgiBase(ctx, settings, targets);
-    renderSsgiUpsample(ctx, targets);
-    const bool temporalActive = settings.ssgi.temporalEnabled && !ctx.temporalReset;
+    const FrameContext* frame = &ctx;
+    DeferredRenderTargets* frameTargets = &targets;
+    RenderGraphPassBuilder base = graph.addPass(
+        {"SSGI.Base", RgPassType::Graphics, RhiQueueType::Graphics});
+    base.dependsOn(dependency)
+        .readTexture(resources.sceneLighting, RhiResourceState::ShaderRead)
+        .readTexture(resources.albedo, RhiResourceState::ShaderRead)
+        .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
+        .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
+        .readTexture(resources.depth, RhiResourceState::DepthRead)
+        .readTexture(resources.noise, RhiResourceState::ShaderRead)
+        .writeTexture(resources.halfRes, RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
+            return recordSsgiBase(
+                pass.commandList(), *frame, settings, *frameTargets);
+        });
+    RgPassHandle previous = base.handle();
+
+    RenderGraphPassBuilder upsample = graph.addPass(
+        {"SSGI.Upsample", RgPassType::Graphics, RhiQueueType::Graphics});
+    upsample.dependsOn(previous)
+        .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
+        .readTexture(resources.depth, RhiResourceState::DepthRead)
+        .writeTexture(resources.output, RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets](RgPassContext& pass) {
+            return recordSsgiUpsample(
+                pass.commandList(), *frame, *frameTargets);
+        });
+    previous = upsample.handle();
+
     if (temporalActive) {
-        renderSsgiTemporal(ctx, settings.ssgi, targets);
+        RenderGraphPassBuilder temporal = graph.addPass(
+            {"SSGI.Temporal", RgPassType::Graphics, RhiQueueType::Graphics});
+        temporal.dependsOn(previous)
+            .readTexture(resources.output, RhiResourceState::ShaderRead)
+            .readTexture(resources.historyPrevious,
+                         RhiResourceState::ShaderRead)
+            .readTexture(resources.velocity, RhiResourceState::ShaderRead)
+            .readTexture(resources.depth, RhiResourceState::DepthRead)
+            .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
+            .readTexture(resources.historyDepthPrevious,
+                         RhiResourceState::ShaderRead)
+            .readTexture(resources.momentsHistoryPrevious,
+                         RhiResourceState::ShaderRead)
+            .writeTexture(resources.temporal, RhiResourceState::RenderTarget)
+            .writeTexture(resources.temporalMoments,
+                          RhiResourceState::RenderTarget)
+            .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
+                return recordSsgiTemporal(
+                    pass.commandList(), *frame, settings.ssgi, *frameTargets);
+            });
+        previous = temporal.handle();
+
+        RenderGraphPassBuilder historyCopy = graph.addPass(
+            {"SSGI.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics});
+        historyCopy.dependsOn(previous)
+            .readTexture(resources.temporal, RhiResourceState::TransferSrc)
+            .readTexture(resources.temporalMoments,
+                         RhiResourceState::TransferSrc)
+            .writeTexture(resources.historyCurrent,
+                          RhiResourceState::TransferDst)
+            .writeTexture(resources.momentsHistoryCurrent,
+                          RhiResourceState::TransferDst)
+            .setExecute([this, frame, frameTargets](RgPassContext& pass) {
+                return recordSsgiHistoryCopy(
+                    pass.commandList(), *frame, *frameTargets);
+            });
+        previous = historyCopy.handle();
     }
-    const bool denoiseActive = settings.ssgi.denoiseEnabled &&
-        std::clamp(settings.ssgi.denoiseIterations, 0, 4) > 0;
-    if (denoiseActive) {
-        renderSsgiDenoise(ctx, settings.ssgi, targets, temporalActive);
-    } else if (temporalActive) {
-        if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
-            return;
+
+    constexpr const char* kDenoisePassNames[4] = {
+        "SSGI.Denoise[0]", "SSGI.Denoise[1]",
+        "SSGI.Denoise[2]", "SSGI.Denoise[3]"
+    };
+    for (int iteration = 0; iteration < denoiseIterations; ++iteration) {
+        const int outputSlot = iteration & 1;
+        const RgTextureHandle input = iteration == 0
+            ? (temporalActive ? resources.temporal : resources.output)
+            : resources.denoise[1 - outputSlot];
+        RenderGraphPassBuilder denoise = graph.addPass(
+            {kDenoisePassNames[iteration], RgPassType::Graphics,
+             RhiQueueType::Graphics});
+        denoise.dependsOn(previous)
+            .readTexture(input, RhiResourceState::ShaderRead)
+            .readTexture(resources.depth, RhiResourceState::DepthRead)
+            .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
+            .writeTexture(resources.denoise[outputSlot],
+                          RhiResourceState::RenderTarget);
+        if (temporalActive) {
+            denoise.readTexture(resources.temporalMoments,
+                                RhiResourceState::ShaderRead);
         }
-        RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-        RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
+        denoise.setExecute(
+            [this, frame, frameTargets, settings, temporalActive, iteration](
+                RgPassContext& pass) {
+                return recordSsgiDenoiseIteration(
+                    pass.commandList(), *frame, settings.ssgi, *frameTargets,
+                    temporalActive, iteration);
+            });
+        previous = denoise.handle();
     }
-    RhiCommandList& commandList = *commandListStorage;
-        const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-            ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
-            : GpuTimerSegmentToken{};
-        targets.transitionTexture(commandList, targets.ssgiTemporalTextureHandle(),
-                                  RhiResourceState::TransferSrc);
-        targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
-                                  RhiResourceState::TransferDst);
-        targets.copySsgiTemporalToSsgi(commandList);
-        targets.transitionTexture(commandList, targets.ssgiTemporalTextureHandle(),
-                                  RhiResourceState::ShaderRead);
-        targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
-                                  RhiResourceState::ShaderRead);
-        if (ctx.debugService != nullptr) {
-            ctx.debugService->endGpuTimer(commandList, timerToken);
-        }
-        if (!commandList.end()) {
-        std::abort();
+
+    if (denoiseIterations > 0 || temporalActive) {
+        const RgTextureHandle copySource = denoiseIterations > 0
+            ? resources.denoise[(denoiseIterations - 1) & 1]
+            : resources.temporal;
+        const RhiTextureHandle copySourceTexture = denoiseIterations > 0
+            ? targets.ssgiDenoiseTextureHandle((denoiseIterations - 1) & 1)
+            : targets.ssgiTemporalTextureHandle();
+        RenderGraphPassBuilder outputCopy = graph.addPass(
+            {"SSGI.OutputCopy", RgPassType::Copy, RhiQueueType::Graphics});
+        outputCopy.dependsOn(previous)
+            .readTexture(copySource, RhiResourceState::TransferSrc)
+            .writeTexture(resources.output, RhiResourceState::TransferDst)
+            .setExecute(
+                [this, frame, frameTargets, copySourceTexture](
+                    RgPassContext& pass) {
+                    return recordSsgiOutputCopy(
+                        pass.commandList(), *frame, *frameTargets,
+                        copySourceTexture);
+                });
+        previous = outputCopy.handle();
     }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
-    }
+
+    return previous;
 }
 
-void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& settings,
+bool SsgiPass::recordSsgiBase(RhiCommandList& commandList,
+                              const FrameContext& ctx,
+                              const RenderSettings& settings,
                               DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsgiHalfResTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice)) {
-        return;
+        return false;
     }
     const SsgiSettings& ssgi = settings.ssgi;
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!ensureNoiseTextureView(rhiDevice)) {
-        return;
+        return false;
     }
     const std::array<RhiTextureViewHandle, 6> views = {
         targets.sceneLightingTextureViewHandle(),
@@ -130,7 +235,7 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
         m_noiseTextureView
     };
     if (!ensureBaseRhiPipeline(rhiDevice) || !ensureBaseBindGroup(rhiDevice, views)) {
-        return;
+        return false;
     }
 
     RhiColorAttachment colorAttachment;
@@ -178,24 +283,6 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
                                  0,
                                  0);
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList, targets.sceneLightingTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.albedoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthRead);
-    targets.transitionTexture(commandList, targets.ssgiHalfResTextureHandle(),
-                              RhiResourceState::RenderTarget);
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
         : GpuTimerSegmentToken{};
@@ -209,20 +296,10 @@ void SsgiPass::renderSsgiBase(const FrameContext& ctx, const RenderSettings& set
     commandList.setBindGroup(0u, m_baseBindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.ssgiHalfResTextureHandle(),
-                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool SsgiPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
@@ -484,12 +561,14 @@ void SsgiPass::destroyBaseRhiResources() {
     m_baseRhiDevice = nullptr;
 }
 
-void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets& targets) {
+bool SsgiPass::recordSsgiUpsample(RhiCommandList& commandList,
+                                  const FrameContext& ctx,
+                                  DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureSsgiHalfResTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice)) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
@@ -498,7 +577,7 @@ void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets
         targets.depthTextureViewHandle()
     };
     if (!ensureUpsampleRhiPipeline(rhiDevice) || !ensureUpsampleBindGroup(rhiDevice, views)) {
-        return;
+        return false;
     }
 
     RhiColorAttachment colorAttachment;
@@ -521,18 +600,6 @@ void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList, targets.ssgiHalfResTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthRead);
-    targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
-                              RhiResourceState::RenderTarget);
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
         : GpuTimerSegmentToken{};
@@ -550,20 +617,10 @@ void SsgiPass::renderSsgiUpsample(const FrameContext& ctx, DeferredRenderTargets
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
-                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool SsgiPass::ensureUpsampleRhiPipeline(RhiDevice& rhiDevice) {
@@ -751,164 +808,104 @@ void SsgiPass::destroyUpsampleRhiResources() {
     m_upsampleRhiDevice = nullptr;
 }
 
-void SsgiPass::renderSsgiDenoise(const FrameContext& ctx, const SsgiSettings& ssgi,
-                                 DeferredRenderTargets& targets, const bool momentsEnabled) {
-    const int iterations = std::clamp(ssgi.denoiseIterations, 0, 4);
-    if (iterations <= 0) {
-        return;
+bool SsgiPass::recordSsgiDenoiseIteration(
+    RhiCommandList& commandList,
+    const FrameContext& ctx,
+    const SsgiSettings& ssgi,
+    DeferredRenderTargets& targets,
+    const bool momentsEnabled,
+    const int iteration) {
+    if (iteration < 0 || iteration >= 4) {
+        return false;
     }
+    const int outputSlot = iteration & 1;
+    const int inputSlot = iteration == 0 ? -1 : 1 - outputSlot;
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice, 0) ||
-        (iterations > 1 && !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice, 1)) ||
+        !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice,
+                                              outputSlot) ||
+        (inputSlot >= 0 &&
+         !targets.ensureSsgiDenoiseTextureView(*ctx.shared->rhiDevice,
+                                               inputSlot)) ||
         !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
         (momentsEnabled && !targets.ensureSsgiTemporalTextureViews(*ctx.shared->rhiDevice))) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!ensureDenoiseRhiPipelines(rhiDevice)) {
-        return;
+        return false;
     }
 
     const glm::vec2 screenSize(
         static_cast<float>(std::max(1, targets.width())),
         static_cast<float>(std::max(1, targets.height())));
-
-    int outputSlot = 0;
-    for (int i = 0; i < iterations; ++i) {
-        outputSlot = i & 1;
-        const int inputSlot = i == 0 ? -1 : 1 - outputSlot;
-        const uint32_t bindGroupCacheIndex =
-            inputSlot < 0 ? 0u : static_cast<uint32_t>(inputSlot + 1);
-        const RhiTextureViewHandle inputView = inputSlot < 0
-            ? (momentsEnabled
-                   ? targets.ssgiTemporalTextureViewHandle()
-                   : targets.ssgiTextureViewHandle())
-            : targets.ssgiDenoiseTextureViewHandle(inputSlot);
-        const std::array<RhiTextureViewHandle, 4> views = {
-            inputView,
-            targets.depthTextureViewHandle(),
-            targets.normalAoTextureViewHandle(),
-            momentsEnabled
-                ? targets.ssgiTemporalMomentsTextureViewHandle()
-                : RhiTextureViewHandle{}
-        };
-        if (!ensureDenoiseBindGroup(rhiDevice, momentsEnabled, bindGroupCacheIndex, views)) {
-            return;
-        }
-
-        RhiColorAttachment colorAttachment;
-        colorAttachment.view = targets.ssgiDenoiseTextureViewHandle(outputSlot);
-        colorAttachment.loadOp = RhiLoadOp::Clear;
-        colorAttachment.storeOp = RhiStoreOp::Store;
-        colorAttachment.clearColor[0] = 0.0f;
-        colorAttachment.clearColor[1] = 0.0f;
-        colorAttachment.clearColor[2] = 0.0f;
-        colorAttachment.clearColor[3] = 0.0f;
-
-        RhiRenderingInfo renderingInfo;
-        renderingInfo.debugName = "SsgiDenoise";
-        renderingInfo.renderArea = {
-            0,
-            0,
-            static_cast<uint32_t>(std::max(1, targets.width())),
-            static_cast<uint32_t>(std::max(1, targets.height()))
-        };
-        renderingInfo.colorAttachments = &colorAttachment;
-        renderingInfo.colorAttachmentCount = 1u;
-
-        RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-        const RhiTextureHandle inputTexture = inputSlot < 0
-            ? (momentsEnabled
-                   ? targets.ssgiTemporalTextureHandle()
-                   : targets.ssgiTextureHandle())
-            : targets.ssgiDenoiseTextureHandle(inputSlot);
-        targets.transitionTexture(commandList, inputTexture,
-                                  RhiResourceState::ShaderRead);
-        targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                                  RhiResourceState::DepthRead);
-        targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                                  RhiResourceState::ShaderRead);
-        if (momentsEnabled) {
-            targets.transitionTexture(commandList, targets.ssgiTemporalMomentsTextureHandle(),
-                                      RhiResourceState::ShaderRead);
-        }
-        targets.transitionTexture(commandList, targets.ssgiDenoiseTextureHandle(outputSlot),
-                                  RhiResourceState::RenderTarget);
-        const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-            ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
-            : GpuTimerSegmentToken{};
-        commandList.beginRendering(renderingInfo);
-        const glm::vec4 pushConstants[2] = {
-            glm::vec4(screenSize,
-                      ctx.camera.nearPlane,
-                      static_cast<float>(1 << i)),
-            glm::vec4(ssgi.denoiseStrength, 0.0f, 0.0f, 0.0f)
-        };
-        commandList.setGraphicsPipeline(
-            momentsEnabled ? m_denoiseMomentsPipeline : m_denoiseSpatialPipeline);
-        commandList.setBindGroup(
-            0u,
-            momentsEnabled
-                ? m_denoiseMomentsBindGroups[bindGroupCacheIndex]
-                : m_denoiseSpatialBindGroups[bindGroupCacheIndex]);
-        commandList.pushConstants(pushConstants,
-                                  sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(3u, 1u, 0u, 0u);
-        commandList.endRendering();
-        targets.transitionTexture(commandList, targets.ssgiDenoiseTextureHandle(outputSlot),
-                                  RhiResourceState::ShaderRead);
-        if (ctx.debugService != nullptr) {
-            ctx.debugService->endGpuTimer(commandList, timerToken);
-        }
-        if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    const uint32_t bindGroupCacheIndex =
+        inputSlot < 0 ? 0u : static_cast<uint32_t>(inputSlot + 1);
+    const RhiTextureViewHandle inputView = inputSlot < 0
+        ? (momentsEnabled
+               ? targets.ssgiTemporalTextureViewHandle()
+               : targets.ssgiTextureViewHandle())
+        : targets.ssgiDenoiseTextureViewHandle(inputSlot);
+    const std::array<RhiTextureViewHandle, 4> views = {
+        inputView,
+        targets.depthTextureViewHandle(),
+        targets.normalAoTextureViewHandle(),
+        momentsEnabled
+            ? targets.ssgiTemporalMomentsTextureViewHandle()
+            : RhiTextureViewHandle{}
+    };
+    if (!ensureDenoiseBindGroup(
+            rhiDevice, momentsEnabled, bindGroupCacheIndex, views)) {
+        return false;
     }
 
-    RhiCommandList* copyCommandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (copyCommandListStorage == nullptr ||
-        !copyCommandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& copyCommandList = *copyCommandListStorage;
-    const GpuTimerSegmentToken copyTimerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(copyCommandList, GpuTimerPass::Ssgi)
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.ssgiDenoiseTextureViewHandle(outputSlot);
+    colorAttachment.loadOp = RhiLoadOp::Clear;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+    colorAttachment.clearColor[0] = 0.0f;
+    colorAttachment.clearColor[1] = 0.0f;
+    colorAttachment.clearColor[2] = 0.0f;
+    colorAttachment.clearColor[3] = 0.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "SsgiDenoise";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
         : GpuTimerSegmentToken{};
-    targets.transitionTexture(copyCommandList, targets.ssgiDenoiseTextureHandle(outputSlot),
-                              RhiResourceState::TransferSrc);
-    targets.transitionTexture(copyCommandList, targets.ssgiTextureHandle(),
-                              RhiResourceState::TransferDst);
-    targets.copySsgiDenoiseToSsgi(copyCommandList, outputSlot);
-    targets.transitionTexture(copyCommandList, targets.ssgiDenoiseTextureHandle(outputSlot),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(copyCommandList, targets.ssgiTextureHandle(),
-                              RhiResourceState::ShaderRead);
+    commandList.beginRendering(renderingInfo);
+    const glm::vec4 pushConstants[2] = {
+        glm::vec4(screenSize,
+                  ctx.camera.nearPlane,
+                  static_cast<float>(1 << iteration)),
+        glm::vec4(ssgi.denoiseStrength, 0.0f, 0.0f, 0.0f)
+    };
+    commandList.setGraphicsPipeline(
+        momentsEnabled ? m_denoiseMomentsPipeline : m_denoiseSpatialPipeline);
+    commandList.setBindGroup(
+        0u,
+        momentsEnabled
+            ? m_denoiseMomentsBindGroups[bindGroupCacheIndex]
+            : m_denoiseSpatialBindGroups[bindGroupCacheIndex]);
+    commandList.pushConstants(pushConstants,
+                              sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
     if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(copyCommandList, copyTimerToken);
+        ctx.debugService->endGpuTimer(commandList, timerToken);
     }
-    if (!copyCommandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&copyCommandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool SsgiPass::ensureDenoiseRhiPipelines(RhiDevice& rhiDevice) {
@@ -1185,7 +1182,9 @@ void SsgiPass::destroyDenoiseRhiResources() {
     m_denoiseRhiDevice = nullptr;
 }
 
-void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& ssgi,
+bool SsgiPass::recordSsgiTemporal(RhiCommandList& commandList,
+                                  const FrameContext& ctx,
+                                  const SsgiSettings& ssgi,
                                   DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSsgiTemporalTextureViews(*ctx.shared->rhiDevice) ||
@@ -1194,7 +1193,7 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
         !targets.ensureVelocityTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
         !targets.ensureHistoryDepthTextureViews(*ctx.shared->rhiDevice)) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
@@ -1208,7 +1207,7 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
         targets.ssgiMomentsHistoryTexturePrevViewHandle()
     };
     if (!ensureTemporalRhiPipeline(rhiDevice) || !ensureTemporalBindGroup(rhiDevice, views)) {
-        return;
+        return false;
     }
 
     RhiColorAttachment colorAttachments[2];
@@ -1238,30 +1237,6 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     renderingInfo.colorAttachments = colorAttachments;
     renderingInfo.colorAttachmentCount = 2u;
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.ssgiHistoryTexturePrevHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.velocityTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthRead);
-    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.historyDepthTexturePrevHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.ssgiMomentsHistoryTexturePrevHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.ssgiTemporalTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.ssgiTemporalMomentsTextureHandle(),
-                              RhiResourceState::RenderTarget);
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
         : GpuTimerSegmentToken{};
@@ -1276,60 +1251,50 @@ void SsgiPass::renderSsgiTemporal(const FrameContext& ctx, const SsgiSettings& s
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.ssgiTemporalTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.ssgiTemporalMomentsTextureHandle(),
-                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
-    RhiCommandList* copyCommandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (copyCommandListStorage == nullptr ||
-        !copyCommandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& copyCommandList = *copyCommandListStorage;
-    const GpuTimerSegmentToken copyTimerToken = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(copyCommandList, GpuTimerPass::Ssgi)
+    return true;
+}
+
+bool SsgiPass::recordSsgiHistoryCopy(RhiCommandList& commandList,
+                                     const FrameContext& ctx,
+                                     DeferredRenderTargets& targets) {
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
         : GpuTimerSegmentToken{};
-    targets.transitionTexture(copyCommandList, targets.ssgiTemporalTextureHandle(),
-                              RhiResourceState::TransferSrc);
-    targets.transitionTexture(copyCommandList, targets.ssgiTemporalMomentsTextureHandle(),
-                              RhiResourceState::TransferSrc);
-    targets.transitionTexture(copyCommandList, targets.ssgiHistoryTextureHandle(),
-                              RhiResourceState::TransferDst);
-    targets.transitionTexture(copyCommandList, targets.ssgiMomentsHistoryTextureHandle(),
-                              RhiResourceState::TransferDst);
-    targets.copySsgiTemporalToHistory(copyCommandList);
-    targets.transitionTexture(copyCommandList, targets.ssgiTemporalTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(copyCommandList, targets.ssgiTemporalMomentsTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(copyCommandList, targets.ssgiHistoryTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(copyCommandList, targets.ssgiMomentsHistoryTextureHandle(),
-                              RhiResourceState::ShaderRead);
+    RhiTextureBlit radianceBlit;
+    radianceBlit.src = targets.ssgiTemporalTextureHandle();
+    radianceBlit.dst = targets.ssgiHistoryTextureHandle();
+    commandList.blitTexture(radianceBlit);
+    RhiTextureBlit momentsBlit;
+    momentsBlit.src = targets.ssgiTemporalMomentsTextureHandle();
+    momentsBlit.dst = targets.ssgiMomentsHistoryTextureHandle();
+    commandList.blitTexture(momentsBlit);
     if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(copyCommandList, copyTimerToken);
+        ctx.debugService->endGpuTimer(commandList, timerToken);
     }
-    if (!copyCommandList.end()) {
-        std::abort();
+    return true;
+}
+
+bool SsgiPass::recordSsgiOutputCopy(RhiCommandList& commandList,
+                                    const FrameContext& ctx,
+                                    DeferredRenderTargets& targets,
+                                    const RhiTextureHandle source) {
+    if (!source.isValid()) {
+        return false;
     }
-    {
-        RhiCommandList* submittedCommandLists[] = {&copyCommandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Ssgi)
+        : GpuTimerSegmentToken{};
+    RhiTextureBlit blit;
+    blit.src = source;
+    blit.dst = targets.ssgiTextureHandle();
+    commandList.blitTexture(blit);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
     }
+    return true;
 }
 
 bool SsgiPass::ensureTemporalRhiPipeline(RhiDevice& rhiDevice) {
