@@ -3657,6 +3657,13 @@ void VkRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
     }
     auto oldState = toVkCommandResourceState(barrier.oldState, m_data->type);
     auto newState = toVkCommandResourceState(barrier.newState, m_data->type);
+    if (barrier.oldState == RhiResourceState::Undefined) {
+        // A discarding transition still needs an execution dependency: when
+        // the image aliases memory another texture just used, its first
+        // write must not overlap that texture's in-flight GPU work.
+        oldState.stages = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        oldState.access = VK_ACCESS_2_NONE;
+    }
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     const bool frameGenerationSwapchain =
         texture->swapchainOwned &&

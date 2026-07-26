@@ -175,6 +175,22 @@ struct RgResourceLifetime {
   uint32_t firstPass = 0u;
   uint32_t lastPass = 0u;
   bool used = false;
+  /// True while every access to the resource runs on the graphics queue;
+  /// only such transients may alias shared memory (cross-queue overlap is
+  /// not ordered by the in-batch barrier chain).
+  bool graphicsOnly = true;
+};
+
+/// Per-frame transient memory accounting for the aliasing allocator.
+struct RgTransientMemoryStats {
+  /// Bytes the transients claimed this frame would need as dedicated images.
+  uint64_t aliasedRequestBytes = 0u;
+  /// Bytes of the shared pages those claims actually landed on.
+  uint64_t aliasedPageBytes = 0u;
+  /// Total bytes allocated across all live shared pages.
+  uint64_t totalPageBytes = 0u;
+  uint32_t pageCount = 0u;
+  uint32_t aliasedTextureCount = 0u;
 };
 
 struct RgCompiledPass {
@@ -381,6 +397,16 @@ public:
   }
   [[nodiscard]] bool isCompiled() const { return m_compiled; }
 
+  /// Enables placing lifetime-disjoint transient textures on shared memory
+  /// pages. Effective only when the device reports textureAliasing; any
+  /// per-texture failure falls back to a dedicated allocation.
+  void setTextureAliasingEnabled(const bool enabled) {
+    m_textureAliasingEnabled = enabled;
+  }
+  [[nodiscard]] const RgTransientMemoryStats &transientMemoryStats() const {
+    return m_transientMemoryStats;
+  }
+
 private:
   friend class RenderGraphPassBuilder;
 
@@ -439,6 +465,37 @@ private:
 
   std::vector<TransientTexture> m_transientTextures;
   std::vector<TransientBuffer> m_transientBuffers;
+
+  /// One shared memory block hosting placed transient textures whose frame
+  /// lifetimes never overlap. Claims are re-collected every frame; members
+  /// live in m_transientTextures tagged with the page index.
+  struct AliasPageClaim {
+    uint32_t firstPass = 0u;
+    uint32_t lastPass = 0u;
+  };
+  struct AliasPage {
+    RhiMemoryHandle memory;
+    RhiTextureMemoryRequirements requirements;
+    std::vector<AliasPageClaim> frameClaims;
+    uint32_t claimsGeneration = 0u;
+  };
+  struct TextureRequirementsCacheEntry {
+    RhiTextureDesc desc{};
+    RhiTextureMemoryRequirements requirements{};
+    bool supported = false;
+  };
+  [[nodiscard]] bool lookupTextureRequirements(
+      RhiDevice &device, const RhiTextureDesc &desc,
+      RhiTextureMemoryRequirements &requirements);
+  [[nodiscard]] TransientTexture *
+  resolveAliasedTransient(RhiDevice &device, const TextureRecord &record,
+                          const RgResourceLifetime &lifetime,
+                          const RhiTextureMemoryRequirements &requirements);
+  std::vector<AliasPage> m_aliasPages;
+  std::vector<TextureRequirementsCacheEntry> m_textureRequirementsCache;
+  RgTransientMemoryStats m_transientMemoryStats;
+  bool m_textureAliasingEnabled = true;
+
   std::vector<TimingSlot> m_timingSlots;
   RgTimingSnapshot m_latestTimings;
   RhiDevice *m_runtimeDevice = nullptr;

@@ -1468,6 +1468,198 @@ void main() {
            device.validationErrorCount() == validationErrorsBefore;
 }
 
+[[nodiscard]] bool validateRenderGraphTextureAliasing(
+    VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    constexpr uint32_t kSizeA = 64u;
+    constexpr uint32_t kSizeB = 32u;
+    constexpr uint64_t kPixelBytesA = kSizeA * kSizeA * 4u;
+    constexpr uint64_t kPixelBytesB = kSizeB * kSizeB * 4u;
+    constexpr uint8_t kFillA = 0xA5u;
+    constexpr uint8_t kFillB = 0x3Cu;
+    const std::vector<uint8_t> payloadA(kPixelBytesA, kFillA);
+    const std::vector<uint8_t> payloadB(kPixelBytesB, kFillB);
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    RhiBufferDesc uploadDesc;
+    uploadDesc.debugName = "VulkanSmoke.GraphAlias.Upload";
+    uploadDesc.size = kPixelBytesA;
+    uploadDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc);
+    uploadDesc.memoryUsage = RhiMemoryUsage::CpuToGpu;
+    uploadDesc.initialState = RhiResourceState::TransferSrc;
+    const RhiBufferHandle uploadA =
+        device.createBuffer(uploadDesc, payloadA.data(), payloadA.size());
+    uploadDesc.size = kPixelBytesB;
+    const RhiBufferHandle uploadB =
+        device.createBuffer(uploadDesc, payloadB.data(), payloadB.size());
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.GraphAlias.Readback";
+    readbackDesc.size = kPixelBytesA + kPixelBytesB;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    const RhiBufferHandle readback =
+        device.createBuffer(readbackDesc, nullptr, 0u);
+    if (!uploadA.isValid() || !uploadB.isValid() || !readback.isValid()) {
+        return false;
+    }
+
+    RenderGraph graph;
+    RhiTextureHandle resolvedFirst;
+    RhiTextureHandle resolvedSecond;
+    const auto executeFrame = [&]() {
+        graph.reset();
+        RhiTextureDesc transientDesc;
+        transientDesc.format = RhiTextureFormat::Rgba8Unorm;
+        transientDesc.width = kSizeA;
+        transientDesc.height = kSizeA;
+        transientDesc.usage = rhiFlag(RhiTextureUsage::TransferDst) |
+                              rhiFlag(RhiTextureUsage::TransferSrc) |
+                              rhiFlag(RhiTextureUsage::Sampled);
+        // Two graphics-only transients with different descriptions and
+        // disjoint pass intervals: the aliasing allocator must land them on
+        // one shared page as distinct placed images while their payloads
+        // stay isolated by the serial barrier chain.
+        const RgTextureHandle first = graph.createTexture(
+            {"AliasFirst", transientDesc, RhiResourceState::Undefined});
+        transientDesc.width = kSizeB;
+        transientDesc.height = kSizeB;
+        const RgTextureHandle second = graph.createTexture(
+            {"AliasSecond", transientDesc, RhiResourceState::Undefined});
+        RhiBufferDesc importedUploadDesc = uploadDesc;
+        const RgBufferHandle importedA = graph.importBuffer(
+            {"UploadA", uploadA, importedUploadDesc,
+             RhiResourceState::TransferSrc, RhiResourceState::TransferSrc,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+        const RgBufferHandle importedB = graph.importBuffer(
+            {"UploadB", uploadB, importedUploadDesc,
+             RhiResourceState::TransferSrc, RhiResourceState::TransferSrc,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+        RhiBufferDesc importedReadbackDesc = readbackDesc;
+        const RgBufferHandle importedReadback = graph.importBuffer(
+            {"Readback", readback, importedReadbackDesc,
+             RhiResourceState::TransferDst, RhiResourceState::HostRead,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+
+        const auto fillPass = [&](const char* name, const RgTextureHandle target,
+                                  const RgBufferHandle source,
+                                  const uint32_t extent,
+                                  RhiTextureHandle* resolved) {
+            graph.addPass({name, RgPassType::Copy, RhiQueueType::Graphics})
+                .readBuffer(source, RhiResourceState::TransferSrc)
+                .writeTexture(target, RhiResourceState::TransferDst)
+                .setExecute([&, target, source, extent,
+                             resolved](RgPassContext& context) {
+                    if (resolved != nullptr) {
+                        *resolved = context.texture(target);
+                    }
+                    RhiBufferTextureCopy copy;
+                    copy.srcBuffer = context.buffer(source);
+                    copy.dstTexture = context.texture(target);
+                    copy.width = extent;
+                    copy.height = extent;
+                    context.commandList().copyBufferToTexture(copy);
+                    return true;
+                });
+        };
+        const auto drainPass = [&](const char* name, const RgTextureHandle target,
+                                   const uint32_t extent,
+                                   const uint64_t readbackOffset) {
+            graph.addPass({name, RgPassType::Copy, RhiQueueType::Graphics})
+                .readTexture(target, RhiResourceState::TransferSrc)
+                .writeBuffer(importedReadback, RhiResourceState::TransferDst)
+                .setExecute([&, target, extent,
+                             readbackOffset](RgPassContext& context) {
+                    RhiTextureBufferCopy copy;
+                    copy.srcTexture = context.texture(target);
+                    copy.dstBuffer = context.buffer(importedReadback);
+                    copy.bufferOffset = readbackOffset;
+                    copy.width = extent;
+                    copy.height = extent;
+                    context.commandList().copyTextureToBuffer(copy);
+                    return true;
+                });
+        };
+        fillPass("Alias.FillFirst", first, importedA, kSizeA, &resolvedFirst);
+        drainPass("Alias.DrainFirst", first, kSizeA, 0u);
+        fillPass("Alias.FillSecond", second, importedB, kSizeB, &resolvedSecond);
+        drainPass("Alias.DrainSecond", second, kSizeB, kPixelBytesA);
+
+        const RgCompileResult compiled = graph.compile();
+        if (!compiled.succeeded()) {
+            std::cerr << "Alias graph compile failed: " << compiled.message
+                      << '\n';
+            return false;
+        }
+        const RgExecuteResult executed = graph.execute(device, commandPool);
+        if (!executed.succeeded()) {
+            std::cerr << "Alias graph execution failed: " << executed.message
+                      << '\n';
+            return false;
+        }
+        if (!device.waitForSubmission(executed.completionToken())) {
+            return false;
+        }
+        const auto* mapped = static_cast<const uint8_t*>(
+            device.mapBuffer(readback, 0u, kPixelBytesA + kPixelBytesB));
+        if (mapped == nullptr) {
+            return false;
+        }
+        const bool isolated =
+            std::all_of(mapped, mapped + kPixelBytesA,
+                        [](const uint8_t value) { return value == kFillA; }) &&
+            std::all_of(mapped + kPixelBytesA,
+                        mapped + kPixelBytesA + kPixelBytesB,
+                        [](const uint8_t value) { return value == kFillB; });
+        device.unmapBuffer(readback);
+        if (!isolated) {
+            std::cerr << "Aliased transient payloads were not isolated\n";
+            return false;
+        }
+        return true;
+    };
+
+    bool valid = executeFrame();
+    const RgTransientMemoryStats statsFirstFrame = graph.transientMemoryStats();
+    if (valid &&
+        (statsFirstFrame.aliasedTextureCount != 2u ||
+         statsFirstFrame.pageCount != 1u ||
+         statsFirstFrame.aliasedPageBytes >=
+             statsFirstFrame.aliasedRequestBytes)) {
+        std::cerr << "Alias stats mismatch: textures="
+                  << statsFirstFrame.aliasedTextureCount
+                  << " pages=" << statsFirstFrame.pageCount << '\n';
+        valid = false;
+    }
+    const RhiTextureHandle firstFrameFirst = resolvedFirst;
+    const RhiTextureHandle firstFrameSecond = resolvedSecond;
+    if (valid &&
+        (firstFrameFirst.index == firstFrameSecond.index &&
+         firstFrameFirst.generation == firstFrameSecond.generation)) {
+        std::cerr << "Aliased transients resolved to one texture\n";
+        valid = false;
+    }
+    // A second identical frame must reuse the same placed textures and page.
+    valid = valid && executeFrame();
+    if (valid &&
+        (graph.transientMemoryStats().pageCount != 1u ||
+         resolvedFirst.index != firstFrameFirst.index ||
+         resolvedFirst.generation != firstFrameFirst.generation ||
+         resolvedSecond.index != firstFrameSecond.index ||
+         resolvedSecond.generation != firstFrameSecond.generation)) {
+        std::cerr << "Alias page reuse across frames failed\n";
+        valid = false;
+    }
+
+    graph.releaseTransientResources(device);
+    device.destroyBuffer(readback);
+    device.destroyBuffer(uploadB);
+    device.destroyBuffer(uploadA);
+    device.waitIdle();
+    return valid && device.validationErrorCount() == validationErrorsBefore;
+}
+
 [[nodiscard]] bool validateResourceDescriptionNameOwnership(
     VkRhiDevice& device) {
     constexpr const char* kBufferDebugName =
@@ -1764,6 +1956,7 @@ int main() {
                                textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !validateRenderGraphMultiQueue(device, *commandPool) ||
+        !validateRenderGraphTextureAliasing(device, *commandPool) ||
         !validateIndependentUiPresentation(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||

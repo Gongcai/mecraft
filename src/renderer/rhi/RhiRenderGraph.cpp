@@ -352,6 +352,9 @@ struct RenderGraph::TransientTexture {
   std::vector<RhiQueueType> queues;
   std::vector<RhiSubmissionToken> lastUses;
   uint32_t claimedGeneration = 0u;
+  /// Index into m_aliasPages when the texture is placed on a shared memory
+  /// page; dedicated allocations keep the invalid sentinel.
+  uint32_t pageIndex = kRgInvalidPassIndex;
 };
 
 struct RenderGraph::TransientBuffer {
@@ -1124,9 +1127,12 @@ RgCompileResult RenderGraph::compile() {
       static_cast<void>(resolveTextureRange(texture.desc, access.range, range));
       RgResourceLifetime &lifetime = m_textureLifetimes[resourceIndex];
       if (!lifetime.used) {
-        lifetime = {compiledIndex, compiledIndex, true};
+        lifetime = {compiledIndex, compiledIndex, true,
+                    pass.queue == RhiQueueType::Graphics};
       } else {
         lifetime.lastPass = compiledIndex;
+        lifetime.graphicsOnly =
+            lifetime.graphicsOnly && pass.queue == RhiQueueType::Graphics;
       }
       for (uint32_t mip = range.baseMip; mip < range.baseMip + range.mipCount;
            ++mip) {
@@ -1164,9 +1170,12 @@ RgCompileResult RenderGraph::compile() {
       const uint32_t resourceIndex = access.buffer.index - 1u;
       RgResourceLifetime &lifetime = m_bufferLifetimes[resourceIndex];
       if (!lifetime.used) {
-        lifetime = {compiledIndex, compiledIndex, true};
+        lifetime = {compiledIndex, compiledIndex, true,
+                    pass.queue == RhiQueueType::Graphics};
       } else {
         lifetime.lastPass = compiledIndex;
+        lifetime.graphicsOnly =
+            lifetime.graphicsOnly && pass.queue == RhiQueueType::Graphics;
       }
       BufferState &current = bufferStates[resourceIndex];
       const bool hazard =
@@ -1326,6 +1335,118 @@ RgCompileResult RenderGraph::compile() {
   return {};
 }
 
+bool RenderGraph::lookupTextureRequirements(
+    RhiDevice &device, const RhiTextureDesc &desc,
+    RhiTextureMemoryRequirements &requirements) {
+  for (const TextureRequirementsCacheEntry &entry :
+       m_textureRequirementsCache) {
+    if (sameTextureDesc(entry.desc, desc)) {
+      requirements = entry.requirements;
+      return entry.supported;
+    }
+  }
+  TextureRequirementsCacheEntry entry;
+  entry.desc = desc;
+  // The cached description must not outlive the caller's name storage.
+  entry.desc.debugName = nullptr;
+  entry.supported = device.getTextureMemoryRequirements(desc, entry.requirements);
+  m_textureRequirementsCache.push_back(entry);
+  requirements = entry.requirements;
+  return entry.supported;
+}
+
+RenderGraph::TransientTexture *RenderGraph::resolveAliasedTransient(
+    RhiDevice &device, const TextureRecord &record,
+    const RgResourceLifetime &lifetime,
+    const RhiTextureMemoryRequirements &requirements) {
+  // Pick the first page whose block satisfies the requirements and whose
+  // claims this frame are all disjoint from the requested pass interval.
+  uint32_t pageIndex = kRgInvalidPassIndex;
+  for (uint32_t candidate = 0u; candidate < m_aliasPages.size(); ++candidate) {
+    AliasPage &page = m_aliasPages[candidate];
+    if (requirements.sizeBytes > page.requirements.sizeBytes ||
+        requirements.alignment > page.requirements.alignment ||
+        (requirements.memoryTypeBits & page.requirements.memoryTypeBits) ==
+            0u) {
+      continue;
+    }
+    if (page.claimsGeneration == m_generation) {
+      bool overlaps = false;
+      for (const AliasPageClaim &claim : page.frameClaims) {
+        if (lifetime.firstPass <= claim.lastPass &&
+            claim.firstPass <= lifetime.lastPass) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (overlaps)
+        continue;
+    }
+    pageIndex = candidate;
+    break;
+  }
+  if (pageIndex == kRgInvalidPassIndex) {
+    const RhiMemoryHandle memory =
+        device.allocateTextureMemory(requirements, "RenderGraph.AliasPage");
+    if (!memory.isValid())
+      return nullptr;
+    m_aliasPages.push_back({memory, requirements, {}, 0u});
+    pageIndex = static_cast<uint32_t>(m_aliasPages.size() - 1u);
+  }
+
+  TransientTexture *member = nullptr;
+  for (TransientTexture &candidate : m_transientTextures) {
+    if (candidate.pageIndex == pageIndex &&
+        sameTextureDesc(candidate.desc, record.desc)) {
+      member = &candidate;
+      break;
+    }
+  }
+  if (member == nullptr) {
+    RhiTextureDesc desc = record.desc;
+    desc.debugName = record.name.c_str();
+    const RhiTextureHandle texture =
+        device.createPlacedTexture(desc, m_aliasPages[pageIndex].memory);
+    if (!texture.isValid())
+      return nullptr;
+    RhiTextureViewDesc viewDesc;
+    viewDesc.texture = texture;
+    viewDesc.viewType = defaultViewType(desc.dimension);
+    viewDesc.format = desc.format;
+    viewDesc.mipCount = desc.mipLevels;
+    viewDesc.layerCount = desc.depthOrLayers;
+    const RhiTextureViewHandle view = device.createTextureView(viewDesc);
+    if (!view.isValid()) {
+      device.destroyTexture(texture);
+      return nullptr;
+    }
+    const uint32_t subresourceCount =
+        record.desc.mipLevels * textureSubresourceLayerCount(record.desc);
+    m_transientTextures.push_back(
+        {record.desc, texture, view,
+         std::vector<RhiResourceState>(subresourceCount,
+                                       RhiResourceState::Undefined),
+         std::vector<RhiQueueType>(subresourceCount, RhiQueueType::Graphics),
+         std::vector<RhiSubmissionToken>(subresourceCount), 0u, pageIndex});
+    member = &m_transientTextures.back();
+  }
+
+  AliasPage &page = m_aliasPages[pageIndex];
+  if (page.claimsGeneration != m_generation) {
+    page.frameClaims.clear();
+    page.claimsGeneration = m_generation;
+    m_transientMemoryStats.aliasedPageBytes += page.requirements.sizeBytes;
+  }
+  page.frameClaims.push_back({lifetime.firstPass, lifetime.lastPass});
+  // The page's memory may have been written by another member since this
+  // texture's last claim; every claim therefore treats the image as freshly
+  // uninitialized, and the first barrier performs a discarding Undefined
+  // transition (the backend gives it a full execution dependency).
+  std::fill(member->states.begin(), member->states.end(),
+            RhiResourceState::Undefined);
+  return member;
+}
+
 RgExecuteResult RenderGraph::execute(RhiDevice &device,
                                      RhiCommandListPool &commandListPool) {
   const auto executeStart = std::chrono::steady_clock::now();
@@ -1422,6 +1543,12 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
   std::vector<uint32_t> transientBufferIndices(
       m_buffers.size(), std::numeric_limits<uint32_t>::max());
 
+  const bool aliasingActive =
+      m_textureAliasingEnabled && device.capabilities().textureAliasing;
+  m_transientMemoryStats.aliasedRequestBytes = 0u;
+  m_transientMemoryStats.aliasedPageBytes = 0u;
+  m_transientMemoryStats.aliasedTextureCount = 0u;
+
   for (uint32_t index = 0u; index < m_textures.size(); ++index) {
     const TextureRecord &record = m_textures[index];
     if (record.imported) {
@@ -1430,11 +1557,29 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
       continue;
     }
     TransientTexture *allocation = nullptr;
+    // Lifetime-disjoint graphics-queue transients share memory pages; any
+    // failure in the placed path silently falls back to a dedicated image.
+    if (aliasingActive && index < m_textureLifetimes.size() &&
+        m_textureLifetimes[index].used &&
+        m_textureLifetimes[index].graphicsOnly) {
+      RhiTextureMemoryRequirements requirements;
+      if (lookupTextureRequirements(device, record.desc, requirements)) {
+        allocation = resolveAliasedTransient(
+            device, record, m_textureLifetimes[index], requirements);
+        if (allocation != nullptr) {
+          m_transientMemoryStats.aliasedRequestBytes += requirements.sizeBytes;
+          ++m_transientMemoryStats.aliasedTextureCount;
+        }
+      }
+    }
     for (TransientTexture &candidate : m_transientTextures) {
-      if (candidate.claimedGeneration != m_generation &&
+      if (allocation != nullptr)
+        break;
+      if (candidate.pageIndex == kRgInvalidPassIndex &&
+          candidate.claimedGeneration != m_generation &&
           sameTextureDesc(candidate.desc, record.desc)) {
         allocation = &candidate;
-        break;
+        candidate.claimedGeneration = m_generation;
       }
     }
     if (allocation == nullptr) {
@@ -1467,15 +1612,20 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
                                          RhiResourceState::Undefined),
            std::vector<RhiQueueType>(subresourceCount, RhiQueueType::Graphics),
            std::vector<RhiSubmissionToken>(subresourceCount),
-           m_generation});
+           m_generation, kRgInvalidPassIndex});
       allocation = &m_transientTextures.back();
-    } else {
-      allocation->claimedGeneration = m_generation;
     }
     resolvedTextures[index] = allocation->texture;
     resolvedTextureViews[index] = allocation->view;
     transientTextureIndices[index] =
         static_cast<uint32_t>(allocation - m_transientTextures.data());
+  }
+
+  m_transientMemoryStats.totalPageBytes = 0u;
+  m_transientMemoryStats.pageCount =
+      static_cast<uint32_t>(m_aliasPages.size());
+  for (const AliasPage &page : m_aliasPages) {
+    m_transientMemoryStats.totalPageBytes += page.requirements.sizeBytes;
   }
 
   for (uint32_t index = 0u; index < m_buffers.size(); ++index) {
@@ -2179,8 +2329,16 @@ void RenderGraph::releaseTransientResources(RhiDevice &device) {
     if (slot.queryPool.isValid())
       device.destroyQueryPool(slot.queryPool);
   }
+  // Placed member textures were destroyed above; their shared pages follow.
+  for (const AliasPage &page : m_aliasPages) {
+    if (page.memory.isValid())
+      device.destroyTextureMemory(page.memory);
+  }
   m_transientTextures.clear();
   m_transientBuffers.clear();
+  m_aliasPages.clear();
+  m_textureRequirementsCache.clear();
+  m_transientMemoryStats = {};
   m_timingSlots.clear();
   m_latestTimings = {};
   m_execution = 0u;
