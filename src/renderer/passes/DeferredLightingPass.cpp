@@ -103,24 +103,29 @@ void DeferredLightingPass::shutdown() {
     m_rippleNormalTexture = {};
 }
 
-void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings& settings,
+bool DeferredLightingPass::execute(RhiCommandList& commandList,
+                                   const FrameContext& ctx,
+                                   const RenderSettings& settings,
                                    DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         m_shadowRenderer == nullptr) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    const bool useTemporalSsao =
+        settings.ssao.enabled && settings.ssao.temporalEnabled &&
+        !ctx.temporalReset;
     if (!ensureRhiPipeline(rhiDevice) ||
         !targets.ensureSceneLightingTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
-        !(settings.ssao.temporalEnabled
+        !(useTemporalSsao
               ? targets.ensureSsaoTemporalTextureView(rhiDevice)
               : targets.ensureSsaoFilteredTextureView(rhiDevice)) ||
         !targets.ensureSkyCaptureTextureView(rhiDevice) ||
         !ensureExternalTextureViews(rhiDevice)) {
-        return;
+        return false;
     }
 
     const std::array<RhiTextureViewHandle, kLightingTextureCount> views = {
@@ -132,7 +137,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
         targets.depthTextureViewHandle(),
         m_lightmapDayTextureView,
         m_lightmapNightTextureView,
-        settings.ssao.temporalEnabled
+        useTemporalSsao
             ? targets.ssaoTemporalTextureViewHandle()
             : targets.ssaoFilteredTextureViewHandle(),
         targets.skyCaptureTextureViewHandle(),
@@ -147,7 +152,7 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
         m_rippleNormalTextureView
     };
     if (!ensureRhiBindGroup(rhiDevice, views)) {
-        return;
+        return false;
     }
 
     const bool volumetricFogActive =
@@ -286,30 +291,6 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList, targets.albedoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.voxelLightTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.materialTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthRead);
-    targets.transitionTexture(commandList, targets.ssaoFilteredTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.sceneLightingTextureHandle(),
-                              RhiResourceState::RenderTarget);
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Lighting)
         : GpuTimerSegmentToken{};
@@ -323,20 +304,10 @@ void DeferredLightingPass::execute(const FrameContext& ctx, const RenderSettings
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.sceneLightingTextureHandle(),
-                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool DeferredLightingPass::ensureRhiPipeline(RhiDevice& rhiDevice) {

@@ -397,18 +397,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     m_deferredFrameActive = true;
 
-    // Geometry, velocity, and shadow work are compiled and submitted as one graph batch.
+    // Deferred geometry, shadows, SSAO, and lighting execute through one graph.
     if (!executeFrameGraph(ctx, m_currentSettings)) {
         return {};
-    }
-
-    // Copy forward alpha to scene lighting
-    targets.copyTextureColorToSceneLighting(rhiDevice, ctx.sceneCaptureColorTexture);
-
-    // Deferred lighting
-    if (m_lightingPass) {
-        m_lightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
-        m_lightingPass->execute(ctx, m_currentSettings, targets);
     }
 
     // Debug early-out for deferred light debug mode
@@ -554,6 +545,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_shared->commandListPool == nullptr ||
         m_shared->deferredTargets == nullptr || ctx.worldView == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
+        m_lightingPass == nullptr || !ctx.sceneCaptureColorTexture.isValid() ||
         m_shared->sky == nullptr || ctx.dayNightSystem == nullptr ||
         ctx.weatherSystem == nullptr) {
         return false;
@@ -567,6 +559,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
+        !targets.ensureSceneLightingTextureView(rhiDevice) ||
         !targets.ensureReflectionTextureView(rhiDevice) ||
         !targets.ensureCloudTextureView(rhiDevice) ||
         !targets.ensureSceneCompositeTextureView(rhiDevice) ||
@@ -581,9 +574,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
         !targets.ensureSkyCaptureTextureView(rhiDevice) ||
         !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
-        (ssaoEnabled &&
-         (!targets.ensureSsaoHalfResTextureView(rhiDevice) ||
-          !targets.ensureSsaoFilteredTextureView(rhiDevice))) ||
+        !targets.ensureSsaoFilteredTextureView(rhiDevice) ||
+        (ssaoEnabled && !targets.ensureSsaoHalfResTextureView(rhiDevice)) ||
         (ssaoEnabled && settings.ssao.filterEnabled &&
          !targets.ensureSsaoHalfResFilteredTextureView(rhiDevice)) ||
         (ssaoTemporalEnabled &&
@@ -668,23 +660,22 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
 
     ShadowPass::GraphResources shadowResources;
-    if (shadowEnabled &&
-        (!importTexture(targets.csmShadowDepthTextureHandle(),
-                        targets.csmShadowDepthTextureViewHandle(0),
-                        RhiResourceState::DepthRead,
-                        shadowResources.depthOpaque) ||
-         !importTexture(targets.csmShadowDepthAllTextureHandle(),
-                        targets.csmShadowDepthAllTextureViewHandle(0),
-                        RhiResourceState::DepthRead,
-                        shadowResources.depthAll) ||
-         !importTexture(targets.csmShadowColor0TextureHandle(),
-                        targets.csmShadowColor0TextureViewHandle(0),
-                        RhiResourceState::ShaderRead,
-                        shadowResources.color0) ||
-         !importTexture(targets.csmShadowColor1TextureHandle(),
-                        targets.csmShadowColor1TextureViewHandle(0),
-                        RhiResourceState::ShaderRead,
-                        shadowResources.color1))) {
+    if (!importTexture(targets.csmShadowDepthTextureHandle(),
+                       targets.csmShadowDepthArrayTextureViewHandle(),
+                       RhiResourceState::DepthRead,
+                       shadowResources.depthOpaque) ||
+        !importTexture(targets.csmShadowDepthAllTextureHandle(),
+                       targets.csmShadowDepthAllArrayTextureViewHandle(),
+                       RhiResourceState::DepthRead,
+                       shadowResources.depthAll) ||
+        !importTexture(targets.csmShadowColor0TextureHandle(),
+                       targets.csmShadowColor0ArrayTextureViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       shadowResources.color0) ||
+        !importTexture(targets.csmShadowColor1TextureHandle(),
+                       targets.csmShadowColor1ArrayTextureViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       shadowResources.color1)) {
         return failGraphSetup();
     }
 
@@ -692,15 +683,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     ssaoResources.depth = depth;
     ssaoResources.normalAo = normalAo;
     ssaoResources.velocity = velocity;
-    if (ssaoEnabled &&
-        (!importTexture(targets.ssaoHalfResTextureHandle(),
-                        targets.ssaoHalfResTextureViewHandle(),
-                        RhiResourceState::ShaderRead,
-                        ssaoResources.halfRes) ||
-         !importTexture(targets.ssaoFilteredTextureHandle(),
-                        targets.ssaoFilteredTextureViewHandle(),
-                        RhiResourceState::ShaderRead,
-                        ssaoResources.filtered) ||
+    if (!importTexture(targets.ssaoFilteredTextureHandle(),
+                       targets.ssaoFilteredTextureViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       ssaoResources.filtered) ||
+        (ssaoEnabled &&
+         (!importTexture(targets.ssaoHalfResTextureHandle(),
+                         targets.ssaoHalfResTextureViewHandle(),
+                         RhiResourceState::ShaderRead,
+                         ssaoResources.halfRes) ||
          (settings.ssao.filterEnabled &&
           !importTexture(targets.ssaoHalfResFilteredTextureHandle(),
                          targets.ssaoHalfResFilteredTextureViewHandle(),
@@ -717,7 +708,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
            !importTexture(targets.ssaoHistoryTexturePrevHandle(),
                           targets.ssaoHistoryTexturePrevViewHandle(),
                           RhiResourceState::ShaderRead,
-                          ssaoResources.historyPrevious))))) {
+                          ssaoResources.historyPrevious)))))) {
         return failGraphSetup();
     }
 
@@ -737,6 +728,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle skyCapture;
     RgTextureHandle atmosphereLut;
     RgTextureHandle skyNoise;
+    RgTextureHandle sceneCaptureColor;
+    RgTextureHandle sceneLighting;
+    RgTextureHandle lightmapDay;
+    RgTextureHandle lightmapNight;
+    RgTextureHandle rippleNormal;
+    const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
+    const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
+    const RhiTextureHandle rippleNormalTexture =
+        m_resourceMgr->getTexture2DHandle("shader_ripple_normal");
     if (!importTexture(targets.reflectionTextureHandle(),
                        targets.reflectionTextureViewHandle(),
                        RhiResourceState::ShaderRead, reflection) ||
@@ -783,7 +783,18 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        targets.atmosphereLutTextureViewHandle(),
                        RhiResourceState::ShaderRead, atmosphereLut) ||
         !importTexture(skyNoiseTexture, {}, RhiResourceState::ShaderRead,
-                       skyNoise)) {
+                       skyNoise) ||
+        !importTexture(ctx.sceneCaptureColorTexture, ctx.sceneCaptureColorView,
+                       RhiResourceState::ShaderRead, sceneCaptureColor) ||
+        !importTexture(targets.sceneLightingTextureHandle(),
+                       targets.sceneLightingTextureViewHandle(),
+                       RhiResourceState::ShaderRead, sceneLighting) ||
+        !importTexture(lightmapDayTexture, {}, RhiResourceState::ShaderRead,
+                       lightmapDay) ||
+        !importTexture(lightmapNightTexture, {}, RhiResourceState::ShaderRead,
+                       lightmapNight) ||
+        !importTexture(rippleNormalTexture, {}, RhiResourceState::ShaderRead,
+                       rippleNormal)) {
         return failGraphSetup();
     }
     ssaoResources.noise = skyNoise;
@@ -893,6 +904,52 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             return failGraphSetup();
         }
     }
+
+    RenderGraphPassBuilder sceneLightingCopy = m_renderGraph.addPass(
+        {"Deferred.SceneLightingCopy", RgPassType::Copy,
+         RhiQueueType::Graphics});
+    sceneLightingCopy.dependsOn(graphTail)
+        .readTexture(sceneCaptureColor, RhiResourceState::TransferSrc)
+        .writeTexture(sceneLighting, RhiResourceState::TransferDst)
+        .setExecute([&](RgPassContext& pass) {
+            RhiTextureBlit blit;
+            blit.src = ctx.sceneCaptureColorTexture;
+            blit.dst = targets.sceneLightingTextureHandle();
+            pass.commandList().blitTexture(blit);
+            return true;
+        });
+    graphTail = sceneLightingCopy.handle();
+
+    const RgTextureHandle lightingSsao = ssaoTemporalEnabled
+        ? ssaoResources.temporal
+        : ssaoResources.filtered;
+    m_lightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
+    RenderGraphPassBuilder lighting = m_renderGraph.addPass(
+        {"Deferred.Lighting", RgPassType::Graphics, RhiQueueType::Graphics});
+    lighting.dependsOn(graphTail)
+        .readTexture(albedo, RhiResourceState::ShaderRead)
+        .readTexture(normalAo, RhiResourceState::ShaderRead)
+        .readTexture(voxelLight, RhiResourceState::ShaderRead)
+        .readTexture(material, RhiResourceState::ShaderRead)
+        .readTexture(materialAux, RhiResourceState::ShaderRead)
+        .readTexture(depth, RhiResourceState::DepthRead)
+        .readTexture(lightmapDay, RhiResourceState::ShaderRead)
+        .readTexture(lightmapNight, RhiResourceState::ShaderRead)
+        .readTexture(lightingSsao, RhiResourceState::ShaderRead)
+        .readTexture(skyCapture, RhiResourceState::ShaderRead)
+        .readTexture(skyNoise, RhiResourceState::ShaderRead)
+        .readTexture(atmosphereLut, RhiResourceState::ShaderRead)
+        .readTexture(shadowResources.depthOpaque, RhiResourceState::DepthRead)
+        .readTexture(shadowResources.depthAll, RhiResourceState::DepthRead)
+        .readTexture(shadowResources.color0, RhiResourceState::ShaderRead)
+        .readTexture(shadowResources.color1, RhiResourceState::ShaderRead)
+        .readTexture(rippleNormal, RhiResourceState::ShaderRead)
+        .readWriteTexture(sceneLighting, RhiResourceState::RenderTarget)
+        .setExecute([&](RgPassContext& pass) {
+            return m_lightingPass->execute(
+                pass.commandList(), ctx, settings, targets);
+        });
+    graphTail = lighting.handle();
 
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {

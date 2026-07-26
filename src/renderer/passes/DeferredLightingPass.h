@@ -11,6 +11,7 @@
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiCommandList;
 class RhiDevice;
 
 namespace shadow { class ShadowRenderer; }
@@ -28,8 +29,16 @@ public:
     /// Set the held block light value (from player inventory).
     void setHeldBlockLightValue(int value) { m_heldBlockLightValue = value; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Records deferred lighting into a graph-owned command list.
+    /// @param commandList Recording command list supplied by the Render Graph.
+    /// @param ctx Current frame camera, weather, atmosphere, and lighting state.
+    /// @param settings Current shadow, SSAO, and post-process settings.
+    /// @param targets Persistent GBuffer inputs and scene-lighting output.
+    /// @return True when resources were prepared and lighting commands were recorded.
+    [[nodiscard]] bool execute(RhiCommandList& commandList,
+                               const FrameContext& ctx,
+                               const RenderSettings& settings,
+                               DeferredRenderTargets& targets);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
