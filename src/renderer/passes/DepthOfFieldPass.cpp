@@ -40,10 +40,63 @@ void DepthOfFieldPass::shutdown() {
     m_noiseTexture = {};
 }
 
-void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                               DeferredRenderTargets& targets) {
+RgPassHandle DepthOfFieldPass::addGraphPasses(
+    RenderGraph& graph,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    const GraphResources& resources,
+    const RgPassHandle dependency) {
+    if (!dependency.isValid() || !resources.sceneResolved.isValid() ||
+        !resources.historyCurrent.isValid() || !resources.depth.isValid()) {
+        return {};
+    }
+
+    const FrameContext* frame = &ctx;
+    DeferredRenderTargets* frameTargets = &targets;
+    RenderGraphPassBuilder copy = graph.addPass(
+        {"DepthOfField.HistoryCopy", RgPassType::Copy,
+         RhiQueueType::Graphics});
+    copy.dependsOn(dependency)
+        .readTexture(resources.sceneResolved, RhiResourceState::TransferSrc)
+        .writeTexture(resources.historyCurrent, RhiResourceState::TransferDst)
+        .setExecute([this, frameTargets](RgPassContext& pass) {
+            return recordHistoryCopy(pass.commandList(), *frameTargets);
+        });
+
+    RenderGraphPassBuilder dof = graph.addPass(
+        {"DepthOfField.Resolve", RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    dof.dependsOn(copy.handle())
+        .readTexture(resources.historyCurrent, RhiResourceState::ShaderRead)
+        .readTexture(resources.depth, RhiResourceState::DepthRead)
+        .writeTexture(resources.sceneResolved, RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
+            return recordDof(
+                pass.commandList(), *frame, settings, *frameTargets);
+        });
+    return dof.handle();
+}
+
+bool DepthOfFieldPass::recordHistoryCopy(
+    RhiCommandList& commandList,
+    DeferredRenderTargets& targets) {
+    if (!targets.isReady()) {
+        return false;
+    }
+    RhiTextureBlit blit;
+    blit.src = targets.sceneResolvedTextureHandle();
+    blit.dst = targets.historySceneTextureHandle();
+    commandList.blitTexture(blit);
+    return true;
+}
+
+bool DepthOfFieldPass::recordDof(RhiCommandList& commandList,
+                                 const FrameContext& ctx,
+                                 const RenderSettings& settings,
+                                 DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
@@ -57,7 +110,7 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
                             targets.historySceneTextureViewHandle(),
                             targets.depthTextureViewHandle(),
                             m_noiseTextureView)) {
-        return;
+        return false;
     }
 
     RhiColorAttachment colorAttachment;
@@ -75,29 +128,6 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
-
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList,
-                              targets.sceneResolvedTextureHandle(),
-                              RhiResourceState::TransferSrc);
-    targets.transitionTexture(commandList,
-                              targets.historySceneTextureHandle(),
-                              RhiResourceState::TransferDst);
-    RhiTextureBlit historyCopy;
-    historyCopy.src = targets.sceneResolvedTextureHandle();
-    historyCopy.dst = targets.historySceneTextureHandle();
-    commandList.blitTexture(historyCopy);
-    targets.transitionTexture(commandList,
-                              targets.historySceneTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList,
-                              targets.sceneResolvedTextureHandle(),
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup[targets.currentHistoryIndex()]);
@@ -117,18 +147,7 @@ void DepthOfFieldPass::execute(const FrameContext& ctx, const RenderSettings& se
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList,
-                              targets.sceneResolvedTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool DepthOfFieldPass::ensureRhiPipeline(RhiDevice& rhiDevice) {

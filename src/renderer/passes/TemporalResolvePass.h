@@ -5,6 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -17,10 +18,39 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "TemporalResolve"; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Graph handles for the current color, temporal scratch, and reprojection inputs.
+    struct GraphResources {
+        RgTextureHandle sceneResolved;
+        RgTextureHandle temporalCurrent;
+        RgTextureHandle historyPrevious;
+        RgTextureHandle velocity;
+        RgTextureHandle depth;
+        RgTextureHandle materialAux;
+    };
+
+    /// Adds the temporal copy and resolve stages to the render graph.
+    /// @param graph Graph receiving the temporal stages.
+    /// @param ctx Frame state retained until graph execution completes.
+    /// @param settings Current temporal and weather settings.
+    /// @param targets Persistent render targets used by recording callbacks.
+    /// @param resources Imported graph handles for all temporal resources.
+    /// @param dependency Pass that must complete before the copy starts.
+    /// @return Final temporal resolve pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        const GraphResources& resources,
+        RgPassHandle dependency);
 
 private:
+    [[nodiscard]] bool recordCurrentCopy(RhiCommandList& commandList,
+                                         DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordResolve(RhiCommandList& commandList,
+                                     const FrameContext& ctx,
+                                     const RenderSettings& settings,
+                                     DeferredRenderTargets& targets);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,
                             int historyPrevIndex,

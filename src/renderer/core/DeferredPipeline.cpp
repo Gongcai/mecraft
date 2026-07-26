@@ -423,24 +423,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // TAA resolve
-    if (m_taaPass && usesNativeTaaResolve(
-            m_currentSettings.upscale.type, m_currentSettings.taa.enabled) &&
-        m_hasPreviousFrameData && !ctx.temporalReset) {
-        m_taaPass->execute(ctx, m_currentSettings, targets);
-    }
-
-    // Motion blur
-    if (m_motionBlurPass && m_currentSettings.postProcess.motionBlurEnabled &&
-        m_hasPreviousFrameData && !ctx.temporalReset) {
-        m_motionBlurPass->execute(ctx, m_currentSettings, targets);
-    }
-
-    // Depth of field
-    if (m_dofPass && m_currentSettings.postProcess.dofEnabled) {
-        m_dofPass->execute(ctx, m_currentSettings, targets);
-    }
-
     // Final history update and blit
     updateDeferredHistoryTargets();
     targets.copySceneResolvedToTransparentComposite(rhiDevice);
@@ -529,6 +511,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         settings.debug.reflectionDebugMode == 0 && !ctx.temporalReset;
     const bool cloudEnabled = settings.debug.deferredLightDebugMode <= 0;
     const bool hasPreviousFrame = m_hasPreviousFrameData && !ctx.temporalReset;
+    const bool nativeTaaEnabled =
+        usesNativeTaaResolve(settings.upscale.type, settings.taa.enabled) &&
+        hasPreviousFrame;
+    const bool motionBlurEnabled = settings.postProcess.motionBlurEnabled &&
+                                   hasPreviousFrame;
+    const bool dofEnabled = settings.postProcess.dofEnabled;
     const bool volumetricTemporalEnabled =
         settings.volumetric.temporalEnabled && hasPreviousFrame;
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
@@ -539,6 +527,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !targets.ensureCloudTextureView(rhiDevice) ||
         !targets.ensureSceneCompositeTextureView(rhiDevice) ||
         !targets.ensureSceneResolvedTextureView(rhiDevice) ||
+        !targets.ensureHistorySceneTextureViews(rhiDevice) ||
+        !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
         !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
         !targets.ensureHalfResTextureView(rhiDevice) ||
         !targets.ensureHistoryVolumetricTextureViews(rhiDevice) ||
@@ -578,6 +568,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (settings.debug.deferredLightDebugMode <= 0 &&
         (m_reflectionPass == nullptr || m_cloudPass == nullptr)) {
+        return false;
+    }
+    if ((nativeTaaEnabled && m_taaPass == nullptr) ||
+        (motionBlurEnabled && m_motionBlurPass == nullptr) ||
+        (dofEnabled && m_dofPass == nullptr)) {
         return false;
     }
     const RhiTextureHandle skyNoiseTexture =
@@ -724,6 +719,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle reflection;
     RgTextureHandle sceneComposite;
     RgTextureHandle sceneResolved;
+    RgTextureHandle temporalCurrent;
+    RgTextureHandle historySceneCurrent;
+    RgTextureHandle historyScenePrevious;
     RgTextureHandle transparentComposite;
     RgTextureHandle transparentCompositeDepth;
     RgTextureHandle cloud;
@@ -768,6 +766,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !importTexture(targets.sceneResolvedTextureHandle(),
                        targets.sceneResolvedTextureViewHandle(),
                        RhiResourceState::ShaderRead, sceneResolved) ||
+        !importTexture(targets.temporalCurrentTextureHandle(),
+                       targets.temporalCurrentTextureViewHandle(),
+                       RhiResourceState::ShaderRead, temporalCurrent) ||
+        !importTexture(targets.historySceneTextureHandle(),
+                       targets.historySceneTextureViewHandle(),
+                       RhiResourceState::ShaderRead, historySceneCurrent) ||
+        !importTexture(targets.historySceneTexturePrevHandle(),
+                       targets.historySceneTexturePrevViewHandle(),
+                       RhiResourceState::ShaderRead, historyScenePrevious) ||
         !importTexture(targets.transparentCompositeTextureHandle(),
                        targets.transparentCompositeTextureViewHandle(),
                        RhiResourceState::ShaderRead, transparentComposite) ||
@@ -1304,6 +1311,51 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
               return failGraphSetup();
           }
           volumetricGraphPrepared = m_volumetricPass->graphFramePrepared();
+        }
+    }
+
+    if (settings.debug.deferredLightDebugMode <= 0 &&
+        settings.debug.reflectionDebugMode <= 0) {
+        if (nativeTaaEnabled) {
+            TemporalResolvePass::GraphResources taaResources;
+            taaResources.sceneResolved = sceneResolved;
+            taaResources.temporalCurrent = temporalCurrent;
+            taaResources.historyPrevious = historyScenePrevious;
+            taaResources.velocity = velocity;
+            taaResources.depth = depth;
+            taaResources.materialAux = materialAux;
+            graphTail = m_taaPass->addGraphPasses(
+                m_renderGraph, ctx, settings, targets, taaResources, graphTail);
+            if (!graphTail.isValid()) {
+                return failGraphSetup();
+            }
+        }
+
+        if (motionBlurEnabled) {
+            MotionBlurPass::GraphResources motionResources;
+            motionResources.sceneResolved = sceneResolved;
+            motionResources.historyCurrent = historySceneCurrent;
+            motionResources.velocity = velocity;
+            motionResources.depth = depth;
+            graphTail = m_motionBlurPass->addGraphPasses(
+                m_renderGraph, ctx, settings, targets, motionResources,
+                graphTail);
+            if (!graphTail.isValid()) {
+                return failGraphSetup();
+            }
+        }
+
+        if (dofEnabled) {
+            DepthOfFieldPass::GraphResources dofResources;
+            dofResources.sceneResolved = sceneResolved;
+            dofResources.historyCurrent = historySceneCurrent;
+            dofResources.depth = depth;
+            graphTail = m_dofPass->addGraphPasses(
+                m_renderGraph, ctx, settings, targets, dofResources,
+                graphTail);
+            if (!graphTail.isValid()) {
+                return failGraphSetup();
+            }
         }
     }
 

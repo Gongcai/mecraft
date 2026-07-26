@@ -24,10 +24,68 @@ void TemporalResolvePass::shutdown() {
     destroyRhiResources();
 }
 
-void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                                  DeferredRenderTargets& targets) {
+RgPassHandle TemporalResolvePass::addGraphPasses(
+    RenderGraph& graph,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    const GraphResources& resources,
+    const RgPassHandle dependency) {
+    if (!dependency.isValid() || !resources.sceneResolved.isValid() ||
+        !resources.temporalCurrent.isValid() ||
+        !resources.historyPrevious.isValid() || !resources.velocity.isValid() ||
+        !resources.depth.isValid() || !resources.materialAux.isValid()) {
+        return {};
+    }
+
+    const FrameContext* frame = &ctx;
+    DeferredRenderTargets* frameTargets = &targets;
+    RenderGraphPassBuilder copy = graph.addPass(
+        {"TemporalResolve.CurrentCopy", RgPassType::Copy,
+         RhiQueueType::Graphics});
+    copy.dependsOn(dependency)
+        .readTexture(resources.sceneResolved, RhiResourceState::TransferSrc)
+        .writeTexture(resources.temporalCurrent, RhiResourceState::TransferDst)
+        .setExecute([this, frameTargets](RgPassContext& pass) {
+            return recordCurrentCopy(pass.commandList(), *frameTargets);
+        });
+
+    RenderGraphPassBuilder resolve = graph.addPass(
+        {"TemporalResolve.Resolve", RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    resolve.dependsOn(copy.handle())
+        .readTexture(resources.temporalCurrent, RhiResourceState::ShaderRead)
+        .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
+        .readTexture(resources.velocity, RhiResourceState::ShaderRead)
+        .readTexture(resources.depth, RhiResourceState::DepthRead)
+        .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
+        .writeTexture(resources.sceneResolved, RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
+            return recordResolve(
+                pass.commandList(), *frame, settings, *frameTargets);
+        });
+    return resolve.handle();
+}
+
+bool TemporalResolvePass::recordCurrentCopy(
+    RhiCommandList& commandList,
+    DeferredRenderTargets& targets) {
+    if (!targets.isReady()) {
+        return false;
+    }
+    RhiTextureBlit blit;
+    blit.src = targets.sceneResolvedTextureHandle();
+    blit.dst = targets.temporalCurrentTextureHandle();
+    commandList.blitTexture(blit);
+    return true;
+}
+
+bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
+                                        const FrameContext& ctx,
+                                        const RenderSettings& settings,
+                                        DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
@@ -37,7 +95,7 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
         !targets.ensureVelocityTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice) ||
         !ensureRhiPipeline(rhiDevice)) {
-        return;
+        return false;
     }
 
     const int historyPrevIndex = 1 - targets.currentHistoryIndex();
@@ -48,7 +106,7 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
                             targets.velocityTextureViewHandle(),
                             targets.depthTextureViewHandle(),
                             targets.materialAuxTextureViewHandle())) {
-        return;
+        return false;
     }
 
     RhiColorAttachment colorAttachment;
@@ -66,29 +124,6 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
     };
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
-
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList,
-                              targets.sceneResolvedTextureHandle(),
-                              RhiResourceState::TransferSrc);
-    targets.transitionTexture(commandList,
-                              targets.temporalCurrentTextureHandle(),
-                              RhiResourceState::TransferDst);
-    RhiTextureBlit temporalCopy;
-    temporalCopy.src = targets.sceneResolvedTextureHandle();
-    temporalCopy.dst = targets.temporalCurrentTextureHandle();
-    commandList.blitTexture(temporalCopy);
-    targets.transitionTexture(commandList,
-                              targets.temporalCurrentTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList,
-                              targets.sceneResolvedTextureHandle(),
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup[historyPrevIndex]);
@@ -111,18 +146,7 @@ void TemporalResolvePass::execute(const FrameContext& ctx, const RenderSettings&
     commandList.pushConstants(pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList,
-                              targets.sceneResolvedTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool TemporalResolvePass::ensureRhiPipeline(RhiDevice& rhiDevice) {

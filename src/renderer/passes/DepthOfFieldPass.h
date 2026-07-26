@@ -5,6 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <cstdint>
 
@@ -19,10 +20,36 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DepthOfField"; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Graph handles for the scene scratch and depth input.
+    struct GraphResources {
+        RgTextureHandle sceneResolved;
+        RgTextureHandle historyCurrent;
+        RgTextureHandle depth;
+    };
+
+    /// Adds the depth-of-field scratch copy and resolve stages to the graph.
+    /// @param graph Graph receiving the depth-of-field stages.
+    /// @param ctx Frame state retained until graph execution completes.
+    /// @param settings Current post-process settings.
+    /// @param targets Persistent render targets used by recording callbacks.
+    /// @param resources Imported graph handles for all depth-of-field resources.
+    /// @param dependency Pass that must complete before the copy starts.
+    /// @return Final depth-of-field pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        const GraphResources& resources,
+        RgPassHandle dependency);
 
 private:
+    [[nodiscard]] bool recordHistoryCopy(RhiCommandList& commandList,
+                                         DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordDof(RhiCommandList& commandList,
+                                 const FrameContext& ctx,
+                                 const RenderSettings& settings,
+                                 DeferredRenderTargets& targets);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,

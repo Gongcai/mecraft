@@ -5,6 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 class DeferredRenderTargets;
 class ResourceMgr;
@@ -17,10 +18,37 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "MotionBlur"; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Graph handles for the scene scratch and motion inputs.
+    struct GraphResources {
+        RgTextureHandle sceneResolved;
+        RgTextureHandle historyCurrent;
+        RgTextureHandle velocity;
+        RgTextureHandle depth;
+    };
+
+    /// Adds the motion-blur scratch copy and resolve stages to the graph.
+    /// @param graph Graph receiving the motion-blur stages.
+    /// @param ctx Frame state retained until graph execution completes.
+    /// @param settings Current post-process settings.
+    /// @param targets Persistent render targets used by recording callbacks.
+    /// @param resources Imported graph handles for all motion resources.
+    /// @param dependency Pass that must complete before the copy starts.
+    /// @return Final motion-blur pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        const GraphResources& resources,
+        RgPassHandle dependency);
 
 private:
+    [[nodiscard]] bool recordHistoryCopy(RhiCommandList& commandList,
+                                         DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordBlur(RhiCommandList& commandList,
+                                  const FrameContext& ctx,
+                                  const RenderSettings& settings,
+                                  DeferredRenderTargets& targets);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,
                             int historyIndex,
