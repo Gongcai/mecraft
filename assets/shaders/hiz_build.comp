@@ -24,8 +24,9 @@ void main() {
         imageStore(uDestMip, texel, vec4(texelFetch(uSourceTex, texel, 0).r));
         return;
     }
-    // Clamped 2x2 gather: repeating the edge texel on odd dimensions keeps
-    // the reduction conservative because max() can only move farther.
+    // 2x2 max gather. Odd source dimensions leave a final row/column that
+    // no 2x2 footprint covers (floor halving); the edge texels absorb those
+    // extra samples so no far value is ever dropped from the pyramid.
     const ivec2 srcSize = textureSize(uSourceTex, 0);
     const ivec2 srcBase = texel * 2;
     const float d0 = texelFetch(uSourceTex, min(srcBase, srcSize - 1), 0).r;
@@ -35,5 +36,27 @@ void main() {
                                 min(srcBase + ivec2(0, 1), srcSize - 1), 0).r;
     const float d3 = texelFetch(uSourceTex,
                                 min(srcBase + ivec2(1, 1), srcSize - 1), 0).r;
-    imageStore(uDestMip, texel, vec4(max(max(d0, d1), max(d2, d3))));
+    float farthest = max(max(d0, d1), max(d2, d3));
+    const bool tailX = (srcSize.x & 1) != 0 && texel.x == uParams.x - 1;
+    const bool tailY = (srcSize.y & 1) != 0 && texel.y == uParams.y - 1;
+    if (tailX) {
+        const float e0 = texelFetch(uSourceTex,
+                                    min(srcBase + ivec2(2, 0), srcSize - 1), 0).r;
+        const float e1 = texelFetch(uSourceTex,
+                                    min(srcBase + ivec2(2, 1), srcSize - 1), 0).r;
+        farthest = max(farthest, max(e0, e1));
+    }
+    if (tailY) {
+        const float e2 = texelFetch(uSourceTex,
+                                    min(srcBase + ivec2(0, 2), srcSize - 1), 0).r;
+        const float e3 = texelFetch(uSourceTex,
+                                    min(srcBase + ivec2(1, 2), srcSize - 1), 0).r;
+        farthest = max(farthest, max(e2, e3));
+    }
+    if (tailX && tailY) {
+        farthest = max(farthest,
+                       texelFetch(uSourceTex,
+                                  min(srcBase + ivec2(2, 2), srcSize - 1), 0).r);
+    }
+    imageStore(uDestMip, texel, vec4(farthest));
 }

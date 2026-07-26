@@ -98,6 +98,9 @@ private:
     struct CullBinding {
         RhiBindGroupHandle bindGroup;
         RhiBufferHandle boundCommands;
+        // The metadata pool reallocates as chunk streaming grows it; a stale
+        // binding would feed garbage origins to the cull test.
+        RhiBufferHandle boundMetadata;
         RhiTextureViewHandle boundHiZ;
     };
     CullBinding m_cullBindings[2];

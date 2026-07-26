@@ -23,8 +23,10 @@ layout(binding = 2) uniform sampler2D uHiZTex;
 layout(binding = 3, std430) buffer CullStatsBuffer { uint uCulledCounts[]; };
 
 layout(push_constant) uniform RhiPushConstants {
-    // Raster view-projection of the CURRENT frame (jittered when the raster
-    // itself is jittered) so the test matches what would be drawn.
+    // Raster view-projection of the PREVIOUS frame (jittered when the raster
+    // itself is jittered). The pyramid holds the previous frame's depth, so
+    // projecting with the matching matrix keeps matrix and depth consistent
+    // for static geometry regardless of camera motion.
     mat4 uViewProj;
     // x, y: Hi-Z mip 0 extent; z: highest mip index; w: command count.
     vec4 uParams0;
@@ -61,10 +63,15 @@ void main() {
         ndcMax = max(ndcMax, ndc);
     }
 
-    // The CPU frustum cull already ran; only the occlusion decision is made
-    // here, so a rect clamped to the screen is sufficient.
-    const vec2 clipUvMin = clamp(ndcMin.xy * 0.5 + 0.5, 0.0, 1.0);
-    const vec2 clipUvMax = clamp(ndcMax.xy * 0.5 + 0.5, 0.0, 1.0);
+    // The pyramid cannot judge a rect that reaches beyond the previous
+    // frame's screen (typical for draws newly rotated into view); keep the
+    // draw instead of sampling clamped edge texels that belong to other
+    // geometry.
+    if (ndcMin.x < -1.0 || ndcMax.x > 1.0 || ndcMin.y < -1.0 || ndcMax.y > 1.0) {
+        return;
+    }
+    const vec2 clipUvMin = ndcMin.xy * 0.5 + 0.5;
+    const vec2 clipUvMax = ndcMax.xy * 0.5 + 0.5;
     // Clip UVs are bottom-left; the pyramid lives in native texture rows.
     const vec2 uvA = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMin));
     const vec2 uvB = rhiScreenUvToTextureUv(rhiScreenUvToClipUv(clipUvMax));

@@ -296,13 +296,15 @@ bool HiZPass::recordCull(RhiCommandList& commandList,
         static_cast<uint32_t>(worldBuffer.cutoutCommandCount())
     };
 
-    // The raster uses the jittered projection when temporal jitter is on;
-    // the cull must test exactly what would be drawn.
+    // The pyramid holds the PREVIOUS frame's depth, so the test projects
+    // with the previous frame's raster matrix (jittered when the raster
+    // itself is jittered): matrix and depth from the same frame make the
+    // test exact for static geometry under any camera motion.
     const bool projectionJitter = usesTemporalProjectionJitter(
         settings.upscale.type, settings.taa.enabled);
     HiZCullPushConstants pushConstants{};
-    pushConstants.viewProj = projectionJitter ? ctx.camera.jitteredViewProj
-                                              : ctx.camera.viewProj;
+    pushConstants.viewProj = projectionJitter ? ctx.previousJitteredViewProj
+                                              : ctx.previousViewProj;
     pushConstants.params0 =
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
@@ -506,6 +508,8 @@ bool HiZPass::ensureCullBindGroup(RhiDevice& rhiDevice,
     if (binding.bindGroup.isValid() &&
         binding.boundCommands.index == commandBuffer.index &&
         binding.boundCommands.generation == commandBuffer.generation &&
+        binding.boundMetadata.index == metadataBuffer.index &&
+        binding.boundMetadata.generation == metadataBuffer.generation &&
         sameTextureView(binding.boundHiZ, hiZView)) {
         return true;
     }
@@ -546,6 +550,7 @@ bool HiZPass::ensureCullBindGroup(RhiDevice& rhiDevice,
         return false;
     }
     binding.boundCommands = commandBuffer;
+    binding.boundMetadata = metadataBuffer;
     binding.boundHiZ = hiZView;
     return true;
 }
