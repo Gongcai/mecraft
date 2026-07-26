@@ -415,10 +415,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Scene composite
-    if (m_sceneCompositePass) {
-        m_sceneCompositePass->execute(ctx, m_currentSettings, targets, m_voxelGiClipmap.get());
-    }
+    // Scene composite is recorded as the final graphics pass of the deferred graph.
     targets.copySceneCompositeToTransparentComposite(rhiDevice);
     targets.copySceneCompositeToSceneResolved(rhiDevice);
 
@@ -526,7 +523,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_shared->commandListPool == nullptr ||
         m_shared->deferredTargets == nullptr || ctx.worldView == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
-        m_lightingPass == nullptr || !ctx.sceneCaptureColorTexture.isValid() ||
+        m_lightingPass == nullptr || m_sceneCompositePass == nullptr ||
+        !ctx.sceneCaptureColorTexture.isValid() ||
         m_shared->sky == nullptr || ctx.dayNightSystem == nullptr ||
         ctx.weatherSystem == nullptr) {
         return false;
@@ -1088,6 +1086,32 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             return failGraphSetup();
         }
         voxelGiGraphPrepared = m_voxelGiClipmap->graphFramePrepared();
+    }
+
+    if (settings.debug.deferredLightDebugMode <= 0) {
+        SceneCompositePass::GraphResources sceneCompositeResources;
+        sceneCompositeResources.sceneLighting = sceneLighting;
+        sceneCompositeResources.reflection = reflection;
+        sceneCompositeResources.cloud = cloud;
+        sceneCompositeResources.depth = depth;
+        sceneCompositeResources.normalAo = normalAo;
+        sceneCompositeResources.material = material;
+        sceneCompositeResources.materialAux = materialAux;
+        sceneCompositeResources.skyCapture = skyCapture;
+        sceneCompositeResources.albedo = albedo;
+        sceneCompositeResources.ssgi = ssgi;
+        sceneCompositeResources.voxelGi = m_voxelGiClipmap != nullptr
+            ? m_voxelGiClipmap->graphTextureHandle()
+            : RgTextureHandle{};
+        sceneCompositeResources.output = sceneComposite;
+        sceneCompositeResources.reactiveMask = reactiveMask;
+        sceneCompositeResources.transparencyMask = transparencyMask;
+        graphTail = m_sceneCompositePass->addGraphPasses(
+            m_renderGraph, ctx, settings, targets, m_voxelGiClipmap.get(),
+            sceneCompositeResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
     }
 
     const RgCompileResult compiled = m_renderGraph.compile();

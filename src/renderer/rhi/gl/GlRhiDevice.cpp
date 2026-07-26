@@ -1235,20 +1235,33 @@ struct GlTextureSubresourceRange {
     const uint32_t baseLayer,
     const uint32_t layerCount,
     GlTextureSubresourceRange& resolved) {
-    if (baseMip >= desc.mipLevels || baseLayer >= desc.depthOrLayers) {
+    const bool texture3D = desc.dimension == RhiTextureDimension::Texture3D;
+    const uint32_t logicalLayerCount = texture3D ? 1u : desc.depthOrLayers;
+    if (baseMip >= desc.mipLevels || baseLayer >= logicalLayerCount) {
         return false;
     }
     resolved.baseMip = baseMip;
     resolved.mipCount = mipCount == kRhiRemainingMipLevels
                             ? desc.mipLevels - baseMip
                             : mipCount;
-    resolved.baseLayer = baseLayer;
-    resolved.layerCount = layerCount == kRhiRemainingArrayLayers
-                              ? desc.depthOrLayers - baseLayer
-                              : layerCount;
+    if (texture3D) {
+        // RHI 3D ranges have one logical layer; OpenGL state tracking stores every depth slice.
+        if (baseLayer != 0u ||
+            (layerCount != 1u && layerCount != kRhiRemainingArrayLayers &&
+             layerCount != desc.depthOrLayers)) {
+            return false;
+        }
+        resolved.baseLayer = 0u;
+        resolved.layerCount = desc.depthOrLayers;
+    } else {
+        resolved.baseLayer = baseLayer;
+        resolved.layerCount = layerCount == kRhiRemainingArrayLayers
+                                  ? desc.depthOrLayers - baseLayer
+                                  : layerCount;
+    }
     return resolved.mipCount != 0u && resolved.layerCount != 0u &&
            resolved.mipCount <= desc.mipLevels - baseMip &&
-           resolved.layerCount <= desc.depthOrLayers - baseLayer;
+           resolved.layerCount <= desc.depthOrLayers - resolved.baseLayer;
 }
 
 [[nodiscard]] size_t textureSubresourceIndex(const RhiTextureDesc& desc,

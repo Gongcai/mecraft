@@ -78,6 +78,13 @@ public:
         return m_graphFramePrepared;
     }
 
+    /// Returns the clipmap resource imported into the current render graph.
+    /// @return Graph texture handle valid for the current frame graph while the
+    /// clipmap is enabled and allocated.
+    [[nodiscard]] RgTextureHandle graphTextureHandle() const {
+        return m_graphTexture;
+    }
+
     [[nodiscard]] RhiTextureHandle textureHandle() const { return m_texture; }
     [[nodiscard]] bool valid() const { return m_valid && m_texture.isValid(); }
     [[nodiscard]] glm::vec3 origin() const { return m_origin; }
@@ -174,6 +181,7 @@ private:
     uint64_t m_lastUpdateFrame = 0;
 
     bool m_graphFramePrepared = false;
+    RgTextureHandle m_graphTexture;
     VoxelGiClipmapUpdateMode m_pendingMode = VoxelGiClipmapUpdateMode::Disabled;
     std::vector<PendingUpload> m_pendingUploads;
     RhiTextureCopy m_pendingShiftToScratch;

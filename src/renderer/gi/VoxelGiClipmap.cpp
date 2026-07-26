@@ -254,11 +254,27 @@ RgPassHandle VoxelGiClipmap::addGraphPasses(
         shutdown();
     }
     m_rhiDevice = &rhiDevice;
+    m_graphTexture = {};
     if (!settings.enabled || ctx.worldView == nullptr) {
         m_valid = false;
         m_stats = {};
         return dependency;
     }
+
+    const auto importClipmapTexture = [&]() {
+        if (!m_texture.isValid()) {
+            return false;
+        }
+        RhiTextureDesc clipmapDesc;
+        if (!rhiDevice.getTextureDesc(m_texture, clipmapDesc)) {
+            return false;
+        }
+        m_graphTexture = graph.importTexture(
+            {"VoxelGI.Clipmap", m_texture, clipmapDesc, m_textureState,
+             RhiResourceState::ShaderRead, {}, RhiQueueType::Graphics,
+             RhiQueueType::Graphics});
+        return m_graphTexture.isValid();
+    };
 
     const int resolution = normalizedResolution(settings.resolution);
     const float voxelSize = normalizedVoxelSize(settings.voxelSize);
@@ -297,7 +313,7 @@ RgPassHandle VoxelGiClipmap::addGraphPasses(
     if (m_valid && !parametersChanged && !originChanged &&
         !((worldChanged || skyRadianceChanged || sunRadianceChanged || sunDirectionChanged || bounceStrengthChanged) && intervalReady)) {
         updateStatsBase(VoxelGiClipmapUpdateMode::Idle, m_originBlock);
-        return dependency;
+        return importClipmapTexture() ? dependency : RgPassHandle{};
     }
 
     if (!allocateTexture(resolution, rhiDevice)) {
@@ -372,25 +388,14 @@ RgPassHandle VoxelGiClipmap::addGraphPasses(
     m_pendingBlockContentRevision = blockRevision;
     m_pendingUpdateFrame = ctx.frameIndex;
 
-    RhiTextureDesc clipmapDesc;
-    if (!rhiDevice.getTextureDesc(m_texture, clipmapDesc)) {
+    if (!importClipmapTexture()) {
         releasePendingUploads();
         resetPendingGraphState();
         m_valid = false;
         m_stats = {};
         return {};
     }
-    const RgTextureHandle clipmap = graph.importTexture(
-        {"VoxelGI.Clipmap", m_texture, clipmapDesc, m_textureState,
-         RhiResourceState::ShaderRead, {}, RhiQueueType::Graphics,
-         RhiQueueType::Graphics});
-    if (!clipmap.isValid()) {
-        releasePendingUploads();
-        resetPendingGraphState();
-        m_valid = false;
-        m_stats = {};
-        return {};
-    }
+    const RgTextureHandle clipmap = m_graphTexture;
 
     std::vector<RgBufferHandle> stagingBuffers;
     stagingBuffers.reserve(m_pendingUploads.size());
@@ -764,6 +769,7 @@ void VoxelGiClipmap::releasePendingUploads() {
 
 void VoxelGiClipmap::resetPendingGraphState() {
     m_graphFramePrepared = false;
+    m_graphTexture = {};
     m_pendingMode = VoxelGiClipmapUpdateMode::Disabled;
     m_pendingUploads.clear();
     m_pendingShiftToScratch = {};

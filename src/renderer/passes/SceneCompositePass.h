@@ -5,11 +5,13 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <array>
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiCommandList;
 class RhiDevice;
 class VoxelGiClipmap;
 
@@ -20,14 +22,51 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SceneComposite"; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets, const VoxelGiClipmap* voxelGiClipmap);
+    struct GraphResources {
+        RgTextureHandle sceneLighting;
+        RgTextureHandle reflection;
+        RgTextureHandle cloud;
+        RgTextureHandle depth;
+        RgTextureHandle normalAo;
+        RgTextureHandle material;
+        RgTextureHandle materialAux;
+        RgTextureHandle skyCapture;
+        RgTextureHandle albedo;
+        RgTextureHandle ssgi;
+        RgTextureHandle voxelGi;
+        RgTextureHandle output;
+        RgTextureHandle reactiveMask;
+        RgTextureHandle transparencyMask;
+    };
+
+    /// Adds the scene composite draw to the frame graph.
+    /// @param graph Graph receiving the scene composite pass.
+    /// @param ctx Frame state used to build scene composite parameters.
+    /// @param settings Render settings controlling composite features.
+    /// @param targets Persistent target set supplying attachment views.
+    /// @param voxelGiClipmap Optional clipmap sampled by the voxel GI variant.
+    /// @param resources Graph resources read and written by this pass.
+    /// @param dependency Pass that must complete before scene composite.
+    /// @return The scene composite pass handle, or an invalid handle on setup failure.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        const VoxelGiClipmap* voxelGiClipmap,
+        const GraphResources& resources,
+        RgPassHandle dependency);
 
 private:
     bool ensureRhiPipelines(RhiDevice& rhiDevice);
     bool ensureBindGroup(RhiDevice& rhiDevice, bool voxelGiEnabled,
                          const std::array<RhiTextureViewHandle, 11>& views);
     bool ensureVoxelGiTextureView(RhiDevice& rhiDevice, const VoxelGiClipmap& voxelGiClipmap);
+    [[nodiscard]] bool recordGraphPass(RhiCommandList& commandList,
+                                       const FrameContext& ctx,
+                                       const RenderSettings& settings,
+                                       DeferredRenderTargets& targets,
+                                       const VoxelGiClipmap* voxelGiClipmap);
     void destroyBindGroups();
     void destroyVoxelBindGroup();
     void destroyRhiResources();

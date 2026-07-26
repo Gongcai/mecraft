@@ -57,8 +57,67 @@ void SceneCompositePass::shutdown() {
     destroyVoxelGiTextureView();
 }
 
-void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                                  DeferredRenderTargets& targets, const VoxelGiClipmap* voxelGiClipmap) {
+RgPassHandle SceneCompositePass::addGraphPasses(
+    RenderGraph& graph,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    const VoxelGiClipmap* voxelGiClipmap,
+    const GraphResources& resources,
+    const RgPassHandle dependency) {
+    if (!dependency.isValid() || !resources.sceneLighting.isValid() ||
+        !resources.reflection.isValid() || !resources.cloud.isValid() ||
+        !resources.depth.isValid() || !resources.normalAo.isValid() ||
+        !resources.material.isValid() || !resources.materialAux.isValid() ||
+        !resources.skyCapture.isValid() || !resources.albedo.isValid() ||
+        !resources.ssgi.isValid() || !resources.output.isValid() ||
+        !resources.reactiveMask.isValid() ||
+        !resources.transparencyMask.isValid()) {
+        return {};
+    }
+
+    const bool voxelGiEnabled = settings.voxelGi.enabled &&
+                                voxelGiClipmap != nullptr &&
+                                voxelGiClipmap->textureHandle().isValid() &&
+                                resources.voxelGi.isValid();
+    if (settings.voxelGi.enabled && voxelGiClipmap != nullptr &&
+        voxelGiClipmap->textureHandle().isValid() != resources.voxelGi.isValid()) {
+        return {};
+    }
+
+    RenderGraphPassBuilder composite = graph.addPass(
+        {"SceneComposite", RgPassType::Graphics, RhiQueueType::Graphics});
+    composite.dependsOn(dependency)
+        .readTexture(resources.sceneLighting, RhiResourceState::ShaderRead)
+        .readTexture(resources.reflection, RhiResourceState::ShaderRead)
+        .readTexture(resources.cloud, RhiResourceState::ShaderRead)
+        .readTexture(resources.depth, RhiResourceState::DepthRead)
+        .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
+        .readTexture(resources.material, RhiResourceState::ShaderRead)
+        .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
+        .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
+        .readTexture(resources.albedo, RhiResourceState::ShaderRead)
+        .readTexture(resources.ssgi, RhiResourceState::ShaderRead);
+    if (voxelGiEnabled) {
+        composite.readTexture(resources.voxelGi, RhiResourceState::ShaderRead);
+    }
+    composite.writeTexture(resources.output, RhiResourceState::RenderTarget)
+        .writeTexture(resources.reactiveMask, RhiResourceState::RenderTarget)
+        .writeTexture(resources.transparencyMask, RhiResourceState::RenderTarget)
+        .setExecute([this, frame = &ctx, frameTargets = &targets,
+                     frameSettings = settings, voxelGiClipmap](RgPassContext& pass) {
+            return recordGraphPass(pass.commandList(), *frame, frameSettings,
+                                   *frameTargets, voxelGiClipmap);
+        });
+    return composite.handle();
+}
+
+bool SceneCompositePass::recordGraphPass(
+    RhiCommandList& commandList,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    const VoxelGiClipmap* voxelGiClipmap) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureSceneCompositeTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureSceneLightingTextureView(*ctx.shared->rhiDevice) ||
@@ -69,18 +128,18 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         !targets.ensureSsgiTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureReactiveMaskTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureTransparencyMaskTextureView(*ctx.shared->rhiDevice)) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     const bool voxelGiEnabled = settings.voxelGi.enabled &&
                                 voxelGiClipmap != nullptr &&
-                                voxelGiClipmap->valid();
+                                voxelGiClipmap->textureHandle().isValid();
     if (!ensureRhiPipelines(rhiDevice)) {
-        return;
+        return false;
     }
     if (voxelGiEnabled && !ensureVoxelGiTextureView(rhiDevice, *voxelGiClipmap)) {
-        return;
+        return false;
     }
     const std::array<RhiTextureViewHandle, 11> views = {
         targets.sceneLightingTextureViewHandle(),
@@ -96,7 +155,7 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
         voxelGiEnabled ? m_voxelGiTextureView : RhiTextureViewHandle{}
     };
     if (!ensureBindGroup(rhiDevice, voxelGiEnabled, views)) {
-        return;
+        return false;
     }
 
     SceneCompositeParams params{};
@@ -172,49 +231,17 @@ void SceneCompositePass::execute(const FrameContext& ctx, const RenderSettings& 
     renderingInfo.colorAttachments = colorAttachments;
     renderingInfo.colorAttachmentCount = 3u;
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
     commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::UniformBuffer,
                                RhiResourceState::TransferDst});
     commandList.updateBuffer(m_uniformBuffer, 0u, &params, sizeof(params));
     commandList.bufferBarrier({m_uniformBuffer, RhiResourceState::TransferDst,
                                RhiResourceState::UniformBuffer});
-    targets.transitionTexture(commandList,
-                              targets.sceneCompositeTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList,
-                              targets.reactiveMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList,
-                              targets.transparencyMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(voxelGiEnabled ? m_voxelPipeline : m_basePipeline);
     commandList.setBindGroup(0u, voxelGiEnabled ? m_voxelBindGroup : m_baseBindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList,
-                              targets.sceneCompositeTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList,
-                              targets.reactiveMaskTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList,
-                              targets.transparencyMaskTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool SceneCompositePass::ensureVoxelGiTextureView(
