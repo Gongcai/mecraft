@@ -403,6 +403,21 @@ public:
   void setTextureAliasingEnabled(const bool enabled) {
     m_textureAliasingEnabled = enabled;
   }
+
+  /// Invoked by execute() after transient resources are resolved and before
+  /// any pass records, so pipelines can publish per-frame transient handles
+  /// into pass-visible storage. resolvedTexture/resolvedTextureView are
+  /// valid only inside the callback and inside pass execute callbacks.
+  void setPreRecordCallback(std::function<void()> callback) {
+    m_preRecordCallback = std::move(callback);
+  }
+  /// Returns the texture backing a graph handle for the current execution.
+  /// @return Invalid handle outside execute() or for an invalid input.
+  [[nodiscard]] RhiTextureHandle resolvedTexture(RgTextureHandle handle) const;
+  /// Returns the default whole-texture view for the current execution.
+  /// @return Invalid handle outside execute() or for an invalid input.
+  [[nodiscard]] RhiTextureViewHandle
+  resolvedTextureView(RgTextureHandle handle) const;
   [[nodiscard]] const RgTransientMemoryStats &transientMemoryStats() const {
     return m_transientMemoryStats;
   }
@@ -495,6 +510,12 @@ private:
   std::vector<TextureRequirementsCacheEntry> m_textureRequirementsCache;
   RgTransientMemoryStats m_transientMemoryStats;
   bool m_textureAliasingEnabled = true;
+  std::function<void()> m_preRecordCallback;
+  /// Set while execute() runs so resolvedTexture/resolvedTextureView work
+  /// from the pre-record callback and pass callbacks.
+  const std::vector<RhiTextureHandle> *m_currentResolvedTextures = nullptr;
+  const std::vector<RhiTextureViewHandle> *m_currentResolvedTextureViews =
+      nullptr;
 
   std::vector<TimingSlot> m_timingSlots;
   RgTimingSnapshot m_latestTimings;

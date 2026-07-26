@@ -2,6 +2,7 @@
 #define MECRAFT_DEFERRED_RENDER_TARGETS_H
 
 #include "renderer/rhi/RhiHandles.h"
+#include "renderer/rhi/RhiResources.h"
 #include "renderer/rhi/RhiTypes.h"
 
 #include <cstdint>
@@ -12,6 +13,19 @@ class RhiDevice;
 class RhiCommandList;
 class RhiCommandListPool;
 
+/// Frame-scoped deferred targets that live as render-graph transients instead
+/// of persistent device textures. Every entry is fully rewritten before it is
+/// read each frame, so the graph's aliasing allocator may overlap their
+/// memory with other single-frame textures.
+enum class DeferredTransientTarget {
+    SceneLighting,
+    SceneComposite,
+    TransparentComposite,
+    TransparentCompositeDepth,
+    Reflection,
+    Cloud
+};
+
 class DeferredRenderTargets {
 public:
     ~DeferredRenderTargets();
@@ -20,6 +34,26 @@ public:
     void shutdown();
 
     bool ensureSize(int width, int height, int shadowResolution);
+
+    /// Publishes the render-graph resolved texture and default view for a
+    /// frame-scoped transient target so the existing handle/view accessors
+    /// keep working during pass recording. Handles are non-owning: the graph
+    /// owns both the texture and the view.
+    /// @param target Transient target slot to publish.
+    /// @param texture Graph-resolved texture backing the target this frame.
+    /// @param view Graph-owned default view for that texture.
+    void publishTransientTarget(DeferredTransientTarget target,
+                                RhiTextureHandle texture,
+                                RhiTextureViewHandle view);
+
+    /// Builds the texture description a frame-scoped transient target needs.
+    /// The returned desc matches the layout previously used for the
+    /// persistent texture (format, resolution, and usage) with a null
+    /// debugName so the caller can name the graph resource.
+    /// @param target Transient target slot to describe.
+    /// @return Complete texture description sized for the current targets.
+    [[nodiscard]] RhiTextureDesc transientTargetDesc(
+        DeferredTransientTarget target) const;
 
     [[nodiscard]] RhiTextureHandle albedoTextureHandle() const { return m_gAlbedoHandle; }
     [[nodiscard]] RhiTextureHandle normalAoTextureHandle() const { return m_gNormalAoHandle; }
@@ -252,8 +286,6 @@ private:
     void destroyGBufferTextures();
     bool createSceneTextures();
     void destroySceneTextures();
-    bool createTransparentCompositeTextures();
-    void destroyTransparentCompositeTextures();
     bool createScreenEffectTextures();
     void destroyScreenEffectTextures();
     bool createAtmosphereTextures();
@@ -343,10 +375,13 @@ private:
     RhiTextureViewHandle m_ssgiTemporalView;
     RhiTextureViewHandle m_ssgiTemporalMomentsView;
 
+    // SceneLighting is a render-graph transient published per frame via
+    // publishTransientTarget; the handle and view are non-owning.
     RhiTextureHandle m_sceneLightingHandle;
     RhiTextureViewHandle m_sceneLightingView;
 
     // SceneComposite is the opaque HDR scene after screen-space base effects such as clouds/reflections.
+    // Render-graph transient published per frame (non-owning).
     RhiTextureHandle m_sceneCompositeHandle;
     RhiTextureViewHandle m_sceneCompositeView;
 
@@ -355,6 +390,7 @@ private:
     RhiTextureViewHandle m_sceneResolvedView;
 
     // TransparentComposite is a scratch scene copy used while forward water/generic transparent geometry is blended.
+    // Render-graph transients published per frame (non-owning).
     RhiTextureHandle m_transparentCompositeHandle;
     RhiTextureHandle m_transparentCompositeDepthHandle;
     RhiTextureViewHandle m_transparentCompositeView;
@@ -363,6 +399,7 @@ private:
     RhiTextureHandle m_halfResHandle;
     RhiTextureViewHandle m_halfResView;
 
+    // Reflection is a render-graph transient published per frame (non-owning).
     RhiTextureHandle m_reflectionHandle;
     RhiTextureViewHandle m_reflectionView;
 
@@ -371,6 +408,7 @@ private:
     RhiTextureHandle m_reflectionTemporalScratchHandle;
     RhiTextureViewHandle m_reflectionTemporalScratchView;
 
+    // Cloud is a render-graph transient published per frame (non-owning).
     RhiTextureHandle m_cloudHandle;
     RhiTextureViewHandle m_cloudView;
 

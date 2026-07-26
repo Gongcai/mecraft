@@ -139,7 +139,10 @@ private:
     // Private orchestration methods
     [[nodiscard]] bool recordDeferredAuxiliaryClear(
         RhiCommandList& commandList,
-        DeferredRenderTargets& targets);
+        DeferredRenderTargets& targets,
+        bool clearReflection,
+        bool clearSceneComposite,
+        bool clearCloud);
     void commitDeferredHistoryState();
     [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList,
                                                     const FrameContext& ctx);

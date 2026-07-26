@@ -299,6 +299,16 @@ json toJson(const OcclusionSettings& s) {
     };
 }
 
+void applyRenderGraphSettings(const json& j, RenderGraphSettings& s) {
+    readBool(j, "textureAliasingEnabled", s.textureAliasingEnabled);
+}
+
+json toJson(const RenderGraphSettings& s) {
+    return json{
+        {"textureAliasingEnabled", s.textureAliasingEnabled},
+    };
+}
+
 void applyCloudSettings(const json& j, CloudSettings& s) {
     readBool(j, "shadowsEnabled", s.shadowsEnabled);
     readBool(j, "asyncComputeEnabled", s.asyncComputeEnabled);
@@ -679,6 +689,7 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("volumetric", [&s](const json& value) { applyVolumetricSettings(value, s.volumetric); });
     applyObject("cloud", [&s](const json& value) { applyCloudSettings(value, s.cloud); });
     applyObject("occlusion", [&s](const json& value) { applyOcclusionSettings(value, s.occlusion); });
+    applyObject("renderGraph", [&s](const json& value) { applyRenderGraphSettings(value, s.renderGraph); });
     applyObject("reflection", [&s](const json& value) { applyReflectionSettings(value, s.reflection); });
     applyObject("transparent", [&s](const json& value) { applyTransparentSettings(value, s.transparent); });
     applyObject("blockMaterialMaps", [&s](const json& value) { applyBlockMaterialMapSettings(value, s.blockMaterialMaps); });
@@ -703,6 +714,7 @@ json toJson(const RenderSettings& s) {
         {"volumetric", toJson(s.volumetric)},
         {"cloud", toJson(s.cloud)},
         {"occlusion", toJson(s.occlusion)},
+        {"renderGraph", toJson(s.renderGraph)},
         {"reflection", toJson(s.reflection)},
         {"transparent", toJson(s.transparent)},
         {"blockMaterialMaps", toJson(s.blockMaterialMaps)},

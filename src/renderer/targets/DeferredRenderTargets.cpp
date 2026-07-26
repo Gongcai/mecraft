@@ -96,10 +96,6 @@ bool DeferredRenderTargets::ensureSize(const int width, const int height, const 
         shutdown();
         return false;
     }
-    if (!createTransparentCompositeTextures()) {
-        shutdown();
-        return false;
-    }
     if (!createScreenEffectTextures()) {
         shutdown();
         return false;
@@ -158,14 +154,11 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
         m_gVoxelLightHandle,
         m_gMaterialHandle,
         m_gMaterialAuxHandle,
-        m_sceneLightingHandle,
-        m_sceneCompositeHandle,
+        // SceneLighting/SceneComposite/TransparentComposite/Reflection/Cloud
+        // are render-graph transients now; the graph tracks their states.
         m_sceneResolvedHandle,
-        m_transparentCompositeHandle,
         m_halfResHandle,
-        m_reflectionHandle,
         m_reflectionTemporalScratchHandle,
-        m_cloudHandle,
         m_skyCaptureHandle,
         m_historySceneHandle[0],
         m_historySceneHandle[1],
@@ -202,7 +195,6 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
     };
     const RhiTextureHandle depthTextures[] = {
         m_gDepthHandle,
-        m_transparentCompositeDepthHandle,
         m_historyDepthHandle[0],
         m_historyDepthHandle[1],
         m_taaHistoryDepthHandle[0],
@@ -236,6 +228,84 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
             {"DeferredTargets.InitializeStates", submittedCommandLists, 1u})) {
         std::abort();
     }
+}
+
+void DeferredRenderTargets::publishTransientTarget(
+    const DeferredTransientTarget target,
+    const RhiTextureHandle texture,
+    const RhiTextureViewHandle view) {
+    switch (target) {
+    case DeferredTransientTarget::SceneLighting:
+        m_sceneLightingHandle = texture;
+        m_sceneLightingView = view;
+        break;
+    case DeferredTransientTarget::SceneComposite:
+        m_sceneCompositeHandle = texture;
+        m_sceneCompositeView = view;
+        break;
+    case DeferredTransientTarget::TransparentComposite:
+        m_transparentCompositeHandle = texture;
+        m_transparentCompositeView = view;
+        break;
+    case DeferredTransientTarget::TransparentCompositeDepth:
+        m_transparentCompositeDepthHandle = texture;
+        m_transparentCompositeDepthView = view;
+        break;
+    case DeferredTransientTarget::Reflection:
+        m_reflectionHandle = texture;
+        m_reflectionView = view;
+        break;
+    case DeferredTransientTarget::Cloud:
+        m_cloudHandle = texture;
+        m_cloudView = view;
+        break;
+    }
+}
+
+RhiTextureDesc DeferredRenderTargets::transientTargetDesc(
+    const DeferredTransientTarget target) const {
+    RhiTextureDesc desc;
+    // The caller names the graph resource; the shared pool must not point at
+    // a string whose storage may outlive this call site.
+    desc.debugName = nullptr;
+    desc.dimension = RhiTextureDimension::Texture2D;
+    desc.width = static_cast<uint32_t>(m_width);
+    desc.height = static_cast<uint32_t>(m_height);
+    desc.depthOrLayers = 1u;
+    desc.mipLevels = 1u;
+    desc.sampleCount = 1u;
+    const RhiTextureUsageFlags colorUsage =
+        rhiFlag(RhiTextureUsage::Sampled) |
+        rhiFlag(RhiTextureUsage::ColorAttachment) |
+        rhiFlag(RhiTextureUsage::TransferSrc) |
+        rhiFlag(RhiTextureUsage::TransferDst);
+    switch (target) {
+    case DeferredTransientTarget::SceneLighting:
+    case DeferredTransientTarget::SceneComposite:
+    case DeferredTransientTarget::TransparentComposite:
+    case DeferredTransientTarget::Reflection:
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.usage = colorUsage;
+        break;
+    case DeferredTransientTarget::TransparentCompositeDepth:
+        // A separate depth attachment prevents feedback while the G-buffer
+        // depth is sampled.
+        desc.format = RhiTextureFormat::Depth32Float;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                     rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+                     rhiFlag(RhiTextureUsage::TransferSrc) |
+                     rhiFlag(RhiTextureUsage::TransferDst);
+        break;
+    case DeferredTransientTarget::Cloud:
+        // Half-resolution raymarch target; Storage lets the async-compute
+        // cloud path write it as a storage image.
+        desc.format = RhiTextureFormat::Rgba16Float;
+        desc.width = static_cast<uint32_t>(std::max(1, m_width / 2));
+        desc.height = static_cast<uint32_t>(std::max(1, m_height / 2));
+        desc.usage = colorUsage | rhiFlag(RhiTextureUsage::Storage);
+        break;
+    }
+    return desc;
 }
 
 RhiTextureHandle DeferredRenderTargets::ssgiDenoiseTextureHandle(const int slot) const {
@@ -338,9 +408,10 @@ bool DeferredRenderTargets::createSceneTextures() {
         return handle.isValid();
     };
 
-    if (!createTexture("DeferredTargets.SceneLighting", m_sceneLightingHandle) ||
-        !createTexture("DeferredTargets.SceneComposite", m_sceneCompositeHandle) ||
-        !createTexture("DeferredTargets.SceneResolved", m_sceneResolvedHandle)) {
+    // SceneLighting and SceneComposite are frame-scoped render-graph
+    // transients published per frame; only SceneResolved stays persistent
+    // because it feeds temporal history across frames.
+    if (!createTexture("DeferredTargets.SceneResolved", m_sceneResolvedHandle)) {
         destroySceneTextures();
         return false;
     }
@@ -352,70 +423,9 @@ void DeferredRenderTargets::destroySceneTextures() {
         return;
     }
 
-    RhiTextureHandle* textures[] = {
-        &m_sceneLightingHandle,
-        &m_sceneCompositeHandle,
-        &m_sceneResolvedHandle
-    };
-    for (RhiTextureHandle* texture : textures) {
-        if (texture->isValid()) {
-            m_rhiDevice->destroyTexture(*texture);
-            *texture = {};
-        }
-    }
-}
-
-bool DeferredRenderTargets::createTransparentCompositeTextures() {
-    if (m_rhiDevice == nullptr) {
-        return false;
-    }
-
-    RhiTextureDesc desc;
-    desc.dimension = RhiTextureDimension::Texture2D;
-    desc.width = static_cast<uint32_t>(m_width);
-    desc.height = static_cast<uint32_t>(m_height);
-    desc.depthOrLayers = 1u;
-    desc.mipLevels = 1u;
-    desc.sampleCount = 1u;
-
-    desc.debugName = "DeferredTargets.TransparentComposite";
-    desc.format = RhiTextureFormat::Rgba16Float;
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                 rhiFlag(RhiTextureUsage::ColorAttachment) |
-                 rhiFlag(RhiTextureUsage::TransferSrc) |
-                 rhiFlag(RhiTextureUsage::TransferDst);
-    m_transparentCompositeHandle = m_rhiDevice->createTexture(desc, nullptr);
-    if (!m_transparentCompositeHandle.isValid()) {
-        return false;
-    }
-
-    // A separate depth attachment prevents feedback while the G-buffer depth is sampled.
-    desc.debugName = "DeferredTargets.TransparentCompositeDepth";
-    desc.format = RhiTextureFormat::Depth32Float;
-    desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                 rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
-                 rhiFlag(RhiTextureUsage::TransferSrc) |
-                 rhiFlag(RhiTextureUsage::TransferDst);
-    m_transparentCompositeDepthHandle = m_rhiDevice->createTexture(desc, nullptr);
-    if (!m_transparentCompositeDepthHandle.isValid()) {
-        destroyTransparentCompositeTextures();
-        return false;
-    }
-    return true;
-}
-
-void DeferredRenderTargets::destroyTransparentCompositeTextures() {
-    if (m_rhiDevice == nullptr) {
-        return;
-    }
-
-    if (m_transparentCompositeHandle.isValid()) {
-        m_rhiDevice->destroyTexture(m_transparentCompositeHandle);
-        m_transparentCompositeHandle = {};
-    }
-    if (m_transparentCompositeDepthHandle.isValid()) {
-        m_rhiDevice->destroyTexture(m_transparentCompositeDepthHandle);
-        m_transparentCompositeDepthHandle = {};
+    if (m_sceneResolvedHandle.isValid()) {
+        m_rhiDevice->destroyTexture(m_sceneResolvedHandle);
+        m_sceneResolvedHandle = {};
     }
 }
 
@@ -451,8 +461,9 @@ bool DeferredRenderTargets::createScreenEffectTextures() {
     const uint32_t height = static_cast<uint32_t>(m_height);
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
+    // Reflection itself is a frame-scoped render-graph transient now; only
+    // the persistent helpers remain here.
     if (!createTexture("DeferredTargets.HalfRes", halfWidth, halfHeight, m_halfResHandle) ||
-        !createTexture("DeferredTargets.Reflection", width, height, m_reflectionHandle) ||
         !createTexture("DeferredTargets.ReflectionTemporalScratch", width, height,
                        m_reflectionTemporalScratchHandle)) {
         destroyScreenEffectTextures();
@@ -468,7 +479,6 @@ void DeferredRenderTargets::destroyScreenEffectTextures() {
 
     RhiTextureHandle* textures[] = {
         &m_halfResHandle,
-        &m_reflectionHandle,
         &m_reflectionTemporalScratchHandle
     };
     for (RhiTextureHandle* texture : textures) {
@@ -507,11 +517,9 @@ bool DeferredRenderTargets::createAtmosphereTextures() {
         return handle.isValid();
     };
 
-    const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
-    const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
-    if (!createTexture("DeferredTargets.Cloud", halfWidth, halfHeight, m_cloudHandle,
-                       rhiFlag(RhiTextureUsage::Storage)) ||
-        !createTexture("DeferredTargets.SkyCapture",
+    // Cloud is a frame-scoped render-graph transient now (half resolution
+    // with Storage usage); only the persistent sky capture stays here.
+    if (!createTexture("DeferredTargets.SkyCapture",
                        static_cast<uint32_t>(kSkyCaptureWidth),
                        static_cast<uint32_t>(kSkyCaptureHeight),
                        m_skyCaptureHandle)) {
@@ -526,12 +534,9 @@ void DeferredRenderTargets::destroyAtmosphereTextures() {
         return;
     }
 
-    RhiTextureHandle* textures[] = {&m_cloudHandle, &m_skyCaptureHandle};
-    for (RhiTextureHandle* texture : textures) {
-        if (texture->isValid()) {
-            m_rhiDevice->destroyTexture(*texture);
-            *texture = {};
-        }
+    if (m_skyCaptureHandle.isValid()) {
+        m_rhiDevice->destroyTexture(m_skyCaptureHandle);
+        m_skyCaptureHandle = {};
     }
 }
 
@@ -1016,15 +1021,9 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_gMaterialHandle.isValid() &&
                             m_gMaterialAuxHandle.isValid() &&
                             m_gDepthHandle.isValid() &&
-                            m_sceneLightingHandle.isValid() &&
-                            m_sceneCompositeHandle.isValid() &&
                             m_sceneResolvedHandle.isValid() &&
-                            m_transparentCompositeHandle.isValid() &&
-                            m_transparentCompositeDepthHandle.isValid() &&
                             m_halfResHandle.isValid() &&
-                            m_reflectionHandle.isValid() &&
                             m_reflectionTemporalScratchHandle.isValid() &&
-                            m_cloudHandle.isValid() &&
                             m_historySceneHandle[0].isValid() &&
                             m_historySceneHandle[1].isValid() &&
                             m_historyDepthHandle[0].isValid() &&
@@ -1656,34 +1655,10 @@ bool DeferredRenderTargets::ensureSsaoHistoryTextureViews(RhiDevice& rhiDevice) 
     return true;
 }
 
-bool DeferredRenderTargets::ensureSceneLightingTextureView(RhiDevice& rhiDevice) {
-    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
-        destroyRhiTextureViews();
-    }
-    if (m_sceneLightingView.isValid()) {
-        return true;
-    }
-
-    if (!m_sceneLightingHandle.isValid()) {
-        return false;
-    }
-
-    RhiTextureViewDesc desc;
-    desc.texture = m_sceneLightingHandle;
-    desc.viewType = RhiTextureViewType::Texture2D;
-    desc.format = RhiTextureFormat::Rgba16Float;
-    desc.baseMip = 0;
-    desc.mipCount = 1;
-    desc.baseLayer = 0;
-    desc.layerCount = 1;
-
-    m_sceneLightingView = rhiDevice.createTextureView(desc);
-    if (!m_sceneLightingView.isValid()) {
-        return false;
-    }
-
-    m_rhiViewDevice = &rhiDevice;
-    return true;
+bool DeferredRenderTargets::ensureSceneLightingTextureView(RhiDevice&) {
+    // SceneLighting is a render-graph transient: the graph publishes its
+    // default view per frame, so this class never creates or destroys one.
+    return m_sceneLightingView.isValid();
 }
 
 bool DeferredRenderTargets::ensureSsgiTextureView(RhiDevice& rhiDevice) {
@@ -1875,34 +1850,10 @@ bool DeferredRenderTargets::ensureSsgiHistoryTextureViews(RhiDevice& rhiDevice) 
     return true;
 }
 
-bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice& rhiDevice) {
-    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
-        destroyRhiTextureViews();
-    }
-    if (m_cloudView.isValid()) {
-        return true;
-    }
-
-    if (!m_cloudHandle.isValid()) {
-        return false;
-    }
-
-    RhiTextureViewDesc desc;
-    desc.texture = m_cloudHandle;
-    desc.viewType = RhiTextureViewType::Texture2D;
-    desc.format = RhiTextureFormat::Rgba16Float;
-    desc.baseMip = 0;
-    desc.mipCount = 1;
-    desc.baseLayer = 0;
-    desc.layerCount = 1;
-
-    m_cloudView = rhiDevice.createTextureView(desc);
-    if (!m_cloudView.isValid()) {
-        return false;
-    }
-
-    m_rhiViewDevice = &rhiDevice;
-    return true;
+bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice&) {
+    // Cloud is a render-graph transient: the graph publishes its default
+    // view per frame, so this class never creates or destroys one.
+    return m_cloudView.isValid();
 }
 
 bool DeferredRenderTargets::ensureSkyCaptureTextureView(RhiDevice& rhiDevice) {
@@ -1935,34 +1886,10 @@ bool DeferredRenderTargets::ensureSkyCaptureTextureView(RhiDevice& rhiDevice) {
     return true;
 }
 
-bool DeferredRenderTargets::ensureReflectionTextureView(RhiDevice& rhiDevice) {
-    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
-        destroyRhiTextureViews();
-    }
-    if (m_reflectionView.isValid()) {
-        return true;
-    }
-
-    if (!m_reflectionHandle.isValid()) {
-        return false;
-    }
-
-    RhiTextureViewDesc desc;
-    desc.texture = m_reflectionHandle;
-    desc.viewType = RhiTextureViewType::Texture2D;
-    desc.format = RhiTextureFormat::Rgba16Float;
-    desc.baseMip = 0;
-    desc.mipCount = 1;
-    desc.baseLayer = 0;
-    desc.layerCount = 1;
-
-    m_reflectionView = rhiDevice.createTextureView(desc);
-    if (!m_reflectionView.isValid()) {
-        return false;
-    }
-
-    m_rhiViewDevice = &rhiDevice;
-    return true;
+bool DeferredRenderTargets::ensureReflectionTextureView(RhiDevice&) {
+    // Reflection is a render-graph transient: the graph publishes its
+    // default view per frame, so this class never creates or destroys one.
+    return m_reflectionView.isValid();
 }
 
 bool DeferredRenderTargets::ensureReflectionTemporalScratchTextureView(RhiDevice& rhiDevice) {
@@ -1995,34 +1922,10 @@ bool DeferredRenderTargets::ensureReflectionTemporalScratchTextureView(RhiDevice
     return true;
 }
 
-bool DeferredRenderTargets::ensureSceneCompositeTextureView(RhiDevice& rhiDevice) {
-    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
-        destroyRhiTextureViews();
-    }
-    if (m_sceneCompositeView.isValid()) {
-        return true;
-    }
-
-    if (!m_sceneCompositeHandle.isValid()) {
-        return false;
-    }
-
-    RhiTextureViewDesc desc;
-    desc.texture = m_sceneCompositeHandle;
-    desc.viewType = RhiTextureViewType::Texture2D;
-    desc.format = RhiTextureFormat::Rgba16Float;
-    desc.baseMip = 0;
-    desc.mipCount = 1;
-    desc.baseLayer = 0;
-    desc.layerCount = 1;
-
-    m_sceneCompositeView = rhiDevice.createTextureView(desc);
-    if (!m_sceneCompositeView.isValid()) {
-        return false;
-    }
-
-    m_rhiViewDevice = &rhiDevice;
-    return true;
+bool DeferredRenderTargets::ensureSceneCompositeTextureView(RhiDevice&) {
+    // SceneComposite is a render-graph transient: the graph publishes its
+    // default view per frame, so this class never creates or destroys one.
+    return m_sceneCompositeView.isValid();
 }
 
 bool DeferredRenderTargets::ensureSceneResolvedTextureView(RhiDevice& rhiDevice) {
@@ -2294,61 +2197,12 @@ bool DeferredRenderTargets::ensureHistoryCloudTextureViews(RhiDevice& rhiDevice)
     return true;
 }
 
-bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice& rhiDevice) {
-    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
-        destroyRhiTextureViews();
-    }
-    if (m_transparentCompositeView.isValid() && m_transparentCompositeDepthView.isValid()) {
-        return true;
-    }
-
-    if (!m_transparentCompositeHandle.isValid() || !m_transparentCompositeDepthHandle.isValid()) {
-        return false;
-    }
-
-    if (m_transparentCompositeView.isValid()) {
-        rhiDevice.destroyTextureView(m_transparentCompositeView);
-        m_transparentCompositeView = {};
-    }
-    if (m_transparentCompositeDepthView.isValid()) {
-        rhiDevice.destroyTextureView(m_transparentCompositeDepthView);
-        m_transparentCompositeDepthView = {};
-    }
-
-    RhiTextureViewDesc colorDesc;
-    colorDesc.texture = m_transparentCompositeHandle;
-    colorDesc.viewType = RhiTextureViewType::Texture2D;
-    colorDesc.format = RhiTextureFormat::Rgba16Float;
-    colorDesc.baseMip = 0;
-    colorDesc.mipCount = 1;
-    colorDesc.baseLayer = 0;
-    colorDesc.layerCount = 1;
-
-    RhiTextureViewDesc depthDesc;
-    depthDesc.texture = m_transparentCompositeDepthHandle;
-    depthDesc.viewType = RhiTextureViewType::Texture2D;
-    depthDesc.format = RhiTextureFormat::Depth32Float;
-    depthDesc.baseMip = 0;
-    depthDesc.mipCount = 1;
-    depthDesc.baseLayer = 0;
-    depthDesc.layerCount = 1;
-
-    m_transparentCompositeView = rhiDevice.createTextureView(colorDesc);
-    m_transparentCompositeDepthView = rhiDevice.createTextureView(depthDesc);
-    if (!m_transparentCompositeView.isValid() || !m_transparentCompositeDepthView.isValid()) {
-        if (m_transparentCompositeView.isValid()) {
-            rhiDevice.destroyTextureView(m_transparentCompositeView);
-        }
-        if (m_transparentCompositeDepthView.isValid()) {
-            rhiDevice.destroyTextureView(m_transparentCompositeDepthView);
-        }
-        m_transparentCompositeView = {};
-        m_transparentCompositeDepthView = {};
-        return false;
-    }
-
-    m_rhiViewDevice = &rhiDevice;
-    return true;
+bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice&) {
+    // TransparentComposite and its depth are render-graph transients: the
+    // graph publishes their default views per frame, so this class never
+    // creates or destroys them.
+    return m_transparentCompositeView.isValid() &&
+           m_transparentCompositeDepthView.isValid();
 }
 
 bool DeferredRenderTargets::ensureHalfResTextureView(RhiDevice& rhiDevice) {
@@ -2661,9 +2515,9 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
-    if (m_rhiViewDevice != nullptr && m_sceneLightingView.isValid()) {
-        m_rhiViewDevice->destroyTextureView(m_sceneLightingView);
-    }
+    // SceneLighting/SceneComposite/TransparentComposite/Reflection/Cloud
+    // views are graph-owned per-frame publications; they are only reset
+    // below, never destroyed here.
     if (m_rhiViewDevice != nullptr && m_ssgiView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_ssgiView);
     }
@@ -2694,29 +2548,14 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     if (m_rhiViewDevice != nullptr && m_ssgiTemporalMomentsView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_ssgiTemporalMomentsView);
     }
-    if (m_rhiViewDevice != nullptr && m_sceneCompositeView.isValid()) {
-        m_rhiViewDevice->destroyTextureView(m_sceneCompositeView);
-    }
     if (m_rhiViewDevice != nullptr && m_sceneResolvedView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_sceneResolvedView);
-    }
-    if (m_rhiViewDevice != nullptr && m_transparentCompositeView.isValid()) {
-        m_rhiViewDevice->destroyTextureView(m_transparentCompositeView);
-    }
-    if (m_rhiViewDevice != nullptr && m_transparentCompositeDepthView.isValid()) {
-        m_rhiViewDevice->destroyTextureView(m_transparentCompositeDepthView);
     }
     if (m_rhiViewDevice != nullptr && m_halfResView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_halfResView);
     }
-    if (m_rhiViewDevice != nullptr && m_reflectionView.isValid()) {
-        m_rhiViewDevice->destroyTextureView(m_reflectionView);
-    }
     if (m_rhiViewDevice != nullptr && m_reflectionTemporalScratchView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_reflectionTemporalScratchView);
-    }
-    if (m_rhiViewDevice != nullptr && m_cloudView.isValid()) {
-        m_rhiViewDevice->destroyTextureView(m_cloudView);
     }
     if (m_rhiViewDevice != nullptr && m_skyCaptureView.isValid()) {
         m_rhiViewDevice->destroyTextureView(m_skyCaptureView);
@@ -2829,7 +2668,6 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroyRhiTextureViews();
     destroyGBufferTextures();
     destroySceneTextures();
-    destroyTransparentCompositeTextures();
     destroyScreenEffectTextures();
     destroyAtmosphereTextures();
     destroySceneHistoryTextures();
@@ -2838,6 +2676,14 @@ void DeferredRenderTargets::unregisterRhiTextures() {
     destroySsaoTextures();
     destroySsgiTextures();
     destroyCsmShadowTextures();
+    // Graph-published transient targets are owned by the render graph; drop
+    // the non-owning handles without destroying any device resources.
+    m_sceneLightingHandle = {};
+    m_sceneCompositeHandle = {};
+    m_transparentCompositeHandle = {};
+    m_transparentCompositeDepthHandle = {};
+    m_reflectionHandle = {};
+    m_cloudHandle = {};
 }
 
 void DeferredRenderTargets::destroyFramebuffers() {

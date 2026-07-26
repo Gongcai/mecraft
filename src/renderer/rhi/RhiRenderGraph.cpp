@@ -1335,6 +1335,22 @@ RgCompileResult RenderGraph::compile() {
   return {};
 }
 
+RhiTextureHandle
+RenderGraph::resolvedTexture(const RgTextureHandle handle) const {
+  if (m_currentResolvedTextures == nullptr || handle.index == 0u ||
+      handle.index > m_currentResolvedTextures->size())
+    return {};
+  return (*m_currentResolvedTextures)[handle.index - 1u];
+}
+
+RhiTextureViewHandle
+RenderGraph::resolvedTextureView(const RgTextureHandle handle) const {
+  if (m_currentResolvedTextureViews == nullptr || handle.index == 0u ||
+      handle.index > m_currentResolvedTextureViews->size())
+    return {};
+  return (*m_currentResolvedTextureViews)[handle.index - 1u];
+}
+
 bool RenderGraph::lookupTextureRequirements(
     RhiDevice &device, const RhiTextureDesc &desc,
     RhiTextureMemoryRequirements &requirements) {
@@ -1543,6 +1559,74 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
   std::vector<uint32_t> transientBufferIndices(
       m_buffers.size(), std::numeric_limits<uint32_t>::max());
 
+  // Trim pooled transients that no frame graph has claimed for many
+  // generations so a temporarily larger graph does not pin its peak memory
+  // forever. A 300-generation lag also guarantees the GPU finished with the
+  // resource long ago. This must run before the resolution loop below:
+  // erasing pool entries would otherwise invalidate the allocation indices
+  // stored in transientTextureIndices/transientBufferIndices.
+  {
+    constexpr uint32_t kTransientTrimGenerationLag = 300u;
+    // claimedGeneration 0 marks entries that never carry a claim stamp
+    // (placed page members); m_generation wrapping below a stored stamp is
+    // treated as fresh rather than risking a bogus huge distance.
+    const auto isStale = [this](const uint32_t generation) {
+      return generation != 0u && m_generation > generation &&
+             m_generation - generation > kTransientTrimGenerationLag;
+    };
+    // Alias pages first: placed members never update claimedGeneration, so
+    // staleness is judged by the page's claimsGeneration. A trimmed page
+    // keeps its slot (pageIndex references in other members stay valid) but
+    // is marked dead by zeroed requirements, which can never satisfy a
+    // placement request again. Its placed members are destroyed with it.
+    for (uint32_t pageIndex = 0u; pageIndex < m_aliasPages.size();
+         ++pageIndex) {
+      AliasPage &page = m_aliasPages[pageIndex];
+      if (!page.memory.isValid() || !isStale(page.claimsGeneration))
+        continue;
+      for (auto it = m_transientTextures.begin();
+           it != m_transientTextures.end();) {
+        if (it->pageIndex == pageIndex) {
+          if (it->view.isValid())
+            device.destroyTextureView(it->view);
+          if (it->texture.isValid())
+            device.destroyTexture(it->texture);
+          it = m_transientTextures.erase(it);
+        } else {
+          ++it;
+        }
+      }
+      device.destroyTextureMemory(page.memory);
+      page.memory = {};
+      page.requirements = {};
+      page.frameClaims.clear();
+      page.claimsGeneration = 0u;
+    }
+    for (auto it = m_transientTextures.begin();
+         it != m_transientTextures.end();) {
+      if (it->pageIndex == kRgInvalidPassIndex &&
+          isStale(it->claimedGeneration)) {
+        if (it->view.isValid())
+          device.destroyTextureView(it->view);
+        if (it->texture.isValid())
+          device.destroyTexture(it->texture);
+        it = m_transientTextures.erase(it);
+      } else {
+        ++it;
+      }
+    }
+    for (auto it = m_transientBuffers.begin();
+         it != m_transientBuffers.end();) {
+      if (isStale(it->claimedGeneration)) {
+        if (it->buffer.isValid())
+          device.destroyBuffer(it->buffer);
+        it = m_transientBuffers.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   const bool aliasingActive =
       m_textureAliasingEnabled && device.capabilities().textureAliasing;
   m_transientMemoryStats.aliasedRequestBytes = 0u;
@@ -1622,9 +1706,13 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
   }
 
   m_transientMemoryStats.totalPageBytes = 0u;
-  m_transientMemoryStats.pageCount =
-      static_cast<uint32_t>(m_aliasPages.size());
+  m_transientMemoryStats.pageCount = 0u;
   for (const AliasPage &page : m_aliasPages) {
+    // Trimmed page slots stay in the vector as dead markers; only live
+    // pages count toward the memory statistics.
+    if (!page.memory.isValid())
+      continue;
+    ++m_transientMemoryStats.pageCount;
     m_transientMemoryStats.totalPageBytes += page.requirements.sizeBytes;
   }
 
@@ -1662,6 +1750,21 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     resolvedBuffers[index] = allocation->buffer;
     transientBufferIndices[index] =
         static_cast<uint32_t>(allocation - m_transientBuffers.data());
+  }
+
+  // Expose the resolved transient handles for the pre-record hook and pass
+  // callbacks; cleared on every exit path from this function.
+  struct ResolvedScope {
+    RenderGraph &graph;
+    ~ResolvedScope() {
+      graph.m_currentResolvedTextures = nullptr;
+      graph.m_currentResolvedTextureViews = nullptr;
+    }
+  } resolvedScope{*this};
+  m_currentResolvedTextures = &resolvedTextures;
+  m_currentResolvedTextureViews = &resolvedTextureViews;
+  if (m_preRecordCallback) {
+    m_preRecordCallback();
   }
 
   std::vector<RhiCommandList *> commandLists;

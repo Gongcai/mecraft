@@ -360,6 +360,13 @@ struct OcclusionSettings {
     bool hiZEnabled = true;
 };
 
+/// Render graph scheduling and memory configuration.
+struct RenderGraphSettings {
+    /// Place lifetime-disjoint transient textures on shared memory pages.
+    /// Only takes effect on backends reporting texture aliasing support.
+    bool textureAliasingEnabled = true;
+};
+
 struct RenderSettings {
     PipelineMode pipelineMode = PipelineMode::Deferred;
 
@@ -371,6 +378,7 @@ struct RenderSettings {
     VolumetricSettings volumetric;
     CloudSettings cloud;
     OcclusionSettings occlusion;
+    RenderGraphSettings renderGraph;
     ReflectionSettings reflection;
     TransparentSettings transparent;
     BlockMaterialMapSettings blockMaterialMaps;

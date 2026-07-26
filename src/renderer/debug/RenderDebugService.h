@@ -109,6 +109,14 @@ struct RenderGraphFrameStats {
     double gpuSpanMs = 0.0;
     /// Span minus total: scheduling bubbles between passes.
     double gpuIdleMs = 0.0;
+    /// Transient textures placed on shared alias pages this frame.
+    uint32_t aliasedTextureCount = 0u;
+    /// Live shared alias pages backing placed transients.
+    uint32_t aliasPageCount = 0u;
+    /// Bytes the aliased transients would need as dedicated images.
+    uint64_t aliasedRequestBytes = 0u;
+    /// Total bytes allocated across all live shared alias pages.
+    uint64_t aliasTotalPageBytes = 0u;
     std::vector<RenderGraphPassStats> passes;
 };
 

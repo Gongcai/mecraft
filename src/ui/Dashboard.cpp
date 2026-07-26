@@ -1060,6 +1060,17 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     shadowCull.culled[2], shadowCull.total[2],
                     shadowCull.culled[3], shadowCull.total[3]);
             }
+            if (graphStats.aliasedTextureCount > 0u) {
+                constexpr double kBytesPerMegabyte = 1024.0 * 1024.0;
+                ImGui::Text(
+                    "Alias: %u tex  %u pages  %.1f -> %.1f MB",
+                    graphStats.aliasedTextureCount,
+                    graphStats.aliasPageCount,
+                    static_cast<double>(graphStats.aliasedRequestBytes) /
+                        kBytesPerMegabyte,
+                    static_cast<double>(graphStats.aliasTotalPageBytes) /
+                        kBytesPerMegabyte);
+            }
             if (graphStats.passes.empty()) {
                 ImGui::Text("GPU timings: waiting");
             } else {
@@ -1468,6 +1479,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("Async Compute SSAO", &settings.ssao.asyncComputeEnabled);
         pipelineChanged |= ImGui::Checkbox("Hi-Z Occlusion Culling", &settings.occlusion.hiZEnabled);
+        pipelineChanged |= ImGui::Checkbox("Texture Aliasing", &settings.renderGraph.textureAliasingEnabled);
         pipelineChanged |= ImGui::Checkbox("SSGI", &settings.ssgi.enabled);
         ImGui::SameLine();
         if (ImGui::Button("SSGI View")) {

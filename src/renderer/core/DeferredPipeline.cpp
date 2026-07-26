@@ -438,19 +438,45 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
 bool DeferredPipeline::recordDeferredAuxiliaryClear(
     RhiCommandList& commandList,
-    DeferredRenderTargets& targets) {
+    DeferredRenderTargets& targets,
+    const bool clearReflection,
+    const bool clearSceneComposite,
+    const bool clearCloud) {
+    // The reflection/sceneComposite/cloud transients are cleared only when
+    // their producer pass is skipped this frame; the flags must mirror the
+    // writeTexture declarations of the AuxiliaryClear pass exactly.
     RhiColorAttachment sceneAttachments[3];
-    setClearAttachment(sceneAttachments[0], targets.reflectionTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
-    setClearAttachment(sceneAttachments[1], targets.sceneCompositeTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
-    setClearAttachment(sceneAttachments[2], targets.sceneResolvedTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
+    uint32_t sceneAttachmentCount = 0u;
+    if (clearReflection) {
+        setClearAttachment(sceneAttachments[sceneAttachmentCount++],
+                           targets.reflectionTextureViewHandle(),
+                           0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    if (clearSceneComposite) {
+        setClearAttachment(sceneAttachments[sceneAttachmentCount++],
+                           targets.sceneCompositeTextureViewHandle(),
+                           0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    setClearAttachment(sceneAttachments[sceneAttachmentCount++],
+                       targets.sceneResolvedTextureViewHandle(),
+                       0.0f, 0.0f, 0.0f, 1.0f);
     clearColorAttachments(commandList, "DeferredAuxiliarySceneClear",
-                          targets.width(), targets.height(), sceneAttachments, 3u);
+                          targets.width(), targets.height(), sceneAttachments,
+                          sceneAttachmentCount);
 
     RhiColorAttachment halfResAttachments[2];
-    setClearAttachment(halfResAttachments[0], targets.cloudTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
-    setClearAttachment(halfResAttachments[1], targets.ssgiHalfResTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
+    uint32_t halfResAttachmentCount = 0u;
+    if (clearCloud) {
+        setClearAttachment(halfResAttachments[halfResAttachmentCount++],
+                           targets.cloudTextureViewHandle(),
+                           0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    setClearAttachment(halfResAttachments[halfResAttachmentCount++],
+                       targets.ssgiHalfResTextureViewHandle(),
+                       0.0f, 0.0f, 0.0f, 0.0f);
     clearColorAttachments(commandList, "DeferredAuxiliaryHalfResClear",
-                          targets.halfWidth(), targets.halfHeight(), halfResAttachments, 2u);
+                          targets.halfWidth(), targets.halfHeight(),
+                          halfResAttachments, halfResAttachmentCount);
 
     RhiColorAttachment ssgiAttachments[8];
     setClearAttachment(ssgiAttachments[0], targets.ssgiTextureViewHandle(), 0.0f, 0.0f, 0.0f, 0.0f);
@@ -513,17 +539,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     const bool dofEnabled = settings.postProcess.dofEnabled;
     const bool volumetricTemporalEnabled =
         settings.volumetric.temporalEnabled && hasPreviousFrame;
+    // SceneLighting/SceneComposite/TransparentComposite/Reflection/Cloud are
+    // render-graph transients: their views are published inside execute(),
+    // so no ensure* call may run for them before the graph resolves.
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
-        !targets.ensureSceneLightingTextureView(rhiDevice) ||
-        !targets.ensureReflectionTextureView(rhiDevice) ||
-        !targets.ensureCloudTextureView(rhiDevice) ||
-        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
         !targets.ensureSceneResolvedTextureView(rhiDevice) ||
         !targets.ensureHistorySceneTextureViews(rhiDevice) ||
         !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
-        !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
         !targets.ensureHalfResTextureView(rhiDevice) ||
         !targets.ensureHistoryVolumetricTextureViews(rhiDevice) ||
         !targets.ensureHistoryDepthTextureViews(rhiDevice) ||
@@ -612,6 +636,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     const auto graphBuildStart = std::chrono::steady_clock::now();
     m_renderGraph.reset();
+    // Aliasing only takes effect on backends reporting textureAliasing; the
+    // setting is forwarded every frame so dashboard toggles apply instantly.
+    m_renderGraph.setTextureAliasingEnabled(
+        settings.renderGraph.textureAliasingEnabled);
     // The composite stages below always write sceneResolved, so every frame
     // graph starts its scene color ping-pong chain at index 0.
     targets.resetSceneColorChain();
@@ -768,13 +796,73 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
     const RhiTextureHandle rippleNormalTexture =
         m_resourceMgr->getTexture2DHandle("shader_ripple_normal");
-    if (!importTexture(targets.reflectionTextureHandle(),
-                       targets.reflectionTextureViewHandle(),
-                       RhiResourceState::ShaderRead, reflection) ||
-        !importTexture(targets.sceneCompositeTextureHandle(),
-                       targets.sceneCompositeTextureViewHandle(),
-                       RhiResourceState::ShaderRead, sceneComposite) ||
-        !importTexture(targets.sceneResolvedTextureHandle(),
+
+    // Frame-scoped scene targets are declared as graph transients: every one
+    // is fully rewritten before it is read each frame, so the lifetime-aware
+    // allocator may alias their memory with other single-frame textures.
+    sceneLighting = m_renderGraph.createTexture(
+        {"Deferred.SceneLighting",
+         targets.transientTargetDesc(DeferredTransientTarget::SceneLighting),
+         RhiResourceState::Undefined});
+    sceneComposite = m_renderGraph.createTexture(
+        {"Deferred.SceneComposite",
+         targets.transientTargetDesc(DeferredTransientTarget::SceneComposite),
+         RhiResourceState::Undefined});
+    transparentComposite = m_renderGraph.createTexture(
+        {"Deferred.TransparentComposite",
+         targets.transientTargetDesc(
+             DeferredTransientTarget::TransparentComposite),
+         RhiResourceState::Undefined});
+    transparentCompositeDepth = m_renderGraph.createTexture(
+        {"Deferred.TransparentCompositeDepth",
+         targets.transientTargetDesc(
+             DeferredTransientTarget::TransparentCompositeDepth),
+         RhiResourceState::Undefined});
+    reflection = m_renderGraph.createTexture(
+        {"Deferred.Reflection",
+         targets.transientTargetDesc(DeferredTransientTarget::Reflection),
+         RhiResourceState::Undefined});
+    cloud = m_renderGraph.createTexture(
+        {"Deferred.Cloud",
+         targets.transientTargetDesc(DeferredTransientTarget::Cloud),
+         RhiResourceState::Undefined});
+    if (!sceneLighting.isValid() || !sceneComposite.isValid() ||
+        !transparentComposite.isValid() ||
+        !transparentCompositeDepth.isValid() || !reflection.isValid() ||
+        !cloud.isValid()) {
+        return failGraphSetup();
+    }
+
+    // Publish the resolved transient handles into DeferredRenderTargets right
+    // before recording so every pass body keeps using the existing accessors.
+    // The six graph handles are captured by value; `targets` is owned by
+    // m_shared and outlives the graph execution.
+    {
+        DeferredRenderTargets* const targetsPointer = &targets;
+        m_renderGraph.setPreRecordCallback(
+            [this, targetsPointer, sceneLighting, sceneComposite,
+             transparentComposite, transparentCompositeDepth, reflection,
+             cloud]() {
+                const auto publish = [this, targetsPointer](
+                                         const DeferredTransientTarget target,
+                                         const RgTextureHandle handle) {
+                    targetsPointer->publishTransientTarget(
+                        target, m_renderGraph.resolvedTexture(handle),
+                        m_renderGraph.resolvedTextureView(handle));
+                };
+                publish(DeferredTransientTarget::SceneLighting, sceneLighting);
+                publish(DeferredTransientTarget::SceneComposite,
+                        sceneComposite);
+                publish(DeferredTransientTarget::TransparentComposite,
+                        transparentComposite);
+                publish(DeferredTransientTarget::TransparentCompositeDepth,
+                        transparentCompositeDepth);
+                publish(DeferredTransientTarget::Reflection, reflection);
+                publish(DeferredTransientTarget::Cloud, cloud);
+            });
+    }
+
+    if (!importTexture(targets.sceneResolvedTextureHandle(),
                        targets.sceneResolvedTextureViewHandle(),
                        RhiResourceState::ShaderRead, sceneResolved) ||
         !importTexture(targets.temporalCurrentTextureHandle(),
@@ -788,15 +876,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !importTexture(targets.historySceneTexturePrevHandle(),
                        targets.historySceneTexturePrevViewHandle(),
                        RhiResourceState::ShaderRead, historyScenePrevious) ||
-        !importTexture(targets.transparentCompositeTextureHandle(),
-                       targets.transparentCompositeTextureViewHandle(),
-                       RhiResourceState::ShaderRead, transparentComposite) ||
-        !importTexture(targets.transparentCompositeDepthTextureHandle(),
-                       targets.transparentCompositeDepthTextureViewHandle(),
-                       RhiResourceState::DepthRead, transparentCompositeDepth) ||
-        !importTexture(targets.cloudTextureHandle(),
-                       targets.cloudTextureViewHandle(),
-                       RhiResourceState::ShaderRead, cloud) ||
         !importTexture(targets.halfResTextureHandle(),
                        targets.halfResTextureViewHandle(),
                        RhiResourceState::ShaderRead, halfRes) ||
@@ -839,9 +918,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        RhiResourceState::ShaderRead, sceneCaptureColor) ||
         !importTexture(ctx.sceneCaptureDepthTexture, ctx.sceneCaptureDepthView,
                        RhiResourceState::DepthRead, sceneCaptureDepth) ||
-        !importTexture(targets.sceneLightingTextureHandle(),
-                       targets.sceneLightingTextureViewHandle(),
-                       RhiResourceState::ShaderRead, sceneLighting) ||
         !importTexture(lightmapDayTexture, {}, RhiResourceState::ShaderRead,
                        lightmapDay) ||
         !importTexture(lightmapNightTexture, {}, RhiResourceState::ShaderRead,
@@ -920,13 +996,34 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     ssaoResources.noise = skyNoise;
 
+    // Reflection, sceneComposite, and cloud are transients whose producer
+    // passes fully rewrite them when they run (reflection chain, the
+    // SceneComposite pass with LoadOp::Clear attachments, and the cloud pass
+    // including its history-copy skip branch). Clearing them here anyway
+    // would extend their transient lifetimes to the frame start and defeat
+    // memory aliasing, so both the write declarations and the recorded
+    // clears run only when the matching producer pass is skipped this frame.
+    const bool reflectionPassAdded = settings.debug.deferredLightDebugMode <= 0;
+    const bool sceneCompositePassAdded =
+        settings.debug.deferredLightDebugMode <= 0;
+    const bool cloudPassAdded = cloudEnabled;
+    const bool auxClearReflection = !reflectionPassAdded;
+    const bool auxClearSceneComposite = !sceneCompositePassAdded;
+    const bool auxClearCloud = !cloudPassAdded;
     RenderGraphPassBuilder auxiliaryClear = m_renderGraph.addPass(
         {"Deferred.AuxiliaryClear", RgPassType::Graphics,
          RhiQueueType::Graphics});
-    auxiliaryClear.writeTexture(reflection, RhiResourceState::RenderTarget)
-        .writeTexture(sceneComposite, RhiResourceState::RenderTarget)
-        .writeTexture(sceneResolved, RhiResourceState::RenderTarget)
-        .writeTexture(cloud, RhiResourceState::RenderTarget)
+    if (auxClearReflection) {
+        auxiliaryClear.writeTexture(reflection, RhiResourceState::RenderTarget);
+    }
+    if (auxClearSceneComposite) {
+        auxiliaryClear.writeTexture(sceneComposite,
+                                    RhiResourceState::RenderTarget);
+    }
+    if (auxClearCloud) {
+        auxiliaryClear.writeTexture(cloud, RhiResourceState::RenderTarget);
+    }
+    auxiliaryClear.writeTexture(sceneResolved, RhiResourceState::RenderTarget)
         .writeTexture(ssgiHalfRes, RhiResourceState::RenderTarget)
         .writeTexture(ssgi, RhiResourceState::RenderTarget)
         .writeTexture(ssgiDenoise0, RhiResourceState::RenderTarget)
@@ -936,8 +1033,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         .writeTexture(weatherMask, RhiResourceState::RenderTarget)
         .writeTexture(reactiveMask, RhiResourceState::RenderTarget)
         .writeTexture(transparencyMask, RhiResourceState::RenderTarget)
-        .setExecute([&](RgPassContext& pass) {
-            return recordDeferredAuxiliaryClear(pass.commandList(), targets);
+        .setExecute([&, auxClearReflection, auxClearSceneComposite,
+                     auxClearCloud](RgPassContext& pass) {
+            return recordDeferredAuxiliaryClear(
+                pass.commandList(), targets, auxClearReflection,
+                auxClearSceneComposite, auxClearCloud);
         });
     RgPassHandle graphTail = auxiliaryClear.handle();
 
@@ -1925,6 +2025,12 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
         static_cast<uint32_t>(m_renderGraph.compiledPasses().size());
     stats.batchCount =
         static_cast<uint32_t>(m_renderGraph.submissionBatches().size());
+    const RgTransientMemoryStats& transientStats =
+        m_renderGraph.transientMemoryStats();
+    stats.aliasedTextureCount = transientStats.aliasedTextureCount;
+    stats.aliasPageCount = transientStats.pageCount;
+    stats.aliasedRequestBytes = transientStats.aliasedRequestBytes;
+    stats.aliasTotalPageBytes = transientStats.totalPageBytes;
 
     const RgTimingSnapshot& timings = m_renderGraph.latestTimings();
     stats.execution = timings.execution;
