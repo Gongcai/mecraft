@@ -116,8 +116,8 @@ private:
     // Private orchestration methods
     void clearDeferredAuxiliaryTargets();
     void updateDeferredHistoryTargets();
-    [[nodiscard]] bool executeGeometryGraph(const FrameContext& ctx,
-                                            const RenderSettings& settings);
+    [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx,
+                                         const RenderSettings& settings);
     [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList,
                                             const FrameContext& ctx,
                                             const RenderSettings& settings);

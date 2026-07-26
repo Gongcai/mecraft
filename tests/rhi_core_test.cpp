@@ -984,6 +984,21 @@ bool testRenderDebugServiceTimestampSegments() {
         service.beginGpuTimer(discardedCommandList, GpuTimerPass::Cloud);
     service.cancelGpuTimer(discardedSegment);
     submitTestCommands(device, commandPool, discardedCommandList);
+
+    const GpuTimerCheckpoint checkpoint = service.gpuTimerCheckpoint();
+    RhiCommandList& discardedBatchCommandList = beginTestCommands(device, commandPool);
+    const GpuTimerSegmentToken discardedBatchSegment =
+        service.beginGpuTimer(discardedBatchCommandList, GpuTimerPass::Cloud);
+    service.endGpuTimer(discardedBatchCommandList, discardedBatchSegment);
+    service.cancelGpuTimersSince(checkpoint);
+    submitTestCommands(device, commandPool, discardedBatchCommandList);
+
+    if (!requireTrue(service.beginShadowFrame(1, 64),
+                     "shadow timestamp frame must begin after query reset")) return false;
+    service.cancelShadowFrame();
+    if (!requireTrue(service.beginShadowFrame(1, 64),
+                     "cancelled shadow timestamp frame must release active state")) return false;
+    service.cancelShadowFrame();
     glFinish();
 
     for (int frame = 0; frame < 4; ++frame) {

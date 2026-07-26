@@ -391,6 +391,41 @@ void RenderDebugService::cancelGpuTimer(const GpuTimerSegmentToken token) {
         GpuTimerSegmentState::Unused;
 }
 
+GpuTimerCheckpoint RenderDebugService::gpuTimerCheckpoint() const {
+    if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame) {
+        return {};
+    }
+    return {
+        m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex],
+        static_cast<uint8_t>(m_gpuTimerWriteIndex),
+        true
+    };
+}
+
+void RenderDebugService::cancelGpuTimersSince(const GpuTimerCheckpoint& checkpoint) {
+    if (!checkpoint.valid) {
+        return;
+    }
+    if (!m_gpuTimersInitialized || checkpoint.frameIndex != m_gpuTimerWriteIndex) {
+        std::abort();
+    }
+    for (size_t passIndex = 0; passIndex < GPU_TIMER_PASS_COUNT; ++passIndex) {
+        const size_t firstSegment = checkpoint.segmentCounts[passIndex];
+        const size_t allocatedSegments =
+            m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex];
+        if (firstSegment > allocatedSegments) {
+            std::abort();
+        }
+        for (size_t segment = firstSegment; segment < allocatedSegments; ++segment) {
+            GpuTimerSegmentState& state =
+                m_gpuTimerSegmentStates[m_gpuTimerWriteIndex][passIndex][segment];
+            state = GpuTimerSegmentState::Unused;
+        }
+        m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex][passIndex] =
+            checkpoint.segmentCounts[passIndex];
+    }
+}
+
 bool RenderDebugService::beginShadowFrame(const int cascadeCount, const int shadowResolution) {
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame || m_shadowFrameActive) {
         return false;
@@ -465,6 +500,18 @@ void RenderDebugService::endShadowFrame() {
         }
     }
     m_shadowFrameIssued[m_gpuTimerWriteIndex] = true;
+    m_shadowFrameActive = false;
+}
+
+void RenderDebugService::cancelShadowFrame() {
+    if (!m_shadowFrameActive) {
+        return;
+    }
+    for (auto& cascade : m_shadowTimestampIssued[m_gpuTimerWriteIndex]) {
+        cascade.fill(false);
+    }
+    m_shadowFrameSlots[m_gpuTimerWriteIndex] = ShadowFrameStats{};
+    m_shadowFrameIssued[m_gpuTimerWriteIndex] = false;
     m_shadowFrameActive = false;
 }
 

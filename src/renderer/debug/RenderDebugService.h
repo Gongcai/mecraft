@@ -34,6 +34,13 @@ struct GpuTimerSegmentToken {
     bool valid = false;
 };
 
+/// Captures timer allocation state before recording an unsubmitted command batch.
+struct GpuTimerCheckpoint {
+    std::array<uint8_t, static_cast<size_t>(GpuTimerPass::Count)> segmentCounts{};
+    uint8_t frameIndex = 0;
+    bool valid = false;
+};
+
 /// Frustum plane identifiers for culling statistics.
 enum class FrustumPlane : size_t {
     Left = 0,
@@ -195,6 +202,12 @@ public:
     /// Discard a segment whose command list will not be submitted.
     void cancelGpuTimer(GpuTimerSegmentToken token);
 
+    /// Captures all timer allocation counts before an atomic command batch is recorded.
+    [[nodiscard]] GpuTimerCheckpoint gpuTimerCheckpoint() const;
+
+    /// Discards every timer allocated after a checkpoint when its batch was not submitted.
+    void cancelGpuTimersSince(const GpuTimerCheckpoint& checkpoint);
+
     /// Enable or disable GPU timer queries.
     void setGpuTimerEnabled(bool enabled) { m_gpuTimerEnabled = enabled; }
     [[nodiscard]] bool isGpuTimerEnabled() const { return m_gpuTimerEnabled; }
@@ -210,6 +223,8 @@ public:
                              int cascadeIndex,
                              ShadowTimestampPoint point);
     void endShadowFrame();
+    /// Discards an active shadow frame whose timestamp command list was not submitted.
+    void cancelShadowFrame();
     [[nodiscard]] const ShadowFrameStats& getShadowFrameStats() const { return m_shadowFrameStats; }
 
     // Culling statistics (updated by the rendering pipeline)

@@ -135,6 +135,9 @@ public:
     void free(const WorldGpuMesh& mesh);
 
     void beginFrame();
+    /// Clears per-draw command streams without releasing resources referenced by
+    /// command lists that are still being recorded.
+    void resetDrawCommands();
     void captureSceneFrameStats();
     void mergeSceneWaterFrameStats();
 

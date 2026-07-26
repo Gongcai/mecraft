@@ -3,11 +3,13 @@
 
 #include "RenderPass.h"
 #include "../mesh/TerrainRenderer.h"
-#include "../mesh/WorldDrawBatch.h"
+#include "../debug/RenderDebugService.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 #include "../rhi/RhiTypes.h"
 #include <glm/glm.hpp>
 #include <array>
+#include <cstdint>
 #include <vector>
 
 #include "renderer/core/FrameContext.h"
@@ -49,23 +51,40 @@ public:
     void setDropSystem(DropSystem* ds) { m_dropSystem = ds; }
     void setGameplayRegistry(ecs::GameplayRegistry* reg) { m_gameplayRegistry = reg; }
 
-    /// Execute the full CSM shadow pass for all cascades.
-    /// Camera data is extracted from FrameContext internally.
-    /// @param ctx Frame context (camera, sky, timing)
-    /// @param settings Render settings (shadow parameters)
-    /// @param targets Deferred render targets (shadow FBOs)
-    /// @param world World for chunk queries
-    /// @param preservedTransparentBatch Transparent batch to save/restore around the pass
-    /// @param preservedTransparentPlan Transparent plan to save/restore around the pass
-    /// @return Updated transparent batch and plan (preserved from input)
-    struct ShadowPassOutput {
-        std::vector<DrawBatchEntry> transparentBatch;
-        TransparentPassPlan transparentPlan;
+    /// Graph handles for the persistent CSM texture arrays used by all cascades.
+    struct GraphResources {
+        RgTextureHandle depthOpaque;
+        RgTextureHandle depthAll;
+        RgTextureHandle color0;
+        RgTextureHandle color1;
     };
-    ShadowPassOutput execute(const FrameContext& ctx, const RenderSettings& settings,
-                              DeferredRenderTargets& targets, const IWorldView& worldView,
-                              const std::vector<DrawBatchEntry>& preservedTransparentBatch,
-                              const TransparentPassPlan& preservedTransparentPlan);
+
+    /// Computes cascade matrices, culls shadow casters, and creates layer views.
+    /// @param ctx Source frame state retained until graph execution completes.
+    /// @param settings Shadow quality and distance settings for this frame.
+    /// @param targets Persistent shadow textures and per-layer attachment views.
+    /// @param worldView World query interface used to collect terrain casters.
+    /// @return True when all CPU data and attachment views are ready for graph recording.
+    [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx,
+                                         const RenderSettings& settings,
+                                         DeferredRenderTargets& targets,
+                                         const IWorldView& worldView);
+
+    /// Adds opaque, depth-copy, and transparent passes for every cascade.
+    /// @param graph Graph that owns the frame pass declarations.
+    /// @param resources Imported CSM texture handles declared by the pipeline.
+    /// @param dependency Pass that must finish before shadow command recording starts.
+    /// @return Final transparent pass handle for downstream dependencies.
+    [[nodiscard]] RgPassHandle addGraphPasses(RenderGraph& graph,
+                                              const GraphResources& resources,
+                                              RgPassHandle dependency);
+
+    /// Opens optional debug timestamp state immediately before graph execution.
+    void beginGraphExecution();
+
+    /// Publishes successful statistics or cancels unsubmitted timestamp state.
+    /// @param succeeded True only when the complete graph batch was submitted.
+    void finishGraphExecution(bool succeeded);
 
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
@@ -89,6 +108,13 @@ private:
                                    const glm::mat4& shadowViewProj,
                                    float animationTime);
 
+    /// Records opaque and cutout casters into one cascade's primary depth layer.
+    [[nodiscard]] bool recordOpaquePass(RhiCommandList& commandList, int cascade);
+    /// Copies one cascade's primary depth layer into its transparent depth layer.
+    [[nodiscard]] bool recordCopyPass(RhiCommandList& commandList, int cascade);
+    /// Clears transparent shadow colors and records near-cascade transparent casters.
+    [[nodiscard]] bool recordTransparentPass(RhiCommandList& commandList, int cascade);
+
     shadow::ShadowRenderer* m_shadowRenderer = nullptr;
     TerrainRenderer* m_terrainRenderer = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
@@ -103,14 +129,18 @@ private:
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeOpaqueRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeCutoutRanges;
     std::array<std::vector<GpuMeshRange>, 4> m_cascadeTransparentRanges;
-    RhiTextureHandle m_trackedCsmDepthTexture;
-    RhiTextureHandle m_trackedCsmDepthAllTexture;
-    RhiTextureHandle m_trackedCsmColor0Texture;
-    RhiTextureHandle m_trackedCsmColor1Texture;
-    std::array<RhiResourceState, 4> m_csmDepthStates{};
-    std::array<RhiResourceState, 4> m_csmDepthAllStates{};
-    std::array<RhiResourceState, 4> m_csmColor0States{};
-    std::array<RhiResourceState, 4> m_csmColor1States{};
+    std::array<ShadowCascadeStats, 4> m_cascadeStats{};
+    std::array<std::array<char, 128>, 4> m_cullerLabels{};
+    std::array<uint32_t, 4> m_cascadeResolutions{};
+    const FrameContext* m_frameContext = nullptr;
+    DeferredRenderTargets* m_frameTargets = nullptr;
+    RenderDebugService* m_frameDebugService = nullptr;
+    int m_visibleTotal = 0;
+    int m_culledTotal = 0;
+    float m_maxCasterDistance = 0.0f;
+    bool m_graphFramePrepared = false;
+    bool m_graphExecutionBegun = false;
+    bool m_shadowStatsActive = false;
 };
 
 #endif // MECRAFT_SHADOW_PASS_H

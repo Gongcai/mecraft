@@ -30,6 +30,22 @@ RhiTextureDesc colorTextureDesc(const uint32_t mipLevels = 1u,
   return desc;
 }
 
+RhiTextureDesc depthTextureDesc(const uint32_t layers) {
+  RhiTextureDesc desc;
+  desc.debugName = "RenderGraphTest.Depth";
+  desc.dimension = RhiTextureDimension::Texture2DArray;
+  desc.format = RhiTextureFormat::Depth32Float;
+  desc.width = 64u;
+  desc.height = 64u;
+  desc.depthOrLayers = layers;
+  desc.mipLevels = 1u;
+  desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+               rhiFlag(RhiTextureUsage::DepthStencilAttachment) |
+               rhiFlag(RhiTextureUsage::TransferSrc) |
+               rhiFlag(RhiTextureUsage::TransferDst);
+  return desc;
+}
+
 bool executeNoop(RgPassContext &) { return true; }
 
 bool testTextureDependencyAndBarrierPlanning() {
@@ -106,6 +122,105 @@ bool testSubresourceIndependence() {
          requireTrue(graph.compiledPasses()[0].textureBarriers.size() == 1u &&
                          graph.compiledPasses()[1].textureBarriers.size() == 1u,
                      "only accessed subresources must receive barriers");
+}
+
+bool testLayeredDepthCopyPlanning() {
+  RenderGraph graph;
+  const RhiTextureDesc depthDesc = depthTextureDesc(2u);
+  const RhiTextureDesc colorDesc = colorTextureDesc(1u, 2u);
+  const RgTextureHandle depthOpaque = graph.importTexture(
+      {"ShadowDepthOpaque", {31u, 1u}, depthDesc,
+       RhiResourceState::DepthRead, RhiResourceState::DepthRead, {},
+       RhiQueueType::Graphics, RhiQueueType::Graphics});
+  const RgTextureHandle depthAll = graph.importTexture(
+      {"ShadowDepthAll", {32u, 1u}, depthDesc,
+       RhiResourceState::DepthRead, RhiResourceState::DepthRead, {},
+       RhiQueueType::Graphics, RhiQueueType::Graphics});
+  const RgTextureHandle color0 = graph.importTexture(
+      {"ShadowColor0", {33u, 1u}, colorDesc,
+       RhiResourceState::ShaderRead, RhiResourceState::ShaderRead, {},
+       RhiQueueType::Graphics, RhiQueueType::Graphics});
+  const RgTextureHandle color1 = graph.importTexture(
+      {"ShadowColor1", {34u, 1u}, colorDesc,
+       RhiResourceState::ShaderRead, RhiResourceState::ShaderRead, {},
+       RhiQueueType::Graphics, RhiQueueType::Graphics});
+
+  const char *const opaqueNames[] = {"Cascade0.Opaque", "Cascade1.Opaque"};
+  const char *const copyNames[] = {"Cascade0.Copy", "Cascade1.Copy"};
+  const char *const transparentNames[] = {"Cascade0.Transparent",
+                                           "Cascade1.Transparent"};
+  RgPassHandle previous;
+  for (uint32_t cascade = 0u; cascade < 2u; ++cascade) {
+    const RgTextureSubresourceRange range{0u, 1u, cascade, 1u, 0u};
+    RenderGraphPassBuilder opaque = graph.addPass(
+        {opaqueNames[cascade], RgPassType::Graphics, RhiQueueType::Graphics});
+    if (previous.isValid())
+      opaque.dependsOn(previous);
+    opaque.writeTexture(depthOpaque, RhiResourceState::DepthWrite, range)
+        .setExecute(executeNoop);
+    previous = opaque.handle();
+
+    RenderGraphPassBuilder copy = graph.addPass(
+        {copyNames[cascade], RgPassType::Copy, RhiQueueType::Graphics});
+    copy.dependsOn(previous)
+        .readTexture(depthOpaque, RhiResourceState::TransferSrc, range)
+        .writeTexture(depthAll, RhiResourceState::TransferDst, range)
+        .setExecute(executeNoop);
+    previous = copy.handle();
+
+    RenderGraphPassBuilder transparent = graph.addPass(
+        {transparentNames[cascade], RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    transparent.dependsOn(previous)
+        .readWriteTexture(depthAll, RhiResourceState::DepthWrite, range)
+        .writeTexture(color0, RhiResourceState::RenderTarget, range)
+        .writeTexture(color1, RhiResourceState::RenderTarget, range)
+        .setExecute(executeNoop);
+    previous = transparent.handle();
+  }
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str()) ||
+      !requireTrue(graph.compiledPasses().size() == 6u,
+                   "two shadow cascades must compile into six passes")) {
+    return false;
+  }
+  const RgCompiledPass &opaque = graph.compiledPasses()[0];
+  const RgCompiledPass &copy = graph.compiledPasses()[1];
+  const RgCompiledPass &transparent = graph.compiledPasses()[2];
+  return requireTrue(
+             opaque.textureBarriers.size() == 1u &&
+                 opaque.textureBarriers[0].oldState ==
+                     RhiResourceState::DepthRead &&
+                 opaque.textureBarriers[0].newState ==
+                     RhiResourceState::DepthWrite,
+             "shadow opaque pass must transition its layer to depth write") &&
+         requireTrue(
+             copy.dependencies.size() == 1u &&
+                 copy.textureBarriers.size() == 2u &&
+                 copy.textureBarriers[0].oldState ==
+                     RhiResourceState::DepthWrite &&
+                 copy.textureBarriers[0].newState ==
+                     RhiResourceState::TransferSrc &&
+                 copy.textureBarriers[1].oldState ==
+                     RhiResourceState::DepthRead &&
+                 copy.textureBarriers[1].newState ==
+                     RhiResourceState::TransferDst,
+             "shadow depth copy must transition both source and destination") &&
+         requireTrue(
+             transparent.dependencies.size() == 1u &&
+                 transparent.textureBarriers.size() == 3u &&
+                 transparent.textureBarriers[0].oldState ==
+                     RhiResourceState::TransferDst &&
+                 transparent.textureBarriers[0].newState ==
+                     RhiResourceState::DepthWrite,
+             "transparent shadow pass must consume the copied depth layer") &&
+         requireTrue(
+             graph.compiledPasses()[3].textureBarriers[0].range.baseLayer ==
+                 1u,
+             "the second cascade must plan barriers only for its own layer") &&
+         requireTrue(graph.epilogueTextureBarriers().size() == 8u,
+                     "all shadow layers must return to stable frame states");
 }
 
 bool testTransientReadBeforeWriteValidation() {
@@ -369,7 +484,7 @@ bool testBatchSplitForLateQueueDependency() {
 int main() {
   const bool passed =
       testTextureDependencyAndBarrierPlanning() &&
-      testSubresourceIndependence() &&
+      testSubresourceIndependence() && testLayeredDepthCopyPlanning() &&
       testTransientReadBeforeWriteValidation() && testImportedResourceRead() &&
       testBufferRangeCoverage() && testExplicitCycleValidation() &&
       testDuplicateAccessValidation() && testResetInvalidatesHandles() &&

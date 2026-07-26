@@ -659,6 +659,13 @@ void WorldRenderBuffer::beginFrame() {
         }
     }
     m_retiredMetadataBindGroups.clear();
+    resetDrawCommands();
+    m_opaquePool.beginFrame();
+    m_cutoutPool.beginFrame();
+    m_transparentPool.beginFrame();
+}
+
+void WorldRenderBuffer::resetDrawCommands() {
     m_opaqueCommands.clear();
     m_cutoutCommands.clear();
     m_transparentCommands.clear();
@@ -671,9 +678,6 @@ void WorldRenderBuffer::beginFrame() {
     m_cutoutVertexCount = 0;
     m_transparentVertexCount = 0;
     m_waterVertexCount = 0;
-    m_opaquePool.beginFrame();
-    m_cutoutPool.beginFrame();
-    m_transparentPool.beginFrame();
 }
 
 bool WorldRenderBuffer::prepareRhiOpaqueAndCutout(

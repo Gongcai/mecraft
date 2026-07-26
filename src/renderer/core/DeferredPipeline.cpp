@@ -410,19 +410,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     m_deferredFrameActive = true;
 
-    // Geometry and velocity are recorded as Render Graph passes and submitted together.
-    if (!executeGeometryGraph(ctx, m_currentSettings)) {
+    // Geometry, velocity, and shadow work are compiled and submitted as one graph batch.
+    if (!executeFrameGraph(ctx, m_currentSettings)) {
         return {};
-    }
-
-    // Shadow pass
-    if (m_shadowPass && m_currentSettings.shadow.enabled &&
-        m_shared->shadowRenderer && ctx.worldView) {
-        auto shadowOutput = m_shadowPass->execute(
-            ctx, m_currentSettings, targets, *ctx.worldView,
-            m_transparentBatch, m_transparentPassPlan);
-        m_transparentBatch = std::move(shadowOutput.transparentBatch);
-        m_transparentPassPlan = shadowOutput.transparentPlan;
     }
 
     // SSAO pass
@@ -655,8 +645,8 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
 
 }
 
-bool DeferredPipeline::executeGeometryGraph(const FrameContext& ctx,
-                                            const RenderSettings& settings) {
+bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
+                                         const RenderSettings& settings) {
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
         m_shared->commandListPool == nullptr ||
         m_shared->deferredTargets == nullptr || ctx.worldView == nullptr) {
@@ -670,6 +660,20 @@ bool DeferredPipeline::executeGeometryGraph(const FrameContext& ctx,
         !targets.ensureVelocityTextureView(rhiDevice)) {
         return false;
     }
+
+    const bool shadowEnabled = settings.shadow.enabled;
+    if (shadowEnabled &&
+        (m_shadowPass == nullptr || m_shared->shadowRenderer == nullptr ||
+         !m_shadowPass->prepareGraphFrame(
+             ctx, settings, targets, *ctx.worldView))) {
+        return false;
+    }
+    const auto failGraphSetup = [&]() {
+        if (shadowEnabled) {
+            m_shadowPass->finishGraphExecution(false);
+        }
+        return false;
+    };
 
     m_renderGraph.reset();
     const auto importTexture = [&](const RhiTextureHandle texture,
@@ -721,13 +725,33 @@ bool DeferredPipeline::executeGeometryGraph(const FrameContext& ctx,
         !importTexture(targets.velocityTextureHandle(),
                        targets.velocityTextureViewHandle(),
                        RhiResourceState::ShaderRead, velocity)) {
-        return false;
+        return failGraphSetup();
     }
 
-    m_renderGraph
-        .addPass({"Deferred.GBuffer", RgPassType::Graphics,
-                  RhiQueueType::Graphics})
-        .writeTexture(albedo, RhiResourceState::RenderTarget)
+    ShadowPass::GraphResources shadowResources;
+    if (shadowEnabled &&
+        (!importTexture(targets.csmShadowDepthTextureHandle(),
+                        targets.csmShadowDepthTextureViewHandle(0),
+                        RhiResourceState::DepthRead,
+                        shadowResources.depthOpaque) ||
+         !importTexture(targets.csmShadowDepthAllTextureHandle(),
+                        targets.csmShadowDepthAllTextureViewHandle(0),
+                        RhiResourceState::DepthRead,
+                        shadowResources.depthAll) ||
+         !importTexture(targets.csmShadowColor0TextureHandle(),
+                        targets.csmShadowColor0TextureViewHandle(0),
+                        RhiResourceState::ShaderRead,
+                        shadowResources.color0) ||
+         !importTexture(targets.csmShadowColor1TextureHandle(),
+                        targets.csmShadowColor1TextureViewHandle(0),
+                        RhiResourceState::ShaderRead,
+                        shadowResources.color1))) {
+        return failGraphSetup();
+    }
+
+    RenderGraphPassBuilder gbuffer = m_renderGraph.addPass(
+        {"Deferred.GBuffer", RgPassType::Graphics, RhiQueueType::Graphics});
+    gbuffer.writeTexture(albedo, RhiResourceState::RenderTarget)
         .writeTexture(normalAo, RhiResourceState::RenderTarget)
         .writeTexture(voxelLight, RhiResourceState::RenderTarget)
         .writeTexture(material, RhiResourceState::RenderTarget)
@@ -761,11 +785,12 @@ bool DeferredPipeline::executeGeometryGraph(const FrameContext& ctx,
                        m_shared->fallingBlockRenderer,
                        m_shared->gameplayRegistry);
         });
+    RgPassHandle graphTail = gbuffer.handle();
 
     if (m_velocityPass != nullptr) {
-        m_renderGraph
-            .addPass({"Deferred.Velocity", RgPassType::Graphics,
-                      RhiQueueType::Graphics})
+        RenderGraphPassBuilder velocityPass = m_renderGraph.addPass(
+            {"Deferred.Velocity", RgPassType::Graphics, RhiQueueType::Graphics});
+        velocityPass.dependsOn(graphTail)
             .readTexture(depth, RhiResourceState::DepthRead)
             .readTexture(perObjectVelocity, RhiResourceState::ShaderRead)
             .writeTexture(velocity, RhiResourceState::RenderTarget)
@@ -773,12 +798,35 @@ bool DeferredPipeline::executeGeometryGraph(const FrameContext& ctx,
                 return m_velocityPass->execute(pass.commandList(), ctx, settings,
                                                targets);
             });
+        graphTail = velocityPass.handle();
+    }
+
+    if (shadowEnabled) {
+        graphTail = m_shadowPass->addGraphPasses(
+            m_renderGraph, shadowResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
     }
 
     const RgCompileResult compiled = m_renderGraph.compile();
-    if (!compiled.succeeded()) return false;
+    if (!compiled.succeeded()) {
+        return failGraphSetup();
+    }
+    const GpuTimerCheckpoint timerCheckpoint = ctx.debugService != nullptr
+        ? ctx.debugService->gpuTimerCheckpoint()
+        : GpuTimerCheckpoint{};
+    if (shadowEnabled) {
+        m_shadowPass->beginGraphExecution();
+    }
     const RgExecuteResult executed =
         m_renderGraph.execute(rhiDevice, *m_shared->commandListPool);
+    if (!executed.succeeded() && ctx.debugService != nullptr) {
+        ctx.debugService->cancelGpuTimersSince(timerCheckpoint);
+    }
+    if (shadowEnabled) {
+        m_shadowPass->finishGraphExecution(executed.succeeded());
+    }
     return executed.succeeded();
 }
 
