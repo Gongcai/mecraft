@@ -402,11 +402,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return {};
     }
 
-    // SSAO pass
-    if (m_ssaoPass) {
-        m_ssaoPass->execute(ctx, m_currentSettings, targets);
-    }
-
     // Copy forward alpha to scene lighting
     targets.copyTextureColorToSceneLighting(rhiDevice, ctx.sceneCaptureColorTexture);
 
@@ -566,6 +561,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
+    const bool ssaoEnabled = settings.ssao.enabled;
+    const bool ssaoTemporalEnabled =
+        ssaoEnabled && settings.ssao.temporalEnabled && !ctx.temporalReset;
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
@@ -582,7 +580,18 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !targets.ensureReactiveMaskTextureView(rhiDevice) ||
         !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
         !targets.ensureSkyCaptureTextureView(rhiDevice) ||
-        !targets.ensureVolumetricFogTextureViews(rhiDevice)) {
+        !targets.ensureVolumetricFogTextureViews(rhiDevice) ||
+        (ssaoEnabled &&
+         (!targets.ensureSsaoHalfResTextureView(rhiDevice) ||
+          !targets.ensureSsaoFilteredTextureView(rhiDevice))) ||
+        (ssaoEnabled && settings.ssao.filterEnabled &&
+         !targets.ensureSsaoHalfResFilteredTextureView(rhiDevice)) ||
+        (ssaoTemporalEnabled &&
+         (!targets.ensureSsaoTemporalTextureView(rhiDevice) ||
+          !targets.ensureSsaoHistoryTextureViews(rhiDevice)))) {
+        return false;
+    }
+    if (ssaoEnabled && m_ssaoPass == nullptr) {
         return false;
     }
     const RhiTextureHandle skyNoiseTexture =
@@ -679,6 +688,39 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return failGraphSetup();
     }
 
+    SsaoPass::GraphResources ssaoResources;
+    ssaoResources.depth = depth;
+    ssaoResources.normalAo = normalAo;
+    ssaoResources.velocity = velocity;
+    if (ssaoEnabled &&
+        (!importTexture(targets.ssaoHalfResTextureHandle(),
+                        targets.ssaoHalfResTextureViewHandle(),
+                        RhiResourceState::ShaderRead,
+                        ssaoResources.halfRes) ||
+         !importTexture(targets.ssaoFilteredTextureHandle(),
+                        targets.ssaoFilteredTextureViewHandle(),
+                        RhiResourceState::ShaderRead,
+                        ssaoResources.filtered) ||
+         (settings.ssao.filterEnabled &&
+          !importTexture(targets.ssaoHalfResFilteredTextureHandle(),
+                         targets.ssaoHalfResFilteredTextureViewHandle(),
+                         RhiResourceState::ShaderRead,
+                         ssaoResources.halfResFiltered)) ||
+         (ssaoTemporalEnabled &&
+          (!importTexture(targets.ssaoTemporalTextureHandle(),
+                          targets.ssaoTemporalTextureViewHandle(),
+                          RhiResourceState::ShaderRead,
+                          ssaoResources.temporal) ||
+           !importTexture(targets.ssaoHistoryTextureHandle(), {},
+                          RhiResourceState::ShaderRead,
+                          ssaoResources.historyCurrent) ||
+           !importTexture(targets.ssaoHistoryTexturePrevHandle(),
+                          targets.ssaoHistoryTexturePrevViewHandle(),
+                          RhiResourceState::ShaderRead,
+                          ssaoResources.historyPrevious))))) {
+        return failGraphSetup();
+    }
+
     RgTextureHandle reflection;
     RgTextureHandle sceneComposite;
     RgTextureHandle sceneResolved;
@@ -744,6 +786,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        skyNoise)) {
         return failGraphSetup();
     }
+    ssaoResources.noise = skyNoise;
 
     RenderGraphPassBuilder auxiliaryClear = m_renderGraph.addPass(
         {"Deferred.AuxiliaryClear", RgPassType::Graphics,
@@ -837,6 +880,15 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (shadowEnabled) {
         graphTail = m_shadowPass->addGraphPasses(
             m_renderGraph, shadowResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
+    }
+
+    if (ssaoEnabled) {
+        graphTail = m_ssaoPass->addGraphPasses(
+            m_renderGraph, ctx, settings.ssao, targets, ssaoResources,
+            graphTail);
         if (!graphTail.isValid()) {
             return failGraphSetup();
         }

@@ -5,6 +5,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <array>
 #include <cstdint>
@@ -24,21 +25,55 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SSAO"; }
 
-    /// Execute all enabled SSAO sub-passes.
-    /// @param ctx Frame context (camera, frame index, dimensions)
-    /// @param settings Render settings (ssao sub-settings)
-    /// @param targets Deferred render targets (GBuffer, SSAO textures, fullscreen VAO)
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Graph handles for GBuffer inputs, SSAO intermediates, and history textures.
+    struct GraphResources {
+        RgTextureHandle depth;
+        RgTextureHandle normalAo;
+        RgTextureHandle velocity;
+        RgTextureHandle noise;
+        RgTextureHandle halfRes;
+        RgTextureHandle halfResFiltered;
+        RgTextureHandle filtered;
+        RgTextureHandle temporal;
+        RgTextureHandle historyCurrent;
+        RgTextureHandle historyPrevious;
+    };
+
+    /// Adds enabled SSAO stages and their exact texture dependencies to a graph.
+    /// @param graph Graph receiving the SSAO pass declarations.
+    /// @param ctx Frame state retained until immediate graph execution completes.
+    /// @param ssao SSAO quality, filter, and temporal settings.
+    /// @param targets Persistent render targets used by the recording callbacks.
+    /// @param resources Imported graph handles for all SSAO resources.
+    /// @param dependency Pass that must complete before SSAO starts.
+    /// @return Final SSAO pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const SsaoSettings& ssao,
+        DeferredRenderTargets& targets,
+        const GraphResources& resources,
+        RgPassHandle dependency);
 
 private:
-    void renderSsaoBase(const FrameContext& ctx, const SsaoSettings& ssao,
-                        DeferredRenderTargets& targets);
-    void renderSsaoFilter(const FrameContext& ctx, DeferredRenderTargets& targets);
-    void renderSsaoUpsample(const FrameContext& ctx, const SsaoSettings& ssao,
-                            DeferredRenderTargets& targets);
-    void renderSsaoTemporal(const FrameContext& ctx, const SsaoSettings& ssao,
-                            DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoBase(RhiCommandList& commandList,
+                                      const FrameContext& ctx,
+                                      const SsaoSettings& ssao,
+                                      DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoFilter(RhiCommandList& commandList,
+                                        const FrameContext& ctx,
+                                        DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoUpsample(RhiCommandList& commandList,
+                                          const FrameContext& ctx,
+                                          const SsaoSettings& ssao,
+                                          DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoTemporal(RhiCommandList& commandList,
+                                          const FrameContext& ctx,
+                                          const SsaoSettings& ssao,
+                                          DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordSsaoHistoryCopy(RhiCommandList& commandList,
+                                             const FrameContext& ctx,
+                                             DeferredRenderTargets& targets);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
     bool ensureBaseBindGroup(RhiDevice& rhiDevice,
                              const std::array<RhiTextureViewHandle, 3>& views);
