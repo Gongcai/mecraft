@@ -31,11 +31,10 @@ void main() {
 
     float depth = texelFetch(uDepthTex, texel, 0).r;
 
-    // Skip sky pixels
-    if (depth >= 0.9999) {
-        FragColor = texelFetch(uSceneTex, texel, 0);
-        return;
-    }
+    // Sky pixels intentionally flow through the regular CoC path: depth 1.0
+    // resolves to the finite far-plane distance, which drives the circle of
+    // confusion to its far-field limit so a near focus blurs the sky instead
+    // of leaving it sharp.
 
     // ---- DerivativeMain CoC calculation ----
     // Auto-focus: sample depth at screen center (DerivativeMain FOCUS_MODE = 0)
