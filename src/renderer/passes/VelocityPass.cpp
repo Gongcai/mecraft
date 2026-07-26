@@ -14,8 +14,7 @@
 
 namespace {
 struct VelocityPushConstants {
-    glm::mat4 invViewProj;
-    glm::mat4 previousViewProj;
+    glm::mat4 clipToPrevClip;
     glm::vec4 screenParams;
 };
 
@@ -73,14 +72,10 @@ bool VelocityPass::execute(RhiCommandList& commandList,
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
 
-    // Reconstruct with the matrix that produced the raster depth, then
-    // reproject with the previous view-projection carrying the CURRENT
-    // frame's jitter so the sub-pixel offset cancels out of the velocity.
+    // The fp64-composed clip-to-previous-clip transform cancels jitter and
+    // matrix-inverse residue exactly for a static camera.
     const VelocityPushConstants pushConstants{
-        usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
-            ? ctx.camera.jitteredInvViewProj
-            : ctx.camera.invViewProj,
-        ctx.previousViewProjWithCurrentJitter,
+        ctx.velocityClipToPrevClip,
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
                   settings.taa.forceZeroVelocity ? 1.0f : 0.0f,
@@ -134,12 +129,9 @@ bool VelocityPass::executeTransparent(RhiCommandList& commandList,
     commandList.setGraphicsPipeline(m_transparentPipeline);
     commandList.setBindGroup(0u, m_transparentBindGroup);
 
-    // Same jitter-cancelling matrix pairing as the opaque velocity pass.
+    // Same fp64-composed reprojection as the opaque velocity pass.
     const VelocityPushConstants pushConstants{
-        usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
-            ? ctx.camera.jitteredInvViewProj
-            : ctx.camera.invViewProj,
-        ctx.previousViewProjWithCurrentJitter,
+        ctx.velocityClipToPrevClip,
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
                   settings.taa.forceZeroVelocity ? 1.0f : 0.0f,

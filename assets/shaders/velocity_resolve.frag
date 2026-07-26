@@ -10,8 +10,10 @@ layout(binding = 0) uniform sampler2D uDepthTex;
 layout(binding = 1) uniform sampler2D uPerObjectVelocityTex;
 
 layout(push_constant) uniform RhiPushConstants {
-    mat4 uInvViewProj;
-    mat4 uPreviousViewProj;
+    // Clip-to-previous-clip reprojection composed on the CPU in double
+    // precision; for a static camera it is the identity to fp64 accuracy, so
+    // no jitter or matrix-inverse residue leaks into the velocity buffer.
+    mat4 uClipToPrevClip;
     vec4 uScreenParams;
 };
 
@@ -31,16 +33,6 @@ vec2 sanitizeVelocity(vec2 velocity) {
     }
     // Keep finite but very large reprojection errors bounded before RG16F storage.
     return clamp(velocity, vec2(-2.0), vec2(2.0));
-}
-
-vec3 reconstructWorldPosition(vec2 clipUv, float depth, out bool valid) {
-    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    vec4 world = uInvViewProj * clip;
-    valid = !badVec4(world) && abs(world.w) > 0.00001;
-    if (!valid) {
-        return vec3(0.0);
-    }
-    return world.xyz / world.w;
 }
 
 void main() {
@@ -68,19 +60,14 @@ void main() {
     vec2 closestScreenUv = rhiNativeFragCoordToScreenUv(
         closestFragment.xy, uScreenParams.xy);
     vec2 closestClipUv = rhiScreenUvToClipUv(closestScreenUv);
-    bool worldValid = false;
-    vec3 worldPos = reconstructWorldPosition(closestClipUv, closestFragment.z, worldValid);
-    if (!worldValid) {
-        FragVelocity = kRejectHistoryVelocity;
-        return;
-    }
 
-    // Standard world-space reprojection. The shared velocity buffer stores native texture UV
-    // deltas so TAA, SSAO, reflections, volumetric fog, and motion blur consume one domain.
-    // uPreviousViewProj carries the CURRENT frame's jitter: the current raster position and
-    // the reprojected previous position then share the same sub-pixel NDC offset, so the
-    // jitter cancels in the subtraction and a static scene yields exactly zero velocity.
-    vec4 previousClip = uPreviousViewProj * vec4(worldPos, 1.0);
+    // Projective reprojection straight from clip space: the composed matrix
+    // already contains inverse(current raster VP) * previous jittered VP, so
+    // no intermediate world-space divide is needed and the shared velocity
+    // buffer stays in the native texture UV domain for every consumer.
+    vec4 currentClip = vec4(closestClipUv * 2.0 - 1.0,
+                            closestFragment.z * 2.0 - 1.0, 1.0);
+    vec4 previousClip = uClipToPrevClip * currentClip;
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;
         return;

@@ -1337,6 +1337,23 @@ std::optional<FrameContext> RenderScene::buildFrameContext(
         }
     }
 
+    // Velocity reprojection as one fp64-composed clip-to-previous-clip
+    // transform. Building the product on the CPU in double precision removes
+    // the ULP mismatch between the differently-composed jittered matrices
+    // that otherwise leaks a per-frame sub-pixel offset into the velocity
+    // buffer and makes the whole image shimmer under TAA.
+    {
+        const bool projectionJitter = usesTemporalProjectionJitter(
+            m_settings.upscale.type, m_settings.taa.enabled);
+        const glm::dmat4 currentRaster = glm::dmat4(
+            projectionJitter ? ctx.camera.jitteredViewProj
+                             : ctx.camera.viewProj);
+        const glm::dmat4 previousRaster =
+            glm::dmat4(ctx.previousViewProjWithCurrentJitter);
+        ctx.velocityClipToPrevClip =
+            glm::mat4(previousRaster * glm::inverse(currentRaster));
+    }
+
     // Weather state from WeatherSystem
     const WeatherState& weather = weatherSystem.getRenderState();
     const WeatherDerived& weatherDerived = weatherSystem.getDerived();

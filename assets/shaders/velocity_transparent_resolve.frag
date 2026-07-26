@@ -10,8 +10,8 @@ layout(binding = 1) uniform sampler2D uTransparentDepthTex;
 layout(binding = 2) uniform sampler2D uTransparencyMaskTex;
 
 layout(push_constant) uniform RhiPushConstants {
-    mat4 uInvViewProj;
-    mat4 uPreviousViewProj;
+    // Same fp64-composed clip-to-previous-clip transform as the opaque pass.
+    mat4 uClipToPrevClip;
     vec4 uScreenParams;
 };
 
@@ -31,16 +31,6 @@ vec2 sanitizeVelocity(vec2 velocity) {
         return kRejectHistoryVelocity;
     }
     return clamp(velocity, vec2(-2.0), vec2(2.0));
-}
-
-vec3 reconstructWorldPosition(vec2 clipUv, float depth, out bool valid) {
-    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    vec4 world = uInvViewProj * clip;
-    valid = !badVec4(world) && abs(world.w) > 0.00001;
-    if (!valid) {
-        return vec3(0.0);
-    }
-    return world.xyz / world.w;
 }
 
 void main() {
@@ -67,17 +57,9 @@ void main() {
         vec2(gl_FragCoord.xy), uScreenParams.xy);
     vec2 currentTextureUv = rhiScreenUvToTextureUv(screenUv);
     vec2 clipUv = rhiScreenUvToClipUv(screenUv);
-    bool worldValid = false;
-    vec3 worldPosition = reconstructWorldPosition(
-        clipUv, transparentDepth, worldValid);
-    if (!worldValid) {
-        FragVelocity = kRejectHistoryVelocity;
-        return;
-    }
-
-    // uPreviousViewProj carries the current frame's jitter so the sub-pixel
-    // offset cancels between the raster position and the reprojection.
-    vec4 previousClip = uPreviousViewProj * vec4(worldPosition, 1.0);
+    vec4 currentClip = vec4(clipUv * 2.0 - 1.0,
+                            transparentDepth * 2.0 - 1.0, 1.0);
+    vec4 previousClip = uClipToPrevClip * currentClip;
     if (badVec4(previousClip) || previousClip.w <= 0.00001) {
         FragVelocity = kRejectHistoryVelocity;
         return;

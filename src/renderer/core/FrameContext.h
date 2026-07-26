@@ -179,6 +179,11 @@ struct FrameContext {
     // projecting both ends with the same sub-pixel NDC offset cancels the
     // jitter exactly, so the shared velocity buffer stores true motion only.
     glm::mat4 previousViewProjWithCurrentJitter = glm::mat4(1.0f);
+    // Double-precision composed reprojection for the velocity pass:
+    // previousViewProjWithCurrentJitter * inverse(current raster view-proj).
+    // Composing in fp64 on the CPU makes the product collapse to identity for
+    // a static camera, so velocity carries no floating-point jitter residue.
+    glm::mat4 velocityClipToPrevClip = glm::mat4(1.0f);
 
     // Sky / Atmosphere
     SkyColorsData skyColors;
