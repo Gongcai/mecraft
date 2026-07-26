@@ -1465,11 +1465,12 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         }
 #endif
         if (features2.features.samplerAnisotropy != VK_TRUE ||
+            features2.features.independentBlend != VK_TRUE ||
             features11.shaderDrawParameters != VK_TRUE ||
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
             features12.timelineSemaphore != VK_TRUE ||
             features12.bufferDeviceAddress != VK_TRUE ||
-        features12.hostQueryReset != VK_TRUE ||
+            features12.hostQueryReset != VK_TRUE ||
             depthClip.depthClipControl != VK_TRUE) {
             continue;
         }
@@ -1571,6 +1572,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkPhysicalDeviceFeatures2 features2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                         &features11};
     features2.features.samplerAnisotropy = VK_TRUE;
+    features2.features.independentBlend = VK_TRUE;
     features2.features.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect;
 #if defined(MECRAFT_ENABLE_FSR31)
     features2.features.shaderInt16 = VK_TRUE;

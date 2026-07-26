@@ -906,6 +906,70 @@ void main() {
     return true;
 }
 
+[[nodiscard]] bool validateIndependentBlendPipeline(VkRhiDevice& device) {
+    constexpr char kVertexSource[] = R"glsl(
+#version 450 core
+void main() {
+    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+}
+)glsl";
+    constexpr char kFragmentSource[] = R"glsl(
+#version 450 core
+layout(location = 0) out vec4 outColor0;
+layout(location = 1) out vec4 outColor1;
+void main() {
+    outColor0 = vec4(1.0);
+    outColor1 = vec4(0.5);
+}
+)glsl";
+
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "VulkanSmoke.IndependentBlend.Vertex";
+    shaderDesc.stage = RhiShaderStage::Vertex;
+    shaderDesc.source = kVertexSource;
+    shaderDesc.sourceSize = sizeof(kVertexSource) - 1u;
+    const RhiShaderHandle vertexShader = device.createShader(shaderDesc);
+    shaderDesc.debugName = "VulkanSmoke.IndependentBlend.Fragment";
+    shaderDesc.stage = RhiShaderStage::Fragment;
+    shaderDesc.source = kFragmentSource;
+    shaderDesc.sourceSize = sizeof(kFragmentSource) - 1u;
+    const RhiShaderHandle fragmentShader = device.createShader(shaderDesc);
+
+    RhiPipelineLayoutDesc layoutDesc;
+    layoutDesc.debugName = "VulkanSmoke.IndependentBlend.Layout";
+    const RhiPipelineLayoutHandle layout = device.createPipelineLayout(layoutDesc);
+    if (!vertexShader.isValid() || !fragmentShader.isValid() || !layout.isValid()) {
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "VulkanSmoke.IndependentBlend.Pipeline";
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.layout = layout;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm,
+                                 RhiTextureFormat::Rgba8Unorm};
+    pipelineDesc.blend.attachments.resize(2u);
+    pipelineDesc.blend.attachments[1].blendEnabled = true;
+    pipelineDesc.blend.attachments[1].srcColor = RhiBlendFactor::One;
+    pipelineDesc.blend.attachments[1].dstColor = RhiBlendFactor::Zero;
+    pipelineDesc.blend.attachments[1].srcAlpha = RhiBlendFactor::One;
+    pipelineDesc.blend.attachments[1].dstAlpha = RhiBlendFactor::Zero;
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    const RhiPipelineHandle pipeline = device.createGraphicsPipeline(pipelineDesc);
+    const bool valid = pipeline.isValid() &&
+                       device.validationErrorCount() == validationErrorsBefore;
+    if (pipeline.isValid()) device.destroyPipeline(pipeline);
+    device.destroyPipelineLayout(layout);
+    device.destroyShader(fragmentShader);
+    device.destroyShader(vertexShader);
+    return valid;
+}
+
 [[nodiscard]] bool validateOffscreenCoordinateContract(VkRhiDevice& device,
                                                        RhiCommandListPool& commandPool,
                                                        GLFWwindow* window) {
@@ -1473,6 +1537,12 @@ int main() {
         }
     }
     if (!createDrawParametersShader(device)) {
+        device.shutdown();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    if (!validateIndependentBlendPipeline(device)) {
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();
