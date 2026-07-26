@@ -30,10 +30,12 @@ void VelocityPass::shutdown() {
     destroyRhiResources();
 }
 
-void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settings,
+bool VelocityPass::execute(RhiCommandList& commandList,
+                           const FrameContext& ctx,
+                           const RenderSettings& settings,
                            DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
@@ -44,7 +46,7 @@ void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settin
         !ensureRhiBindGroup(rhiDevice,
                             targets.depthTextureViewHandle(),
                             targets.perObjectVelocityTextureViewHandle())) {
-        return;
+        return false;
     }
 
     RhiColorAttachment colorAttachment;
@@ -67,15 +69,6 @@ void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settin
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList,
-                              targets.velocityTextureHandle(),
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
     commandList.setBindGroup(0u, m_bindGroup);
@@ -91,18 +84,7 @@ void VelocityPass::execute(const FrameContext& ctx, const RenderSettings& settin
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList,
-                              targets.velocityTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool VelocityPass::ensureRhiPipeline(RhiDevice& rhiDevice) {

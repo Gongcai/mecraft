@@ -3,6 +3,7 @@
 
 #include "RenderPipeline.h"
 #include "RenderSettings.h"
+#include "../rhi/RhiRenderGraph.h"
 #include "../mesh/WorldDrawBatch.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/TerrainRenderCache.h"
@@ -110,11 +111,16 @@ private:
     // Transparent batch state (populated by renderGBufferTerrain, consumed by water/transparent)
     std::vector<DrawBatchEntry> m_transparentBatch;
     TransparentPassPlan m_transparentPassPlan;
+    RenderGraph m_renderGraph;
 
     // Private orchestration methods
     void clearDeferredAuxiliaryTargets();
     void updateDeferredHistoryTargets();
-    void renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings);
+    [[nodiscard]] bool executeGeometryGraph(const FrameContext& ctx,
+                                            const RenderSettings& settings);
+    [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList,
+                                            const FrameContext& ctx,
+                                            const RenderSettings& settings);
     void renderGenericTransparentPass(const FrameContext& ctx);
     void renderParticlesToSceneResolved(const FrameContext& ctx);
     void renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve);

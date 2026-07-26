@@ -8,6 +8,7 @@
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiCommandList;
 class RhiDevice;
 
 /// Screen-space velocity pass: reprojects depth to compute per-pixel velocity.
@@ -17,8 +18,16 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Velocity"; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Records screen-space velocity reconstruction into a graph command list.
+    /// @param commandList Recording command list supplied by the Render Graph.
+    /// @param ctx Current frame camera and shared rendering state.
+    /// @param settings Current temporal reconstruction settings.
+    /// @param targets Persistent deferred render targets used by this pass.
+    /// @return True when pipeline preparation and command recording succeeded.
+    [[nodiscard]] bool execute(RhiCommandList& commandList,
+                               const FrameContext& ctx,
+                               const RenderSettings& settings,
+                               DeferredRenderTargets& targets);
 
 private:
     bool ensureRhiPipeline(RhiDevice& rhiDevice);

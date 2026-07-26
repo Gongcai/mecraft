@@ -301,6 +301,9 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
 }
 
 void DeferredPipeline::shutdown() {
+    if (m_shared != nullptr && m_shared->rhiDevice != nullptr) {
+        m_renderGraph.releaseTransientResources(*m_shared->rhiDevice);
+    }
     if (m_voxelGiClipmap) {
         m_voxelGiClipmap->shutdown();
     }
@@ -407,32 +410,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
 
     m_deferredFrameActive = true;
 
-    // GBuffer terrain
-    {
-        renderGBufferTerrain(ctx, m_currentSettings);
-
-        // Entity and drop GBuffer
-        if (m_gbufferPass) {
-            m_gbufferPass->executeEntities(*ctx.worldView, ctx, m_currentSettings,
-                                           targets,
-                                           m_shared->humanoidRenderer,
-                                           m_shared->gameplayRegistry,
-                                           ctx.renderLocalPlayerModel);
-            m_gbufferPass->executeBlockEntities(*ctx.worldView, ctx, m_currentSettings,
-                                                targets,
-                                                m_shared->blockEntityRenderer);
-            m_gbufferPass->executeDrops(*ctx.worldView, ctx, m_currentSettings,
-                                        targets,
-                                        m_shared->dropRenderer, m_shared->dropSystem);
-            m_gbufferPass->executeFallingBlocks(*ctx.worldView, ctx, m_currentSettings,
-                                                targets,
-                                                m_shared->fallingBlockRenderer, m_shared->gameplayRegistry);
-        }
-    }
-
-    // Velocity pass
-    if (m_velocityPass) {
-        m_velocityPass->execute(ctx, m_currentSettings, targets);
+    // Geometry and velocity are recorded as Render Graph passes and submitted together.
+    if (!executeGeometryGraph(ctx, m_currentSettings)) {
+        return {};
     }
 
     // Shadow pass
@@ -675,10 +655,139 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
 
 }
 
-void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const RenderSettings& settings) {
+bool DeferredPipeline::executeGeometryGraph(const FrameContext& ctx,
+                                            const RenderSettings& settings) {
+    if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
+        m_shared->commandListPool == nullptr ||
+        m_shared->deferredTargets == nullptr || ctx.worldView == nullptr) {
+        return false;
+    }
+
+    RhiDevice& rhiDevice = *m_shared->rhiDevice;
+    DeferredRenderTargets& targets = *m_shared->deferredTargets;
+    if (!targets.ensureGBufferTextureViews(rhiDevice) ||
+        !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
+        !targets.ensureVelocityTextureView(rhiDevice)) {
+        return false;
+    }
+
+    m_renderGraph.reset();
+    const auto importTexture = [&](const RhiTextureHandle texture,
+                                   const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState,
+                                   RgTextureHandle& graphTexture) {
+        RhiTextureDesc desc;
+        if (!rhiDevice.getTextureDesc(texture, desc)) return false;
+        RgImportedTextureDesc imported;
+        imported.name = desc.debugName;
+        imported.texture = texture;
+        imported.desc = desc;
+        imported.initialState = stableState;
+        imported.finalState = stableState;
+        imported.defaultView = view;
+        graphTexture = m_renderGraph.importTexture(imported);
+        return graphTexture.isValid();
+    };
+
+    RgTextureHandle albedo;
+    RgTextureHandle normalAo;
+    RgTextureHandle voxelLight;
+    RgTextureHandle material;
+    RgTextureHandle materialAux;
+    RgTextureHandle depth;
+    RgTextureHandle perObjectVelocity;
+    RgTextureHandle velocity;
+    if (!importTexture(targets.albedoTextureHandle(),
+                       targets.albedoTextureViewHandle(),
+                       RhiResourceState::ShaderRead, albedo) ||
+        !importTexture(targets.normalAoTextureHandle(),
+                       targets.normalAoTextureViewHandle(),
+                       RhiResourceState::ShaderRead, normalAo) ||
+        !importTexture(targets.voxelLightTextureHandle(),
+                       targets.voxelLightTextureViewHandle(),
+                       RhiResourceState::ShaderRead, voxelLight) ||
+        !importTexture(targets.materialTextureHandle(),
+                       targets.materialTextureViewHandle(),
+                       RhiResourceState::ShaderRead, material) ||
+        !importTexture(targets.materialAuxTextureHandle(),
+                       targets.materialAuxTextureViewHandle(),
+                       RhiResourceState::ShaderRead, materialAux) ||
+        !importTexture(targets.depthTextureHandle(),
+                       targets.depthTextureViewHandle(),
+                       RhiResourceState::DepthRead, depth) ||
+        !importTexture(targets.perObjectVelocityTextureHandle(),
+                       targets.perObjectVelocityTextureViewHandle(),
+                       RhiResourceState::ShaderRead, perObjectVelocity) ||
+        !importTexture(targets.velocityTextureHandle(),
+                       targets.velocityTextureViewHandle(),
+                       RhiResourceState::ShaderRead, velocity)) {
+        return false;
+    }
+
+    m_renderGraph
+        .addPass({"Deferred.GBuffer", RgPassType::Graphics,
+                  RhiQueueType::Graphics})
+        .writeTexture(albedo, RhiResourceState::RenderTarget)
+        .writeTexture(normalAo, RhiResourceState::RenderTarget)
+        .writeTexture(voxelLight, RhiResourceState::RenderTarget)
+        .writeTexture(material, RhiResourceState::RenderTarget)
+        .writeTexture(materialAux, RhiResourceState::RenderTarget)
+        .writeTexture(depth, RhiResourceState::DepthWrite)
+        .writeTexture(perObjectVelocity, RhiResourceState::RenderTarget)
+        .setExecute([&](RgPassContext& pass) {
+            RhiColorAttachment velocityClear;
+            setClearAttachment(velocityClear,
+                               targets.perObjectVelocityTextureViewHandle(),
+                               0.0f, 0.0f, 0.0f, 0.0f);
+            clearColorAttachments(pass.commandList(), "GBuffer.VelocityClear",
+                                  targets.width(), targets.height(),
+                                  &velocityClear, 1u);
+            if (!renderGBufferTerrain(pass.commandList(), ctx, settings)) {
+                return false;
+            }
+            if (m_gbufferPass == nullptr) return true;
+            return m_gbufferPass->executeEntities(
+                       pass.commandList(), *ctx.worldView, ctx, settings, targets,
+                       m_shared->humanoidRenderer, m_shared->gameplayRegistry,
+                       ctx.renderLocalPlayerModel) &&
+                   m_gbufferPass->executeBlockEntities(
+                       pass.commandList(), *ctx.worldView, ctx, settings, targets,
+                       m_shared->blockEntityRenderer) &&
+                   m_gbufferPass->executeDrops(
+                       pass.commandList(), *ctx.worldView, ctx, settings, targets,
+                       m_shared->dropRenderer, m_shared->dropSystem) &&
+                   m_gbufferPass->executeFallingBlocks(
+                       pass.commandList(), *ctx.worldView, ctx, settings, targets,
+                       m_shared->fallingBlockRenderer,
+                       m_shared->gameplayRegistry);
+        });
+
+    if (m_velocityPass != nullptr) {
+        m_renderGraph
+            .addPass({"Deferred.Velocity", RgPassType::Graphics,
+                      RhiQueueType::Graphics})
+            .readTexture(depth, RhiResourceState::DepthRead)
+            .readTexture(perObjectVelocity, RhiResourceState::ShaderRead)
+            .writeTexture(velocity, RhiResourceState::RenderTarget)
+            .setExecute([&](RgPassContext& pass) {
+                return m_velocityPass->execute(pass.commandList(), ctx, settings,
+                                               targets);
+            });
+    }
+
+    const RgCompileResult compiled = m_renderGraph.compile();
+    if (!compiled.succeeded()) return false;
+    const RgExecuteResult executed =
+        m_renderGraph.execute(rhiDevice, *m_shared->commandListPool);
+    return executed.succeeded();
+}
+
+bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
+                                            const FrameContext& ctx,
+                                            const RenderSettings& settings) {
     if (!m_shared || !m_shared->deferredTargets || !m_shared->terrain ||
         !m_shared->worldRenderBuffer || !m_shared->resources || !m_shared->rhiDevice) {
-        return;
+        return false;
     }
 
     auto& targets = *m_shared->deferredTargets;
@@ -687,7 +796,7 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
     if (!targets.ensureGBufferTextureViews(rhiDevice)) {
-        return;
+        return false;
     }
 
     RhiColorAttachment gbufferAttachments[5];
@@ -715,12 +824,6 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     renderingInfo.colorAttachmentCount = 5u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    RhiCommandList* commandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"DeferredPipeline.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
@@ -813,7 +916,7 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
         if (ctx.debugService != nullptr) {
             ctx.debugService->cancelGpuTimer(gpuTimer);
         }
-        return;
+        return false;
     }
 
     if (m_shared->terrainCache) {
@@ -830,21 +933,8 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
         if (ctx.debugService != nullptr) {
             ctx.debugService->cancelGpuTimer(gpuTimer);
         }
-        return;
+        return false;
     }
-
-    targets.transitionTexture(commandList, targets.albedoTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.voxelLightTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.materialTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthWrite);
 
     commandList.beginRendering(renderingInfo);
     commandList.setViewport({
@@ -868,30 +958,10 @@ void DeferredPipeline::renderGBufferTerrain(const FrameContext& ctx, const Rende
     worldBuffer.captureSceneFrameStats();
 
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.albedoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.voxelLightTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.materialTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"DeferredPipeline.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {

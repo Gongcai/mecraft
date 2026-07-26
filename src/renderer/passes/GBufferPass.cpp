@@ -4,7 +4,6 @@
 #include "../core/RenderSettings.h"
 #include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
-#include "../rhi/RhiCommandListPool.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../renderers/BlockEntityRenderer.h"
@@ -17,7 +16,6 @@
 
 
 #include <algorithm>
-#include <cstdlib>
 
 namespace {
 void setLoadAttachment(RhiColorAttachment& attachment, const RhiTextureViewHandle view) {
@@ -26,14 +24,14 @@ void setLoadAttachment(RhiColorAttachment& attachment, const RhiTextureViewHandl
     attachment.storeOp = RhiStoreOp::Store;
 }
 
-RhiCommandList* beginObjectGBufferRendering(RhiDevice& rhiDevice,
-                                            RhiCommandListPool& commandListPool,
-                                            DeferredRenderTargets& targets,
-                                            const char* debugName,
-                                            const bool clearPerObjectVelocity) {
+bool beginObjectGBufferRendering(RhiDevice& rhiDevice,
+                                 RhiCommandList& commandList,
+                                 DeferredRenderTargets& targets,
+                                 const char* debugName,
+                                 const bool clearPerObjectVelocity) {
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice)) {
-        return nullptr;
+        return false;
     }
 
     RhiColorAttachment attachments[6];
@@ -67,61 +65,12 @@ RhiCommandList* beginObjectGBufferRendering(RhiDevice& rhiDevice,
     renderingInfo.colorAttachmentCount = 6u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    RhiCommandList* const commandListStorage =
-        commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({debugName, RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList, targets.albedoTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.voxelLightTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.materialTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.perObjectVelocityTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthWrite);
     commandList.beginRendering(renderingInfo);
-    return &commandList;
+    return true;
 }
 
-void submitCommandList(RhiDevice& rhiDevice,
-                       RhiCommandList& commandList,
-                       const char* const debugName) {
-    if (!commandList.end()) {
-        std::abort();
-    }
-    RhiCommandList* commandLists[] = {&commandList};
-    const RhiSubmitInfo submitInfo{debugName, commandLists, 1u};
-    if (!rhiDevice.submit(submitInfo)) {
-        std::abort();
-    }
-}
-
-void endObjectGBufferRendering(RhiCommandList& commandList,
-                               DeferredRenderTargets& targets) {
+void endObjectGBufferRendering(RhiCommandList& commandList) {
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.albedoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.normalAoTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.voxelLightTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.materialTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.materialAuxTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.perObjectVelocityTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthRead);
 }
 } // namespace
 
@@ -132,19 +81,20 @@ void GBufferPass::init(ResourceMgr& resourceMgr) {
 void GBufferPass::shutdown() {
 }
 
-void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContext& ctx,
-                                   const RenderSettings& settings,
-                                   DeferredRenderTargets& targets,
-                                   HumanoidRenderer* humanoidRenderer,
-                                   ecs::GameplayRegistry* gameplayRegistry,
-                                   bool renderLocalPlayerModel) {
+bool GBufferPass::executeEntities(RhiCommandList& commandList,
+                                  const IWorldView& worldView,
+                                  const FrameContext& ctx,
+                                  const RenderSettings& settings,
+                                  DeferredRenderTargets& targets,
+                                  HumanoidRenderer* humanoidRenderer,
+                                  ecs::GameplayRegistry* gameplayRegistry,
+                                  bool renderLocalPlayerModel) {
     if (humanoidRenderer == nullptr || gameplayRegistry == nullptr) {
-        return;
+        return true;
     }
 
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        ctx.shared->commandListPool == nullptr) {
-        return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
@@ -152,13 +102,12 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
         ? HumanoidRenderer::kRenderAll
         : HumanoidRenderer::kRenderMobsOnly;
     humanoidRenderer->prepareFrame(worldView, *gameplayRegistry, mode);
-    RhiCommandList* commandList = beginObjectGBufferRendering(
-        rhiDevice, *ctx.shared->commandListPool, targets, "GBuffer.Entities", true);
-    if (commandList == nullptr) {
-        return;
+    if (!beginObjectGBufferRendering(
+            rhiDevice, commandList, targets, "GBuffer.Entities", false)) {
+        return false;
     }
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(*commandList, GpuTimerPass::GBuffer)
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
 
     // Rasterize with the same projection flavor as terrain, but reproject
@@ -168,98 +117,87 @@ void GBufferPass::executeEntities(const IWorldView& worldView, const FrameContex
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
 
-    humanoidRenderer->renderPreparedToGBuffer(*commandList, viewProj, previousViewProj);
+    humanoidRenderer->renderPreparedToGBuffer(commandList, viewProj, previousViewProj);
     humanoidRenderer->finishFrame();
 
-    endObjectGBufferRendering(*commandList, targets);
+    endObjectGBufferRendering(commandList);
     if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(*commandList, gpuTimer);
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
-    submitCommandList(rhiDevice, *commandList, "GBuffer.Entities.Submit");
+    return true;
 }
 
-void GBufferPass::executeBlockEntities(const IWorldView& worldView, const FrameContext& ctx,
+bool GBufferPass::executeBlockEntities(RhiCommandList& commandList,
+                                       const IWorldView& worldView,
+                                       const FrameContext& ctx,
                                        const RenderSettings& settings,
                                        DeferredRenderTargets& targets,
                                        BlockEntityRenderer* blockEntityRenderer) {
     if (blockEntityRenderer == nullptr) {
-        return;
+        return true;
     }
 
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        ctx.shared->commandListPool == nullptr) {
-        return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     blockEntityRenderer->prepareFrame(worldView);
-    RhiCommandList* const preparationCommandListStorage =
-        ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (preparationCommandListStorage == nullptr ||
-        !preparationCommandListStorage->begin(
-            {"GBuffer.BlockEntities.Preparation.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& preparationCommandList = *preparationCommandListStorage;
     const GpuTimerSegmentToken preparationGpuTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(preparationCommandList, GpuTimerPass::GBuffer)
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
-    if (!blockEntityRenderer->prepareGBuffer(preparationCommandList)) {
+    if (!blockEntityRenderer->prepareGBuffer(commandList)) {
         if (ctx.debugService != nullptr) {
             ctx.debugService->cancelGpuTimer(preparationGpuTimer);
         }
-        submitCommandList(rhiDevice, preparationCommandList,
-                          "GBuffer.BlockEntities.Preparation.Submit");
-        return;
+        return false;
     }
     if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(preparationCommandList, preparationGpuTimer);
+        ctx.debugService->endGpuTimer(commandList, preparationGpuTimer);
     }
-    submitCommandList(rhiDevice, preparationCommandList,
-                      "GBuffer.BlockEntities.Preparation.Submit");
-    RhiCommandList* commandList = beginObjectGBufferRendering(
-        rhiDevice, *ctx.shared->commandListPool, targets, "GBuffer.BlockEntities", false);
-    if (commandList == nullptr) {
-        return;
+    if (!beginObjectGBufferRendering(
+            rhiDevice, commandList, targets, "GBuffer.BlockEntities", false)) {
+        return false;
     }
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(*commandList, GpuTimerPass::GBuffer)
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
 
     const glm::mat4& viewProj = usesTemporalProjectionJitter(
         settings.upscale.type, settings.taa.enabled)
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    blockEntityRenderer->renderToGBuffer(*commandList, viewProj);
+    blockEntityRenderer->renderToGBuffer(commandList, viewProj);
 
-    endObjectGBufferRendering(*commandList, targets);
+    endObjectGBufferRendering(commandList);
     if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(*commandList, gpuTimer);
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
-    submitCommandList(rhiDevice, *commandList, "GBuffer.BlockEntities.Submit");
+    return true;
 }
 
-void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& ctx,
-                                const RenderSettings& settings,
-                                DeferredRenderTargets& targets,
-                                DropRenderer* dropRenderer, DropSystem* dropSystem) {
+bool GBufferPass::executeDrops(RhiCommandList& commandList,
+                               const IWorldView& worldView,
+                               const FrameContext& ctx,
+                               const RenderSettings& settings,
+                               DeferredRenderTargets& targets,
+                               DropRenderer* dropRenderer,
+                               DropSystem* dropSystem) {
     if (dropRenderer == nullptr || dropSystem == nullptr) {
-        return;
+        return true;
     }
 
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        ctx.shared->commandListPool == nullptr) {
-        return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     dropRenderer->prepareFrame(worldView, *dropSystem);
-    RhiCommandList* commandList = beginObjectGBufferRendering(
-        rhiDevice, *ctx.shared->commandListPool, targets, "GBuffer.Drops", false);
-    if (commandList == nullptr) {
-        return;
+    if (!beginObjectGBufferRendering(
+            rhiDevice, commandList, targets, "GBuffer.Drops", false)) {
+        return false;
     }
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(*commandList, GpuTimerPass::GBuffer)
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
 
     // Match entity velocity: current rasterization may be jittered, while
@@ -268,51 +206,51 @@ void GBufferPass::executeDrops(const IWorldView& worldView, const FrameContext& 
         settings.upscale.type, settings.taa.enabled)
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
-    dropRenderer->renderItemsToGBuffer(*commandList, viewProj, previousViewProj);
-    dropRenderer->renderBlocksToGBuffer(*commandList, viewProj, previousViewProj, ctx.animationTime);
+    dropRenderer->renderItemsToGBuffer(commandList, viewProj, previousViewProj);
+    dropRenderer->renderBlocksToGBuffer(commandList, viewProj, previousViewProj, ctx.animationTime);
     dropRenderer->finishGBufferFrame();
 
-    endObjectGBufferRendering(*commandList, targets);
+    endObjectGBufferRendering(commandList);
     if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(*commandList, gpuTimer);
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
-    submitCommandList(rhiDevice, *commandList, "GBuffer.Drops.Submit");
+    return true;
 }
 
-void GBufferPass::executeFallingBlocks(const IWorldView& worldView, const FrameContext& ctx,
+bool GBufferPass::executeFallingBlocks(RhiCommandList& commandList,
+                                       const IWorldView& worldView,
+                                       const FrameContext& ctx,
                                        const RenderSettings& settings,
                                        DeferredRenderTargets& targets,
                                        FallingBlockRenderer* fallingBlockRenderer,
                                        ecs::GameplayRegistry* gameplayRegistry) {
     if (fallingBlockRenderer == nullptr || gameplayRegistry == nullptr) {
-        return;
+        return true;
     }
 
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        ctx.shared->commandListPool == nullptr) {
-        return;
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
     }
 
     fallingBlockRenderer->prepareFrame(worldView, *gameplayRegistry);
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    RhiCommandList* commandList = beginObjectGBufferRendering(
-        rhiDevice, *ctx.shared->commandListPool, targets, "GBuffer.FallingBlocks", false);
-    if (commandList == nullptr) {
-        return;
+    if (!beginObjectGBufferRendering(
+            rhiDevice, commandList, targets, "GBuffer.FallingBlocks", false)) {
+        return false;
     }
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(*commandList, GpuTimerPass::GBuffer)
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
 
     const glm::mat4& viewProj = usesTemporalProjectionJitter(
         settings.upscale.type, settings.taa.enabled)
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     const glm::mat4& previousViewProj = ctx.previousViewProj;
-    fallingBlockRenderer->renderToGBuffer(*commandList, viewProj, previousViewProj, ctx.animationTime);
+    fallingBlockRenderer->renderToGBuffer(commandList, viewProj, previousViewProj, ctx.animationTime);
 
-    endObjectGBufferRendering(*commandList, targets);
+    endObjectGBufferRendering(commandList);
     if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(*commandList, gpuTimer);
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
-    submitCommandList(rhiDevice, *commandList, "GBuffer.FallingBlocks.Submit");
+    return true;
 }
