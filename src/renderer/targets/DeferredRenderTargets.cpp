@@ -500,7 +500,13 @@ void DeferredRenderTargets::copyHistoryCloudToCloud(RhiCommandList& commandList)
     if (!m_ready) {
         return;
     }
-    blitColorTexture(commandList, m_historyCloudHandle[1 - m_currentHistoryIndex], m_cloudHandle);
+    // Render Graph owns the source and destination layouts for this callback.
+    // Record only the copy operation so legacy state tracking cannot emit a
+    // second, conflicting transition for the same image subresources.
+    RhiTextureBlit blit;
+    blit.src = m_historyCloudHandle[1 - m_currentHistoryIndex];
+    blit.dst = m_cloudHandle;
+    commandList.blitTexture(blit);
 }
 
 void DeferredRenderTargets::copyVolumetricToHistory(RhiDevice& rhiDevice) const {

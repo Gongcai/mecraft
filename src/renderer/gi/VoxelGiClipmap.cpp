@@ -1,7 +1,6 @@
 #include "VoxelGiClipmap.h"
 
 #include "../rhi/RhiCommandList.h"
-#include "../rhi/RhiCommandListPool.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../rhi/RhiTypes.h"
@@ -209,6 +208,7 @@ VoxelGiClipmap::~VoxelGiClipmap() {
 }
 
 void VoxelGiClipmap::shutdown() {
+    releasePendingUploads();
     if (m_rhiDevice != nullptr) {
         if (m_texture.isValid()) {
             m_rhiDevice->destroyTexture(m_texture);
@@ -218,7 +218,6 @@ void VoxelGiClipmap::shutdown() {
         }
     }
     m_rhiDevice = nullptr;
-    m_commandListPool = nullptr;
     m_texture = {};
     m_shiftScratchTexture = {};
     m_textureState = RhiResourceState::Undefined;
@@ -238,23 +237,27 @@ void VoxelGiClipmap::shutdown() {
     m_lastSunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
     m_lastUpdateFrame = 0;
     m_stats = {};
+    resetPendingGraphState();
 }
 
-void VoxelGiClipmap::update(const FrameContext& ctx,
-                            const VoxelGiSettings& settings,
-                            const IBlockTextureColorProvider& textureColors,
-                            RhiDevice& rhiDevice,
-                            RhiCommandListPool& commandListPool) {
-    if ((m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) ||
-        (m_commandListPool != nullptr && m_commandListPool != &commandListPool)) {
+RgPassHandle VoxelGiClipmap::addGraphPasses(
+    RenderGraph& graph,
+    const FrameContext& ctx,
+    const VoxelGiSettings& settings,
+    const IBlockTextureColorProvider& textureColors,
+    RhiDevice& rhiDevice,
+    const RgPassHandle dependency) {
+    if (m_graphFramePrepared || !dependency.isValid()) {
+        return {};
+    }
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
         shutdown();
     }
     m_rhiDevice = &rhiDevice;
-    m_commandListPool = &commandListPool;
     if (!settings.enabled || ctx.worldView == nullptr) {
         m_valid = false;
         m_stats = {};
-        return;
+        return dependency;
     }
 
     const int resolution = normalizedResolution(settings.resolution);
@@ -294,13 +297,13 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
     if (m_valid && !parametersChanged && !originChanged &&
         !((worldChanged || skyRadianceChanged || sunRadianceChanged || sunDirectionChanged || bounceStrengthChanged) && intervalReady)) {
         updateStatsBase(VoxelGiClipmapUpdateMode::Idle, m_originBlock);
-        return;
+        return dependency;
     }
 
     if (!allocateTexture(resolution, rhiDevice)) {
         m_valid = false;
         m_stats = {};
-        return;
+        return {};
     }
     glm::ivec3 deltaVoxels(0);
     const bool lightingChanged = skyRadianceChanged || sunRadianceChanged || sunDirectionChanged || bounceStrengthChanged;
@@ -318,80 +321,191 @@ void VoxelGiClipmap::update(const FrameContext& ctx,
 
     m_originBlock = originBlock;
     m_origin = glm::vec3(originBlock);
-    RhiCommandList& commandList = beginCommandList("VoxelGI.Upload");
-    std::vector<RhiBufferHandle> stagingBuffers;
-    stagingBuffers.reserve(6u);
-    bool uploadSucceeded = true;
+    m_pendingUploads.reserve(6u);
+    m_pendingStats = {};
     if (shiftedVolume) {
         const uint64_t overlapVoxels = overlapVoxelCount(deltaVoxels);
         const uint64_t totalVoxels = static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution);
-        updateStatsBase(VoxelGiClipmapUpdateMode::Shifted, originBlock);
-        m_stats.deltaVoxels = deltaVoxels;
-        m_stats.reusedVoxels = overlapVoxels;
-        m_stats.sampledVoxels = totalVoxels - overlapVoxels;
-        m_stats.uploadedVoxels = m_stats.sampledVoxels;
-        m_stats.copiedVoxels = overlapVoxels;
-        m_stats.uploadedBoxes = uploadShiftedVolume(deltaVoxels, commandList, rhiDevice,
-                                                    stagingBuffers);
-        uploadSucceeded = m_stats.uploadedBoxes >= 0;
+        prepareShiftCopies(deltaVoxels);
+        const int uploadedBoxes = prepareShiftedVolumeUpload(deltaVoxels, rhiDevice);
+        if (uploadedBoxes < 0) {
+            releasePendingUploads();
+            resetPendingGraphState();
+            m_valid = false;
+            m_stats = {};
+            return {};
+        }
+        m_pendingMode = VoxelGiClipmapUpdateMode::Shifted;
+        m_pendingStats.deltaVoxels = deltaVoxels;
+        m_pendingStats.reusedVoxels = overlapVoxels;
+        m_pendingStats.sampledVoxels = totalVoxels - overlapVoxels;
+        m_pendingStats.uploadedVoxels = m_pendingStats.sampledVoxels;
+        m_pendingStats.copiedVoxels = overlapVoxels;
+        m_pendingStats.uploadedBoxes = uploadedBoxes;
     } else {
-        uploadSucceeded = uploadFullVolume(commandList, rhiDevice, stagingBuffers);
+        if (!prepareFullVolumeUpload(rhiDevice)) {
+            releasePendingUploads();
+            resetPendingGraphState();
+            m_valid = false;
+            m_stats = {};
+            return {};
+        }
         const uint64_t totalVoxels = static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution) *
                                      static_cast<uint64_t>(m_resolution);
-        updateStatsBase(VoxelGiClipmapUpdateMode::Full, originBlock);
-        m_stats.sampledVoxels = totalVoxels;
-        m_stats.uploadedVoxels = totalVoxels;
-        m_stats.uploadedBoxes = 1;
+        m_pendingMode = VoxelGiClipmapUpdateMode::Full;
+        m_pendingStats.sampledVoxels = totalVoxels;
+        m_pendingStats.uploadedVoxels = totalVoxels;
+        m_pendingStats.uploadedBoxes = 1;
     }
-    submitCommandList(commandList, "VoxelGI.Upload");
-    for (const RhiBufferHandle staging : stagingBuffers) {
-        rhiDevice.destroyBuffer(staging);
-    }
-    if (!uploadSucceeded) {
+
+    m_pendingStats.mode = m_pendingMode;
+    m_pendingStats.resolution = m_resolution;
+    m_pendingStats.mipLevels = m_mipLevels;
+    m_pendingStats.originBlock = originBlock;
+    m_pendingStats.skyRadianceScale = lighting.skyRadianceScale;
+    m_pendingStats.sunRadianceScale = lighting.sunRadianceScale;
+    m_pendingLighting = lighting;
+    m_pendingActiveChunkRevision = activeRevision;
+    m_pendingBlockContentRevision = blockRevision;
+    m_pendingUpdateFrame = ctx.frameIndex;
+
+    RhiTextureDesc clipmapDesc;
+    if (!rhiDevice.getTextureDesc(m_texture, clipmapDesc)) {
+        releasePendingUploads();
+        resetPendingGraphState();
         m_valid = false;
         m_stats = {};
-        return;
+        return {};
     }
-    m_lastActiveChunkRevision = activeRevision;
-    m_lastBlockContentRevision = blockRevision;
-    m_lastSkyRadianceScale = lighting.skyRadianceScale;
-    m_lastSunRadianceScale = lighting.sunRadianceScale;
-    m_lastSkyBounceStrength = lighting.skyBounceStrength;
-    m_lastSunBounceStrength = lighting.sunBounceStrength;
-    m_lastSunDirection = lighting.sunDirection;
-    m_lastUpdateFrame = ctx.frameIndex;
-    m_valid = true;
-    m_stats.valid = true;
-    m_stats.skyRadianceScale = lighting.skyRadianceScale;
-    m_stats.sunRadianceScale = lighting.sunRadianceScale;
+    const RgTextureHandle clipmap = graph.importTexture(
+        {"VoxelGI.Clipmap", m_texture, clipmapDesc, m_textureState,
+         RhiResourceState::ShaderRead, {}, RhiQueueType::Graphics,
+         RhiQueueType::Graphics});
+    if (!clipmap.isValid()) {
+        releasePendingUploads();
+        resetPendingGraphState();
+        m_valid = false;
+        m_stats = {};
+        return {};
+    }
+
+    std::vector<RgBufferHandle> stagingBuffers;
+    stagingBuffers.reserve(m_pendingUploads.size());
+    for (const PendingUpload& upload : m_pendingUploads) {
+        const RgBufferHandle staging = graph.importBuffer(
+            {"VoxelGI.UploadStaging", upload.stagingBuffer, upload.stagingDesc,
+             RhiResourceState::TransferSrc, RhiResourceState::TransferSrc,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+        if (!staging.isValid()) {
+            releasePendingUploads();
+            resetPendingGraphState();
+            m_valid = false;
+            m_stats = {};
+            return {};
+        }
+        stagingBuffers.push_back(staging);
+    }
+
+    RgPassHandle graphTail = dependency;
+    if (m_pendingMode == VoxelGiClipmapUpdateMode::Shifted) {
+        RhiTextureDesc scratchDesc;
+        if (!rhiDevice.getTextureDesc(m_shiftScratchTexture, scratchDesc)) {
+            releasePendingUploads();
+            resetPendingGraphState();
+            m_valid = false;
+            m_stats = {};
+            return {};
+        }
+        const RgTextureHandle scratch = graph.importTexture(
+            {"VoxelGI.ShiftScratch", m_shiftScratchTexture, scratchDesc,
+             m_shiftScratchTextureState, RhiResourceState::TransferSrc, {},
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+        if (!scratch.isValid()) {
+            releasePendingUploads();
+            resetPendingGraphState();
+            m_valid = false;
+            m_stats = {};
+            return {};
+        }
+        const RgTextureSubresourceRange mip0{0u, 1u, 0u, 1u, 0u};
+        RenderGraphPassBuilder shiftToScratch = graph.addPass(
+            {"VoxelGI.ShiftToScratch", RgPassType::Copy,
+             RhiQueueType::Graphics});
+        shiftToScratch.dependsOn(graphTail)
+            .readTexture(clipmap, RhiResourceState::TransferSrc, mip0)
+            .writeTexture(scratch, RhiResourceState::TransferDst)
+            .setExecute([this](RgPassContext& pass) {
+                return recordShiftToScratch(pass.commandList());
+            });
+        graphTail = shiftToScratch.handle();
+
+        RenderGraphPassBuilder applyShift = graph.addPass(
+            {"VoxelGI.ApplyShift", RgPassType::Copy, RhiQueueType::Graphics});
+        applyShift.dependsOn(graphTail)
+            .readTexture(scratch, RhiResourceState::TransferSrc)
+            .writeTexture(clipmap, RhiResourceState::TransferDst);
+        for (const RgBufferHandle staging : stagingBuffers) {
+            applyShift.readBuffer(staging, RhiResourceState::TransferSrc);
+        }
+        applyShift.setExecute([this](RgPassContext& pass) {
+            return recordShiftedVolumeUpload(pass.commandList());
+        });
+        graphTail = applyShift.handle();
+    } else {
+        RenderGraphPassBuilder upload = graph.addPass(
+            {"VoxelGI.FullUpload", RgPassType::Copy,
+             RhiQueueType::Graphics});
+        upload.dependsOn(graphTail)
+            .writeTexture(clipmap, RhiResourceState::TransferDst);
+        for (const RgBufferHandle staging : stagingBuffers) {
+            upload.readBuffer(staging, RhiResourceState::TransferSrc);
+        }
+        upload.setExecute([this](RgPassContext& pass) {
+            return recordFullVolumeUpload(pass.commandList());
+        });
+        graphTail = upload.handle();
+    }
+
+    if (!graphTail.isValid()) {
+        releasePendingUploads();
+        resetPendingGraphState();
+        m_valid = false;
+        m_stats = {};
+        return {};
+    }
+    m_graphFramePrepared = true;
+    return graphTail;
 }
 
-RhiCommandList& VoxelGiClipmap::beginCommandList(const char* const debugName) const {
-    if (m_commandListPool == nullptr) {
+void VoxelGiClipmap::finishGraphExecution(const bool succeeded) {
+    if (!m_graphFramePrepared) {
         std::abort();
     }
-    RhiCommandList* const commandList =
-        m_commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({debugName, RhiCommandListType::Graphics})) {
-        std::abort();
+    releasePendingUploads();
+    if (succeeded) {
+        m_lastActiveChunkRevision = m_pendingActiveChunkRevision;
+        m_lastBlockContentRevision = m_pendingBlockContentRevision;
+        m_lastSkyRadianceScale = m_pendingLighting.skyRadianceScale;
+        m_lastSunRadianceScale = m_pendingLighting.sunRadianceScale;
+        m_lastSkyBounceStrength = m_pendingLighting.skyBounceStrength;
+        m_lastSunBounceStrength = m_pendingLighting.sunBounceStrength;
+        m_lastSunDirection = m_pendingLighting.sunDirection;
+        m_lastUpdateFrame = m_pendingUpdateFrame;
+        m_textureState = RhiResourceState::ShaderRead;
+        if (m_pendingMode == VoxelGiClipmapUpdateMode::Shifted) {
+            m_shiftScratchTextureState = RhiResourceState::TransferSrc;
+        }
+        m_valid = true;
+        m_pendingStats.valid = true;
+        m_stats = m_pendingStats;
+    } else {
+        m_valid = false;
+        m_stats = {};
     }
-    return *commandList;
-}
-
-void VoxelGiClipmap::submitCommandList(RhiCommandList& commandList,
-                                       const char* const debugName) const {
-    if (m_rhiDevice == nullptr || !commandList.end()) {
-        std::abort();
-    }
-    RhiCommandList* commandLists[] = {&commandList};
-    const RhiSubmitInfo submitInfo{debugName, commandLists, 1u};
-    if (!m_rhiDevice->submit(submitInfo)) {
-        std::abort();
-    }
+    resetPendingGraphState();
 }
 
 bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice) {
@@ -403,6 +517,7 @@ bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice)
         return true;
     }
 
+    m_valid = false;
     if (m_texture.isValid()) {
         rhiDevice.destroyTexture(m_texture);
         m_texture = {};
@@ -446,25 +561,14 @@ bool VoxelGiClipmap::allocateTexture(const int resolution, RhiDevice& rhiDevice)
     return true;
 }
 
-bool VoxelGiClipmap::uploadFullVolume(RhiCommandList& commandList,
-                                      RhiDevice& rhiDevice,
-                                      std::vector<RhiBufferHandle>& stagingBuffers) {
-    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::TransferDst);
-    if (!uploadSubVolume(0, 0, 0, m_resolution, m_resolution, m_resolution,
-                         commandList, rhiDevice, stagingBuffers)) {
-        return false;
-    }
-    commandList.generateMipmaps(m_texture);
-    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::ShaderRead);
-    return true;
+bool VoxelGiClipmap::prepareFullVolumeUpload(RhiDevice& rhiDevice) {
+    return prepareSubVolumeUpload(0, 0, 0, m_resolution, m_resolution,
+                                  m_resolution, rhiDevice);
 }
 
-int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels,
-                                        RhiCommandList& commandList,
-                                        RhiDevice& rhiDevice,
-                                        std::vector<RhiBufferHandle>& stagingBuffers) {
-    copyOverlapThroughScratch(deltaVoxels, commandList);
-
+int VoxelGiClipmap::prepareShiftedVolumeUpload(
+    const glm::ivec3& deltaVoxels,
+    RhiDevice& rhiDevice) {
     const auto axisRange = [this](const int delta, int& start, int& end) {
         if (delta > 0) {
             start = 0;
@@ -491,8 +595,8 @@ int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels,
     int uploadedBoxes = 0;
     const auto upload = [&](const int x, const int y, const int z,
                             const int width, const int height, const int depth) {
-        if (!uploadSubVolume(x, y, z, width, height, depth,
-                             commandList, rhiDevice, stagingBuffers)) {
+        if (!prepareSubVolumeUpload(x, y, z, width, height, depth,
+                                    rhiDevice)) {
             return false;
         }
         ++uploadedBoxes;
@@ -506,21 +610,16 @@ int VoxelGiClipmap::uploadShiftedVolume(const glm::ivec3& deltaVoxels,
     if (z0 > 0 && x1 > x0 && y1 > y0 && !upload(x0, y0, 0, x1 - x0, y1 - y0, z0)) return -1;
     if (z1 < m_resolution && x1 > x0 && y1 > y0 &&
         !upload(x0, y0, z1, x1 - x0, y1 - y0, m_resolution - z1)) return -1;
-
-    commandList.generateMipmaps(m_texture);
-    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::ShaderRead);
     return uploadedBoxes;
 }
 
-bool VoxelGiClipmap::uploadSubVolume(const int x,
-                                     const int y,
-                                     const int z,
-                                     const int width,
-                                     const int height,
-                                     const int depth,
-                                     RhiCommandList& commandList,
-                                     RhiDevice& rhiDevice,
-                                     std::vector<RhiBufferHandle>& stagingBuffers) {
+bool VoxelGiClipmap::prepareSubVolumeUpload(const int x,
+                                            const int y,
+                                            const int z,
+                                            const int width,
+                                            const int height,
+                                            const int depth,
+                                            RhiDevice& rhiDevice) {
     if (width <= 0 || height <= 0 || depth <= 0) {
         return false;
     }
@@ -552,7 +651,6 @@ bool VoxelGiClipmap::uploadSubVolume(const int x,
     if (!staging.isValid()) {
         return false;
     }
-    stagingBuffers.push_back(staging);
 
     RhiBufferTextureCopy copy;
     copy.srcBuffer = staging;
@@ -565,12 +663,11 @@ bool VoxelGiClipmap::uploadSubVolume(const int x,
     copy.width = static_cast<uint32_t>(width);
     copy.height = static_cast<uint32_t>(height);
     copy.depth = static_cast<uint32_t>(depth);
-    commandList.copyBufferToTexture(copy);
+    m_pendingUploads.push_back({staging, stagingDesc, copy});
     return true;
 }
 
-void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels,
-                                               RhiCommandList& commandList) {
+void VoxelGiClipmap::prepareShiftCopies(const glm::ivec3& deltaVoxels) {
     const auto axisRange = [this](const int delta, int& srcStart, int& dstStart, int& size) {
         if (delta > 0) {
             srcStart = delta;
@@ -600,10 +697,6 @@ void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels,
     axisRange(deltaVoxels.y, srcY, dstY, sizeY);
     axisRange(deltaVoxels.z, srcZ, dstZ, sizeZ);
 
-    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::TransferSrc);
-    transitionTexture(commandList, m_shiftScratchTexture, m_shiftScratchTextureState,
-                      RhiResourceState::TransferDst);
-
     RhiTextureCopy copy;
     copy.src = m_texture;
     copy.dst = m_shiftScratchTexture;
@@ -612,26 +705,74 @@ void VoxelGiClipmap::copyOverlapThroughScratch(const glm::ivec3& deltaVoxels,
     copy.srcOffset = {static_cast<uint32_t>(srcX), static_cast<uint32_t>(srcY), static_cast<uint32_t>(srcZ)};
     copy.dstOffset = {static_cast<uint32_t>(dstX), static_cast<uint32_t>(dstY), static_cast<uint32_t>(dstZ)};
     copy.extent = {static_cast<uint32_t>(sizeX), static_cast<uint32_t>(sizeY), static_cast<uint32_t>(sizeZ)};
-    commandList.copyTexture(copy);
+    m_pendingShiftToScratch = copy;
 
-    transitionTexture(commandList, m_shiftScratchTexture, m_shiftScratchTextureState,
-                      RhiResourceState::TransferSrc);
-    transitionTexture(commandList, m_texture, m_textureState, RhiResourceState::TransferDst);
     copy.src = m_shiftScratchTexture;
     copy.dst = m_texture;
     copy.srcOffset = copy.dstOffset;
-    commandList.copyTexture(copy);
+    m_pendingShiftFromScratch = copy;
 }
 
-void VoxelGiClipmap::transitionTexture(RhiCommandList& commandList,
-                                       const RhiTextureHandle texture,
-                                       RhiResourceState& currentState,
-                                       const RhiResourceState newState) {
-    if (currentState == newState) {
-        return;
+bool VoxelGiClipmap::recordFullVolumeUpload(
+    RhiCommandList& commandList) const {
+    if (m_pendingMode != VoxelGiClipmapUpdateMode::Full ||
+        m_pendingUploads.empty()) {
+        return false;
     }
-    commandList.textureBarrier({texture, currentState, newState});
-    currentState = newState;
+    for (const PendingUpload& upload : m_pendingUploads) {
+        commandList.copyBufferToTexture(upload.copy);
+    }
+    commandList.generateMipmaps(m_texture);
+    return true;
+}
+
+bool VoxelGiClipmap::recordShiftToScratch(
+    RhiCommandList& commandList) const {
+    if (m_pendingMode != VoxelGiClipmapUpdateMode::Shifted ||
+        !m_pendingShiftToScratch.src.isValid() ||
+        !m_pendingShiftToScratch.dst.isValid()) {
+        return false;
+    }
+    commandList.copyTexture(m_pendingShiftToScratch);
+    return true;
+}
+
+bool VoxelGiClipmap::recordShiftedVolumeUpload(
+    RhiCommandList& commandList) const {
+    if (m_pendingMode != VoxelGiClipmapUpdateMode::Shifted ||
+        m_pendingUploads.empty() || !m_pendingShiftFromScratch.src.isValid() ||
+        !m_pendingShiftFromScratch.dst.isValid()) {
+        return false;
+    }
+    commandList.copyTexture(m_pendingShiftFromScratch);
+    for (const PendingUpload& upload : m_pendingUploads) {
+        commandList.copyBufferToTexture(upload.copy);
+    }
+    commandList.generateMipmaps(m_texture);
+    return true;
+}
+
+void VoxelGiClipmap::releasePendingUploads() {
+    if (!m_pendingUploads.empty() && m_rhiDevice == nullptr) {
+        std::abort();
+    }
+    for (const PendingUpload& upload : m_pendingUploads) {
+        m_rhiDevice->destroyBuffer(upload.stagingBuffer);
+    }
+    m_pendingUploads.clear();
+}
+
+void VoxelGiClipmap::resetPendingGraphState() {
+    m_graphFramePrepared = false;
+    m_pendingMode = VoxelGiClipmapUpdateMode::Disabled;
+    m_pendingUploads.clear();
+    m_pendingShiftToScratch = {};
+    m_pendingShiftFromScratch = {};
+    m_pendingStats = {};
+    m_pendingLighting = {};
+    m_pendingActiveChunkRevision = 0;
+    m_pendingBlockContentRevision = 0;
+    m_pendingUpdateFrame = 0;
 }
 
 void VoxelGiClipmap::rebuildVolume(const IWorldView& worldView,

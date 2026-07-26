@@ -4,6 +4,7 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 #include "../rhi/RhiTypes.h"
 #include "../../world/block/Block.h"
 
@@ -37,7 +38,6 @@ struct VoxelGiClipmapStats {
 
 class IBlockTextureColorProvider;
 class RhiCommandList;
-class RhiCommandListPool;
 class RhiDevice;
 
 /// Maintains a camera-centered 3D radiance clipmap for stable low-frequency GI.
@@ -50,11 +50,33 @@ public:
     VoxelGiClipmap& operator=(const VoxelGiClipmap&) = delete;
 
     void shutdown();
-    void update(const FrameContext& ctx,
-                const VoxelGiSettings& settings,
-                const IBlockTextureColorProvider& textureColors,
-                RhiDevice& rhiDevice,
-                RhiCommandListPool& commandListPool);
+
+    /// Prepares the CPU clipmap update and adds its GPU copy stages to the graph.
+    /// @param graph Graph receiving clipmap transfer passes and staging resources.
+    /// @param ctx Frame state used to sample the world and lighting.
+    /// @param settings Clipmap resolution, cadence, and radiance settings.
+    /// @param textureColors Provider used to sample block material colors.
+    /// @param rhiDevice Device owning the persistent clipmap and staging buffers.
+    /// @param dependency Pass that must complete before the clipmap update starts.
+    /// @return The final clipmap pass, the unchanged dependency when no update is
+    /// required, or an invalid handle when preparation fails.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const VoxelGiSettings& settings,
+        const IBlockTextureColorProvider& textureColors,
+        RhiDevice& rhiDevice,
+        RgPassHandle dependency);
+
+    /// Commits or rejects the prepared CPU state after graph submission.
+    /// @param succeeded True when the complete graph recorded and submitted.
+    void finishGraphExecution(bool succeeded);
+
+    /// Reports whether a GPU clipmap update is awaiting graph completion.
+    /// @return True between addGraphPasses and finishGraphExecution.
+    [[nodiscard]] bool graphFramePrepared() const {
+        return m_graphFramePrepared;
+    }
 
     [[nodiscard]] RhiTextureHandle textureHandle() const { return m_texture; }
     [[nodiscard]] bool valid() const { return m_valid && m_texture.isValid(); }
@@ -82,25 +104,25 @@ private:
         float sunBounceStrength = 1.0f;
     };
 
+    struct PendingUpload {
+        RhiBufferHandle stagingBuffer;
+        RhiBufferDesc stagingDesc;
+        RhiBufferTextureCopy copy;
+    };
+
     [[nodiscard]] bool allocateTexture(int resolution, RhiDevice& rhiDevice);
-    [[nodiscard]] bool uploadFullVolume(RhiCommandList& commandList,
-                                        RhiDevice& rhiDevice,
-                                        std::vector<RhiBufferHandle>& stagingBuffers);
-    [[nodiscard]] int uploadShiftedVolume(const glm::ivec3& deltaVoxels,
-                                          RhiCommandList& commandList,
-                                          RhiDevice& rhiDevice,
-                                          std::vector<RhiBufferHandle>& stagingBuffers);
-    [[nodiscard]] bool uploadSubVolume(int x, int y, int z, int width, int height, int depth,
-                                       RhiCommandList& commandList,
-                                       RhiDevice& rhiDevice,
-                                       std::vector<RhiBufferHandle>& stagingBuffers);
-    void copyOverlapThroughScratch(const glm::ivec3& deltaVoxels, RhiCommandList& commandList);
-    void transitionTexture(RhiCommandList& commandList,
-                           RhiTextureHandle texture,
-                           RhiResourceState& currentState,
-                           RhiResourceState newState);
-    [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
-    void submitCommandList(RhiCommandList& commandList, const char* debugName) const;
+    [[nodiscard]] bool prepareFullVolumeUpload(RhiDevice& rhiDevice);
+    [[nodiscard]] int prepareShiftedVolumeUpload(const glm::ivec3& deltaVoxels,
+                                                 RhiDevice& rhiDevice);
+    [[nodiscard]] bool prepareSubVolumeUpload(int x, int y, int z,
+                                              int width, int height, int depth,
+                                              RhiDevice& rhiDevice);
+    void prepareShiftCopies(const glm::ivec3& deltaVoxels);
+    [[nodiscard]] bool recordFullVolumeUpload(RhiCommandList& commandList) const;
+    [[nodiscard]] bool recordShiftToScratch(RhiCommandList& commandList) const;
+    [[nodiscard]] bool recordShiftedVolumeUpload(RhiCommandList& commandList) const;
+    void releasePendingUploads();
+    void resetPendingGraphState();
     void rebuildVolume(const IWorldView& worldView,
                        const IBlockTextureColorProvider& textureColors,
                        const LightingSampleParams& lighting,
@@ -128,7 +150,6 @@ private:
                                                 const glm::ivec3& blockPos);
 
     RhiDevice* m_rhiDevice = nullptr;
-    RhiCommandListPool* m_commandListPool = nullptr;
     RhiTextureHandle m_texture;
     RhiTextureHandle m_shiftScratchTexture;
     RhiResourceState m_textureState = RhiResourceState::Undefined;
@@ -151,6 +172,17 @@ private:
     float m_lastSunBounceStrength = -1.0f;
     glm::vec3 m_lastSunDirection = glm::vec3(0.0f, 1.0f, 0.0f);
     uint64_t m_lastUpdateFrame = 0;
+
+    bool m_graphFramePrepared = false;
+    VoxelGiClipmapUpdateMode m_pendingMode = VoxelGiClipmapUpdateMode::Disabled;
+    std::vector<PendingUpload> m_pendingUploads;
+    RhiTextureCopy m_pendingShiftToScratch;
+    RhiTextureCopy m_pendingShiftFromScratch;
+    VoxelGiClipmapStats m_pendingStats;
+    LightingSampleParams m_pendingLighting;
+    uint64_t m_pendingActiveChunkRevision = 0;
+    uint64_t m_pendingBlockContentRevision = 0;
+    uint64_t m_pendingUpdateFrame = 0;
 };
 
 #endif // MECRAFT_VOXEL_GI_CLIPMAP_H

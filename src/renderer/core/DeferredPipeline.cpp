@@ -415,12 +415,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Voxel GI clipmap update
-    if (m_voxelGiClipmap) {
-        m_voxelGiClipmap->update(ctx, m_currentSettings.voxelGi, *m_resourceMgr,
-                                 rhiDevice, *m_shared->commandListPool);
-    }
-
     // Scene composite
     if (m_sceneCompositePass) {
         m_sceneCompositePass->execute(ctx, m_currentSettings, targets, m_voxelGiClipmap.get());
@@ -615,7 +609,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return false;
     }
     bool cloudGraphPrepared = false;
+    bool voxelGiGraphPrepared = false;
     const auto failGraphSetup = [&]() {
+        if (voxelGiGraphPrepared) {
+            m_voxelGiClipmap->finishGraphExecution(false);
+            voxelGiGraphPrepared = false;
+        }
         if (cloudGraphPrepared) {
             m_cloudPass->finishGraphExecution(false);
             cloudGraphPrepared = false;
@@ -1081,6 +1080,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         cloudGraphPrepared = true;
     }
 
+    if (settings.debug.deferredLightDebugMode <= 0 && m_voxelGiClipmap) {
+        graphTail = m_voxelGiClipmap->addGraphPasses(
+            m_renderGraph, ctx, settings.voxelGi, *m_resourceMgr, rhiDevice,
+            graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
+        voxelGiGraphPrepared = m_voxelGiClipmap->graphFramePrepared();
+    }
+
     const RgCompileResult compiled = m_renderGraph.compile();
     if (!compiled.succeeded()) {
         MECRAFT_LOG_STREAM(
@@ -1109,6 +1118,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (cloudGraphPrepared) {
         m_cloudPass->finishGraphExecution(executed.succeeded());
+    }
+    if (voxelGiGraphPrepared) {
+        m_voxelGiClipmap->finishGraphExecution(executed.succeeded());
     }
     return executed.succeeded();
 }
