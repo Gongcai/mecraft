@@ -510,6 +510,49 @@ bool testBatchSplitForLateQueueDependency() {
                          graph.submissionBatches()[2].dependencies[0] == 0u,
                      "the split graphics batch must wait for its producer");
 }
+
+bool testSubmissionBatchPassLimit() {
+  RenderGraph graph;
+  RgPassHandle previous;
+  const uint32_t passCount = kRgMaxPassesPerSubmissionBatch * 2u + 1u;
+  for (uint32_t index = 0u; index < passCount; ++index) {
+    RenderGraphPassBuilder pass = graph.addPass(
+        {"BatchLimitPass", RgPassType::Copy, RhiQueueType::Graphics});
+    if (previous.isValid()) {
+      pass.dependsOn(previous);
+    }
+    pass.setExecute(executeNoop);
+    previous = pass.handle();
+  }
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str())) {
+    return false;
+  }
+  const auto &batches = graph.submissionBatches();
+  const uint32_t expectedBatchCount =
+      (passCount + kRgMaxPassesPerSubmissionBatch - 1u) /
+      kRgMaxPassesPerSubmissionBatch;
+  if (!requireTrue(batches.size() == expectedBatchCount,
+                   "same-queue passes must be split at the declared batch limit")) {
+    return false;
+  }
+  for (uint32_t batchIndex = 0u; batchIndex < batches.size(); ++batchIndex) {
+    const uint32_t expectedPasses =
+        std::min(kRgMaxPassesPerSubmissionBatch,
+                 passCount - batchIndex * kRgMaxPassesPerSubmissionBatch);
+    if (!requireTrue(batches[batchIndex].passes.size() == expectedPasses,
+                     "submission batches must respect the pass limit") ||
+        !requireTrue(
+            batchIndex == 0u ||
+                (batches[batchIndex].dependencies.size() == 1u &&
+                 batches[batchIndex].dependencies[0] == batchIndex - 1u),
+            "serial same-queue batches must retain their graph dependency")) {
+      return false;
+    }
+  }
+  return true;
+}
 } // namespace
 
 int main() {
@@ -524,6 +567,7 @@ int main() {
       testUndefinedImportedReadValidation() &&
       testCrossQueueReadOwnershipDependency() &&
       testQueueOnlyEpiloguePlanning() &&
-      testBatchSplitForLateQueueDependency();
+      testBatchSplitForLateQueueDependency() &&
+      testSubmissionBatchPassLimit();
   return passed ? EXIT_SUCCESS : EXIT_FAILURE;
 }

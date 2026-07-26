@@ -1166,6 +1166,8 @@ RgCompileResult RenderGraph::compile() {
     const RgCompiledPass &pass = m_compiledPasses[passIndex];
     bool startsBatch =
         m_submissionBatches.empty() ||
+        m_submissionBatches.back().passes.size() >=
+            kRgMaxPassesPerSubmissionBatch ||
         m_submissionBatches.back().queue != pass.queue ||
         pass.type == RgPassType::External ||
         m_compiledPasses[m_submissionBatches.back().passes.back()].type ==

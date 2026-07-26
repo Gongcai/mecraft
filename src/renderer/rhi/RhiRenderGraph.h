@@ -18,6 +18,12 @@ class RhiDevice;
 inline constexpr uint32_t kRgInvalidPassIndex =
     std::numeric_limits<uint32_t>::max();
 
+/// Bounds the number of compiled passes recorded in one queue submission.
+/// Keeping command replay bounded prevents a frame graph from producing an
+/// unbounded backend command stream while preserving the graph's dependency
+/// ordering between adjacent same-queue batches.
+inline constexpr uint32_t kRgMaxPassesPerSubmissionBatch = 8u;
+
 struct RgTextureHandle {
   uint32_t index = 0u;
   uint32_t generation = 0u;
