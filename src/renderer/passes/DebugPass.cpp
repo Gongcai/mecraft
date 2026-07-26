@@ -22,6 +22,11 @@ constexpr size_t kDebugTextureCount = DebugPass::kTextureCount;
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
 
+[[nodiscard]] bool sameGraphTextureHandle(const RgTextureHandle lhs,
+                                          const RgTextureHandle rhs) {
+    return lhs.index == rhs.index && lhs.generation == rhs.generation;
+}
+
 [[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs,
                                    const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
@@ -121,13 +126,38 @@ RgPassHandle DebugPass::addGraphPass(
         {"Deferred.DebugView", RgPassType::Graphics,
          RhiQueueType::Graphics});
     debug.dependsOn(dependency);
+
+    // Shader bindings may intentionally reference one graph texture more than once.
+    // Render Graph access declarations must contain one non-overlapping read per texture.
+    struct DeclaredTexture {
+        RgTextureHandle handle;
+        bool depthRead = false;
+    };
+    std::array<DeclaredTexture, kDebugTextureCount> declaredTextures{};
+    std::size_t declaredTextureCount = 0u;
     for (std::size_t index = 0u; index < resources.textures.size(); ++index) {
         const bool depthTexture = index == 4u || index == 5u || index == 9u ||
                                   index == 16u ||
                                   (index == 13u && settings.debug.viewMode == 19);
-        debug.readTexture(resources.textures[index],
-                          depthTexture ? RhiResourceState::DepthRead
-                                       : RhiResourceState::ShaderRead);
+        const RgTextureHandle texture = resources.textures[index];
+        auto existing = std::find_if(
+            declaredTextures.begin(),
+            declaredTextures.begin() + static_cast<std::ptrdiff_t>(declaredTextureCount),
+            [texture](const DeclaredTexture& declared) {
+                return sameGraphTextureHandle(declared.handle, texture);
+            });
+        if (existing !=
+            declaredTextures.begin() + static_cast<std::ptrdiff_t>(declaredTextureCount)) {
+            existing->depthRead = existing->depthRead || depthTexture;
+            continue;
+        }
+        declaredTextures[declaredTextureCount++] = {texture, depthTexture};
+    }
+    for (std::size_t index = 0u; index < declaredTextureCount; ++index) {
+        debug.readTexture(
+            declaredTextures[index].handle,
+            declaredTextures[index].depthRead ? RhiResourceState::DepthRead
+                                              : RhiResourceState::ShaderRead);
     }
     debug.writeTexture(resources.output, RhiResourceState::RenderTarget)
         .setExecute([this, frame = &ctx, frameSettings = settings,
