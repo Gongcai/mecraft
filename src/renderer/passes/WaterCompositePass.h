@@ -14,6 +14,7 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class WorldRenderBuffer;
+class RhiCommandList;
 
 /// Water composite pass: renders water surfaces with deferred-compatible shading.
 /// Handles depth softening, volumetric fog, sky capture reflections, and composite targets.
@@ -44,6 +45,19 @@ public:
                  WorldRenderBuffer& worldRenderBuffer,
                  const std::vector<DrawBatchEntry>& transparentBatch,
                  const TransparentPassPlan& transparentPlan);
+
+    /// Record water rendering into a caller-owned graphics command list.
+    /// The caller owns resource transitions, input copies, and submission.
+    bool recordGraphPass(const FrameContext& ctx, const RenderSettings& settings,
+                         DeferredRenderTargets& targets,
+                         bool deferredFrameActive, bool preTemporalResolve,
+                         bool transparentCompositeEnabled,
+                         bool waterEffectsEnabled, bool rainSurfaceRipplesEnabled,
+                         bool volumetricFogActive,
+                         RhiCommandList& commandList,
+                         WorldRenderBuffer& worldRenderBuffer,
+                         const std::vector<DrawBatchEntry>& transparentBatch,
+                         const TransparentPassPlan& transparentPlan);
 
 private:
     ResourceMgr* m_resourceMgr = nullptr;

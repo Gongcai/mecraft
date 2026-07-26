@@ -423,15 +423,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Water composite before the selected temporal reconstruction stage.
-    if (usesTemporalProjectionJitter(
-            m_currentSettings.upscale.type, m_currentSettings.taa.enabled)) {
-        renderWaterCompositePass(ctx, true);
-    }
-
-    // Generic transparent terrain (glass, stained glass) before temporal resolve.
-    // Particles
-
     // Volumetric fog
     if (m_volumetricPass) {
         m_volumetricPass->execute(
@@ -516,6 +507,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         m_shared->deferredTargets == nullptr || ctx.worldView == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
         m_lightingPass == nullptr || m_sceneCompositePass == nullptr ||
+        m_waterCompositePass == nullptr ||
+        m_shared->worldRenderBuffer == nullptr ||
+        m_shared->terrainRhiPipelines == nullptr ||
         !ctx.sceneCaptureColorTexture.isValid() ||
         m_shared->sky == nullptr || ctx.dayNightSystem == nullptr ||
         ctx.weatherSystem == nullptr) {
@@ -549,6 +543,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !targets.ensureSceneCompositeTextureView(rhiDevice) ||
         !targets.ensureSceneResolvedTextureView(rhiDevice) ||
         !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
+        !targets.ensureHalfResTextureView(rhiDevice) ||
         !targets.ensureSsgiTextureView(rhiDevice) ||
         !targets.ensureSsgiHalfResTextureView(rhiDevice) ||
         !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
@@ -728,6 +723,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle transparentComposite;
     RgTextureHandle transparentCompositeDepth;
     RgTextureHandle cloud;
+    RgTextureHandle halfRes;
     RgTextureHandle ssgiHalfRes;
     RgTextureHandle ssgi;
     RgTextureHandle ssgiDenoise0;
@@ -775,6 +771,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !importTexture(targets.cloudTextureHandle(),
                        targets.cloudTextureViewHandle(),
                        RhiResourceState::ShaderRead, cloud) ||
+        !importTexture(targets.halfResTextureHandle(),
+                       targets.halfResTextureViewHandle(),
+                       RhiResourceState::ShaderRead, halfRes) ||
         !importTexture(targets.ssgiHalfResTextureHandle(),
                        targets.ssgiHalfResTextureViewHandle(),
                        RhiResourceState::ShaderRead, ssgiHalfRes) ||
@@ -1139,8 +1138,65 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                 depthBlit.dst = targets.transparentCompositeDepthTextureHandle();
                 pass.commandList().blitTexture(depthBlit);
                 return true;
-            });
+        });
         graphTail = sceneCompositeCopies.handle();
+
+        if (usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)) {
+            RenderGraphPassBuilder water = m_renderGraph.addPass(
+                {"Deferred.WaterPreTemporal", RgPassType::Graphics,
+                 RhiQueueType::Graphics});
+            water.dependsOn(graphTail)
+                .readTexture(depth, RhiResourceState::DepthRead)
+                .readTexture(sceneResolved, RhiResourceState::ShaderRead)
+                .readTexture(skyCapture, RhiResourceState::ShaderRead)
+                .readTexture(reflection, RhiResourceState::ShaderRead)
+                .readTexture(atmosphereLut, RhiResourceState::ShaderRead)
+                .readTexture(halfRes, RhiResourceState::ShaderRead)
+                .readTexture(skyNoise, RhiResourceState::ShaderRead)
+                .readTexture(rippleNormal, RhiResourceState::ShaderRead)
+                .readWriteTexture(transparentComposite, RhiResourceState::RenderTarget)
+                .readWriteTexture(transparentCompositeDepth, RhiResourceState::DepthWrite)
+                .readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
+                .readWriteTexture(transparencyMask, RhiResourceState::RenderTarget)
+                .setExecute([&](RgPassContext& pass) {
+                    const bool hasWater = m_transparentPassPlan.hasWater();
+                    const bool succeeded = m_waterCompositePass->recordGraphPass(
+                        ctx, settings, targets, m_deferredFrameActive, true,
+                        settings.transparent.compositeEnabled,
+                        settings.transparent.waterEffectsEnabled,
+                        settings.weather.surfaceRipplesEnabled,
+                        false,
+                        pass.commandList(), *m_shared->worldRenderBuffer,
+                        m_transparentBatch, m_transparentPassPlan);
+                    if (succeeded && hasWater &&
+                        settings.transparent.waterEffectsEnabled) {
+                        m_waterRenderedBeforeTemporal = true;
+                    }
+                    return succeeded;
+                });
+            graphTail = water.handle();
+
+            RenderGraphPassBuilder waterCopies = m_renderGraph.addPass(
+                {"Deferred.WaterPreTemporalCopies", RgPassType::Copy,
+                 RhiQueueType::Graphics});
+            waterCopies.dependsOn(graphTail)
+                .readTexture(transparentComposite, RhiResourceState::TransferSrc)
+                .writeTexture(sceneComposite, RhiResourceState::TransferDst)
+                .writeTexture(sceneResolved, RhiResourceState::TransferDst)
+                .setExecute([&](RgPassContext& pass) {
+                    RhiTextureBlit sceneBlit;
+                    sceneBlit.src = targets.transparentCompositeTextureHandle();
+                    sceneBlit.dst = targets.sceneCompositeTextureHandle();
+                    pass.commandList().blitTexture(sceneBlit);
+
+                    RhiTextureBlit resolvedBlit;
+                    resolvedBlit.src = targets.transparentCompositeTextureHandle();
+                    resolvedBlit.dst = targets.sceneResolvedTextureHandle();
+                    pass.commandList().blitTexture(resolvedBlit);
+                    return true;
+                });
+            graphTail = waterCopies.handle();
+        }
 
         RenderGraphPassBuilder genericTransparent = m_renderGraph.addPass(
             {"Deferred.GenericTransparent", RgPassType::Graphics,
@@ -1426,9 +1482,12 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
 bool DeferredPipeline::recordGenericTransparentPass(
     RhiCommandList& commandList,
     const FrameContext& ctx) {
-    if (!m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer ||
-        !m_shared->terrainRhiPipelines || !m_resourceMgr || !m_transparentPassPlan.hasGeneric()) {
+    if (!m_transparentPassPlan.hasGeneric()) {
         return true;
+    }
+    if (!m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer ||
+        !m_shared->terrainRhiPipelines || !m_resourceMgr || !m_shared->rhiDevice) {
+        return false;
     }
 
     auto& targets = *m_shared->deferredTargets;
@@ -1615,11 +1674,13 @@ void DeferredPipeline::updateDeferredHistoryTargets() {
 bool DeferredPipeline::recordParticlesPass(
     RhiCommandList& commandList,
     const FrameContext& ctx) {
-    if (!m_currentSettings.weather.particlesEnabled || !m_shared || !m_shared->particleSystem || !m_resourceMgr) {
+    if (!m_currentSettings.weather.particlesEnabled) {
         return true;
     }
-
-    if (!m_shared->deferredTargets) return false;
+    if (!m_shared || !m_shared->particleSystem || !m_resourceMgr ||
+        !m_shared->deferredTargets || !m_shared->rhiDevice) {
+        return false;
+    }
     auto& targets = *m_shared->deferredTargets;
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
