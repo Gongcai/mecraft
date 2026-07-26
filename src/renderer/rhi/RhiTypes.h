@@ -176,6 +176,9 @@ struct RhiCapabilities {
     uint32_t shaderBindingTableHandleSize = 0u;
     uint32_t shaderBindingTableHandleAlignment = 0u;
     uint32_t shaderBindingTableBaseAlignment = 0u;
+    /// True when placed textures may share device memory blocks
+    /// (getTextureMemoryRequirements/allocateTextureMemory/createPlacedTexture).
+    bool textureAliasing = false;
 };
 
 enum class RhiShaderStage : uint32_t {

@@ -1702,6 +1702,9 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.dynamicRendering = true;
     m_capabilities.synchronization2 = true;
     m_capabilities.timelineSemaphore = true;
+    // Placed textures ride Vulkan 1.3 core (vkGetDeviceImageMemoryRequirements)
+    // plus VMA's aliasing allocation path; no extension gate needed.
+    m_capabilities.textureAliasing = true;
     m_capabilities.bufferDeviceAddress = true;
     m_capabilities.multiDrawIndirect = selectedCoreFeatures.multiDrawIndirect == VK_TRUE;
     m_capabilities.timestampQuery = m_data->properties.limits.timestampComputeAndGraphics == VK_TRUE;
@@ -1833,6 +1836,14 @@ void VkRhiDevice::shutdown() {
         }
         for (const auto& record : m_data->deferredImages) {
             vmaDestroyImage(m_data->allocator, record.image, record.allocation);
+        }
+        // Shared texture memory blocks are freed after every image (placed
+        // images alias them and must be destroyed first).
+        for (auto& [_, record] : m_data->textureMemories) {
+            vmaFreeMemory(m_data->allocator, record.allocation);
+        }
+        for (const auto& record : m_data->deferredMemories) {
+            vmaFreeMemory(m_data->allocator, record.allocation);
         }
         for (auto& frame : m_data->frames) {
             if (frame.imageAvailable != VK_NULL_HANDLE) {
@@ -2015,17 +2026,18 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc,
     return handle;
 }
 
-RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
-                                            const RhiTextureInitialData* initialData) {
-    if (!m_initialized || desc.width == 0u || desc.height == 0u ||
-        desc.depthOrLayers == 0u || desc.mipLevels == 0u ||
-        toVkFormat(desc.format) == VK_FORMAT_UNDEFINED || toVkSampleCount(desc.sampleCount) == 0u) {
-        return {};
+namespace {
+/// Validates a texture description and fills the matching VkImageCreateInfo.
+/// Shared by createTexture, createPlacedTexture, and the memory-requirements
+/// query so a placed image is byte-identical to what was measured.
+/// @return False when the description cannot form a valid Vulkan image.
+bool fillImageCreateInfo(const RhiTextureDesc& desc, VkImageCreateInfo& imageInfo) {
+    if (desc.width == 0u || desc.height == 0u || desc.depthOrLayers == 0u ||
+        desc.mipLevels == 0u || toVkFormat(desc.format) == VK_FORMAT_UNDEFINED ||
+        toVkSampleCount(desc.sampleCount) == 0u) {
+        return false;
     }
-    if (initialData != nullptr && (initialData->pixels == nullptr || initialData->sizeBytes == 0u)) {
-        return {};
-    }
-    VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    imageInfo = VkImageCreateInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     imageInfo.flags = desc.dimension == RhiTextureDimension::Cube
         ? VkImageCreateFlags{VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT} : VkImageCreateFlags{};
     imageInfo.imageType = toVkImageType(desc.dimension);
@@ -2039,8 +2051,23 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
     imageInfo.samples = toVkSampleCount(desc.sampleCount);
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.usage = toVkImageUsage(desc.usage);
-    if (initialData != nullptr) imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    return true;
+}
+} // namespace
+
+RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
+                                            const RhiTextureInitialData* initialData) {
+    VkImageCreateInfo imageInfo;
+    if (!m_initialized || !fillImageCreateInfo(desc, imageInfo)) {
+        return {};
+    }
+    if (initialData != nullptr) {
+        if (initialData->pixels == nullptr || initialData->sizeBytes == 0u) {
+            return {};
+        }
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
     VmaAllocationCreateInfo allocationInfo{};
     allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     VkImage image = VK_NULL_HANDLE;
@@ -2068,6 +2095,129 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
         return {};
     }
     return handle;
+}
+
+bool VkRhiDevice::getTextureMemoryRequirements(
+    const RhiTextureDesc& desc, RhiTextureMemoryRequirements& requirements) {
+    VkImageCreateInfo imageInfo;
+    if (!m_initialized || !fillImageCreateInfo(desc, imageInfo)) {
+        return false;
+    }
+    VkDeviceImageMemoryRequirements query{
+        VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS};
+    query.pCreateInfo = &imageInfo;
+    VkMemoryRequirements2 memoryRequirements{
+        VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2};
+    vkGetDeviceImageMemoryRequirements(m_data->device, &query,
+                                       &memoryRequirements);
+    requirements.sizeBytes = memoryRequirements.memoryRequirements.size;
+    requirements.alignment = memoryRequirements.memoryRequirements.alignment;
+    requirements.memoryTypeBits =
+        memoryRequirements.memoryRequirements.memoryTypeBits;
+    return requirements.sizeBytes != 0u && requirements.memoryTypeBits != 0u;
+}
+
+RhiMemoryHandle VkRhiDevice::allocateTextureMemory(
+    const RhiTextureMemoryRequirements& requirements, const char* debugName) {
+    if (!m_initialized || requirements.sizeBytes == 0u ||
+        requirements.memoryTypeBits == 0u) {
+        return {};
+    }
+    VkMemoryRequirements memoryRequirements{};
+    memoryRequirements.size = requirements.sizeBytes;
+    memoryRequirements.alignment = std::max<uint64_t>(1u, requirements.alignment);
+    memoryRequirements.memoryTypeBits = requirements.memoryTypeBits;
+    VmaAllocationCreateInfo allocationInfo{};
+    allocationInfo.flags = VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT;
+    allocationInfo.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    VmaAllocation allocation = VK_NULL_HANDLE;
+    if (!vkSucceeded(vmaAllocateMemory(m_data->allocator, &memoryRequirements,
+                                       &allocationInfo, &allocation, nullptr),
+                     "vmaAllocateMemory")) {
+        return {};
+    }
+    if (debugName != nullptr) {
+        vmaSetAllocationName(m_data->allocator, allocation, debugName);
+    }
+    const RhiMemoryHandle handle = m_data->textureMemoryHandles.allocate();
+    m_data->textureMemories.emplace(
+        handleKey(handle),
+        VkRhiDeviceData::TextureMemory{allocation, requirements.sizeBytes,
+                                       debugName != nullptr ? debugName : ""});
+    return handle;
+}
+
+RhiTextureHandle VkRhiDevice::createPlacedTexture(const RhiTextureDesc& desc,
+                                                  const RhiMemoryHandle memory) {
+    if (!m_initialized) {
+        return {};
+    }
+    const auto memoryIt = m_data->textureMemories.find(handleKey(memory));
+    if (memoryIt == m_data->textureMemories.end()) {
+        return {};
+    }
+    VkImageCreateInfo imageInfo;
+    if (!fillImageCreateInfo(desc, imageInfo)) {
+        return {};
+    }
+    // A block accepted at allocation time may still be too small or of an
+    // incompatible type for this description; re-check before binding.
+    VkDeviceImageMemoryRequirements query{
+        VK_STRUCTURE_TYPE_DEVICE_IMAGE_MEMORY_REQUIREMENTS};
+    query.pCreateInfo = &imageInfo;
+    VkMemoryRequirements2 memoryRequirements{
+        VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2};
+    vkGetDeviceImageMemoryRequirements(m_data->device, &query,
+                                       &memoryRequirements);
+    VmaAllocationInfo allocationInfo{};
+    vmaGetAllocationInfo(m_data->allocator, memoryIt->second.allocation,
+                         &allocationInfo);
+    if (memoryRequirements.memoryRequirements.size > memoryIt->second.sizeBytes ||
+        (memoryRequirements.memoryRequirements.memoryTypeBits &
+         (1u << allocationInfo.memoryType)) == 0u ||
+        allocationInfo.offset %
+            std::max<uint64_t>(
+                1u, memoryRequirements.memoryRequirements.alignment) != 0u) {
+        return {};
+    }
+    VkImage image = VK_NULL_HANDLE;
+    if (!vkSucceeded(vmaCreateAliasingImage(m_data->allocator,
+                                            memoryIt->second.allocation,
+                                            &imageInfo, &image),
+                     "vmaCreateAliasingImage")) {
+        return {};
+    }
+    // A null allocation marks the record as placed: destroyTexture's deferred
+    // path then destroys only the image and leaves the shared block alive.
+    const RhiTextureHandle handle = m_data->textureHandles.allocate();
+    m_data->textures.emplace(handleKey(handle),
+                             VkRhiDeviceData::Texture{
+                                 image,
+                                 VK_NULL_HANDLE,
+                                 desc,
+                                 desc.debugName != nullptr ? desc.debugName : "",
+                                 false,
+                                 false
+                             });
+    nameObject(*m_data, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image),
+               desc.debugName);
+    return handle;
+}
+
+void VkRhiDevice::destroyTextureMemory(const RhiMemoryHandle handle) {
+    if (m_data == nullptr) return;
+    const auto it = m_data->textureMemories.find(handleKey(handle));
+    if (it == m_data->textureMemories.end() ||
+        !m_data->textureMemoryHandles.release(handle)) {
+        return;
+    }
+    // Placed textures do not stamp per-resource lifetimes onto the block, so
+    // conservatively wait for everything submitted up to this point.
+    enqueueDeferred(m_data->deferredMemories,
+                    VkRhiDeviceData::DeferredMemory{m_lastSubmittedSequence,
+                                                    it->second.allocation});
+    m_data->textureMemories.erase(it);
+    reclaimCompletedWork();
 }
 
 bool VkRhiDevice::getBufferDesc(const RhiBufferHandle buffer,
@@ -3259,6 +3409,11 @@ void VkRhiDevice::reclaimCompletedWorkUnlocked() {
         if (hasLiveView) break;
         vmaDestroyImage(m_data->allocator, item.image, item.allocation);
         m_data->deferredImages.pop_front();
+    }
+    while (!m_data->deferredMemories.empty() &&
+           m_data->deferredMemories.front().sequence <= completed) {
+        vmaFreeMemory(m_data->allocator, m_data->deferredMemories.front().allocation);
+        m_data->deferredMemories.pop_front();
     }
 }
 

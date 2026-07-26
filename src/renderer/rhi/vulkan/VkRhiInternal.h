@@ -109,7 +109,15 @@ struct VkRhiDeviceData {
     struct BindGroup { VkDescriptorSet set = VK_NULL_HANDLE; RhiBindGroupLayoutHandle layoutHandle{}; RhiBindGroupDesc desc{}; VkRhiResourceLifetime lifetime{}; };
     struct QueryPool { VkQueryPool pool = VK_NULL_HANDLE; uint32_t count = 0u; VkRhiResourceLifetime lifetime{}; };
     struct FrameContext { VkSemaphore imageAvailable = VK_NULL_HANDLE; VkFence fence = VK_NULL_HANDLE; bool fencePending = false; };
+    /// Shared memory block hosting placed textures; the allocation stays
+    /// alive until explicitly destroyed, independent of member textures.
+    struct TextureMemory {
+        VmaAllocation allocation = VK_NULL_HANDLE;
+        uint64_t sizeBytes = 0u;
+        std::string debugName;
+    };
     struct DeferredBuffer { uint64_t sequence; VkBuffer buffer; VmaAllocation allocation; };
+    struct DeferredMemory { uint64_t sequence; VmaAllocation allocation; };
     struct DeferredImage {
         uint64_t sequence;
         uint64_t textureKey;
@@ -192,6 +200,7 @@ struct VkRhiDeviceData {
     RhiHandleAllocator<RhiPipelineHandle> pipelineHandles;
     RhiHandleAllocator<RhiBindGroupHandle> bindGroupHandles;
     RhiHandleAllocator<RhiQueryPoolHandle> queryPoolHandles;
+    RhiHandleAllocator<RhiMemoryHandle> textureMemoryHandles;
     std::unordered_map<uint64_t, Buffer> buffers;
     std::unordered_map<uint64_t, Texture> textures;
     std::unordered_map<uint64_t, TextureView> textureViews;
@@ -202,8 +211,10 @@ struct VkRhiDeviceData {
     std::unordered_map<uint64_t, Pipeline> pipelines;
     std::unordered_map<uint64_t, BindGroup> bindGroups;
     std::unordered_map<uint64_t, QueryPool> queryPools;
+    std::unordered_map<uint64_t, TextureMemory> textureMemories;
     std::deque<DeferredBuffer> deferredBuffers;
     std::deque<DeferredImage> deferredImages;
+    std::deque<DeferredMemory> deferredMemories;
     std::deque<DeferredObject> deferredObjects;
     std::deque<PendingList> pendingLists;
     std::deque<PendingSubmission> pendingSubmissions;

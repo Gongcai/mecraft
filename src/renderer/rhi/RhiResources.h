@@ -30,6 +30,16 @@ using RhiTextureAspectFlags = uint32_t;
     return static_cast<RhiTextureAspectFlags>(aspect);
 }
 
+/// Memory footprint of a texture description, used to place multiple
+/// lifetime-disjoint textures on one shared device memory block.
+struct RhiTextureMemoryRequirements {
+    uint64_t sizeBytes = 0u;
+    uint64_t alignment = 0u;
+    /// Backend-opaque compatibility mask; a block can only host textures
+    /// whose masks all include the block's chosen memory type.
+    uint32_t memoryTypeBits = 0u;
+};
+
 struct RhiTextureDesc {
     const char* debugName = nullptr;
     RhiTextureDimension dimension = RhiTextureDimension::Texture2D;

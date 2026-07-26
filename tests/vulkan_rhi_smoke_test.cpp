@@ -1516,6 +1516,91 @@ void main() {
     return valid;
 }
 
+[[nodiscard]] bool validateTextureAliasing(VkRhiDevice& device) {
+    if (!device.capabilities().textureAliasing) {
+        std::cerr << "Vulkan device must report textureAliasing\n";
+        return false;
+    }
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+
+    RhiTextureDesc colorDesc;
+    colorDesc.debugName = "VulkanSmoke.Aliasing.Color";
+    colorDesc.format = RhiTextureFormat::Rgba16Float;
+    colorDesc.width = 256u;
+    colorDesc.height = 256u;
+    colorDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
+                      rhiFlag(RhiTextureUsage::Sampled);
+    RhiTextureDesc storageDesc;
+    storageDesc.debugName = "VulkanSmoke.Aliasing.Storage";
+    storageDesc.format = RhiTextureFormat::R32Float;
+    storageDesc.width = 128u;
+    storageDesc.height = 128u;
+    storageDesc.usage = rhiFlag(RhiTextureUsage::Storage) |
+                        rhiFlag(RhiTextureUsage::Sampled);
+
+    RhiTextureMemoryRequirements colorRequirements;
+    RhiTextureMemoryRequirements storageRequirements;
+    if (!device.getTextureMemoryRequirements(colorDesc, colorRequirements) ||
+        !device.getTextureMemoryRequirements(storageDesc, storageRequirements)) {
+        std::cerr << "Texture memory requirements query failed\n";
+        return false;
+    }
+    RhiTextureMemoryRequirements blockRequirements;
+    blockRequirements.sizeBytes =
+        std::max(colorRequirements.sizeBytes, storageRequirements.sizeBytes);
+    blockRequirements.alignment =
+        std::max(colorRequirements.alignment, storageRequirements.alignment);
+    blockRequirements.memoryTypeBits =
+        colorRequirements.memoryTypeBits & storageRequirements.memoryTypeBits;
+    if (blockRequirements.memoryTypeBits == 0u) {
+        // No shared memory type on this device; aliasing simply won't group
+        // these formats, which is a valid outcome.
+        return true;
+    }
+
+    const RhiMemoryHandle memory = device.allocateTextureMemory(
+        blockRequirements, "VulkanSmoke.Aliasing.Block");
+    if (!memory.isValid()) {
+        std::cerr << "Texture memory allocation failed\n";
+        return false;
+    }
+    const RhiTextureHandle colorTexture =
+        device.createPlacedTexture(colorDesc, memory);
+    const RhiTextureHandle storageTexture =
+        device.createPlacedTexture(storageDesc, memory);
+    bool valid = colorTexture.isValid() && storageTexture.isValid();
+
+    // Views must be creatable on placed textures like any other texture.
+    RhiTextureViewHandle colorView;
+    RhiTextureViewHandle storageView;
+    if (valid) {
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = colorTexture;
+        colorView = device.createTextureView(viewDesc);
+        viewDesc.texture = storageTexture;
+        storageView = device.createTextureView(viewDesc);
+        valid = colorView.isValid() && storageView.isValid();
+    }
+
+    // A description larger than the block must be rejected, not bound.
+    RhiTextureDesc oversizedDesc = colorDesc;
+    oversizedDesc.debugName = "VulkanSmoke.Aliasing.Oversized";
+    oversizedDesc.width = 4096u;
+    oversizedDesc.height = 4096u;
+    if (device.createPlacedTexture(oversizedDesc, memory).isValid()) {
+        std::cerr << "Oversized placed texture was not rejected\n";
+        valid = false;
+    }
+
+    if (colorView.isValid()) device.destroyTextureView(colorView);
+    if (storageView.isValid()) device.destroyTextureView(storageView);
+    if (colorTexture.isValid()) device.destroyTexture(colorTexture);
+    if (storageTexture.isValid()) device.destroyTexture(storageTexture);
+    device.destroyTextureMemory(memory);
+    device.waitIdle();
+    return valid && device.validationErrorCount() == validationErrorsBefore;
+}
+
 } // namespace
 
 int main() {
@@ -1570,6 +1655,13 @@ int main() {
         !validateResourceDescriptionNameOwnership(device)) {
         std::cerr << "vulkan_rhi_smoke_test: swapchain format or resource "
                      "name ownership check failed\n";
+        device.shutdown();
+        glfwDestroyWindow(window);
+        glfwTerminate();
+        return 1;
+    }
+    if (!validateTextureAliasing(device)) {
+        std::cerr << "vulkan_rhi_smoke_test: texture aliasing check failed\n";
         device.shutdown();
         glfwDestroyWindow(window);
         glfwTerminate();

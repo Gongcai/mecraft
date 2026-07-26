@@ -43,6 +43,56 @@ public:
     [[nodiscard]] virtual bool getTextureDesc(RhiTextureHandle texture,
                                               RhiTextureDesc& desc) const = 0;
 
+    // --- Placed textures on shared memory (memory aliasing) ---
+    // Optional feature gated by capabilities().textureAliasing; the default
+    // implementations report "unsupported" so backends without placement
+    // (OpenGL) need no changes and callers fall back to createTexture.
+
+    /// Queries the memory footprint a texture with this description would
+    /// occupy when placed on a shared memory block.
+    /// @param desc Texture description to measure; never creates the texture.
+    /// @param requirements Receives size, alignment, and the type mask.
+    /// @return False when the backend cannot place textures on shared memory.
+    [[nodiscard]] virtual bool getTextureMemoryRequirements(
+        const RhiTextureDesc& desc,
+        RhiTextureMemoryRequirements& requirements) {
+        (void)desc;
+        (void)requirements;
+        return false;
+    }
+
+    /// Allocates a device-local memory block placed textures can share.
+    /// @param requirements Size, alignment, and type mask the block satisfies;
+    ///        callers pass the combined (max size/alignment, intersected mask)
+    ///        requirements of every texture that will alias the block.
+    /// @param debugName Optional label for tooling.
+    /// @return Invalid handle when aliasing is unsupported or allocation fails.
+    virtual RhiMemoryHandle allocateTextureMemory(
+        const RhiTextureMemoryRequirements& requirements,
+        const char* debugName) {
+        (void)requirements;
+        (void)debugName;
+        return {};
+    }
+
+    /// Creates a texture bound at offset zero of a shared memory block. The
+    /// texture's contents are undefined whenever another texture aliasing the
+    /// block was written since this texture's last write; callers must treat
+    /// each reuse as an uninitialized resource.
+    /// @param desc Texture description whose requirements fit the block.
+    /// @param memory Block returned by allocateTextureMemory on this device.
+    /// @return Invalid handle when the block cannot host the description.
+    virtual RhiTextureHandle createPlacedTexture(const RhiTextureDesc& desc,
+                                                 RhiMemoryHandle memory) {
+        (void)desc;
+        (void)memory;
+        return {};
+    }
+
+    /// Destroys a shared memory block once submitted GPU work completes.
+    /// Placed textures created on the block must be destroyed beforehand.
+    virtual void destroyTextureMemory(RhiMemoryHandle handle) { (void)handle; }
+
     virtual RhiTextureViewHandle createTextureView(const RhiTextureViewDesc& desc) = 0;
     virtual RhiSamplerHandle createSampler(const RhiSamplerDesc& desc) = 0;
     virtual RhiShaderHandle createShader(const RhiShaderDesc& desc) = 0;

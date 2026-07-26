@@ -31,6 +31,15 @@ public:
                                      RhiBufferDesc& desc) const override;
     [[nodiscard]] bool getTextureDesc(RhiTextureHandle texture,
                                       RhiTextureDesc& desc) const override;
+    [[nodiscard]] bool getTextureMemoryRequirements(
+        const RhiTextureDesc& desc,
+        RhiTextureMemoryRequirements& requirements) override;
+    RhiMemoryHandle allocateTextureMemory(
+        const RhiTextureMemoryRequirements& requirements,
+        const char* debugName) override;
+    RhiTextureHandle createPlacedTexture(const RhiTextureDesc& desc,
+                                         RhiMemoryHandle memory) override;
+    void destroyTextureMemory(RhiMemoryHandle handle) override;
     RhiTextureViewHandle createTextureView(const RhiTextureViewDesc& desc) override;
     RhiSamplerHandle createSampler(const RhiSamplerDesc& desc) override;
     RhiShaderHandle createShader(const RhiShaderDesc& desc) override;
