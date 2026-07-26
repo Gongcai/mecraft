@@ -222,6 +222,7 @@ private:
     ShadowFrameStats m_displayShadowStats{};
     RenderGraphFrameStats m_displayRenderGraphStats{};
     HiZCullFrameStats m_displayHiZCullStats{};
+    ShadowCullFrameStats m_displayShadowCullStats{};
     RenderWorkStats m_displayRenderWorkStats{};
     LightFrameStats m_displayLightStats{};
     CachedWorldMetrics m_cachedWorldMetrics{};

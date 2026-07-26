@@ -1066,6 +1066,14 @@ HiZCullFrameStats RenderScene::hiZCullStats() const {
     return m_deferredPipeline->hiZPass()->cullStats();
 }
 
+ShadowCullFrameStats RenderScene::shadowCullStats() const {
+    if (m_deferredPipeline == nullptr ||
+        m_deferredPipeline->shadowPass() == nullptr) {
+        return {};
+    }
+    return m_deferredPipeline->shadowPass()->cullStats();
+}
+
 RenderScene::PresentationDebugInfo RenderScene::presentationDebugInfo() const {
     PresentationDebugInfo info;
     info.renderWidth = m_currentContext.renderExtent.width;

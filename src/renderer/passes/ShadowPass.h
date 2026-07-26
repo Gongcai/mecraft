@@ -18,6 +18,7 @@
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiDevice;
 class IWorldView;
 class World;
 class BlockEntityRenderer;
@@ -86,6 +87,9 @@ public:
     /// @param succeeded True only when the complete graph batch was submitted.
     void finishGraphExecution(bool succeeded);
 
+    /// Latest GPU cascade-cull counters read back from the ring.
+    [[nodiscard]] const ShadowCullFrameStats& cullStats() const { return m_cullStats; }
+
 private:
     /// Render humanoid/mob entities into the current shadow cascade layer.
     void renderShadowEntities(RhiCommandList& commandList,
@@ -110,6 +114,26 @@ private:
 
     /// Records opaque and cutout casters into one cascade's primary depth layer.
     [[nodiscard]] bool recordOpaquePass(RhiCommandList& commandList, int cascade);
+
+    /// Creates the cascade-cull compute pipeline and stats buffers on first use.
+    [[nodiscard]] bool ensureCullPipeline(RhiDevice& rhiDevice);
+    /// Creates any missing cull counter/readback buffers (per-item recovery).
+    [[nodiscard]] bool ensureCullStatsBuffers(RhiDevice& rhiDevice);
+    /// (Re)binds one command buffer slot (0 opaque, 1 cutout) for the cull
+    /// dispatch; rebuilt when the growable command buffer reallocates.
+    [[nodiscard]] bool ensureCullBindGroup(RhiDevice& rhiDevice, int slot,
+                                           RhiBufferHandle commandBuffer,
+                                           uint64_t commandCapacity,
+                                           RhiBufferHandle metadataBuffer,
+                                           uint64_t metadataCapacity);
+    /// Dispatches the light-frustum cull over this cascade's freshly uploaded
+    /// indirect commands, between the upload and the multi-draw. Consumes the
+    /// oldest readback slot on the first rendered cascade and ships this
+    /// frame's counters on the last one. Failures degrade to an uncalled draw.
+    void recordCascadeCull(RhiCommandList& commandList, const FrameContext& ctx,
+                           int cascade, bool renderCutoutCasters);
+    /// Destroys all GPU cull resources (pipeline, bind groups, buffers).
+    void destroyCullResources();
     /// Copies one cascade's primary depth layer into its transparent depth layer.
     [[nodiscard]] bool recordCopyPass(RhiCommandList& commandList, int cascade);
     /// Clears transparent shadow colors and records near-cascade transparent casters.
@@ -148,6 +172,34 @@ private:
     bool m_graphFramePrepared = false;
     bool m_graphExecutionBegun = false;
     bool m_shadowStatsActive = false;
+
+    // GPU cascade command culling: compute pipeline zeroing indirect draws
+    // outside the cascade's tightly padded light frustum, with a delayed
+    // readback ring for the culled-count display.
+    struct CullBinding {
+        RhiBindGroupHandle bindGroup;
+        RhiBufferHandle boundCommands;
+        // The metadata pool reallocates as chunk streaming grows it; a stale
+        // binding would feed garbage origins to the cull test.
+        RhiBufferHandle boundMetadata;
+    };
+    static constexpr uint32_t kCullStatsRingSize = 3u;
+    RhiDevice* m_cullRhiDevice = nullptr;
+    RhiShaderHandle m_cullShader;
+    RhiBindGroupLayoutHandle m_cullBindGroupLayout;
+    RhiPipelineLayoutHandle m_cullPipelineLayout;
+    RhiPipelineHandle m_cullPipeline;
+    std::array<CullBinding, 2> m_cullBindings{};
+    RhiBufferHandle m_cullCounterBuffer;
+    std::array<RhiBufferHandle, kCullStatsRingSize> m_cullReadbackBuffers{};
+    std::array<bool, kCullStatsRingSize> m_cullRingWritten{};
+    std::array<std::array<uint32_t, 4>, kCullStatsRingSize> m_cullTotalsRing{};
+    uint32_t m_cullRingWriteIndex = 0u;
+    // Command totals per cascade; frozen cascades keep their last values.
+    std::array<uint32_t, 4> m_cullTotals{};
+    ShadowCullFrameStats m_cullStats{};
+    bool m_gpuCullEnabledThisFrame = false;
+    int m_cullLastRenderedCascade = 0;
 };
 
 #endif // MECRAFT_SHADOW_PASS_H

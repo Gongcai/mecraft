@@ -20,6 +20,10 @@ struct ShadowSettings {
     /// Update far cascades (2/3) on alternating frames; they cover 46m+
     /// where one frame of light/camera staleness is not resolvable.
     bool farCascadeInterleaved = true;
+    /// Tighten each cascade's caster set on the GPU: a compute pass re-tests
+    /// every indirect draw against the cascade's light frustum with a small
+    /// padding and zeroes draws the wide CPU binning kept conservatively.
+    bool gpuCascadeCullEnabled = true;
     int resolution = 2048;
     float distance = 192.0f;
     float softness = 1.0f;

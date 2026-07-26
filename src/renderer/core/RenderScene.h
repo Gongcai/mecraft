@@ -203,6 +203,7 @@ public:
 
     /// Hi-Z occlusion culling counters (ring-delayed GPU readback).
     [[nodiscard]] HiZCullFrameStats hiZCullStats() const;
+    [[nodiscard]] ShadowCullFrameStats shadowCullStats() const;
 
     // Pipeline readiness (R2.6a)
     /// Check if the new pipeline path is ready to use.

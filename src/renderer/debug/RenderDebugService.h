@@ -122,6 +122,15 @@ struct HiZCullFrameStats {
     uint32_t cutoutTotal = 0u;
 };
 
+/// Per-cascade GPU shadow command culling counters read back from the GPU
+/// (ring-delayed by a few frames to avoid stalls). Frozen interleaved
+/// cascades retain the counts from their last rendered frame.
+struct ShadowCullFrameStats {
+    bool valid = false;
+    std::array<uint32_t, 4> culled{};
+    std::array<uint32_t, 4> total{};
+};
+
 /// Per-cascade CSM shadow statistics for profiling and baseline capture.
 struct ShadowCascadeStats {
     double gpuTotalMs = 0.0;

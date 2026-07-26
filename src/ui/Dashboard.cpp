@@ -807,6 +807,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             m_displayShadowStats = render.getShadowFrameStats();
             m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
             m_displayHiZCullStats = renderScene.hiZCullStats();
+            m_displayShadowCullStats = renderScene.shadowCullStats();
             m_displayRenderWorkStats = render.getRenderWorkStats();
             m_displayLightStats = world.getLightFrameStats();
             refreshWorldMetricsIfNeeded(world, now, false);
@@ -1049,6 +1050,15 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     culled, total,
                     cull.opaqueCulled, cull.opaqueTotal,
                     cull.cutoutCulled, cull.cutoutTotal);
+            }
+            if (m_displayShadowCullStats.valid) {
+                const ShadowCullFrameStats& shadowCull = m_displayShadowCullStats;
+                ImGui::Text(
+                    "Shadow Cull: c0 %u/%u  c1 %u/%u  c2 %u/%u  c3 %u/%u",
+                    shadowCull.culled[0], shadowCull.total[0],
+                    shadowCull.culled[1], shadowCull.total[1],
+                    shadowCull.culled[2], shadowCull.total[2],
+                    shadowCull.culled[3], shadowCull.total[3]);
             }
             if (graphStats.passes.empty()) {
                 ImGui::Text("GPU timings: waiting");
@@ -1437,6 +1447,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Soft Shadows", &settings.shadow.softShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("PCSS Shadows", &settings.shadow.pcssShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Interleaved Far Cascades", &settings.shadow.farCascadeInterleaved);
+        pipelineChanged |= ImGui::Checkbox("GPU Cascade Culling", &settings.shadow.gpuCascadeCullEnabled);
         pipelineChanged |= ImGui::Checkbox("Contact Shadows", &settings.shadow.contactShadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Cloud Shadows [DM optional]", &settings.cloud.shadowsEnabled);
         pipelineChanged |= ImGui::Checkbox("Derivative Strict", &settings.debug.derivativeStrictMode);

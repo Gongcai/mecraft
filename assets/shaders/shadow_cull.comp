@@ -1,0 +1,77 @@
+#version 450 core
+
+// Shadow cascade command culling: one thread per indirect draw command of
+// the cascade being rendered. The command's baseInstance indexes the
+// sub-chunk metadata (world origin of a 16^3 box). The box is projected
+// with the cascade's orthographic view-projection and rejected when it
+// falls outside the padded light-space clip volume; rejected draws have
+// their vertex count zeroed in place before the multi-draw executes.
+//
+// The CPU binning pass already ran with a wide safety padding (16-block
+// floor), so this pass only tightens the same test with a padding sized
+// to the actual filter/animation slack, removing the border ring of
+// sub-chunks the CPU kept conservatively.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct DrawCommand {
+    uint count;
+    uint instanceCount;
+    uint first;
+    uint baseInstance;
+};
+
+layout(binding = 0, std430) buffer CommandBuffer { DrawCommand uCommands[]; };
+layout(binding = 1, std430) readonly buffer MetadataBuffer { vec4 uOrigins[]; };
+// One counter per cascade; the dispatch's slot comes in uParams0.w.
+layout(binding = 2, std430) buffer CullStatsBuffer { uint uCulledCounts[]; };
+
+layout(push_constant) uniform RhiPushConstants {
+    // Orthographic view-projection of the cascade being rendered.
+    mat4 uViewProj;
+    // x: XY padding in NDC units; y: Z padding in NDC units;
+    // z: command count; w: stats slot (cascade index).
+    vec4 uParams0;
+    // x: 1.0 when the Z extent participates in culling, 0.0 otherwise.
+    vec4 uParams1;
+};
+
+void main() {
+    const uint index = gl_GlobalInvocationID.x;
+    if (index >= uint(uParams0.z)) {
+        return;
+    }
+    const DrawCommand command = uCommands[index];
+    if (command.count == 0u) {
+        return;
+    }
+    const vec3 origin = uOrigins[command.baseInstance].xyz;
+
+    vec3 ndcMin = vec3(1.0e9);
+    vec3 ndcMax = vec3(-1.0e9);
+    for (int corner = 0; corner < 8; ++corner) {
+        const vec3 world = origin + vec3((corner & 1) != 0 ? 16.0 : 0.0,
+                                         (corner & 2) != 0 ? 16.0 : 0.0,
+                                         (corner & 4) != 0 ? 16.0 : 0.0);
+        const vec4 clip = uViewProj * vec4(world, 1.0);
+        if (abs(clip.w) <= 1.0e-4) {
+            // Degenerate projection; keep the draw.
+            return;
+        }
+        const vec3 ndc = clip.xyz / clip.w;
+        ndcMin = min(ndcMin, ndc);
+        ndcMax = max(ndcMax, ndc);
+    }
+
+    const float xyPad = uParams0.x;
+    const float zPad = uParams0.y;
+    bool culled = ndcMax.x < -1.0 - xyPad || ndcMin.x > 1.0 + xyPad ||
+                  ndcMax.y < -1.0 - xyPad || ndcMin.y > 1.0 + xyPad;
+    if (!culled && uParams1.x > 0.5) {
+        culled = ndcMax.z < -1.0 - zPad || ndcMin.z > 1.0 + zPad;
+    }
+    if (culled) {
+        uCommands[index].count = 0u;
+        atomicAdd(uCulledCounts[uint(uParams0.w)], 1u);
+    }
+}

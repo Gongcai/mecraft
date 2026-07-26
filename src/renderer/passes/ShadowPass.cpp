@@ -21,11 +21,15 @@
 #include "../../world/DropSystem.h"
 #include "../../ecs/GameplayRegistry.h"
 
+#include "../rhi/RhiShaderSourceLoader.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
+#include <optional>
 
 #include "renderer/core/FrameContext.h"
 
@@ -39,6 +43,13 @@ constexpr int kCutoutShadowCasterCascadeCount = SHADOW_CASCADE_COUNT;
 [[nodiscard]] RgTextureSubresourceRange cascadeRange(const int cascade) {
     return {0u, 1u, static_cast<uint32_t>(cascade), 1u, 0u};
 }
+
+/// Push-constant block of shadow_cull.comp; layout mirrors the shader.
+struct ShadowCullPushConstants {
+    glm::mat4 viewProj;
+    glm::vec4 params0;
+    glm::vec4 params1;
+};
 } // namespace
 
 void ShadowPass::init(ResourceMgr& resourceMgr) {
@@ -49,6 +60,7 @@ void ShadowPass::shutdown() {
     if (m_shadowStatsActive && m_frameDebugService != nullptr) {
         m_frameDebugService->cancelShadowFrame();
     }
+    destroyCullResources();
     m_resourceMgr = nullptr;
     m_frameContext = nullptr;
     m_frameTargets = nullptr;
@@ -161,6 +173,14 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
     m_lastShadowResolution = settings.shadow.resolution;
     m_lastShadowDistance = settings.shadow.distance;
     m_farCascadesPrimed = true;
+
+    m_gpuCullEnabledThisFrame = settings.shadow.gpuCascadeCullEnabled;
+    m_cullLastRenderedCascade = 0;
+    for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
+        if (m_cascadeRenderedThisFrame[static_cast<size_t>(cascade)]) {
+            m_cullLastRenderedCascade = cascade;
+        }
+    }
 
     m_shadowRenderer->updateFromBasis(basis, shadowSettings,
                                       m_cascadeRenderedThisFrame);
@@ -436,6 +456,10 @@ bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade
         return false;
     }
 
+    if (m_gpuCullEnabledThisFrame) {
+        recordCascadeCull(commandList, ctx, cascade, renderCutoutCasters);
+    }
+
     RhiDepthStencilAttachment depthAttachment;
     depthAttachment.view = targets.csmShadowDepthTextureViewHandle(cascade);
     depthAttachment.depthLoadOp = RhiLoadOp::Clear;
@@ -471,6 +495,330 @@ bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade
         m_frameDebugService->endGpuTimer(commandList, gpuTimer);
     }
     return true;
+}
+
+void ShadowPass::recordCascadeCull(RhiCommandList& commandList,
+                                   const FrameContext& ctx,
+                                   const int cascade,
+                                   const bool renderCutoutCasters) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        cascade < 0 || cascade >= SHADOW_CASCADE_COUNT) {
+        return;
+    }
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!ensureCullPipeline(rhiDevice)) {
+        return;
+    }
+
+    const RhiBufferHandle commandBuffers[2] = {
+        m_worldRenderBuffer->opaqueIndirectBufferHandle(),
+        m_worldRenderBuffer->cutoutIndirectBufferHandle()
+    };
+    const uint64_t commandCapacities[2] = {
+        m_worldRenderBuffer->opaqueIndirectBufferCapacity(),
+        m_worldRenderBuffer->cutoutIndirectBufferCapacity()
+    };
+    const uint32_t commandCounts[2] = {
+        static_cast<uint32_t>(m_worldRenderBuffer->opaqueCommandCount()),
+        renderCutoutCasters
+            ? static_cast<uint32_t>(m_worldRenderBuffer->cutoutCommandCount())
+            : 0u
+    };
+
+    // Consume the oldest readback slot before this frame's copy overwrites
+    // it. Cascade 0 renders every frame, so the read happens exactly once
+    // per frame and always before any counter traffic is recorded.
+    const uint32_t ringIndex = m_cullRingWriteIndex;
+    if (cascade == 0 && m_cullRingWritten[ringIndex]) {
+        const void* mapped = rhiDevice.mapBuffer(
+            m_cullReadbackBuffers[ringIndex], 0u, sizeof(uint32_t) * 4u);
+        if (mapped != nullptr) {
+            uint32_t counts[4];
+            std::memcpy(counts, mapped, sizeof(counts));
+            rhiDevice.unmapBuffer(m_cullReadbackBuffers[ringIndex]);
+            m_cullStats.valid = true;
+            for (size_t i = 0; i < 4; ++i) {
+                m_cullStats.culled[i] = counts[i];
+                m_cullStats.total[i] = m_cullTotalsRing[ringIndex][i];
+            }
+        }
+    }
+
+    // Zero this cascade's counter slot ahead of its dispatches; frozen
+    // cascades keep the counts from their last rendered frame.
+    const uint32_t zero = 0u;
+    commandList.bufferBarrier({m_cullCounterBuffer,
+                               RhiResourceState::StorageBuffer,
+                               RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_cullCounterBuffer,
+                             sizeof(uint32_t) * static_cast<uint64_t>(cascade),
+                             &zero, sizeof(zero));
+    commandList.bufferBarrier({m_cullCounterBuffer,
+                               RhiResourceState::TransferDst,
+                               RhiResourceState::StorageBuffer});
+
+    const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
+    // XY padding only needs to cover vertex animation sway and texel-snap
+    // slop; undoing the CPU binning's wide 16-block floor is the point of
+    // this pass.
+    const float xyPadWorld = std::max(2.0f, cascadeData.texelWorldSize * 8.0f);
+    // Z keeps the CPU padding untouched: a depth-range mistake silently
+    // drops casters of tall structures, and the Z test culls nothing the
+    // CPU pass has not already removed.
+    const float zPadWorld = std::max(64.0f, cascadeData.texelWorldSize * 64.0f);
+    ShadowCullPushConstants pushConstants{};
+    pushConstants.viewProj = cascadeData.viewProj;
+    pushConstants.params0 = glm::vec4(
+        xyPadWorld / std::max(1.0f, cascadeData.radius),
+        zPadWorld / std::max(1.0f, cascadeData.depthExtent),
+        0.0f,
+        static_cast<float>(cascade));
+    pushConstants.params1 = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
+
+    for (int slot = 0; slot < 2; ++slot) {
+        if (commandCounts[slot] == 0u || !commandBuffers[slot].isValid()) {
+            continue;
+        }
+        if (!ensureCullBindGroup(rhiDevice, slot, commandBuffers[slot],
+                                 commandCapacities[slot],
+                                 m_worldRenderBuffer->metadataBufferHandle(),
+                                 m_worldRenderBuffer->metadataBufferCapacity())) {
+            return;
+        }
+        pushConstants.params0.z = static_cast<float>(commandCounts[slot]);
+        commandList.bufferBarrier({commandBuffers[slot],
+                                   RhiResourceState::IndirectArgument,
+                                   RhiResourceState::StorageBuffer});
+        commandList.setComputePipeline(m_cullPipeline);
+        commandList.setBindGroup(0u, m_cullBindings[slot].bindGroup);
+        commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                                  rhiFlag(RhiShaderStage::Compute));
+        commandList.dispatch((commandCounts[slot] + 63u) / 64u, 1u, 1u);
+        commandList.bufferBarrier({commandBuffers[slot],
+                                   RhiResourceState::StorageBuffer,
+                                   RhiResourceState::IndirectArgument});
+    }
+    m_cullTotals[static_cast<size_t>(cascade)] =
+        commandCounts[0] + commandCounts[1];
+
+    // The last rendered cascade ships all four counters into the ring.
+    if (cascade == m_cullLastRenderedCascade) {
+        commandList.bufferBarrier({m_cullCounterBuffer,
+                                   RhiResourceState::StorageBuffer,
+                                   RhiResourceState::TransferSrc});
+        if (m_cullRingWritten[ringIndex]) {
+            commandList.bufferBarrier({m_cullReadbackBuffers[ringIndex],
+                                       RhiResourceState::HostRead,
+                                       RhiResourceState::TransferDst});
+        }
+        RhiBufferCopy statsCopy;
+        statsCopy.src = m_cullCounterBuffer;
+        statsCopy.dst = m_cullReadbackBuffers[ringIndex];
+        statsCopy.size = sizeof(uint32_t) * 4u;
+        commandList.copyBuffer(statsCopy);
+        commandList.bufferBarrier({m_cullReadbackBuffers[ringIndex],
+                                   RhiResourceState::TransferDst,
+                                   RhiResourceState::HostRead});
+        commandList.bufferBarrier({m_cullCounterBuffer,
+                                   RhiResourceState::TransferSrc,
+                                   RhiResourceState::StorageBuffer});
+        m_cullTotalsRing[ringIndex] = m_cullTotals;
+        m_cullRingWritten[ringIndex] = true;
+        m_cullRingWriteIndex = (ringIndex + 1u) % kCullStatsRingSize;
+    }
+}
+
+bool ShadowPass::ensureCullPipeline(RhiDevice& rhiDevice) {
+    if (m_cullRhiDevice != nullptr && m_cullRhiDevice != &rhiDevice) {
+        destroyCullResources();
+    }
+    m_cullRhiDevice = &rhiDevice;
+    if (m_cullPipeline.isValid()) {
+        return ensureCullStatsBuffers(rhiDevice);
+    }
+
+    const std::optional<std::string> source =
+        renderer::rhi::loadShaderSource("assets/shaders/shadow_cull.comp");
+    if (!source.has_value()) {
+        return false;
+    }
+    RhiShaderDesc shaderDesc;
+    shaderDesc.debugName = "Shadow.Cull";
+    shaderDesc.stage = RhiShaderStage::Compute;
+    shaderDesc.source = source->c_str();
+    shaderDesc.sourceSize = source->size();
+    m_cullShader = rhiDevice.createShader(shaderDesc);
+    if (!m_cullShader.isValid()) {
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc layoutDesc;
+    layoutDesc.debugName = "Shadow.CullBindGroupLayout";
+    layoutDesc.entries.push_back({
+        0u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    layoutDesc.entries.push_back({
+        1u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    layoutDesc.entries.push_back({
+        2u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
+    m_cullBindGroupLayout = rhiDevice.createBindGroupLayout(layoutDesc);
+    if (!m_cullBindGroupLayout.isValid()) {
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Shadow.CullPipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_cullBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes =
+        static_cast<uint32_t>(sizeof(ShadowCullPushConstants));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Compute);
+    m_cullPipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_cullPipelineLayout.isValid()) {
+        return false;
+    }
+
+    RhiComputePipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Shadow.CullPipeline";
+    pipelineDesc.computeShader = m_cullShader;
+    pipelineDesc.layout = m_cullPipelineLayout;
+    m_cullPipeline = rhiDevice.createComputePipeline(pipelineDesc);
+    if (!m_cullPipeline.isValid()) {
+        return false;
+    }
+    return ensureCullStatsBuffers(rhiDevice);
+}
+
+bool ShadowPass::ensureCullStatsBuffers(RhiDevice& rhiDevice) {
+    if (!m_cullCounterBuffer.isValid()) {
+        RhiBufferDesc counterDesc;
+        counterDesc.debugName = "Shadow.CullCounters";
+        counterDesc.size = sizeof(uint32_t) * 4u;
+        counterDesc.usage = rhiFlag(RhiBufferUsage::Storage) |
+                            rhiFlag(RhiBufferUsage::TransferSrc) |
+                            rhiFlag(RhiBufferUsage::TransferDst);
+        counterDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        counterDesc.initialState = RhiResourceState::StorageBuffer;
+        m_cullCounterBuffer = rhiDevice.createBuffer(counterDesc, nullptr, 0u);
+        if (!m_cullCounterBuffer.isValid()) {
+            return false;
+        }
+    }
+    for (uint32_t slot = 0u; slot < kCullStatsRingSize; ++slot) {
+        if (m_cullReadbackBuffers[slot].isValid()) {
+            continue;
+        }
+        // Mappable readback contract: MapRead usage with a TransferDst
+        // resting state (HostRead is entered only after each copy).
+        RhiBufferDesc readbackDesc;
+        readbackDesc.debugName = "Shadow.CullReadback";
+        readbackDesc.size = sizeof(uint32_t) * 4u;
+        readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                             rhiFlag(RhiBufferUsage::MapRead);
+        readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+        readbackDesc.initialState = RhiResourceState::TransferDst;
+        m_cullReadbackBuffers[slot] = rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
+        if (!m_cullReadbackBuffers[slot].isValid()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ShadowPass::ensureCullBindGroup(RhiDevice& rhiDevice,
+                                     const int slot,
+                                     const RhiBufferHandle commandBuffer,
+                                     const uint64_t commandCapacity,
+                                     const RhiBufferHandle metadataBuffer,
+                                     const uint64_t metadataCapacity) {
+    if (!commandBuffer.isValid() || !metadataBuffer.isValid() ||
+        slot < 0 || slot >= 2) {
+        return false;
+    }
+    CullBinding& binding = m_cullBindings[static_cast<size_t>(slot)];
+    if (binding.bindGroup.isValid() &&
+        binding.boundCommands.index == commandBuffer.index &&
+        binding.boundCommands.generation == commandBuffer.generation &&
+        binding.boundMetadata.index == metadataBuffer.index &&
+        binding.boundMetadata.generation == metadataBuffer.generation) {
+        return true;
+    }
+    if (binding.bindGroup.isValid()) {
+        rhiDevice.destroyBindGroup(binding.bindGroup);
+        binding = {};
+    }
+
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_cullBindGroupLayout;
+    RhiBindGroupEntry commandsEntry;
+    commandsEntry.binding = 0u;
+    commandsEntry.resource.buffer.buffer = commandBuffer;
+    commandsEntry.resource.buffer.offset = 0u;
+    commandsEntry.resource.buffer.range = commandCapacity;
+    bindGroupDesc.entries.push_back(commandsEntry);
+    RhiBindGroupEntry metadataEntry;
+    metadataEntry.binding = 1u;
+    metadataEntry.resource.buffer.buffer = metadataBuffer;
+    metadataEntry.resource.buffer.offset = 0u;
+    metadataEntry.resource.buffer.range = metadataCapacity;
+    bindGroupDesc.entries.push_back(metadataEntry);
+    RhiBindGroupEntry statsEntry;
+    statsEntry.binding = 2u;
+    statsEntry.resource.buffer.buffer = m_cullCounterBuffer;
+    statsEntry.resource.buffer.offset = 0u;
+    statsEntry.resource.buffer.range = sizeof(uint32_t) * 4u;
+    bindGroupDesc.entries.push_back(statsEntry);
+
+    binding.bindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!binding.bindGroup.isValid()) {
+        binding = {};
+        return false;
+    }
+    binding.boundCommands = commandBuffer;
+    binding.boundMetadata = metadataBuffer;
+    return true;
+}
+
+void ShadowPass::destroyCullResources() {
+    if (m_cullRhiDevice != nullptr) {
+        for (CullBinding& binding : m_cullBindings) {
+            if (binding.bindGroup.isValid()) {
+                m_cullRhiDevice->destroyBindGroup(binding.bindGroup);
+            }
+            binding = {};
+        }
+        if (m_cullPipeline.isValid()) {
+            m_cullRhiDevice->destroyPipeline(m_cullPipeline);
+        }
+        if (m_cullPipelineLayout.isValid()) {
+            m_cullRhiDevice->destroyPipelineLayout(m_cullPipelineLayout);
+        }
+        if (m_cullBindGroupLayout.isValid()) {
+            m_cullRhiDevice->destroyBindGroupLayout(m_cullBindGroupLayout);
+        }
+        if (m_cullShader.isValid()) {
+            m_cullRhiDevice->destroyShader(m_cullShader);
+        }
+        if (m_cullCounterBuffer.isValid()) {
+            m_cullRhiDevice->destroyBuffer(m_cullCounterBuffer);
+        }
+        for (RhiBufferHandle& buffer : m_cullReadbackBuffers) {
+            if (buffer.isValid()) {
+                m_cullRhiDevice->destroyBuffer(buffer);
+            }
+            buffer = {};
+        }
+    }
+    m_cullPipeline = {};
+    m_cullPipelineLayout = {};
+    m_cullBindGroupLayout = {};
+    m_cullShader = {};
+    m_cullCounterBuffer = {};
+    for (bool& written : m_cullRingWritten) {
+        written = false;
+    }
+    m_cullRingWriteIndex = 0u;
+    m_cullTotals = {};
+    m_cullStats = {};
+    m_cullRhiDevice = nullptr;
 }
 
 bool ShadowPass::recordCopyPass(RhiCommandList& commandList, const int cascade) {
