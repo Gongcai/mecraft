@@ -5,12 +5,14 @@
 #include "../core/FrameContext.h"
 #include "../core/RenderSettings.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <array>
 #include <cstdint>
 
 class DeferredRenderTargets;
 class ResourceMgr;
+class RhiCommandList;
 class RhiDevice;
 
 /// Reflection pass: SSR probe, bilateral filter, and temporal reprojection.
@@ -20,16 +22,53 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "Reflection"; }
 
-    void execute(const FrameContext& ctx, const RenderSettings& settings,
-                 DeferredRenderTargets& targets);
+    /// Graph handles for reflection inputs, scratch storage, and history.
+    struct GraphResources {
+        RgTextureHandle sceneLighting;
+        RgTextureHandle depth;
+        RgTextureHandle normalAo;
+        RgTextureHandle material;
+        RgTextureHandle materialAux;
+        RgTextureHandle skyCapture;
+        RgTextureHandle voxelLight;
+        RgTextureHandle reflection;
+        RgTextureHandle scratch;
+        RgTextureHandle historyPrevious;
+        RgTextureHandle velocity;
+    };
+
+    /// Adds reflection probe, filter, and temporal stages to a graph.
+    /// @param graph Graph receiving reflection pass declarations.
+    /// @param ctx Frame state retained until immediate graph execution completes.
+    /// @param settings Reflection and debug settings for this frame.
+    /// @param targets Persistent render targets used by recording callbacks.
+    /// @param resources Imported graph handles for all reflection resources.
+    /// @param dependency Pass that must complete before reflection starts.
+    /// @return Final reflection pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        const GraphResources& resources,
+        RgPassHandle dependency);
 
 private:
-    void renderReflection(const FrameContext& ctx, const RenderSettings& settings,
-                          DeferredRenderTargets& targets);
-    void renderFilter(const FrameContext& ctx, const ReflectionSettings& reflection,
-                      DeferredRenderTargets& targets);
-    void renderTemporal(const FrameContext& ctx, const ReflectionSettings& reflection,
-                        DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordReflection(RhiCommandList& commandList,
+                                        const FrameContext& ctx,
+                                        const RenderSettings& settings,
+                                        DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordScratchCopy(RhiCommandList& commandList,
+                                         const FrameContext& ctx,
+                                         DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordFilter(RhiCommandList& commandList,
+                                    const FrameContext& ctx,
+                                    const ReflectionSettings& reflection,
+                                    DeferredRenderTargets& targets);
+    [[nodiscard]] bool recordTemporal(RhiCommandList& commandList,
+                                      const FrameContext& ctx,
+                                      const ReflectionSettings& reflection,
+                                      DeferredRenderTargets& targets);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
     bool ensureBaseBindGroup(RhiDevice& rhiDevice,
                              const std::array<RhiTextureViewHandle, 7>& views);

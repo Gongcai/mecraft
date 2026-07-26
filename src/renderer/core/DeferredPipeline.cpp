@@ -415,11 +415,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Reflection pass
-    if (m_reflectionPass) {
-        m_reflectionPass->execute(ctx, m_currentSettings, targets);
-    }
-
     // Cloud pass
     if (m_cloudPass) {
         m_cloudPass->execute(ctx, m_currentSettings, targets);
@@ -557,6 +552,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         settings.ssgi.enabled && settings.debug.deferredLightDebugMode <= 0;
     const bool ssgiTemporalEnabled =
         ssgiEnabled && settings.ssgi.temporalEnabled && !ctx.temporalReset;
+    const bool reflectionFilterEnabled =
+        settings.debug.deferredLightDebugMode <= 0 &&
+        settings.reflection.filterEnabled &&
+        settings.debug.reflectionDebugMode == 0;
+    const bool reflectionTemporalEnabled =
+        settings.debug.deferredLightDebugMode <= 0 &&
+        settings.reflection.temporalEnabled &&
+        settings.debug.reflectionDebugMode == 0 && !ctx.temporalReset;
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
@@ -584,13 +587,21 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
           !targets.ensureSsaoHistoryTextureViews(rhiDevice))) ||
         (ssgiTemporalEnabled &&
          (!targets.ensureSsgiHistoryTextureViews(rhiDevice) ||
-          !targets.ensureHistoryDepthTextureViews(rhiDevice)))) {
+          !targets.ensureHistoryDepthTextureViews(rhiDevice))) ||
+        ((reflectionFilterEnabled || reflectionTemporalEnabled) &&
+         !targets.ensureReflectionTemporalScratchTextureView(rhiDevice)) ||
+        (reflectionTemporalEnabled &&
+         !targets.ensureHistoryReflectionTextureViews(rhiDevice))) {
         return false;
     }
     if (ssaoEnabled && m_ssaoPass == nullptr) {
         return false;
     }
     if (ssgiEnabled && m_ssgiPass == nullptr) {
+        return false;
+    }
+    if (settings.debug.deferredLightDebugMode <= 0 &&
+        m_reflectionPass == nullptr) {
         return false;
     }
     const RhiTextureHandle skyNoiseTexture =
@@ -745,6 +756,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle ssgiMomentsHistoryCurrent;
     RgTextureHandle ssgiMomentsHistoryPrevious;
     RgTextureHandle historyDepthPrevious;
+    RgTextureHandle reflectionScratch;
+    RgTextureHandle historyReflectionPrevious;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
     const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
     const RhiTextureHandle rippleNormalTexture =
@@ -828,6 +841,20 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                         targets.historyDepthTexturePrevViewHandle(),
                         RhiResourceState::DepthRead,
                         historyDepthPrevious))) {
+        return failGraphSetup();
+    }
+    if ((reflectionFilterEnabled || reflectionTemporalEnabled) &&
+        !importTexture(targets.reflectionTemporalScratchTextureHandle(),
+                       targets.reflectionTemporalScratchTextureViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       reflectionScratch)) {
+        return failGraphSetup();
+    }
+    if (reflectionTemporalEnabled &&
+        !importTexture(targets.historyReflectionTexturePrevHandle(),
+                       targets.historyReflectionTexturePrevViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       historyReflectionPrevious)) {
         return failGraphSetup();
     }
     ssaoResources.noise = skyNoise;
@@ -1005,6 +1032,27 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         ssgiResources.momentsHistoryCurrent = ssgiMomentsHistoryCurrent;
         graphTail = m_ssgiPass->addGraphPasses(
             m_renderGraph, ctx, settings, targets, ssgiResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
+    }
+
+    if (settings.debug.deferredLightDebugMode <= 0) {
+        ReflectionPass::GraphResources reflectionResources;
+        reflectionResources.sceneLighting = sceneLighting;
+        reflectionResources.depth = depth;
+        reflectionResources.normalAo = normalAo;
+        reflectionResources.material = material;
+        reflectionResources.materialAux = materialAux;
+        reflectionResources.skyCapture = skyCapture;
+        reflectionResources.voxelLight = voxelLight;
+        reflectionResources.reflection = reflection;
+        reflectionResources.scratch = reflectionScratch;
+        reflectionResources.historyPrevious = historyReflectionPrevious;
+        reflectionResources.velocity = velocity;
+        graphTail = m_reflectionPass->addGraphPasses(
+            m_renderGraph, ctx, settings, targets, reflectionResources,
+            graphTail);
         if (!graphTail.isValid()) {
             return failGraphSetup();
         }
