@@ -35,60 +35,6 @@ constexpr float kCubeVertices[] = {
      1.0f, -1.0f,  1.0f,   -1.0f, -1.0f,  1.0f,   -1.0f, -1.0f, -1.0f,
 };
 
-bool blitBlurTargetToSwapchain(RhiDevice& rhiDevice,
-                               RhiCommandListPool& commandListPool,
-                               const RhiTextureHandle source,
-                               const int width,
-                               const int height) {
-    if (!source.isValid() || width <= 0 || height <= 0) {
-        return false;
-    }
-
-    const RhiTextureViewHandle swapchainColorView = rhiDevice.currentSwapchainColorView();
-    const RhiTextureHandle swapchainColorTexture = rhiDevice.currentSwapchainColorTexture();
-    if (!swapchainColorView.isValid() || !swapchainColorTexture.isValid()) {
-        return false;
-    }
-
-    RhiTextureBlit blit;
-    blit.src = source;
-    blit.dstView = swapchainColorView;
-
-    RhiCommandList* commandListStorage = commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"SkyboxBlit.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    commandList.textureBarrier({
-        source,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::TransferSrc
-    });
-    commandList.textureBarrier({
-        swapchainColorTexture,
-        RhiResourceState::Present,
-        RhiResourceState::TransferDst
-    });
-    commandList.blitTexture(blit);
-    commandList.textureBarrier({
-        source,
-        RhiResourceState::TransferSrc,
-        RhiResourceState::ShaderRead
-    });
-    commandList.textureBarrier({
-        swapchainColorTexture,
-        RhiResourceState::TransferDst,
-        RhiResourceState::Present
-    });
-    if (!commandList.end()) std::abort();
-    RhiCommandList* submittedCommandLists[] = {&commandList};
-    if (!rhiDevice.submit({"SkyboxBlit.Submit", submittedCommandLists, 1u})) {
-        std::abort();
-    }
-    return true;
-}
-
 RhiTextureViewHandle createBlurTargetView(RhiDevice& rhiDevice, const RhiTextureHandle texture) {
     if (!texture.isValid()) {
         return {};
@@ -132,9 +78,37 @@ void beginSkyboxBlurOutput(RhiCommandList& commandList,
     renderingInfo.colorAttachmentCount = 1u;
     commandList.beginRendering(renderingInfo);
 }
+
+[[nodiscard]] bool importSkyboxTexture(
+    RenderGraph& graph,
+    RhiDevice& rhiDevice,
+    const char* const name,
+    const RhiTextureHandle texture,
+    const RhiTextureViewHandle view,
+    const RhiResourceState initialState,
+    const RhiResourceState finalState,
+    RgTextureHandle& graphTexture) {
+    RhiTextureDesc desc;
+    if (!rhiDevice.getTextureDesc(texture, desc)) {
+        return false;
+    }
+    desc.debugName = name;
+    RgImportedTextureDesc imported;
+    imported.name = name;
+    imported.texture = texture;
+    imported.desc = desc;
+    imported.initialState = initialState;
+    imported.finalState = finalState;
+    imported.defaultView = view;
+    graphTexture = graph.importTexture(imported);
+    return graphTexture.isValid();
+}
 }
 
 void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
+    if (m_rhiDevice != nullptr && m_rhiDevice != &rhiDevice) {
+        shutdown();
+    }
     m_rhiDevice = &rhiDevice;
     m_commandListPool = &resourceMgr.commandListPool();
     m_cubemapTexture = resourceMgr.getCubemap("menu_skybox");
@@ -248,6 +222,10 @@ void SkyboxRenderer::init(ResourceMgr& resourceMgr, RhiDevice& rhiDevice) {
 }
 
 void SkyboxRenderer::shutdown() {
+    if (m_rhiDevice != nullptr) {
+        m_renderGraph.releaseTransientResources(*m_rhiDevice);
+    }
+    m_renderGraph.reset();
     destroyBlurTargets();
     destroyCubeMesh();
     if (m_skyboxBindGroup.isValid()) m_rhiDevice->destroyBindGroup(m_skyboxBindGroup);
@@ -287,7 +265,8 @@ void SkyboxRenderer::shutdown() {
 void SkyboxRenderer::render(const int width, const int height, const float aspect,
                             const float yawDegrees, const float pitchDegrees,
                             RhiDevice& rhiDevice) {
-    if (!m_cubemapTexture.isValid() || !m_cubeVertexBuffer.isValid()) {
+    if (m_rhiDevice != &rhiDevice || !m_cubemapTexture.isValid() ||
+        !m_cubeVertexBuffer.isValid()) {
         return;
     }
     if (width <= 0 || height <= 0) {
@@ -302,104 +281,177 @@ void SkyboxRenderer::render(const int width, const int height, const float aspec
         return;
     }
 
-    if (m_commandListPool == nullptr) std::abort();
-    RhiCommandList* commandListStorage =
-        m_commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"Skybox.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-
-    // Pass 1 renders the skybox into the scene color attachment.
-    commandList.textureBarrier({
-        m_sceneColorHandle,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::RenderTarget
-    });
-    beginSkyboxBlurOutput(commandList, "SkyboxScene", m_sceneColorView, blurW, blurH, true);
-
-    glm::mat4 view(1.0f);
-    view = glm::rotate(view, glm::radians(pitchDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
-    view = glm::rotate(view, glm::radians(yawDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
-
-    glm::mat4 projection = glm::perspective(glm::radians(70.0f), aspect, 0.1f, 100.0f);
-
-    struct SkyboxPushConstants { glm::mat4 projection; glm::mat4 view; };
-    const SkyboxPushConstants skyboxConstants{projection, view};
-    commandList.setViewport({0.0f, 0.0f, static_cast<float>(blurW),
-                             static_cast<float>(blurH), 0.0f, 1.0f});
-    commandList.setScissor({0, 0, static_cast<uint32_t>(blurW),
-                            static_cast<uint32_t>(blurH)});
-    commandList.setGraphicsPipeline(m_skyboxPipeline);
-    commandList.setBindGroup(0u, m_skyboxBindGroup);
-    commandList.setVertexBuffer(0u, m_cubeVertexBuffer, 0u);
-    commandList.pushConstants(&skyboxConstants, sizeof(skyboxConstants),
-                              rhiFlag(RhiShaderStage::Vertex));
-    commandList.draw(36u, 1u, 0u, 0u);
-    commandList.endRendering();
-    commandList.textureBarrier({
-        m_sceneColorHandle,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
-
-    // --- Pass 2: Horizontal blur (scene -> ping) ---
-    commandList.textureBarrier({
-        m_pingColorHandle,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::RenderTarget
-    });
-    beginSkyboxBlurOutput(commandList, "SkyboxBlurHorizontal", m_pingColorView, blurW, blurH, false);
-
-    const glm::vec4 horizontalDirection(1.0f / static_cast<float>(blurW), 0.0f, 0.0f, 0.0f);
-    commandList.setViewport({0.0f, 0.0f, static_cast<float>(blurW),
-                             static_cast<float>(blurH), 0.0f, 1.0f});
-    commandList.setScissor({0, 0, static_cast<uint32_t>(blurW),
-                            static_cast<uint32_t>(blurH)});
-    commandList.setGraphicsPipeline(m_blurPipeline);
-    commandList.setBindGroup(0u, m_sceneBlurBindGroup);
-    commandList.pushConstants(&horizontalDirection, sizeof(horizontalDirection),
-                              rhiFlag(RhiShaderStage::Fragment));
-    commandList.draw(3u, 1u, 0u, 0u);
-    commandList.endRendering();
-    commandList.textureBarrier({
-        m_pingColorHandle,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
-
-    // --- Pass 3: Vertical blur (ping -> pong) ---
-    commandList.textureBarrier({
-        m_pongColorHandle,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::RenderTarget
-    });
-    beginSkyboxBlurOutput(commandList, "SkyboxBlurVertical", m_pongColorView, blurW, blurH, false);
-
-    const glm::vec4 verticalDirection(0.0f, 1.0f / static_cast<float>(blurH), 0.0f, 0.0f);
-    commandList.setGraphicsPipeline(m_blurPipeline);
-    commandList.setBindGroup(0u, m_pingBlurBindGroup);
-    commandList.pushConstants(&verticalDirection, sizeof(verticalDirection),
-                              rhiFlag(RhiShaderStage::Fragment));
-    commandList.draw(3u, 1u, 0u, 0u);
-    commandList.endRendering();
-    commandList.textureBarrier({
-        m_pongColorHandle,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
-    if (!commandList.end()) std::abort();
-    RhiCommandList* submittedCommandLists[] = {&commandList};
-    if (!rhiDevice.submit({"Skybox.Submit", submittedCommandLists, 1u})) {
-        std::abort();
+    const RhiTextureViewHandle swapchainColorView =
+        rhiDevice.currentSwapchainColorView();
+    const RhiTextureHandle swapchainColorTexture =
+        rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainColorView.isValid() || !swapchainColorTexture.isValid()) {
+        return;
     }
 
-    const bool blitted = blitBlurTargetToSwapchain(
-        rhiDevice, *m_commandListPool, m_pongColorHandle, width, height);
-    if (!blitted) {
-        MECRAFT_LOG_STREAM(std::cerr << "[SkyboxRenderer] Failed to blit menu skybox through RHI\n");
+    m_renderGraph.reset();
+    const RhiResourceState blurInitialState = m_blurTargetsInitialized
+        ? RhiResourceState::ShaderRead
+        : RhiResourceState::Undefined;
+    RgTextureHandle graphSceneColor;
+    RgTextureHandle graphPingColor;
+    RgTextureHandle graphPongColor;
+    RgTextureHandle graphSwapchain;
+    if (!importSkyboxTexture(
+            m_renderGraph, rhiDevice, "Skybox.SceneColor",
+            m_sceneColorHandle, m_sceneColorView, blurInitialState,
+            RhiResourceState::ShaderRead, graphSceneColor) ||
+        !importSkyboxTexture(
+            m_renderGraph, rhiDevice, "Skybox.BlurPing",
+            m_pingColorHandle, m_pingColorView, blurInitialState,
+            RhiResourceState::ShaderRead, graphPingColor) ||
+        !importSkyboxTexture(
+            m_renderGraph, rhiDevice, "Skybox.BlurPong",
+            m_pongColorHandle, m_pongColorView, blurInitialState,
+            RhiResourceState::ShaderRead, graphPongColor) ||
+        !importSkyboxTexture(
+            m_renderGraph, rhiDevice, "Skybox.Swapchain",
+            swapchainColorTexture, swapchainColorView,
+            RhiResourceState::Present, RhiResourceState::Present,
+            graphSwapchain)) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[SkyboxRenderer] Failed to import Render Graph textures\n");
+        return;
     }
+
+    glm::mat4 cameraView(1.0f);
+    cameraView = glm::rotate(
+        cameraView, glm::radians(pitchDegrees), glm::vec3(1.0f, 0.0f, 0.0f));
+    cameraView = glm::rotate(
+        cameraView, glm::radians(yawDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::mat4 projection = glm::perspective(
+        glm::radians(70.0f), aspect, 0.1f, 100.0f);
+
+    struct SkyboxPushConstants {
+        glm::mat4 projection;
+        glm::mat4 view;
+    };
+    const SkyboxPushConstants skyboxConstants{projection, cameraView};
+
+    RenderGraphPassBuilder skybox = m_renderGraph.addPass(
+        {"Skybox.Scene", RgPassType::Graphics, RhiQueueType::Graphics});
+    skybox.writeTexture(graphSceneColor, RhiResourceState::RenderTarget)
+        .setExecute([this, graphSceneColor, skyboxConstants, blurW, blurH](
+                        RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            const RhiTextureViewHandle view = pass.textureView(graphSceneColor);
+            if (!view.isValid()) {
+                return false;
+            }
+            beginSkyboxBlurOutput(
+                commandList, "SkyboxScene", view, blurW, blurH, true);
+            commandList.setViewport({
+                0.0f, 0.0f, static_cast<float>(blurW),
+                static_cast<float>(blurH), 0.0f, 1.0f});
+            commandList.setScissor({
+                0, 0, static_cast<uint32_t>(blurW),
+                static_cast<uint32_t>(blurH)});
+            commandList.setGraphicsPipeline(m_skyboxPipeline);
+            commandList.setBindGroup(0u, m_skyboxBindGroup);
+            commandList.setVertexBuffer(0u, m_cubeVertexBuffer, 0u);
+            commandList.pushConstants(
+                &skyboxConstants, sizeof(skyboxConstants),
+                rhiFlag(RhiShaderStage::Vertex));
+            commandList.draw(36u, 1u, 0u, 0u);
+            commandList.endRendering();
+            return true;
+        });
+
+    RenderGraphPassBuilder horizontal = m_renderGraph.addPass(
+        {"Skybox.BlurHorizontal", RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    horizontal.readTexture(graphSceneColor, RhiResourceState::ShaderRead)
+        .writeTexture(graphPingColor, RhiResourceState::RenderTarget)
+        .setExecute([this, graphPingColor, blurW, blurH](RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            const RhiTextureViewHandle view = pass.textureView(graphPingColor);
+            if (!view.isValid()) {
+                return false;
+            }
+            beginSkyboxBlurOutput(
+                commandList, "SkyboxBlurHorizontal", view, blurW, blurH, false);
+            const glm::vec4 direction(
+                1.0f / static_cast<float>(blurW), 0.0f, 0.0f, 0.0f);
+            commandList.setViewport({
+                0.0f, 0.0f, static_cast<float>(blurW),
+                static_cast<float>(blurH), 0.0f, 1.0f});
+            commandList.setScissor({
+                0, 0, static_cast<uint32_t>(blurW),
+                static_cast<uint32_t>(blurH)});
+            commandList.setGraphicsPipeline(m_blurPipeline);
+            commandList.setBindGroup(0u, m_sceneBlurBindGroup);
+            commandList.pushConstants(
+                &direction, sizeof(direction),
+                rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(3u, 1u, 0u, 0u);
+            commandList.endRendering();
+            return true;
+        });
+
+    RenderGraphPassBuilder vertical = m_renderGraph.addPass(
+        {"Skybox.BlurVertical", RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    vertical.readTexture(graphPingColor, RhiResourceState::ShaderRead)
+        .writeTexture(graphPongColor, RhiResourceState::RenderTarget)
+        .setExecute([this, graphPongColor, blurW, blurH](RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            const RhiTextureViewHandle view = pass.textureView(graphPongColor);
+            if (!view.isValid()) {
+                return false;
+            }
+            beginSkyboxBlurOutput(
+                commandList, "SkyboxBlurVertical", view, blurW, blurH, false);
+            const glm::vec4 direction(
+                0.0f, 1.0f / static_cast<float>(blurH), 0.0f, 0.0f);
+            commandList.setViewport({
+                0.0f, 0.0f, static_cast<float>(blurW),
+                static_cast<float>(blurH), 0.0f, 1.0f});
+            commandList.setScissor({
+                0, 0, static_cast<uint32_t>(blurW),
+                static_cast<uint32_t>(blurH)});
+            commandList.setGraphicsPipeline(m_blurPipeline);
+            commandList.setBindGroup(0u, m_pingBlurBindGroup);
+            commandList.pushConstants(
+                &direction, sizeof(direction),
+                rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(3u, 1u, 0u, 0u);
+            commandList.endRendering();
+            return true;
+        });
+
+    RenderGraphPassBuilder blit = m_renderGraph.addPass(
+        {"Skybox.Present", RgPassType::Copy, RhiQueueType::Graphics});
+    blit.readTexture(graphPongColor, RhiResourceState::TransferSrc)
+        .writeTexture(graphSwapchain, RhiResourceState::TransferDst)
+        .setExecute([graphPongColor, graphSwapchain](RgPassContext& pass) {
+            RhiTextureBlit blitCommand;
+            blitCommand.src = pass.texture(graphPongColor);
+            blitCommand.dstView = pass.textureView(graphSwapchain);
+            pass.commandList().blitTexture(blitCommand);
+            return true;
+        });
+
+    const RgCompileResult compiled = m_renderGraph.compile();
+    if (!compiled.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[SkyboxRenderer] Render Graph compilation failed: "
+                      << compiled.message << '\n');
+        return;
+    }
+    const RgExecuteResult executed = m_renderGraph.execute(
+        rhiDevice, *m_commandListPool);
+    if (!executed.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[SkyboxRenderer] Render Graph execution failed: "
+                      << executed.message << '\n');
+        return;
+    }
+    m_blurTargetsInitialized = true;
 }
 
 bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int height) {
@@ -452,35 +504,9 @@ bool SkyboxRenderer::ensureBlurTargets(RhiDevice& rhiDevice, int width, int heig
         return false;
     }
 
-    if (m_commandListPool == nullptr) std::abort();
-    RhiCommandList* commandListStorage =
-        m_commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin(
-            {"SkyboxTargets.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    const RhiTextureHandle textures[] = {
-        m_sceneColorHandle,
-        m_pingColorHandle,
-        m_pongColorHandle
-    };
-    for (const RhiTextureHandle texture : textures) {
-        commandList.textureBarrier({
-            texture,
-            RhiResourceState::Undefined,
-            RhiResourceState::ShaderRead
-        });
-    }
-    if (!commandList.end()) std::abort();
-    RhiCommandList* submittedCommandLists[] = {&commandList};
-    if (!rhiDevice.submit({"SkyboxTargets.Submit", submittedCommandLists, 1u})) {
-        std::abort();
-    }
-
     m_blurWidth = width;
     m_blurHeight = height;
+    m_blurTargetsInitialized = false;
     return true;
 }
 
@@ -513,6 +539,7 @@ void SkyboxRenderer::destroyBlurTargets() {
     m_pongColorHandle = {};
     m_blurWidth = 0;
     m_blurHeight = 0;
+    m_blurTargetsInitialized = false;
 }
 
 void SkyboxRenderer::initCubeMesh() {

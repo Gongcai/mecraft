@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 class ResourceMgr;
 class RhiDevice;
@@ -52,6 +53,8 @@ private:
     RhiTextureViewHandle m_pongColorView;
     int m_blurWidth = 0;
     int m_blurHeight = 0;
+    bool m_blurTargetsInitialized = false;
+    RenderGraph m_renderGraph;
 };
 
 #endif // MECRAFT_SKYBOXRENDERER_H
