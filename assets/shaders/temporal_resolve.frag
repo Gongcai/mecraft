@@ -228,13 +228,32 @@ void main() {
         ivec2 historyDepthTexel = clamp(
             ivec2(historyDepthUv * uScreenSizeJitter.xy),
             ivec2(0), historyDepthSize - 1);
-        float historyDepth = texelFetch(
-            uHistoryDepthTex, historyDepthTexel, 0).r;
+        // Test the expected depth against the 3x3 history depth RANGE, not a
+        // single texel. Sub-pixel foliage flips a texel between leaf and
+        // background depth every frame under jitter, and grazing surfaces
+        // (distant water/ground) change linear depth by whole meters per
+        // texel, so a one-sample comparison misreads both as disocclusion
+        // and permanently rejects valid history.
+        float minHistoryDepth = 1.0;
+        float maxHistoryDepth = 0.0;
+        for (int dy = -1; dy <= 1; ++dy) {
+            for (int dx = -1; dx <= 1; ++dx) {
+                ivec2 tapTexel = clamp(historyDepthTexel + ivec2(dx, dy),
+                                       ivec2(0), historyDepthSize - 1);
+                float tapDepth = texelFetch(uHistoryDepthTex, tapTexel, 0).r;
+                minHistoryDepth = min(minHistoryDepth, tapDepth);
+                maxHistoryDepth = max(maxHistoryDepth, tapDepth);
+            }
+        }
         float expectedLinearDepth = linearizeDepth(expectedHistoryDepth);
-        float sampledLinearDepth = linearizeDepth(historyDepth);
+        float minLinearDepth = linearizeDepth(minHistoryDepth);
+        float maxLinearDepth = linearizeDepth(maxHistoryDepth);
+        float rangeDistance = max(
+            max(minLinearDepth - expectedLinearDepth,
+                expectedLinearDepth - maxLinearDepth),
+            0.0);
         float relativeDepthDifference =
-            abs(expectedLinearDepth - sampledLinearDepth) /
-            max(expectedLinearDepth, 0.1);
+            rangeDistance / max(expectedLinearDepth, 0.1);
         depthDisocclusion = smoothstep(0.035, 0.28,
                                        relativeDepthDifference);
     }
@@ -248,7 +267,12 @@ void main() {
     // not a stable projection of the previous resolved image.
     float maskHistoryReject = clamp(max(reactiveMask, transparencyMask),
                                     0.0, 1.0);
-    blendWeight *= (1.0 - maskHistoryReject) * (1.0 - depthDisocclusion);
+    // Depth disocclusion attenuates history instead of zeroing it: the YCoCg
+    // neighborhood clamp already bounds stale history, while sub-pixel
+    // geometry (very sparse distant foliage) can never fully pass a depth
+    // test, so a hard zero re-exposes raw raster flicker at distance.
+    blendWeight *= (1.0 - maskHistoryReject) *
+                   (1.0 - depthDisocclusion * 0.8);
 
     // Animated wet opaque surfaces need the existing ripple-specific rejection,
     // while transparent surfaces use their explicit temporal masks instead.

@@ -581,6 +581,15 @@ void main() {
     // Water changes every frame, but full-strength masks discard nearly all
     // temporal history and expose projection jitter. Scale both signals by the
     // actual reflection contribution so calm, face-on water remains stable.
-    FragReactiveMask = clamp(0.20 + fresnel * 0.30, 0.20, 0.50);
-    FragTransparencyMask = clamp(0.15 + fresnel * 0.35, 0.15, 0.50);
+    // Fade the masks with view distance: far-away wave motion is sub-pixel,
+    // so those pixels need temporal accumulation to converge instead of
+    // per-frame specular sparkle. Keep a small floor so transparent-surface
+    // classification (mask > 1e-4) and upscaler reactivity stay intact.
+    float waterViewDistance = length(uCameraPos - vWorldPos);
+    float maskDistanceFade =
+        mix(0.1, 1.0, 1.0 - smoothstep(24.0, 96.0, waterViewDistance));
+    FragReactiveMask =
+        clamp((0.20 + fresnel * 0.30) * maskDistanceFade, 0.05, 0.50);
+    FragTransparencyMask =
+        clamp((0.15 + fresnel * 0.35) * maskDistanceFade, 0.05, 0.50);
 }
