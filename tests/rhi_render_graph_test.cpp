@@ -1,5 +1,6 @@
 #include "renderer/rhi/RhiRenderGraph.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -122,6 +123,36 @@ bool testSubresourceIndependence() {
          requireTrue(graph.compiledPasses()[0].textureBarriers.size() == 1u &&
                          graph.compiledPasses()[1].textureBarriers.size() == 1u,
                      "only accessed subresources must receive barriers");
+}
+
+bool testThreeDimensionalTextureSubresources() {
+  RenderGraph graph;
+  RhiTextureDesc desc = colorTextureDesc(3u, 16u);
+  desc.dimension = RhiTextureDimension::Texture3D;
+  const RgTextureHandle texture = graph.createTexture(
+      {"Volume", desc, RhiResourceState::ShaderRead});
+  graph.addPass({"WriteVolume", RgPassType::Copy, RhiQueueType::Graphics})
+      .writeTexture(texture, RhiResourceState::TransferDst)
+      .setExecute(executeNoop);
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str())) {
+    return false;
+  }
+  const auto hasOnlyNativeSubresourceLayers = [](const auto &barriers) {
+    return std::all_of(barriers.begin(), barriers.end(), [](const auto &barrier) {
+      return barrier.range.baseLayer == 0u && barrier.range.layerCount == 1u;
+    });
+  };
+  return requireTrue(graph.compiledPasses()[0].textureBarriers.size() == 3u,
+                     "a 3D texture must plan one barrier per mip") &&
+         requireTrue(graph.epilogueTextureBarriers().size() == 3u,
+                     "a 3D texture final state must cover each mip once") &&
+         requireTrue(
+             hasOnlyNativeSubresourceLayers(
+                 graph.compiledPasses()[0].textureBarriers) &&
+                 hasOnlyNativeSubresourceLayers(graph.epilogueTextureBarriers()),
+             "3D texture depth must not be treated as array layers");
 }
 
 bool testLayeredDepthCopyPlanning() {
@@ -484,7 +515,9 @@ bool testBatchSplitForLateQueueDependency() {
 int main() {
   const bool passed =
       testTextureDependencyAndBarrierPlanning() &&
-      testSubresourceIndependence() && testLayeredDepthCopyPlanning() &&
+      testSubresourceIndependence() &&
+      testThreeDimensionalTextureSubresources() &&
+      testLayeredDepthCopyPlanning() &&
       testTransientReadBeforeWriteValidation() && testImportedResourceRead() &&
       testBufferRangeCoverage() && testExplicitCycleValidation() &&
       testDuplicateAccessValidation() && testResetInvalidatesHandles() &&

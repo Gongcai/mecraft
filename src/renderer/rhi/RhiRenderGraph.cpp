@@ -67,6 +67,13 @@ namespace {
   return requested <= total - base ? requested : 0u;
 }
 
+[[nodiscard]] uint32_t textureSubresourceLayerCount(
+    const RhiTextureDesc &desc) {
+  return desc.dimension == RhiTextureDimension::Texture3D
+             ? 1u
+             : desc.depthOrLayers;
+}
+
 struct ResolvedTextureRange {
   uint32_t baseMip = 0u;
   uint32_t mipCount = 0u;
@@ -98,7 +105,8 @@ formatAspect(const RhiTextureFormat format) {
       resolvedCount(range.baseMip, range.mipCount, desc.mipLevels);
   resolved.baseLayer = range.baseLayer;
   resolved.layerCount =
-      resolvedCount(range.baseLayer, range.layerCount, desc.depthOrLayers);
+      resolvedCount(range.baseLayer, range.layerCount,
+                    textureSubresourceLayerCount(desc));
   resolved.aspect =
       range.aspect != 0u ? range.aspect : formatAspect(desc.format);
   const RhiTextureAspectFlags validAspects = formatAspect(desc.format);
@@ -965,8 +973,9 @@ RgCompileResult RenderGraph::compile() {
   std::vector<std::vector<TextureState>> textureStates;
   textureStates.reserve(m_textures.size());
   for (const TextureRecord &texture : m_textures) {
+    const uint32_t layerCount = textureSubresourceLayerCount(texture.desc);
     const uint32_t subresourceCount =
-        texture.desc.mipLevels * texture.desc.depthOrLayers;
+        texture.desc.mipLevels * layerCount;
     textureStates.emplace_back(
         subresourceCount,
         TextureState{texture.initialState, texture.initialQueue,
@@ -1020,7 +1029,8 @@ RgCompileResult RenderGraph::compile() {
              layer < range.baseLayer + range.layerCount; ++layer) {
           TextureState &current =
               textureStates[resourceIndex]
-                           [mip * texture.desc.depthOrLayers + layer];
+                           [mip * textureSubresourceLayerCount(texture.desc) +
+                            layer];
           const bool hazard =
               current.accessed && (includesWrite(current.lastAccess) ||
                                    includesWrite(access.access));
@@ -1079,14 +1089,15 @@ RgCompileResult RenderGraph::compile() {
 
   for (uint32_t index = 0u; index < m_textures.size(); ++index) {
     const TextureRecord &texture = m_textures[index];
+    const uint32_t layerCount = textureSubresourceLayerCount(texture.desc);
     if (texture.finalState == RhiResourceState::Undefined ||
         !m_textureLifetimes[index].used)
       continue;
     const RgTextureHandle handle{index + 1u, texture.generation};
     for (uint32_t mip = 0u; mip < texture.desc.mipLevels; ++mip) {
-      for (uint32_t layer = 0u; layer < texture.desc.depthOrLayers; ++layer) {
+      for (uint32_t layer = 0u; layer < layerCount; ++layer) {
         const TextureState &current =
-            textureStates[index][mip * texture.desc.depthOrLayers + layer];
+            textureStates[index][mip * layerCount + layer];
         if (current.state == texture.finalState &&
             current.queue == texture.finalQueue)
           continue;
@@ -1328,7 +1339,7 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
                 {}};
       }
       const uint32_t subresourceCount =
-          record.desc.mipLevels * record.desc.depthOrLayers;
+          record.desc.mipLevels * textureSubresourceLayerCount(record.desc);
       m_transientTextures.push_back(
           {record.desc, texture, view,
            std::vector<RhiResourceState>(subresourceCount,
@@ -1398,9 +1409,10 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
       return state;
     const TransientTexture &allocation =
         m_transientTextures[allocationIndex];
+    const uint32_t layerCount =
+        textureSubresourceLayerCount(allocation.desc);
     const uint32_t subresource =
-        barrier.range.baseMip * allocation.desc.depthOrLayers +
-        barrier.range.baseLayer;
+        barrier.range.baseMip * layerCount + barrier.range.baseLayer;
     state.state = allocation.states[subresource];
     state.queue = allocation.queues[subresource];
     state.lastUse = allocation.lastUses[subresource];
@@ -1452,9 +1464,10 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
          ownershipTransfer ? destinationFamily : kRhiQueueFamilyIgnored,
          phase});
     if (allocation != nullptr && phase != RhiBarrierPhase::Release) {
+      const uint32_t layerCount =
+          textureSubresourceLayerCount(allocation->desc);
       const uint32_t subresource =
-          barrier.range.baseMip * allocation->desc.depthOrLayers +
-          barrier.range.baseLayer;
+          barrier.range.baseMip * layerCount + barrier.range.baseLayer;
       allocation->states[subresource] = barrier.newState;
       allocation->queues[subresource] = barrier.destinationQueue;
     }
@@ -1872,9 +1885,10 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     if (allocationIndex == std::numeric_limits<uint32_t>::max())
       return;
     TransientTexture &allocation = m_transientTextures[allocationIndex];
+    const uint32_t layerCount =
+        textureSubresourceLayerCount(allocation.desc);
     const uint32_t subresource =
-        barrier.range.baseMip * allocation.desc.depthOrLayers +
-        barrier.range.baseLayer;
+        barrier.range.baseMip * layerCount + barrier.range.baseLayer;
     allocation.lastUses[subresource] = token;
   };
   const auto setBufferLastUse = [&](const RgBufferBarrierPlan &barrier,
