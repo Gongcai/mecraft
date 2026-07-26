@@ -244,7 +244,9 @@ float sunOcclusionAt(vec3 pos, float height01, float weatherCoverage, float ligh
     for (int i = 0; i < 4; ++i) {
         vec3 samplePos = pos + sunDir * stepLen * (lightNoise + 0.5);
         float h = clamp((samplePos.y - uCloudHeight) / max(uCloudThickness, 1.0), 0.0, 1.0);
-        float d = cloudDensityAt(samplePos, h, weatherCoverage, 1.0);
+        // Two noise octaves: transmittance integration averages the high
+        // frequencies away, halving the light-march texture cost.
+        float d = cloudDensityAtLod(samplePos, h, weatherCoverage, 1.0, 2);
         opticalDepth += d;
         stepLen *= 2.0;
     }
@@ -259,7 +261,7 @@ float skyLightOcclusionAt(vec3 pos, float height01, float weatherCoverage, float
     for (int i = 0; i < 2; ++i) {
         vec3 samplePos = pos + vec3(0.0, rayLength * (lightNoise + 0.5), 0.0);
         float h = clamp((samplePos.y - uCloudHeight) / max(uCloudThickness, 1.0), 0.0, 1.0);
-        float d = cloudDensityAt(samplePos, h, weatherCoverage, 1.0);
+        float d = cloudDensityAtLod(samplePos, h, weatherCoverage, 1.0, 2);
         opticalDepth += d;
         rayLength *= 2.0;
     }

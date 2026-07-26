@@ -135,8 +135,22 @@ float cirrusCloudDensity(vec2 worldPos, float coverage) {
     return noise;
 }
 
-// Cumulus cloud density at worldPos (DerivativeMain CloudDensity)
-float cloudDensityAt(vec3 worldPos, float normalizedHeight, float weatherCoverage, float noiseDetail) {
+// Cumulus cloud density with a selectable noise octave count. Light-ray
+// marches integrate transmittance where high-frequency detail averages out,
+// so they can run fewer octaves at roughly half the sampling cost while the
+// primary march keeps full detail.
+float cloudDensityAtLod(vec3 worldPos, float normalizedHeight,
+                        float weatherCoverage, float noiseDetail,
+                        int octaveCount) {
+    // Near the layer edges the constant subtraction below always dominates
+    // (max positive term is heightAttenuation * 1.9 with density <= ~1.0),
+    // so skip every noise sample outright.
+    float heightAttenuation = clamp(normalizedHeight * 6.6, 0.0, 1.0)
+                            * clamp((1.0 - normalizedHeight) * (2.0 + uCloudWetness), 0.0, 1.0);
+    if (heightAttenuation < 0.06) {
+        return 0.0;
+    }
+
     float cloudTime = uTime * uCloudTimeScale;
     vec3 wind = vec3(2e-3, 2e-4, 1e-3) * cloudTime;
     float noiseScale = 4e-4 + 6e-5 * uCloudWetness;
@@ -153,17 +167,20 @@ float cloudDensityAt(vec3 worldPos, float normalizedHeight, float weatherCoverag
     const float octScale = 3.0;
 
     for (int i = 0; i < 4; ++i) {
-        density += weight * cloudNoiseSmooth(position);
-        position = position * octScale - wind;
+        if (i < octaveCount) {
+            density += weight * cloudNoiseSmooth(position);
+            position = position * octScale - wind;
+        } else {
+            // Replace skipped octaves with their statistical mean so lower
+            // LODs preserve the same average optical depth.
+            density += weight * 0.5;
+        }
         weight *= octWeight;
     }
     density += octWeight / octScale / 4.0;
     if (density < 1e-6) return 0.0;
 
     density *= localCoverage;
-
-    float heightAttenuation = clamp(normalizedHeight * 6.6, 0.0, 1.0)
-                            * clamp((1.0 - normalizedHeight) * (2.0 + uCloudWetness), 0.0, 1.0);
 
     if (weatherCoverage != 1.0) {
         density = clamp((density - 1.0 + weatherCoverage) / weatherCoverage, 0.0, 1.0);
@@ -173,6 +190,12 @@ float cloudDensityAt(vec3 worldPos, float normalizedHeight, float weatherCoverag
     density -= heightAttenuation * 0.9 + normalizedHeight * 0.5 + 0.1;
 
     return clamp(density * 3.0 * uCloudDensity, 0.0, 1.0);
+}
+
+// Cumulus cloud density at worldPos (DerivativeMain CloudDensity)
+float cloudDensityAt(vec3 worldPos, float normalizedHeight, float weatherCoverage, float noiseDetail) {
+    return cloudDensityAtLod(worldPos, normalizedHeight, weatherCoverage,
+                             noiseDetail, 4);
 }
 
 // Cirrocumulus cloud density (DerivativeMain lower planar layer with curl noise)
