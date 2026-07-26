@@ -5,6 +5,7 @@
 #include "FrameContext.h"
 #include "FrameOutput.h"
 #include "../mesh/TerrainRenderer.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <vector>
 
@@ -32,14 +33,23 @@ public:
     bool supportsDebugView() const override { return false; }
 
 private:
-    bool beginBackbufferFrame(const FrameContext& ctx);
-    bool beginBackbufferScenePass(const FrameContext& ctx);
-    void endBackbufferFrame(const FrameContext& ctx);
+    [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx,
+                                         const RenderSettings& settings);
+    [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx,
+                                         const RenderSettings& settings,
+                                         RhiCommandList& commandList);
+    [[nodiscard]] bool recordSkyPass(const FrameContext& ctx,
+                                     RhiCommandList& commandList);
+    [[nodiscard]] bool recordScenePass(const FrameContext& ctx,
+                                       const RenderSettings& settings,
+                                       RhiCommandList& commandList);
     bool prepareTerrain(const FrameContext& ctx, RhiCommandList& commandList);
-    void renderSky(const FrameContext& ctx);
-    void renderTerrain();
-    void renderEntitiesAndParticles(const FrameContext& ctx, const RenderSettings& settings);
-    void renderTransparent();
+    void renderSky(const FrameContext& ctx, RhiCommandList& commandList);
+    void renderTerrain(RhiCommandList& commandList);
+    void renderEntitiesAndParticles(const FrameContext& ctx,
+                                    const RenderSettings& settings,
+                                    RhiCommandList& commandList);
+    void renderTransparent(RhiCommandList& commandList);
     FrameOutput buildFrameOutput(const FrameContext& ctx);
 
     static TerrainFrameData buildTerrainFrameData(const FrameContext& ctx);
@@ -51,11 +61,11 @@ private:
     GameplaySkyRenderer* m_skyRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
     SharedRenderResources* m_shared = nullptr;
-    RhiCommandList* m_backbufferCommandList = nullptr;
 
     // Transparent batch state (populated by renderTerrain, consumed by renderTransparent)
     std::vector<DrawBatchEntry> m_transparentBatch;
     TransparentPassPlan m_transparentPassPlan;
+    RenderGraph m_renderGraph;
 
     bool m_initialized = false;
 };
