@@ -727,9 +727,13 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
     }
 
     if (skipPostProcess) {
-        m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
-                                                       m_currentContext.swapchainColorView,
-                                                       m_debugService);
+        if (!m_postProcessPass.blitSceneCaptureToBackbuffer(
+                *m_shared.rhiDevice,
+                m_currentContext.swapchainColorView,
+                m_debugService)) {
+            m_terrainStreamingService.endFrame();
+            return;
+        }
     } else {
         PostProcessEffects effects = buildPostProcessEffects(
             request.worldView, request.camera, frameAspectRatio,
@@ -737,9 +741,13 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
             request.dayNightSystem, request.weatherSystem);
         m_postProcessPass.setFrameEffects(effects);
         if (lightDebugActive) {
-            m_postProcessPass.blitSceneCaptureToBackbuffer(*m_shared.rhiDevice,
-                                                           m_currentContext.swapchainColorView,
-                                                           m_debugService);
+            if (!m_postProcessPass.blitSceneCaptureToBackbuffer(
+                    *m_shared.rhiDevice,
+                    m_currentContext.swapchainColorView,
+                    m_debugService)) {
+                m_terrainStreamingService.endFrame();
+                return;
+            }
         } else {
             const bool fsrEnabled = isFsr1RuntimeEnabled();
             if (fsrEnabled) {
@@ -766,15 +774,18 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                     std::abort();
                 }
             } else {
-                m_postProcessPass.compositeToBackbuffer(
-                    *m_shared.rhiDevice,
-                    m_currentContext.swapchainColorView,
-                    m_currentContext.swapchainColorFormat,
-                    displaySize.x,
-                    displaySize.y,
-                    request.frameTime,
-                    m_lastFrameOutput.gbufferDepth,
-                    m_debugService);
+                if (!m_postProcessPass.compositeToBackbuffer(
+                        *m_shared.rhiDevice,
+                        m_currentContext.swapchainColorView,
+                        m_currentContext.swapchainColorFormat,
+                        displaySize.x,
+                        displaySize.y,
+                        request.frameTime,
+                        m_lastFrameOutput.gbufferDepth,
+                        m_debugService)) {
+                    m_terrainStreamingService.endFrame();
+                    return;
+                }
             }
         }
     }

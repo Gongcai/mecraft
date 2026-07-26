@@ -3,6 +3,7 @@
 
 #include "RenderPass.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 #include "../rhi/RhiTypes.h"
 #include <array>
 #include <cstdint>
@@ -93,14 +94,15 @@ public:
                                    int height);
 
     /// Composite captured scene to back buffer with active effects.
-    void compositeToBackbuffer(RhiDevice& rhiDevice,
-                               RhiTextureViewHandle swapchainColorView,
-                               RhiTextureFormat swapchainColorFormat,
-                               int outputWidth,
-                               int outputHeight,
-                               float frameTime,
-                               RhiTextureHandle gbufferDepthTexture,
-                               RenderDebugService& debugService);
+    [[nodiscard]] bool compositeToBackbuffer(
+        RhiDevice& rhiDevice,
+        RhiTextureViewHandle swapchainColorView,
+        RhiTextureFormat swapchainColorFormat,
+        int outputWidth,
+        int outputHeight,
+        float frameTime,
+        RhiTextureHandle gbufferDepthTexture,
+        RenderDebugService& debugService);
 
     /// Composite captured scene into an internal LDR texture instead of the back buffer.
     [[nodiscard]] RhiTextureHandle compositeToTexture(RhiDevice& rhiDevice,
@@ -109,14 +111,16 @@ public:
                                                       RenderDebugService& debugService);
 
     /// Blit captured scene directly to back buffer without any postprocessing.
-    void blitSceneCaptureToBackbuffer(RhiDevice& rhiDevice,
-                                      RhiTextureViewHandle swapchainColorView,
-                                      RenderDebugService& debugService);
+    [[nodiscard]] bool blitSceneCaptureToBackbuffer(
+        RhiDevice& rhiDevice,
+        RhiTextureViewHandle swapchainColorView,
+        RenderDebugService& debugService);
 
     /// Blit the internal composited LDR texture to the back buffer.
-    void blitCompositeToBackbuffer(RhiDevice& rhiDevice,
-                                   RhiTextureViewHandle swapchainColorView,
-                                   RenderDebugService& debugService);
+    [[nodiscard]] bool blitCompositeToBackbuffer(
+        RhiDevice& rhiDevice,
+        RhiTextureViewHandle swapchainColorView,
+        RenderDebugService& debugService);
 
     /// Set effects configuration for the current frame.
     void setFrameEffects(const PostProcessEffects& effects);
@@ -149,6 +153,10 @@ private:
     static constexpr int kExposureMipCount = 13;
     static constexpr int kAutoExposureLod = 6;
     static constexpr double kAutoExposureSampleIntervalSeconds = 0.25;
+    enum class CompositeDestination {
+        Backbuffer,
+        Texture
+    };
     struct PostProcessCompositeParams;
     [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
     void submitCommandList(RhiDevice& rhiDevice,
@@ -169,24 +177,45 @@ private:
     void destroyTargetBindGroups();
     void destroyCompositeBindGroups();
     void destroyRhiResources();
-    bool updateAutoExposure(RhiDevice& rhiDevice,
-                            float frameTime,
-                            float& resolvedExposure,
-                            RenderDebugService& debugService);
-    bool initializeExposureState(RhiDevice& rhiDevice,
-                                 float manualExposure,
-                                 RenderDebugService& debugService);
-
-    /// Apply bloom extraction and blur passes.
-    bool renderBloom(RhiDevice& rhiDevice,
-                     int maxMipCount,
-                     bool& bloomReady,
-                     RenderDebugService& debugService);
+    [[nodiscard]] bool executeCompositeGraph(
+        RhiDevice& rhiDevice,
+        CompositeDestination destination,
+        RhiTextureViewHandle outputView,
+        int outputWidth,
+        int outputHeight,
+        float frameTime,
+        RenderDebugService& debugService);
+    [[nodiscard]] bool executeBlitGraph(
+        RhiDevice& rhiDevice,
+        RhiTextureHandle sourceTexture,
+        RhiTextureViewHandle swapchainColorView,
+        RenderDebugService& debugService);
+    void recordExposureStateInitialization(RhiCommandList& commandList,
+                                           float manualExposure);
+    void recordExposureDownsample(RhiCommandList& commandList,
+                                  int mip,
+                                  const glm::ivec2& sourceSize,
+                                  bool sourceIsScene,
+                                  int sourceLod);
+    void recordExposureResolve(RhiCommandList& commandList,
+                               int readIndex,
+                               int writeIndex,
+                               float elapsedFrameTime,
+                               float manualExposure,
+                               bool historyAvailable,
+                               bool reuseExposure);
+    void recordBloomExtract(RhiCommandList& commandList, int mip);
+    void recordBloomBlur(RhiCommandList& commandList,
+                         int mip,
+                         bool horizontal);
 
     /// Apply final composite (tonemap, color grading, underwater, etc.)
     void renderComposite(RhiCommandList& commandList,
-                         RhiPipelineHandle pipeline);
-    void updateCompositeParams(RhiCommandList& commandList, bool bloomReady);
+                         RhiPipelineHandle pipeline,
+                         int exposureStateIndex);
+    void uploadCompositeParams(
+        RhiCommandList& commandList,
+        const PostProcessCompositeParams& params);
     [[nodiscard]] PostProcessCompositeParams buildCompositeParams(
         bool useAutoExposureTexture, bool hasBloom) const;
     void bindCompositeOutput(RhiCommandList& commandList, int width, int height);
@@ -290,6 +319,7 @@ private:
     float m_lastTargetExposure = 1.0f;
 
     PostProcessEffects m_effects{};
+    RenderGraph m_renderGraph;
 };
 
 #endif // MECRAFT_POST_PROCESS_PASS_H

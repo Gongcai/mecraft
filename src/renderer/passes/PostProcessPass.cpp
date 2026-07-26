@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <optional>
+#include <string>
 
 namespace {
 struct ExposureDownsamplePushConstants {
@@ -68,66 +69,6 @@ bool createTextureAndView(RhiDevice& rhiDevice,
         rhiDevice.destroyTexture(texture);
         texture = {};
         return false;
-    }
-    return true;
-}
-
-bool blitPostProcessTextureToSwapchain(RhiDevice& rhiDevice,
-                                       RhiCommandListPool& commandListPool,
-                                       const RhiTextureViewHandle swapchainColorView,
-                                       const RhiTextureHandle source,
-                                       RenderDebugService& debugService) {
-    if (!source.isValid() || !swapchainColorView.isValid()) {
-        return false;
-    }
-
-    RhiTextureBlit blit;
-    blit.src = source;
-    blit.dstView = swapchainColorView;
-
-    RhiCommandList* const commandListStorage =
-        commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin(
-            {"PostProcess.Blit.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    const GpuTimerSegmentToken timerToken =
-        debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
-    const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
-    if (!swapchainTexture.isValid()) {
-        std::abort();
-    }
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::Present,
-        RhiResourceState::TransferDst
-    });
-    commandList.textureBarrier({
-        source,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::TransferSrc
-    });
-    commandList.blitTexture(blit);
-    commandList.textureBarrier({
-        source,
-        RhiResourceState::TransferSrc,
-        RhiResourceState::ShaderRead
-    });
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::TransferDst,
-        RhiResourceState::Present
-    });
-    debugService.endGpuTimer(commandList, timerToken);
-    if (!commandList.end()) {
-        std::abort();
-    }
-    RhiCommandList* commandLists[] = {&commandList};
-    const RhiSubmitInfo submitInfo{"PostProcess.Blit.Submit", commandLists, 1u};
-    if (!rhiDevice.submit(submitInfo)) {
-        std::abort();
     }
     return true;
 }
@@ -299,55 +240,27 @@ bool PostProcessPass::setHdrInput(const RhiTextureHandle texture,
     return true;
 }
 
-void PostProcessPass::compositeToBackbuffer(RhiDevice& rhiDevice,
-                                            const RhiTextureViewHandle swapchainColorView,
-                                            const RhiTextureFormat swapchainColorFormat,
-                                            const int outputWidth,
-                                            const int outputHeight,
-                                            const float frameTime,
-                                            const RhiTextureHandle gbufferDepthTexture,
-                                            RenderDebugService& debugService) {
+bool PostProcessPass::compositeToBackbuffer(
+    RhiDevice& rhiDevice,
+    const RhiTextureViewHandle swapchainColorView,
+    const RhiTextureFormat swapchainColorFormat,
+    const int outputWidth,
+    const int outputHeight,
+    const float frameTime,
+    const RhiTextureHandle gbufferDepthTexture,
+    RenderDebugService& debugService) {
     if (!m_sceneCaptured || !swapchainColorView.isValid() ||
         !ensureProcessingTargets(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) ||
         !ensureRhiPipelines(rhiDevice) || !ensureNoiseTextureView(rhiDevice) ||
         !ensureSwapchainCompositePipeline(rhiDevice, swapchainColorFormat) ||
         !ensureGbufferDepthTextureView(rhiDevice, gbufferDepthTexture) ||
         !rebuildTargetBindGroups() || !rebuildCompositeBindGroups()) {
-        return;
+        return false;
     }
-
-    float resolvedExposure = 0.0f;
-    if (!updateAutoExposure(rhiDevice, frameTime, resolvedExposure, debugService)) {
-        return;
-    }
-    bool bloomReady = false;
-    if (!renderBloom(rhiDevice, m_effects.bloomMipCount, bloomReady, debugService)) {
-        return;
-    }
-
-    RhiCommandList& commandList = beginCommandList("PostProcess.CompositeBackbuffer.Commands");
-    const GpuTimerSegmentToken timerToken =
-        debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
-    updateCompositeParams(commandList, bloomReady);
-    commandList.textureBarrier({
-        rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
-    bindBackbufferOutput(commandList,
-                         swapchainColorView,
-                         std::max(1, outputWidth),
-                         std::max(1, outputHeight),
-                         false);
-    renderComposite(commandList, m_compositeSwapchainPipeline);
-    commandList.endRendering();
-    commandList.textureBarrier({
-        rhiDevice.currentSwapchainColorTexture(),
-        RhiResourceState::RenderTarget,
-        RhiResourceState::Present
-    });
-    debugService.endGpuTimer(commandList, timerToken);
-    submitCommandList(rhiDevice, commandList, "PostProcess.CompositeBackbuffer.Submit");
+    return executeCompositeGraph(rhiDevice, CompositeDestination::Backbuffer,
+                                 swapchainColorView,
+                                 outputWidth, outputHeight, frameTime,
+                                 debugService);
 }
 
 RhiTextureHandle PostProcessPass::compositeToTexture(
@@ -360,111 +273,204 @@ RhiTextureHandle PostProcessPass::compositeToTexture(
         !ensureCompositeTarget(rhiDevice, m_hdrInputWidth, m_hdrInputHeight) ||
         !ensureRhiPipelines(rhiDevice) || !ensureNoiseTextureView(rhiDevice) ||
         !ensureGbufferDepthTextureView(rhiDevice, gbufferDepthTexture) ||
-        !rebuildTargetBindGroups() || !rebuildCompositeBindGroups()) {
+        !rebuildTargetBindGroups() || !rebuildCompositeBindGroups() ||
+        !executeCompositeGraph(rhiDevice, CompositeDestination::Texture,
+                                m_compositeView, m_processingWidth,
+                                m_processingHeight, frameTime, debugService)) {
         return {};
     }
-
-    float resolvedExposure = 0.0f;
-    if (!updateAutoExposure(rhiDevice, frameTime, resolvedExposure, debugService)) {
-        return {};
-    }
-    bool bloomReady = false;
-    if (!renderBloom(rhiDevice, m_effects.bloomMipCount, bloomReady, debugService)) {
-        return {};
-    }
-
-    RhiCommandList& commandList = beginCommandList("PostProcess.CompositeTexture.Commands");
-    const GpuTimerSegmentToken timerToken =
-        debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
-    updateCompositeParams(commandList, bloomReady);
-    commandList.textureBarrier({
-        m_compositeHandle,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::RenderTarget
-    });
-    bindCompositeOutput(commandList, m_processingWidth, m_processingHeight);
-    renderComposite(commandList, m_compositeTexturePipeline);
-    commandList.endRendering();
-    commandList.textureBarrier({
-        m_compositeHandle,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
-    debugService.endGpuTimer(commandList, timerToken);
-    submitCommandList(rhiDevice, commandList, "PostProcess.CompositeTexture.Submit");
     return m_compositeHandle;
 }
 
-void PostProcessPass::blitSceneCaptureToBackbuffer(
+bool PostProcessPass::blitSceneCaptureToBackbuffer(
     RhiDevice& rhiDevice,
     const RhiTextureViewHandle swapchainColorView,
     RenderDebugService& debugService) {
     if (!m_sceneCaptured || !m_sceneColorHandle.isValid()) {
-        return;
+        return false;
     }
-    if (m_commandListPool == nullptr) {
-        std::abort();
-    }
-    if (!blitPostProcessTextureToSwapchain(rhiDevice,
-                                           *m_commandListPool,
-                                           swapchainColorView,
-                                           m_sceneColorHandle,
-                                           debugService)) {
-        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Failed to blit scene capture through RHI\n");
-    }
+    return executeBlitGraph(rhiDevice, m_sceneColorHandle,
+                            swapchainColorView, debugService);
 }
 
-void PostProcessPass::blitCompositeToBackbuffer(
+bool PostProcessPass::blitCompositeToBackbuffer(
     RhiDevice& rhiDevice,
     const RhiTextureViewHandle swapchainColorView,
     RenderDebugService& debugService) {
     if (!m_compositeHandle.isValid()) {
-        return;
+        return false;
     }
-    if (m_commandListPool == nullptr) {
-        std::abort();
-    }
-    if (!blitPostProcessTextureToSwapchain(rhiDevice,
-                                           *m_commandListPool,
-                                           swapchainColorView,
-                                           m_compositeHandle,
-                                           debugService)) {
-        MECRAFT_LOG_STREAM(std::cerr << "[PostProcessPass] Failed to blit composite target through RHI\n");
-    }
+    return executeBlitGraph(rhiDevice, m_compositeHandle,
+                            swapchainColorView, debugService);
 }
 
-bool PostProcessPass::updateAutoExposure(RhiDevice& rhiDevice,
-                                         const float frameTime,
-                                         float& resolvedExposure,
-                                         RenderDebugService& debugService) {
-    const float manualExposure = 0.8f / std::max(m_effects.exposure, 0.0001f);
-    if (!m_effects.autoExposureEnabled) {
-        m_autoExposureInitialized = false;
-        m_adaptedExposure = manualExposure;
-        m_autoExposureSampleAccumulator = 0.0;
-        resolvedExposure = manualExposure;
-        return true;
-    }
-    if (m_exposureMipCount <= 0 || !rebuildTargetBindGroups()) {
+bool PostProcessPass::executeCompositeGraph(
+    RhiDevice& rhiDevice,
+    const CompositeDestination destination,
+    const RhiTextureViewHandle outputView,
+    const int outputWidth,
+    const int outputHeight,
+    const float frameTime,
+    RenderDebugService& debugService) {
+    if (m_commandListPool == nullptr || m_rhiDevice != &rhiDevice ||
+        !m_hdrInputHandle.isValid() || !m_hdrInputView.isValid() ||
+        !m_sceneDepthHandle.isValid() || !m_sceneDepthView.isValid() ||
+        !m_noiseTexture.isValid() || !m_noiseTextureView.isValid() ||
+        !m_gbufferDepthViewTexture.isValid() ||
+        !m_gbufferDepthTextureView.isValid() ||
+        !m_compositeParamsBuffer.isValid() || !outputView.isValid()) {
         return false;
     }
 
-    if (!m_autoExposureInitialized) {
-        m_adaptedExposure = manualExposure;
-        if (!initializeExposureState(rhiDevice, manualExposure, debugService)) {
+    struct GraphResources {
+        RgTextureHandle hdrInput;
+        RgTextureHandle sceneDepth;
+        RgTextureHandle noise;
+        RgTextureHandle gbufferDepth;
+        RgTextureHandle output;
+        std::array<std::array<RgTextureHandle, 2>, kBloomMipCount> bloom{};
+        std::array<RgTextureHandle, kExposureMipCount> exposure{};
+        std::array<RgTextureHandle, 2> exposureState{};
+        RgBufferHandle compositeParams;
+    } resources;
+
+    m_renderGraph.reset();
+    const auto importTexture = [&](const RhiTextureHandle texture,
+                                   const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState,
+                                   RgTextureHandle& graphTexture) {
+        RhiTextureDesc desc;
+        if (!rhiDevice.getTextureDesc(texture, desc)) {
+            return false;
+        }
+        RgImportedTextureDesc imported;
+        imported.name = desc.debugName;
+        imported.texture = texture;
+        imported.desc = desc;
+        imported.initialState = stableState;
+        imported.finalState = stableState;
+        imported.defaultView = view;
+        graphTexture = m_renderGraph.importTexture(imported);
+        return graphTexture.isValid();
+    };
+    const auto importBuffer = [&](const RhiBufferHandle buffer,
+                                  const RhiResourceState stableState,
+                                  RgBufferHandle& graphBuffer) {
+        RhiBufferDesc desc;
+        if (!rhiDevice.getBufferDesc(buffer, desc)) {
+            return false;
+        }
+        RgImportedBufferDesc imported;
+        imported.name = desc.debugName;
+        imported.buffer = buffer;
+        imported.desc = desc;
+        imported.initialState = stableState;
+        imported.finalState = stableState;
+        graphBuffer = m_renderGraph.importBuffer(imported);
+        return graphBuffer.isValid();
+    };
+
+    if (!importTexture(m_hdrInputHandle, m_hdrInputView,
+                       RhiResourceState::ShaderRead, resources.hdrInput) ||
+        !importTexture(m_sceneDepthHandle, m_sceneDepthView,
+                       RhiResourceState::DepthRead, resources.sceneDepth) ||
+        !importTexture(m_noiseTexture, m_noiseTextureView,
+                       RhiResourceState::ShaderRead, resources.noise) ||
+        !importTexture(m_gbufferDepthViewTexture, m_gbufferDepthTextureView,
+                       RhiResourceState::DepthRead, resources.gbufferDepth) ||
+        !importBuffer(m_compositeParamsBuffer, RhiResourceState::UniformBuffer,
+                      resources.compositeParams)) {
+        return false;
+    }
+    for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        for (int ping = 0; ping < 2; ++ping) {
+            if (!importTexture(m_bloomHandle[mip][ping], m_bloomView[mip][ping],
+                               RhiResourceState::ShaderRead,
+                               resources.bloom[mip][ping])) {
+                return false;
+            }
+        }
+    }
+    for (int mip = 0; mip < m_exposureMipCount; ++mip) {
+        if (!importTexture(m_exposureHandle[mip], m_exposureView[mip],
+                           RhiResourceState::ShaderRead,
+                           resources.exposure[mip])) {
+            return false;
+        }
+    }
+    for (int index = 0; index < 2; ++index) {
+        if (!importTexture(m_exposureStateHandle[index],
+                           m_exposureStateView[index],
+                           RhiResourceState::ShaderRead,
+                           resources.exposureState[index])) {
             return false;
         }
     }
 
-    const float elapsedFrameTime = std::max(frameTime, 0.0f);
-    m_autoExposureSampleAccumulator += elapsedFrameTime;
-    const bool shouldSampleExposure =
-        !m_autoExposureInitialized ||
-        m_autoExposureSampleAccumulator >= kAutoExposureSampleIntervalSeconds;
+    const RhiTextureHandle outputTexture = destination == CompositeDestination::Texture
+        ? m_compositeHandle
+        : rhiDevice.currentSwapchainColorTexture();
+    const RhiResourceState outputStableState =
+        destination == CompositeDestination::Texture
+            ? RhiResourceState::ShaderRead
+            : RhiResourceState::Present;
+    if (!outputTexture.isValid() ||
+        !importTexture(outputTexture, outputView, outputStableState,
+                       resources.output)) {
+        return false;
+    }
 
-    RhiCommandList& commandList = beginCommandList("PostProcess.AutoExposure.Commands");
-    const GpuTimerSegmentToken timerToken =
-        debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
+    const float manualExposure = 0.8f / std::max(m_effects.exposure, 0.0001f);
+    const float elapsedFrameTime = std::max(frameTime, 0.0f);
+    const bool autoExposureEnabled = m_effects.autoExposureEnabled;
+    const bool initializeExposure = autoExposureEnabled &&
+                                    !m_autoExposureInitialized;
+    const bool shouldSampleExposure = autoExposureEnabled &&
+        (initializeExposure ||
+         m_autoExposureSampleAccumulator + elapsedFrameTime >=
+             kAutoExposureSampleIntervalSeconds);
+    const int previousExposureReadIndex = initializeExposure
+        ? 0
+        : m_exposureStateReadIndex;
+    const int finalExposureReadIndex = autoExposureEnabled
+        ? 1 - previousExposureReadIndex
+        : m_exposureStateReadIndex;
+    const double nextExposureAccumulator =
+        shouldSampleExposure
+            ? 0.0
+            : m_autoExposureSampleAccumulator + elapsedFrameTime;
+    if (!autoExposureEnabled) {
+        m_autoExposureInitialized = false;
+        m_adaptedExposure = manualExposure;
+        m_autoExposureSampleAccumulator = 0.0;
+    } else if (initializeExposure) {
+        m_adaptedExposure = manualExposure;
+    }
+
+    GpuTimerSegmentToken exposureTimer;
+    GpuTimerSegmentToken bloomTimer;
+    GpuTimerSegmentToken compositeTimer;
+    RgPassHandle graphTail;
+
+    if (initializeExposure) {
+        RenderGraphPassBuilder initialize = m_renderGraph.addPass(
+            {"PostProcess.ExposureStateInitialization",
+             RgPassType::Graphics, RhiQueueType::Graphics});
+        initialize.writeTexture(resources.exposureState[0],
+                                 RhiResourceState::RenderTarget)
+            .writeTexture(resources.exposureState[1],
+                          RhiResourceState::RenderTarget)
+            .setExecute([this, &debugService, &exposureTimer, manualExposure](
+                            RgPassContext& pass) {
+                exposureTimer = debugService.beginGpuTimer(
+                    pass.commandList(), GpuTimerPass::Post);
+                recordExposureStateInitialization(pass.commandList(),
+                                                  manualExposure);
+                return true;
+            });
+        graphTail = initialize.handle();
+    }
+
     if (shouldSampleExposure) {
         const int exposureLod = std::min(
             kAutoExposureLod,
@@ -474,113 +480,314 @@ bool PostProcessPass::updateAutoExposure(RhiDevice& rhiDevice,
                               std::max(1, m_processingHeight >> exposureLod));
         bool sourceIsScene = true;
         for (int mip = 0; mip < m_exposureMipCount; ++mip) {
-            commandList.textureBarrier({
-                m_exposureHandle[mip],
-                RhiResourceState::ShaderRead,
-                RhiResourceState::RenderTarget
-            });
-            beginPostProcessColorOutput(commandList,
-                                        "ExposureDownsample",
-                                        m_exposureView[mip],
-                                        m_exposureMipSize[mip].x,
-                                        m_exposureMipSize[mip].y,
-                                        true);
-            commandList.setGraphicsPipeline(m_exposureDownsamplePipeline);
-            commandList.setBindGroup(0u, m_exposureDownsampleBindGroup[mip]);
-            const ExposureDownsamplePushConstants pushConstants{
-                glm::vec4(static_cast<float>(sourceSize.x),
-                          static_cast<float>(sourceSize.y),
-                          0.0f,
-                          0.0f),
-                glm::ivec4(sourceIsScene ? 1 : 0,
-                           sourceIsScene ? exposureLod : 0,
-                           0,
-                           0)
-            };
-            commandList.pushConstants(&pushConstants,
-                                      sizeof(pushConstants),
-                                      rhiFlag(RhiShaderStage::Fragment));
-            commandList.draw(3u, 1u, 0u, 0u);
-            commandList.endRendering();
-            commandList.textureBarrier({
-                m_exposureHandle[mip],
-                RhiResourceState::RenderTarget,
-                RhiResourceState::ShaderRead
-            });
-
+            const glm::ivec2 mipSourceSize = sourceSize;
+            const bool mipSourceIsScene = sourceIsScene;
+            const std::string passName =
+                "PostProcess.ExposureDownsample." + std::to_string(mip);
+            RenderGraphPassBuilder downsample = m_renderGraph.addPass(
+                {passName.c_str(), RgPassType::Graphics, RhiQueueType::Graphics});
+            if (graphTail.isValid()) {
+                downsample.dependsOn(graphTail);
+            }
+            if (mipSourceIsScene) {
+                downsample.readTexture(resources.hdrInput,
+                                       RhiResourceState::ShaderRead);
+            } else {
+                downsample.readTexture(resources.exposure[mip - 1],
+                                       RhiResourceState::ShaderRead);
+            }
+            downsample.writeTexture(resources.exposure[mip],
+                                    RhiResourceState::RenderTarget)
+                .setExecute([this, &debugService, &exposureTimer, mip,
+                             mipSourceSize, mipSourceIsScene,
+                             exposureLod](RgPassContext& pass) {
+                    if (mip == 0 && !exposureTimer.valid) {
+                        exposureTimer = debugService.beginGpuTimer(
+                            pass.commandList(), GpuTimerPass::Post);
+                    }
+                    recordExposureDownsample(pass.commandList(), mip,
+                                             mipSourceSize, mipSourceIsScene,
+                                             exposureLod);
+                    return true;
+                });
+            graphTail = downsample.handle();
             sourceSize = m_exposureMipSize[mip];
             sourceIsScene = false;
         }
     }
 
-    const int writeIndex = 1 - m_exposureStateReadIndex;
-    commandList.textureBarrier({
-        m_exposureStateHandle[writeIndex],
-        RhiResourceState::ShaderRead,
-        RhiResourceState::RenderTarget
-    });
-    beginPostProcessColorOutput(commandList,
-                                "ExposureResolve",
-                                m_exposureStateView[writeIndex],
-                                1,
-                                1,
-                                false);
-    commandList.setGraphicsPipeline(m_exposureResolvePipeline);
-    commandList.setBindGroup(0u, m_exposureResolveBindGroup[m_exposureStateReadIndex]);
-    const ExposureResolvePushConstants resolvePushConstants{
-        glm::vec4(elapsedFrameTime,
-                  m_effects.autoExposureSpeed,
-                  m_effects.autoExposureBias,
-                  manualExposure),
-        glm::ivec4(m_autoExposureInitialized ? 1 : 0,
-                   shouldSampleExposure ? 0 : 1,
-                   0,
-                   0)
-    };
-    commandList.pushConstants(&resolvePushConstants,
-                              sizeof(resolvePushConstants),
-                              rhiFlag(RhiShaderStage::Fragment));
-    commandList.draw(3u, 1u, 0u, 0u);
-    commandList.endRendering();
-    commandList.textureBarrier({
-        m_exposureStateHandle[writeIndex],
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
-    debugService.endGpuTimer(commandList, timerToken);
-    submitCommandList(rhiDevice, commandList, "PostProcess.AutoExposure.Submit");
-
-    m_exposureStateReadIndex = writeIndex;
-    m_autoExposureInitialized = true;
-    if (shouldSampleExposure) {
-        m_autoExposureSampleAccumulator = 0.0;
+    if (autoExposureEnabled) {
+        RenderGraphPassBuilder resolve = m_renderGraph.addPass(
+            {"PostProcess.ExposureResolve", RgPassType::Graphics,
+             RhiQueueType::Graphics});
+        if (graphTail.isValid()) {
+            resolve.dependsOn(graphTail);
+        }
+        resolve.readTexture(resources.exposure[m_exposureMipCount - 1],
+                            RhiResourceState::ShaderRead)
+            .readTexture(resources.exposureState[previousExposureReadIndex],
+                         RhiResourceState::ShaderRead)
+            .writeTexture(resources.exposureState[finalExposureReadIndex],
+                          RhiResourceState::RenderTarget)
+            .setExecute([this, &debugService, &exposureTimer,
+                         previousExposureReadIndex, finalExposureReadIndex,
+                         elapsedFrameTime, manualExposure,
+                         historyAvailable = !initializeExposure,
+                         reuseExposure = !shouldSampleExposure](
+                            RgPassContext& pass) {
+                if (!exposureTimer.valid) {
+                    exposureTimer = debugService.beginGpuTimer(
+                        pass.commandList(), GpuTimerPass::Post);
+                }
+                recordExposureResolve(pass.commandList(),
+                                      previousExposureReadIndex,
+                                      finalExposureReadIndex,
+                                      elapsedFrameTime, manualExposure,
+                                      historyAvailable, reuseExposure);
+                debugService.endGpuTimer(pass.commandList(), exposureTimer);
+                return true;
+            });
+        graphTail = resolve.handle();
     }
-    resolvedExposure = m_adaptedExposure;
+
+    const bool bloomReady = m_effects.bloomEnabled &&
+                            m_effects.bloomStrength > 0.001f;
+    const int bloomMipCount = std::clamp(m_effects.bloomMipCount,
+                                         1, kBloomMipCount);
+    if (bloomReady) {
+        for (int mip = 0; mip < bloomMipCount; ++mip) {
+            const std::string extractName =
+                "PostProcess.Bloom.Extract." + std::to_string(mip);
+            RenderGraphPassBuilder extract = m_renderGraph.addPass(
+                {extractName.c_str(), RgPassType::Graphics,
+                 RhiQueueType::Graphics});
+            if (graphTail.isValid()) {
+                extract.dependsOn(graphTail);
+            }
+            extract.readTexture(resources.hdrInput, RhiResourceState::ShaderRead)
+                .writeTexture(resources.bloom[mip][0],
+                               RhiResourceState::RenderTarget)
+                .setExecute([this, &debugService, &bloomTimer, mip](
+                                RgPassContext& pass) {
+                    if (mip == 0) {
+                        bloomTimer = debugService.beginGpuTimer(
+                            pass.commandList(), GpuTimerPass::Post);
+                    }
+                    recordBloomExtract(pass.commandList(), mip);
+                    return true;
+                });
+            const RgPassHandle extractHandle = extract.handle();
+
+            const std::string horizontalName =
+                "PostProcess.Bloom.BlurHorizontal." + std::to_string(mip);
+            RenderGraphPassBuilder horizontal = m_renderGraph.addPass(
+                {horizontalName.c_str(), RgPassType::Graphics,
+                 RhiQueueType::Graphics});
+            horizontal.dependsOn(extractHandle)
+                .readTexture(resources.bloom[mip][0],
+                             RhiResourceState::ShaderRead)
+                .writeTexture(resources.bloom[mip][1],
+                               RhiResourceState::RenderTarget)
+                .setExecute([this, mip](RgPassContext& pass) {
+                    recordBloomBlur(pass.commandList(), mip, true);
+                    return true;
+                });
+            const RgPassHandle horizontalHandle = horizontal.handle();
+
+            const std::string verticalName =
+                "PostProcess.Bloom.BlurVertical." + std::to_string(mip);
+            RenderGraphPassBuilder vertical = m_renderGraph.addPass(
+                {verticalName.c_str(), RgPassType::Graphics,
+                 RhiQueueType::Graphics});
+            vertical.dependsOn(horizontalHandle)
+                .readTexture(resources.bloom[mip][1],
+                             RhiResourceState::ShaderRead)
+                .writeTexture(resources.bloom[mip][0],
+                               RhiResourceState::RenderTarget)
+                .setExecute([this, &debugService, &bloomTimer, mip,
+                             lastMip = mip == bloomMipCount - 1](
+                                RgPassContext& pass) {
+                    recordBloomBlur(pass.commandList(), mip, false);
+                    if (lastMip) {
+                        debugService.endGpuTimer(pass.commandList(), bloomTimer);
+                    }
+                    return true;
+                });
+            graphTail = vertical.handle();
+        }
+    }
+
+    const bool useAutoExposureTexture = autoExposureEnabled;
+    const PostProcessCompositeParams compositeParams =
+        buildCompositeParams(useAutoExposureTexture, bloomReady);
+    RenderGraphPassBuilder params = m_renderGraph.addPass(
+        {"PostProcess.CompositeParameters", RgPassType::Copy,
+         RhiQueueType::Graphics});
+    if (graphTail.isValid()) {
+        params.dependsOn(graphTail);
+    }
+    params.writeBuffer(resources.compositeParams, RhiResourceState::TransferDst)
+        .setExecute([this, &debugService, &compositeTimer, compositeParams](
+                        RgPassContext& pass) {
+            compositeTimer = debugService.beginGpuTimer(
+                pass.commandList(), GpuTimerPass::Post);
+            uploadCompositeParams(pass.commandList(), compositeParams);
+            return true;
+        });
+    const RgPassHandle paramsHandle = params.handle();
+
+    RenderGraphPassBuilder composite = m_renderGraph.addPass(
+        {destination == CompositeDestination::Texture
+             ? "PostProcess.CompositeTexture"
+             : "PostProcess.CompositeBackbuffer",
+         RgPassType::Graphics, RhiQueueType::Graphics});
+    composite.dependsOn(paramsHandle)
+        .readTexture(resources.hdrInput, RhiResourceState::ShaderRead)
+        .readTexture(resources.noise, RhiResourceState::ShaderRead)
+        .readTexture(resources.gbufferDepth, RhiResourceState::DepthRead)
+        .readTexture(resources.sceneDepth, RhiResourceState::DepthRead)
+        .readTexture(resources.exposureState[finalExposureReadIndex],
+                     RhiResourceState::ShaderRead)
+        .readBuffer(resources.compositeParams, RhiResourceState::UniformBuffer)
+        .writeTexture(resources.output, RhiResourceState::RenderTarget);
+    for (int mip = 0; mip < kBloomMipCount; ++mip) {
+        composite.readTexture(resources.bloom[mip][0],
+                              RhiResourceState::ShaderRead);
+    }
+    composite.setExecute([this, &debugService, &compositeTimer, destination,
+                          outputView, outputWidth, outputHeight,
+                          finalExposureReadIndex](RgPassContext& pass) {
+        if (destination == CompositeDestination::Texture) {
+            bindCompositeOutput(pass.commandList(), m_processingWidth,
+                                m_processingHeight);
+            renderComposite(pass.commandList(), m_compositeTexturePipeline,
+                            finalExposureReadIndex);
+        } else {
+            bindBackbufferOutput(pass.commandList(), outputView,
+                                 std::max(1, outputWidth),
+                                 std::max(1, outputHeight), false);
+            renderComposite(pass.commandList(), m_compositeSwapchainPipeline,
+                            finalExposureReadIndex);
+        }
+        pass.commandList().endRendering();
+        debugService.endGpuTimer(pass.commandList(), compositeTimer);
+        return true;
+    });
+
+    const RgCompileResult compiled = m_renderGraph.compile();
+    if (!compiled.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[PostProcessPass] Render Graph compile failed: "
+                      << compiled.message << '\n');
+        return false;
+    }
+    const GpuTimerCheckpoint timerCheckpoint = debugService.gpuTimerCheckpoint();
+    const RgExecuteResult executed = m_renderGraph.execute(
+        rhiDevice, *m_commandListPool);
+    if (!executed.succeeded()) {
+        debugService.cancelGpuTimersSince(timerCheckpoint);
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[PostProcessPass] Render Graph execution failed: "
+                      << executed.message << '\n');
+        return false;
+    }
+
+    if (autoExposureEnabled) {
+        m_exposureStateReadIndex = finalExposureReadIndex;
+        m_autoExposureInitialized = true;
+        m_autoExposureSampleAccumulator = nextExposureAccumulator;
+    }
     return true;
 }
 
-bool PostProcessPass::initializeExposureState(RhiDevice& rhiDevice,
-                                              const float manualExposure,
-                                              RenderDebugService& debugService) {
-    if (!m_exposureStateView[0].isValid() || !m_exposureStateView[1].isValid()) {
+bool PostProcessPass::executeBlitGraph(
+    RhiDevice& rhiDevice,
+    const RhiTextureHandle sourceTexture,
+    const RhiTextureViewHandle swapchainColorView,
+    RenderDebugService& debugService) {
+    if (m_commandListPool == nullptr || m_rhiDevice != &rhiDevice ||
+        !sourceTexture.isValid() || !swapchainColorView.isValid()) {
         return false;
     }
+    const RhiTextureHandle swapchainTexture =
+        rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainTexture.isValid()) {
+        return false;
+    }
+
+    m_renderGraph.reset();
+    const auto importTexture = [&](const RhiTextureHandle texture,
+                                   const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState,
+                                   RgTextureHandle& graphTexture) {
+        RhiTextureDesc desc;
+        if (!rhiDevice.getTextureDesc(texture, desc)) {
+            return false;
+        }
+        RgImportedTextureDesc imported;
+        imported.name = desc.debugName;
+        imported.texture = texture;
+        imported.desc = desc;
+        imported.initialState = stableState;
+        imported.finalState = stableState;
+        imported.defaultView = view;
+        graphTexture = m_renderGraph.importTexture(imported);
+        return graphTexture.isValid();
+    };
+    RgTextureHandle source;
+    RgTextureHandle swapchain;
+    if (!importTexture(sourceTexture, {}, RhiResourceState::ShaderRead, source) ||
+        !importTexture(swapchainTexture, swapchainColorView,
+                       RhiResourceState::Present, swapchain)) {
+        return false;
+    }
+
+    RenderGraphPassBuilder blit = m_renderGraph.addPass(
+        {"PostProcess.Blit", RgPassType::Copy, RhiQueueType::Graphics});
+    blit.readTexture(source, RhiResourceState::TransferSrc)
+        .writeTexture(swapchain, RhiResourceState::TransferDst)
+        .setExecute([&debugService, sourceTexture, swapchainColorView](
+                        RgPassContext& pass) {
+            const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(
+                pass.commandList(), GpuTimerPass::Post);
+            RhiTextureBlit blitInfo;
+            blitInfo.src = sourceTexture;
+            blitInfo.dstView = swapchainColorView;
+            pass.commandList().blitTexture(blitInfo);
+            debugService.endGpuTimer(pass.commandList(), timerToken);
+            return true;
+        });
+
+    const RgCompileResult compiled = m_renderGraph.compile();
+    if (!compiled.succeeded()) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[PostProcessPass] Blit graph compile failed: "
+                      << compiled.message << '\n');
+        return false;
+    }
+    const GpuTimerCheckpoint timerCheckpoint = debugService.gpuTimerCheckpoint();
+    const RgExecuteResult executed = m_renderGraph.execute(
+        rhiDevice, *m_commandListPool);
+    if (!executed.succeeded()) {
+        debugService.cancelGpuTimersSince(timerCheckpoint);
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[PostProcessPass] Blit graph execution failed: "
+                      << executed.message << '\n');
+        return false;
+    }
+    return true;
+}
+
+void PostProcessPass::recordExposureStateInitialization(
+    RhiCommandList& commandList,
+    const float manualExposure) {
     const float initialState[4] = {
         std::max(manualExposure, 0.001f),
         m_lastAverageLum,
         m_lastTargetExposure,
         1.0f
     };
-
-    RhiCommandList& commandList = beginCommandList("PostProcess.ExposureInitialization.Commands");
-    const GpuTimerSegmentToken timerToken =
-        debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
     for (int index = 0; index < 2; ++index) {
-        commandList.textureBarrier({
-            m_exposureStateHandle[index],
-            RhiResourceState::ShaderRead,
-            RhiResourceState::RenderTarget
-        });
         RhiColorAttachment colorAttachment;
         colorAttachment.view = m_exposureStateView[index];
         colorAttachment.loadOp = RhiLoadOp::Clear;
@@ -597,136 +804,124 @@ bool PostProcessPass::initializeExposureState(RhiDevice& rhiDevice,
         renderingInfo.colorAttachmentCount = 1u;
         commandList.beginRendering(renderingInfo);
         commandList.endRendering();
-        commandList.textureBarrier({
-            m_exposureStateHandle[index],
-            RhiResourceState::RenderTarget,
-            RhiResourceState::ShaderRead
-        });
     }
-    debugService.endGpuTimer(commandList, timerToken);
-    submitCommandList(rhiDevice, commandList, "PostProcess.ExposureInitialization.Submit");
-    m_exposureStateReadIndex = 0;
-    return true;
 }
 
-bool PostProcessPass::renderBloom(RhiDevice& rhiDevice,
-                                  const int maxMipCount,
-                                  bool& bloomReady,
-                                  RenderDebugService& debugService) {
-    bloomReady = false;
-    if (!m_effects.bloomEnabled || m_effects.bloomStrength <= 0.001f) {
-        return true;
-    }
-    if (!rebuildTargetBindGroups()) {
-        return false;
-    }
+void PostProcessPass::recordExposureDownsample(
+    RhiCommandList& commandList,
+    const int mip,
+    const glm::ivec2& sourceSize,
+    const bool sourceIsScene,
+    const int sourceLod) {
+    beginPostProcessColorOutput(commandList,
+                                "ExposureDownsample",
+                                m_exposureView[mip],
+                                m_exposureMipSize[mip].x,
+                                m_exposureMipSize[mip].y,
+                                true);
+    commandList.setGraphicsPipeline(m_exposureDownsamplePipeline);
+    commandList.setBindGroup(0u, m_exposureDownsampleBindGroup[mip]);
+    const ExposureDownsamplePushConstants pushConstants{
+        glm::vec4(static_cast<float>(sourceSize.x),
+                  static_cast<float>(sourceSize.y), 0.0f, 0.0f),
+        glm::ivec4(sourceIsScene ? 1 : 0,
+                   sourceIsScene ? sourceLod : 0,
+                   0,
+                   0)
+    };
+    commandList.pushConstants(&pushConstants,
+                              sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
+}
 
-    const int mipCount = std::clamp(maxMipCount, 1, kBloomMipCount);
-    RhiCommandList& commandList = beginCommandList("PostProcess.Bloom.Commands");
-    const GpuTimerSegmentToken timerToken =
-        debugService.beginGpuTimer(commandList, GpuTimerPass::Post);
-    for (int mip = 0; mip < mipCount; ++mip) {
-        commandList.textureBarrier({
-            m_bloomHandle[mip][0],
-            RhiResourceState::ShaderRead,
-            RhiResourceState::RenderTarget
-        });
-        beginPostProcessColorOutput(commandList,
-                                    "BloomExtract",
-                                    m_bloomView[mip][0],
-                                    m_bloomMipSize[mip].x,
-                                    m_bloomMipSize[mip].y,
-                                    true);
-        commandList.setGraphicsPipeline(m_bloomExtractPipeline);
-        commandList.setBindGroup(0u, m_bloomExtractBindGroup);
-        const glm::ivec4 pushConstants(mip + 1, 0, 0, 0);
-        commandList.pushConstants(&pushConstants,
-                                  sizeof(pushConstants),
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(3u, 1u, 0u, 0u);
-        commandList.endRendering();
-        commandList.textureBarrier({
-            m_bloomHandle[mip][0],
-            RhiResourceState::RenderTarget,
-            RhiResourceState::ShaderRead
-        });
+void PostProcessPass::recordExposureResolve(
+    RhiCommandList& commandList,
+    const int readIndex,
+    const int writeIndex,
+    const float elapsedFrameTime,
+    const float manualExposure,
+    const bool historyAvailable,
+    const bool reuseExposure) {
+    beginPostProcessColorOutput(commandList,
+                                "ExposureResolve",
+                                m_exposureStateView[writeIndex],
+                                1,
+                                1,
+                                false);
+    commandList.setGraphicsPipeline(m_exposureResolvePipeline);
+    commandList.setBindGroup(0u, m_exposureResolveBindGroup[readIndex]);
+    const ExposureResolvePushConstants resolvePushConstants{
+        glm::vec4(elapsedFrameTime,
+                  m_effects.autoExposureSpeed,
+                  m_effects.autoExposureBias,
+                  manualExposure),
+        glm::ivec4(historyAvailable ? 1 : 0,
+                   reuseExposure ? 1 : 0,
+                   0,
+                   0)
+    };
+    commandList.pushConstants(&resolvePushConstants,
+                              sizeof(resolvePushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
+}
 
-        commandList.textureBarrier({
-            m_bloomHandle[mip][1],
-            RhiResourceState::ShaderRead,
-            RhiResourceState::RenderTarget
-        });
-        beginPostProcessColorOutput(commandList,
-                                    "BloomBlurHorizontal",
-                                    m_bloomView[mip][1],
-                                    m_bloomMipSize[mip].x,
-                                    m_bloomMipSize[mip].y,
-                                    true);
-        commandList.setGraphicsPipeline(m_bloomBlurPipeline);
-        commandList.setBindGroup(0u, m_bloomBlurBindGroup[mip][0]);
-        const glm::vec4 horizontalPushConstants(1.0f, 0.0f, 1.0f, 0.0f);
-        commandList.pushConstants(&horizontalPushConstants,
-                                  sizeof(horizontalPushConstants),
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(3u, 1u, 0u, 0u);
-        commandList.endRendering();
-        commandList.textureBarrier({
-            m_bloomHandle[mip][1],
-            RhiResourceState::RenderTarget,
-            RhiResourceState::ShaderRead
-        });
+void PostProcessPass::recordBloomExtract(RhiCommandList& commandList,
+                                         const int mip) {
+    beginPostProcessColorOutput(commandList,
+                                "BloomExtract",
+                                m_bloomView[mip][0],
+                                m_bloomMipSize[mip].x,
+                                m_bloomMipSize[mip].y,
+                                true);
+    commandList.setGraphicsPipeline(m_bloomExtractPipeline);
+    commandList.setBindGroup(0u, m_bloomExtractBindGroup);
+    const glm::ivec4 pushConstants(mip + 1, 0, 0, 0);
+    commandList.pushConstants(&pushConstants,
+                              sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
+}
 
-        commandList.textureBarrier({
-            m_bloomHandle[mip][0],
-            RhiResourceState::ShaderRead,
-            RhiResourceState::RenderTarget
-        });
-        beginPostProcessColorOutput(commandList,
-                                    "BloomBlurVertical",
-                                    m_bloomView[mip][0],
-                                    m_bloomMipSize[mip].x,
-                                    m_bloomMipSize[mip].y,
-                                    true);
-        commandList.setGraphicsPipeline(m_bloomBlurPipeline);
-        commandList.setBindGroup(0u, m_bloomBlurBindGroup[mip][1]);
-        const glm::vec4 verticalPushConstants(0.0f, 1.0f, 1.0f, 0.0f);
-        commandList.pushConstants(&verticalPushConstants,
-                                  sizeof(verticalPushConstants),
-                                  rhiFlag(RhiShaderStage::Fragment));
-        commandList.draw(3u, 1u, 0u, 0u);
-        commandList.endRendering();
-        commandList.textureBarrier({
-            m_bloomHandle[mip][0],
-            RhiResourceState::RenderTarget,
-            RhiResourceState::ShaderRead
-        });
-    }
-    debugService.endGpuTimer(commandList, timerToken);
-    submitCommandList(rhiDevice, commandList, "PostProcess.Bloom.Submit");
-    bloomReady = true;
-    return true;
+void PostProcessPass::recordBloomBlur(RhiCommandList& commandList,
+                                      const int mip,
+                                      const bool horizontal) {
+    beginPostProcessColorOutput(commandList,
+                                horizontal ? "BloomBlurHorizontal"
+                                            : "BloomBlurVertical",
+                                m_bloomView[mip][horizontal ? 1 : 0],
+                                m_bloomMipSize[mip].x,
+                                m_bloomMipSize[mip].y,
+                                true);
+    commandList.setGraphicsPipeline(m_bloomBlurPipeline);
+    commandList.setBindGroup(0u, m_bloomBlurBindGroup[mip][horizontal ? 0 : 1]);
+    const glm::vec4 pushConstants = horizontal
+        ? glm::vec4(1.0f, 0.0f, 1.0f, 0.0f)
+        : glm::vec4(0.0f, 1.0f, 1.0f, 0.0f);
+    commandList.pushConstants(&pushConstants,
+                              sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
 }
 
 void PostProcessPass::renderComposite(RhiCommandList& commandList,
-                                      const RhiPipelineHandle pipeline) {
+                                      const RhiPipelineHandle pipeline,
+                                      const int exposureStateIndex) {
     commandList.setGraphicsPipeline(pipeline);
-    commandList.setBindGroup(0u, m_compositeBindGroup[m_exposureStateReadIndex]);
+    commandList.setBindGroup(0u, m_compositeBindGroup[exposureStateIndex]);
     commandList.draw(3u, 1u, 0u, 0u);
 }
 
-void PostProcessPass::updateCompositeParams(RhiCommandList& commandList,
-                                            const bool bloomReady) {
-    const bool useAutoExposureTexture =
-        m_effects.autoExposureEnabled && m_autoExposureInitialized;
-    const bool hasBloom = bloomReady && m_effects.bloomEnabled &&
-                          m_effects.bloomStrength > 0.001f;
-    const PostProcessCompositeParams params =
-        buildCompositeParams(useAutoExposureTexture, hasBloom);
-    commandList.bufferBarrier({m_compositeParamsBuffer, RhiResourceState::UniformBuffer,
-                               RhiResourceState::TransferDst});
-    commandList.updateBuffer(m_compositeParamsBuffer, 0u, &params, sizeof(params));
-    commandList.bufferBarrier({m_compositeParamsBuffer, RhiResourceState::TransferDst,
-                               RhiResourceState::UniformBuffer});
+void PostProcessPass::uploadCompositeParams(
+    RhiCommandList& commandList,
+    const PostProcessCompositeParams& params) {
+    commandList.updateBuffer(m_compositeParamsBuffer, 0u,
+                             &params, sizeof(params));
 }
 
 PostProcessPass::PostProcessCompositeParams PostProcessPass::buildCompositeParams(
@@ -1630,6 +1825,9 @@ void PostProcessPass::destroyProcessingTargets() {
 }
 
 void PostProcessPass::destroyRhiResources() {
+    if (m_rhiDevice != nullptr) {
+        m_renderGraph.releaseTransientResources(*m_rhiDevice);
+    }
     destroyCompositeBindGroups();
     destroySceneCaptureTargets();
     destroyProcessingTargets();
