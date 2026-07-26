@@ -287,6 +287,7 @@ json toJson(const VolumetricSettings& s) {
 
 void applyCloudSettings(const json& j, CloudSettings& s) {
     readBool(j, "shadowsEnabled", s.shadowsEnabled);
+    readBool(j, "asyncComputeEnabled", s.asyncComputeEnabled);
     readInt(j, "updateInterval", s.updateInterval);
     readFloat(j, "shadowStrength", s.shadowStrength);
     readFloat(j, "shadowScale", s.shadowScale);
@@ -305,6 +306,7 @@ void applyCloudSettings(const json& j, CloudSettings& s) {
 json toJson(const CloudSettings& s) {
     return {
         {"shadowsEnabled", s.shadowsEnabled},
+        {"asyncComputeEnabled", s.asyncComputeEnabled},
         {"updateInterval", s.updateInterval},
         {"shadowStrength", s.shadowStrength},
         {"shadowScale", s.shadowScale},

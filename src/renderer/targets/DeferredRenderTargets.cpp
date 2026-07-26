@@ -427,7 +427,9 @@ bool DeferredRenderTargets::createScreenEffectTextures() {
     const auto createTexture = [this](const char* debugName,
                                       const uint32_t width,
                                       const uint32_t height,
-                                      RhiTextureHandle& handle) {
+                                      RhiTextureHandle& handle,
+                                      const RhiTextureUsageFlags extraUsage =
+                                          0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.dimension = RhiTextureDimension::Texture2D;
@@ -440,7 +442,7 @@ bool DeferredRenderTargets::createScreenEffectTextures() {
         desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                      rhiFlag(RhiTextureUsage::ColorAttachment) |
                      rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst);
+                     rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };
@@ -485,7 +487,9 @@ bool DeferredRenderTargets::createAtmosphereTextures() {
     const auto createTexture = [this](const char* debugName,
                                       const uint32_t width,
                                       const uint32_t height,
-                                      RhiTextureHandle& handle) {
+                                      RhiTextureHandle& handle,
+                                      const RhiTextureUsageFlags extraUsage =
+                                          0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.dimension = RhiTextureDimension::Texture2D;
@@ -498,14 +502,15 @@ bool DeferredRenderTargets::createAtmosphereTextures() {
         desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                      rhiFlag(RhiTextureUsage::ColorAttachment) |
                      rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst);
+                     rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };
 
     const uint32_t halfWidth = static_cast<uint32_t>(std::max(1, m_width / 2));
     const uint32_t halfHeight = static_cast<uint32_t>(std::max(1, m_height / 2));
-    if (!createTexture("DeferredTargets.Cloud", halfWidth, halfHeight, m_cloudHandle) ||
+    if (!createTexture("DeferredTargets.Cloud", halfWidth, halfHeight, m_cloudHandle,
+                       rhiFlag(RhiTextureUsage::Storage)) ||
         !createTexture("DeferredTargets.SkyCapture",
                        static_cast<uint32_t>(kSkyCaptureWidth),
                        static_cast<uint32_t>(kSkyCaptureHeight),
@@ -613,7 +618,9 @@ bool DeferredRenderTargets::createEffectHistoryTextures() {
     const auto createTexture = [this](const char* debugName,
                                       const uint32_t width,
                                       const uint32_t height,
-                                      RhiTextureHandle& handle) {
+                                      RhiTextureHandle& handle,
+                                      const RhiTextureUsageFlags extraUsage =
+                                          0u) {
         RhiTextureDesc desc;
         desc.debugName = debugName;
         desc.dimension = RhiTextureDimension::Texture2D;
@@ -626,7 +633,7 @@ bool DeferredRenderTargets::createEffectHistoryTextures() {
         desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
                      rhiFlag(RhiTextureUsage::ColorAttachment) |
                      rhiFlag(RhiTextureUsage::TransferSrc) |
-                     rhiFlag(RhiTextureUsage::TransferDst);
+                     rhiFlag(RhiTextureUsage::TransferDst) | extraUsage;
         handle = m_rhiDevice->createTexture(desc, nullptr);
         return handle.isValid();
     };

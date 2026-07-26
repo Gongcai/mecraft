@@ -110,6 +110,10 @@ struct VolumetricSettings {
 /// Cloud settings
 struct CloudSettings {
     bool shadowsEnabled = true;
+    /// Dispatch the cloud raymarch on the async compute queue so it overlaps
+    /// shadow/SSAO rasterization. Effective only on Vulkan devices exposing a
+    /// dedicated compute queue; other configurations fall back to graphics.
+    bool asyncComputeEnabled = true;
     int updateInterval = 2; // 1=every frame, 2=half rate, 3=third rate
     float shadowStrength = 0.0f;
     float shadowScale = 0.0045f;

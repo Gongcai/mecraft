@@ -1791,12 +1791,34 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
   // single-queue frame into one submit and removes the GPU idle bubbles
   // that per-batch semaphore chains introduce at batch boundaries.
   std::vector<RhiSubmissionToken> batchTokens(m_submissionBatches.size());
+  // A submission-level wait blocks every command in the submit, so a batch
+  // that depends on another queue must START its own group: coalescing it
+  // into the running group would stall earlier same-queue batches that have
+  // no such dependency and erase any cross-queue overlap.
+  const auto batchNeedsCrossQueueWait = [&](const uint32_t batchIndex,
+                                            const RhiQueueType queue) {
+    const RgSubmissionBatchPlan &batch = m_submissionBatches[batchIndex];
+    for (const uint32_t dependency : batch.dependencies) {
+      if (dependency < m_submissionBatches.size() &&
+          m_submissionBatches[dependency].queue != queue) {
+        return true;
+      }
+    }
+    for (const uint32_t dependency : batchPrologueDependencies[batchIndex]) {
+      if (dependency < prologueBatches.size() &&
+          prologueBatches[dependency].queue != queue) {
+        return true;
+      }
+    }
+    return false;
+  };
   uint32_t groupBegin = 0u;
   while (groupBegin < m_submissionBatches.size()) {
     const RhiQueueType groupQueue = m_submissionBatches[groupBegin].queue;
     uint32_t groupEnd = groupBegin + 1u;
     while (groupEnd < m_submissionBatches.size() &&
-           m_submissionBatches[groupEnd].queue == groupQueue) {
+           m_submissionBatches[groupEnd].queue == groupQueue &&
+           !batchNeedsCrossQueueWait(groupEnd, groupQueue)) {
       ++groupEnd;
     }
 

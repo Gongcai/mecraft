@@ -1,0 +1,23 @@
+#version 450 core
+
+// Async-compute entry point for the cloud target: identical shading to the
+// fragment path, dispatched on the compute queue so the raymarch overlaps
+// shadow rasterization on the graphics queue.
+#include "cloud_target_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(binding = 5, rgba16f) uniform writeonly image2D uCloudImage;
+
+void main() {
+    const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    const ivec2 extent = imageSize(uCloudImage);
+    if (texel.x >= extent.x || texel.y >= extent.y) {
+        return;
+    }
+    // Native texel centers map to screen UV through the shared helper, so
+    // the compute path stays consistent with the rasterized fragment path
+    // on every backend.
+    const vec2 screenUv = rhiNativeFragCoordToScreenUv(
+        vec2(texel) + 0.5, vec2(extent));
+    imageStore(uCloudImage, texel, renderCloudTarget(screenUv));
+}

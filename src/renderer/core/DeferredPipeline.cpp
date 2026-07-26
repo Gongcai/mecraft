@@ -994,6 +994,35 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         graphTail = velocityPass.handle();
     }
 
+    // Async compute pilot: the cloud raymarch depends only on the depth
+    // buffer, sky capture, and its own history, none of which the upcoming
+    // shadow/SSAO/lighting chain modifies. Declaring it on the compute queue
+    // here splits the graphics batches exactly at the overlap window, so the
+    // raymarch runs concurrently with that raster work. The main graphTail
+    // is deliberately not advanced: downstream cloud consumers are ordered
+    // through their resource reads.
+    bool cloudGraphAdded = false;
+    const bool cloudAsyncCompute = cloudEnabled && m_cloudPass != nullptr &&
+        settings.cloud.asyncComputeEnabled &&
+        rhiDevice.backend() == RhiBackend::Vulkan &&
+        rhiDevice.capabilities().dedicatedComputeQueue;
+    if (cloudAsyncCompute) {
+        CloudPass::GraphResources cloudResources;
+        cloudResources.depth = depth;
+        cloudResources.skyCapture = skyCapture;
+        cloudResources.noise = skyNoise;
+        cloudResources.historyPrevious = historyCloudPrevious;
+        cloudResources.cloud = cloud;
+        const RgPassHandle cloudHandle = m_cloudPass->addGraphPass(
+            m_renderGraph, ctx, settings, targets, cloudResources, graphTail,
+            true);
+        if (!cloudHandle.isValid()) {
+            return failGraphSetup();
+        }
+        cloudGraphPrepared = true;
+        cloudGraphAdded = true;
+    }
+
     if (shadowEnabled) {
         graphTail = m_shadowPass->addGraphPasses(
             m_renderGraph, shadowResources, graphTail);
@@ -1103,18 +1132,21 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             return failGraphSetup();
         }
 
-        CloudPass::GraphResources cloudResources;
-        cloudResources.depth = depth;
-        cloudResources.skyCapture = skyCapture;
-        cloudResources.noise = skyNoise;
-        cloudResources.historyPrevious = historyCloudPrevious;
-        cloudResources.cloud = cloud;
-        graphTail = m_cloudPass->addGraphPass(
-            m_renderGraph, ctx, settings, targets, cloudResources, graphTail);
-        if (!graphTail.isValid()) {
-            return failGraphSetup();
+        if (!cloudGraphAdded) {
+            CloudPass::GraphResources cloudResources;
+            cloudResources.depth = depth;
+            cloudResources.skyCapture = skyCapture;
+            cloudResources.noise = skyNoise;
+            cloudResources.historyPrevious = historyCloudPrevious;
+            cloudResources.cloud = cloud;
+            graphTail = m_cloudPass->addGraphPass(
+                m_renderGraph, ctx, settings, targets, cloudResources,
+                graphTail);
+            if (!graphTail.isValid()) {
+                return failGraphSetup();
+            }
+            cloudGraphPrepared = true;
         }
-        cloudGraphPrepared = true;
     }
 
     if (settings.debug.deferredLightDebugMode <= 0 && m_voxelGiClipmap) {

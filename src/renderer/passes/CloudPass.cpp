@@ -86,7 +86,8 @@ RgPassHandle CloudPass::addGraphPass(
     const RenderSettings& settings,
     DeferredRenderTargets& targets,
     const GraphResources& resources,
-    const RgPassHandle dependency) {
+    const RgPassHandle dependency,
+    const bool useAsyncCompute) {
     if (m_graphFramePrepared || !dependency.isValid() ||
         !resources.depth.isValid() || !resources.skyCapture.isValid() ||
         !resources.noise.isValid() || !resources.historyPrevious.isValid() ||
@@ -95,15 +96,32 @@ RgPassHandle CloudPass::addGraphPass(
     }
 
     const bool renderClouds = shouldRenderClouds(ctx, settings);
+    // Blits require the graphics queue, so only real render frames may move
+    // to async compute; history-reuse frames always stay on graphics.
+    const bool computeQueue = renderClouds && useAsyncCompute;
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
     RenderGraphPassBuilder cloudPass = graph.addPass({
         renderClouds ? "Cloud.Render" : "Cloud.HistoryCopy",
-        renderClouds ? RgPassType::Graphics : RgPassType::Copy,
-        RhiQueueType::Graphics
+        renderClouds ? (computeQueue ? RgPassType::Compute
+                                     : RgPassType::Graphics)
+                     : RgPassType::Copy,
+        computeQueue ? RhiQueueType::Compute : RhiQueueType::Graphics
     });
     cloudPass.dependsOn(dependency);
-    if (renderClouds) {
+    if (computeQueue) {
+        // DepthRead is a graphics-only attachment state; the compute queue
+        // samples the depth buffer through the generic shader-read layout.
+        cloudPass.readTexture(resources.depth, RhiResourceState::ShaderRead)
+            .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
+            .readTexture(resources.noise, RhiResourceState::ShaderRead)
+            .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
+            .writeTexture(resources.cloud, RhiResourceState::ShaderWrite)
+            .setExecute([this, frame, frameTargets](RgPassContext& pass) {
+                return recordCloudCompute(
+                    pass.commandList(), *frame, *frameTargets);
+            });
+    } else if (renderClouds) {
         cloudPass.readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
             .readTexture(resources.noise, RhiResourceState::ShaderRead)
@@ -159,32 +177,9 @@ bool CloudPass::recordHistoryCopy(RhiCommandList& commandList,
     return true;
 }
 
-bool CloudPass::recordCloud(RhiCommandList& commandList,
-                            const FrameContext& ctx,
-                            DeferredRenderTargets& targets) {
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !targets.ensureCloudTextureView(*ctx.shared->rhiDevice) ||
-        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
-        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
-        !targets.ensureHistoryCloudTextureViews(*ctx.shared->rhiDevice)) {
-        return false;
-    }
-
-    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-    if (!ensureNoiseTextureView(rhiDevice)) {
-        return false;
-    }
-    const std::array<RhiTextureViewHandle, 4> views = {
-        targets.depthTextureViewHandle(),
-        targets.skyCaptureTextureViewHandle(),
-        m_noiseTextureView,
-        targets.historyCloudTexturePrevViewHandle()
-    };
-    if (!ensureRhiPipeline(rhiDevice) || !ensureBindGroup(rhiDevice, views)) {
-        return false;
-    }
-
-    const bool historyAvailable = m_hasRenderedClouds && !ctx.temporalReset;
+namespace {
+[[nodiscard]] CloudParams buildCloudParams(const FrameContext& ctx,
+                                           const bool historyAvailable) {
     CloudParams params{};
     params.invViewProj = ctx.camera.invViewProj;
     params.previousViewProj = ctx.previousViewProj;
@@ -211,6 +206,37 @@ bool CloudPass::recordCloud(RhiCommandList& commandList,
                                  historyAvailable ? 1 : 0,
                                  0,
                                  0);
+    return params;
+}
+} // namespace
+
+bool CloudPass::recordCloud(RhiCommandList& commandList,
+                            const FrameContext& ctx,
+                            DeferredRenderTargets& targets) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureCloudTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureHistoryCloudTextureViews(*ctx.shared->rhiDevice)) {
+        return false;
+    }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!ensureNoiseTextureView(rhiDevice)) {
+        return false;
+    }
+    const std::array<RhiTextureViewHandle, 4> views = {
+        targets.depthTextureViewHandle(),
+        targets.skyCaptureTextureViewHandle(),
+        m_noiseTextureView,
+        targets.historyCloudTexturePrevViewHandle()
+    };
+    if (!ensureRhiPipeline(rhiDevice) || !ensureBindGroup(rhiDevice, views)) {
+        return false;
+    }
+
+    const bool historyAvailable = m_hasRenderedClouds && !ctx.temporalReset;
+    const CloudParams params = buildCloudParams(ctx, historyAvailable);
 
     RhiColorAttachment colorAttachment;
     colorAttachment.view = targets.cloudTextureViewHandle();
@@ -249,6 +275,207 @@ bool CloudPass::recordCloud(RhiCommandList& commandList,
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
     return true;
+}
+
+bool CloudPass::recordCloudCompute(RhiCommandList& commandList,
+                                   const FrameContext& ctx,
+                                   DeferredRenderTargets& targets) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureCloudTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
+        !targets.ensureHistoryCloudTextureViews(*ctx.shared->rhiDevice)) {
+        return false;
+    }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!ensureNoiseTextureView(rhiDevice)) {
+        return false;
+    }
+    const std::array<RhiTextureViewHandle, 4> views = {
+        targets.depthTextureViewHandle(),
+        targets.skyCaptureTextureViewHandle(),
+        m_noiseTextureView,
+        targets.historyCloudTexturePrevViewHandle()
+    };
+    if (!ensureComputeRhiPipeline(rhiDevice) ||
+        !ensureComputeBindGroup(rhiDevice, views,
+                                targets.cloudTextureViewHandle())) {
+        return false;
+    }
+
+    const bool historyAvailable = m_hasRenderedClouds && !ctx.temporalReset;
+    const CloudParams params = buildCloudParams(ctx, historyAvailable);
+
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
+        : GpuTimerSegmentToken{};
+    commandList.bufferBarrier({m_computeUniformBuffer,
+                               RhiResourceState::UniformBuffer,
+                               RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_computeUniformBuffer, 0u, &params,
+                             sizeof(params));
+    commandList.bufferBarrier({m_computeUniformBuffer,
+                               RhiResourceState::TransferDst,
+                               RhiResourceState::UniformBuffer});
+    commandList.setComputePipeline(m_computePipeline);
+    commandList.setBindGroup(0u, m_computeBindGroup);
+    const uint32_t width =
+        static_cast<uint32_t>(std::max(1, targets.halfWidth()));
+    const uint32_t height =
+        static_cast<uint32_t>(std::max(1, targets.halfHeight()));
+    commandList.dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1u);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    return true;
+}
+
+bool CloudPass::ensureComputeRhiPipeline(RhiDevice& rhiDevice) {
+    // The graphics path owns the shared samplers, so guarantee it first.
+    if (!ensureRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    if (m_computePipeline.isValid()) {
+        return true;
+    }
+
+    const std::optional<std::string> computeSource =
+        renderer::rhi::loadShaderSource("assets/shaders/cloud_target.comp");
+    if (!computeSource.has_value()) {
+        return false;
+    }
+    RhiShaderDesc computeDesc;
+    computeDesc.debugName = "Cloud.Compute";
+    computeDesc.stage = RhiShaderStage::Compute;
+    computeDesc.source = computeSource->c_str();
+    computeDesc.sourceSize = computeSource->size();
+    m_computeShader = rhiDevice.createShader(computeDesc);
+    if (!m_computeShader.isValid()) {
+        return false;
+    }
+
+    // Buffers use exclusive sharing, so the compute path keeps its own
+    // uniform buffer that only ever lives on the compute queue family.
+    RhiBufferDesc uniformBufferDesc;
+    uniformBufferDesc.debugName = "Cloud.ComputeParams";
+    uniformBufferDesc.size = sizeof(CloudParams);
+    uniformBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
+                              rhiFlag(RhiBufferUsage::TransferDst);
+    uniformBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    uniformBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    m_computeUniformBuffer = rhiDevice.createBuffer(uniformBufferDesc, nullptr, 0u);
+    if (!m_computeUniformBuffer.isValid()) {
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "Cloud.ComputeBindGroupLayout";
+    for (uint32_t binding = 0u; binding < 4u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Compute),
+            1u
+        });
+    }
+    bindGroupLayoutDesc.entries.push_back({
+        4u,
+        RhiBindingType::UniformBuffer,
+        rhiFlag(RhiShaderStage::Compute),
+        1u
+    });
+    bindGroupLayoutDesc.entries.push_back({
+        5u,
+        RhiBindingType::StorageTexture,
+        rhiFlag(RhiShaderStage::Compute),
+        1u
+    });
+    m_computeBindGroupLayout = rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_computeBindGroupLayout.isValid()) {
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "Cloud.ComputePipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_computeBindGroupLayout);
+    m_computePipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_computePipelineLayout.isValid()) {
+        return false;
+    }
+
+    RhiComputePipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "Cloud.ComputePipeline";
+    pipelineDesc.computeShader = m_computeShader;
+    pipelineDesc.layout = m_computePipelineLayout;
+    m_computePipeline = rhiDevice.createComputePipeline(pipelineDesc);
+    return m_computePipeline.isValid();
+}
+
+bool CloudPass::ensureComputeBindGroup(
+    RhiDevice& rhiDevice,
+    const std::array<RhiTextureViewHandle, 4>& views,
+    const RhiTextureViewHandle cloudStorageView) {
+    if (!ensureComputeRhiPipeline(rhiDevice) || !cloudStorageView.isValid()) {
+        return false;
+    }
+    for (const RhiTextureViewHandle view : views) {
+        if (!view.isValid()) {
+            return false;
+        }
+    }
+    const std::array<RhiTextureViewHandle, 5> boundViews = {
+        views[0], views[1], views[2], views[3], cloudStorageView
+    };
+    if (m_computeBindGroup.isValid() &&
+        sameTextureViews(m_computeBoundViews, boundViews)) {
+        return true;
+    }
+
+    destroyComputeBindGroup();
+    const RhiSamplerHandle samplers[4] = {
+        m_nearestSampler,
+        m_linearSampler,
+        m_noiseSampler,
+        m_linearSampler
+    };
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_computeBindGroupLayout;
+    for (uint32_t binding = 0u; binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = samplers[binding];
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    RhiBindGroupEntry uniformEntry;
+    uniformEntry.binding = 4u;
+    uniformEntry.resource.buffer.buffer = m_computeUniformBuffer;
+    uniformEntry.resource.buffer.offset = 0u;
+    uniformEntry.resource.buffer.range = sizeof(CloudParams);
+    bindGroupDesc.entries.push_back(uniformEntry);
+
+    RhiBindGroupEntry storageEntry;
+    storageEntry.binding = 5u;
+    storageEntry.resource.textureView = cloudStorageView;
+    bindGroupDesc.entries.push_back(storageEntry);
+
+    m_computeBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_computeBindGroup.isValid()) {
+        m_computeBoundViews = {};
+        return false;
+    }
+    m_computeBoundViews = boundViews;
+    return true;
+}
+
+void CloudPass::destroyComputeBindGroup() {
+    if (m_rhiDevice != nullptr && m_computeBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_computeBindGroup);
+    }
+    m_computeBindGroup = {};
+    m_computeBoundViews = {};
 }
 
 bool CloudPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
@@ -464,6 +691,29 @@ void CloudPass::destroyBindGroup() {
 
 void CloudPass::destroyRhiResources() {
     destroyBindGroup();
+    destroyComputeBindGroup();
+    if (m_rhiDevice != nullptr) {
+        if (m_computePipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_computePipeline);
+        }
+        if (m_computeShader.isValid()) {
+            m_rhiDevice->destroyShader(m_computeShader);
+        }
+        if (m_computePipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_computePipelineLayout);
+        }
+        if (m_computeBindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_computeBindGroupLayout);
+        }
+        if (m_computeUniformBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_computeUniformBuffer);
+        }
+    }
+    m_computePipeline = {};
+    m_computeShader = {};
+    m_computePipelineLayout = {};
+    m_computeBindGroupLayout = {};
+    m_computeUniformBuffer = {};
     if (m_rhiDevice != nullptr) {
         if (m_pipeline.isValid()) {
             m_rhiDevice->destroyPipeline(m_pipeline);
