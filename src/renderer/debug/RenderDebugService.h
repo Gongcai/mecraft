@@ -101,6 +101,8 @@ struct RenderGraphFrameStats {
     double cpuShadowPrepMs = 0.0;
     /// CPU-side frame context construction in RenderScene.
     double cpuContextMs = 0.0;
+    /// Terrain collection and indirect upload inside the Record window.
+    double cpuTerrainPrepMs = 0.0;
     /// Sum of measured pass durations.
     double gpuTotalMs = 0.0;
     /// Last pass end minus first pass begin on the GPU clock.

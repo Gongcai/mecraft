@@ -1032,9 +1032,10 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                         graphStats.cpuCompileMs,
                         graphStats.cpuRecordMs,
                         graphStats.cpuSubmitMs);
-            ImGui::Text("CPU ShadowPrep: %.3f ms  Context: %.3f ms",
+            ImGui::Text("CPU ShadowPrep: %.3f ms  Context: %.3f ms  TerrainPrep: %.3f ms",
                         graphStats.cpuShadowPrepMs,
-                        graphStats.cpuContextMs);
+                        graphStats.cpuContextMs,
+                        graphStats.cpuTerrainPrepMs);
             ImGui::Text("Passes: %u  Batches: %u  Submits: %u",
                         graphStats.passCount,
                         graphStats.batchCount,

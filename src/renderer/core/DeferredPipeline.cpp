@@ -1919,6 +1919,7 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     stats.cpuRecordMs = m_graphCpuRecordMs;
     stats.cpuSubmitMs = m_graphCpuSubmitMs;
     stats.cpuShadowPrepMs = m_graphCpuShadowPrepMs;
+    stats.cpuTerrainPrepMs = m_graphCpuTerrainPrepMs;
     stats.submitCount = m_graphSubmitCount;
     stats.passCount =
         static_cast<uint32_t>(m_renderGraph.compiledPasses().size());
@@ -1974,6 +1975,7 @@ bool DeferredPipeline::recordTerrainDrawPreparation(
     }
     auto& terrain = *m_shared->terrain;
     auto& worldBuffer = *m_shared->worldRenderBuffer;
+    const auto terrainPrepStart = std::chrono::steady_clock::now();
 
     if (m_shared->terrainCache) {
         m_shared->terrainCache->releaseStaleMdiAllocations(*ctx.worldView);
@@ -2078,6 +2080,8 @@ bool DeferredPipeline::recordTerrainDrawPreparation(
         return false;
     }
     m_terrainDrawsPrepared = true;
+    m_graphCpuTerrainPrepMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - terrainPrepStart).count();
     return true;
 }
 
