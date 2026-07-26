@@ -48,31 +48,6 @@ void DeferredRenderTargets::shutdown() {
     m_commandListPool = nullptr;
 }
 
-RhiCommandList& DeferredRenderTargets::beginCommandList(const char* const debugName) const {
-    if (m_commandListPool == nullptr) {
-        std::abort();
-    }
-    RhiCommandList* const commandList =
-        m_commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({debugName, RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    return *commandList;
-}
-
-void DeferredRenderTargets::submitCommandList(RhiCommandList& commandList,
-                                               const char* const debugName) const {
-    if (m_rhiDevice == nullptr || !commandList.end()) {
-        std::abort();
-    }
-    RhiCommandList* commandLists[] = {&commandList};
-    const RhiSubmitInfo submitInfo{debugName, commandLists, 1u};
-    if (!m_rhiDevice->submit(submitInfo)) {
-        std::abort();
-    }
-}
-
 void DeferredRenderTargets::transitionTexture(RhiCommandList& commandList,
                                               const RhiTextureHandle texture,
                                               const RhiResourceState newState) const {
@@ -96,73 +71,6 @@ void DeferredRenderTargets::initializeTextureState(RhiCommandList& commandList,
     assert(texture.isValid());
     commandList.textureBarrier({texture, RhiResourceState::Undefined, stableState});
     m_textureStates[textureStateKey(texture)] = stableState;
-}
-
-void DeferredRenderTargets::setKnownTextureState(const RhiTextureHandle texture,
-                                                 const RhiResourceState state) const {
-    assert(texture.isValid());
-    assert(state != RhiResourceState::Undefined);
-    m_textureStates[textureStateKey(texture)] = state;
-}
-
-void DeferredRenderTargets::blitColorTexture(RhiCommandList& commandList,
-                                             const RhiTextureHandle source,
-                                             const RhiTextureHandle destination) const {
-    assert(source.isValid());
-    assert(destination.isValid());
-    assert(source.index != destination.index || source.generation != destination.generation);
-
-    transitionTexture(commandList, source, RhiResourceState::TransferSrc);
-    transitionTexture(commandList, destination, RhiResourceState::TransferDst);
-
-    RhiTextureBlit blit;
-    blit.src = source;
-    blit.dst = destination;
-    commandList.blitTexture(blit);
-
-    transitionTexture(commandList, source, RhiResourceState::ShaderRead);
-    transitionTexture(commandList, destination, RhiResourceState::ShaderRead);
-}
-
-void DeferredRenderTargets::blitColorTexture(RhiDevice& rhiDevice,
-                                             const RhiTextureHandle source,
-                                             const RhiTextureHandle destination) const {
-    if (m_rhiDevice != &rhiDevice) {
-        std::abort();
-    }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.Blit");
-    blitColorTexture(commandList, source, destination);
-    submitCommandList(commandList, "DeferredTargets.Blit");
-}
-
-void DeferredRenderTargets::blitDepthTexture(RhiCommandList& commandList,
-                                             const RhiTextureHandle source,
-                                             const RhiTextureHandle destination) const {
-    assert(source.isValid());
-    assert(destination.isValid());
-    assert(source.index != destination.index || source.generation != destination.generation);
-
-    transitionTexture(commandList, source, RhiResourceState::TransferSrc);
-    transitionTexture(commandList, destination, RhiResourceState::TransferDst);
-
-    RhiTextureBlit blit;
-    blit.src = source;
-    blit.dst = destination;
-    commandList.blitTexture(blit);
-
-    transitionTexture(commandList, source, RhiResourceState::DepthRead);
-    transitionTexture(commandList, destination, RhiResourceState::DepthRead);
-}
-
-void DeferredRenderTargets::blitDepthTexture(RhiDevice& rhiDevice,
-                                             const RhiTextureHandle source,
-                                             const RhiTextureHandle destination) const {
-    if (m_rhiDevice != &rhiDevice) {
-        std::abort();
-    }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.DepthBlit");
-    blitDepthTexture(commandList, source, destination);
-    submitCommandList(commandList, "DeferredTargets.DepthBlit");
 }
 
 bool DeferredRenderTargets::ensureSize(const int width, const int height, const int shadowResolution) {
@@ -301,305 +209,31 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
         m_csmShadowDepthAllHandle
     };
 
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.InitializeStates");
+    if (m_commandListPool == nullptr || m_rhiDevice == nullptr) {
+        std::abort();
+    }
+    RhiCommandList* const commandListStorage =
+        m_commandListPool->acquire(RhiCommandListType::Graphics);
+    if (commandListStorage == nullptr ||
+        !commandListStorage->begin(
+            {"DeferredTargets.InitializeStates", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    RhiCommandList& commandList = *commandListStorage;
     for (const RhiTextureHandle texture : colorTextures) {
         initializeTextureState(commandList, texture, RhiResourceState::ShaderRead);
     }
     for (const RhiTextureHandle texture : depthTextures) {
         initializeTextureState(commandList, texture, RhiResourceState::DepthRead);
     }
-    submitCommandList(commandList, "DeferredTargets.InitializeStates");
-}
-
-void DeferredRenderTargets::copyTextureColorToSceneLighting(RhiDevice& rhiDevice, const RhiTextureHandle source) const {
-    if (!m_ready || !source.isValid()) {
-        return;
-    }
-    setKnownTextureState(source, RhiResourceState::ShaderRead);
-    blitColorTexture(rhiDevice, source, m_sceneLightingHandle);
-}
-
-void DeferredRenderTargets::copySceneLightingToTransparentComposite(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_sceneLightingHandle, m_transparentCompositeHandle);
-}
-
-void DeferredRenderTargets::copySceneLightingToSceneComposite(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_sceneLightingHandle, m_sceneCompositeHandle);
-}
-
-void DeferredRenderTargets::copySceneCompositeToSceneResolved(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_sceneCompositeHandle, m_sceneResolvedHandle);
-}
-
-void DeferredRenderTargets::copySceneCompositeToTransparentComposite(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    if (m_rhiDevice != &rhiDevice) {
+    if (!commandList.end()) {
         std::abort();
     }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopySceneCompositeToTransparent");
-    copySceneCompositeToTransparentComposite(commandList);
-    submitCommandList(commandList, "DeferredTargets.CopySceneCompositeToTransparent");
-}
-
-void DeferredRenderTargets::copySceneCompositeToTransparentComposite(
-    RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_sceneCompositeHandle, m_transparentCompositeHandle);
-}
-
-void DeferredRenderTargets::copySceneResolvedToTransparentComposite(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    if (m_rhiDevice != &rhiDevice) {
+    RhiCommandList* submittedCommandLists[] = {&commandList};
+    if (!m_rhiDevice->submit(
+            {"DeferredTargets.InitializeStates", submittedCommandLists, 1u})) {
         std::abort();
     }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopySceneResolvedToTransparent");
-    copySceneResolvedToTransparentComposite(commandList);
-    submitCommandList(commandList, "DeferredTargets.CopySceneResolvedToTransparent");
-}
-
-void DeferredRenderTargets::copySceneResolvedToTransparentComposite(
-    RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_sceneResolvedHandle, m_transparentCompositeHandle);
-}
-
-void DeferredRenderTargets::copyTransparentCompositeToSceneComposite(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    if (m_rhiDevice != &rhiDevice) {
-        std::abort();
-    }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyTransparentToSceneComposite");
-    copyTransparentCompositeToSceneComposite(commandList);
-    submitCommandList(commandList, "DeferredTargets.CopyTransparentToSceneComposite");
-}
-
-void DeferredRenderTargets::copyTransparentCompositeToSceneComposite(
-    RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_transparentCompositeHandle, m_sceneCompositeHandle);
-}
-
-void DeferredRenderTargets::copyTransparentCompositeToSceneResolved(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    if (m_rhiDevice != &rhiDevice) {
-        std::abort();
-    }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyTransparentToSceneResolved");
-    copyTransparentCompositeToSceneResolved(commandList);
-    submitCommandList(commandList, "DeferredTargets.CopyTransparentToSceneResolved");
-}
-
-void DeferredRenderTargets::copyTransparentCompositeToSceneResolved(
-    RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_transparentCompositeHandle, m_sceneResolvedHandle);
-}
-
-void DeferredRenderTargets::copyDepthToTransparentComposite(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    if (m_rhiDevice != &rhiDevice) {
-        std::abort();
-    }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyDepthToTransparent");
-    copyDepthToTransparentComposite(commandList);
-    submitCommandList(commandList, "DeferredTargets.CopyDepthToTransparent");
-}
-
-void DeferredRenderTargets::copyDepthToTransparentComposite(
-    RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    blitDepthTexture(commandList, m_gDepthHandle, m_transparentCompositeDepthHandle);
-}
-
-void DeferredRenderTargets::copySceneResolvedToHistory(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_sceneResolvedHandle, m_historySceneHandle[m_currentHistoryIndex]);
-}
-
-void DeferredRenderTargets::copySceneResolvedToTemporalCurrent(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_sceneResolvedHandle, m_temporalCurrentHandle);
-}
-
-void DeferredRenderTargets::copyDepthToHistory(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitDepthTexture(rhiDevice, m_gDepthHandle, m_historyDepthHandle[m_currentHistoryIndex]);
-}
-
-void DeferredRenderTargets::copyReflectionToHistory(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_reflectionHandle, m_historyReflectionHandle[m_currentHistoryIndex]);
-}
-
-void DeferredRenderTargets::copyReflectionToTemporalScratch(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_reflectionHandle, m_reflectionTemporalScratchHandle);
-}
-
-void DeferredRenderTargets::copyReflectionToTemporalScratch(RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_reflectionHandle, m_reflectionTemporalScratchHandle);
-}
-
-void DeferredRenderTargets::copyCloudToHistory(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_cloudHandle, m_historyCloudHandle[m_currentHistoryIndex]);
-}
-
-void DeferredRenderTargets::copyHistoryCloudToCloud(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_historyCloudHandle[1 - m_currentHistoryIndex], m_cloudHandle);
-}
-
-void DeferredRenderTargets::copyHistoryCloudToCloud(RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    // Render Graph owns the source and destination layouts for this callback.
-    // Record only the copy operation so legacy state tracking cannot emit a
-    // second, conflicting transition for the same image subresources.
-    RhiTextureBlit blit;
-    blit.src = m_historyCloudHandle[1 - m_currentHistoryIndex];
-    blit.dst = m_cloudHandle;
-    commandList.blitTexture(blit);
-}
-
-void DeferredRenderTargets::copyVolumetricToHistory(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_halfResHandle, m_historyVolumetricHandle[m_currentHistoryIndex]);
-}
-
-void DeferredRenderTargets::copyHistoryVolumetricToHalfRes(RhiDevice& rhiDevice) const {
-    if (!m_ready) {
-        return;
-    }
-    const RhiTextureHandle previous = m_historyVolumetricHandle[1 - m_currentHistoryIndex];
-    blitColorTexture(rhiDevice, previous, m_halfResHandle);
-    blitColorTexture(rhiDevice, previous, m_historyVolumetricHandle[m_currentHistoryIndex]);
-}
-
-void DeferredRenderTargets::copyHistoryVolumetricToHalfRes(RhiCommandList& commandList) const {
-    if (!m_ready) {
-        return;
-    }
-    const RhiTextureHandle previous = m_historyVolumetricHandle[1 - m_currentHistoryIndex];
-    blitColorTexture(commandList, previous, m_halfResHandle);
-    blitColorTexture(commandList, previous, m_historyVolumetricHandle[m_currentHistoryIndex]);
-}
-
-void DeferredRenderTargets::copySceneResolvedToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
-    if (!m_ready || !destination.isValid()) {
-        return;
-    }
-    setKnownTextureState(destination, RhiResourceState::ShaderRead);
-    blitColorTexture(rhiDevice, m_sceneResolvedHandle, destination);
-}
-
-void DeferredRenderTargets::copyDepthToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
-    if (!m_ready || !destination.isValid()) {
-        return;
-    }
-    setKnownTextureState(destination, RhiResourceState::DepthRead);
-    blitDepthTexture(rhiDevice, m_gDepthHandle, destination);
-}
-
-void DeferredRenderTargets::copyTransparentCompositeToTexture(RhiDevice& rhiDevice, const RhiTextureHandle destination) const {
-    if (!m_ready || !destination.isValid()) {
-        return;
-    }
-    if (m_rhiDevice != &rhiDevice) {
-        std::abort();
-    }
-    RhiCommandList& commandList = beginCommandList("DeferredTargets.CopyTransparentToTexture");
-    copyTransparentCompositeToTexture(commandList, destination);
-    submitCommandList(commandList, "DeferredTargets.CopyTransparentToTexture");
-}
-
-void DeferredRenderTargets::copyTransparentCompositeToTexture(
-    RhiCommandList& commandList,
-    const RhiTextureHandle destination) const {
-    if (!m_ready || !destination.isValid()) {
-        return;
-    }
-    setKnownTextureState(destination, RhiResourceState::ShaderRead);
-    blitColorTexture(commandList, m_transparentCompositeHandle, destination);
-}
-
-void DeferredRenderTargets::copySsaoTemporalToHistory(RhiDevice& rhiDevice) {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_ssaoTemporalHandle, m_ssaoHistoryHandle[m_ssaoHistoryIndex]);
-}
-
-void DeferredRenderTargets::copySsaoTemporalToHistory(RhiCommandList& commandList) {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_ssaoTemporalHandle, m_ssaoHistoryHandle[m_ssaoHistoryIndex]);
-}
-
-void DeferredRenderTargets::copySsgiTemporalToHistory(RhiDevice& rhiDevice) {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHistoryHandle[m_ssgiHistoryIndex]);
-    blitColorTexture(rhiDevice, m_ssgiTemporalMomentsHandle, m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]);
-}
-
-void DeferredRenderTargets::copySsgiTemporalToHistory(RhiCommandList& commandList) {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_ssgiTemporalHandle, m_ssgiHistoryHandle[m_ssgiHistoryIndex]);
-    blitColorTexture(commandList, m_ssgiTemporalMomentsHandle, m_ssgiMomentsHistoryHandle[m_ssgiHistoryIndex]);
 }
 
 RhiTextureHandle DeferredRenderTargets::ssgiDenoiseTextureHandle(const int slot) const {
@@ -610,36 +244,6 @@ RhiTextureHandle DeferredRenderTargets::ssgiDenoiseTextureHandle(const int slot)
 RhiTextureViewHandle DeferredRenderTargets::ssgiDenoiseTextureViewHandle(const int slot) const {
     assert(slot >= 0 && slot < 2);
     return m_ssgiDenoiseView[slot];
-}
-
-void DeferredRenderTargets::copySsgiDenoiseToSsgi(RhiDevice& rhiDevice, const int slot) {
-    assert(slot >= 0 && slot < 2);
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_ssgiDenoiseHandle[slot], m_ssgiHandle);
-}
-
-void DeferredRenderTargets::copySsgiDenoiseToSsgi(RhiCommandList& commandList, const int slot) {
-    assert(slot >= 0 && slot < 2);
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_ssgiDenoiseHandle[slot], m_ssgiHandle);
-}
-
-void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiDevice& rhiDevice) {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(rhiDevice, m_ssgiTemporalHandle, m_ssgiHandle);
-}
-
-void DeferredRenderTargets::copySsgiTemporalToSsgi(RhiCommandList& commandList) {
-    if (!m_ready) {
-        return;
-    }
-    blitColorTexture(commandList, m_ssgiTemporalHandle, m_ssgiHandle);
 }
 
 bool DeferredRenderTargets::createGBufferTextures() {

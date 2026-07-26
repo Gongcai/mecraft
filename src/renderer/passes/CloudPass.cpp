@@ -149,7 +149,10 @@ bool CloudPass::recordHistoryCopy(RhiCommandList& commandList,
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
         : GpuTimerSegmentToken{};
-    targets.copyHistoryCloudToCloud(commandList);
+    RhiTextureBlit blit;
+    blit.src = targets.historyCloudTexturePrevHandle();
+    blit.dst = targets.cloudTextureHandle();
+    commandList.blitTexture(blit);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
