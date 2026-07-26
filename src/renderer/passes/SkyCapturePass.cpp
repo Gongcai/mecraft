@@ -32,23 +32,27 @@ void SkyCapturePass::shutdown() {
     destroyMetadataResources();
 }
 
-void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
-                              RhiDevice& rhiDevice,
-                              RhiCommandListPool& commandListPool,
-                              DeferredRenderTargets& targets,
-                              GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
-                              float cameraY, float shaderTime, const glm::vec3& cameraPos,
-                              float cloudTimeScale) {
+bool SkyCapturePass::execute(RhiCommandList& commandList,
+                             const DayNightSystem& dayNightSystem,
+                             const WeatherSystem& weatherSystem,
+                             RhiDevice& rhiDevice,
+                             DeferredRenderTargets& targets,
+                             GameplaySkyRenderer& skyRenderer,
+                             ResourceMgr& resourceMgr,
+                             const float cameraY,
+                             const float shaderTime,
+                             const glm::vec3& cameraPos,
+                             const float cloudTimeScale) {
     if (!targets.ensureSkyCaptureTextureView(rhiDevice) ||
         !targets.atmosphereLutTextureViewHandle().isValid() ||
         !ensureMetadataResources(rhiDevice, targets.atmosphereLutTextureViewHandle())) {
-        return;
+        return false;
     }
 
     const float cameraAltitude = cameraY;
     const RhiTextureHandle atmosphereLut = targets.atmosphereLutTextureHandle();
     if (!atmosphereLut.isValid()) {
-        return;
+        return false;
     }
     const int moonPhase = dayNightSystem.getMoonPhaseIndex();
 
@@ -76,15 +80,8 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
     const float cloudDensity = 0.85f + weatherWetness * 0.35f + weatherStorm * 0.55f;
     const RhiTextureHandle noiseTexture = resourceMgr.getTexture2DHandle("shader_noise2d");
     if (!noiseTexture.isValid()) {
-        return;
+        return false;
     }
-    RhiCommandList* commandListStorage =
-        commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
 
     RhiColorAttachment rawAttachment;
     rawAttachment.view = targets.skyCaptureTextureViewHandle();
@@ -96,9 +93,6 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                                static_cast<uint32_t>(std::min(targets.skyCaptureHeight(), 258))};
     rawRendering.colorAttachments = &rawAttachment;
     rawRendering.colorAttachmentCount = 1u;
-    targets.transitionTexture(commandList,
-                              targets.skyCaptureTextureHandle(),
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(rawRendering);
     commandList.setGraphicsPipeline(m_rawPipeline);
     commandList.setBindGroup(0u, m_metadataBindGroup);
@@ -161,18 +155,7 @@ void SkyCapturePass::execute(const DayNightSystem& dayNightSystem, const Weather
                               rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList,
-                              targets.skyCaptureTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 bool SkyCapturePass::ensureMetadataResources(RhiDevice& rhiDevice,

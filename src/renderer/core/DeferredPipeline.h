@@ -114,7 +114,9 @@ private:
     RenderGraph m_renderGraph;
 
     // Private orchestration methods
-    void clearDeferredAuxiliaryTargets();
+    [[nodiscard]] bool recordDeferredAuxiliaryClear(
+        RhiCommandList& commandList,
+        DeferredRenderTargets& targets);
     void updateDeferredHistoryTargets();
     [[nodiscard]] bool executeFrameGraph(const FrameContext& ctx,
                                          const RenderSettings& settings);

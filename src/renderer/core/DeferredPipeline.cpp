@@ -395,19 +395,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         }
     }
 
-    // Clear auxiliary targets
-    clearDeferredAuxiliaryTargets();
-
-    // Sky capture
-    if (m_skyCapturePass && m_shared->sky) {
-        m_skyCapturePass->execute(*ctx.dayNightSystem, *ctx.weatherSystem,
-                                  *m_shared->rhiDevice, *m_shared->commandListPool,
-                                  targets, *m_shared->sky,
-                                  *m_resourceMgr, ctx.camera.position.y,
-                                  ctx.shaderTime, ctx.camera.position,
-                                  m_currentSettings.cloud.timeScale);
-    }
-
     m_deferredFrameActive = true;
 
     // Geometry, velocity, and shadow work are compiled and submitted as one graph batch.
@@ -535,60 +522,9 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     return buildFrameOutput(ctx);
 }
 
-void DeferredPipeline::clearDeferredAuxiliaryTargets() {
-    if (!m_shared || !m_shared->deferredTargets || !m_shared->rhiDevice) return;
-    auto& targets = *m_shared->deferredTargets;
-    RhiDevice& rhiDevice = *m_shared->rhiDevice;
-
-    if (!targets.ensureReflectionTextureView(rhiDevice) ||
-        !targets.ensureCloudTextureView(rhiDevice) ||
-        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
-        !targets.ensureSceneResolvedTextureView(rhiDevice) ||
-        !targets.ensureSsgiTextureView(rhiDevice) ||
-        !targets.ensureSsgiHalfResTextureView(rhiDevice) ||
-        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
-        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 1) ||
-        !targets.ensureSsgiTemporalTextureViews(rhiDevice) ||
-        !targets.ensureWeatherMaskTextureView(rhiDevice) ||
-        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
-        !targets.ensureTransparencyMaskTextureView(rhiDevice)) {
-        return;
-    }
-
-    RhiCommandList* commandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"DeferredPipeline.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-
-    targets.transitionTexture(commandList, targets.reflectionTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.sceneCompositeTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.sceneResolvedTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.cloudTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.ssgiHalfResTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.ssgiTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.ssgiDenoiseTextureHandle(0),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.ssgiDenoiseTextureHandle(1),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.ssgiTemporalTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.ssgiTemporalMomentsTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.weatherMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
-
+bool DeferredPipeline::recordDeferredAuxiliaryClear(
+    RhiCommandList& commandList,
+    DeferredRenderTargets& targets) {
     RhiColorAttachment sceneAttachments[3];
     setClearAttachment(sceneAttachments[0], targets.reflectionTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
     setClearAttachment(sceneAttachments[1], targets.sceneCompositeTextureViewHandle(), 0.0f, 0.0f, 0.0f, 1.0f);
@@ -614,42 +550,17 @@ void DeferredPipeline::clearDeferredAuxiliaryTargets() {
     clearColorAttachments(commandList, "DeferredAuxiliarySsgiClear",
                           targets.width(), targets.height(), ssgiAttachments, 8u);
 
-    const RhiTextureHandle clearedTextures[] = {
-        targets.reflectionTextureHandle(),
-        targets.sceneCompositeTextureHandle(),
-        targets.sceneResolvedTextureHandle(),
-        targets.cloudTextureHandle(),
-        targets.ssgiHalfResTextureHandle(),
-        targets.ssgiTextureHandle(),
-        targets.ssgiDenoiseTextureHandle(0),
-        targets.ssgiDenoiseTextureHandle(1),
-        targets.ssgiTemporalTextureHandle(),
-        targets.ssgiTemporalMomentsTextureHandle(),
-        targets.weatherMaskTextureHandle(),
-        targets.reactiveMaskTextureHandle(),
-        targets.transparencyMaskTextureHandle()
-    };
-    for (const RhiTextureHandle texture : clearedTextures) {
-        targets.transitionTexture(commandList, texture, RhiResourceState::ShaderRead);
-    }
-
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"DeferredPipeline.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
-
+    return true;
 }
 
 bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                                          const RenderSettings& settings) {
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
         m_shared->commandListPool == nullptr ||
-        m_shared->deferredTargets == nullptr || ctx.worldView == nullptr) {
+        m_shared->deferredTargets == nullptr || ctx.worldView == nullptr ||
+        m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
+        m_shared->sky == nullptr || ctx.dayNightSystem == nullptr ||
+        ctx.weatherSystem == nullptr) {
         return false;
     }
 
@@ -657,7 +568,26 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
-        !targets.ensureVelocityTextureView(rhiDevice)) {
+        !targets.ensureVelocityTextureView(rhiDevice) ||
+        !targets.ensureReflectionTextureView(rhiDevice) ||
+        !targets.ensureCloudTextureView(rhiDevice) ||
+        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
+        !targets.ensureSceneResolvedTextureView(rhiDevice) ||
+        !targets.ensureSsgiTextureView(rhiDevice) ||
+        !targets.ensureSsgiHalfResTextureView(rhiDevice) ||
+        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
+        !targets.ensureSsgiDenoiseTextureView(rhiDevice, 1) ||
+        !targets.ensureSsgiTemporalTextureViews(rhiDevice) ||
+        !targets.ensureWeatherMaskTextureView(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(rhiDevice) ||
+        !targets.ensureVolumetricFogTextureViews(rhiDevice)) {
+        return false;
+    }
+    const RhiTextureHandle skyNoiseTexture =
+        m_resourceMgr->getTexture2DHandle("shader_noise2d");
+    if (!skyNoiseTexture.isValid()) {
         return false;
     }
 
@@ -749,9 +679,112 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return failGraphSetup();
     }
 
+    RgTextureHandle reflection;
+    RgTextureHandle sceneComposite;
+    RgTextureHandle sceneResolved;
+    RgTextureHandle cloud;
+    RgTextureHandle ssgiHalfRes;
+    RgTextureHandle ssgi;
+    RgTextureHandle ssgiDenoise0;
+    RgTextureHandle ssgiDenoise1;
+    RgTextureHandle ssgiTemporal;
+    RgTextureHandle ssgiTemporalMoments;
+    RgTextureHandle weatherMask;
+    RgTextureHandle reactiveMask;
+    RgTextureHandle transparencyMask;
+    RgTextureHandle skyCapture;
+    RgTextureHandle atmosphereLut;
+    RgTextureHandle skyNoise;
+    if (!importTexture(targets.reflectionTextureHandle(),
+                       targets.reflectionTextureViewHandle(),
+                       RhiResourceState::ShaderRead, reflection) ||
+        !importTexture(targets.sceneCompositeTextureHandle(),
+                       targets.sceneCompositeTextureViewHandle(),
+                       RhiResourceState::ShaderRead, sceneComposite) ||
+        !importTexture(targets.sceneResolvedTextureHandle(),
+                       targets.sceneResolvedTextureViewHandle(),
+                       RhiResourceState::ShaderRead, sceneResolved) ||
+        !importTexture(targets.cloudTextureHandle(),
+                       targets.cloudTextureViewHandle(),
+                       RhiResourceState::ShaderRead, cloud) ||
+        !importTexture(targets.ssgiHalfResTextureHandle(),
+                       targets.ssgiHalfResTextureViewHandle(),
+                       RhiResourceState::ShaderRead, ssgiHalfRes) ||
+        !importTexture(targets.ssgiTextureHandle(),
+                       targets.ssgiTextureViewHandle(),
+                       RhiResourceState::ShaderRead, ssgi) ||
+        !importTexture(targets.ssgiDenoiseTextureHandle(0),
+                       targets.ssgiDenoiseTextureViewHandle(0),
+                       RhiResourceState::ShaderRead, ssgiDenoise0) ||
+        !importTexture(targets.ssgiDenoiseTextureHandle(1),
+                       targets.ssgiDenoiseTextureViewHandle(1),
+                       RhiResourceState::ShaderRead, ssgiDenoise1) ||
+        !importTexture(targets.ssgiTemporalTextureHandle(),
+                       targets.ssgiTemporalTextureViewHandle(),
+                       RhiResourceState::ShaderRead, ssgiTemporal) ||
+        !importTexture(targets.ssgiTemporalMomentsTextureHandle(),
+                       targets.ssgiTemporalMomentsTextureViewHandle(),
+                       RhiResourceState::ShaderRead, ssgiTemporalMoments) ||
+        !importTexture(targets.weatherMaskTextureHandle(),
+                       targets.weatherMaskTextureViewHandle(),
+                       RhiResourceState::ShaderRead, weatherMask) ||
+        !importTexture(targets.reactiveMaskTextureHandle(),
+                       targets.reactiveMaskTextureViewHandle(),
+                       RhiResourceState::ShaderRead, reactiveMask) ||
+        !importTexture(targets.transparencyMaskTextureHandle(),
+                       targets.transparencyMaskTextureViewHandle(),
+                       RhiResourceState::ShaderRead, transparencyMask) ||
+        !importTexture(targets.skyCaptureTextureHandle(),
+                       targets.skyCaptureTextureViewHandle(),
+                       RhiResourceState::ShaderRead, skyCapture) ||
+        !importTexture(targets.atmosphereLutTextureHandle(),
+                       targets.atmosphereLutTextureViewHandle(),
+                       RhiResourceState::ShaderRead, atmosphereLut) ||
+        !importTexture(skyNoiseTexture, {}, RhiResourceState::ShaderRead,
+                       skyNoise)) {
+        return failGraphSetup();
+    }
+
+    RenderGraphPassBuilder auxiliaryClear = m_renderGraph.addPass(
+        {"Deferred.AuxiliaryClear", RgPassType::Graphics,
+         RhiQueueType::Graphics});
+    auxiliaryClear.writeTexture(reflection, RhiResourceState::RenderTarget)
+        .writeTexture(sceneComposite, RhiResourceState::RenderTarget)
+        .writeTexture(sceneResolved, RhiResourceState::RenderTarget)
+        .writeTexture(cloud, RhiResourceState::RenderTarget)
+        .writeTexture(ssgiHalfRes, RhiResourceState::RenderTarget)
+        .writeTexture(ssgi, RhiResourceState::RenderTarget)
+        .writeTexture(ssgiDenoise0, RhiResourceState::RenderTarget)
+        .writeTexture(ssgiDenoise1, RhiResourceState::RenderTarget)
+        .writeTexture(ssgiTemporal, RhiResourceState::RenderTarget)
+        .writeTexture(ssgiTemporalMoments, RhiResourceState::RenderTarget)
+        .writeTexture(weatherMask, RhiResourceState::RenderTarget)
+        .writeTexture(reactiveMask, RhiResourceState::RenderTarget)
+        .writeTexture(transparencyMask, RhiResourceState::RenderTarget)
+        .setExecute([&](RgPassContext& pass) {
+            return recordDeferredAuxiliaryClear(pass.commandList(), targets);
+        });
+    RgPassHandle graphTail = auxiliaryClear.handle();
+
+    RenderGraphPassBuilder skyCapturePass = m_renderGraph.addPass(
+        {"Deferred.SkyCapture", RgPassType::Graphics, RhiQueueType::Graphics});
+    skyCapturePass.dependsOn(graphTail)
+        .readTexture(atmosphereLut, RhiResourceState::ShaderRead)
+        .readTexture(skyNoise, RhiResourceState::ShaderRead)
+        .writeTexture(skyCapture, RhiResourceState::RenderTarget)
+        .setExecute([&](RgPassContext& pass) {
+            return m_skyCapturePass->execute(
+                pass.commandList(), *ctx.dayNightSystem, *ctx.weatherSystem,
+                rhiDevice, targets, *m_shared->sky, *m_resourceMgr,
+                ctx.camera.position.y, ctx.shaderTime, ctx.camera.position,
+                settings.cloud.timeScale);
+        });
+    graphTail = skyCapturePass.handle();
+
     RenderGraphPassBuilder gbuffer = m_renderGraph.addPass(
         {"Deferred.GBuffer", RgPassType::Graphics, RhiQueueType::Graphics});
-    gbuffer.writeTexture(albedo, RhiResourceState::RenderTarget)
+    gbuffer.dependsOn(graphTail)
+        .writeTexture(albedo, RhiResourceState::RenderTarget)
         .writeTexture(normalAo, RhiResourceState::RenderTarget)
         .writeTexture(voxelLight, RhiResourceState::RenderTarget)
         .writeTexture(material, RhiResourceState::RenderTarget)
@@ -785,7 +818,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        m_shared->fallingBlockRenderer,
                        m_shared->gameplayRegistry);
         });
-    RgPassHandle graphTail = gbuffer.handle();
+    graphTail = gbuffer.handle();
 
     if (m_velocityPass != nullptr) {
         RenderGraphPassBuilder velocityPass = m_renderGraph.addPass(

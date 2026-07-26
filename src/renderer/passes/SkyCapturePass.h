@@ -11,7 +11,7 @@ class ResourceMgr;
 class DayNightSystem;
 class WeatherSystem;
 class RhiDevice;
-class RhiCommandListPool;
+class RhiCommandList;
 
 /// Sky capture pass: renders equirectangular sky radiance and cloud data for IBL and lighting.
 class SkyCapturePass : public RenderPass {
@@ -20,10 +20,11 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "SkyCapture"; }
 
-    /// Execute sky capture rendering.
+    /// Records sky capture rendering into a graph-owned command list.
+    /// @param commandList Recording command list supplied by the Render Graph.
     /// @param dayNightSystem Day/night system for sky colors and time
     /// @param weatherSystem Weather system for wetness and storm state
-    /// @param rhiDevice RHI device used to begin the sky capture render targets
+    /// @param rhiDevice RHI device that owns the sky capture resources.
     /// @param targets Deferred render targets for sky capture and atmosphere LUT resources
     /// @param skyRenderer Gameplay sky renderer (owns shaders and rendering)
     /// @param resourceMgr Resource manager for noise texture
@@ -31,13 +32,18 @@ public:
     /// @param shaderTime Current shader time
     /// @param cameraPos Camera position for cloud rendering
     /// @param cloudTimeScale Cloud time scale from settings
-    void execute(const DayNightSystem& dayNightSystem, const WeatherSystem& weatherSystem,
-                 RhiDevice& rhiDevice,
-                 RhiCommandListPool& commandListPool,
-                 DeferredRenderTargets& targets,
-                 GameplaySkyRenderer& skyRenderer, ResourceMgr& resourceMgr,
-                 float cameraY, float shaderTime, const glm::vec3& cameraPos,
-                 float cloudTimeScale);
+    /// @return True when all resources were prepared and commands were recorded.
+    [[nodiscard]] bool execute(RhiCommandList& commandList,
+                               const DayNightSystem& dayNightSystem,
+                               const WeatherSystem& weatherSystem,
+                               RhiDevice& rhiDevice,
+                               DeferredRenderTargets& targets,
+                               GameplaySkyRenderer& skyRenderer,
+                               ResourceMgr& resourceMgr,
+                               float cameraY,
+                               float shaderTime,
+                               const glm::vec3& cameraPos,
+                               float cloudTimeScale);
 
 private:
     [[nodiscard]] bool ensureMetadataResources(RhiDevice& rhiDevice,
