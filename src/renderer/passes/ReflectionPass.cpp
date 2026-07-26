@@ -82,7 +82,8 @@ RgPassHandle ReflectionPass::addGraphPasses(
     const bool baseWritesScratch = currentIsScratch;
 
     RenderGraphPassBuilder base = graph.addPass(
-        {"Reflection.Base", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"Reflection.Base", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     base.dependsOn(dependency)
         .readTexture(resources.sceneLighting, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
@@ -106,7 +107,7 @@ RgPassHandle ReflectionPass::addGraphPasses(
         const bool readScratch = currentIsScratch;
         RenderGraphPassBuilder filter = graph.addPass(
             {"Reflection.Filter", RgPassType::Graphics,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         filter.dependsOn(previous)
             .readTexture(readScratch ? resources.scratch
                                      : resources.reflection,
@@ -133,7 +134,7 @@ RgPassHandle ReflectionPass::addGraphPasses(
         const bool readScratch = currentIsScratch;
         RenderGraphPassBuilder temporal = graph.addPass(
             {"Reflection.Temporal", RgPassType::Graphics,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         temporal.dependsOn(previous)
             .readTexture(readScratch ? resources.scratch
                                      : resources.reflection,

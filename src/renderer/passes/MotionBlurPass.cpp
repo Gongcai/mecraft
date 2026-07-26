@@ -49,7 +49,7 @@ RgPassHandle MotionBlurPass::addGraphPasses(
 
     RenderGraphPassBuilder blur = graph.addPass(
         {"MotionBlur.Resolve", RgPassType::Graphics,
-         RhiQueueType::Graphics});
+         RhiQueueType::Graphics, /*threadSafeRecord=*/true});
     blur.dependsOn(dependency)
         .readTexture(inputTexture, RhiResourceState::ShaderRead)
         .readTexture(resources.velocity, RhiResourceState::ShaderRead)

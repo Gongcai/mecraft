@@ -86,7 +86,8 @@ RgPassHandle SceneCompositePass::addGraphPasses(
     }
 
     RenderGraphPassBuilder composite = graph.addPass(
-        {"SceneComposite", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"SceneComposite", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     composite.dependsOn(dependency)
         .readTexture(resources.sceneLighting, RhiResourceState::ShaderRead)
         .readTexture(resources.reflection, RhiResourceState::ShaderRead)

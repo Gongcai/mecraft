@@ -8,13 +8,17 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
 class RhiCommandList;
 class RhiCommandListPool;
 class RhiDevice;
+class ThreadPool;
 
 inline constexpr uint32_t kRgInvalidPassIndex =
     std::numeric_limits<uint32_t>::max();
@@ -135,6 +139,11 @@ struct RgPassDesc {
   const char *name = nullptr;
   RgPassType type = RgPassType::Graphics;
   RhiQueueType queue = RhiQueueType::Graphics;
+  /// Declares the execute callback safe to record from a worker thread: it
+  /// must not mutate CPU state shared with other passes and may only reach
+  /// the device through thread-safe entry points. Batches containing any
+  /// pass without this flag always record on the calling thread.
+  bool threadSafeRecord = false;
 };
 
 struct RgTextureAccess {
@@ -198,6 +207,8 @@ struct RgCompiledPass {
   std::string name;
   RgPassType type = RgPassType::Graphics;
   RhiQueueType queue = RhiQueueType::Graphics;
+  /// Mirrors RgPassDesc::threadSafeRecord for batch scheduling decisions.
+  bool threadSafeRecord = false;
   std::vector<uint32_t> dependencies;
   std::vector<RgTextureBarrierPlan> textureBarriers;
   std::vector<RgBufferBarrierPlan> bufferBarriers;
@@ -230,6 +241,8 @@ struct RgExecuteResult {
   double recordMilliseconds = 0.0;
   /// CPU milliseconds spent submitting recorded batches to device queues.
   double submitMilliseconds = 0.0;
+  /// Submission batches whose command lists were recorded on worker threads.
+  uint32_t workerRecordedBatchCount = 0u;
 
   /// Reports whether every command list was recorded and submitted successfully.
   /// @return True only when no execution error was reported.
@@ -404,6 +417,14 @@ public:
     m_textureAliasingEnabled = enabled;
   }
 
+  /// Enables recording eligible submission batches on worker threads. A
+  /// batch is eligible only when every contained pass declared
+  /// threadSafeRecord and the device backend supports recording off the
+  /// device thread (Vulkan). Pass nullptr to record everything serially.
+  /// @param pool Thread pool that runs worker recording tasks; must outlive
+  /// every subsequent execute call, or be cleared beforehand.
+  void setRecordThreading(ThreadPool *pool) { m_recordThreadPool = pool; }
+
   /// Invoked by execute() after transient resources are resolved and before
   /// any pass records, so pipelines can publish per-frame transient handles
   /// into pass-visible storage. resolvedTexture/resolvedTextureView are
@@ -502,6 +523,15 @@ private:
   [[nodiscard]] bool lookupTextureRequirements(
       RhiDevice &device, const RhiTextureDesc &desc,
       RhiTextureMemoryRequirements &requirements);
+
+  /// Returns this worker thread's command list pool, creating it on first
+  /// use. Pools must be constructed on the recording thread because backend
+  /// pools bind their owner thread at construction time.
+  [[nodiscard]] RhiCommandListPool *
+  acquireWorkerCommandListPool(RhiDevice &device);
+  /// Destroys every worker-thread pool; called from the teardown paths so
+  /// device objects never outlive the device. Pools are recreated lazily.
+  void destroyWorkerCommandListPools();
   [[nodiscard]] TransientTexture *
   resolveAliasedTransient(RhiDevice &device, const TextureRecord &record,
                           const RgResourceLifetime &lifetime,
@@ -516,6 +546,15 @@ private:
   const std::vector<RhiTextureHandle> *m_currentResolvedTextures = nullptr;
   const std::vector<RhiTextureViewHandle> *m_currentResolvedTextureViews =
       nullptr;
+
+  /// Optional pool for worker-thread batch recording; not owned.
+  ThreadPool *m_recordThreadPool = nullptr;
+  /// One command list pool per worker thread that has recorded for this
+  /// graph. Guarded by m_workerPoolMutex; pools are created inside worker
+  /// tasks and destroyed with the graph's transient resources.
+  std::mutex m_workerPoolMutex;
+  std::unordered_map<std::thread::id, std::unique_ptr<RhiCommandListPool>>
+      m_workerCommandListPools;
 
   std::vector<TimingSlot> m_timingSlots;
   RgTimingSnapshot m_latestTimings;

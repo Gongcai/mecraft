@@ -86,7 +86,8 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
     RenderGraphPassBuilder base = graph.addPass(
-        {"SSGI.Base", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"SSGI.Base", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     base.dependsOn(dependency)
         .readTexture(resources.sceneLighting, RhiResourceState::ShaderRead)
         .readTexture(resources.albedo, RhiResourceState::ShaderRead)
@@ -102,7 +103,8 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
     RgPassHandle previous = base.handle();
 
     RenderGraphPassBuilder upsample = graph.addPass(
-        {"SSGI.Upsample", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"SSGI.Upsample", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     upsample.dependsOn(previous)
         .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
@@ -115,7 +117,8 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
 
     if (temporalActive) {
         RenderGraphPassBuilder temporal = graph.addPass(
-            {"SSGI.Temporal", RgPassType::Graphics, RhiQueueType::Graphics});
+            {"SSGI.Temporal", RgPassType::Graphics, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         temporal.dependsOn(previous)
             .readTexture(resources.output, RhiResourceState::ShaderRead)
             .readTexture(resources.historyPrevious,
@@ -137,7 +140,8 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
         previous = temporal.handle();
 
         RenderGraphPassBuilder historyCopy = graph.addPass(
-            {"SSGI.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics});
+            {"SSGI.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         historyCopy.dependsOn(previous)
             .readTexture(resources.temporal, RhiResourceState::TransferSrc)
             .readTexture(resources.temporalMoments,
@@ -164,7 +168,7 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
             : resources.denoise[1 - outputSlot];
         RenderGraphPassBuilder denoise = graph.addPass(
             {kDenoisePassNames[iteration], RgPassType::Graphics,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         denoise.dependsOn(previous)
             .readTexture(input, RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
@@ -193,7 +197,8 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
             ? targets.ssgiDenoiseTextureHandle((denoiseIterations - 1) & 1)
             : targets.ssgiTemporalTextureHandle();
         RenderGraphPassBuilder outputCopy = graph.addPass(
-            {"SSGI.OutputCopy", RgPassType::Copy, RhiQueueType::Graphics});
+            {"SSGI.OutputCopy", RgPassType::Copy, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         outputCopy.dependsOn(previous)
             .readTexture(copySource, RhiResourceState::TransferSrc)
             .writeTexture(resources.output, RhiResourceState::TransferDst)

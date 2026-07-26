@@ -301,11 +301,13 @@ json toJson(const OcclusionSettings& s) {
 
 void applyRenderGraphSettings(const json& j, RenderGraphSettings& s) {
     readBool(j, "textureAliasingEnabled", s.textureAliasingEnabled);
+    readBool(j, "multithreadedRecordEnabled", s.multithreadedRecordEnabled);
 }
 
 json toJson(const RenderGraphSettings& s) {
     return json{
         {"textureAliasingEnabled", s.textureAliasingEnabled},
+        {"multithreadedRecordEnabled", s.multithreadedRecordEnabled},
     };
 }
 

@@ -640,6 +640,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     // setting is forwarded every frame so dashboard toggles apply instantly.
     m_renderGraph.setTextureAliasingEnabled(
         settings.renderGraph.textureAliasingEnabled);
+    // Multithreaded batch recording: forwarded every frame like aliasing so
+    // the dashboard toggle applies instantly. The graph itself restricts the
+    // feature to thread-safe batches on backends that allow it.
+    m_renderGraph.setRecordThreading(
+        settings.renderGraph.multithreadedRecordEnabled ? m_shared->threadPool
+                                                        : nullptr);
     // The composite stages below always write sceneResolved, so every frame
     // graph starts its scene color ping-pong chain at index 0.
     targets.resetSceneColorChain();
@@ -1042,7 +1048,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgPassHandle graphTail = auxiliaryClear.handle();
 
     RenderGraphPassBuilder skyCapturePass = m_renderGraph.addPass(
-        {"Deferred.SkyCapture", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"Deferred.SkyCapture", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     skyCapturePass.dependsOn(graphTail)
         .readTexture(atmosphereLut, RhiResourceState::ShaderRead)
         .readTexture(skyNoise, RhiResourceState::ShaderRead)
@@ -1134,7 +1141,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     if (m_velocityPass != nullptr) {
         RenderGraphPassBuilder velocityPass = m_renderGraph.addPass(
-            {"Deferred.Velocity", RgPassType::Graphics, RhiQueueType::Graphics});
+            {"Deferred.Velocity", RgPassType::Graphics, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         velocityPass.dependsOn(graphTail)
             .readTexture(depth, RhiResourceState::DepthRead)
             .readTexture(perObjectVelocity, RhiResourceState::ShaderRead)
@@ -1227,7 +1235,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     RenderGraphPassBuilder sceneLightingCopy = m_renderGraph.addPass(
         {"Deferred.SceneLightingCopy", RgPassType::Copy,
-         RhiQueueType::Graphics});
+         RhiQueueType::Graphics, /*threadSafeRecord=*/true});
     sceneLightingCopy.dependsOn(graphTail)
         .readTexture(sceneCaptureColor, RhiResourceState::TransferSrc)
         .writeTexture(sceneLighting, RhiResourceState::TransferDst)
@@ -1245,7 +1253,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         : ssaoResources.filtered;
     m_lightingPass->setHeldBlockLightValue(m_heldBlockLightValue);
     RenderGraphPassBuilder lighting = m_renderGraph.addPass(
-        {"Deferred.Lighting", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"Deferred.Lighting", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     lighting.dependsOn(graphTail)
         .readTexture(albedo, RhiResourceState::ShaderRead)
         .readTexture(normalAo, RhiResourceState::ShaderRead)
@@ -1371,7 +1380,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
         RenderGraphPassBuilder sceneCompositeCopies = m_renderGraph.addPass(
             {"Deferred.SceneCompositeCopies", RgPassType::Copy,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         sceneCompositeCopies.dependsOn(graphTail)
             .readTexture(sceneComposite, RhiResourceState::TransferSrc)
             .readTexture(depth, RhiResourceState::TransferSrc)
@@ -1538,7 +1547,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
           if (m_velocityPass != nullptr) {
               RenderGraphPassBuilder transparentVelocity = m_renderGraph.addPass(
                   {"Deferred.TransparentVelocity", RgPassType::Graphics,
-                   RhiQueueType::Graphics});
+                   RhiQueueType::Graphics, /*threadSafeRecord=*/true});
               transparentVelocity.dependsOn(graphTail)
                   .readTexture(depth, RhiResourceState::DepthRead)
                   .readTexture(transparentCompositeDepth,
@@ -1630,7 +1639,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (settings.debug.deferredLightDebugMode > 0) {
         RenderGraphPassBuilder lightingDebugCopy = m_renderGraph.addPass(
             {"Deferred.DebugLightingCopy", RgPassType::Copy,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         lightingDebugCopy.dependsOn(graphTail)
             .readTexture(sceneLighting, RhiResourceState::TransferSrc)
             .writeTexture(sceneComposite, RhiResourceState::TransferDst)
@@ -1645,7 +1654,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
         RenderGraphPassBuilder resolvedDebugCopy = m_renderGraph.addPass(
             {"Deferred.DebugResolvedCopy", RgPassType::Copy,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         resolvedDebugCopy.dependsOn(graphTail)
             .readTexture(sceneComposite, RhiResourceState::TransferSrc)
             .writeTexture(sceneResolved, RhiResourceState::TransferDst)
@@ -1666,7 +1675,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         settings.debug.deferredLightDebugMode <= 0 &&
         settings.debug.reflectionDebugMode <= 0;
     RenderGraphPassBuilder historyCopy = m_renderGraph.addPass(
-        {"Deferred.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics});
+        {"Deferred.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     const RgTextureHandle sceneColorFinal = targets.sceneColorIndex() == 0
         ? sceneResolved : temporalCurrent;
     historyCopy.dependsOn(graphTail)
@@ -1795,7 +1805,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         }
     } else {
         RenderGraphPassBuilder sceneOutput = m_renderGraph.addPass(
-            {"Deferred.SceneOutput", RgPassType::Copy, RhiQueueType::Graphics});
+            {"Deferred.SceneOutput", RgPassType::Copy, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         sceneOutput.dependsOn(graphTail)
             .readTexture(targets.sceneColorIndex() == 0 ? sceneResolved
                                                         : temporalCurrent,
@@ -1812,7 +1823,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
 
     RenderGraphPassBuilder depthOutput = m_renderGraph.addPass(
-        {"Deferred.DepthOutput", RgPassType::Copy, RhiQueueType::Graphics});
+        {"Deferred.DepthOutput", RgPassType::Copy, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     depthOutput.dependsOn(graphTail)
         .readTexture(depth, RhiResourceState::TransferSrc)
         .writeTexture(sceneCaptureDepth, RhiResourceState::TransferDst)
@@ -1842,7 +1854,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             targets.sceneColorIndex() != 0) {
             RenderGraphPassBuilder normalize = m_renderGraph.addPass(
                 {"Deferred.SceneColorNormalize", RgPassType::Copy,
-                 RhiQueueType::Graphics});
+                 RhiQueueType::Graphics, /*threadSafeRecord=*/true});
             normalize.dependsOn(graphTail)
                 .readTexture(temporalCurrent, RhiResourceState::TransferSrc)
                 .writeTexture(sceneResolved, RhiResourceState::TransferDst)
@@ -1983,6 +1995,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     m_graphCpuRecordMs = executed.recordMilliseconds;
     m_graphCpuSubmitMs = executed.submitMilliseconds;
     m_graphSubmitCount = static_cast<uint32_t>(executed.submissions.size());
+    m_graphWorkerRecordedBatchCount = executed.workerRecordedBatchCount;
     m_graphCpuStatsValid = true;
     if (!executed.succeeded()) {
         MECRAFT_LOG_STREAM(
@@ -2021,6 +2034,7 @@ RenderGraphFrameStats DeferredPipeline::renderGraphFrameStats() const {
     stats.cpuShadowPrepMs = m_graphCpuShadowPrepMs;
     stats.cpuTerrainPrepMs = m_graphCpuTerrainPrepMs;
     stats.submitCount = m_graphSubmitCount;
+    stats.workerRecordedBatches = m_graphWorkerRecordedBatchCount;
     stats.passCount =
         static_cast<uint32_t>(m_renderGraph.compiledPasses().size());
     stats.batchCount =

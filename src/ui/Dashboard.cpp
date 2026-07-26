@@ -1037,10 +1037,11 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                         graphStats.cpuShadowPrepMs,
                         graphStats.cpuContextMs,
                         graphStats.cpuTerrainPrepMs);
-            ImGui::Text("Passes: %u  Batches: %u  Submits: %u",
+            ImGui::Text("Passes: %u  Batches: %u  Submits: %u  MT batches: %u",
                         graphStats.passCount,
                         graphStats.batchCount,
-                        graphStats.submitCount);
+                        graphStats.submitCount,
+                        graphStats.workerRecordedBatches);
             if (m_displayHiZCullStats.valid) {
                 const HiZCullFrameStats& cull = m_displayHiZCullStats;
                 const uint32_t total = cull.opaqueTotal + cull.cutoutTotal;
@@ -1480,6 +1481,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("Async Compute SSAO", &settings.ssao.asyncComputeEnabled);
         pipelineChanged |= ImGui::Checkbox("Hi-Z Occlusion Culling", &settings.occlusion.hiZEnabled);
         pipelineChanged |= ImGui::Checkbox("Texture Aliasing", &settings.renderGraph.textureAliasingEnabled);
+        pipelineChanged |= ImGui::Checkbox("MT Record", &settings.renderGraph.multithreadedRecordEnabled);
         pipelineChanged |= ImGui::Checkbox("SSGI", &settings.ssgi.enabled);
         ImGui::SameLine();
         if (ImGui::Button("SSGI View")) {

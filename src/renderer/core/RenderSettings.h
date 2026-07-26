@@ -365,6 +365,9 @@ struct RenderGraphSettings {
     /// Place lifetime-disjoint transient textures on shared memory pages.
     /// Only takes effect on backends reporting texture aliasing support.
     bool textureAliasingEnabled = true;
+    /// Record thread-safe submission batches on worker threads. Only takes
+    /// effect on backends that allow recording off the device thread.
+    bool multithreadedRecordEnabled = true;
 };
 
 struct RenderSettings {

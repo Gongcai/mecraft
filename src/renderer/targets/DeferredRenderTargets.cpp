@@ -1093,6 +1093,7 @@ RhiTextureViewHandle DeferredRenderTargets::csmShadowColor1TextureViewHandle(con
 }
 
 bool DeferredRenderTargets::ensureCsmShadowDepthTextureView(RhiDevice& rhiDevice, const int cascadeIndex) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -1127,6 +1128,7 @@ bool DeferredRenderTargets::ensureCsmShadowDepthTextureView(RhiDevice& rhiDevice
 
 bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rhiDevice,
                                                                    const int cascadeIndex) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     assert(cascadeIndex >= 0 && cascadeIndex < kShadowCascadeCount);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -1199,6 +1201,7 @@ bool DeferredRenderTargets::ensureCsmShadowTransparentTextureViews(RhiDevice& rh
 }
 
 bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1280,6 +1283,7 @@ bool DeferredRenderTargets::ensureVolumetricFogTextureViews(RhiDevice& rhiDevice
 }
 
 bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1386,6 +1390,7 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureHiZTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1435,6 +1440,7 @@ bool DeferredRenderTargets::ensureHiZTextureViews(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1465,6 +1471,7 @@ bool DeferredRenderTargets::ensureVelocityTextureView(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensurePerObjectVelocityTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1495,6 +1502,7 @@ bool DeferredRenderTargets::ensurePerObjectVelocityTextureView(RhiDevice& rhiDev
 }
 
 bool DeferredRenderTargets::ensureSsaoFilteredTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1525,6 +1533,7 @@ bool DeferredRenderTargets::ensureSsaoFilteredTextureView(RhiDevice& rhiDevice) 
 }
 
 bool DeferredRenderTargets::ensureSsaoHalfResTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1555,6 +1564,7 @@ bool DeferredRenderTargets::ensureSsaoHalfResTextureView(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureSsaoHalfResFilteredTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1585,6 +1595,7 @@ bool DeferredRenderTargets::ensureSsaoHalfResFilteredTextureView(RhiDevice& rhiD
 }
 
 bool DeferredRenderTargets::ensureSsaoTemporalTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1615,6 +1626,7 @@ bool DeferredRenderTargets::ensureSsaoTemporalTextureView(RhiDevice& rhiDevice) 
 }
 
 bool DeferredRenderTargets::ensureSsaoHistoryTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1656,12 +1668,14 @@ bool DeferredRenderTargets::ensureSsaoHistoryTextureViews(RhiDevice& rhiDevice) 
 }
 
 bool DeferredRenderTargets::ensureSceneLightingTextureView(RhiDevice&) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     // SceneLighting is a render-graph transient: the graph publishes its
     // default view per frame, so this class never creates or destroys one.
     return m_sceneLightingView.isValid();
 }
 
 bool DeferredRenderTargets::ensureSsgiTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1692,6 +1706,7 @@ bool DeferredRenderTargets::ensureSsgiTextureView(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureSsgiHalfResTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1722,6 +1737,7 @@ bool DeferredRenderTargets::ensureSsgiHalfResTextureView(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, const int slot) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     assert(slot >= 0 && slot < 2);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -1753,6 +1769,7 @@ bool DeferredRenderTargets::ensureSsgiDenoiseTextureView(RhiDevice& rhiDevice, c
 }
 
 bool DeferredRenderTargets::ensureSsgiTemporalTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1795,6 +1812,7 @@ bool DeferredRenderTargets::ensureSsgiTemporalTextureViews(RhiDevice& rhiDevice)
 }
 
 bool DeferredRenderTargets::ensureSsgiHistoryTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1851,12 +1869,14 @@ bool DeferredRenderTargets::ensureSsgiHistoryTextureViews(RhiDevice& rhiDevice) 
 }
 
 bool DeferredRenderTargets::ensureCloudTextureView(RhiDevice&) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     // Cloud is a render-graph transient: the graph publishes its default
     // view per frame, so this class never creates or destroys one.
     return m_cloudView.isValid();
 }
 
 bool DeferredRenderTargets::ensureSkyCaptureTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1887,12 +1907,14 @@ bool DeferredRenderTargets::ensureSkyCaptureTextureView(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureReflectionTextureView(RhiDevice&) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     // Reflection is a render-graph transient: the graph publishes its
     // default view per frame, so this class never creates or destroys one.
     return m_reflectionView.isValid();
 }
 
 bool DeferredRenderTargets::ensureReflectionTemporalScratchTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1923,12 +1945,14 @@ bool DeferredRenderTargets::ensureReflectionTemporalScratchTextureView(RhiDevice
 }
 
 bool DeferredRenderTargets::ensureSceneCompositeTextureView(RhiDevice&) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     // SceneComposite is a render-graph transient: the graph publishes its
     // default view per frame, so this class never creates or destroys one.
     return m_sceneCompositeView.isValid();
 }
 
 bool DeferredRenderTargets::ensureSceneResolvedTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1959,6 +1983,7 @@ bool DeferredRenderTargets::ensureSceneResolvedTextureView(RhiDevice& rhiDevice)
 }
 
 bool DeferredRenderTargets::ensureHistorySceneTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -1991,6 +2016,7 @@ bool DeferredRenderTargets::ensureHistorySceneTextureView(RhiDevice& rhiDevice) 
 }
 
 bool DeferredRenderTargets::ensureHistorySceneTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2032,6 +2058,7 @@ bool DeferredRenderTargets::ensureHistorySceneTextureViews(RhiDevice& rhiDevice)
 }
 
 bool DeferredRenderTargets::ensureHistoryDepthTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2073,6 +2100,7 @@ bool DeferredRenderTargets::ensureHistoryDepthTextureViews(RhiDevice& rhiDevice)
 }
 
 bool DeferredRenderTargets::ensureTaaHistoryDepthTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2116,6 +2144,7 @@ bool DeferredRenderTargets::ensureTaaHistoryDepthTextureViews(RhiDevice& rhiDevi
 }
 
 bool DeferredRenderTargets::ensureHistoryReflectionTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2157,6 +2186,7 @@ bool DeferredRenderTargets::ensureHistoryReflectionTextureViews(RhiDevice& rhiDe
 }
 
 bool DeferredRenderTargets::ensureHistoryCloudTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2198,6 +2228,7 @@ bool DeferredRenderTargets::ensureHistoryCloudTextureViews(RhiDevice& rhiDevice)
 }
 
 bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice&) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     // TransparentComposite and its depth are render-graph transients: the
     // graph publishes their default views per frame, so this class never
     // creates or destroys them.
@@ -2206,6 +2237,7 @@ bool DeferredRenderTargets::ensureTransparentCompositeTextureViews(RhiDevice&) {
 }
 
 bool DeferredRenderTargets::ensureHalfResTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2236,6 +2268,7 @@ bool DeferredRenderTargets::ensureHalfResTextureView(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureTemporalCurrentTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2266,6 +2299,7 @@ bool DeferredRenderTargets::ensureTemporalCurrentTextureView(RhiDevice& rhiDevic
 }
 
 bool DeferredRenderTargets::ensureHistoryVolumetricTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2299,6 +2333,7 @@ bool DeferredRenderTargets::ensureHistoryVolumetricTextureView(RhiDevice& rhiDev
 }
 
 bool DeferredRenderTargets::ensureHistoryVolumetricTextureViews(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2340,6 +2375,7 @@ bool DeferredRenderTargets::ensureHistoryVolumetricTextureViews(RhiDevice& rhiDe
 }
 
 bool DeferredRenderTargets::ensureWeatherMaskTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2370,6 +2406,7 @@ bool DeferredRenderTargets::ensureWeatherMaskTextureView(RhiDevice& rhiDevice) {
 }
 
 bool DeferredRenderTargets::ensureReactiveMaskTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }
@@ -2396,6 +2433,7 @@ bool DeferredRenderTargets::ensureReactiveMaskTextureView(RhiDevice& rhiDevice) 
 }
 
 bool DeferredRenderTargets::ensureTransparencyMaskTextureView(RhiDevice& rhiDevice) {
+    const std::lock_guard<std::recursive_mutex> viewLock(m_rhiViewMutex);
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
     }

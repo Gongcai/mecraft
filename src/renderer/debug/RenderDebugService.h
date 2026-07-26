@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -91,6 +92,8 @@ struct RenderGraphFrameStats {
     uint32_t batchCount = 0u;
     /// Queue submissions issued for the last frame graph.
     uint32_t submitCount = 0u;
+    /// Submission batches recorded on worker threads last frame.
+    uint32_t workerRecordedBatches = 0u;
     double cpuBuildMs = 0.0;
     double cpuCompileMs = 0.0;
     double cpuExecuteMs = 0.0;
@@ -338,6 +341,10 @@ private:
                                                    size_t pointIndex);
 
     // GPU timer state
+    /// Serializes the segment allocator read-modify-write in beginGpuTimer,
+    /// endGpuTimer, and their cancel paths. Render-graph passes may record
+    /// on worker threads, so segment slots must be claimed atomically.
+    mutable std::mutex m_gpuTimerMutex;
     RhiQueryPoolHandle m_gpuTimerQueryPool;
     std::array<std::array<uint8_t, GPU_TIMER_PASS_COUNT>, GPU_TIMER_RING_SIZE>
         m_gpuTimerAllocatedSegmentCounts{};

@@ -35,6 +35,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -397,6 +398,8 @@ std::optional<VkRhiTextureInteropInfo> VkRhiInterop::textureInfo(
         !texture.isValid() || !view.isValid()) {
         return std::nullopt;
     }
+    const std::shared_lock<std::shared_mutex> registryLock(
+        device.m_data->resourceRegistryMutex);
     const auto* textureRecord = findRecord(device.m_data->textures, texture);
     const auto* viewRecord = findRecord(device.m_data->textureViews, view);
     if (textureRecord == nullptr || viewRecord == nullptr ||
@@ -2015,6 +2018,8 @@ RhiBufferHandle VkRhiDevice::createBuffer(const RhiBufferDesc& desc,
             vmaDestroyBuffer(m_data->allocator, staging, stagingAllocation);
         }
     }
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const RhiBufferHandle handle = m_data->bufferHandles.allocate();
     m_data->buffers.emplace(handleKey(handle),
                             VkRhiDeviceData::Buffer{buffer, allocation, desc,
@@ -2077,16 +2082,21 @@ RhiTextureHandle VkRhiDevice::createTexture(const RhiTextureDesc& desc,
                      "vmaCreateImage")) {
         return {};
     }
-    const RhiTextureHandle handle = m_data->textureHandles.allocate();
-    m_data->textures.emplace(handleKey(handle),
-                             VkRhiDeviceData::Texture{
-                                 image,
-                                 allocation,
-                                 desc,
-                                 desc.debugName != nullptr ? desc.debugName : "",
-                                 false,
-                                 false
-                             });
+    RhiTextureHandle handle;
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        handle = m_data->textureHandles.allocate();
+        m_data->textures.emplace(handleKey(handle),
+                                 VkRhiDeviceData::Texture{
+                                     image,
+                                     allocation,
+                                     desc,
+                                     desc.debugName != nullptr ? desc.debugName : "",
+                                     false,
+                                     false
+                                 });
+    }
     nameObject(*m_data, VK_OBJECT_TYPE_IMAGE, reinterpret_cast<uint64_t>(image), desc.debugName);
     if (initialData != nullptr && !uploadTextureInitialData(*m_data, image, desc, *initialData)) {
         std::cerr << "VkRhiDevice: texture initial data upload failed ["
@@ -2139,6 +2149,8 @@ RhiMemoryHandle VkRhiDevice::allocateTextureMemory(
     if (debugName != nullptr) {
         vmaSetAllocationName(m_data->allocator, allocation, debugName);
     }
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const RhiMemoryHandle handle = m_data->textureMemoryHandles.allocate();
     m_data->textureMemories.emplace(
         handleKey(handle),
@@ -2152,6 +2164,8 @@ RhiTextureHandle VkRhiDevice::createPlacedTexture(const RhiTextureDesc& desc,
     if (!m_initialized) {
         return {};
     }
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto memoryIt = m_data->textureMemories.find(handleKey(memory));
     if (memoryIt == m_data->textureMemories.end()) {
         return {};
@@ -2206,22 +2220,28 @@ RhiTextureHandle VkRhiDevice::createPlacedTexture(const RhiTextureDesc& desc,
 
 void VkRhiDevice::destroyTextureMemory(const RhiMemoryHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->textureMemories.find(handleKey(handle));
-    if (it == m_data->textureMemories.end() ||
-        !m_data->textureMemoryHandles.release(handle)) {
-        return;
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->textureMemories.find(handleKey(handle));
+        if (it == m_data->textureMemories.end() ||
+            !m_data->textureMemoryHandles.release(handle)) {
+            return;
+        }
+        // Placed textures do not stamp per-resource lifetimes onto the block, so
+        // conservatively wait for everything submitted up to this point.
+        enqueueDeferred(m_data->deferredMemories,
+                        VkRhiDeviceData::DeferredMemory{m_lastSubmittedSequence,
+                                                        it->second.allocation});
+        m_data->textureMemories.erase(it);
     }
-    // Placed textures do not stamp per-resource lifetimes onto the block, so
-    // conservatively wait for everything submitted up to this point.
-    enqueueDeferred(m_data->deferredMemories,
-                    VkRhiDeviceData::DeferredMemory{m_lastSubmittedSequence,
-                                                    it->second.allocation});
-    m_data->textureMemories.erase(it);
     reclaimCompletedWork();
 }
 
 bool VkRhiDevice::getBufferDesc(const RhiBufferHandle buffer,
                                 RhiBufferDesc& desc) const {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* record = m_data != nullptr ? findRecord(m_data->buffers, buffer) : nullptr;
     if (!m_initialized || record == nullptr) return false;
     desc = record->desc;
@@ -2231,6 +2251,8 @@ bool VkRhiDevice::getBufferDesc(const RhiBufferHandle buffer,
 
 bool VkRhiDevice::getTextureDesc(const RhiTextureHandle texture,
                                  RhiTextureDesc& desc) const {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* record = m_data != nullptr ? findRecord(m_data->textures, texture) : nullptr;
     if (!m_initialized || record == nullptr) return false;
     desc = record->desc;
@@ -2239,6 +2261,10 @@ bool VkRhiDevice::getTextureDesc(const RhiTextureHandle texture,
 }
 
 RhiTextureViewHandle VkRhiDevice::createTextureView(const RhiTextureViewDesc& desc) {
+    // Exclusive: the texture record pointer is used across the native view
+    // creation and the registry insertion below.
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* texture = m_data != nullptr ? findRecord(m_data->textures, desc.texture) : nullptr;
     if (texture == nullptr) return {};
     const bool texture3D = texture->desc.dimension == RhiTextureDimension::Texture3D;
@@ -2303,6 +2329,8 @@ RhiSamplerHandle VkRhiDevice::createSampler(const RhiSamplerDesc& desc) {
     VkSampler sampler = VK_NULL_HANDLE;
     if (!vkSucceeded(vkCreateSampler(m_data->device, &info, nullptr, &sampler),
                      "vkCreateSampler")) return {};
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const RhiSamplerHandle handle = m_data->samplerHandles.allocate();
     m_data->samplers.emplace(handleKey(handle), VkRhiDeviceData::Sampler{sampler});
     return handle;
@@ -2323,6 +2351,8 @@ RhiShaderHandle VkRhiDevice::createShader(const RhiShaderDesc& desc) {
     VkShaderModule module = VK_NULL_HANDLE;
     if (!vkSucceeded(vkCreateShaderModule(m_data->device, &info, nullptr, &module),
                      "vkCreateShaderModule")) return {};
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const RhiShaderHandle handle = m_data->shaderHandles.allocate();
     m_data->shaders.emplace(handleKey(handle),
                             VkRhiDeviceData::Shader{module, compiled->stage,
@@ -2353,6 +2383,8 @@ RhiBindGroupLayoutHandle VkRhiDevice::createBindGroupLayout(
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     if (!vkSucceeded(vkCreateDescriptorSetLayout(m_data->device, &info, nullptr, &layout),
                      "vkCreateDescriptorSetLayout")) return {};
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const RhiBindGroupLayoutHandle handle = m_data->bindGroupLayoutHandles.allocate();
     m_data->bindGroupLayouts.emplace(handleKey(handle),
                                      VkRhiDeviceData::BindGroupLayout{layout, desc});
@@ -2363,6 +2395,8 @@ RhiBindGroupLayoutHandle VkRhiDevice::createBindGroupLayout(
 
 RhiPipelineLayoutHandle VkRhiDevice::createPipelineLayout(const RhiPipelineLayoutDesc& desc) {
     if (!m_initialized) return {};
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     std::vector<VkDescriptorSetLayout> layouts;
     layouts.reserve(desc.bindGroupLayouts.size());
     for (const auto handle : desc.bindGroupLayouts) {
@@ -2394,6 +2428,10 @@ RhiPipelineLayoutHandle VkRhiDevice::createPipelineLayout(const RhiPipelineLayou
 }
 
 RhiPipelineHandle VkRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineDesc& desc) {
+    // Exclusive: shader and layout record pointers stay live across the
+    // native pipeline creation and the registry insertion below.
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* vertex = m_data != nullptr ? findRecord(m_data->shaders, desc.vertexShader) : nullptr;
     const auto* fragment = m_data != nullptr ? findRecord(m_data->shaders, desc.fragmentShader) : nullptr;
     const auto* layout = m_data != nullptr ? findRecord(m_data->pipelineLayouts, desc.layout) : nullptr;
@@ -2522,6 +2560,8 @@ RhiPipelineHandle VkRhiDevice::createGraphicsPipeline(const RhiGraphicsPipelineD
 }
 
 RhiPipelineHandle VkRhiDevice::createComputePipeline(const RhiComputePipelineDesc& desc) {
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* shader = m_data != nullptr ? findRecord(m_data->shaders, desc.computeShader) : nullptr;
     const auto* layout = m_data != nullptr ? findRecord(m_data->pipelineLayouts, desc.layout) : nullptr;
     if (shader == nullptr || layout == nullptr || shader->stage != RhiShaderStage::Compute) return {};
@@ -2545,6 +2585,10 @@ RhiPipelineHandle VkRhiDevice::createComputePipeline(const RhiComputePipelineDes
 }
 
 RhiBindGroupHandle VkRhiDevice::createBindGroup(const RhiBindGroupDesc& desc) {
+    // Exclusive: also serializes descriptor-set allocation from the shared
+    // descriptor pool, which Vulkan requires to be externally synchronized.
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* layout = m_data != nullptr ? findRecord(m_data->bindGroupLayouts, desc.layout) : nullptr;
     if (layout == nullptr || desc.entries.size() != layout->desc.entries.size()) return {};
     VkDescriptorSetAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
@@ -2647,6 +2691,8 @@ RhiQueryPoolHandle VkRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
     VkQueryPool pool = VK_NULL_HANDLE;
     if (!vkSucceeded(vkCreateQueryPool(m_data->device, &info, nullptr, &pool),
                      "vkCreateQueryPool")) return {};
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const RhiQueryPoolHandle handle = m_data->queryPoolHandles.allocate();
     m_data->queryPools.emplace(handleKey(handle),
                                VkRhiDeviceData::QueryPool{pool, desc.queryCount});
@@ -2658,6 +2704,8 @@ RhiQueryPoolHandle VkRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
 bool VkRhiDevice::resetQueryPool(const RhiQueryPoolHandle pool,
                                  const uint32_t firstQuery,
                                  const uint32_t queryCount) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* record = m_data != nullptr ? findRecord(m_data->queryPools, pool) : nullptr;
     if (!m_initialized || std::this_thread::get_id() != m_deviceThread ||
         record == nullptr || queryCount == 0u || firstQuery > record->count ||
@@ -2670,6 +2718,9 @@ bool VkRhiDevice::resetQueryPool(const RhiQueryPoolHandle pool,
 
 void* VkRhiDevice::mapBuffer(const RhiBufferHandle buffer, const uint64_t offset,
                              const uint64_t size) {
+    // Exclusive: the record's cached mapping pointer may be written below.
+    const std::unique_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     auto* record = m_data != nullptr ? findRecord(m_data->buffers, buffer) : nullptr;
     if (record == nullptr || record->desc.memoryUsage == RhiMemoryUsage::GpuOnly ||
         offset > record->desc.size || size > record->desc.size - offset) return nullptr;
@@ -2685,6 +2736,8 @@ void* VkRhiDevice::mapBuffer(const RhiBufferHandle buffer, const uint64_t offset
 }
 
 void VkRhiDevice::unmapBuffer(const RhiBufferHandle buffer) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     auto* record = m_data != nullptr ? findRecord(m_data->buffers, buffer) : nullptr;
     if (record == nullptr || record->mapped == nullptr) return;
     if (record->desc.memoryUsage == RhiMemoryUsage::CpuToGpu) {
@@ -2695,6 +2748,8 @@ void VkRhiDevice::unmapBuffer(const RhiBufferHandle buffer) {
 bool VkRhiDevice::areQueryResultsAvailable(const RhiQueryPoolHandle pool,
                                            const uint32_t firstQuery,
                                            const uint32_t queryCount) const {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* record = m_data != nullptr ? findRecord(m_data->queryPools, pool) : nullptr;
     if (record == nullptr || queryCount == 0u || firstQuery > record->count ||
         queryCount > record->count - firstQuery) return false;
@@ -2711,6 +2766,8 @@ bool VkRhiDevice::areQueryResultsAvailable(const RhiQueryPoolHandle pool,
 
 bool VkRhiDevice::getQueryResults(const RhiQueryPoolHandle pool, const uint32_t firstQuery,
                                   const uint32_t queryCount, uint64_t* results) const {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_data->resourceRegistryMutex);
     const auto* record = m_data != nullptr ? findRecord(m_data->queryPools, pool) : nullptr;
     if (record == nullptr || results == nullptr || queryCount == 0u ||
         firstQuery > record->count || queryCount > record->count - firstQuery) return false;
@@ -3064,124 +3121,164 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
 
 void VkRhiDevice::destroyBuffer(const RhiBufferHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->buffers.find(handleKey(handle));
-    if (it == m_data->buffers.end() || !m_data->bufferHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredBuffers,
-                    VkRhiDeviceData::DeferredBuffer{it->second.lifetime.lastUseSequence,
-                                                    it->second.buffer,
-                                                    it->second.allocation});
-    m_data->buffers.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->buffers.find(handleKey(handle));
+        if (it == m_data->buffers.end() || !m_data->bufferHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredBuffers,
+                        VkRhiDeviceData::DeferredBuffer{it->second.lifetime.lastUseSequence,
+                                                        it->second.buffer,
+                                                        it->second.allocation});
+        m_data->buffers.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyTexture(const RhiTextureHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->textures.find(handleKey(handle));
-    if (it == m_data->textures.end() || it->second.swapchainOwned) return;
-    if (!m_data->textureHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredImages,
-                    VkRhiDeviceData::DeferredImage{it->second.lifetime.lastUseSequence,
-                                                   handleKey(handle), it->second.image,
-                                                   it->second.allocation});
-    m_data->textures.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->textures.find(handleKey(handle));
+        if (it == m_data->textures.end() || it->second.swapchainOwned) return;
+        if (!m_data->textureHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredImages,
+                        VkRhiDeviceData::DeferredImage{it->second.lifetime.lastUseSequence,
+                                                       handleKey(handle), it->second.image,
+                                                       it->second.allocation});
+        m_data->textures.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyTextureView(const RhiTextureViewHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->textureViews.find(handleKey(handle));
-    if (it == m_data->textureViews.end() || !m_data->textureViewHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_IMAGE_VIEW,
-                        reinterpret_cast<uint64_t>(it->second.view)});
-    m_data->textureViews.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->textureViews.find(handleKey(handle));
+        if (it == m_data->textureViews.end() || !m_data->textureViewHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_IMAGE_VIEW,
+                            reinterpret_cast<uint64_t>(it->second.view)});
+        m_data->textureViews.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroySampler(const RhiSamplerHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->samplers.find(handleKey(handle));
-    if (it == m_data->samplers.end() || !m_data->samplerHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_SAMPLER,
-                        reinterpret_cast<uint64_t>(it->second.sampler)});
-    m_data->samplers.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->samplers.find(handleKey(handle));
+        if (it == m_data->samplers.end() || !m_data->samplerHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_SAMPLER,
+                            reinterpret_cast<uint64_t>(it->second.sampler)});
+        m_data->samplers.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyShader(const RhiShaderHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->shaders.find(handleKey(handle));
-    if (it == m_data->shaders.end() || !m_data->shaderHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_SHADER_MODULE,
-                        reinterpret_cast<uint64_t>(it->second.module)});
-    m_data->shaders.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->shaders.find(handleKey(handle));
+        if (it == m_data->shaders.end() || !m_data->shaderHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_SHADER_MODULE,
+                            reinterpret_cast<uint64_t>(it->second.module)});
+        m_data->shaders.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyBindGroupLayout(const RhiBindGroupLayoutHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->bindGroupLayouts.find(handleKey(handle));
-    if (it == m_data->bindGroupLayouts.end() ||
-        !m_data->bindGroupLayoutHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence,
-                        VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
-                        reinterpret_cast<uint64_t>(it->second.layout)});
-    m_data->bindGroupLayouts.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->bindGroupLayouts.find(handleKey(handle));
+        if (it == m_data->bindGroupLayouts.end() ||
+            !m_data->bindGroupLayoutHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence,
+                            VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                            reinterpret_cast<uint64_t>(it->second.layout)});
+        m_data->bindGroupLayouts.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyPipelineLayout(const RhiPipelineLayoutHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->pipelineLayouts.find(handleKey(handle));
-    if (it == m_data->pipelineLayouts.end() || !m_data->pipelineLayoutHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_PIPELINE_LAYOUT,
-                        reinterpret_cast<uint64_t>(it->second.layout)});
-    m_data->pipelineLayouts.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->pipelineLayouts.find(handleKey(handle));
+        if (it == m_data->pipelineLayouts.end() || !m_data->pipelineLayoutHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_PIPELINE_LAYOUT,
+                            reinterpret_cast<uint64_t>(it->second.layout)});
+        m_data->pipelineLayouts.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyPipeline(const RhiPipelineHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->pipelines.find(handleKey(handle));
-    if (it == m_data->pipelines.end() || !m_data->pipelineHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_PIPELINE,
-                        reinterpret_cast<uint64_t>(it->second.pipeline)});
-    m_data->pipelines.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->pipelines.find(handleKey(handle));
+        if (it == m_data->pipelines.end() || !m_data->pipelineHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_PIPELINE,
+                            reinterpret_cast<uint64_t>(it->second.pipeline)});
+        m_data->pipelines.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyBindGroup(const RhiBindGroupHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->bindGroups.find(handleKey(handle));
-    if (it == m_data->bindGroups.end() || !m_data->bindGroupHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_DESCRIPTOR_SET,
-                        reinterpret_cast<uint64_t>(it->second.set)});
-    m_data->bindGroups.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->bindGroups.find(handleKey(handle));
+        if (it == m_data->bindGroups.end() || !m_data->bindGroupHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                            reinterpret_cast<uint64_t>(it->second.set)});
+        m_data->bindGroups.erase(it);
+    }
     reclaimCompletedWork();
 }
 
 void VkRhiDevice::destroyQueryPool(const RhiQueryPoolHandle handle) {
     if (m_data == nullptr) return;
-    const auto it = m_data->queryPools.find(handleKey(handle));
-    if (it == m_data->queryPools.end() || !m_data->queryPoolHandles.release(handle)) return;
-    enqueueDeferred(m_data->deferredObjects,
-                    VkRhiDeviceData::DeferredObject{
-                        it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_QUERY_POOL,
-                        reinterpret_cast<uint64_t>(it->second.pool)});
-    m_data->queryPools.erase(it);
+    {
+        const std::unique_lock<std::shared_mutex> registryLock(
+            m_data->resourceRegistryMutex);
+        const auto it = m_data->queryPools.find(handleKey(handle));
+        if (it == m_data->queryPools.end() || !m_data->queryPoolHandles.release(handle)) return;
+        enqueueDeferred(m_data->deferredObjects,
+                        VkRhiDeviceData::DeferredObject{
+                            it->second.lifetime.lastUseSequence, VK_OBJECT_TYPE_QUERY_POOL,
+                            reinterpret_cast<uint64_t>(it->second.pool)});
+        m_data->queryPools.erase(it);
+    }
     reclaimCompletedWork();
 }
 
@@ -3196,6 +3293,11 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
         info.queue == RhiQueueType::Present || std::this_thread::get_id() != m_deviceThread ||
         (info.waitCount == 0u) != (info.waits == nullptr)) return false;
     const std::lock_guard<std::mutex> registryLock(m_data->commandRegistryMutex);
+    // Exclusive resource lock: submission resolves resource references,
+    // stamps lifetimes, and reclaims deferred destructions. Lock order is
+    // commandRegistryMutex before resourceRegistryMutex everywhere.
+    const std::unique_lock<std::shared_mutex> resourceLock(
+        m_data->resourceRegistryMutex);
     std::vector<VkCommandBufferSubmitInfo> commandInfos;
     std::vector<VkRhiCommandList*> lists;
     std::vector<VkRhiCommandResourceReferences> resourceReferences;
@@ -3360,9 +3462,14 @@ uint64_t VkRhiDevice::validationErrorCount() const {
 void VkRhiDevice::reclaimCompletedWork() {
     if (!m_initialized) return;
     const std::lock_guard<std::mutex> lock(m_data->commandRegistryMutex);
+    const std::unique_lock<std::shared_mutex> resourceLock(
+        m_data->resourceRegistryMutex);
     reclaimCompletedWorkUnlocked();
 }
 
+// Requires both commandRegistryMutex and an exclusive resourceRegistryMutex
+// lock: it walks pending lists and the deferred-destruction queues, and
+// scans the texture-view registry before releasing deferred images.
 void VkRhiDevice::reclaimCompletedWorkUnlocked() {
     if (!m_initialized) return;
     std::array<uint64_t, 3u> completedQueueValues{};
@@ -3451,10 +3558,22 @@ VkRhiCommandListPool::VkRhiCommandListPool(VkRhiDevice& device,
 VkRhiCommandListPool::~VkRhiCommandListPool() {
     if (m_device != nullptr) {
         if (std::this_thread::get_id() != m_ownerThread) {
-            std::cerr << "VkRhiDevice: command-list pool destruction requires its owner thread\n";
+            // Cross-thread destruction is tolerated when the owner thread no
+            // longer uses the pool (worker-thread pools are torn down by the
+            // render graph on the main thread); a list still in the
+            // Recording state indicates genuinely concurrent use.
+            for (const auto& list : m_commandLists) {
+                if (list->state() == RhiCommandListState::Recording) {
+                    std::cerr << "VkRhiDevice: command-list pool destroyed "
+                                 "while its owner thread is recording\n";
+                    break;
+                }
+            }
         }
         const std::lock_guard<std::mutex> registryLock(
             m_device->m_data->commandRegistryMutex);
+        const std::unique_lock<std::shared_mutex> resourceLock(
+            m_device->m_data->resourceRegistryMutex);
         if (waitDeviceIdle(*m_device->m_data) == VK_SUCCESS) {
             m_device->reclaimCompletedWorkUnlocked();
         }
@@ -3477,6 +3596,14 @@ VkRhiCommandListPool::~VkRhiCommandListPool() {
 
 RhiCommandList* VkRhiCommandListPool::acquire(const RhiCommandListType type) {
     if (m_device == nullptr || std::this_thread::get_id() != m_ownerThread) return nullptr;
+    // Recycle lists whose GPU completion was observed on a foreign thread;
+    // the command-buffer reset must run here on the pool's owner thread.
+    for (auto& list : m_commandLists) {
+        if (list->m_data->completedAwaitingReset.exchange(
+                false, std::memory_order_acq_rel)) {
+            list->markComplete();
+        }
+    }
     for (auto& list : m_commandLists) {
         if (list->state() == RhiCommandListState::Initial && list->m_data->type == type) {
             return list.get();
@@ -3596,12 +3723,20 @@ void VkRhiCommandList::markPending(const uint64_t sequence) {
 }
 
 void VkRhiCommandList::markComplete() {
-    if (m_data->state == RhiCommandListState::Pending) {
-        if (vkResetCommandBuffer(m_data->commandBuffer, 0u) == VK_SUCCESS) {
-            resetForPoolReuse();
-        } else {
-            m_data->valid = false;
-        }
+    if (m_data->state != RhiCommandListState::Pending) {
+        return;
+    }
+    if (std::this_thread::get_id() != m_data->ownerThread) {
+        // vkResetCommandBuffer requires external synchronization of the
+        // owning command pool. Completion observed on a foreign thread only
+        // flags the list; the owner thread resets it on its next acquire.
+        m_data->completedAwaitingReset.store(true, std::memory_order_release);
+        return;
+    }
+    if (vkResetCommandBuffer(m_data->commandBuffer, 0u) == VK_SUCCESS) {
+        resetForPoolReuse();
+    } else {
+        m_data->valid = false;
     }
 }
 
@@ -3638,6 +3773,8 @@ void VkRhiCommandList::insertDebugMarker(const char* name, const glm::vec4& colo
 }
 
 void VkRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     auto* texture = findRecord(m_device->m_data->textures, barrier.texture);
     const uint32_t layers = texture != nullptr &&
         texture->desc.dimension != RhiTextureDimension::Texture3D
@@ -3741,6 +3878,8 @@ void VkRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
 }
 
 void VkRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     auto* buffer = findRecord(m_device->m_data->buffers, barrier.buffer);
     const uint64_t size = buffer != nullptr && barrier.size == kRhiWholeSize
         ? buffer->desc.size - std::min(barrier.offset, buffer->desc.size) : barrier.size;
@@ -3784,6 +3923,8 @@ void VkRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
         m_data->valid = false;
         return;
     }
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     uint32_t targetWidth = 0u;
     uint32_t targetHeight = 0u;
     const auto registerAttachmentExtent = [&](const RhiTextureViewHandle viewHandle) {
@@ -3924,6 +4065,8 @@ void VkRhiCommandList::setScissor(const RhiRect2D& rect) {
 }
 
 void VkRhiCommandList::setGraphicsPipeline(const RhiPipelineHandle pipeline) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->pipelines, pipeline);
     if (record == nullptr || record->bindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS) {
         m_data->valid = false;
@@ -3943,6 +4086,8 @@ void VkRhiCommandList::setGraphicsPipeline(const RhiPipelineHandle pipeline) {
 }
 
 void VkRhiCommandList::setComputePipeline(const RhiPipelineHandle pipeline) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->pipelines, pipeline);
     if (record == nullptr || record->bindPoint != VK_PIPELINE_BIND_POINT_COMPUTE ||
         m_data->rendering) {
@@ -3963,6 +4108,8 @@ void VkRhiCommandList::setComputePipeline(const RhiPipelineHandle pipeline) {
 
 void VkRhiCommandList::setBindGroup(const uint32_t setIndex,
                                     const RhiBindGroupHandle bindGroup) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->bindGroups, bindGroup);
     const auto* pipelineLayout = findRecord(m_device->m_data->pipelineLayouts,
                                             m_data->pipelineLayoutHandle);
@@ -3981,6 +4128,8 @@ void VkRhiCommandList::setBindGroup(const uint32_t setIndex,
 
 void VkRhiCommandList::setVertexBuffer(const uint32_t slot, const RhiBufferHandle buffer,
                                        const uint64_t offset) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->buffers, buffer);
     if (record == nullptr || offset >= record->desc.size) {
         m_data->valid = false;
@@ -3992,6 +4141,8 @@ void VkRhiCommandList::setVertexBuffer(const uint32_t slot, const RhiBufferHandl
 
 void VkRhiCommandList::setIndexBuffer(const RhiBufferHandle buffer,
                                       const RhiIndexFormat format, const uint64_t offset) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->buffers, buffer);
     if (record == nullptr || offset >= record->desc.size) {
         m_data->valid = false;
@@ -4038,6 +4189,8 @@ void VkRhiCommandList::drawIndexed(const uint32_t indexCount, const uint32_t ins
 void VkRhiCommandList::drawIndirect(const RhiBufferHandle indirectBuffer,
                                     const uint64_t offset, const uint32_t drawCount,
                                     const uint32_t stride) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->buffers, indirectBuffer);
     if (record == nullptr || !m_data->rendering) {
         m_data->valid = false;
@@ -4058,6 +4211,8 @@ void VkRhiCommandList::dispatch(const uint32_t groupCountX, const uint32_t group
 
 void VkRhiCommandList::updateBuffer(const RhiBufferHandle buffer, const uint64_t offset,
                                     const void* data, const size_t size) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     auto* record = findRecord(m_device->m_data->buffers, buffer);
     if (record == nullptr || data == nullptr || size == 0u ||
         offset > record->desc.size || size > record->desc.size - offset ||
@@ -4089,6 +4244,8 @@ void VkRhiCommandList::updateBuffer(const RhiBufferHandle buffer, const uint64_t
 }
 
 void VkRhiCommandList::copyBuffer(const RhiBufferCopy& copy) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* source = findRecord(m_device->m_data->buffers, copy.src);
     const auto* destination = findRecord(m_device->m_data->buffers, copy.dst);
     if (source == nullptr || destination == nullptr || copy.size == 0u) {
@@ -4102,6 +4259,8 @@ void VkRhiCommandList::copyBuffer(const RhiBufferCopy& copy) {
 }
 
 void VkRhiCommandList::copyBufferToTexture(const RhiBufferTextureCopy& copy) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* source = findRecord(m_device->m_data->buffers, copy.srcBuffer);
     const auto* destination = findRecord(m_device->m_data->textures, copy.dstTexture);
     if (source == nullptr || destination == nullptr) {
@@ -4122,6 +4281,8 @@ void VkRhiCommandList::copyBufferToTexture(const RhiBufferTextureCopy& copy) {
 }
 
 void VkRhiCommandList::copyTextureToBuffer(const RhiTextureBufferCopy& copy) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* source = findRecord(m_device->m_data->textures, copy.srcTexture);
     const auto* destination = findRecord(m_device->m_data->buffers, copy.dstBuffer);
     if (source == nullptr || destination == nullptr) {
@@ -4150,6 +4311,8 @@ void VkRhiCommandList::copyTextureToBuffer(const RhiTextureBufferCopy& copy) {
 }
 
 void VkRhiCommandList::copyTexture(const RhiTextureCopy& copy) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* source = findRecord(m_device->m_data->textures, copy.src);
     const auto* destination = findRecord(m_device->m_data->textures, copy.dst);
     if (source == nullptr || destination == nullptr) {
@@ -4179,6 +4342,8 @@ void VkRhiCommandList::copyTexture(const RhiTextureCopy& copy) {
 }
 
 void VkRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     RhiTextureHandle sourceHandle = blit.src;
     RhiTextureHandle destinationHandle = blit.dst;
     const auto* sourceView = blit.srcView.isValid()
@@ -4236,6 +4401,8 @@ void VkRhiCommandList::blitTexture(const RhiTextureBlit& blit) {
 }
 
 void VkRhiCommandList::generateMipmaps(const RhiTextureHandle textureHandle) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* texture = findRecord(m_device->m_data->textures, textureHandle);
     if (texture == nullptr || texture->desc.mipLevels < 2u ||
         (defaultAspectForFormat(texture->desc.format) & VK_IMAGE_ASPECT_COLOR_BIT) == 0u ||
@@ -4295,6 +4462,8 @@ void VkRhiCommandList::generateMipmaps(const RhiTextureHandle textureHandle) {
 void VkRhiCommandList::resetQueryPool(const RhiQueryPoolHandle pool,
                                       const uint32_t firstQuery,
                                       const uint32_t queryCount) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->queryPools, pool);
     if (record == nullptr || firstQuery > record->count || queryCount > record->count - firstQuery) {
         m_data->valid = false;
@@ -4306,6 +4475,8 @@ void VkRhiCommandList::resetQueryPool(const RhiQueryPoolHandle pool,
 
 void VkRhiCommandList::writeTimestamp(const RhiQueryPoolHandle pool,
                                       const uint32_t queryIndex) {
+    const std::shared_lock<std::shared_mutex> registryLock(
+        m_device->m_data->resourceRegistryMutex);
     const auto* record = findRecord(m_device->m_data->queryPools, pool);
     if (record == nullptr || queryIndex >= record->count) {
         m_data->valid = false;

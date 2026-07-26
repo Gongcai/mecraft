@@ -221,6 +221,13 @@ struct VkRhiDeviceData {
     std::mutex commandRegistryMutex;
     std::set<RhiCommandList*> commandLists;
     std::set<VkRhiCommandListPool*> commandListPools;
+    /// Guards every resource registry map, its handle allocator, and the
+    /// deferred-destruction queues. Command recording takes shared locks on
+    /// its per-command handle lookups while resource creation/destruction
+    /// takes exclusive locks, allowing render-graph batches to record on
+    /// worker threads concurrently with lazy resource creation.
+    /// Lock order: commandRegistryMutex before resourceRegistryMutex.
+    mutable std::shared_mutex resourceRegistryMutex;
 };
 
 struct VkRhiCommandListData {
@@ -238,6 +245,10 @@ struct VkRhiCommandListData {
     uint32_t renderingTargetWidth = 0u;
     uint32_t renderingTargetHeight = 0u;
     bool valid = true;
+    /// Set when GPU completion was observed on a foreign thread. The actual
+    /// vkResetCommandBuffer requires external synchronization of the owning
+    /// command pool, so the owner thread performs it on its next acquire.
+    std::atomic<bool> completedAwaitingReset{false};
     std::vector<std::pair<VkBuffer, VmaAllocation>> transientBuffers;
     std::vector<uint32_t> initializedSwapchainImages;
     VkRhiCommandResourceReferences resourceReferences;

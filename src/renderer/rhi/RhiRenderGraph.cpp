@@ -3,9 +3,12 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
+#include "thread/ThreadPool.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -381,6 +384,7 @@ struct RenderGraph::PassRecord {
   std::string name;
   RgPassType type = RgPassType::Graphics;
   RhiQueueType queue = RhiQueueType::Graphics;
+  bool threadSafeRecord = false;
   std::vector<RgTextureAccess> textureAccesses;
   std::vector<RgBufferAccess> bufferAccesses;
   std::vector<RgPassHandle> explicitDependencies;
@@ -590,8 +594,8 @@ RenderGraphPassBuilder RenderGraph::addPass(const RgPassDesc &desc) {
                     "render graph pass type is incompatible with its queue");
     return {*this, {}};
   }
-  m_passes.push_back(
-      {desc.name, desc.type, desc.queue, {}, {}, {}, {}, m_generation});
+  m_passes.push_back({desc.name, desc.type, desc.queue, desc.threadSafeRecord,
+                      {}, {}, {}, {}, m_generation});
   return {*this, {static_cast<uint32_t>(m_passes.size()), m_generation}};
 }
 
@@ -825,6 +829,7 @@ uint64_t RenderGraph::computeStructuralFingerprint() const {
     hasher.mixString(pass.name);
     hasher.mixValue(pass.type);
     hasher.mixValue(pass.queue);
+    hasher.mixValue(pass.threadSafeRecord);
     hasher.mixValue<uint64_t>(pass.textureAccesses.size());
     for (const RgTextureAccess &access : pass.textureAccesses) {
       hasher.mixValue(access.texture.index);
@@ -1115,6 +1120,7 @@ RgCompileResult RenderGraph::compile() {
     compiled.name = pass.name;
     compiled.type = pass.type;
     compiled.queue = pass.queue;
+    compiled.threadSafeRecord = pass.threadSafeRecord;
     for (const uint32_t dependency : reducedDependencies[originalIndex]) {
       compiled.dependencies.push_back(originalToCompiled[dependency]);
     }
@@ -1767,8 +1773,10 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     m_preRecordCallback();
   }
 
-  std::vector<RhiCommandList *> commandLists;
-  commandLists.reserve(m_submissionBatches.size());
+  // Indexed by submission batch so worker-recorded lists land in submission
+  // order regardless of recording order.
+  std::vector<RhiCommandList *> commandLists(m_submissionBatches.size(),
+                                             nullptr);
   const RhiCapabilities &capabilities = device.capabilities();
   struct RuntimeResourceState {
     RhiResourceState state = RhiResourceState::Undefined;
@@ -1804,9 +1812,13 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     state.lastUse = allocation.lastUse;
     return state;
   };
-  const auto recordTextureBarrier = [&](RhiCommandList &commandList,
-                                        const RgTextureBarrierPlan &barrier,
-                                        const RhiBarrierPhase requestedPhase) {
+  // Barrier resolution consumes and updates the live transient subresource
+  // states, so it must run serially in declaration order on the calling
+  // thread. Recording replays the pre-resolved barriers and can therefore be
+  // distributed across worker threads without touching shared graph state.
+  const auto resolveTextureBarrier =
+      [&](const RgTextureBarrierPlan &barrier,
+          const RhiBarrierPhase requestedPhase) -> RhiTextureBarrier {
     const uint32_t textureIndex = barrier.texture.index - 1u;
     const RuntimeResourceState runtime = textureRuntimeState(barrier);
     TransientTexture *allocation = nullptr;
@@ -1830,13 +1842,6 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
                  ownershipTransfer)
             ? requestedPhase
             : RhiBarrierPhase::Full;
-    commandList.textureBarrier(
-        {resolvedTextures[textureIndex], runtime.state, barrier.newState,
-         barrier.range.baseMip, barrier.range.mipCount, barrier.range.baseLayer,
-         barrier.range.layerCount, barrier.range.aspect,
-         ownershipTransfer ? sourceFamily : kRhiQueueFamilyIgnored,
-         ownershipTransfer ? destinationFamily : kRhiQueueFamilyIgnored,
-         phase});
     if (allocation != nullptr && phase != RhiBarrierPhase::Release) {
       const uint32_t layerCount =
           textureSubresourceLayerCount(allocation->desc);
@@ -1845,10 +1850,17 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
       allocation->states[subresource] = barrier.newState;
       allocation->queues[subresource] = barrier.destinationQueue;
     }
+    return {resolvedTextures[textureIndex], runtime.state, barrier.newState,
+            barrier.range.baseMip, barrier.range.mipCount,
+            barrier.range.baseLayer, barrier.range.layerCount,
+            barrier.range.aspect,
+            ownershipTransfer ? sourceFamily : kRhiQueueFamilyIgnored,
+            ownershipTransfer ? destinationFamily : kRhiQueueFamilyIgnored,
+            phase};
   };
-  const auto recordBufferBarrier = [&](RhiCommandList &commandList,
-                                       const RgBufferBarrierPlan &barrier,
-                                       const RhiBarrierPhase requestedPhase) {
+  const auto resolveBufferBarrier =
+      [&](const RgBufferBarrierPlan &barrier,
+          const RhiBarrierPhase requestedPhase) -> RhiBufferBarrier {
     const uint32_t bufferIndex = barrier.buffer.index - 1u;
     const RuntimeResourceState runtime = bufferRuntimeState(barrier);
     TransientBuffer *allocation = nullptr;
@@ -1872,16 +1884,25 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
                  ownershipTransfer)
             ? requestedPhase
             : RhiBarrierPhase::Full;
-    commandList.bufferBarrier(
-        {resolvedBuffers[bufferIndex], runtime.state, barrier.newState,
-         barrier.range.offset, barrier.range.size,
-         ownershipTransfer ? sourceFamily : kRhiQueueFamilyIgnored,
-         ownershipTransfer ? destinationFamily : kRhiQueueFamilyIgnored,
-         phase});
     if (allocation != nullptr && phase != RhiBarrierPhase::Release) {
       allocation->state = barrier.newState;
       allocation->queue = barrier.destinationQueue;
     }
+    return {resolvedBuffers[bufferIndex], runtime.state, barrier.newState,
+            barrier.range.offset, barrier.range.size,
+            ownershipTransfer ? sourceFamily : kRhiQueueFamilyIgnored,
+            ownershipTransfer ? destinationFamily : kRhiQueueFamilyIgnored,
+            phase};
+  };
+  const auto recordTextureBarrier = [&](RhiCommandList &commandList,
+                                        const RgTextureBarrierPlan &barrier,
+                                        const RhiBarrierPhase requestedPhase) {
+    commandList.textureBarrier(resolveTextureBarrier(barrier, requestedPhase));
+  };
+  const auto recordBufferBarrier = [&](RhiCommandList &commandList,
+                                       const RgBufferBarrierPlan &barrier,
+                                       const RhiBarrierPhase requestedPhase) {
+    commandList.bufferBarrier(resolveBufferBarrier(barrier, requestedPhase));
   };
 
   struct TransitionBatch {
@@ -1995,23 +2016,97 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
     }
   }
 
-  for (const RgSubmissionBatchPlan &batch : m_submissionBatches) {
-    const RhiCommandListType listType = commandListType(batch.queue);
-    RhiCommandList *const commandList = commandListPool.acquire(listType);
-    if (commandList == nullptr ||
-        !commandList->begin({"RenderGraph.Batch", listType})) {
-      return {RgExecuteError::CommandListUnavailable,
-              "failed to begin a render graph command list",
-              {}};
-    }
+  // Phase 1: resolve every batch's barriers serially. This keeps the
+  // transient state bookkeeping identical to the previous fully serial
+  // recording while making the per-batch recording bodies read-only.
+  struct PassRecordPlan {
+    uint32_t passIndex = 0u;
+    std::vector<RhiTextureBarrier> acquireTextureBarriers;
+    std::vector<RhiBufferBarrier> acquireBufferBarriers;
+    /// Post-pass barriers: cross-family releases followed by same-queue
+    /// epilogue transitions, in the order the serial recorder used.
+    std::vector<RhiTextureBarrier> postTextureBarriers;
+    std::vector<RhiBufferBarrier> postBufferBarriers;
+  };
+  struct BatchRecordPlan {
+    std::vector<PassRecordPlan> passes;
+    bool threadSafe = true;
+  };
+  std::vector<BatchRecordPlan> batchPlans(m_submissionBatches.size());
+  for (uint32_t batchIndex = 0u; batchIndex < m_submissionBatches.size();
+       ++batchIndex) {
+    const RgSubmissionBatchPlan &batch = m_submissionBatches[batchIndex];
+    BatchRecordPlan &plan = batchPlans[batchIndex];
+    plan.passes.reserve(batch.passes.size());
     for (const uint32_t passIndex : batch.passes) {
       const RgCompiledPass &compiledPass = m_compiledPasses[passIndex];
+      plan.threadSafe = plan.threadSafe && compiledPass.threadSafeRecord;
+      PassRecordPlan passPlan;
+      passPlan.passIndex = passIndex;
       for (const RgTextureBarrierPlan &barrier : compiledPass.textureBarriers) {
-        recordTextureBarrier(*commandList, barrier, RhiBarrierPhase::Acquire);
+        passPlan.acquireTextureBarriers.push_back(
+            resolveTextureBarrier(barrier, RhiBarrierPhase::Acquire));
       }
       for (const RgBufferBarrierPlan &barrier : compiledPass.bufferBarriers) {
-        recordBufferBarrier(*commandList, barrier, RhiBarrierPhase::Acquire);
+        passPlan.acquireBufferBarriers.push_back(
+            resolveBufferBarrier(barrier, RhiBarrierPhase::Acquire));
       }
+      for (const RgTextureBarrierPlan &barrier :
+           compiledPass.releaseTextureBarriers) {
+        if (queueFamily(capabilities, barrier.sourceQueue) !=
+            queueFamily(capabilities, barrier.destinationQueue)) {
+          passPlan.postTextureBarriers.push_back(
+              resolveTextureBarrier(barrier, RhiBarrierPhase::Release));
+        }
+      }
+      for (const RgBufferBarrierPlan &barrier :
+           compiledPass.releaseBufferBarriers) {
+        if (queueFamily(capabilities, barrier.sourceQueue) !=
+            queueFamily(capabilities, barrier.destinationQueue)) {
+          passPlan.postBufferBarriers.push_back(
+              resolveBufferBarrier(barrier, RhiBarrierPhase::Release));
+        }
+      }
+      for (const RgTextureBarrierPlan &barrier : m_epilogueTextureBarriers) {
+        if (barrier.sourcePass != passIndex ||
+            barrier.sourceQueue != barrier.destinationQueue)
+          continue;
+        passPlan.postTextureBarriers.push_back(
+            resolveTextureBarrier(barrier, RhiBarrierPhase::Full));
+      }
+      for (const RgBufferBarrierPlan &barrier : m_epilogueBufferBarriers) {
+        if (barrier.sourcePass != passIndex ||
+            barrier.sourceQueue != barrier.destinationQueue)
+          continue;
+        passPlan.postBufferBarriers.push_back(
+            resolveBufferBarrier(barrier, RhiBarrierPhase::Full));
+      }
+      plan.passes.push_back(std::move(passPlan));
+    }
+  }
+
+  // Phase 2: record batch command lists. The body below is shared by the
+  // serial path and the worker tasks; it only reads state resolved above.
+  const auto recordBatchCommands =
+      [&](const uint32_t batchIndex, RhiCommandListPool &pool,
+          RgExecuteError &error, std::string &message) -> bool {
+    const RgSubmissionBatchPlan &batch = m_submissionBatches[batchIndex];
+    const BatchRecordPlan &plan = batchPlans[batchIndex];
+    const RhiCommandListType listType = commandListType(batch.queue);
+    RhiCommandList *const commandList = pool.acquire(listType);
+    if (commandList == nullptr ||
+        !commandList->begin({"RenderGraph.Batch", listType})) {
+      error = RgExecuteError::CommandListUnavailable;
+      message = "failed to begin a render graph command list";
+      return false;
+    }
+    for (const PassRecordPlan &passPlan : plan.passes) {
+      const uint32_t passIndex = passPlan.passIndex;
+      const RgCompiledPass &compiledPass = m_compiledPasses[passIndex];
+      for (const RhiTextureBarrier &barrier : passPlan.acquireTextureBarriers)
+        commandList->textureBarrier(barrier);
+      for (const RhiBufferBarrier &barrier : passPlan.acquireBufferBarriers)
+        commandList->bufferBarrier(barrier);
 
       const uint32_t firstTimestampQuery = passIndex * 2u;
       commandList->writeTimestamp(timingSlot->queryPool, firstTimestampQuery);
@@ -2024,54 +2119,107 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
       if (!pass.execute(context)) {
         commandList->endDebugLabel();
         static_cast<void>(commandList->end());
-        return {RgExecuteError::PassExecutionFailed,
-                "render graph pass '" + compiledPass.name + "' failed",
-                {}};
+        error = RgExecuteError::PassExecutionFailed;
+        message = "render graph pass '" + compiledPass.name + "' failed";
+        return false;
       }
       commandList->writeTimestamp(timingSlot->queryPool,
                                   firstTimestampQuery + 1u);
       commandList->endDebugLabel();
 
-      for (const RgTextureBarrierPlan &barrier :
-           compiledPass.releaseTextureBarriers) {
-        const uint32_t sourceFamily =
-            queueFamily(capabilities, barrier.sourceQueue);
-        const uint32_t destinationFamily =
-            queueFamily(capabilities, barrier.destinationQueue);
-        if (sourceFamily != destinationFamily) {
-          recordTextureBarrier(*commandList, barrier, RhiBarrierPhase::Release);
-        }
-      }
-      for (const RgBufferBarrierPlan &barrier :
-           compiledPass.releaseBufferBarriers) {
-        const uint32_t sourceFamily =
-            queueFamily(capabilities, barrier.sourceQueue);
-        const uint32_t destinationFamily =
-            queueFamily(capabilities, barrier.destinationQueue);
-        if (sourceFamily != destinationFamily) {
-          recordBufferBarrier(*commandList, barrier, RhiBarrierPhase::Release);
-        }
-      }
-
-      for (const RgTextureBarrierPlan &barrier : m_epilogueTextureBarriers) {
-        if (barrier.sourcePass != passIndex ||
-            barrier.sourceQueue != barrier.destinationQueue)
-          continue;
-        recordTextureBarrier(*commandList, barrier, RhiBarrierPhase::Full);
-      }
-      for (const RgBufferBarrierPlan &barrier : m_epilogueBufferBarriers) {
-        if (barrier.sourcePass != passIndex ||
-            barrier.sourceQueue != barrier.destinationQueue)
-          continue;
-        recordBufferBarrier(*commandList, barrier, RhiBarrierPhase::Full);
-      }
+      for (const RhiTextureBarrier &barrier : passPlan.postTextureBarriers)
+        commandList->textureBarrier(barrier);
+      for (const RhiBufferBarrier &barrier : passPlan.postBufferBarriers)
+        commandList->bufferBarrier(barrier);
     }
     if (!commandList->end()) {
-      return {RgExecuteError::CommandRecordingFailed,
-              "failed to end a render graph command list",
-              {}};
+      error = RgExecuteError::CommandRecordingFailed;
+      message = "failed to end a render graph command list";
+      return false;
     }
-    commandLists.push_back(commandList);
+    commandLists[batchIndex] = commandList;
+    return true;
+  };
+
+  // Worker-eligible batches are dispatched first so they overlap the main
+  // thread's recording of the remaining batches. GL backends require the
+  // device thread for all recording, so threading is Vulkan-only.
+  const bool workerRecordingEnabled =
+      m_recordThreadPool != nullptr && m_recordThreadPool->isRunning() &&
+      m_recordThreadPool->numWorkers() > 0 &&
+      device.backend() == RhiBackend::Vulkan;
+  std::vector<uint8_t> recordedByWorker(m_submissionBatches.size(), 0u);
+  std::atomic<uint32_t> pendingWorkerBatches{0u};
+  std::mutex workerMutex;
+  std::condition_variable workerCondition;
+  std::atomic<bool> workerFailed{false};
+  RgExecuteError workerError = RgExecuteError::None;
+  std::string workerErrorMessage;
+  uint32_t workerBatchCount = 0u;
+  if (workerRecordingEnabled) {
+    for (uint32_t batchIndex = 0u; batchIndex < m_submissionBatches.size();
+         ++batchIndex) {
+      if (!batchPlans[batchIndex].threadSafe)
+        continue;
+      recordedByWorker[batchIndex] = 1u;
+      ++workerBatchCount;
+      pendingWorkerBatches.fetch_add(1u, std::memory_order_relaxed);
+      m_recordThreadPool->submit(
+          [&, batchIndex]() {
+            RgExecuteError error = RgExecuteError::None;
+            std::string message;
+            RhiCommandListPool *const workerPool =
+                acquireWorkerCommandListPool(device);
+            bool recorded = false;
+            if (workerPool == nullptr) {
+              error = RgExecuteError::CommandListUnavailable;
+              message = "failed to create a worker command list pool";
+            } else {
+              recorded =
+                  recordBatchCommands(batchIndex, *workerPool, error, message);
+            }
+            if (!recorded && !workerFailed.exchange(
+                                 true, std::memory_order_acq_rel)) {
+              const std::lock_guard<std::mutex> lock(workerMutex);
+              workerError = error;
+              workerErrorMessage = std::move(message);
+            }
+            {
+              const std::lock_guard<std::mutex> lock(workerMutex);
+              pendingWorkerBatches.fetch_sub(1u, std::memory_order_acq_rel);
+            }
+            workerCondition.notify_all();
+          },
+          0);
+    }
+  }
+
+  bool mainRecordingSucceeded = true;
+  RgExecuteError mainError = RgExecuteError::None;
+  std::string mainErrorMessage;
+  for (uint32_t batchIndex = 0u; batchIndex < m_submissionBatches.size();
+       ++batchIndex) {
+    if (recordedByWorker[batchIndex] != 0u)
+      continue;
+    if (!recordBatchCommands(batchIndex, commandListPool, mainError,
+                             mainErrorMessage)) {
+      mainRecordingSucceeded = false;
+      break;
+    }
+  }
+  // Always join outstanding workers before leaving this scope: their tasks
+  // reference stack state owned by this execute call.
+  if (workerBatchCount != 0u) {
+    std::unique_lock<std::mutex> lock(workerMutex);
+    workerCondition.wait(lock, [&]() {
+      return pendingWorkerBatches.load(std::memory_order_acquire) == 0u;
+    });
+  }
+  if (!mainRecordingSucceeded) {
+    return {mainError, std::move(mainErrorMessage), {}};
+  }
+  if (workerFailed.load(std::memory_order_acquire)) {
+    return {workerError, std::move(workerErrorMessage), {}};
   }
 
   std::vector<TransitionBatch> epilogueBatches;
@@ -2139,6 +2287,7 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
   result.recordMilliseconds =
       std::chrono::duration<double, std::milli>(submitStart - executeStart)
           .count();
+  result.workerRecordedBatchCount = workerBatchCount;
   result.submissions.reserve(prologueBatches.size() +
                              m_submissionBatches.size() +
                              epilogueBatches.size());
@@ -2359,6 +2508,33 @@ RgExecuteResult RenderGraph::execute(RhiDevice &device,
   return result;
 }
 
+RhiCommandListPool *
+RenderGraph::acquireWorkerCommandListPool(RhiDevice &device) {
+  const std::thread::id thread = std::this_thread::get_id();
+  {
+    const std::lock_guard<std::mutex> lock(m_workerPoolMutex);
+    const auto existing = m_workerCommandListPools.find(thread);
+    if (existing != m_workerCommandListPools.end())
+      return existing->second.get();
+  }
+  // Create outside the map lock: backend pools bind their owner thread at
+  // construction, which is exactly the calling worker thread here.
+  RhiCommandListPoolDesc desc;
+  desc.debugName = "RenderGraph.WorkerCommandListPool";
+  std::unique_ptr<RhiCommandListPool> pool = device.createCommandListPool(desc);
+  if (pool == nullptr)
+    return nullptr;
+  RhiCommandListPool *const created = pool.get();
+  const std::lock_guard<std::mutex> lock(m_workerPoolMutex);
+  m_workerCommandListPools.emplace(thread, std::move(pool));
+  return created;
+}
+
+void RenderGraph::destroyWorkerCommandListPools() {
+  const std::lock_guard<std::mutex> lock(m_workerPoolMutex);
+  m_workerCommandListPools.clear();
+}
+
 RgTimingPollResult RenderGraph::pollTimings(RhiDevice &device) {
   if (m_runtimeDevice != nullptr && m_runtimeDevice != &device)
     return RgTimingPollResult::Error;
@@ -2418,6 +2594,9 @@ RgTimingPollResult RenderGraph::pollTimings(RhiDevice &device) {
 void RenderGraph::releaseTransientResources(RhiDevice &device) {
   if (m_runtimeDevice != nullptr && m_runtimeDevice != &device)
     return;
+  // Worker pools are device objects: destroy them before the device can be
+  // shut down. They are recreated lazily if the graph executes again.
+  destroyWorkerCommandListPools();
   for (const TransientTexture &texture : m_transientTextures) {
     if (texture.view.isValid())
       device.destroyTextureView(texture.view);

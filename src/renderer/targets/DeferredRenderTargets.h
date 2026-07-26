@@ -6,6 +6,7 @@
 #include "renderer/rhi/RhiTypes.h"
 
 #include <cstdint>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -446,6 +447,10 @@ private:
     RhiTextureHandle m_velocityHandle;
     RhiTextureViewHandle m_velocityView;
     RhiDevice* m_rhiViewDevice = nullptr;
+    /// Serializes the lazy ensure*TextureView creation paths: render-graph
+    /// passes may call them concurrently from worker recording threads.
+    /// Recursive because some ensure functions delegate to others.
+    mutable std::recursive_mutex m_rhiViewMutex;
 
     // Per-object velocity (RG16F): written by entity/drop GBuffer shaders as an MRT color attachment.
     // Consumed by velocity_resolve.fs.

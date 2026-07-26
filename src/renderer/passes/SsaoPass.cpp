@@ -76,7 +76,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
         // on compute queues, so the whole chain stays on one queue and no
         // graphics batch has to wait for it before the shadow work.
         RenderGraphPassBuilder base = graph.addPass(
-            {"SSAO.Base", RgPassType::Compute, RhiQueueType::Compute});
+            {"SSAO.Base", RgPassType::Compute, RhiQueueType::Compute,
+             /*threadSafeRecord=*/true});
         base.dependsOn(dependency)
             .readTexture(resources.depth, RhiResourceState::ShaderRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
@@ -90,7 +91,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
 
         if (ssao.filterEnabled) {
             RenderGraphPassBuilder filter = graph.addPass(
-                {"SSAO.Filter", RgPassType::Compute, RhiQueueType::Compute});
+                {"SSAO.Filter", RgPassType::Compute, RhiQueueType::Compute,
+                 /*threadSafeRecord=*/true});
             filter.dependsOn(previous)
                 .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
                 .readTexture(resources.depth, RhiResourceState::ShaderRead)
@@ -108,7 +110,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
             ? resources.halfResFiltered
             : resources.halfRes;
         RenderGraphPassBuilder upsample = graph.addPass(
-            {"SSAO.Upsample", RgPassType::Compute, RhiQueueType::Compute});
+            {"SSAO.Upsample", RgPassType::Compute, RhiQueueType::Compute,
+             /*threadSafeRecord=*/true});
         upsample.dependsOn(previous)
             .readTexture(halfInput, RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::ShaderRead)
@@ -121,7 +124,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
 
         if (temporalEnabled) {
             RenderGraphPassBuilder temporal = graph.addPass(
-                {"SSAO.Temporal", RgPassType::Compute, RhiQueueType::Compute});
+                {"SSAO.Temporal", RgPassType::Compute, RhiQueueType::Compute,
+                 /*threadSafeRecord=*/true});
             temporal.dependsOn(previous)
                 .readTexture(resources.filtered, RhiResourceState::ShaderRead)
                 .readTexture(resources.historyPrevious,
@@ -137,7 +141,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
             previous = temporal.handle();
 
             RenderGraphPassBuilder historyCopy = graph.addPass(
-                {"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Compute});
+                {"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Compute,
+                 /*threadSafeRecord=*/true});
             historyCopy.dependsOn(previous)
                 .readTexture(resources.temporal, RhiResourceState::TransferSrc)
                 .writeTexture(resources.historyCurrent,
@@ -152,7 +157,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
     }
 
     RenderGraphPassBuilder base = graph.addPass(
-        {"SSAO.Base", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"SSAO.Base", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     base.dependsOn(dependency)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
         .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
@@ -166,7 +172,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
 
     if (ssao.filterEnabled) {
         RenderGraphPassBuilder filter = graph.addPass(
-            {"SSAO.Filter", RgPassType::Graphics, RhiQueueType::Graphics});
+            {"SSAO.Filter", RgPassType::Graphics, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         filter.dependsOn(previous)
             .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
@@ -184,7 +191,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
         ? resources.halfResFiltered
         : resources.halfRes;
     RenderGraphPassBuilder upsample = graph.addPass(
-        {"SSAO.Upsample", RgPassType::Graphics, RhiQueueType::Graphics});
+        {"SSAO.Upsample", RgPassType::Graphics, RhiQueueType::Graphics,
+         /*threadSafeRecord=*/true});
     upsample.dependsOn(previous)
         .readTexture(halfResInput, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
@@ -197,7 +205,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
 
     if (temporalEnabled) {
         RenderGraphPassBuilder temporal = graph.addPass(
-            {"SSAO.Temporal", RgPassType::Graphics, RhiQueueType::Graphics});
+            {"SSAO.Temporal", RgPassType::Graphics, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         temporal.dependsOn(previous)
             .readTexture(resources.filtered, RhiResourceState::ShaderRead)
             .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
@@ -211,7 +220,8 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
         previous = temporal.handle();
 
         RenderGraphPassBuilder historyCopy = graph.addPass(
-            {"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics});
+            {"SSAO.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         historyCopy.dependsOn(previous)
             .readTexture(resources.temporal, RhiResourceState::TransferSrc)
             .writeTexture(resources.historyCurrent, RhiResourceState::TransferDst)

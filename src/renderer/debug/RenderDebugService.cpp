@@ -329,6 +329,7 @@ GpuTimerSegmentToken RenderDebugService::beginGpuTimer(RhiCommandList& commandLi
         return {};
     }
 
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     const size_t passIndex = static_cast<size_t>(pass);
     if (passIndex >= GPU_TIMER_PASS_COUNT) {
         std::abort();
@@ -359,6 +360,7 @@ void RenderDebugService::endGpuTimer(RhiCommandList& commandList,
         return;
     }
 
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     const size_t passIndex = static_cast<size_t>(token.pass);
     if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex ||
         passIndex >= GPU_TIMER_PASS_COUNT ||
@@ -379,6 +381,7 @@ void RenderDebugService::cancelGpuTimer(const GpuTimerSegmentToken token) {
         return;
     }
 
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     const size_t passIndex = static_cast<size_t>(token.pass);
     if (!m_gpuTimersInitialized || token.frameIndex != m_gpuTimerWriteIndex ||
         passIndex >= GPU_TIMER_PASS_COUNT ||
@@ -395,6 +398,7 @@ GpuTimerCheckpoint RenderDebugService::gpuTimerCheckpoint() const {
     if (!m_gpuTimersInitialized || !m_gpuTimerEnabled || !m_gpuTimerCanIssueThisFrame) {
         return {};
     }
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     return {
         m_gpuTimerAllocatedSegmentCounts[m_gpuTimerWriteIndex],
         static_cast<uint8_t>(m_gpuTimerWriteIndex),
@@ -406,6 +410,7 @@ void RenderDebugService::cancelGpuTimersSince(const GpuTimerCheckpoint& checkpoi
     if (!checkpoint.valid) {
         return;
     }
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     if (!m_gpuTimersInitialized || checkpoint.frameIndex != m_gpuTimerWriteIndex) {
         std::abort();
     }
@@ -470,6 +475,7 @@ void RenderDebugService::recordShadowFrameTotals(const int submitted, const int 
 void RenderDebugService::markShadowTimestamp(RhiCommandList& commandList,
                                              const int cascadeIndex,
                                              const ShadowTimestampPoint point) {
+    const std::lock_guard<std::mutex> timerLock(m_gpuTimerMutex);
     if (!m_shadowFrameActive || cascadeIndex < 0 ||
         cascadeIndex >= static_cast<int>(SHADOW_TIMER_CASCADE_COUNT)) {
         return;

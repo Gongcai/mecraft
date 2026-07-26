@@ -64,7 +64,7 @@ RgPassHandle DepthOfFieldPass::addGraphPasses(
 
     RenderGraphPassBuilder dof = graph.addPass(
         {"DepthOfField.Resolve", RgPassType::Graphics,
-         RhiQueueType::Graphics});
+         RhiQueueType::Graphics, /*threadSafeRecord=*/true});
     dof.dependsOn(dependency)
         .readTexture(inputTexture, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)

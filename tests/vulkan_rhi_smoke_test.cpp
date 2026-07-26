@@ -5,6 +5,7 @@
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
 #include "renderer/passes/TemporalUpscalePass.h"
 #include "renderer/presentation/PresentationController.h"
+#include "thread/ThreadPool.h"
 
 #if defined(MECRAFT_ENABLE_FSR31)
 #include "renderer/upscaling/Fsr31VulkanContext.h"
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -1468,6 +1470,158 @@ void main() {
            device.validationErrorCount() == validationErrorsBefore;
 }
 
+// Builds a graph of independent thread-safe copy passes spanning multiple
+// submission batches and executes it with worker-thread recording enabled.
+// Validates payload correctness through a readback and that at least one
+// batch was actually recorded off the calling thread.
+[[nodiscard]] bool validateRenderGraphMultithreadedRecord(
+    VkRhiDevice& device, RhiCommandListPool& commandPool) {
+    constexpr uint32_t kPassCount = 12u;
+    constexpr uint64_t kChunkSize = 16u;
+    constexpr uint64_t kPayloadSize = kPassCount * kChunkSize;
+
+    std::array<uint32_t, kPayloadSize / sizeof(uint32_t)> payload{};
+    for (uint32_t index = 0u; index < payload.size(); ++index) {
+        payload[index] = 0x9E3779B9u * (index + 1u);
+    }
+
+    RhiBufferDesc sourceDesc;
+    sourceDesc.debugName = "VulkanSmoke.MtRecord.Source";
+    sourceDesc.size = kPayloadSize;
+    sourceDesc.usage = rhiFlag(RhiBufferUsage::TransferSrc) |
+                       rhiFlag(RhiBufferUsage::TransferDst);
+    sourceDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+    sourceDesc.initialState = RhiResourceState::TransferSrc;
+    const RhiBufferHandle source =
+        device.createBuffer(sourceDesc, payload.data(), kPayloadSize);
+    if (!source.isValid()) {
+        return false;
+    }
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.MtRecord.Readback";
+    readbackDesc.size = kPayloadSize;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    const RhiBufferHandle readback =
+        device.createBuffer(readbackDesc, nullptr, 0u);
+    if (!readback.isValid()) {
+        device.destroyBuffer(source);
+        return false;
+    }
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    ThreadPool workerPool(2);
+    workerPool.start();
+    bool valid = true;
+    {
+        RenderGraph graph;
+        graph.setRecordThreading(&workerPool);
+
+        // Two frames: the second one exercises worker command-list pool
+        // reuse and the cross-thread completion recycling path.
+        const auto executeFrame =
+            [&](const RhiResourceState readbackInitialState) {
+            graph.reset();
+            const RgBufferHandle importedSource = graph.importBuffer(
+                {"MtSource", source, sourceDesc, RhiResourceState::TransferSrc,
+                 RhiResourceState::TransferSrc, RhiQueueType::Graphics,
+                 RhiQueueType::Graphics});
+            RhiBufferDesc importedReadbackDesc = readbackDesc;
+            importedReadbackDesc.initialState = readbackInitialState;
+            const RgBufferHandle importedReadback = graph.importBuffer(
+                {"MtReadback", readback, importedReadbackDesc,
+                 readbackInitialState, RhiResourceState::HostRead,
+                 RhiQueueType::Graphics, RhiQueueType::Graphics});
+
+            // Twelve independent chunk copies exceed the per-batch pass cap,
+            // producing at least two worker-eligible submission batches.
+            char passNames[kPassCount][32];
+            for (uint32_t pass = 0u; pass < kPassCount; ++pass) {
+                std::snprintf(passNames[pass], sizeof(passNames[pass]),
+                              "MtRecord.Copy%u", pass);
+                const uint64_t offset = pass * kChunkSize;
+                graph
+                    .addPass({passNames[pass], RgPassType::Copy,
+                              RhiQueueType::Graphics,
+                              /*threadSafeRecord=*/true})
+                    .readBuffer(importedSource, RhiResourceState::TransferSrc,
+                                {offset, kChunkSize})
+                    .writeBuffer(importedReadback,
+                                 RhiResourceState::TransferDst,
+                                 {offset, kChunkSize})
+                    .setExecute([&, offset](RgPassContext& context) {
+                        context.commandList().copyBuffer(
+                            {context.buffer(importedSource),
+                             context.buffer(importedReadback), offset, offset,
+                             kChunkSize});
+                        return true;
+                    });
+            }
+
+            const RgCompileResult compiled = graph.compile();
+            if (!compiled.succeeded()) {
+                std::cerr << "Render Graph MT record compile failed: "
+                          << compiled.message << '\n';
+                return false;
+            }
+            const size_t batchCount = graph.submissionBatches().size();
+            if (batchCount < 2u) {
+                std::cerr << "Render Graph MT record produced too few "
+                             "batches\n";
+                return false;
+            }
+            const RgExecuteResult executed = graph.execute(device, commandPool);
+            if (!executed.succeeded()) {
+                std::cerr << "Render Graph MT record execution failed: "
+                          << executed.message << '\n';
+                return false;
+            }
+            if (executed.workerRecordedBatchCount !=
+                static_cast<uint32_t>(batchCount)) {
+                std::cerr << "Render Graph MT record worker batch count "
+                          << executed.workerRecordedBatchCount
+                          << " does not match batch count " << batchCount
+                          << '\n';
+                return false;
+            }
+            if (!device.waitForSubmission(executed.completionToken())) {
+                std::cerr << "Render Graph MT record wait failed\n";
+                return false;
+            }
+            // Collecting timings forces submission-completion polling, which
+            // marks worker-recorded lists for owner-thread recycling.
+            if (graph.pollTimings(device) == RgTimingPollResult::Error) {
+                std::cerr << "Render Graph MT record timing poll failed\n";
+                return false;
+            }
+            const auto* mapped = static_cast<const uint32_t*>(
+                device.mapBuffer(readback, 0u, kPayloadSize));
+            if (mapped == nullptr) {
+                return false;
+            }
+            const bool payloadMatches =
+                std::equal(payload.begin(), payload.end(), mapped);
+            device.unmapBuffer(readback);
+            if (!payloadMatches) {
+                std::cerr << "Render Graph MT record payload mismatch\n";
+                return false;
+            }
+            return true;
+        };
+
+        valid = executeFrame(RhiResourceState::TransferDst) &&
+                executeFrame(RhiResourceState::HostRead);
+        graph.releaseTransientResources(device);
+    }
+    workerPool.shutdown();
+    device.destroyBuffer(readback);
+    device.destroyBuffer(source);
+    return valid && device.validationErrorCount() == validationErrorsBefore;
+}
+
 [[nodiscard]] bool validateRenderGraphTextureAliasing(
     VkRhiDevice& device, RhiCommandListPool& commandPool) {
     constexpr uint32_t kSizeA = 64u;
@@ -1956,6 +2110,7 @@ int main() {
                                textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
         !validateRenderGraphMultiQueue(device, *commandPool) ||
+        !validateRenderGraphMultithreadedRecord(device, *commandPool) ||
         !validateRenderGraphTextureAliasing(device, *commandPool) ||
         !validateIndependentUiPresentation(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||

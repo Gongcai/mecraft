@@ -150,7 +150,8 @@ RgPassHandle VolumetricPass::addGraphPasses(
             return {};
         }
         RenderGraphPassBuilder fog = graph.addPass(
-            {"Volumetric.Fog", RgPassType::Graphics, RhiQueueType::Graphics});
+            {"Volumetric.Fog", RgPassType::Graphics, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         fog.dependsOn(tail)
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
@@ -174,7 +175,7 @@ RgPassHandle VolumetricPass::addGraphPasses(
         }
         RenderGraphPassBuilder reuse = graph.addPass(
             {"Volumetric.HistoryReuse", RgPassType::Copy,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         reuse.dependsOn(tail)
             .readTexture(resources.historyPrevious, RhiResourceState::TransferSrc)
             .writeTexture(resources.halfRes, RhiResourceState::TransferDst)
@@ -203,7 +204,7 @@ RgPassHandle VolumetricPass::addGraphPasses(
         }
         RenderGraphPassBuilder temporal = graph.addPass(
             {"Volumetric.Temporal", RgPassType::Graphics,
-             RhiQueueType::Graphics});
+             RhiQueueType::Graphics, /*threadSafeRecord=*/true});
         temporal.dependsOn(tail)
             .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
             .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
@@ -227,7 +228,7 @@ RgPassHandle VolumetricPass::addGraphPasses(
     }
     RenderGraphPassBuilder composite = graph.addPass(
         {"Volumetric.Composite", RgPassType::Graphics,
-         RhiQueueType::Graphics});
+         RhiQueueType::Graphics, /*threadSafeRecord=*/true});
     composite.dependsOn(tail)
         .readTexture(resources.sceneComposite, RhiResourceState::ShaderRead)
         .readTexture(volumetricInput, RhiResourceState::ShaderRead)

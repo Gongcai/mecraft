@@ -46,7 +46,8 @@ RgPassHandle HiZPass::addGraphPasses(RenderGraph& graph,
         char passName[32];
         std::snprintf(passName, sizeof(passName), "HiZ.Mip%u", mip);
         RenderGraphPassBuilder pass = graph.addPass(
-            {passName, RgPassType::Compute, RhiQueueType::Graphics});
+            {passName, RgPassType::Compute, RhiQueueType::Graphics,
+             /*threadSafeRecord=*/true});
         RgTextureSubresourceRange destRange;
         destRange.baseMip = mip;
         destRange.mipCount = 1u;
