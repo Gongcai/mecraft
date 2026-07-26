@@ -3,6 +3,7 @@
 
 #include "RenderPass.h"
 #include "../rhi/RhiHandles.h"
+#include "../rhi/RhiRenderGraph.h"
 
 #include <cstdint>
 #include <glm/vec4.hpp>
@@ -24,6 +25,7 @@ public:
 
     bool execute(RhiDevice& rhiDevice,
                  RhiTextureViewHandle swapchainColorView,
+                 RhiTextureHandle inputTexture,
                  RhiTextureViewHandle inputView,
                  int inputWidth,
                  int inputHeight,
@@ -75,6 +77,7 @@ private:
     RhiTextureViewHandle m_easuView;
     int m_width = 0;
     int m_height = 0;
+    RenderGraph m_renderGraph;
 };
 
 #endif // MECRAFT_FSR1_PASS_H

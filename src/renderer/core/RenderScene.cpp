@@ -764,6 +764,7 @@ void RenderScene::renderGameplayFrame(const RenderGameplayFrameRequest& request)
                 if (!m_fsr1Pass.execute(
                         *m_shared.rhiDevice,
                         m_currentContext.swapchainColorView,
+                        postTexture,
                         m_postProcessPass.compositeTextureViewHandle(),
                         inputWidth,
                         inputHeight,

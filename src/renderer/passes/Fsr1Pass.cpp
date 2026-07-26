@@ -64,6 +64,7 @@ void Fsr1Pass::submitCommandList(RhiDevice& rhiDevice,
 
 bool Fsr1Pass::execute(RhiDevice& rhiDevice,
                        const RhiTextureViewHandle swapchainColorView,
+                       const RhiTextureHandle inputTexture,
                        const RhiTextureViewHandle inputView,
                        const int inputWidth,
                        const int inputHeight,
@@ -71,7 +72,8 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
                        const int outputHeight,
                        const float sharpness,
                        RenderDebugService& debugService) {
-    if (!isSupported(rhiDevice) || !inputView.isValid() || !swapchainColorView.isValid() ||
+    if (!isSupported(rhiDevice) || !inputTexture.isValid() ||
+        !inputView.isValid() || !swapchainColorView.isValid() ||
         inputWidth <= 0 || inputHeight <= 0 || outputWidth <= 0 || outputHeight <= 0) {
         return false;
     }
@@ -94,92 +96,133 @@ bool Fsr1Pass::execute(RhiDevice& rhiDevice,
                           static_cast<float>(outputWidth),
                           static_cast<float>(outputHeight));
 
-    RhiColorAttachment easuAttachment;
-    easuAttachment.view = m_easuView;
-    easuAttachment.loadOp = RhiLoadOp::DontCare;
-    easuAttachment.storeOp = RhiStoreOp::Store;
-
-    RhiRenderingInfo easuRenderingInfo;
-    easuRenderingInfo.debugName = "FSR1EASU";
-    easuRenderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, outputWidth)),
-        static_cast<uint32_t>(std::max(1, outputHeight))
-    };
-    easuRenderingInfo.colorAttachments = &easuAttachment;
-    easuRenderingInfo.colorAttachmentCount = 1u;
-
-    RhiCommandList& easuCommandList = beginCommandList("FSR1.EASU.Commands");
-    const GpuTimerSegmentToken easuTimerToken = debugService.beginGpuTimer(
-        easuCommandList, GpuTimerPass::Post);
-    easuCommandList.textureBarrier({
-        m_easuHandle,
-        RhiResourceState::ShaderRead,
-        RhiResourceState::RenderTarget
-    });
-    easuCommandList.beginRendering(easuRenderingInfo);
-    easuCommandList.setGraphicsPipeline(m_easuPipeline);
-    easuCommandList.setBindGroup(0u, m_easuBindGroup);
     const glm::vec4 easuPushConstants[4] = {
         con0,
         con1,
         con2,
         con3
     };
-    easuCommandList.pushConstants(easuPushConstants, sizeof(easuPushConstants), rhiFlag(RhiShaderStage::Fragment));
-    easuCommandList.draw(3u, 1u, 0u, 0u);
-    easuCommandList.endRendering();
-    easuCommandList.textureBarrier({
-        m_easuHandle,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::ShaderRead
-    });
-    debugService.endGpuTimer(easuCommandList, easuTimerToken);
-    submitCommandList(rhiDevice, easuCommandList, "FSR1.EASU.Submit");
-
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = swapchainColorView;
-    colorAttachment.loadOp = RhiLoadOp::Load;
-    colorAttachment.storeOp = RhiStoreOp::Store;
-
-    RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "FSR1Backbuffer";
-    renderingInfo.renderArea = {
-        0,
-        0,
-        static_cast<uint32_t>(std::max(1, outputWidth)),
-        static_cast<uint32_t>(std::max(1, outputHeight))
-    };
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1;
-
-    RhiCommandList& commandList = beginCommandList("FSR1.RCAS.Commands");
-    const GpuTimerSegmentToken rcasTimerToken = debugService.beginGpuTimer(
-        commandList, GpuTimerPass::Post);
-    const RhiTextureHandle swapchainTexture = rhiDevice.currentSwapchainColorTexture();
-    if (!swapchainTexture.isValid()) {
-        std::abort();
-    }
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::Present,
-        RhiResourceState::RenderTarget
-    });
-    commandList.beginRendering(renderingInfo);
-    commandList.setGraphicsPipeline(m_rcasPipeline);
-    commandList.setBindGroup(0u, m_rcasBindGroup);
     const glm::vec4 rcasPushConstants = populateRcasConstants(sharpness);
-    commandList.pushConstants(&rcasPushConstants, sizeof(rcasPushConstants), rhiFlag(RhiShaderStage::Fragment));
-    commandList.draw(3u, 1u, 0u, 0u);
-    commandList.endRendering();
-    commandList.textureBarrier({
-        swapchainTexture,
-        RhiResourceState::RenderTarget,
-        RhiResourceState::Present
-    });
-    debugService.endGpuTimer(commandList, rcasTimerToken);
-    submitCommandList(rhiDevice, commandList, "FSR1.RCAS.Submit");
+
+    const RhiTextureHandle swapchainTexture =
+        rhiDevice.currentSwapchainColorTexture();
+    if (!swapchainTexture.isValid()) {
+        return false;
+    }
+
+    m_renderGraph.reset();
+    const auto importTexture = [&](const RhiTextureHandle texture,
+                                   const RhiTextureViewHandle view,
+                                   const RhiResourceState stableState,
+                                   RgTextureHandle& graphTexture) {
+        RhiTextureDesc desc;
+        if (!rhiDevice.getTextureDesc(texture, desc)) {
+            return false;
+        }
+        RgImportedTextureDesc imported;
+        imported.name = desc.debugName;
+        imported.texture = texture;
+        imported.desc = desc;
+        imported.initialState = stableState;
+        imported.finalState = stableState;
+        imported.defaultView = view;
+        graphTexture = m_renderGraph.importTexture(imported);
+        return graphTexture.isValid();
+    };
+
+    RgTextureHandle graphInput;
+    RgTextureHandle graphEasu;
+    RgTextureHandle graphSwapchain;
+    if (!importTexture(inputTexture, inputView, RhiResourceState::ShaderRead,
+                       graphInput) ||
+        !importTexture(m_easuHandle, m_easuView, RhiResourceState::ShaderRead,
+                       graphEasu) ||
+        !importTexture(swapchainTexture, swapchainColorView,
+                       RhiResourceState::Present, graphSwapchain)) {
+        return false;
+    }
+
+    RenderGraphPassBuilder easu = m_renderGraph.addPass(
+        {"FSR1.EASU", RgPassType::Graphics, RhiQueueType::Graphics});
+    easu.readTexture(graphInput, RhiResourceState::ShaderRead)
+        .writeTexture(graphEasu, RhiResourceState::RenderTarget)
+        .setExecute([this, &debugService, easuPushConstants,
+                     outputWidth, outputHeight](RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(
+                commandList, GpuTimerPass::Post);
+            RhiColorAttachment colorAttachment;
+            colorAttachment.view = m_easuView;
+            colorAttachment.loadOp = RhiLoadOp::DontCare;
+            colorAttachment.storeOp = RhiStoreOp::Store;
+            RhiRenderingInfo renderingInfo;
+            renderingInfo.debugName = "FSR1EASU";
+            renderingInfo.renderArea = {
+                0, 0,
+                static_cast<uint32_t>(std::max(1, outputWidth)),
+                static_cast<uint32_t>(std::max(1, outputHeight))
+            };
+            renderingInfo.colorAttachments = &colorAttachment;
+            renderingInfo.colorAttachmentCount = 1u;
+            commandList.beginRendering(renderingInfo);
+            commandList.setGraphicsPipeline(m_easuPipeline);
+            commandList.setBindGroup(0u, m_easuBindGroup);
+            commandList.pushConstants(easuPushConstants,
+                                      sizeof(easuPushConstants),
+                                      rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(3u, 1u, 0u, 0u);
+            commandList.endRendering();
+            debugService.endGpuTimer(commandList, timerToken);
+            return true;
+        });
+
+    RenderGraphPassBuilder rcas = m_renderGraph.addPass(
+        {"FSR1.RCAS", RgPassType::Graphics, RhiQueueType::Graphics});
+    rcas.dependsOn(easu.handle())
+        .readTexture(graphEasu, RhiResourceState::ShaderRead)
+        .writeTexture(graphSwapchain, RhiResourceState::RenderTarget)
+        .setExecute([this, &debugService, rcasPushConstants,
+                     swapchainColorView, outputWidth, outputHeight](
+                        RgPassContext& pass) {
+            RhiCommandList& commandList = pass.commandList();
+            const GpuTimerSegmentToken timerToken = debugService.beginGpuTimer(
+                commandList, GpuTimerPass::Post);
+            RhiColorAttachment colorAttachment;
+            colorAttachment.view = swapchainColorView;
+            colorAttachment.loadOp = RhiLoadOp::Load;
+            colorAttachment.storeOp = RhiStoreOp::Store;
+            RhiRenderingInfo renderingInfo;
+            renderingInfo.debugName = "FSR1Backbuffer";
+            renderingInfo.renderArea = {
+                0, 0,
+                static_cast<uint32_t>(std::max(1, outputWidth)),
+                static_cast<uint32_t>(std::max(1, outputHeight))
+            };
+            renderingInfo.colorAttachments = &colorAttachment;
+            renderingInfo.colorAttachmentCount = 1u;
+            commandList.beginRendering(renderingInfo);
+            commandList.setGraphicsPipeline(m_rcasPipeline);
+            commandList.setBindGroup(0u, m_rcasBindGroup);
+            commandList.pushConstants(&rcasPushConstants,
+                                      sizeof(rcasPushConstants),
+                                      rhiFlag(RhiShaderStage::Fragment));
+            commandList.draw(3u, 1u, 0u, 0u);
+            commandList.endRendering();
+            debugService.endGpuTimer(commandList, timerToken);
+            return true;
+        });
+
+    const RgCompileResult compiled = m_renderGraph.compile();
+    if (!compiled.succeeded()) {
+        return false;
+    }
+    const GpuTimerCheckpoint timerCheckpoint = debugService.gpuTimerCheckpoint();
+    const RgExecuteResult executed = m_renderGraph.execute(
+        rhiDevice, *m_commandListPool);
+    if (!executed.succeeded()) {
+        debugService.cancelGpuTimersSince(timerCheckpoint);
+        return false;
+    }
 
     return true;
 }
@@ -446,6 +489,9 @@ void Fsr1Pass::destroyRhiBindGroups() {
 }
 
 void Fsr1Pass::destroyRhiResources() {
+    if (m_rhiDevice != nullptr) {
+        m_renderGraph.releaseTransientResources(*m_rhiDevice);
+    }
     destroyRhiBindGroups();
     if (m_rhiDevice != nullptr) {
         if (m_easuPipeline.isValid()) {
