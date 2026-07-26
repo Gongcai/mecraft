@@ -82,6 +82,14 @@ bool traceScreenSpaceReflection(vec3 worldPos,
     // Smooth surfaces trace farther with more steps; rough surfaces get fewer steps.
     float maxDistance = mix(56.0, 10.0, roughness);
     int baseSteps = int(mix(40.0, 16.0, roughness));
+    // Distant reflectors cover few pixels and their reflections change slowly
+    // across the image, so shorten the ray and coarsen the march with the
+    // reflector's view distance instead of paying full price everywhere.
+    float reflectorDistance = length(worldPos - uCameraPos);
+    float distanceLod =
+        mix(1.0, 0.5, smoothstep(24.0, 96.0, reflectorDistance));
+    maxDistance *= distanceLod;
+    baseSteps = max(int(float(baseSteps) * distanceLod), 8);
     float stepLength = maxDistance / float(baseSteps);
 
     // Dither: small offset to break up banding artifacts across pixels.
@@ -104,7 +112,12 @@ bool traceScreenSpaceReflection(vec3 worldPos,
         float stepScale = 1.0 + roughness * progress * 0.5;
         float t = float(i) * stepLength * stepScale;
         vec3 sampleWorld = rayOrigin + reflectedDir * t;
-        vec2 screenUv = projectWorldScreenUv(sampleWorld);
+        // Project once per step: the same clip result yields both the screen
+        // UV and the ray depth, halving the per-step matrix work.
+        vec4 rayClip = uViewProj * vec4(sampleWorld, 1.0);
+        float rayClipW = max(rayClip.w, 0.00001);
+        vec2 screenUv =
+            rhiScreenUvToClipUv(rayClip.xy / rayClipW * 0.5 + 0.5);
 
         // Screen bounds check with margin for refinement
         if (screenUv.x <= 0.002 || screenUv.x >= 0.998 ||
@@ -112,7 +125,8 @@ bool traceScreenSpaceReflection(vec3 worldPos,
             break;
         }
 
-        float sceneDepth = texture(uDepthTex, rhiScreenUvToTextureUv(screenUv)).r;
+        float sceneDepth =
+            textureLod(uDepthTex, rhiScreenUvToTextureUv(screenUv), 0.0).r;
         if (sceneDepth >= 0.9999) {
             prevT = t;
             continue;
@@ -120,8 +134,7 @@ bool traceScreenSpaceReflection(vec3 worldPos,
 
         // DerivativeMain ScreenSpaceRayTrace:51 — relative linear depth comparison.
         // abs(linearSample - currentDepth) / currentDepth < 0.2
-        vec4 rayClip = uViewProj * vec4(sampleWorld, 1.0);
-        float rayNdcZ = rayClip.z / max(rayClip.w, 0.00001);
+        float rayNdcZ = rayClip.z / rayClipW;
         float rayDepth01 = clamp(rayNdcZ * 0.5 + 0.5, 0.0, 1.0);
         float rayLin = getLinearDepth(rayDepth01);
         float sceneLin = getLinearDepth(sceneDepth);
