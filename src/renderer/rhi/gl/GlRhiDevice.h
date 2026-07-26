@@ -230,6 +230,9 @@ public:
     RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) override;
     RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) override;
     RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) override;
+    bool resetQueryPool(RhiQueryPoolHandle pool,
+                        uint32_t firstQuery,
+                        uint32_t queryCount) override;
     void* mapBuffer(RhiBufferHandle buffer, uint64_t offset, uint64_t size) override;
     void unmapBuffer(RhiBufferHandle buffer) override;
     [[nodiscard]] bool areQueryResultsAvailable(RhiQueryPoolHandle pool,

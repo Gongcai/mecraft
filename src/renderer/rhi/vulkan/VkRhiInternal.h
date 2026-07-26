@@ -109,11 +109,22 @@ struct VkRhiDeviceData {
         VmaAllocation allocation;
     };
     struct DeferredObject { uint64_t sequence = 0u; VkObjectType type = VK_OBJECT_TYPE_UNKNOWN; uint64_t object = 0u; };
-    struct PendingList { uint64_t sequence; VkRhiCommandList* list; };
+    struct PendingList {
+        uint64_t sequence = 0u;
+        RhiQueueType queue = RhiQueueType::Graphics;
+        uint64_t queueValue = 0u;
+        VkRhiCommandList* list = nullptr;
+    };
+    struct PendingSubmission {
+        uint64_t sequence = 0u;
+        RhiQueueType queue = RhiQueueType::Graphics;
+        uint64_t queueValue = 0u;
+    };
 
     GLFWwindow* window = nullptr;
     VkInstance instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
+    std::atomic<uint64_t> validationErrorCount{0u};
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     VkDevice device = VK_NULL_HANDLE;
@@ -128,7 +139,9 @@ struct VkRhiDeviceData {
     VmaAllocator allocator = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
-    VkSemaphore timeline = VK_NULL_HANDLE;
+    std::array<VkSemaphore, 3u> queueTimelines{};
+    std::array<uint64_t, 3u> lastQueueTimelineValues{};
+    uint64_t completedSubmissionSequence = 0u;
     VkSemaphore externalFrameCompletionSemaphore = VK_NULL_HANDLE;
     uint64_t externalFrameCompletionValue = 0u;
     bool frameGenerationAcquireLayoutPending = false;
@@ -185,6 +198,7 @@ struct VkRhiDeviceData {
     std::deque<DeferredImage> deferredImages;
     std::deque<DeferredObject> deferredObjects;
     std::deque<PendingList> pendingLists;
+    std::deque<PendingSubmission> pendingSubmissions;
     std::mutex commandRegistryMutex;
     std::set<RhiCommandList*> commandLists;
     std::set<VkRhiCommandListPool*> commandListPools;
@@ -235,6 +249,16 @@ void nameObject(VkRhiDeviceData& data, VkObjectType type, uint64_t object, const
         case RhiQueueType::Present: return data.presentQueue;
     }
     return VK_NULL_HANDLE;
+}
+
+[[nodiscard]] size_t queueTimelineIndex(const RhiQueueType type) {
+    switch (type) {
+        case RhiQueueType::Graphics: return 0u;
+        case RhiQueueType::Compute: return 1u;
+        case RhiQueueType::Transfer: return 2u;
+        case RhiQueueType::Present: return 3u;
+    }
+    return 3u;
 }
 } // namespace
 

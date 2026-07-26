@@ -7,10 +7,16 @@
 
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
 class RhiCommandList;
+class RhiCommandListPool;
+class RhiDevice;
+
+inline constexpr uint32_t kRgInvalidPassIndex =
+    std::numeric_limits<uint32_t>::max();
 
 struct RgTextureHandle {
   uint32_t index = 0u;
@@ -57,6 +63,21 @@ enum class RgCompileError {
   CyclicDependency
 };
 
+enum class RgExecuteError {
+  None,
+  NotCompiled,
+  DeviceMismatch,
+  ResourceCreationFailed,
+  CommandListUnavailable,
+  CommandRecordingFailed,
+  PassExecutionFailed,
+  SubmissionFailed,
+  TimestampUnsupported,
+  TimestampQueryFailed
+};
+
+enum class RgTimingPollResult { Unavailable, Available, Error };
+
 struct RgTextureSubresourceRange {
   uint32_t baseMip = 0u;
   uint32_t mipCount = kRhiRemainingMipLevels;
@@ -76,6 +97,9 @@ struct RgImportedTextureDesc {
   RhiTextureDesc desc;
   RhiResourceState initialState = RhiResourceState::Undefined;
   RhiResourceState finalState = RhiResourceState::Undefined;
+  RhiTextureViewHandle defaultView;
+  RhiQueueType initialQueue = RhiQueueType::Graphics;
+  RhiQueueType finalQueue = RhiQueueType::Graphics;
 };
 
 struct RgTransientTextureDesc {
@@ -90,6 +114,8 @@ struct RgImportedBufferDesc {
   RhiBufferDesc desc;
   RhiResourceState initialState = RhiResourceState::Undefined;
   RhiResourceState finalState = RhiResourceState::Undefined;
+  RhiQueueType initialQueue = RhiQueueType::Graphics;
+  RhiQueueType finalQueue = RhiQueueType::Graphics;
 };
 
 struct RgTransientBufferDesc {
@@ -125,6 +151,7 @@ struct RgTextureBarrierPlan {
   RgTextureSubresourceRange range;
   RhiQueueType sourceQueue = RhiQueueType::Graphics;
   RhiQueueType destinationQueue = RhiQueueType::Graphics;
+  uint32_t sourcePass = kRgInvalidPassIndex;
 };
 
 struct RgBufferBarrierPlan {
@@ -134,6 +161,7 @@ struct RgBufferBarrierPlan {
   RgBufferRange range;
   RhiQueueType sourceQueue = RhiQueueType::Graphics;
   RhiQueueType destinationQueue = RhiQueueType::Graphics;
+  uint32_t sourcePass = kRgInvalidPassIndex;
 };
 
 struct RgResourceLifetime {
@@ -150,6 +178,8 @@ struct RgCompiledPass {
   std::vector<uint32_t> dependencies;
   std::vector<RgTextureBarrierPlan> textureBarriers;
   std::vector<RgBufferBarrierPlan> bufferBarriers;
+  std::vector<RgTextureBarrierPlan> releaseTextureBarriers;
+  std::vector<RgBufferBarrierPlan> releaseBufferBarriers;
 };
 
 struct RgCompileResult {
@@ -159,20 +189,72 @@ struct RgCompileResult {
   [[nodiscard]] bool succeeded() const { return error == RgCompileError::None; }
 };
 
+struct RgSubmissionBatchPlan {
+  /// Logical queue that records and executes all passes in this batch.
+  RhiQueueType queue = RhiQueueType::Graphics;
+  /// Compiled pass indices recorded into the batch command list in order.
+  std::vector<uint32_t> passes;
+  /// Earlier batch indices whose timeline tokens must complete before execution.
+  std::vector<uint32_t> dependencies;
+};
+
+struct RgExecuteResult {
+  RgExecuteError error = RgExecuteError::None;
+  std::string message;
+  std::vector<RhiSubmissionToken> submissions;
+
+  /// Reports whether every command list was recorded and submitted successfully.
+  /// @return True only when no execution error was reported.
+  [[nodiscard]] bool succeeded() const { return error == RgExecuteError::None; }
+
+  /// Returns the token for the final graph submission in execution order.
+  /// @return Final submission token, or an invalid token when nothing was submitted.
+  [[nodiscard]] RhiSubmissionToken completionToken() const {
+    return submissions.empty() ? RhiSubmissionToken{} : submissions.back();
+  }
+};
+
+struct RgPassTiming {
+  /// Debug name supplied by the pass declaration.
+  std::string name;
+  /// Logical queue that executed the measured pass.
+  RhiQueueType queue = RhiQueueType::Graphics;
+  /// GPU timestamp difference converted to nanoseconds by the RHI backend.
+  uint64_t durationNanoseconds = 0u;
+};
+
+struct RgTimingSnapshot {
+  /// Monotonic Render Graph execution identity associated with this snapshot.
+  uint64_t execution = 0u;
+  /// Timings in compiled pass execution order.
+  std::vector<RgPassTiming> passes;
+
+  /// Reports whether this snapshot contains a completed execution.
+  /// @return True when the execution identity is non-zero.
+  [[nodiscard]] bool isValid() const { return execution != 0u; }
+};
+
 class RgPassContext {
 public:
   [[nodiscard]] RhiCommandList &commandList() const;
   [[nodiscard]] RhiTextureHandle texture(RgTextureHandle handle) const;
+
+  /// Resolves the default texture view for an imported or transient graph texture.
+  /// @param handle Texture handle declared by the executing pass.
+  /// @return RHI view owned by the imported resource or transient allocation.
+  [[nodiscard]] RhiTextureViewHandle textureView(RgTextureHandle handle) const;
   [[nodiscard]] RhiBufferHandle buffer(RgBufferHandle handle) const;
 
 private:
   friend class RenderGraph;
   RgPassContext(RhiCommandList &commandList,
                 const std::vector<RhiTextureHandle> &textures,
+                const std::vector<RhiTextureViewHandle> &textureViews,
                 const std::vector<RhiBufferHandle> &buffers);
 
   RhiCommandList *m_commandList = nullptr;
   const std::vector<RhiTextureHandle> *m_textures = nullptr;
+  const std::vector<RhiTextureViewHandle> *m_textureViews = nullptr;
   const std::vector<RhiBufferHandle> *m_buffers = nullptr;
 };
 
@@ -231,6 +313,31 @@ public:
   [[nodiscard]] RenderGraphPassBuilder editPass(RgPassHandle pass);
 
   [[nodiscard]] RgCompileResult compile();
+
+  /// Records compiled passes, creates required transient resources, and submits
+  /// dependency batches to their declared logical queues.
+  /// @param device Device that owns imported and transient graph resources.
+  /// @param commandListPool Pool used to allocate one command list per batch.
+  /// @return Execution status and submission tokens in submission order.
+  [[nodiscard]] RgExecuteResult execute(RhiDevice &device,
+                                        RhiCommandListPool &commandListPool);
+
+  /// Collects completed GPU pass timestamps without blocking for pending work.
+  /// @param device Device used by the matching execute calls.
+  /// @return Available after collecting at least one execution, Unavailable while
+  /// work is pending, or Error when the device or query contract is violated.
+  [[nodiscard]] RgTimingPollResult pollTimings(RhiDevice &device);
+
+  /// Returns the most recently collected complete timing snapshot.
+  /// @return Stable snapshot retained until a newer execution is collected or
+  /// transient resources are released.
+  [[nodiscard]] const RgTimingSnapshot &latestTimings() const {
+    return m_latestTimings;
+  }
+
+  /// Destroys pooled transient resources and timestamp queries owned by a device.
+  /// @param device Device passed to previous execute calls for this graph.
+  void releaseTransientResources(RhiDevice &device);
   void reset();
 
   [[nodiscard]] const std::vector<RgCompiledPass> &compiledPasses() const {
@@ -251,6 +358,10 @@ public:
   epilogueBufferBarriers() const {
     return m_epilogueBufferBarriers;
   }
+  [[nodiscard]] const std::vector<RgSubmissionBatchPlan> &
+  submissionBatches() const {
+    return m_submissionBatches;
+  }
   [[nodiscard]] bool isCompiled() const { return m_compiled; }
 
 private:
@@ -259,6 +370,9 @@ private:
   struct TextureRecord;
   struct BufferRecord;
   struct PassRecord;
+  struct TransientTexture;
+  struct TransientBuffer;
+  struct TimingSlot;
 
   [[nodiscard]] bool addTextureAccess(RgPassHandle pass,
                                       const RgTextureAccess &access);
@@ -284,11 +398,21 @@ private:
   std::vector<RgResourceLifetime> m_bufferLifetimes;
   std::vector<RgTextureBarrierPlan> m_epilogueTextureBarriers;
   std::vector<RgBufferBarrierPlan> m_epilogueBufferBarriers;
+  std::vector<RgSubmissionBatchPlan> m_submissionBatches;
+  std::vector<uint32_t> m_passToBatch;
+  std::vector<std::vector<uint32_t>> m_textureLastPasses;
+  std::vector<uint32_t> m_bufferLastPasses;
+  std::vector<TransientTexture> m_transientTextures;
+  std::vector<TransientBuffer> m_transientBuffers;
+  std::vector<TimingSlot> m_timingSlots;
+  RgTimingSnapshot m_latestTimings;
+  RhiDevice *m_runtimeDevice = nullptr;
   bool m_compiled = false;
   bool m_builderError = false;
   RgCompileError m_builderErrorCode = RgCompileError::None;
   std::string m_builderErrorMessage;
   uint32_t m_generation = 1u;
+  uint64_t m_execution = 0u;
 };
 
 #endif // MECRAFT_RHI_RENDER_GRAPH_H

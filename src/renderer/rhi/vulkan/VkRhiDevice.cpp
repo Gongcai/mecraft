@@ -78,11 +78,32 @@ void logVkError(const char* operation, const VkResult result) {
     return false;
 }
 
+[[nodiscard]] renderer::rhi::vulkan::VkResourceStateMapping
+toVkCommandResourceState(const RhiResourceState state,
+                         const RhiCommandListType commandListType) {
+    auto mapping = renderer::rhi::vulkan::toVkResourceState(state);
+    if (commandListType != RhiCommandListType::Compute) return mapping;
+    switch (state) {
+        case RhiResourceState::ShaderRead:
+        case RhiResourceState::ShaderWrite:
+        case RhiResourceState::UniformBuffer:
+        case RhiResourceState::StorageBuffer:
+            mapping.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            break;
+        default: break;
+    }
+    return mapping;
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                                               VkDebugUtilsMessageTypeFlagsEXT,
                                               const VkDebugUtilsMessengerCallbackDataEXT* data,
-                                              void*) {
+                                              void* userData) {
     if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+        if (userData != nullptr) {
+            static_cast<std::atomic<uint64_t>*>(userData)->fetch_add(
+                1u, std::memory_order_relaxed);
+        }
         std::cerr << "Vulkan validation: "
                   << (data != nullptr && data->pMessage != nullptr
                           ? data->pMessage
@@ -1384,6 +1405,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
                                 VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                                 VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         debugInfo.pfnUserCallback = debugCallback;
+        debugInfo.pUserData = &m_data->validationErrorCount;
         if (!vkSucceeded(createMessenger(m_data->instance, &debugInfo, nullptr,
                                          &m_data->debugMessenger),
                          "vkCreateDebugUtilsMessengerEXT")) {
@@ -1447,6 +1469,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
             features13.dynamicRendering != VK_TRUE || features13.synchronization2 != VK_TRUE ||
             features12.timelineSemaphore != VK_TRUE ||
             features12.bufferDeviceAddress != VK_TRUE ||
+        features12.hostQueryReset != VK_TRUE ||
             depthClip.depthClipControl != VK_TRUE) {
             continue;
         }
@@ -1526,6 +1549,7 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
         VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &features13};
     features12.timelineSemaphore = VK_TRUE;
     features12.bufferDeviceAddress = VK_TRUE;
+    features12.hostQueryReset = VK_TRUE;
     features12.shaderFloat16 = selected12.shaderFloat16;
     features12.shaderInt8 = selected12.shaderInt8;
     features12.descriptorIndexing = selected12.descriptorIndexing;
@@ -1633,11 +1657,13 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     VkSemaphoreTypeCreateInfo timelineType{VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO};
     timelineType.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
     VkSemaphoreCreateInfo semaphoreInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, &timelineType};
-    if (!vkSucceeded(vkCreateSemaphore(m_data->device, &semaphoreInfo, nullptr,
-                                      &m_data->timeline),
-                     "vkCreateSemaphore(timeline)")) {
-        shutdown();
-        return false;
+    for (VkSemaphore& timeline : m_data->queueTimelines) {
+        if (!vkSucceeded(vkCreateSemaphore(m_data->device, &semaphoreInfo, nullptr,
+                                          &timeline),
+                         "vkCreateSemaphore(queue timeline)")) {
+            shutdown();
+            return false;
+        }
     }
     for (auto& frame : m_data->frames) {
         VkSemaphoreCreateInfo binaryInfo{VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -1691,6 +1717,22 @@ bool VkRhiDevice::init(const RhiDeviceDesc& desc) {
     m_capabilities.computeQueueFamilyIndex = m_data->queueFamilies.compute;
     m_capabilities.transferQueueFamilyIndex = m_data->queueFamilies.transfer;
     m_capabilities.presentQueueFamilyIndex = m_data->queueFamilies.present;
+    uint32_t queueFamilyCount = 0u;
+    vkGetPhysicalDeviceQueueFamilyProperties(m_data->physicalDevice,
+                                             &queueFamilyCount, nullptr);
+    std::vector<VkQueueFamilyProperties> queueFamilyProperties(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(
+        m_data->physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
+    const auto supportsTimestamps = [&](const uint32_t family) {
+        return family < queueFamilyProperties.size() &&
+               queueFamilyProperties[family].timestampValidBits != 0u;
+    };
+    m_capabilities.graphicsTimestampQuery =
+        supportsTimestamps(m_data->queueFamilies.graphics);
+    m_capabilities.computeTimestampQuery =
+        supportsTimestamps(m_data->queueFamilies.compute);
+    m_capabilities.transferTimestampQuery =
+        supportsTimestamps(m_data->queueFamilies.transfer);
     m_capabilities.dedicatedComputeQueue =
         m_data->queueFamilies.compute != m_data->queueFamilies.graphics;
     m_capabilities.dedicatedTransferQueue =
@@ -1788,8 +1830,10 @@ void VkRhiDevice::shutdown() {
                 vkDestroyFence(m_data->device, frame.fence, nullptr);
             }
         }
-        if (m_data->timeline != VK_NULL_HANDLE) {
-            vkDestroySemaphore(m_data->device, m_data->timeline, nullptr);
+    for (const VkSemaphore timeline : m_data->queueTimelines) {
+      if (timeline != VK_NULL_HANDLE) {
+        vkDestroySemaphore(m_data->device, timeline, nullptr);
+      }
         }
         if (m_data->pipelineCache != VK_NULL_HANDLE) {
             vkDestroyPipelineCache(m_data->device, m_data->pipelineCache, nullptr);
@@ -2421,6 +2465,19 @@ RhiQueryPoolHandle VkRhiDevice::createQueryPool(const RhiQueryPoolDesc& desc) {
     return handle;
 }
 
+bool VkRhiDevice::resetQueryPool(const RhiQueryPoolHandle pool,
+                                 const uint32_t firstQuery,
+                                 const uint32_t queryCount) {
+    const auto* record = m_data != nullptr ? findRecord(m_data->queryPools, pool) : nullptr;
+    if (!m_initialized || std::this_thread::get_id() != m_deviceThread ||
+        record == nullptr || queryCount == 0u || firstQuery > record->count ||
+        queryCount > record->count - firstQuery) {
+        return false;
+    }
+    vkResetQueryPool(m_data->device, record->pool, firstQuery, queryCount);
+    return true;
+}
+
 void* VkRhiDevice::mapBuffer(const RhiBufferHandle buffer, const uint64_t offset,
                              const uint64_t size) {
     auto* record = m_data != nullptr ? findRecord(m_data->buffers, buffer) : nullptr;
@@ -2725,7 +2782,8 @@ RhiFrameStatus VkRhiDevice::presentFrame(const RhiPresentInfo& info) {
     }
     if (m_data->frameLastGraphicsSequence != 0u) {
         waits[waitCount++] = {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, nullptr,
-                              m_data->timeline, m_data->frameLastGraphicsSequence,
+                              m_data->queueTimelines[queueTimelineIndex(RhiQueueType::Graphics)],
+                              m_data->frameLastGraphicsSequence,
                               VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, 0u};
     }
     const VkSemaphore presentReady = m_data->presentReadySemaphores[m_data->acquiredImage];
@@ -2945,7 +3003,7 @@ std::unique_ptr<RhiCommandListPool> VkRhiDevice::createCommandListPool(
 
 bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completionToken) {
     if (!m_initialized || info.commandLists == nullptr || info.commandListCount == 0u ||
-        info.queue != RhiQueueType::Graphics || std::this_thread::get_id() != m_deviceThread ||
+        info.queue == RhiQueueType::Present || std::this_thread::get_id() != m_deviceThread ||
         (info.waitCount == 0u) != (info.waits == nullptr)) return false;
     const std::lock_guard<std::mutex> registryLock(m_data->commandRegistryMutex);
     std::vector<VkCommandBufferSubmitInfo> commandInfos;
@@ -2973,17 +3031,25 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
         resourceReferences.push_back(std::move(resolved));
     }
     const uint64_t sequence = m_lastSubmittedSequence + 1u;
+    const size_t signalQueueIndex = queueTimelineIndex(info.queue);
+    if (signalQueueIndex >= m_data->queueTimelines.size()) return false;
+    const uint64_t queueValue =
+        m_data->lastQueueTimelineValues[signalQueueIndex] + 1u;
     std::vector<VkSemaphoreSubmitInfo> waits;
     waits.reserve(info.waitCount + 2u);
     for (uint32_t i = 0u; i < info.waitCount; ++i) {
         const auto& wait = info.waits[i];
         if (!validateSubmissionToken(wait.token) || wait.token.sequence > m_lastSubmittedSequence) return false;
-        const uint64_t value = wait.value != 0u ? wait.value : wait.token.sequence;
-        if (value > wait.token.sequence) return false;
-        waits.push_back({VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, nullptr, m_data->timeline,
+        const size_t waitQueueIndex = queueTimelineIndex(wait.token.queue);
+        if (waitQueueIndex >= m_data->queueTimelines.size()) return false;
+        const uint64_t value = wait.value != 0u ? wait.value : wait.token.timelineValue();
+        if (value > wait.token.timelineValue()) return false;
+        waits.push_back({VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, nullptr,
+                         m_data->queueTimelines[waitQueueIndex],
                          value, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, 0u});
     }
     const bool consumeExternalFrameCompletion =
+        info.queue == RhiQueueType::Graphics &&
         m_data->externalFrameCompletionSemaphore != VK_NULL_HANDLE;
     if (consumeExternalFrameCompletion) {
         waits.push_back({
@@ -2995,7 +3061,9 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
             0u
         });
     }
-    const bool consumeAcquire = m_data->frameAcquired && !m_data->frameImageAvailableWaited;
+    const bool consumeAcquire = info.queue == RhiQueueType::Graphics &&
+                                m_data->frameAcquired &&
+                                !m_data->frameImageAvailableWaited;
     VkRhiDeviceData::FrameContext* frame = nullptr;
     if (consumeAcquire) {
         frame = &m_data->frames[m_data->frameSlot];
@@ -3004,7 +3072,7 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
                          VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, 0u});
     }
     const VkSemaphoreSubmitInfo signal{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO, nullptr,
-                                       m_data->timeline, sequence,
+                                       m_data->queueTimelines[signalQueueIndex], queueValue,
                                        VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, 0u};
     VkSubmitInfo2 submitInfo{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
     submitInfo.waitSemaphoreInfoCount = static_cast<uint32_t>(waits.size());
@@ -3024,6 +3092,8 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
         m_data->externalFrameCompletionValue = 0u;
     }
     m_lastSubmittedSequence = sequence;
+    m_data->lastQueueTimelineValues[signalQueueIndex] = queueValue;
+    m_data->pendingSubmissions.push_back({sequence, info.queue, queueValue});
     for (size_t index = 0u; index < lists.size(); ++index) {
         auto* list = lists[index];
         markResourceReferencesUsed(*m_data, resourceReferences[index], sequence);
@@ -3033,7 +3103,7 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
             }
         }
         list->markPending(sequence);
-        m_data->pendingLists.push_back({sequence, list});
+        m_data->pendingLists.push_back({sequence, info.queue, queueValue, list});
         for (const auto& transient : list->m_data->transientBuffers) {
             enqueueDeferred(m_data->deferredBuffers,
                             VkRhiDeviceData::DeferredBuffer{
@@ -3041,37 +3111,47 @@ bool VkRhiDevice::submit(const RhiSubmitInfo& info, RhiSubmissionToken* completi
         }
         list->m_data->transientBuffers.clear();
     }
-    if (m_data->frameAcquired) {
+    if (m_data->frameAcquired && info.queue == RhiQueueType::Graphics) {
         m_data->frameSubmitted = true;
         m_data->frameImageAvailableWaited = true;
-        m_data->frameLastGraphicsSequence = sequence;
+        m_data->frameLastGraphicsSequence = queueValue;
     }
-    if (completionToken != nullptr) *completionToken = {m_deviceId, sequence};
+    if (completionToken != nullptr) {
+        *completionToken = {m_deviceId, sequence, info.queue, queueValue};
+    }
     reclaimCompletedWorkUnlocked();
     return true;
 }
 
 bool VkRhiDevice::validateSubmissionToken(const RhiSubmissionToken token) const {
-    return token.isValid() && token.deviceId == m_deviceId &&
-           token.sequence <= m_lastSubmittedSequence;
+    if (!token.isValid() || token.deviceId != m_deviceId ||
+        token.sequence > m_lastSubmittedSequence) return false;
+    const size_t index = queueTimelineIndex(token.queue);
+    return index < m_data->lastQueueTimelineValues.size() &&
+           token.timelineValue() <= m_data->lastQueueTimelineValues[index];
 }
 
 bool VkRhiDevice::isSubmissionComplete(const RhiSubmissionToken token, bool& complete) {
     complete = false;
     if (!validateSubmissionToken(token)) return false;
+    const size_t index = queueTimelineIndex(token.queue);
     uint64_t counter = 0u;
-    if (vkGetSemaphoreCounterValue(m_data->device, m_data->timeline, &counter) != VK_SUCCESS) return false;
-    complete = counter >= token.sequence;
+    if (vkGetSemaphoreCounterValue(m_data->device, m_data->queueTimelines[index],
+                                   &counter) != VK_SUCCESS) return false;
+    complete = counter >= token.timelineValue();
     if (complete) reclaimCompletedWork();
     return true;
 }
 
 bool VkRhiDevice::waitForSubmission(const RhiSubmissionToken token) {
     if (!validateSubmissionToken(token)) return false;
+    const size_t index = queueTimelineIndex(token.queue);
+    const uint64_t value = token.timelineValue();
+    const VkSemaphore timeline = m_data->queueTimelines[index];
     VkSemaphoreWaitInfo waitInfo{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
     waitInfo.semaphoreCount = 1u;
-    waitInfo.pSemaphores = &m_data->timeline;
-    waitInfo.pValues = &token.sequence;
+    waitInfo.pSemaphores = &timeline;
+    waitInfo.pValues = &value;
     if (vkWaitSemaphores(m_data->device, &waitInfo, UINT64_MAX) != VK_SUCCESS) return false;
     reclaimCompletedWork();
     return true;
@@ -3079,6 +3159,12 @@ bool VkRhiDevice::waitForSubmission(const RhiSubmissionToken token) {
 
 void VkRhiDevice::waitIdle() {
     if (m_initialized && waitDeviceIdle(*m_data) == VK_SUCCESS) reclaimCompletedWork();
+}
+
+uint64_t VkRhiDevice::validationErrorCount() const {
+    return m_data != nullptr
+        ? m_data->validationErrorCount.load(std::memory_order_relaxed)
+        : 0u;
 }
 
 void VkRhiDevice::reclaimCompletedWork() {
@@ -3089,11 +3175,30 @@ void VkRhiDevice::reclaimCompletedWork() {
 
 void VkRhiDevice::reclaimCompletedWorkUnlocked() {
     if (!m_initialized) return;
-    uint64_t completed = 0u;
-    if (vkGetSemaphoreCounterValue(m_data->device, m_data->timeline, &completed) != VK_SUCCESS) return;
-    while (!m_data->pendingLists.empty() && m_data->pendingLists.front().sequence <= completed) {
-        m_data->pendingLists.front().list->markComplete();
-        m_data->pendingLists.pop_front();
+    std::array<uint64_t, 3u> completedQueueValues{};
+    for (size_t index = 0u; index < completedQueueValues.size(); ++index) {
+        if (vkGetSemaphoreCounterValue(m_data->device,
+                                       m_data->queueTimelines[index],
+                                       &completedQueueValues[index]) != VK_SUCCESS) return;
+    }
+    while (!m_data->pendingSubmissions.empty()) {
+        const auto& submission = m_data->pendingSubmissions.front();
+        const size_t queueIndex = queueTimelineIndex(submission.queue);
+        if (queueIndex >= completedQueueValues.size() ||
+            completedQueueValues[queueIndex] < submission.queueValue) break;
+        m_data->completedSubmissionSequence = submission.sequence;
+        m_data->pendingSubmissions.pop_front();
+    }
+    const uint64_t completed = m_data->completedSubmissionSequence;
+    for (auto it = m_data->pendingLists.begin(); it != m_data->pendingLists.end();) {
+        const size_t queueIndex = queueTimelineIndex(it->queue);
+        if (queueIndex < completedQueueValues.size() &&
+            completedQueueValues[queueIndex] >= it->queueValue) {
+            it->list->markComplete();
+            it = m_data->pendingLists.erase(it);
+        } else {
+            ++it;
+        }
     }
     while (!m_data->deferredObjects.empty() && m_data->deferredObjects.front().sequence <= completed) {
         const auto item = m_data->deferredObjects.front();
@@ -3355,8 +3460,8 @@ void VkRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
         m_data->valid = false;
         return;
     }
-    auto oldState = toVkResourceState(barrier.oldState);
-    auto newState = toVkResourceState(barrier.newState);
+    auto oldState = toVkCommandResourceState(barrier.oldState, m_data->type);
+    auto newState = toVkCommandResourceState(barrier.newState, m_data->type);
 #if defined(MECRAFT_ENABLE_STREAMLINE)
     const bool frameGenerationSwapchain =
         texture->swapchainOwned &&
@@ -3384,6 +3489,13 @@ void VkRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
     native.srcAccessMask = oldState.access;
     native.dstStageMask = newState.stages;
     native.dstAccessMask = newState.access;
+    if (barrier.phase == RhiBarrierPhase::Release) {
+        native.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+        native.dstAccessMask = VK_ACCESS_2_NONE;
+    } else if (barrier.phase == RhiBarrierPhase::Acquire) {
+        native.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+        native.srcAccessMask = VK_ACCESS_2_NONE;
+    }
     native.oldLayout = oldState.layout;
     if (texture->swapchainOwned && barrier.oldState == RhiResourceState::Present) {
         const auto swapchainIt = std::find_if(
@@ -3436,13 +3548,22 @@ void VkRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
         m_data->valid = false;
         return;
     }
-    const auto oldState = toVkResourceState(barrier.oldState);
-    const auto newState = toVkResourceState(barrier.newState);
+    const auto oldState =
+        toVkCommandResourceState(barrier.oldState, m_data->type);
+    const auto newState =
+        toVkCommandResourceState(barrier.newState, m_data->type);
     VkBufferMemoryBarrier2 native{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2};
     native.srcStageMask = oldState.stages;
     native.srcAccessMask = oldState.access;
     native.dstStageMask = newState.stages;
     native.dstAccessMask = newState.access;
+    if (barrier.phase == RhiBarrierPhase::Release) {
+        native.dstStageMask = VK_PIPELINE_STAGE_2_NONE;
+        native.dstAccessMask = VK_ACCESS_2_NONE;
+    } else if (barrier.phase == RhiBarrierPhase::Acquire) {
+        native.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+        native.srcAccessMask = VK_ACCESS_2_NONE;
+    }
     native.srcQueueFamilyIndex = barrier.srcQueueFamilyIndex;
     native.dstQueueFamilyIndex = barrier.dstQueueFamilyIndex;
     native.buffer = buffer->buffer;

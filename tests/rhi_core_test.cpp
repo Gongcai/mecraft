@@ -1,6 +1,7 @@
 #include "renderer/rhi/RhiHandleAllocator.h"
 #include "renderer/rhi/RhiGrowableBuffer.h"
 #include "renderer/rhi/RhiHash.h"
+#include "renderer/rhi/RhiRenderGraph.h"
 #include "renderer/rhi/RhiShaderSourceLoader.h"
 #include "renderer/rhi/gl/GlRhiDevice.h"
 #include "renderer/debug/RenderDebugService.h"
@@ -4956,6 +4957,126 @@ bool testGlRhiSubmissionCompletionTokens() {
     device.shutdown();
     return true;
 }
+
+bool testGlRenderGraphExecutionAndTransientReuse() {
+  GlTestContext context;
+  if (!context.init()) {
+    return false;
+  }
+
+  GlRhiDevice device;
+  if (!requireTrue(
+          device.init(makeDeviceDesc()),
+          "OpenGL device must initialize for Render Graph execution")) {
+    return false;
+  }
+  std::unique_ptr<RhiCommandListPool> commandPool =
+      device.createCommandListPool({"RenderGraphTest.Pool", 2u, 64u * 1024u});
+  if (!requireTrue(commandPool != nullptr,
+                   "Render Graph execution requires a command-list pool")) {
+    device.shutdown();
+    return false;
+  }
+
+  RenderGraph graph;
+  RhiTextureHandle firstTexture;
+  RhiTextureViewHandle firstView;
+  RhiBufferHandle firstBuffer;
+  const auto executeFrame = [&](const bool expectReuse) {
+    graph.reset();
+    RhiTextureDesc textureDesc;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
+    textureDesc.width = 16u;
+    textureDesc.height = 16u;
+    textureDesc.usage = rhiFlag(RhiTextureUsage::TransferSrc) |
+                        rhiFlag(RhiTextureUsage::TransferDst);
+    const RgTextureHandle texture =
+        graph.createTexture({"RenderGraphTest.TransientTexture", textureDesc,
+                             RhiResourceState::TransferSrc});
+    RhiBufferDesc bufferDesc;
+    bufferDesc.size = 256u;
+    bufferDesc.usage =
+        rhiFlag(RhiBufferUsage::Storage) | rhiFlag(RhiBufferUsage::TransferDst);
+    const RgBufferHandle buffer =
+        graph.createBuffer({"RenderGraphTest.TransientBuffer", bufferDesc,
+                            RhiResourceState::StorageBuffer});
+
+    RhiTextureHandle resolvedTexture;
+    RhiTextureViewHandle resolvedView;
+    RhiBufferHandle resolvedBuffer;
+    graph
+        .addPass(
+            {"RenderGraphTest.Write", RgPassType::Copy, RhiQueueType::Graphics})
+        .writeTexture(texture, RhiResourceState::TransferDst)
+        .writeBuffer(buffer, RhiResourceState::TransferDst)
+        .setExecute([&](RgPassContext &pass) {
+          resolvedTexture = pass.texture(texture);
+          resolvedView = pass.textureView(texture);
+          resolvedBuffer = pass.buffer(buffer);
+          return resolvedTexture.isValid() && resolvedView.isValid() &&
+                 resolvedBuffer.isValid();
+        });
+    graph
+        .addPass(
+            {"RenderGraphTest.Read", RgPassType::Copy, RhiQueueType::Graphics})
+        .readTexture(texture, RhiResourceState::TransferSrc)
+        .readBuffer(buffer, RhiResourceState::StorageBuffer)
+        .setExecute([&](RgPassContext &pass) {
+          return pass.texture(texture).index == resolvedTexture.index &&
+                 pass.textureView(texture).index == resolvedView.index &&
+                 pass.buffer(buffer).index == resolvedBuffer.index;
+        });
+
+    const RgCompileResult compiled = graph.compile();
+    if (!requireTrue(compiled.succeeded(), compiled.message.c_str()) ||
+        !requireTrue(
+            graph.submissionBatches().size() == 1u,
+            "same-queue Render Graph passes must share a submission batch")) {
+      return false;
+    }
+    const RgExecuteResult executed = graph.execute(device, *commandPool);
+    if (!requireTrue(executed.succeeded(), executed.message.c_str()) ||
+        !requireTrue(
+            executed.submissions.size() == 1u &&
+                executed.completionToken().isValid(),
+            "Render Graph execution must return its completion token") ||
+        !requireTrue(device.waitForSubmission(executed.completionToken()),
+                     "Render Graph submission must complete")) {
+      return false;
+    }
+    if (!requireTrue(graph.pollTimings(device) == RgTimingPollResult::Available,
+                     "Render Graph pass timings must become available") ||
+        !requireTrue(graph.latestTimings().passes.size() == 2u &&
+                         graph.latestTimings().passes[0].name ==
+                             "RenderGraphTest.Write" &&
+                         graph.latestTimings().passes[1].name ==
+                             "RenderGraphTest.Read",
+                     "Render Graph timings must retain pass names")) {
+      return false;
+    }
+    if (expectReuse) {
+      return requireTrue(
+          resolvedTexture.index == firstTexture.index &&
+              resolvedTexture.generation == firstTexture.generation &&
+              resolvedView.index == firstView.index &&
+              resolvedView.generation == firstView.generation &&
+              resolvedBuffer.index == firstBuffer.index &&
+              resolvedBuffer.generation == firstBuffer.generation,
+          "Render Graph must reuse matching transient allocations");
+    }
+    firstTexture = resolvedTexture;
+    firstView = resolvedView;
+    firstBuffer = resolvedBuffer;
+    return true;
+  };
+
+  const bool passed = executeFrame(false) && executeFrame(true);
+  graph.releaseTransientResources(device);
+  device.waitIdle();
+  commandPool.reset();
+  device.shutdown();
+  return passed;
+}
 } // namespace
 
 int main() {
@@ -5079,5 +5200,8 @@ int main() {
     if (!testGlRhiSubmissionCompletionTokens()) {
         return 1;
     }
+  if (!testGlRenderGraphExecutionAndTransientReuse()) {
+    return 1;
+  }
     return 0;
 }

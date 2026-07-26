@@ -2279,7 +2279,8 @@ void GlRhiCommandList::textureBarrier(const RhiTextureBarrier& barrier) {
         : barrier.aspect;
     if (barrierAspects == 0u || (barrierAspects & ~formatAspects) != 0u ||
         barrier.srcQueueFamilyIndex != kRhiQueueFamilyIgnored ||
-        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored) {
+        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored ||
+        barrier.phase != RhiBarrierPhase::Full) {
         (void) rejectReplayCommand("textureBarrier received invalid aspects or queue ownership");
         return;
     }
@@ -2344,7 +2345,8 @@ void GlRhiCommandList::bufferBarrier(const RhiBufferBarrier& barrier) {
     if (barrier.offset >= record->desc.size || barrierSize == 0u ||
         barrierSize > record->desc.size - barrier.offset ||
         barrier.srcQueueFamilyIndex != kRhiQueueFamilyIgnored ||
-        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored) {
+        barrier.dstQueueFamilyIndex != kRhiQueueFamilyIgnored ||
+        barrier.phase != RhiBarrierPhase::Full) {
         (void) rejectReplayCommand("bufferBarrier received an invalid range or queue ownership");
         return;
     }
@@ -4389,6 +4391,9 @@ bool GlRhiDevice::init(const RhiDeviceDesc& desc) {
     m_data->completedSubmissionSequence = 0u;
     m_capabilities.multiDrawIndirect = true;
     m_capabilities.timestampQuery = true;
+    m_capabilities.graphicsTimestampQuery = true;
+    m_capabilities.computeTimestampQuery = false;
+    m_capabilities.transferTimestampQuery = false;
     m_capabilities.textureView = true;
     m_capabilities.samplerAnisotropy = true;
     m_capabilities.storageImage = true;
@@ -5401,6 +5406,22 @@ void GlRhiDevice::unmapBuffer(const RhiBufferHandle buffer) {
     record->mapped = false;
 }
 
+bool GlRhiDevice::resetQueryPool(const RhiQueryPoolHandle pool,
+                                 const uint32_t firstQuery,
+                                 const uint32_t queryCount) {
+    GlQueryPoolRecord* record =
+        recordForHandle(m_data->queryPools, m_data->queryPoolRecords, pool);
+    if (!m_initialized || std::this_thread::get_id() != m_deviceThread ||
+        record == nullptr || queryCount == 0u ||
+        firstQuery > record->queries.size() ||
+        queryCount > record->queries.size() - firstQuery) {
+        return false;
+    }
+    std::fill(record->issued.begin() + firstQuery,
+              record->issued.begin() + firstQuery + queryCount, false);
+    return true;
+}
+
 bool GlRhiDevice::areQueryResultsAvailable(RhiQueryPoolHandle pool,
                                            uint32_t firstQuery,
                                            uint32_t queryCount) const {
@@ -5722,7 +5743,7 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
     for (uint32_t index = 0u; index < info.waitCount; ++index) {
         const RhiQueueDependency& dependency = info.waits[index];
         if (!validateSubmissionToken(dependency.token) ||
-            (dependency.value != 0u && dependency.value != dependency.token.sequence)) {
+            (dependency.value != 0u && dependency.value != dependency.token.timelineValue())) {
             logRhiError("submit received an invalid queue dependency");
             return false;
         }
@@ -5825,7 +5846,8 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
     m_data->pendingRetirements = {};
     m_data->retirementBatches.push_back(std::move(batch));
     if (completionToken != nullptr) {
-        *completionToken = {m_deviceId, m_lastSubmittedSequence};
+    *completionToken = {m_deviceId, m_lastSubmittedSequence,
+                        RhiQueueType::Graphics, m_lastSubmittedSequence};
     }
     glFlush();
     return true;
@@ -5833,7 +5855,9 @@ bool GlRhiDevice::submit(const RhiSubmitInfo& info,
 
 bool GlRhiDevice::validateSubmissionToken(const RhiSubmissionToken token) const {
     return m_initialized && token.isValid() && token.deviceId == m_deviceId &&
-           token.sequence <= m_lastSubmittedSequence;
+         token.queue == RhiQueueType::Graphics &&
+         token.sequence <= m_lastSubmittedSequence &&
+         token.timelineValue() <= m_lastSubmittedSequence;
 }
 
 bool GlRhiDevice::isSubmissionComplete(const RhiSubmissionToken token,

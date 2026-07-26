@@ -235,6 +235,9 @@ public:
     RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc&) override {
         return {m_nextQueryPool++, 1u};
     }
+    bool resetQueryPool(RhiQueryPoolHandle, uint32_t, uint32_t) override {
+        return true;
+    }
     void* mapBuffer(RhiBufferHandle, uint64_t, uint64_t) override { return nullptr; }
     void unmapBuffer(RhiBufferHandle) override {}
     [[nodiscard]] bool areQueryResultsAvailable(RhiQueryPoolHandle, uint32_t, uint32_t) const override {

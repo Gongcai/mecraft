@@ -14,6 +14,10 @@ inline constexpr uint64_t kRhiWholeSize = std::numeric_limits<uint64_t>::max();
 inline constexpr uint32_t kRhiQueueFamilyIgnored = std::numeric_limits<uint32_t>::max();
 inline constexpr uint32_t kRhiQueueFamilyExternal = kRhiQueueFamilyIgnored - 1u;
 
+/// Selects whether a resource barrier performs a complete transition or one
+/// half of a queue-family ownership transfer.
+enum class RhiBarrierPhase { Full, Release, Acquire };
+
 enum class RhiTextureAspect : uint32_t {
     Color = 1u << 0u,
     Depth = 1u << 1u,
@@ -120,6 +124,8 @@ struct RhiTextureBarrier {
     RhiTextureAspectFlags aspect = 0u;
     uint32_t srcQueueFamilyIndex = kRhiQueueFamilyIgnored;
     uint32_t dstQueueFamilyIndex = kRhiQueueFamilyIgnored;
+    /// Selects full transition, source-queue release, or destination-queue acquire.
+    RhiBarrierPhase phase = RhiBarrierPhase::Full;
 };
 
 struct RhiBufferBarrier {
@@ -130,6 +136,8 @@ struct RhiBufferBarrier {
     uint64_t size = kRhiWholeSize;
     uint32_t srcQueueFamilyIndex = kRhiQueueFamilyIgnored;
     uint32_t dstQueueFamilyIndex = kRhiQueueFamilyIgnored;
+    /// Selects full transition, source-queue release, or destination-queue acquire.
+    RhiBarrierPhase phase = RhiBarrierPhase::Full;
 };
 
 struct RhiBufferCopy {

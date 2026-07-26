@@ -49,13 +49,24 @@ struct RhiCommandListPoolDesc {
 struct RhiSubmissionToken {
     /// Identifies the device instance that issued this backend-independent token.
     uint64_t deviceId = 0u;
-    /// Identifies one submission in the device's monotonically ordered queue.
+    /// Identifies one submission in the device-wide monotonic submission order.
     uint64_t sequence = 0u;
+    /// Identifies the logical queue that executes this submission.
+    RhiQueueType queue = RhiQueueType::Graphics;
+    /// Identifies the signal value on the logical queue timeline.
+    uint64_t queueValue = 0u;
 
     /// Reports whether this token identifies a submission on a device instance.
     /// @return True when both the device identity and queue sequence are non-zero.
     [[nodiscard]] constexpr bool isValid() const {
-        return deviceId != 0u && sequence != 0u;
+        return deviceId != 0u && sequence != 0u && queue != RhiQueueType::Present;
+    }
+
+    /// Returns the signal value on the token's logical queue timeline.
+    /// Legacy tokens use the global submission sequence as their timeline value.
+    /// @return Non-zero timeline value used for queue waits and completion queries.
+    [[nodiscard]] constexpr uint64_t timelineValue() const {
+        return queueValue != 0u ? queueValue : sequence;
     }
 };
 
@@ -127,6 +138,9 @@ struct RhiDeviceDesc {
 struct RhiCapabilities {
     bool multiDrawIndirect = false;
     bool timestampQuery = false;
+    bool graphicsTimestampQuery = false;
+    bool computeTimestampQuery = false;
+    bool transferTimestampQuery = false;
     bool textureView = false;
     bool samplerAnisotropy = false;
     bool storageImage = false;

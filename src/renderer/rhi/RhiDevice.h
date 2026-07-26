@@ -37,6 +37,15 @@ public:
     virtual RhiPipelineHandle createComputePipeline(const RhiComputePipelineDesc& desc) = 0;
     virtual RhiBindGroupHandle createBindGroup(const RhiBindGroupDesc& desc) = 0;
     virtual RhiQueryPoolHandle createQueryPool(const RhiQueryPoolDesc& desc) = 0;
+
+    /// Resets a contiguous query range before commands write new results.
+    /// @param pool Query pool owned by this device.
+    /// @param firstQuery Index of the first query to reset.
+    /// @param queryCount Number of queries in the reset range.
+    /// @return True when the complete range was reset on the device thread.
+    virtual bool resetQueryPool(RhiQueryPoolHandle pool,
+                                uint32_t firstQuery,
+                                uint32_t queryCount) = 0;
     virtual void* mapBuffer(RhiBufferHandle buffer, uint64_t offset, uint64_t size) = 0;
     virtual void unmapBuffer(RhiBufferHandle buffer) = 0;
     [[nodiscard]] virtual bool areQueryResultsAvailable(RhiQueryPoolHandle pool,

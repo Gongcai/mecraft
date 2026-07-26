@@ -1,5 +1,6 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiDevice.h"
+#include "renderer/rhi/RhiRenderGraph.h"
 #include "renderer/rhi/vulkan/VkRhiDevice.h"
 #include "renderer/rhi/vulkan/VkRhiInterop.h"
 #include "renderer/passes/TemporalUpscalePass.h"
@@ -15,6 +16,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -1212,6 +1215,194 @@ void main() {
     return presentationCorrect;
 }
 
+[[nodiscard]] bool validateRenderGraphMultiQueue(
+    VkRhiDevice& device,
+    RhiCommandListPool& commandPool) {
+    constexpr std::array<uint32_t, 4u> kPayload{
+        0x13579BDFu, 0x2468ACE0u, 0x10203040u, 0x55667788u};
+    constexpr uint64_t kPayloadSize = sizeof(kPayload);
+
+    RhiBufferDesc readbackDesc;
+    readbackDesc.debugName = "VulkanSmoke.RenderGraph.Readback";
+    readbackDesc.size = kPayloadSize;
+    readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                         rhiFlag(RhiBufferUsage::MapRead);
+    readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+    readbackDesc.initialState = RhiResourceState::TransferDst;
+    const RhiBufferHandle readback =
+        device.createBuffer(readbackDesc, nullptr, 0u);
+    if (!readback.isValid()) {
+        return false;
+    }
+
+    const uint64_t validationErrorsBefore = device.validationErrorCount();
+    RenderGraph graph;
+    RhiBufferHandle firstTransientBuffer;
+    RhiTextureHandle firstTransientTexture;
+    const auto executeFrame = [&](const RhiResourceState readbackInitialState,
+                                  const bool expectReuse,
+                                  const size_t expectedSubmissionCount) {
+        graph.reset();
+
+        RhiBufferDesc transientBufferDesc;
+        transientBufferDesc.debugName =
+            "VulkanSmoke.RenderGraph.TransientBuffer";
+        transientBufferDesc.size = kPayloadSize;
+        transientBufferDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                                    rhiFlag(RhiBufferUsage::TransferSrc) |
+                                    rhiFlag(RhiBufferUsage::Storage);
+        const RgBufferHandle transientBuffer = graph.createBuffer(
+            {"MultiQueueBuffer", transientBufferDesc,
+             RhiResourceState::Undefined});
+
+        RhiTextureDesc transientTextureDesc;
+        transientTextureDesc.debugName =
+            "VulkanSmoke.RenderGraph.TransientTexture";
+        transientTextureDesc.format = RhiTextureFormat::Rgba8Unorm;
+        transientTextureDesc.width = 8u;
+        transientTextureDesc.height = 8u;
+        transientTextureDesc.usage = rhiFlag(RhiTextureUsage::TransferDst) |
+                                     rhiFlag(RhiTextureUsage::Storage) |
+                                     rhiFlag(RhiTextureUsage::Sampled);
+        const RgTextureHandle transientTexture = graph.createTexture(
+            {"MultiQueueTexture", transientTextureDesc,
+             RhiResourceState::Undefined});
+
+        RhiBufferDesc importedReadbackDesc = readbackDesc;
+        importedReadbackDesc.initialState = readbackInitialState;
+        const RgBufferHandle importedReadback = graph.importBuffer(
+            {"Readback", readback, importedReadbackDesc,
+             readbackInitialState, RhiResourceState::HostRead,
+             RhiQueueType::Graphics, RhiQueueType::Graphics});
+
+        RhiBufferHandle resolvedBuffer;
+        RhiTextureHandle resolvedTexture;
+        graph.addPass({"MultiQueue.Transfer", RgPassType::Copy,
+                       RhiQueueType::Transfer})
+            .writeBuffer(transientBuffer, RhiResourceState::TransferDst)
+            .writeTexture(transientTexture, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& context) {
+                resolvedBuffer = context.buffer(transientBuffer);
+                resolvedTexture = context.texture(transientTexture);
+                context.commandList().updateBuffer(
+                    resolvedBuffer, 0u, kPayload.data(), sizeof(kPayload));
+                return resolvedBuffer.isValid() && resolvedTexture.isValid();
+            });
+        graph.addPass({"MultiQueue.Compute", RgPassType::Compute,
+                       RhiQueueType::Compute})
+            .readWriteBuffer(transientBuffer,
+                             RhiResourceState::StorageBuffer)
+            .readWriteTexture(transientTexture,
+                              RhiResourceState::ShaderWrite)
+            .setExecute([](RgPassContext&) { return true; });
+        graph.addPass({"MultiQueue.Graphics", RgPassType::Copy,
+                       RhiQueueType::Graphics})
+            .readBuffer(transientBuffer, RhiResourceState::TransferSrc)
+            .readTexture(transientTexture, RhiResourceState::ShaderRead)
+            .writeBuffer(importedReadback, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& context) {
+                context.commandList().copyBuffer(
+                    {context.buffer(transientBuffer),
+                     context.buffer(importedReadback), 0u, 0u, kPayloadSize});
+                return true;
+            });
+
+        const RgCompileResult compiled = graph.compile();
+        if (!compiled.succeeded()) {
+            std::cerr << "Render Graph multi-queue compile failed: "
+                      << compiled.message << '\n';
+            return false;
+        }
+        const auto& batches = graph.submissionBatches();
+        if (batches.size() != 3u ||
+            batches[0].queue != RhiQueueType::Transfer ||
+            batches[1].queue != RhiQueueType::Compute ||
+            batches[2].queue != RhiQueueType::Graphics ||
+            batches[1].dependencies.size() != 1u ||
+            batches[1].dependencies[0] != 0u ||
+            batches[2].dependencies.size() != 1u ||
+            batches[2].dependencies[0] != 1u) {
+            std::cerr << "Render Graph multi-queue batch plan is invalid\n";
+            return false;
+        }
+
+        const RgExecuteResult executed = graph.execute(device, commandPool);
+        if (!executed.succeeded()) {
+            std::cerr << "Render Graph multi-queue execution failed: "
+                      << executed.message << '\n';
+            return false;
+        }
+        if (executed.submissions.size() != expectedSubmissionCount) {
+            std::cerr << "Render Graph multi-queue submission count mismatch\n";
+            return false;
+        }
+        const size_t queueTokenOffset = expectedSubmissionCount - 3u;
+        if (executed.submissions[queueTokenOffset].queue !=
+                RhiQueueType::Transfer ||
+            executed.submissions[queueTokenOffset + 1u].queue !=
+                RhiQueueType::Compute ||
+            executed.submissions[queueTokenOffset + 2u].queue !=
+                RhiQueueType::Graphics ||
+            executed.submissions[queueTokenOffset].timelineValue() == 0u ||
+            executed.submissions[queueTokenOffset + 1u].timelineValue() == 0u ||
+            executed.submissions[queueTokenOffset + 2u].timelineValue() == 0u) {
+            std::cerr << "Render Graph multi-queue timeline chain is invalid\n";
+            return false;
+        }
+        if (!expectReuse) {
+            firstTransientBuffer = resolvedBuffer;
+            firstTransientTexture = resolvedTexture;
+            return true;
+        }
+        if (!device.waitForSubmission(executed.completionToken())) {
+            std::cerr << "Render Graph multi-frame timeline chain is invalid\n";
+            return false;
+        }
+        if (graph.pollTimings(device) != RgTimingPollResult::Available) {
+            std::cerr << "Render Graph multi-queue timings are unavailable\n";
+            return false;
+        }
+        const RgTimingSnapshot& timings = graph.latestTimings();
+        if (!timings.isValid() || timings.execution != 2u ||
+            timings.passes.size() != 3u ||
+            timings.passes[0].name != "MultiQueue.Transfer" ||
+            timings.passes[0].queue != RhiQueueType::Transfer ||
+            timings.passes[1].name != "MultiQueue.Compute" ||
+            timings.passes[1].queue != RhiQueueType::Compute ||
+            timings.passes[2].name != "MultiQueue.Graphics" ||
+            timings.passes[2].queue != RhiQueueType::Graphics) {
+            std::cerr << "Render Graph multi-queue timing snapshot is invalid\n";
+            return false;
+        }
+
+        const auto* mapped = static_cast<const uint32_t*>(
+            device.mapBuffer(readback, 0u, kPayloadSize));
+        if (mapped == nullptr) {
+            return false;
+        }
+        const bool payloadMatches =
+            std::equal(kPayload.begin(), kPayload.end(), mapped);
+        device.unmapBuffer(readback);
+        if (!payloadMatches) {
+            std::cerr << "Render Graph multi-queue payload mismatch\n";
+            return false;
+        }
+
+        return resolvedBuffer.index == firstTransientBuffer.index &&
+               resolvedBuffer.generation == firstTransientBuffer.generation &&
+               resolvedTexture.index == firstTransientTexture.index &&
+               resolvedTexture.generation == firstTransientTexture.generation;
+    };
+
+    const bool valid =
+        executeFrame(RhiResourceState::TransferDst, false, 3u) &&
+        executeFrame(RhiResourceState::HostRead, true, 4u);
+    graph.releaseTransientResources(device);
+    device.destroyBuffer(readback);
+    return valid &&
+           device.validationErrorCount() == validationErrorsBefore;
+}
+
 } // namespace
 
 int main() {
@@ -1353,6 +1544,7 @@ int main() {
         !validateVulkanInterop(device, *commandPool, texture, textureView,
                                textureWidth, textureHeight, textureDepth) ||
         !validateOffscreenCoordinateContract(device, *commandPool, window) ||
+        !validateRenderGraphMultiQueue(device, *commandPool) ||
         !validateIndependentUiPresentation(device, *commandPool, window) ||
         !rejectDestroyedResourceSubmission(device, *commandPool) ||
         !cancelAcquiredFrame(device, window) ||

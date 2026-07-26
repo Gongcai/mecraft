@@ -69,8 +69,16 @@ bool testTextureDependencyAndBarrierPlanning() {
                      RhiQueueType::Compute,
              "the reader must receive a cross-queue state transition") &&
          requireTrue(
-             graph.epilogueTextureBarriers().empty(),
-             "the requested final texture state is already established") &&
+             graph.epilogueTextureBarriers().size() == 1u &&
+                 graph.epilogueTextureBarriers()[0].oldState ==
+                     RhiResourceState::ShaderRead &&
+                 graph.epilogueTextureBarriers()[0].newState ==
+                     RhiResourceState::ShaderRead &&
+                 graph.epilogueTextureBarriers()[0].sourceQueue ==
+                     RhiQueueType::Compute &&
+                 graph.epilogueTextureBarriers()[0].destinationQueue ==
+                     RhiQueueType::Graphics,
+             "the final queue contract must return the texture to graphics") &&
          requireTrue(graph.textureLifetimes()[0].used &&
                          graph.textureLifetimes()[0].firstPass == 0u &&
                          graph.textureLifetimes()[0].lastPass == 1u,
@@ -119,7 +127,10 @@ bool testImportedResourceRead() {
                            {7u, 3u},
                            colorTextureDesc(),
                            RhiResourceState::ShaderRead,
-                           RhiResourceState::ShaderRead});
+                           RhiResourceState::ShaderRead,
+                           {},
+                           RhiQueueType::Graphics,
+                           RhiQueueType::Graphics});
   graph.addPass({"HistoryRead", RgPassType::Graphics, RhiQueueType::Graphics})
       .readTexture(texture)
       .setExecute(executeNoop);
@@ -155,8 +166,16 @@ bool testBufferRangeCoverage() {
              graph.compiledPasses()[2].dependencies.size() == 2u,
              "a buffer consumer must depend on every overlapping writer") &&
          requireTrue(
-             graph.epilogueBufferBarriers().empty(),
-             "the final buffer state must be established by its consumer");
+             graph.epilogueBufferBarriers().size() == 1u &&
+                 graph.epilogueBufferBarriers()[0].oldState ==
+                     RhiResourceState::StorageBuffer &&
+                 graph.epilogueBufferBarriers()[0].newState ==
+                     RhiResourceState::StorageBuffer &&
+                 graph.epilogueBufferBarriers()[0].sourceQueue ==
+                     RhiQueueType::Compute &&
+                 graph.epilogueBufferBarriers()[0].destinationQueue ==
+                     RhiQueueType::Graphics,
+             "the final buffer queue contract must return it to graphics");
 }
 
 bool testExplicitCycleValidation() {
@@ -186,7 +205,10 @@ bool testDuplicateAccessValidation() {
                            {4u, 2u},
                            colorTextureDesc(),
                            RhiResourceState::ShaderRead,
-                           RhiResourceState::ShaderRead});
+                           RhiResourceState::ShaderRead,
+                           {},
+                           RhiQueueType::Graphics,
+                           RhiQueueType::Graphics});
   graph
       .addPass(
           {"DuplicateAccess", RgPassType::Graphics, RhiQueueType::Graphics})
@@ -224,7 +246,10 @@ bool testUndefinedImportedReadValidation() {
                            {11u, 2u},
                            colorTextureDesc(),
                            RhiResourceState::Undefined,
-                           RhiResourceState::ShaderRead});
+                           RhiResourceState::ShaderRead,
+                           {},
+                           RhiQueueType::Graphics,
+                           RhiQueueType::Graphics});
   graph
       .addPass(
           {"ReadUndefinedImport", RgPassType::Graphics, RhiQueueType::Graphics})
@@ -235,6 +260,110 @@ bool testUndefinedImportedReadValidation() {
       result.error == RgCompileError::ReadBeforeWrite,
       "an imported resource in Undefined state must be written before reading");
 }
+
+bool testCrossQueueReadOwnershipDependency() {
+  RenderGraph graph;
+  const RgTextureHandle texture =
+      graph.importTexture({"SharedRead",
+                           {17u, 4u},
+                           colorTextureDesc(),
+                           RhiResourceState::ShaderRead,
+                           RhiResourceState::ShaderRead,
+                           {},
+                           RhiQueueType::Graphics,
+                           RhiQueueType::Compute});
+  graph.addPass({"GraphicsRead", RgPassType::Graphics,
+                 RhiQueueType::Graphics})
+      .readTexture(texture)
+      .setExecute(executeNoop);
+  graph.addPass({"ComputeRead", RgPassType::Compute, RhiQueueType::Compute})
+      .readTexture(texture)
+      .setExecute(executeNoop);
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str()))
+    return false;
+  const RgCompiledPass &source = graph.compiledPasses()[0];
+  const RgCompiledPass &destination = graph.compiledPasses()[1];
+  return requireTrue(destination.dependencies.size() == 1u &&
+                         destination.dependencies[0] == 0u,
+                     "cross-queue reads must preserve exclusive ownership") &&
+         requireTrue(source.releaseTextureBarriers.size() == 1u,
+                     "cross-family ownership must have a source release plan") &&
+         requireTrue(destination.textureBarriers.size() == 1u &&
+                         destination.textureBarriers[0].sourcePass == 0u,
+                     "cross-queue read must have a paired destination plan");
+}
+
+bool testQueueOnlyEpiloguePlanning() {
+  RenderGraph graph;
+  RhiBufferDesc desc;
+  desc.debugName = "RenderGraphTest.QueueOnlyEpilogue";
+  desc.size = 256u;
+  desc.usage = rhiFlag(RhiBufferUsage::TransferDst);
+  const RgBufferHandle buffer = graph.createBuffer(
+      {"QueueOnlyEpilogue", desc, RhiResourceState::TransferDst});
+  graph.addPass({"TransferWrite", RgPassType::Copy,
+                 RhiQueueType::Transfer})
+      .writeBuffer(buffer, RhiResourceState::TransferDst)
+      .setExecute(executeNoop);
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str()))
+    return false;
+  return requireTrue(graph.epilogueBufferBarriers().size() == 1u,
+                     "final queue changes require an epilogue barrier") &&
+         requireTrue(
+             graph.epilogueBufferBarriers()[0].oldState ==
+                     RhiResourceState::TransferDst &&
+                 graph.epilogueBufferBarriers()[0].newState ==
+                     RhiResourceState::TransferDst &&
+                 graph.epilogueBufferBarriers()[0].sourceQueue ==
+                     RhiQueueType::Transfer &&
+                 graph.epilogueBufferBarriers()[0].destinationQueue ==
+                     RhiQueueType::Graphics &&
+                 graph.epilogueBufferBarriers()[0].sourcePass == 0u,
+             "queue-only epilogue must retain state and source pass") &&
+         requireTrue(
+             graph.compiledPasses()[0].releaseBufferBarriers.size() == 1u,
+             "queue-only epilogue must plan a matching source release");
+}
+
+bool testBatchSplitForLateQueueDependency() {
+  RenderGraph graph;
+  RhiBufferDesc desc;
+  desc.debugName = "RenderGraphTest.BatchSplit";
+  desc.size = 256u;
+  desc.usage = rhiFlag(RhiBufferUsage::Storage) |
+               rhiFlag(RhiBufferUsage::TransferDst);
+  const RgBufferHandle computeOutput =
+      graph.createBuffer({"ComputeOutput", desc, RhiResourceState::Undefined});
+  const RgBufferHandle graphicsOutput = graph.createBuffer(
+      {"GraphicsOutput", desc, RhiResourceState::Undefined});
+  graph.addPass({"ComputeProducer", RgPassType::Compute,
+                 RhiQueueType::Compute})
+      .writeBuffer(computeOutput, RhiResourceState::StorageBuffer)
+      .setExecute(executeNoop);
+  graph.addPass({"IndependentGraphics", RgPassType::Copy,
+                 RhiQueueType::Graphics})
+      .writeBuffer(graphicsOutput, RhiResourceState::TransferDst)
+      .setExecute(executeNoop);
+  graph.addPass({"DependentGraphics", RgPassType::Compute,
+                 RhiQueueType::Graphics})
+      .readBuffer(computeOutput, RhiResourceState::StorageBuffer)
+      .setExecute(executeNoop);
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str()))
+    return false;
+  return requireTrue(graph.submissionBatches().size() == 3u,
+                     "a late cross-queue wait must start a new batch") &&
+         requireTrue(graph.submissionBatches()[1].dependencies.empty(),
+                     "independent graphics work must not wait for compute") &&
+         requireTrue(graph.submissionBatches()[2].dependencies.size() == 1u &&
+                         graph.submissionBatches()[2].dependencies[0] == 0u,
+                     "the split graphics batch must wait for its producer");
+}
 } // namespace
 
 int main() {
@@ -244,6 +373,9 @@ int main() {
       testTransientReadBeforeWriteValidation() && testImportedResourceRead() &&
       testBufferRangeCoverage() && testExplicitCycleValidation() &&
       testDuplicateAccessValidation() && testResetInvalidatesHandles() &&
-      testUndefinedImportedReadValidation();
+      testUndefinedImportedReadValidation() &&
+      testCrossQueueReadOwnershipDependency() &&
+      testQueueOnlyEpiloguePlanning() &&
+      testBatchSplitForLateQueueDependency();
   return passed ? EXIT_SUCCESS : EXIT_FAILURE;
 }
