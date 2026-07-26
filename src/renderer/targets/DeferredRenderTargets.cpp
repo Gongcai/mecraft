@@ -205,6 +205,8 @@ void DeferredRenderTargets::initializePersistentTextureStates() {
         m_transparentCompositeDepthHandle,
         m_historyDepthHandle[0],
         m_historyDepthHandle[1],
+        m_taaHistoryDepthHandle[0],
+        m_taaHistoryDepthHandle[1],
         m_csmShadowDepthHandle,
         m_csmShadowDepthAllHandle
     };
@@ -568,8 +570,13 @@ bool DeferredRenderTargets::createSceneHistoryTextures() {
         const char* depthName = i == 0
             ? "DeferredTargets.HistoryDepth[0]"
             : "DeferredTargets.HistoryDepth[1]";
+        const char* taaDepthName = i == 0
+            ? "DeferredTargets.TaaHistoryDepth[0]"
+            : "DeferredTargets.TaaHistoryDepth[1]";
         if (!createTexture(sceneName, RhiTextureFormat::Rgba16Float, colorUsage, m_historySceneHandle[i]) ||
-            !createTexture(depthName, RhiTextureFormat::Depth32Float, depthUsage, m_historyDepthHandle[i])) {
+            !createTexture(depthName, RhiTextureFormat::Depth32Float, depthUsage, m_historyDepthHandle[i]) ||
+            !createTexture(taaDepthName, RhiTextureFormat::Depth32Float, depthUsage,
+                           m_taaHistoryDepthHandle[i])) {
             destroySceneHistoryTextures();
             return false;
         }
@@ -590,6 +597,10 @@ void DeferredRenderTargets::destroySceneHistoryTextures() {
         if (m_historyDepthHandle[i].isValid()) {
             m_rhiDevice->destroyTexture(m_historyDepthHandle[i]);
             m_historyDepthHandle[i] = {};
+        }
+        if (m_taaHistoryDepthHandle[i].isValid()) {
+            m_rhiDevice->destroyTexture(m_taaHistoryDepthHandle[i]);
+            m_taaHistoryDepthHandle[i] = {};
         }
     }
 }
@@ -972,6 +983,8 @@ bool DeferredRenderTargets::registerRhiTextures() {
                             m_historySceneHandle[1].isValid() &&
                             m_historyDepthHandle[0].isValid() &&
                             m_historyDepthHandle[1].isValid() &&
+                            m_taaHistoryDepthHandle[0].isValid() &&
+                            m_taaHistoryDepthHandle[1].isValid() &&
                             m_historyReflectionHandle[0].isValid() &&
                             m_historyReflectionHandle[1].isValid() &&
                             m_historyCloudHandle[0].isValid() &&
@@ -2061,6 +2074,49 @@ bool DeferredRenderTargets::ensureHistoryDepthTextureViews(RhiDevice& rhiDevice)
     return true;
 }
 
+bool DeferredRenderTargets::ensureTaaHistoryDepthTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (m_taaHistoryDepthView[0].isValid() &&
+        m_taaHistoryDepthView[1].isValid()) {
+        return true;
+    }
+    if (!m_taaHistoryDepthHandle[0].isValid() ||
+        !m_taaHistoryDepthHandle[1].isValid()) {
+        return false;
+    }
+
+    for (int historyIndex = 0; historyIndex < 2; ++historyIndex) {
+        if (m_taaHistoryDepthView[historyIndex].isValid()) {
+            continue;
+        }
+
+        RhiTextureViewDesc desc;
+        desc.texture = m_taaHistoryDepthHandle[historyIndex];
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::Depth32Float;
+        desc.baseMip = 0;
+        desc.mipCount = 1;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+
+        m_taaHistoryDepthView[historyIndex] = rhiDevice.createTextureView(desc);
+        if (!m_taaHistoryDepthView[historyIndex].isValid()) {
+            for (RhiTextureViewHandle& view : m_taaHistoryDepthView) {
+                if (view.isValid()) {
+                    rhiDevice.destroyTextureView(view);
+                }
+                view = {};
+            }
+            return false;
+        }
+    }
+
+    m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
 bool DeferredRenderTargets::ensureHistoryReflectionTextureViews(RhiDevice& rhiDevice) {
     if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
         destroyRhiTextureViews();
@@ -2570,6 +2626,12 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
         }
         view = {};
     }
+    for (RhiTextureViewHandle& view : m_taaHistoryDepthView) {
+        if (m_rhiViewDevice != nullptr && view.isValid()) {
+            m_rhiViewDevice->destroyTextureView(view);
+        }
+        view = {};
+    }
     for (RhiTextureViewHandle& view : m_historyVolumetricView) {
         if (m_rhiViewDevice != nullptr && view.isValid()) {
             m_rhiViewDevice->destroyTextureView(view);
@@ -2643,6 +2705,8 @@ void DeferredRenderTargets::destroyRhiTextureViews() {
     m_historySceneView[1] = {};
     m_historyDepthView[0] = {};
     m_historyDepthView[1] = {};
+    m_taaHistoryDepthView[0] = {};
+    m_taaHistoryDepthView[1] = {};
     m_historyReflectionView[0] = {};
     m_historyReflectionView[1] = {};
     m_historyCloudView[0] = {};

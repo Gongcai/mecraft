@@ -1,9 +1,7 @@
 #version 450 core
-// DerivativeMain-style temporal resolve. Parity with Temporal.frag:
-// - Variance clip (mean +/- 1.25 * stddev) instead of AABB expansion
-// - Fixed 0.97 blend weight with sub-pixel coverage modulation
-// - Reinhard luminance-weighted tonemapping
-// - taaOffset * 0.5 applied to current sample coordinate
+// DerivativeMain-style temporal resolve with explicit transparent-surface
+// rejection. The history color remains in the resolved, non-jittered domain;
+// history depth is sampled in the previous frame's jittered raster domain.
 
 #include "gbuffer_contract.glsl"
 #include "rhi_screen_coordinates.glsl"
@@ -13,14 +11,22 @@ layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uCurrentTex;
 layout(binding = 1) uniform sampler2D uHistoryTex;
-layout(binding = 2) uniform sampler2D uVelocityTex;
-layout(binding = 3) uniform sampler2D uDepthTex;
-layout(binding = 4) uniform sampler2D uMaterialAuxTex;
+layout(binding = 2) uniform sampler2D uHistoryDepthTex;
+layout(binding = 3) uniform sampler2D uVelocityTex;
+layout(binding = 4) uniform sampler2D uOpaqueDepthTex;
+layout(binding = 5) uniform sampler2D uTransparentDepthTex;
+layout(binding = 6) uniform sampler2D uReactiveMaskTex;
+layout(binding = 7) uniform sampler2D uTransparencyMaskTex;
+layout(binding = 8) uniform sampler2D uMaterialAuxTex;
 
 layout(push_constant) uniform RhiPushConstants {
+    mat4 uCurrentInvViewProj;
+    mat4 uPreviousJitteredViewProj;
     vec4 uScreenSizeJitter;
     vec4 uTemporalParams;
 };
+
+const float kDepthEpsilon = 1.0e-5;
 
 vec3 RGBtoYCoCgR(in vec3 rgbColor) {
     vec3 ycocg;
@@ -52,8 +58,29 @@ vec3 invReinhard(in vec3 color) {
     return color / (1.0 - GetLuminance(color));
 }
 
-bool badVec2(vec2 v) {
-    return any(isnan(v)) || any(isinf(v));
+bool badVec2(vec2 value) {
+    return any(isnan(value)) || any(isinf(value));
+}
+
+bool badVec4(vec4 value) {
+    return any(isnan(value)) || any(isinf(value));
+}
+
+vec3 reconstructWorldPosition(vec2 clipUv, float depth, out bool valid) {
+    vec4 clip = vec4(clipUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 world = uCurrentInvViewProj * clip;
+    valid = !badVec4(world) && abs(world.w) > 0.00001;
+    if (!valid) {
+        return vec3(0.0);
+    }
+    return world.xyz / world.w;
+}
+
+float linearizeDepth(float depth) {
+    float nearPlane = max(uTemporalParams.z, 1.0e-4);
+    float farPlane = max(uTemporalParams.w, nearPlane + 1.0e-3);
+    float denominator = depth * (nearPlane - farPlane) + farPlane;
+    return nearPlane * farPlane / max(denominator, 1.0e-7);
 }
 
 vec3 clipAABB(in vec3 boxMin, in vec3 boxMax, in vec3 previousSample) {
@@ -70,7 +97,6 @@ vec3 clipAABB(in vec3 boxMin, in vec3 boxMax, in vec3 previousSample) {
 }
 
 // DerivativeMain Temporal.frag: SMAA CatmullRom approximation (5-tap).
-// Sharper than bilinear for history sampling, reduces variance clip rejection.
 vec4 catmullRomFast(sampler2D tex, vec2 coord) {
     vec2 pxSize = 1.0 / max(uScreenSizeJitter.xy, vec2(1.0));
     vec2 position = uScreenSizeJitter.xy * coord;
@@ -79,7 +105,7 @@ vec4 catmullRomFast(sampler2D tex, vec2 coord) {
     vec2 f2 = f * f;
     vec2 f3 = f * f2;
 
-    const float sharpness = 0.7; // DerivativeMain TAA_SHARPNESS
+    const float sharpness = 0.7;
     vec2 w0 = -sharpness        * f3 + 2.0 * sharpness         * f2 - sharpness * f;
     vec2 w1 = (2.0 - sharpness) * f3 - (3.0 - sharpness)       * f2 + 1.0;
     vec2 w2 = (sharpness - 2.0) * f3 + (3.0 - 2.0 * sharpness) * f2 + sharpness * f;
@@ -112,35 +138,65 @@ void main() {
 
     vec2 velocity = texelFetch(uVelocityTex, texel, 0).rg;
     vec2 previousCoord = textureUv - velocity;
-
-    // Bad motion vectors make texture() with NaN/Inf coordinates undefined,
-    // which appears as stable-shaped regions filled with drifting history.
     if (badVec2(velocity) || badVec2(previousCoord) ||
         any(greaterThan(abs(velocity), vec2(1.0)))) {
         FragColor = texelFetch(uCurrentTex, texel, 0);
         return;
     }
 
-    // Out-of-bounds history: use current frame
     if (previousCoord.x < 0.0 || previousCoord.x > 1.0 ||
         previousCoord.y < 0.0 || previousCoord.y > 1.0) {
         FragColor = texelFetch(uCurrentTex, texel, 0);
         return;
     }
 
-    // DerivativeMain: apply taaOffset * 0.5 to current sample coordinate.
-    // Convert UV to pixel, apply jitter in pixel space, clamp.
+    float opaqueDepth = texelFetch(uOpaqueDepthTex, texel, 0).r;
+    float transparentDepth = texelFetch(uTransparentDepthTex, texel, 0).r;
+    float reactiveMask = texelFetch(uReactiveMaskTex, texel, 0).r;
+    float transparencyMask = texelFetch(uTransparencyMaskTex, texel, 0).r;
+    bool transparentSurface = transparencyMask > 1.0e-4 &&
+                              transparentDepth < 1.0 - kDepthEpsilon &&
+                              transparentDepth < opaqueDepth - kDepthEpsilon;
+    float currentDepth = transparentSurface ? transparentDepth : opaqueDepth;
+
+    // Reconstruct the current surface using the matrix that produced the
+    // raster depth, then locate that surface in the previous jittered depth.
+    bool worldValid = false;
+    vec3 worldPosition = reconstructWorldPosition(
+        rhiScreenUvToClipUv(vScreenUv), currentDepth, worldValid);
+    vec2 historyDepthUv = vec2(0.0);
+    float expectedHistoryDepth = 1.0;
+    bool historyDepthValid = worldValid;
+    if (historyDepthValid) {
+        vec4 previousJitteredClip =
+            uPreviousJitteredViewProj * vec4(worldPosition, 1.0);
+        historyDepthValid = !badVec4(previousJitteredClip) &&
+                           previousJitteredClip.w > 0.00001;
+        if (historyDepthValid) {
+            vec2 previousClipUv = previousJitteredClip.xy /
+                                  previousJitteredClip.w * 0.5 + 0.5;
+            vec2 previousScreenUv = rhiScreenUvToClipUv(previousClipUv);
+            historyDepthUv = rhiScreenUvToTextureUv(previousScreenUv);
+            expectedHistoryDepth = previousJitteredClip.z /
+                                   previousJitteredClip.w * 0.5 + 0.5;
+            historyDepthValid = !badVec2(historyDepthUv) &&
+                                !badVec2(vec2(expectedHistoryDepth)) &&
+                                expectedHistoryDepth >= 0.0 &&
+                                expectedHistoryDepth <= 1.0 &&
+                                historyDepthUv.x >= 0.0 &&
+                                historyDepthUv.x <= 1.0 &&
+                                historyDepthUv.y >= 0.0 &&
+                                historyDepthUv.y <= 1.0;
+        }
+    }
+
+    // DerivativeMain applies taaOffset * 0.5 to the current color sample.
     vec2 samplePixel = textureUv * uScreenSizeJitter.xy +
         uScreenSizeJitter.zw * uScreenSizeJitter.xy * 0.5;
-    ivec2 sampleTexel = clamp(ivec2(samplePixel), ivec2(0), ivec2(uScreenSizeJitter.xy) - 1);
-
+    ivec2 sampleTexel = clamp(
+        ivec2(samplePixel), ivec2(0), ivec2(uScreenSizeJitter.xy) - 1);
     vec3 currentSample = texelFetch(uCurrentTex, sampleTexel, 0).rgb;
 
-    // DerivativeMain: no sky special case. All pixels, including sky and
-    // VFog, go through the same variance clip + 0.97 history blend.
-    // Sky velocity comes from far-plane reprojection, not zero.
-
-    // 3x3 neighborhood in YCoCgR for variance clip, all around sampleTexel.
     ivec2 clampedSize = ivec2(uScreenSizeJitter.xy) - 1;
     vec3 col0 = RGBtoYCoCgR(currentSample);
     vec3 col1 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2(-1,  1), ivec2(0), clampedSize), 0).rgb);
@@ -152,53 +208,70 @@ void main() {
     vec3 col7 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 0, -1), ivec2(0), clampedSize), 0).rgb);
     vec3 col8 = RGBtoYCoCgR(texelFetch(uCurrentTex, clamp(sampleTexel + ivec2( 1, -1), ivec2(0), clampedSize), 0).rgb);
 
-    // DerivativeMain variance clip: mean +/- 1.25 * stddev
     vec3 clipAvg = (col0 + col1 + col2 + col3 + col4 + col5 + col6 + col7 + col8) / 9.0;
     vec3 sqrVar = (col0*col0 + col1*col1 + col2*col2 + col3*col3 + col4*col4 + col5*col5 + col6*col6 + col7*col7 + col8*col8) / 9.0;
     vec3 variance = sqrt(abs(sqrVar - clipAvg * clipAvg));
     vec3 clipMin = clipAvg - variance * 1.25;
     vec3 clipMax = clipAvg + variance * 1.25;
 
-    // Sample and clip history — CatmullRom for sharper reconstruction.
-    // DerivativeMain Temporal.frag: textureCatmullRomFast with TAA_SHARPNESS=0.7.
-    vec2 safeHistoryUv = clamp(previousCoord, texelSize * 0.5, 1.0 - texelSize * 0.5);
-    vec3 previousSample = RGBtoYCoCgR(catmullRomFast(uHistoryTex, safeHistoryUv).rgb);
+    vec2 safeHistoryUv = clamp(previousCoord,
+                               texelSize * 0.5,
+                               1.0 - texelSize * 0.5);
+    vec3 previousSample = RGBtoYCoCgR(
+        catmullRomFast(uHistoryTex, safeHistoryUv).rgb);
     previousSample = clipAABB(clipMin, clipMax, previousSample);
     previousSample = YCoCgRtoRGB(previousSample);
 
-    // DerivativeMain blend: fixed 0.97 with sub-pixel coverage modulation.
-    // When the reprojected coordinate lands near a texel center (coverage ~1),
-    // history gets full weight. Near texel edges, weight drops slightly.
+    float depthDisocclusion = 1.0;
+    if (historyDepthValid) {
+        ivec2 historyDepthSize = ivec2(uScreenSizeJitter.xy);
+        ivec2 historyDepthTexel = clamp(
+            ivec2(historyDepthUv * uScreenSizeJitter.xy),
+            ivec2(0), historyDepthSize - 1);
+        float historyDepth = texelFetch(
+            uHistoryDepthTex, historyDepthTexel, 0).r;
+        float expectedLinearDepth = linearizeDepth(expectedHistoryDepth);
+        float sampledLinearDepth = linearizeDepth(historyDepth);
+        float relativeDepthDifference =
+            abs(expectedLinearDepth - sampledLinearDepth) /
+            max(expectedLinearDepth, 0.1);
+        depthDisocclusion = smoothstep(0.035, 0.28,
+                                       relativeDepthDifference);
+    }
+
     float blendWeight = 0.97;
-    vec2 pixelVelocity = 1.0 - abs(fract(previousCoord * uScreenSizeJitter.xy) * 2.0 - 1.0);
+    vec2 pixelVelocity = 1.0 -
+        abs(fract(previousCoord * uScreenSizeJitter.xy) * 2.0 - 1.0);
     blendWeight *= sqrt(pixelVelocity.x * pixelVelocity.y) * 0.25 + 0.75;
 
-    // Mecraft adaptation: DerivativeMain writes rain ripple normals into the
-    // G-buffer before its TAA pass. In this renderer the animated wet-reflection
-    // signal is much smaller relative to the lit scene, so a full 0.97 history
-    // average can converge the moving RippleNormal contribution away. Keep the
-    // base Temporal.frag path for ordinary pixels, but make puddle pixels
-    // current-frame dominant so the DerivativeMain ripple source survives resolve.
-    if (uTemporalParams.y != 0.0 && uTemporalParams.x > 1e-2) {
-        float depth = texelFetch(uDepthTex, sampleTexel, 0).r;
-        if (depth < 0.9999) {
-            SurfaceMaterialAux aux = unpackGBufferMaterialAux(texelFetch(uMaterialAuxTex, sampleTexel, 0));
+    // Reactive and transparency masks describe pixels whose current color is
+    // not a stable projection of the previous resolved image.
+    float maskHistoryReject = clamp(max(reactiveMask, transparencyMask),
+                                    0.0, 1.0);
+    blendWeight *= (1.0 - maskHistoryReject) * (1.0 - depthDisocclusion);
+
+    // Animated wet opaque surfaces need the existing ripple-specific rejection,
+    // while transparent surfaces use their explicit temporal masks instead.
+    if (!transparentSurface && uTemporalParams.y != 0.0 &&
+        uTemporalParams.x > 1e-2) {
+        if (currentDepth < 0.9999) {
+            SurfaceMaterialAux aux = unpackGBufferMaterialAux(
+                texelFetch(uMaterialAuxTex, sampleTexel, 0));
             TranslucentMask transMask = decodeTranslucentMask(aux.materialKind);
             if (!transMask.isTranslucent) {
-                float wetHistoryReject = smoothstep(0.02, 0.25, aux.wetnessMask) *
-                                         clamp(uTemporalParams.x, 0.0, 1.0);
-                blendWeight = mix(blendWeight, 0.06, wetHistoryReject);
+                float wetHistoryReject = smoothstep(0.02, 0.25,
+                                                    aux.wetnessMask) *
+                                          clamp(uTemporalParams.x, 0.0, 1.0);
+                float wetHistoryLimit = mix(0.97, 0.06, wetHistoryReject);
+                blendWeight = min(blendWeight, wetHistoryLimit);
             }
         }
     }
 
-    // DerivativeMain: Reinhard luminance-weighted blend
-    vec3 result = invReinhard(mix(reinhard(currentSample), reinhard(previousSample), blendWeight));
-
-    // Preserve fog transmittance in alpha
+    vec3 result = invReinhard(
+        mix(reinhard(currentSample), reinhard(previousSample), blendWeight));
     float currentAlpha = texelFetch(uCurrentTex, sampleTexel, 0).a;
     float historyAlpha = texture(uHistoryTex, safeHistoryUv).a;
     float resultAlpha = mix(historyAlpha, currentAlpha, 1.0 - blendWeight);
-
     FragColor = vec4(max(result, vec3(0.0)), resultAlpha);
 }

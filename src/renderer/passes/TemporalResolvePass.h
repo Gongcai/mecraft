@@ -23,8 +23,12 @@ public:
         RgTextureHandle sceneResolved;
         RgTextureHandle temporalCurrent;
         RgTextureHandle historyPrevious;
+        RgTextureHandle historyDepthPrevious; // Visible surface depth from the previous frame.
         RgTextureHandle velocity;
         RgTextureHandle depth;
+        RgTextureHandle transparentDepth;
+        RgTextureHandle reactiveMask;
+        RgTextureHandle transparencyMask;
         RgTextureHandle materialAux;
     };
 
@@ -56,8 +60,12 @@ private:
                             int historyPrevIndex,
                             RhiTextureViewHandle currentView,
                             RhiTextureViewHandle historyView,
+                            RhiTextureViewHandle historyDepthView,
                             RhiTextureViewHandle velocityView,
                             RhiTextureViewHandle depthView,
+                            RhiTextureViewHandle transparentDepthView,
+                            RhiTextureViewHandle reactiveMaskView,
+                            RhiTextureViewHandle transparencyMaskView,
                             RhiTextureViewHandle materialAuxView);
     void destroyRhiBindGroup();
     void destroyRhiResources();
@@ -72,8 +80,12 @@ private:
     RhiBindGroupHandle m_bindGroup[2];
     RhiTextureViewHandle m_boundCurrentView[2];
     RhiTextureViewHandle m_boundHistoryView[2];
+    RhiTextureViewHandle m_boundHistoryDepthView[2];
     RhiTextureViewHandle m_boundVelocityView[2];
     RhiTextureViewHandle m_boundDepthView[2];
+    RhiTextureViewHandle m_boundTransparentDepthView[2];
+    RhiTextureViewHandle m_boundReactiveMaskView[2];
+    RhiTextureViewHandle m_boundTransparencyMaskView[2];
     RhiTextureViewHandle m_boundMaterialAuxView[2];
 };
 

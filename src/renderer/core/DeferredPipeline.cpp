@@ -113,7 +113,7 @@ void destroyTextureViews(RhiDevice& rhiDevice, RhiTextureViewHandle* views, cons
 bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice,
                                 RhiCommandListPool& commandListPool,
                                 DeferredRenderTargets& targets) {
-    RhiTextureViewHandle views[8];
+    RhiTextureViewHandle views[10];
     int viewCount = 0;
 
     const auto createView = [&](const RhiTextureHandle texture, const RhiTextureFormat format) {
@@ -141,6 +141,10 @@ bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice,
                                                              RhiTextureFormat::Depth32Float);
     const RhiTextureViewHandle historyDepthPrevView = createView(targets.historyDepthTexturePrevHandle(),
                                                                  RhiTextureFormat::Depth32Float);
+    const RhiTextureViewHandle taaHistoryDepthView = createView(
+        targets.taaHistoryDepthTextureHandle(), RhiTextureFormat::Depth32Float);
+    const RhiTextureViewHandle taaHistoryDepthPrevView = createView(
+        targets.taaHistoryDepthTexturePrevHandle(), RhiTextureFormat::Depth32Float);
 
     if (!ssaoHistoryView.isValid() ||
         !ssaoHistoryPrevView.isValid() ||
@@ -149,7 +153,9 @@ bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice,
         !ssgiHistoryPrevView.isValid() ||
         !ssgiMomentsHistoryPrevView.isValid() ||
         !historyDepthView.isValid() ||
-        !historyDepthPrevView.isValid()) {
+        !historyDepthPrevView.isValid() ||
+        !taaHistoryDepthView.isValid() ||
+        !taaHistoryDepthPrevView.isValid()) {
         destroyTextureViews(rhiDevice, views, viewCount);
         return false;
     }
@@ -177,6 +183,10 @@ bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice,
                               RhiResourceState::DepthWrite);
     targets.transitionTexture(commandList, targets.historyDepthTexturePrevHandle(),
                               RhiResourceState::DepthWrite);
+    targets.transitionTexture(commandList, targets.taaHistoryDepthTextureHandle(),
+                              RhiResourceState::DepthWrite);
+    targets.transitionTexture(commandList, targets.taaHistoryDepthTexturePrevHandle(),
+                              RhiResourceState::DepthWrite);
 
     RhiColorAttachment ssaoAttachments[2];
     setClearAttachment(ssaoAttachments[0], ssaoHistoryView, 1.0f, 1.0f, 1.0f, 1.0f);
@@ -196,6 +206,10 @@ bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice,
                          targets.width(), targets.height(), historyDepthView, 1.0f);
     clearDepthAttachment(commandList, "DeferredHistoryDepthPrevInit",
                          targets.width(), targets.height(), historyDepthPrevView, 1.0f);
+    clearDepthAttachment(commandList, "DeferredTaaHistoryDepthInit",
+                         targets.width(), targets.height(), taaHistoryDepthView, 1.0f);
+    clearDepthAttachment(commandList, "DeferredTaaHistoryDepthPrevInit",
+                         targets.width(), targets.height(), taaHistoryDepthPrevView, 1.0f);
 
     targets.transitionTexture(commandList, targets.ssaoHistoryTextureHandle(),
                               RhiResourceState::ShaderRead);
@@ -212,6 +226,10 @@ bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice,
     targets.transitionTexture(commandList, targets.historyDepthTextureHandle(),
                               RhiResourceState::DepthRead);
     targets.transitionTexture(commandList, targets.historyDepthTexturePrevHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.taaHistoryDepthTextureHandle(),
+                              RhiResourceState::DepthRead);
+    targets.transitionTexture(commandList, targets.taaHistoryDepthTexturePrevHandle(),
                               RhiResourceState::DepthRead);
 
     if (!commandList.end()) {
@@ -718,6 +736,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle ssgiMomentsHistoryPrevious;
     RgTextureHandle historyDepthCurrent;
     RgTextureHandle historyDepthPrevious;
+    RgTextureHandle taaHistoryDepthCurrent;
+    RgTextureHandle taaHistoryDepthPrevious;
     RgTextureHandle historyVolumetricCurrent;
     RgTextureHandle historyVolumetricPrevious;
     RgTextureHandle reflectionScratch;
@@ -815,6 +835,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        targets.historyDepthTexturePrevViewHandle(),
                        RhiResourceState::DepthRead,
                        historyDepthPrevious)) {
+        return failGraphSetup();
+    }
+    if (!importTexture(targets.taaHistoryDepthTextureHandle(), {},
+                       RhiResourceState::DepthRead, taaHistoryDepthCurrent) ||
+        !importTexture(targets.taaHistoryDepthTexturePrevHandle(),
+                       targets.taaHistoryDepthTexturePrevViewHandle(),
+                       RhiResourceState::DepthRead,
+                       taaHistoryDepthPrevious)) {
         return failGraphSetup();
     }
     if (ssgiTemporalEnabled &&
@@ -1267,6 +1295,23 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             });
           graphTail = particleCopy.handle();
 
+          if (m_velocityPass != nullptr) {
+              RenderGraphPassBuilder transparentVelocity = m_renderGraph.addPass(
+                  {"Deferred.TransparentVelocity", RgPassType::Graphics,
+                   RhiQueueType::Graphics});
+              transparentVelocity.dependsOn(graphTail)
+                  .readTexture(depth, RhiResourceState::DepthRead)
+                  .readTexture(transparentCompositeDepth,
+                               RhiResourceState::DepthRead)
+                  .readTexture(transparencyMask, RhiResourceState::ShaderRead)
+                  .readWriteTexture(velocity, RhiResourceState::RenderTarget)
+                  .setExecute([&](RgPassContext& pass) {
+                      return m_velocityPass->executeTransparent(
+                          pass.commandList(), ctx, settings, targets);
+                  });
+              graphTail = transparentVelocity.handle();
+          }
+
           VolumetricPass::GraphResources volumetricResources;
           volumetricResources.depth = depth;
           volumetricResources.skyCapture = skyCapture;
@@ -1300,8 +1345,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             taaResources.sceneResolved = sceneResolved;
             taaResources.temporalCurrent = temporalCurrent;
             taaResources.historyPrevious = historyScenePrevious;
+            taaResources.historyDepthPrevious = taaHistoryDepthPrevious;
             taaResources.velocity = velocity;
             taaResources.depth = depth;
+            taaResources.transparentDepth = transparentCompositeDepth;
+            taaResources.reactiveMask = reactiveMask;
+            taaResources.transparencyMask = transparencyMask;
             taaResources.materialAux = materialAux;
             graphTail = m_taaPass->addGraphPasses(
                 m_renderGraph, ctx, settings, targets, taaResources, graphTail);
@@ -1373,6 +1422,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     const bool volumetricHistoryWrittenByGraph =
         settings.debug.deferredLightDebugMode <= 0 &&
         volumetricTemporalEnabled;
+    const bool taaTransparentDepthAvailable =
+        settings.debug.deferredLightDebugMode <= 0 &&
+        settings.debug.reflectionDebugMode <= 0;
     RenderGraphPassBuilder historyCopy = m_renderGraph.addPass(
         {"Deferred.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics});
     historyCopy.dependsOn(graphTail)
@@ -1382,14 +1434,20 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         .readTexture(cloud, RhiResourceState::TransferSrc)
         .writeTexture(historySceneCurrent, RhiResourceState::TransferDst)
         .writeTexture(historyDepthCurrent, RhiResourceState::TransferDst)
+        .writeTexture(taaHistoryDepthCurrent, RhiResourceState::TransferDst)
         .writeTexture(historyReflectionCurrent, RhiResourceState::TransferDst)
         .writeTexture(historyCloudCurrent, RhiResourceState::TransferDst);
+    if (taaTransparentDepthAvailable) {
+        historyCopy.readTexture(transparentCompositeDepth,
+                                RhiResourceState::TransferSrc);
+    }
     if (!volumetricHistoryWrittenByGraph) {
         historyCopy.readTexture(halfRes, RhiResourceState::TransferSrc)
             .writeTexture(historyVolumetricCurrent,
                           RhiResourceState::TransferDst);
     }
-    historyCopy.setExecute([&, volumetricHistoryWrittenByGraph](RgPassContext& pass) {
+    historyCopy.setExecute([&, volumetricHistoryWrittenByGraph,
+                            taaTransparentDepthAvailable](RgPassContext& pass) {
         RhiTextureBlit sceneBlit;
         sceneBlit.src = targets.sceneResolvedTextureHandle();
         sceneBlit.dst = targets.historySceneTextureHandle();
@@ -1399,6 +1457,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         depthBlit.src = targets.depthTextureHandle();
         depthBlit.dst = targets.historyDepthTextureHandle();
         pass.commandList().blitTexture(depthBlit);
+
+        RhiTextureBlit taaDepthBlit;
+        taaDepthBlit.src = taaTransparentDepthAvailable
+            ? targets.transparentCompositeDepthTextureHandle()
+            : targets.depthTextureHandle();
+        taaDepthBlit.dst = targets.taaHistoryDepthTextureHandle();
+        pass.commandList().blitTexture(taaDepthBlit);
 
         RhiTextureBlit reflectionBlit;
         reflectionBlit.src = targets.reflectionTextureHandle();

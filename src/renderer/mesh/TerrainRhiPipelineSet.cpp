@@ -1142,7 +1142,7 @@ bool TerrainRhiPipelineSet::ensureWaterPipeline(ResourceMgr& resourceMgr) {
     setPackedTerrainVertexInput(pipelineDesc);
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = true;
-    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
     pipelineDesc.colorFormats = {
         RhiTextureFormat::Rgba16Float,
@@ -1477,7 +1477,7 @@ bool TerrainRhiPipelineSet::ensureTransparentPipeline(ResourceMgr& resourceMgr) 
     setPackedTerrainVertexInput(pipelineDesc);
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     pipelineDesc.depthStencil.depthTestEnabled = true;
-    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
     pipelineDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
     RhiBlendAttachmentState blend;
     blend.blendEnabled = true;

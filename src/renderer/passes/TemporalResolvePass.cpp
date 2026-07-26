@@ -10,9 +10,17 @@
 #include <algorithm>
 #include <optional>
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
 namespace {
+struct TemporalResolvePushConstants {
+    glm::mat4 currentInvViewProj;
+    glm::mat4 previousJitteredViewProj;
+    glm::vec4 screenSizeJitter;
+    glm::vec4 temporalParams;
+};
+
 [[nodiscard]] bool sameTextureView(const RhiTextureViewHandle lhs, const RhiTextureViewHandle rhs) {
     return lhs.index == rhs.index && lhs.generation == rhs.generation;
 }
@@ -34,7 +42,11 @@ RgPassHandle TemporalResolvePass::addGraphPasses(
     if (!dependency.isValid() || !resources.sceneResolved.isValid() ||
         !resources.temporalCurrent.isValid() ||
         !resources.historyPrevious.isValid() || !resources.velocity.isValid() ||
-        !resources.depth.isValid() || !resources.materialAux.isValid()) {
+        !resources.historyDepthPrevious.isValid() || !resources.depth.isValid() ||
+        !resources.transparentDepth.isValid() ||
+        !resources.reactiveMask.isValid() ||
+        !resources.transparencyMask.isValid() ||
+        !resources.materialAux.isValid()) {
         return {};
     }
 
@@ -56,8 +68,12 @@ RgPassHandle TemporalResolvePass::addGraphPasses(
     resolve.dependsOn(copy.handle())
         .readTexture(resources.temporalCurrent, RhiResourceState::ShaderRead)
         .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
+        .readTexture(resources.historyDepthPrevious, RhiResourceState::DepthRead)
         .readTexture(resources.velocity, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
+        .readTexture(resources.transparentDepth, RhiResourceState::DepthRead)
+        .readTexture(resources.reactiveMask, RhiResourceState::ShaderRead)
+        .readTexture(resources.transparencyMask, RhiResourceState::ShaderRead)
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
         .writeTexture(resources.sceneResolved, RhiResourceState::RenderTarget)
         .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
@@ -92,8 +108,12 @@ bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
     if (!targets.ensureSceneResolvedTextureView(rhiDevice) ||
         !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
         !targets.ensureHistorySceneTextureViews(rhiDevice) ||
+        !targets.ensureTaaHistoryDepthTextureViews(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice) ||
+        !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
+        !targets.ensureReactiveMaskTextureView(rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
         !ensureRhiPipeline(rhiDevice)) {
         return false;
     }
@@ -103,8 +123,12 @@ bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
                             historyPrevIndex,
                             targets.temporalCurrentTextureViewHandle(),
                             targets.historySceneTexturePrevViewHandle(),
+                            targets.taaHistoryDepthTexturePrevViewHandle(),
                             targets.velocityTextureViewHandle(),
                             targets.depthTextureViewHandle(),
+                            targets.transparentCompositeDepthTextureViewHandle(),
+                            targets.reactiveMaskTextureViewHandle(),
+                            targets.transparencyMaskTextureViewHandle(),
                             targets.materialAuxTextureViewHandle())) {
         return false;
     }
@@ -133,17 +157,22 @@ bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
     if (rhiDevice.backend() == RhiBackend::Vulkan) {
         textureJitter.y = -textureJitter.y;
     }
-    const glm::vec4 pushConstants[2] = {
+    const bool projectionJitter = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled);
+    const TemporalResolvePushConstants pushConstants{
+        projectionJitter ? ctx.camera.jitteredInvViewProj : ctx.camera.invViewProj,
+        ctx.previousJitteredViewProj,
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
                   textureJitter.x,
                   textureJitter.y),
         glm::vec4(ctx.weather.surfaceWetness,
                   settings.weather.rainLinesEnabled ? 1.0f : 0.0f,
-                  0.0f,
-                  0.0f)
+                  ctx.prevCamera.nearPlane,
+                  ctx.prevCamera.farPlane)
     };
-    commandList.pushConstants(pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     return true;
@@ -199,7 +228,7 @@ bool TemporalResolvePass::ensureRhiPipeline(RhiDevice& rhiDevice) {
 
     RhiBindGroupLayoutDesc bindGroupLayoutDesc;
     bindGroupLayoutDesc.debugName = "TemporalResolve.BindGroupLayout";
-    for (uint32_t binding = 0u; binding < 5u; ++binding) {
+    for (uint32_t binding = 0u; binding < 9u; ++binding) {
         bindGroupLayoutDesc.entries.push_back({
             binding,
             RhiBindingType::CombinedTextureSampler,
@@ -216,7 +245,8 @@ bool TemporalResolvePass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "TemporalResolve.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
-    pipelineLayoutDesc.pushConstantBytes = static_cast<uint32_t>(sizeof(glm::vec4) * 2u);
+    pipelineLayoutDesc.pushConstantBytes =
+        static_cast<uint32_t>(sizeof(TemporalResolvePushConstants));
     pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
     m_pipelineLayout = rhiDevice.createPipelineLayout(pipelineLayoutDesc);
     if (!m_pipelineLayout.isValid()) {
@@ -248,16 +278,24 @@ bool TemporalResolvePass::ensureRhiBindGroup(RhiDevice& rhiDevice,
                                              const int historyPrevIndex,
                                              const RhiTextureViewHandle currentView,
                                              const RhiTextureViewHandle historyView,
+                                             const RhiTextureViewHandle historyDepthView,
                                              const RhiTextureViewHandle velocityView,
                                              const RhiTextureViewHandle depthView,
+                                             const RhiTextureViewHandle transparentDepthView,
+                                             const RhiTextureViewHandle reactiveMaskView,
+                                             const RhiTextureViewHandle transparencyMaskView,
                                              const RhiTextureViewHandle materialAuxView) {
     if (!ensureRhiPipeline(rhiDevice) ||
         historyPrevIndex < 0 ||
         historyPrevIndex >= 2 ||
         !currentView.isValid() ||
         !historyView.isValid() ||
+        !historyDepthView.isValid() ||
         !velocityView.isValid() ||
         !depthView.isValid() ||
+        !transparentDepthView.isValid() ||
+        !reactiveMaskView.isValid() ||
+        !transparencyMaskView.isValid() ||
         !materialAuxView.isValid()) {
         return false;
     }
@@ -265,8 +303,12 @@ bool TemporalResolvePass::ensureRhiBindGroup(RhiDevice& rhiDevice,
     if (m_bindGroup[historyPrevIndex].isValid() &&
         sameTextureView(m_boundCurrentView[historyPrevIndex], currentView) &&
         sameTextureView(m_boundHistoryView[historyPrevIndex], historyView) &&
+        sameTextureView(m_boundHistoryDepthView[historyPrevIndex], historyDepthView) &&
         sameTextureView(m_boundVelocityView[historyPrevIndex], velocityView) &&
         sameTextureView(m_boundDepthView[historyPrevIndex], depthView) &&
+        sameTextureView(m_boundTransparentDepthView[historyPrevIndex], transparentDepthView) &&
+        sameTextureView(m_boundReactiveMaskView[historyPrevIndex], reactiveMaskView) &&
+        sameTextureView(m_boundTransparencyMaskView[historyPrevIndex], transparencyMaskView) &&
         sameTextureView(m_boundMaterialAuxView[historyPrevIndex], materialAuxView)) {
         return true;
     }
@@ -276,17 +318,21 @@ bool TemporalResolvePass::ensureRhiBindGroup(RhiDevice& rhiDevice,
         m_bindGroup[historyPrevIndex] = {};
     }
 
-    const RhiTextureViewHandle views[5] = {
+    const RhiTextureViewHandle views[9] = {
         currentView,
         historyView,
+        historyDepthView,
         velocityView,
         depthView,
+        transparentDepthView,
+        reactiveMaskView,
+        transparencyMaskView,
         materialAuxView
     };
 
     RhiBindGroupDesc bindGroupDesc;
     bindGroupDesc.layout = m_bindGroupLayout;
-    for (uint32_t binding = 0u; binding < 5u; ++binding) {
+    for (uint32_t binding = 0u; binding < 9u; ++binding) {
         RhiBindGroupEntry entry;
         entry.binding = binding;
         entry.resource.combinedTextureSampler.textureView = views[binding];
@@ -298,16 +344,24 @@ bool TemporalResolvePass::ensureRhiBindGroup(RhiDevice& rhiDevice,
     if (!m_bindGroup[historyPrevIndex].isValid()) {
         m_boundCurrentView[historyPrevIndex] = {};
         m_boundHistoryView[historyPrevIndex] = {};
+        m_boundHistoryDepthView[historyPrevIndex] = {};
         m_boundVelocityView[historyPrevIndex] = {};
         m_boundDepthView[historyPrevIndex] = {};
+        m_boundTransparentDepthView[historyPrevIndex] = {};
+        m_boundReactiveMaskView[historyPrevIndex] = {};
+        m_boundTransparencyMaskView[historyPrevIndex] = {};
         m_boundMaterialAuxView[historyPrevIndex] = {};
         return false;
     }
 
     m_boundCurrentView[historyPrevIndex] = currentView;
     m_boundHistoryView[historyPrevIndex] = historyView;
+    m_boundHistoryDepthView[historyPrevIndex] = historyDepthView;
     m_boundVelocityView[historyPrevIndex] = velocityView;
     m_boundDepthView[historyPrevIndex] = depthView;
+    m_boundTransparentDepthView[historyPrevIndex] = transparentDepthView;
+    m_boundReactiveMaskView[historyPrevIndex] = reactiveMaskView;
+    m_boundTransparencyMaskView[historyPrevIndex] = transparencyMaskView;
     m_boundMaterialAuxView[historyPrevIndex] = materialAuxView;
     return true;
 }
@@ -328,8 +382,12 @@ void TemporalResolvePass::destroyRhiBindGroup() {
     for (int i = 0; i < 2; ++i) {
         m_boundCurrentView[i] = {};
         m_boundHistoryView[i] = {};
+        m_boundHistoryDepthView[i] = {};
         m_boundVelocityView[i] = {};
         m_boundDepthView[i] = {};
+        m_boundTransparentDepthView[i] = {};
+        m_boundReactiveMaskView[i] = {};
+        m_boundTransparencyMaskView[i] = {};
         m_boundMaterialAuxView[i] = {};
     }
 }

@@ -129,6 +129,11 @@ public:
     [[nodiscard]] RhiTextureHandle historyDepthTexturePrevHandle() const { return m_historyDepthHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureViewHandle historyDepthTexturePrevViewHandle() const { return m_historyDepthView[1 - m_currentHistoryIndex]; }
     bool ensureHistoryDepthTextureViews(RhiDevice& rhiDevice);
+    // Native TAA history depth tracks the visible surface after transparent composition.
+    [[nodiscard]] RhiTextureHandle taaHistoryDepthTextureHandle() const { return m_taaHistoryDepthHandle[m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureHandle taaHistoryDepthTexturePrevHandle() const { return m_taaHistoryDepthHandle[1 - m_currentHistoryIndex]; }
+    [[nodiscard]] RhiTextureViewHandle taaHistoryDepthTexturePrevViewHandle() const { return m_taaHistoryDepthView[1 - m_currentHistoryIndex]; }
+    bool ensureTaaHistoryDepthTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle historyReflectionTextureHandle() const { return m_historyReflectionHandle[m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureHandle historyReflectionTexturePrevHandle() const { return m_historyReflectionHandle[1 - m_currentHistoryIndex]; }
     [[nodiscard]] RhiTextureViewHandle historyReflectionTexturePrevViewHandle() const { return m_historyReflectionView[1 - m_currentHistoryIndex]; }
@@ -336,9 +341,13 @@ private:
 
     // History ping-pong for temporal accumulation
     RhiTextureHandle m_historySceneHandle[2];
+    // Opaque depth history consumed by SSGI and volumetric temporal passes.
     RhiTextureHandle m_historyDepthHandle[2];
+    // Visible-surface depth history consumed by Native TAA after transparency.
+    RhiTextureHandle m_taaHistoryDepthHandle[2];
     RhiTextureViewHandle m_historySceneView[2];
     RhiTextureViewHandle m_historyDepthView[2];
+    RhiTextureViewHandle m_taaHistoryDepthView[2];
     RhiTextureHandle m_historyReflectionHandle[2];
     RhiTextureViewHandle m_historyReflectionView[2];
     RhiTextureHandle m_historyCloudHandle[2];

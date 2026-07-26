@@ -74,7 +74,9 @@ bool VelocityPass::execute(RhiCommandList& commandList,
     commandList.setBindGroup(0u, m_bindGroup);
 
     const VelocityPushConstants pushConstants{
-        ctx.camera.invViewProj,
+        usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
+            ? ctx.camera.jitteredInvViewProj
+            : ctx.camera.invViewProj,
         ctx.previousViewProj,
         glm::vec4(static_cast<float>(std::max(1, targets.width())),
                   static_cast<float>(std::max(1, targets.height())),
@@ -82,6 +84,65 @@ bool VelocityPass::execute(RhiCommandList& commandList,
                   0.0f)
     };
     commandList.pushConstants(&pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Fragment));
+    commandList.draw(3u, 1u, 0u, 0u);
+    commandList.endRendering();
+    return true;
+}
+
+bool VelocityPass::executeTransparent(RhiCommandList& commandList,
+                                       const FrameContext& ctx,
+                                       const RenderSettings& settings,
+                                       DeferredRenderTargets& targets) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
+    }
+
+    RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
+    if (!targets.ensureVelocityTextureView(rhiDevice) ||
+        !targets.ensureGBufferTextureViews(rhiDevice) ||
+        !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
+        !targets.ensureTransparencyMaskTextureView(rhiDevice) ||
+        !ensureTransparentRhiPipeline(rhiDevice) ||
+        !ensureTransparentRhiBindGroup(
+            rhiDevice,
+            targets.depthTextureViewHandle(),
+            targets.transparentCompositeDepthTextureViewHandle(),
+            targets.transparencyMaskTextureViewHandle())) {
+        return false;
+    }
+
+    RhiColorAttachment colorAttachment;
+    colorAttachment.view = targets.velocityTextureViewHandle();
+    colorAttachment.loadOp = RhiLoadOp::Load;
+    colorAttachment.storeOp = RhiStoreOp::Store;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "TransparentVelocity";
+    renderingInfo.renderArea = {
+        0,
+        0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))
+    };
+    renderingInfo.colorAttachments = &colorAttachment;
+    renderingInfo.colorAttachmentCount = 1u;
+
+    commandList.beginRendering(renderingInfo);
+    commandList.setGraphicsPipeline(m_transparentPipeline);
+    commandList.setBindGroup(0u, m_transparentBindGroup);
+
+    const VelocityPushConstants pushConstants{
+        usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)
+            ? ctx.camera.jitteredInvViewProj
+            : ctx.camera.invViewProj,
+        ctx.previousViewProj,
+        glm::vec4(static_cast<float>(std::max(1, targets.width())),
+                  static_cast<float>(std::max(1, targets.height())),
+                  settings.taa.forceZeroVelocity ? 1.0f : 0.0f,
+                  0.0f)
+    };
+    commandList.pushConstants(&pushConstants, sizeof(pushConstants),
+                              rhiFlag(RhiShaderStage::Fragment));
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
     return true;
@@ -182,6 +243,81 @@ bool VelocityPass::ensureRhiPipeline(RhiDevice& rhiDevice) {
     return true;
 }
 
+bool VelocityPass::ensureTransparentRhiPipeline(RhiDevice& rhiDevice) {
+    if (!ensureRhiPipeline(rhiDevice)) {
+        return false;
+    }
+    if (m_transparentPipeline.isValid()) {
+        return true;
+    }
+
+    const std::optional<std::string> fragmentSource =
+        renderer::rhi::loadShaderSource(
+            "assets/shaders/velocity_transparent_resolve.frag");
+    if (!fragmentSource.has_value()) {
+        return false;
+    }
+
+    RhiShaderDesc fragmentDesc;
+    fragmentDesc.debugName = "TransparentVelocity.Fragment";
+    fragmentDesc.stage = RhiShaderStage::Fragment;
+    fragmentDesc.source = fragmentSource->c_str();
+    fragmentDesc.sourceSize = fragmentSource->size();
+    m_transparentFragmentShader = rhiDevice.createShader(fragmentDesc);
+    if (!m_transparentFragmentShader.isValid()) {
+        destroyTransparentRhiResources();
+        return false;
+    }
+
+    RhiBindGroupLayoutDesc bindGroupLayoutDesc;
+    bindGroupLayoutDesc.debugName = "TransparentVelocity.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        bindGroupLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u
+        });
+    }
+    m_transparentBindGroupLayout =
+        rhiDevice.createBindGroupLayout(bindGroupLayoutDesc);
+    if (!m_transparentBindGroupLayout.isValid()) {
+        destroyTransparentRhiResources();
+        return false;
+    }
+
+    RhiPipelineLayoutDesc pipelineLayoutDesc;
+    pipelineLayoutDesc.debugName = "TransparentVelocity.PipelineLayout";
+    pipelineLayoutDesc.bindGroupLayouts.push_back(m_transparentBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes =
+        static_cast<uint32_t>(sizeof(VelocityPushConstants));
+    pipelineLayoutDesc.pushConstantStages = rhiFlag(RhiShaderStage::Fragment);
+    m_transparentPipelineLayout =
+        rhiDevice.createPipelineLayout(pipelineLayoutDesc);
+    if (!m_transparentPipelineLayout.isValid()) {
+        destroyTransparentRhiResources();
+        return false;
+    }
+
+    RhiGraphicsPipelineDesc pipelineDesc;
+    pipelineDesc.debugName = "TransparentVelocity.Pipeline";
+    pipelineDesc.vertexShader = m_vertexShader;
+    pipelineDesc.fragmentShader = m_transparentFragmentShader;
+    pipelineDesc.layout = m_transparentPipelineLayout;
+    pipelineDesc.topology = RhiPrimitiveTopology::TriangleList;
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    pipelineDesc.depthStencil.depthTestEnabled = false;
+    pipelineDesc.depthStencil.depthWriteEnabled = false;
+    pipelineDesc.colorFormats.push_back(RhiTextureFormat::Rg16Float);
+    pipelineDesc.blend.attachments.push_back({});
+    m_transparentPipeline = rhiDevice.createGraphicsPipeline(pipelineDesc);
+    if (!m_transparentPipeline.isValid()) {
+        destroyTransparentRhiResources();
+        return false;
+    }
+    return true;
+}
+
 bool VelocityPass::ensureRhiBindGroup(RhiDevice& rhiDevice,
                                       const RhiTextureViewHandle depthView,
                                       const RhiTextureViewHandle perObjectVelocityView) {
@@ -226,6 +362,55 @@ bool VelocityPass::ensureRhiBindGroup(RhiDevice& rhiDevice,
     return true;
 }
 
+bool VelocityPass::ensureTransparentRhiBindGroup(
+    RhiDevice& rhiDevice,
+    const RhiTextureViewHandle opaqueDepthView,
+    const RhiTextureViewHandle transparentDepthView,
+    const RhiTextureViewHandle transparencyMaskView) {
+    if (!ensureTransparentRhiPipeline(rhiDevice) ||
+        !opaqueDepthView.isValid() || !transparentDepthView.isValid() ||
+        !transparencyMaskView.isValid()) {
+        return false;
+    }
+
+    if (m_transparentBindGroup.isValid() &&
+        sameTextureView(m_boundTransparentOpaqueDepthView, opaqueDepthView) &&
+        sameTextureView(m_boundTransparentDepthView, transparentDepthView) &&
+        sameTextureView(m_boundTransparencyMaskView, transparencyMaskView)) {
+        return true;
+    }
+
+    destroyTransparentRhiBindGroup();
+
+    const RhiTextureViewHandle views[3] = {
+        opaqueDepthView,
+        transparentDepthView,
+        transparencyMaskView
+    };
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_transparentBindGroupLayout;
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler.textureView = views[binding];
+        entry.resource.combinedTextureSampler.sampler = m_sampler;
+        bindGroupDesc.entries.push_back(entry);
+    }
+
+    m_transparentBindGroup = rhiDevice.createBindGroup(bindGroupDesc);
+    if (!m_transparentBindGroup.isValid()) {
+        m_boundTransparentOpaqueDepthView = {};
+        m_boundTransparentDepthView = {};
+        m_boundTransparencyMaskView = {};
+        return false;
+    }
+
+    m_boundTransparentOpaqueDepthView = opaqueDepthView;
+    m_boundTransparentDepthView = transparentDepthView;
+    m_boundTransparencyMaskView = transparencyMaskView;
+    return true;
+}
+
 void VelocityPass::destroyRhiBindGroup() {
     if (m_rhiDevice != nullptr && m_bindGroup.isValid()) {
         m_rhiDevice->destroyBindGroup(m_bindGroup);
@@ -235,11 +420,47 @@ void VelocityPass::destroyRhiBindGroup() {
     m_boundPerObjectVelocityView = {};
 }
 
+void VelocityPass::destroyTransparentRhiBindGroup() {
+    if (m_rhiDevice != nullptr && m_transparentBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_transparentBindGroup);
+    }
+    m_transparentBindGroup = {};
+    m_boundTransparentOpaqueDepthView = {};
+    m_boundTransparentDepthView = {};
+    m_boundTransparencyMaskView = {};
+}
+
+void VelocityPass::destroyTransparentRhiResources() {
+    destroyTransparentRhiBindGroup();
+    if (m_rhiDevice != nullptr) {
+        if (m_transparentPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_transparentPipeline);
+        }
+        if (m_transparentFragmentShader.isValid()) {
+            m_rhiDevice->destroyShader(m_transparentFragmentShader);
+        }
+        if (m_transparentPipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_transparentPipelineLayout);
+        }
+        if (m_transparentBindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_transparentBindGroupLayout);
+        }
+    }
+    m_transparentPipeline = {};
+    m_transparentFragmentShader = {};
+    m_transparentPipelineLayout = {};
+    m_transparentBindGroupLayout = {};
+}
+
 void VelocityPass::destroyRhiResources() {
     destroyRhiBindGroup();
+    destroyTransparentRhiBindGroup();
     if (m_rhiDevice != nullptr) {
         if (m_pipeline.isValid()) {
             m_rhiDevice->destroyPipeline(m_pipeline);
+        }
+        if (m_transparentPipeline.isValid()) {
+            m_rhiDevice->destroyPipeline(m_transparentPipeline);
         }
         if (m_vertexShader.isValid()) {
             m_rhiDevice->destroyShader(m_vertexShader);
@@ -247,11 +468,20 @@ void VelocityPass::destroyRhiResources() {
         if (m_fragmentShader.isValid()) {
             m_rhiDevice->destroyShader(m_fragmentShader);
         }
+        if (m_transparentFragmentShader.isValid()) {
+            m_rhiDevice->destroyShader(m_transparentFragmentShader);
+        }
         if (m_pipelineLayout.isValid()) {
             m_rhiDevice->destroyPipelineLayout(m_pipelineLayout);
         }
+        if (m_transparentPipelineLayout.isValid()) {
+            m_rhiDevice->destroyPipelineLayout(m_transparentPipelineLayout);
+        }
         if (m_bindGroupLayout.isValid()) {
             m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+        }
+        if (m_transparentBindGroupLayout.isValid()) {
+            m_rhiDevice->destroyBindGroupLayout(m_transparentBindGroupLayout);
         }
         if (m_sampler.isValid()) {
             m_rhiDevice->destroySampler(m_sampler);
@@ -259,10 +489,14 @@ void VelocityPass::destroyRhiResources() {
     }
 
     m_pipeline = {};
+    m_transparentPipeline = {};
     m_vertexShader = {};
     m_fragmentShader = {};
+    m_transparentFragmentShader = {};
     m_pipelineLayout = {};
+    m_transparentPipelineLayout = {};
     m_bindGroupLayout = {};
+    m_transparentBindGroupLayout = {};
     m_sampler = {};
     m_rhiDevice = nullptr;
 }
