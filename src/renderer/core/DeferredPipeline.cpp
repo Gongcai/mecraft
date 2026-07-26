@@ -415,10 +415,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Scene composite is recorded as the final graphics pass of the deferred graph.
-    targets.copySceneCompositeToTransparentComposite(rhiDevice);
-    targets.copySceneCompositeToSceneResolved(rhiDevice);
-
     // Reflection debug early-out
     if (m_currentSettings.debug.reflectionDebugMode > 0) {
         updateDeferredHistoryTargets();
@@ -434,11 +430,7 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
     }
 
     // Generic transparent terrain (glass, stained glass) before temporal resolve.
-    renderGenericTransparentPass(ctx);
-
     // Particles
-    renderParticlesToSceneResolved(ctx);
-    targets.copySceneCompositeToSceneResolved(rhiDevice);
 
     // Volumetric fog
     if (m_volumetricPass) {
@@ -556,6 +548,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !targets.ensureCloudTextureView(rhiDevice) ||
         !targets.ensureSceneCompositeTextureView(rhiDevice) ||
         !targets.ensureSceneResolvedTextureView(rhiDevice) ||
+        !targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
         !targets.ensureSsgiTextureView(rhiDevice) ||
         !targets.ensureSsgiHalfResTextureView(rhiDevice) ||
         !targets.ensureSsgiDenoiseTextureView(rhiDevice, 0) ||
@@ -732,6 +725,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle reflection;
     RgTextureHandle sceneComposite;
     RgTextureHandle sceneResolved;
+    RgTextureHandle transparentComposite;
+    RgTextureHandle transparentCompositeDepth;
     RgTextureHandle cloud;
     RgTextureHandle ssgiHalfRes;
     RgTextureHandle ssgi;
@@ -771,6 +766,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !importTexture(targets.sceneResolvedTextureHandle(),
                        targets.sceneResolvedTextureViewHandle(),
                        RhiResourceState::ShaderRead, sceneResolved) ||
+        !importTexture(targets.transparentCompositeTextureHandle(),
+                       targets.transparentCompositeTextureViewHandle(),
+                       RhiResourceState::ShaderRead, transparentComposite) ||
+        !importTexture(targets.transparentCompositeDepthTextureHandle(),
+                       targets.transparentCompositeDepthTextureViewHandle(),
+                       RhiResourceState::DepthRead, transparentCompositeDepth) ||
         !importTexture(targets.cloudTextureHandle(),
                        targets.cloudTextureViewHandle(),
                        RhiResourceState::ShaderRead, cloud) ||
@@ -1112,6 +1113,97 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         if (!graphTail.isValid()) {
             return failGraphSetup();
         }
+
+        RenderGraphPassBuilder sceneCompositeCopies = m_renderGraph.addPass(
+            {"Deferred.SceneCompositeCopies", RgPassType::Copy,
+             RhiQueueType::Graphics});
+        sceneCompositeCopies.dependsOn(graphTail)
+            .readTexture(sceneComposite, RhiResourceState::TransferSrc)
+            .readTexture(depth, RhiResourceState::TransferSrc)
+            .writeTexture(transparentComposite, RhiResourceState::TransferDst)
+            .writeTexture(sceneResolved, RhiResourceState::TransferDst)
+            .writeTexture(transparentCompositeDepth, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& pass) {
+                RhiTextureBlit transparentBlit;
+                transparentBlit.src = targets.sceneCompositeTextureHandle();
+                transparentBlit.dst = targets.transparentCompositeTextureHandle();
+                pass.commandList().blitTexture(transparentBlit);
+
+                RhiTextureBlit resolvedBlit;
+                resolvedBlit.src = targets.sceneCompositeTextureHandle();
+                resolvedBlit.dst = targets.sceneResolvedTextureHandle();
+                pass.commandList().blitTexture(resolvedBlit);
+
+                RhiTextureBlit depthBlit;
+                depthBlit.src = targets.depthTextureHandle();
+                depthBlit.dst = targets.transparentCompositeDepthTextureHandle();
+                pass.commandList().blitTexture(depthBlit);
+                return true;
+            });
+        graphTail = sceneCompositeCopies.handle();
+
+        RenderGraphPassBuilder genericTransparent = m_renderGraph.addPass(
+            {"Deferred.GenericTransparent", RgPassType::Graphics,
+             RhiQueueType::Graphics});
+        genericTransparent.dependsOn(graphTail)
+            .readWriteTexture(transparentComposite, RhiResourceState::RenderTarget)
+            .readWriteTexture(transparentCompositeDepth, RhiResourceState::DepthWrite)
+            .readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
+            .readWriteTexture(transparencyMask, RhiResourceState::RenderTarget)
+            .setExecute([&](RgPassContext& pass) {
+                return recordGenericTransparentPass(pass.commandList(), ctx);
+            });
+        graphTail = genericTransparent.handle();
+
+        RenderGraphPassBuilder genericCopies = m_renderGraph.addPass(
+            {"Deferred.GenericTransparentCopies", RgPassType::Copy,
+             RhiQueueType::Graphics});
+        genericCopies.dependsOn(graphTail)
+            .readTexture(transparentComposite, RhiResourceState::TransferSrc)
+            .writeTexture(sceneComposite, RhiResourceState::TransferDst)
+            .writeTexture(sceneResolved, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& pass) {
+                RhiTextureBlit sceneBlit;
+                sceneBlit.src = targets.transparentCompositeTextureHandle();
+                sceneBlit.dst = targets.sceneCompositeTextureHandle();
+                pass.commandList().blitTexture(sceneBlit);
+
+                RhiTextureBlit resolvedBlit;
+                resolvedBlit.src = targets.transparentCompositeTextureHandle();
+                resolvedBlit.dst = targets.sceneResolvedTextureHandle();
+                pass.commandList().blitTexture(resolvedBlit);
+                return true;
+        });
+        graphTail = genericCopies.handle();
+
+        RenderGraphPassBuilder particles = m_renderGraph.addPass(
+            {"Deferred.Particles", RgPassType::Graphics,
+             RhiQueueType::Graphics});
+        particles.dependsOn(graphTail)
+            .readTexture(voxelLight, RhiResourceState::ShaderRead)
+            .readTexture(depth, RhiResourceState::DepthRead)
+            .readWriteTexture(sceneComposite, RhiResourceState::RenderTarget)
+            .readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
+            .readWriteTexture(transparencyMask, RhiResourceState::RenderTarget)
+            .setExecute([&](RgPassContext& pass) {
+                return recordParticlesPass(pass.commandList(), ctx);
+            });
+        graphTail = particles.handle();
+
+        RenderGraphPassBuilder particleCopy = m_renderGraph.addPass(
+            {"Deferred.ParticlesCopy", RgPassType::Copy,
+             RhiQueueType::Graphics});
+        particleCopy.dependsOn(graphTail)
+            .readTexture(sceneComposite, RhiResourceState::TransferSrc)
+            .writeTexture(sceneResolved, RhiResourceState::TransferDst)
+            .setExecute([&](RgPassContext& pass) {
+                RhiTextureBlit blit;
+                blit.src = targets.sceneCompositeTextureHandle();
+                blit.dst = targets.sceneResolvedTextureHandle();
+                pass.commandList().blitTexture(blit);
+                return true;
+            });
+        graphTail = particleCopy.handle();
     }
 
     const RgCompileResult compiled = m_renderGraph.compile();
@@ -1331,10 +1423,12 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
     return true;
 }
 
-void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
+bool DeferredPipeline::recordGenericTransparentPass(
+    RhiCommandList& commandList,
+    const FrameContext& ctx) {
     if (!m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer ||
         !m_shared->terrainRhiPipelines || !m_resourceMgr || !m_transparentPassPlan.hasGeneric()) {
-        return;
+        return true;
     }
 
     auto& targets = *m_shared->deferredTargets;
@@ -1344,34 +1438,7 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     if (!targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
         !targets.ensureReactiveMaskTextureView(rhiDevice) ||
         !targets.ensureTransparencyMaskTextureView(rhiDevice)) {
-        return;
-    }
-
-    {
-        RhiCommandList* copyCommandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (copyCommandListStorage == nullptr ||
-        !copyCommandListStorage->begin({"DeferredPipeline.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& copyCommandList = *copyCommandListStorage;
-        const GpuTimerSegmentToken copyTimer = ctx.debugService != nullptr
-            ? ctx.debugService->beginGpuTimer(
-                  copyCommandList, GpuTimerPass::Transparent)
-            : GpuTimerSegmentToken{};
-        targets.copySceneCompositeToTransparentComposite(copyCommandList);
-        targets.copyDepthToTransparentComposite(copyCommandList);
-        if (ctx.debugService != nullptr) {
-            ctx.debugService->endGpuTimer(copyCommandList, copyTimer);
-        }
-        if (!copyCommandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&copyCommandList};
-        if (!rhiDevice.submit({"DeferredPipeline.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+        return false;
     }
 
     RhiColorAttachment colorAttachments[3];
@@ -1402,12 +1469,6 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
     renderingInfo.colorAttachmentCount = 3u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
 
-    RhiCommandList* commandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"DeferredPipeline.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Transparent)
         : GpuTimerSegmentToken{};
@@ -1514,13 +1575,9 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
         if (ctx.debugService != nullptr) {
             ctx.debugService->cancelGpuTimer(gpuTimer);
         }
-        return;
+        return false;
     }
 
-    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
     worldBuffer.recordRhiTransparent(
         commandList,
@@ -1528,47 +1585,10 @@ void DeferredPipeline::renderGenericTransparentPass(const FrameContext& ctx) {
         m_shared->terrainRhiPipelines->transparentBindGroup());
 
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
-                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"DeferredPipeline.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
-
-    RhiCommandList* copyCommandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (copyCommandListStorage == nullptr ||
-        !copyCommandListStorage->begin({"DeferredPipeline.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& copyCommandList = *copyCommandListStorage;
-    const GpuTimerSegmentToken copyTimer = ctx.debugService != nullptr
-        ? ctx.debugService->beginGpuTimer(copyCommandList, GpuTimerPass::Transparent)
-        : GpuTimerSegmentToken{};
-    targets.copyTransparentCompositeToSceneComposite(copyCommandList);
-    targets.copyTransparentCompositeToSceneResolved(copyCommandList);
-    if (ctx.debugService != nullptr) {
-        ctx.debugService->endGpuTimer(copyCommandList, copyTimer);
-    }
-    if (!copyCommandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&copyCommandList};
-        if (!rhiDevice.submit({"DeferredPipeline.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
-
+    return true;
 }
 
 void DeferredPipeline::updateDeferredHistoryTargets() {
@@ -1592,19 +1612,21 @@ void DeferredPipeline::updateDeferredHistoryTargets() {
     m_deferredHistoryUpdatedThisFrame = true;
 }
 
-void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
+bool DeferredPipeline::recordParticlesPass(
+    RhiCommandList& commandList,
+    const FrameContext& ctx) {
     if (!m_currentSettings.weather.particlesEnabled || !m_shared || !m_shared->particleSystem || !m_resourceMgr) {
-        return;
+        return true;
     }
 
-    if (!m_shared->deferredTargets) return;
+    if (!m_shared->deferredTargets) return false;
     auto& targets = *m_shared->deferredTargets;
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     if (!targets.ensureSceneCompositeTextureView(rhiDevice) ||
         !targets.ensureReactiveMaskTextureView(rhiDevice) ||
         !targets.ensureTransparencyMaskTextureView(rhiDevice)) {
-        return;
+        return false;
     }
 
     RhiColorAttachment colorAttachments[3];
@@ -1629,22 +1651,10 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
     renderingInfo.colorAttachments = colorAttachments;
     renderingInfo.colorAttachmentCount = 3u;
 
-    RhiCommandList* commandListStorage = m_shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"DeferredPipeline.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Transparent)
         : GpuTimerSegmentToken{};
     m_shared->particleSystem->prepareFrame(ctx.camera.view, commandList);
-    targets.transitionTexture(commandList, targets.sceneCompositeTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
-    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
-                              RhiResourceState::RenderTarget);
     commandList.beginRendering(renderingInfo);
 
     const glm::mat4& viewProj = usesTemporalProjectionJitter(
@@ -1663,24 +1673,10 @@ void DeferredPipeline::renderParticlesToSceneResolved(const FrameContext& ctx) {
         screenSize);
 
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.sceneCompositeTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.reactiveMaskTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.transparencyMaskTextureHandle(),
-                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"DeferredPipeline.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
+    return true;
 }
 
 void DeferredPipeline::renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve) {

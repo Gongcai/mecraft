@@ -123,8 +123,12 @@ private:
     [[nodiscard]] bool renderGBufferTerrain(RhiCommandList& commandList,
                                             const FrameContext& ctx,
                                             const RenderSettings& settings);
-    void renderGenericTransparentPass(const FrameContext& ctx);
-    void renderParticlesToSceneResolved(const FrameContext& ctx);
+    [[nodiscard]] bool recordGenericTransparentPass(
+        RhiCommandList& commandList,
+        const FrameContext& ctx);
+    [[nodiscard]] bool recordParticlesPass(
+        RhiCommandList& commandList,
+        const FrameContext& ctx);
     void renderWaterCompositePass(const FrameContext& ctx, bool preTemporalResolve);
     FrameOutput buildFrameOutput(const FrameContext& ctx);
 };
