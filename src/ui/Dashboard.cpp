@@ -806,6 +806,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             m_displayGpuStats = render.getGpuFrameStats();
             m_displayShadowStats = render.getShadowFrameStats();
             m_displayRenderGraphStats = renderScene.renderGraphFrameStats();
+            m_displayHiZCullStats = renderScene.hiZCullStats();
             m_displayRenderWorkStats = render.getRenderWorkStats();
             m_displayLightStats = world.getLightFrameStats();
             refreshWorldMetricsIfNeeded(world, now, false);
@@ -1035,6 +1036,16 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                         graphStats.passCount,
                         graphStats.batchCount,
                         graphStats.submitCount);
+            if (m_displayHiZCullStats.valid) {
+                const HiZCullFrameStats& cull = m_displayHiZCullStats;
+                const uint32_t total = cull.opaqueTotal + cull.cutoutTotal;
+                const uint32_t culled = cull.opaqueCulled + cull.cutoutCulled;
+                ImGui::Text(
+                    "HiZ Cull: %u / %u occluded (opaque %u/%u, cutout %u/%u)",
+                    culled, total,
+                    cull.opaqueCulled, cull.opaqueTotal,
+                    cull.cutoutCulled, cull.cutoutTotal);
+            }
             if (graphStats.passes.empty()) {
                 ImGui::Text("GPU timings: waiting");
             } else {

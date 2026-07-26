@@ -72,6 +72,7 @@ public:
     WaterCompositePass* waterCompositePass() const { return m_waterCompositePass.get(); }
     DebugPass* debugPass() const { return m_debugPass.get(); }
     VoxelGiClipmap* voxelGiClipmap() const { return m_voxelGiClipmap.get(); }
+    HiZPass* hiZPass() const { return m_hiZPass.get(); }
 
     /// Builds dashboard statistics from the most recent Render Graph frame:
     /// CPU stage costs measured around the last submission plus per-pass GPU

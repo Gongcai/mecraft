@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <optional>
 
 #include <glm/mat4x4.hpp>
@@ -311,6 +312,34 @@ bool HiZPass::recordCull(RhiCommandList& commandList,
     // animation; expressed in post-projection 0-1 depth.
     pushConstants.params1 = glm::vec4(5.0e-4f, 0.0f, 0.0f, 0.0f);
 
+    // Consume the oldest readback slot before overwriting it; the ring is
+    // deep enough that its copy completed frames ago.
+    const uint32_t ringIndex = m_cullRingWriteIndex;
+    if (m_cullRingWritten[ringIndex]) {
+        const void* mapped = rhiDevice.mapBuffer(
+            m_cullReadbackBuffers[ringIndex], 0u, sizeof(uint32_t) * 2u);
+        if (mapped != nullptr) {
+            uint32_t counts[2];
+            std::memcpy(counts, mapped, sizeof(counts));
+            rhiDevice.unmapBuffer(m_cullReadbackBuffers[ringIndex]);
+            m_cullStats.valid = true;
+            m_cullStats.opaqueCulled = counts[0];
+            m_cullStats.cutoutCulled = counts[1];
+            m_cullStats.opaqueTotal = m_cullTotalsRing[ringIndex][0];
+            m_cullStats.cutoutTotal = m_cullTotalsRing[ringIndex][1];
+        }
+    }
+
+    const uint32_t zeroCounts[2] = {0u, 0u};
+    commandList.bufferBarrier({m_cullCounterBuffer,
+                               RhiResourceState::StorageBuffer,
+                               RhiResourceState::TransferDst});
+    commandList.updateBuffer(m_cullCounterBuffer, 0u, zeroCounts,
+                             sizeof(zeroCounts));
+    commandList.bufferBarrier({m_cullCounterBuffer,
+                               RhiResourceState::TransferDst,
+                               RhiResourceState::StorageBuffer});
+
     for (int slot = 0; slot < 2; ++slot) {
         if (commandCounts[slot] == 0u || !commandBuffers[slot].isValid()) {
             continue;
@@ -323,6 +352,7 @@ bool HiZPass::recordCull(RhiCommandList& commandList,
             return false;
         }
         pushConstants.params0.w = static_cast<float>(commandCounts[slot]);
+        pushConstants.params1.y = static_cast<float>(slot);
         commandList.bufferBarrier({commandBuffers[slot],
                                    RhiResourceState::IndirectArgument,
                                    RhiResourceState::StorageBuffer});
@@ -335,12 +365,41 @@ bool HiZPass::recordCull(RhiCommandList& commandList,
                                    RhiResourceState::StorageBuffer,
                                    RhiResourceState::IndirectArgument});
     }
+
+    // Ship this frame's counters into the readback ring.
+    commandList.bufferBarrier({m_cullCounterBuffer,
+                               RhiResourceState::StorageBuffer,
+                               RhiResourceState::TransferSrc});
+    if (m_cullRingWritten[ringIndex]) {
+        commandList.bufferBarrier({m_cullReadbackBuffers[ringIndex],
+                                   RhiResourceState::HostRead,
+                                   RhiResourceState::TransferDst});
+    }
+    RhiBufferCopy statsCopy;
+    statsCopy.src = m_cullCounterBuffer;
+    statsCopy.dst = m_cullReadbackBuffers[ringIndex];
+    statsCopy.size = sizeof(uint32_t) * 2u;
+    commandList.copyBuffer(statsCopy);
+    commandList.bufferBarrier({m_cullReadbackBuffers[ringIndex],
+                               RhiResourceState::TransferDst,
+                               RhiResourceState::HostRead});
+    commandList.bufferBarrier({m_cullCounterBuffer,
+                               RhiResourceState::TransferSrc,
+                               RhiResourceState::StorageBuffer});
+    m_cullTotalsRing[ringIndex][0] = commandCounts[0];
+    m_cullTotalsRing[ringIndex][1] = commandCounts[1];
+    m_cullRingWritten[ringIndex] = true;
+    m_cullRingWriteIndex = (ringIndex + 1u) % kCullStatsRingSize;
     return true;
 }
 
 bool HiZPass::ensureCullPipeline(RhiDevice& rhiDevice) {
-    if (m_cullPipeline.isValid()) {
+    if (m_cullPipeline.isValid() && m_cullCounterBuffer.isValid() &&
+        m_cullReadbackBuffers[kCullStatsRingSize - 1u].isValid()) {
         return true;
+    }
+    if (m_cullPipeline.isValid()) {
+        return ensureCullStatsBuffers(rhiDevice);
     }
     const std::optional<std::string> source =
         renderer::rhi::loadShaderSource("assets/shaders/hiz_cull.comp");
@@ -366,6 +425,8 @@ bool HiZPass::ensureCullPipeline(RhiDevice& rhiDevice) {
     layoutDesc.entries.push_back({
         2u, RhiBindingType::CombinedTextureSampler,
         rhiFlag(RhiShaderStage::Compute), 1u});
+    layoutDesc.entries.push_back({
+        3u, RhiBindingType::StorageBuffer, rhiFlag(RhiShaderStage::Compute), 1u});
     m_cullBindGroupLayout = rhiDevice.createBindGroupLayout(layoutDesc);
     if (!m_cullBindGroupLayout.isValid()) {
         return false;
@@ -387,7 +448,47 @@ bool HiZPass::ensureCullPipeline(RhiDevice& rhiDevice) {
     pipelineDesc.computeShader = m_cullShader;
     pipelineDesc.layout = m_cullPipelineLayout;
     m_cullPipeline = rhiDevice.createComputePipeline(pipelineDesc);
-    return m_cullPipeline.isValid();
+    if (!m_cullPipeline.isValid()) {
+        return false;
+    }
+
+    return ensureCullStatsBuffers(rhiDevice);
+}
+
+bool HiZPass::ensureCullStatsBuffers(RhiDevice& rhiDevice) {
+    if (!m_cullCounterBuffer.isValid()) {
+        RhiBufferDesc counterDesc;
+        counterDesc.debugName = "HiZ.CullCounters";
+        counterDesc.size = sizeof(uint32_t) * 2u;
+        counterDesc.usage = rhiFlag(RhiBufferUsage::Storage) |
+                            rhiFlag(RhiBufferUsage::TransferSrc) |
+                            rhiFlag(RhiBufferUsage::TransferDst);
+        counterDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
+        counterDesc.initialState = RhiResourceState::StorageBuffer;
+        m_cullCounterBuffer = rhiDevice.createBuffer(counterDesc, nullptr, 0u);
+        if (!m_cullCounterBuffer.isValid()) {
+            return false;
+        }
+    }
+    for (uint32_t slot = 0u; slot < kCullStatsRingSize; ++slot) {
+        if (m_cullReadbackBuffers[slot].isValid()) {
+            continue;
+        }
+        // Mappable readback contract: MapRead usage with a TransferDst
+        // resting state (HostRead is entered only after each copy).
+        RhiBufferDesc readbackDesc;
+        readbackDesc.debugName = "HiZ.CullReadback";
+        readbackDesc.size = sizeof(uint32_t) * 2u;
+        readbackDesc.usage = rhiFlag(RhiBufferUsage::TransferDst) |
+                             rhiFlag(RhiBufferUsage::MapRead);
+        readbackDesc.memoryUsage = RhiMemoryUsage::GpuToCpu;
+        readbackDesc.initialState = RhiResourceState::TransferDst;
+        m_cullReadbackBuffers[slot] = rhiDevice.createBuffer(readbackDesc, nullptr, 0u);
+        if (!m_cullReadbackBuffers[slot].isValid()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool HiZPass::ensureCullBindGroup(RhiDevice& rhiDevice,
@@ -432,6 +533,12 @@ bool HiZPass::ensureCullBindGroup(RhiDevice& rhiDevice,
     hiZEntry.resource.combinedTextureSampler.textureView = hiZView;
     hiZEntry.resource.combinedTextureSampler.sampler = m_sampler;
     bindGroupDesc.entries.push_back(hiZEntry);
+    RhiBindGroupEntry statsEntry;
+    statsEntry.binding = 3u;
+    statsEntry.resource.buffer.buffer = m_cullCounterBuffer;
+    statsEntry.resource.buffer.offset = 0u;
+    statsEntry.resource.buffer.range = sizeof(uint32_t) * 2u;
+    bindGroupDesc.entries.push_back(statsEntry);
 
     binding.bindGroup = rhiDevice.createBindGroup(bindGroupDesc);
     if (!binding.bindGroup.isValid()) {
@@ -485,7 +592,22 @@ void HiZPass::destroyRhiResources() {
         if (m_cullShader.isValid()) {
             m_rhiDevice->destroyShader(m_cullShader);
         }
+        if (m_cullCounterBuffer.isValid()) {
+            m_rhiDevice->destroyBuffer(m_cullCounterBuffer);
+        }
+        for (RhiBufferHandle& buffer : m_cullReadbackBuffers) {
+            if (buffer.isValid()) {
+                m_rhiDevice->destroyBuffer(buffer);
+            }
+            buffer = {};
+        }
     }
+    m_cullCounterBuffer = {};
+    m_cullStats = {};
+    for (bool& written : m_cullRingWritten) {
+        written = false;
+    }
+    m_cullRingWriteIndex = 0u;
     m_cullPipeline = {};
     m_cullPipelineLayout = {};
     m_cullBindGroupLayout = {};

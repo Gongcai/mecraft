@@ -106,6 +106,16 @@ struct RenderGraphFrameStats {
     std::vector<RenderGraphPassStats> passes;
 };
 
+/// Hi-Z occlusion culling counters read back from the GPU (ring-delayed by
+/// a few frames to avoid stalls).
+struct HiZCullFrameStats {
+    bool valid = false;
+    uint32_t opaqueCulled = 0u;
+    uint32_t opaqueTotal = 0u;
+    uint32_t cutoutCulled = 0u;
+    uint32_t cutoutTotal = 0u;
+};
+
 /// Per-cascade CSM shadow statistics for profiling and baseline capture.
 struct ShadowCascadeStats {
     double gpuTotalMs = 0.0;

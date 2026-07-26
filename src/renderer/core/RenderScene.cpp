@@ -1053,6 +1053,13 @@ RenderGraphFrameStats RenderScene::renderGraphFrameStats() const {
     return m_deferredPipeline->renderGraphFrameStats();
 }
 
+HiZCullFrameStats RenderScene::hiZCullStats() const {
+    if (m_deferredPipeline == nullptr || m_deferredPipeline->hiZPass() == nullptr) {
+        return {};
+    }
+    return m_deferredPipeline->hiZPass()->cullStats();
+}
+
 RenderScene::PresentationDebugInfo RenderScene::presentationDebugInfo() const {
     PresentationDebugInfo info;
     info.renderWidth = m_currentContext.renderExtent.width;

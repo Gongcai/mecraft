@@ -201,6 +201,9 @@ public:
     };
     [[nodiscard]] PresentationDebugInfo presentationDebugInfo() const;
 
+    /// Hi-Z occlusion culling counters (ring-delayed GPU readback).
+    [[nodiscard]] HiZCullFrameStats hiZCullStats() const;
+
     // Pipeline readiness (R2.6a)
     /// Check if the new pipeline path is ready to use.
     bool isNewPipelineReady() const;

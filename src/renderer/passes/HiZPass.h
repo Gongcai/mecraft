@@ -4,6 +4,7 @@
 #include "RenderPass.h"
 #include "../core/FrameContext.h"
 #include "../rhi/RhiHandles.h"
+#include "../debug/RenderDebugService.h"
 #include "../rhi/RhiRenderGraph.h"
 
 #include <vector>
@@ -38,6 +39,11 @@ public:
 
     /// Adds the occlusion cull pass: one compute thread per indirect terrain
     /// draw, zeroing commands whose sub-chunk box is behind the pyramid.
+    /// Latest culled/total command counts, delayed by the readback ring.
+    [[nodiscard]] const HiZCullFrameStats& cullStats() const {
+        return m_cullStats;
+    }
+
     [[nodiscard]] RgPassHandle addCullPass(RenderGraph& graph,
                                            const FrameContext& ctx,
                                            const RenderSettings& settings,
@@ -58,6 +64,7 @@ private:
                                  uint32_t mip);
     void destroyRhiResources();
     bool ensureCullPipeline(RhiDevice& rhiDevice);
+    bool ensureCullStatsBuffers(RhiDevice& rhiDevice);
     bool ensureCullBindGroup(RhiDevice& rhiDevice,
                              int slot,
                              RhiBufferHandle commandBuffer,
@@ -94,6 +101,14 @@ private:
         RhiTextureViewHandle boundHiZ;
     };
     CullBinding m_cullBindings[2];
+
+    static constexpr uint32_t kCullStatsRingSize = 3u;
+    RhiBufferHandle m_cullCounterBuffer;
+    RhiBufferHandle m_cullReadbackBuffers[kCullStatsRingSize];
+    uint32_t m_cullTotalsRing[kCullStatsRingSize][2] = {};
+    bool m_cullRingWritten[kCullStatsRingSize] = {};
+    uint32_t m_cullRingWriteIndex = 0u;
+    HiZCullFrameStats m_cullStats;
 };
 
 #endif // MECRAFT_HIZ_PASS_H

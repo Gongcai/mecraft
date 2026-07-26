@@ -19,6 +19,8 @@ struct DrawCommand {
 layout(binding = 0, std430) buffer CommandBuffer { DrawCommand uCommands[]; };
 layout(binding = 1, std430) readonly buffer MetadataBuffer { vec4 uOrigins[]; };
 layout(binding = 2) uniform sampler2D uHiZTex;
+// Two counters (opaque, cutout); the dispatch's slot comes in uParams1.y.
+layout(binding = 3, std430) buffer CullStatsBuffer { uint uCulledCounts[]; };
 
 layout(push_constant) uniform RhiPushConstants {
     // Raster view-projection of the CURRENT frame (jittered when the raster
@@ -26,7 +28,8 @@ layout(push_constant) uniform RhiPushConstants {
     mat4 uViewProj;
     // x, y: Hi-Z mip 0 extent; z: highest mip index; w: command count.
     vec4 uParams0;
-    // x: depth slack compensating the pyramid's one-frame latency.
+    // x: depth slack compensating the pyramid's one-frame latency;
+    // y: stats slot written by this dispatch.
     vec4 uParams1;
 };
 
@@ -80,5 +83,6 @@ void main() {
     const float boxNearest = ndcMin.z * 0.5 + 0.5;
     if (boxNearest > sceneFarthest + uParams1.x) {
         uCommands[index].count = 0u;
+        atomicAdd(uCulledCounts[uint(uParams1.y)], 1u);
     }
 }
