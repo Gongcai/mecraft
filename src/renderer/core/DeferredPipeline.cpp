@@ -415,11 +415,6 @@ FrameOutput DeferredPipeline::renderFrame(const FrameContext& ctx, const RenderS
         return buildFrameOutput(ctx);
     }
 
-    // Cloud pass
-    if (m_cloudPass) {
-        m_cloudPass->execute(ctx, m_currentSettings, targets);
-    }
-
     // Voxel GI clipmap update
     if (m_voxelGiClipmap) {
         m_voxelGiClipmap->update(ctx, m_currentSettings.voxelGi, *m_resourceMgr,
@@ -560,6 +555,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         settings.debug.deferredLightDebugMode <= 0 &&
         settings.reflection.temporalEnabled &&
         settings.debug.reflectionDebugMode == 0 && !ctx.temporalReset;
+    const bool cloudEnabled = settings.debug.deferredLightDebugMode <= 0;
     if (!targets.ensureGBufferTextureViews(rhiDevice) ||
         !targets.ensurePerObjectVelocityTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
@@ -591,7 +587,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         ((reflectionFilterEnabled || reflectionTemporalEnabled) &&
          !targets.ensureReflectionTemporalScratchTextureView(rhiDevice)) ||
         (reflectionTemporalEnabled &&
-         !targets.ensureHistoryReflectionTextureViews(rhiDevice))) {
+         !targets.ensureHistoryReflectionTextureViews(rhiDevice)) ||
+        (cloudEnabled && !targets.ensureHistoryCloudTextureViews(rhiDevice))) {
         return false;
     }
     if (ssaoEnabled && m_ssaoPass == nullptr) {
@@ -601,7 +598,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         return false;
     }
     if (settings.debug.deferredLightDebugMode <= 0 &&
-        m_reflectionPass == nullptr) {
+        (m_reflectionPass == nullptr || m_cloudPass == nullptr)) {
         return false;
     }
     const RhiTextureHandle skyNoiseTexture =
@@ -617,7 +614,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
              ctx, settings, targets, *ctx.worldView))) {
         return false;
     }
+    bool cloudGraphPrepared = false;
     const auto failGraphSetup = [&]() {
+        if (cloudGraphPrepared) {
+            m_cloudPass->finishGraphExecution(false);
+            cloudGraphPrepared = false;
+        }
         if (shadowEnabled) {
             m_shadowPass->finishGraphExecution(false);
         }
@@ -758,6 +760,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle historyDepthPrevious;
     RgTextureHandle reflectionScratch;
     RgTextureHandle historyReflectionPrevious;
+    RgTextureHandle historyCloudPrevious;
     const RhiTextureHandle lightmapDayTexture = m_resourceMgr->getLightmapDay();
     const RhiTextureHandle lightmapNightTexture = m_resourceMgr->getLightmapNight();
     const RhiTextureHandle rippleNormalTexture =
@@ -855,6 +858,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                        targets.historyReflectionTexturePrevViewHandle(),
                        RhiResourceState::ShaderRead,
                        historyReflectionPrevious)) {
+        return failGraphSetup();
+    }
+    if (cloudEnabled &&
+        !importTexture(targets.historyCloudTexturePrevHandle(),
+                       targets.historyCloudTexturePrevViewHandle(),
+                       RhiResourceState::ShaderRead,
+                       historyCloudPrevious)) {
         return failGraphSetup();
     }
     ssaoResources.noise = skyNoise;
@@ -1056,6 +1066,19 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         if (!graphTail.isValid()) {
             return failGraphSetup();
         }
+
+        CloudPass::GraphResources cloudResources;
+        cloudResources.depth = depth;
+        cloudResources.skyCapture = skyCapture;
+        cloudResources.noise = skyNoise;
+        cloudResources.historyPrevious = historyCloudPrevious;
+        cloudResources.cloud = cloud;
+        graphTail = m_cloudPass->addGraphPass(
+            m_renderGraph, ctx, settings, targets, cloudResources, graphTail);
+        if (!graphTail.isValid()) {
+            return failGraphSetup();
+        }
+        cloudGraphPrepared = true;
     }
 
     const RgCompileResult compiled = m_renderGraph.compile();
@@ -1083,6 +1106,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (shadowEnabled) {
         m_shadowPass->finishGraphExecution(executed.succeeded());
+    }
+    if (cloudGraphPrepared) {
+        m_cloudPass->finishGraphExecution(executed.succeeded());
     }
     return executed.succeeded();
 }

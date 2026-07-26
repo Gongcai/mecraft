@@ -54,13 +54,16 @@ void CloudPass::shutdown() {
     destroyNoiseTextureView();
     m_noiseTexture = {};
     m_hasRenderedClouds = false;
+    m_graphFramePrepared = false;
+    m_pendingCloudRender = false;
 }
 
 void CloudPass::invalidateHistory() {
     m_hasRenderedClouds = false;
 }
 
-bool CloudPass::shouldRenderClouds(const FrameContext& ctx, const RenderSettings& settings) {
+bool CloudPass::shouldRenderClouds(const FrameContext& ctx,
+                                   const RenderSettings& settings) const {
     const int updateInterval = std::clamp(settings.cloud.updateInterval, 1, 8);
     if (!m_hasRenderedClouds || ctx.temporalReset || updateInterval <= 1) {
         return true;
@@ -77,57 +80,96 @@ bool CloudPass::shouldRenderClouds(const FrameContext& ctx, const RenderSettings
     return (ctx.frameIndex % static_cast<uint64_t>(updateInterval)) == 0;
 }
 
-void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
-                         DeferredRenderTargets& targets) {
-    if (!shouldRenderClouds(ctx, settings)) {
-        if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
-            return;
-        }
-        RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
-        RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-        const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
-            ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
-            : GpuTimerSegmentToken{};
-        targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
-                                  RhiResourceState::TransferSrc);
-        targets.transitionTexture(commandList, targets.cloudTextureHandle(),
-                                  RhiResourceState::TransferDst);
-        targets.copyHistoryCloudToCloud(commandList);
-        targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
-                                  RhiResourceState::ShaderRead);
-        targets.transitionTexture(commandList, targets.cloudTextureHandle(),
-                                  RhiResourceState::ShaderRead);
-        if (ctx.debugService != nullptr) {
-            ctx.debugService->endGpuTimer(commandList, timerToken);
-        }
-        if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
-        return;
+RgPassHandle CloudPass::addGraphPass(
+    RenderGraph& graph,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    const GraphResources& resources,
+    const RgPassHandle dependency) {
+    if (m_graphFramePrepared || !dependency.isValid() ||
+        !resources.depth.isValid() || !resources.skyCapture.isValid() ||
+        !resources.noise.isValid() || !resources.historyPrevious.isValid() ||
+        !resources.cloud.isValid()) {
+        return {};
     }
 
+    const bool renderClouds = shouldRenderClouds(ctx, settings);
+    const FrameContext* frame = &ctx;
+    DeferredRenderTargets* frameTargets = &targets;
+    RenderGraphPassBuilder cloudPass = graph.addPass({
+        renderClouds ? "Cloud.Render" : "Cloud.HistoryCopy",
+        renderClouds ? RgPassType::Graphics : RgPassType::Copy,
+        RhiQueueType::Graphics
+    });
+    cloudPass.dependsOn(dependency);
+    if (renderClouds) {
+        cloudPass.readTexture(resources.depth, RhiResourceState::DepthRead)
+            .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
+            .readTexture(resources.noise, RhiResourceState::ShaderRead)
+            .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
+            .writeTexture(resources.cloud, RhiResourceState::RenderTarget)
+            .setExecute([this, frame, frameTargets](RgPassContext& pass) {
+                return recordCloud(pass.commandList(), *frame, *frameTargets);
+            });
+    } else {
+        cloudPass.readTexture(resources.historyPrevious,
+                              RhiResourceState::TransferSrc)
+            .writeTexture(resources.cloud, RhiResourceState::TransferDst)
+            .setExecute([this, frame, frameTargets](RgPassContext& pass) {
+                return recordHistoryCopy(
+                    pass.commandList(), *frame, *frameTargets);
+            });
+    }
+
+    m_graphFramePrepared = true;
+    m_pendingCloudRender = renderClouds;
+    m_pendingCameraPos = ctx.camera.position;
+    m_pendingWeatherSignal = ctx.weather.wetness + ctx.weather.storm +
+                             ctx.weather.lightningFlash * 4.0f;
+    return cloudPass.handle();
+}
+
+void CloudPass::finishGraphExecution(const bool succeeded) {
+    if (!m_graphFramePrepared) {
+        std::abort();
+    }
+    if (succeeded && m_pendingCloudRender) {
+        m_lastCameraPos = m_pendingCameraPos;
+        m_lastWeatherSignal = m_pendingWeatherSignal;
+        m_hasRenderedClouds = true;
+    }
+    m_graphFramePrepared = false;
+    m_pendingCloudRender = false;
+}
+
+bool CloudPass::recordHistoryCopy(RhiCommandList& commandList,
+                                  const FrameContext& ctx,
+                                  DeferredRenderTargets& targets) {
+    const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
+        : GpuTimerSegmentToken{};
+    targets.copyHistoryCloudToCloud(commandList);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, timerToken);
+    }
+    return true;
+}
+
+bool CloudPass::recordCloud(RhiCommandList& commandList,
+                            const FrameContext& ctx,
+                            DeferredRenderTargets& targets) {
     if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
         !targets.ensureCloudTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
         !targets.ensureSkyCaptureTextureView(*ctx.shared->rhiDevice) ||
         !targets.ensureHistoryCloudTextureViews(*ctx.shared->rhiDevice)) {
-        return;
+        return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!ensureNoiseTextureView(rhiDevice)) {
-        return;
+        return false;
     }
     const std::array<RhiTextureViewHandle, 4> views = {
         targets.depthTextureViewHandle(),
@@ -136,7 +178,7 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
         targets.historyCloudTexturePrevViewHandle()
     };
     if (!ensureRhiPipeline(rhiDevice) || !ensureBindGroup(rhiDevice, views)) {
-        return;
+        return false;
     }
 
     const bool historyAvailable = m_hasRenderedClouds && !ctx.temporalReset;
@@ -187,20 +229,6 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     renderingInfo.colorAttachments = &colorAttachment;
     renderingInfo.colorAttachmentCount = 1u;
 
-    RhiCommandList* commandListStorage = ctx.shared->commandListPool->acquire(RhiCommandListType::Graphics);
-    if (commandListStorage == nullptr ||
-        !commandListStorage->begin({"RenderPass.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
-    RhiCommandList& commandList = *commandListStorage;
-    targets.transitionTexture(commandList, targets.depthTextureHandle(),
-                              RhiResourceState::DepthRead);
-    targets.transitionTexture(commandList, targets.skyCaptureTextureHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.historyCloudTexturePrevHandle(),
-                              RhiResourceState::ShaderRead);
-    targets.transitionTexture(commandList, targets.cloudTextureHandle(),
-                              RhiResourceState::RenderTarget);
     const GpuTimerSegmentToken timerToken = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Cloud)
         : GpuTimerSegmentToken{};
@@ -214,25 +242,10 @@ void CloudPass::execute(const FrameContext& ctx, const RenderSettings& settings,
     commandList.setBindGroup(0u, m_bindGroup);
     commandList.draw(3u, 1u, 0u, 0u);
     commandList.endRendering();
-    targets.transitionTexture(commandList, targets.cloudTextureHandle(),
-                              RhiResourceState::ShaderRead);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, timerToken);
     }
-    if (!commandList.end()) {
-        std::abort();
-    }
-    {
-        RhiCommandList* submittedCommandLists[] = {&commandList};
-        if (!rhiDevice.submit({"RenderPass.Submit", submittedCommandLists, 1u})) {
-            std::abort();
-        }
-    }
-
-    m_lastCameraPos = ctx.camera.position;
-    m_lastWeatherSignal = ctx.weather.wetness + ctx.weather.storm +
-                          ctx.weather.lightningFlash * 4.0f;
-    m_hasRenderedClouds = true;
+    return true;
 }
 
 bool CloudPass::ensureNoiseTextureView(RhiDevice& rhiDevice) {
