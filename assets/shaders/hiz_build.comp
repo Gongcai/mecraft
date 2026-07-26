@@ -1,0 +1,39 @@
+#version 450 core
+
+// Builds one mip of the Hi-Z occlusion pyramid. The pyramid stores the
+// FARTHEST (maximum) depth of each footprint so an occlusion test that finds
+// an object's nearest depth beyond the sampled value can reject it
+// conservatively with standard 0-near/1-far depth.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) uniform sampler2D uSourceTex;
+layout(binding = 1, r32f) uniform writeonly image2D uDestMip;
+
+layout(push_constant) uniform RhiPushConstants {
+    // x, y: destination mip extent; z: 1 when copying the depth buffer into
+    // mip 0 (1:1), 0 for the 2x2 max-reduction of the previous mip.
+    ivec4 uParams;
+};
+
+void main() {
+    const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (texel.x >= uParams.x || texel.y >= uParams.y) {
+        return;
+    }
+    if (uParams.z != 0) {
+        imageStore(uDestMip, texel, vec4(texelFetch(uSourceTex, texel, 0).r));
+        return;
+    }
+    // Clamped 2x2 gather: repeating the edge texel on odd dimensions keeps
+    // the reduction conservative because max() can only move farther.
+    const ivec2 srcSize = textureSize(uSourceTex, 0);
+    const ivec2 srcBase = texel * 2;
+    const float d0 = texelFetch(uSourceTex, min(srcBase, srcSize - 1), 0).r;
+    const float d1 = texelFetch(uSourceTex,
+                                min(srcBase + ivec2(1, 0), srcSize - 1), 0).r;
+    const float d2 = texelFetch(uSourceTex,
+                                min(srcBase + ivec2(0, 1), srcSize - 1), 0).r;
+    const float d3 = texelFetch(uSourceTex,
+                                min(srcBase + ivec2(1, 1), srcSize - 1), 0).r;
+    imageStore(uDestMip, texel, vec4(max(max(d0, d1), max(d2, d3))));
+}

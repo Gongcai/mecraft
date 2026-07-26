@@ -711,6 +711,34 @@ bool DeferredRenderTargets::createMotionTextures() {
     // TemporalCurrent doubles as the second scene color ping-pong buffer:
     // TAA/motion blur/DoF render into it and downstream copies blit from it,
     // so it needs the same usage set as SceneResolved.
+    {
+        // Full mip chain down to 1x1; the build pass stops early when a mip
+        // would fall below a useful footprint, but allocating the full chain
+        // keeps the view bookkeeping trivial across resizes.
+        uint32_t mipCount = 1u;
+        for (uint32_t extent = static_cast<uint32_t>(
+                 std::max(m_width, m_height));
+             extent > 1u; extent >>= 1u) {
+            ++mipCount;
+        }
+        m_hiZMipCount = mipCount;
+        RhiTextureDesc desc;
+        desc.debugName = "DeferredTargets.HiZ";
+        desc.dimension = RhiTextureDimension::Texture2D;
+        desc.format = RhiTextureFormat::R32Float;
+        desc.width = static_cast<uint32_t>(m_width);
+        desc.height = static_cast<uint32_t>(m_height);
+        desc.depthOrLayers = 1u;
+        desc.mipLevels = mipCount;
+        desc.sampleCount = 1u;
+        desc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                     rhiFlag(RhiTextureUsage::Storage);
+        m_hiZHandle = m_rhiDevice->createTexture(desc, nullptr);
+        if (!m_hiZHandle.isValid()) {
+            destroyMotionTextures();
+            return false;
+        }
+    }
     if (!createTexture("DeferredTargets.TemporalCurrent",
                        RhiTextureFormat::Rgba16Float,
                        rhiFlag(RhiTextureUsage::Sampled) |
@@ -740,6 +768,7 @@ void DeferredRenderTargets::destroyMotionTextures() {
     }
 
     RhiTextureHandle* textures[] = {
+        &m_hiZHandle,
         &m_temporalCurrentHandle,
         &m_velocityHandle,
         &m_perObjectVelocityHandle,
@@ -1354,6 +1383,41 @@ bool DeferredRenderTargets::ensureGBufferTextureViews(RhiDevice& rhiDevice) {
     }
 
     m_rhiViewDevice = &rhiDevice;
+    return true;
+}
+
+bool DeferredRenderTargets::ensureHiZTextureViews(RhiDevice& rhiDevice) {
+    if (m_rhiViewDevice != nullptr && m_rhiViewDevice != &rhiDevice) {
+        destroyRhiTextureViews();
+    }
+    if (!m_hiZMipViews.empty()) {
+        return true;
+    }
+    if (!m_hiZHandle.isValid() || m_hiZMipCount == 0u) {
+        return false;
+    }
+    m_rhiViewDevice = &rhiDevice;
+    m_hiZMipViews.resize(m_hiZMipCount);
+    for (uint32_t mip = 0u; mip < m_hiZMipCount; ++mip) {
+        RhiTextureViewDesc desc;
+        desc.texture = m_hiZHandle;
+        desc.viewType = RhiTextureViewType::Texture2D;
+        desc.format = RhiTextureFormat::R32Float;
+        desc.baseMip = mip;
+        desc.mipCount = 1;
+        desc.baseLayer = 0;
+        desc.layerCount = 1;
+        m_hiZMipViews[mip] = rhiDevice.createTextureView(desc);
+        if (!m_hiZMipViews[mip].isValid()) {
+            for (RhiTextureViewHandle& view : m_hiZMipViews) {
+                if (view.isValid()) {
+                    rhiDevice.destroyTextureView(view);
+                }
+            }
+            m_hiZMipViews.clear();
+            return false;
+        }
+    }
     return true;
 }
 

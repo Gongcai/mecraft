@@ -1441,6 +1441,7 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         pipelineChanged |= ImGui::Checkbox("SSAO", &settings.ssao.enabled);
         pipelineChanged |= ImGui::Checkbox("SSAO Temporal", &settings.ssao.temporalEnabled);
         pipelineChanged |= ImGui::Checkbox("Async Compute SSAO", &settings.ssao.asyncComputeEnabled);
+        pipelineChanged |= ImGui::Checkbox("Hi-Z Occlusion Culling", &settings.occlusion.hiZEnabled);
         pipelineChanged |= ImGui::Checkbox("SSGI", &settings.ssgi.enabled);
         ImGui::SameLine();
         if (ImGui::Button("SSGI View")) {

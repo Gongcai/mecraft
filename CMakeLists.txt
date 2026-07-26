@@ -363,6 +363,7 @@ set(SRC_RENDERER
         # Render passes
         src/renderer/passes/SsaoPass.cpp
         src/renderer/passes/SsgiPass.cpp
+        src/renderer/passes/HiZPass.cpp
         src/renderer/passes/VelocityPass.cpp
         src/renderer/passes/ReflectionPass.cpp
         src/renderer/passes/TemporalResolvePass.cpp

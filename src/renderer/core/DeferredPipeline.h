@@ -10,6 +10,7 @@
 #include "../mesh/TerrainRenderCache.h"
 #include "../passes/SsaoPass.h"
 #include "../passes/SsgiPass.h"
+#include "../passes/HiZPass.h"
 #include "../passes/VelocityPass.h"
 #include "../passes/ReflectionPass.h"
 #include "../passes/TemporalResolvePass.h"
@@ -85,6 +86,7 @@ private:
     std::unique_ptr<SsaoPass> m_ssaoPass;
     std::unique_ptr<SsgiPass> m_ssgiPass;
     std::unique_ptr<VelocityPass> m_velocityPass;
+    std::unique_ptr<HiZPass> m_hiZPass;
     std::unique_ptr<ReflectionPass> m_reflectionPass;
     std::unique_ptr<TemporalResolvePass> m_taaPass;
     std::unique_ptr<MotionBlurPass> m_motionBlurPass;

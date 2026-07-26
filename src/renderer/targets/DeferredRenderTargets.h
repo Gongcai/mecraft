@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 class RhiDevice;
 class RhiCommandList;
@@ -151,6 +152,17 @@ public:
     [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
     [[nodiscard]] RhiTextureViewHandle temporalCurrentTextureViewHandle() const { return m_temporalCurrentView; }
 
+    // Hi-Z occlusion pyramid: R32Float mip chain holding the FARTHEST depth
+    // per footprint, rebuilt each frame from the previous frame's depth so
+    // GPU occlusion culling can conservatively reject indirect draws.
+    [[nodiscard]] RhiTextureHandle hiZTextureHandle() const { return m_hiZHandle; }
+    [[nodiscard]] uint32_t hiZMipCount() const { return m_hiZMipCount; }
+    [[nodiscard]] RhiTextureViewHandle hiZMipTextureViewHandle(const uint32_t mip) const {
+        return mip < m_hiZMipViews.size() ? m_hiZMipViews[mip]
+                                          : RhiTextureViewHandle{};
+    }
+    bool ensureHiZTextureViews(RhiDevice& rhiDevice);
+
     // Scene color ping-pong chain shared by TAA, motion blur, and depth of
     // field: index 0 aliases sceneResolved and index 1 aliases the same-format
     // temporalCurrent target. Each in-place style pass reads the current index,
@@ -212,6 +224,11 @@ public:
     void transitionTexture(RhiCommandList& commandList,
                            RhiTextureHandle texture,
                            RhiResourceState newState) const;
+    /// Registers a freshly created texture's stable state after moving it
+    /// out of the Undefined layout; required before transitionTexture use.
+    void initializeTextureState(RhiCommandList& commandList,
+                                RhiTextureHandle texture,
+                                RhiResourceState stableState) const;
 
 private:
     static constexpr int kShadowCascadeCount = 4;
@@ -229,9 +246,7 @@ private:
     bool createCsmShadowTextures();
     void destroyCsmShadowTextures();
     void initializePersistentTextureStates();
-    void initializeTextureState(RhiCommandList& commandList,
-                                RhiTextureHandle texture,
-                                RhiResourceState stableState) const;
+
     bool createGBufferTextures();
     void destroyGBufferTextures();
     bool createSceneTextures();
@@ -378,6 +393,9 @@ private:
     RhiTextureViewHandle m_historyVolumetricView[2];
     int m_currentHistoryIndex = 0;
     int m_sceneColorIndex = 0;
+    RhiTextureHandle m_hiZHandle;
+    std::vector<RhiTextureViewHandle> m_hiZMipViews;
+    uint32_t m_hiZMipCount = 0u;
     bool m_rebuiltSinceCheck = false;
 
     // TAA current-frame scratch: avoids reading history[current] as TAA input.

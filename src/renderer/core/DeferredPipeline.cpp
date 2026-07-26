@@ -233,6 +233,11 @@ bool clearRebuiltHistoryTargets(RhiDevice& rhiDevice,
                               RhiResourceState::DepthRead);
     targets.transitionTexture(commandList, targets.taaHistoryDepthTexturePrevHandle(),
                               RhiResourceState::DepthRead);
+    // The Hi-Z pyramid is rebuilt from scratch every frame, so no clear is
+    // needed; it only has to leave the Undefined layout and register its
+    // stable state so the render graph's planned barriers line up.
+    targets.initializeTextureState(commandList, targets.hiZTextureHandle(),
+                                   RhiResourceState::ShaderRead);
 
     if (!commandList.end()) {
         std::abort();
@@ -258,6 +263,7 @@ void DeferredPipeline::initializePasses(ResourceMgr& resourceMgr,
     m_shadowPass = std::make_unique<ShadowPass>();
     m_waterCompositePass = std::make_unique<WaterCompositePass>();
     m_velocityPass = std::make_unique<VelocityPass>();
+    m_hiZPass = std::make_unique<HiZPass>();
     m_ssaoPass = std::make_unique<SsaoPass>();
     m_ssgiPass = std::make_unique<SsgiPass>();
     m_lightingPass = std::make_unique<DeferredLightingPass>();
@@ -341,6 +347,7 @@ void DeferredPipeline::shutdown() {
     if (m_ssgiPass) m_ssgiPass->shutdown();
     if (m_ssaoPass) m_ssaoPass->shutdown();
     if (m_velocityPass) m_velocityPass->shutdown();
+    if (m_hiZPass) m_hiZPass->shutdown();
     if (m_waterCompositePass) m_waterCompositePass->shutdown();
     if (m_shadowPass) m_shadowPass->shutdown();
     if (m_gbufferPass) m_gbufferPass->shutdown();
@@ -712,6 +719,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     RgTextureHandle sceneComposite;
     RgTextureHandle sceneResolved;
     RgTextureHandle temporalCurrent;
+    RgTextureHandle hiZ;
     RgTextureHandle historySceneCurrent;
     RgTextureHandle historyScenePrevious;
     RgTextureHandle transparentComposite;
@@ -767,6 +775,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         !importTexture(targets.temporalCurrentTextureHandle(),
                        targets.temporalCurrentTextureViewHandle(),
                        RhiResourceState::ShaderRead, temporalCurrent) ||
+        !importTexture(targets.hiZTextureHandle(), {},
+                       RhiResourceState::ShaderRead, hiZ) ||
         !importTexture(targets.historySceneTextureHandle(),
                        targets.historySceneTextureViewHandle(),
                        RhiResourceState::ShaderRead, historySceneCurrent) ||
@@ -992,6 +1002,20 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                                                targets);
             });
         graphTail = velocityPass.handle();
+    }
+
+    // Hi-Z pyramid: reduce the previous frame's depth into a max-depth mip
+    // chain right after the early passes; the GPU occlusion cull consumes it
+    // before the indirect terrain draws.
+    if (settings.occlusion.hiZEnabled && m_hiZPass != nullptr) {
+        HiZPass::GraphResources hiZResources;
+        hiZResources.historyDepthPrevious = historyDepthPrevious;
+        hiZResources.hiZ = hiZ;
+        const RgPassHandle hiZHandle = m_hiZPass->addGraphPasses(
+            m_renderGraph, ctx, targets, hiZResources, graphTail);
+        if (!hiZHandle.isValid()) {
+            return failGraphSetup();
+        }
     }
 
     // Async compute pilot: the cloud raymarch depends only on the depth

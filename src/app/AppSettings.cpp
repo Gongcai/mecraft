@@ -287,6 +287,16 @@ json toJson(const VolumetricSettings& s) {
     };
 }
 
+void applyOcclusionSettings(const json& j, OcclusionSettings& s) {
+    readBool(j, "hiZEnabled", s.hiZEnabled);
+}
+
+json toJson(const OcclusionSettings& s) {
+    return json{
+        {"hiZEnabled", s.hiZEnabled},
+    };
+}
+
 void applyCloudSettings(const json& j, CloudSettings& s) {
     readBool(j, "shadowsEnabled", s.shadowsEnabled);
     readBool(j, "asyncComputeEnabled", s.asyncComputeEnabled);
@@ -666,6 +676,7 @@ void applyRenderSettings(const json& j, RenderSettings& s) {
     applyObject("voxelGi", [&s](const json& value) { applyVoxelGiSettings(value, s.voxelGi); });
     applyObject("volumetric", [&s](const json& value) { applyVolumetricSettings(value, s.volumetric); });
     applyObject("cloud", [&s](const json& value) { applyCloudSettings(value, s.cloud); });
+    applyObject("occlusion", [&s](const json& value) { applyOcclusionSettings(value, s.occlusion); });
     applyObject("reflection", [&s](const json& value) { applyReflectionSettings(value, s.reflection); });
     applyObject("transparent", [&s](const json& value) { applyTransparentSettings(value, s.transparent); });
     applyObject("blockMaterialMaps", [&s](const json& value) { applyBlockMaterialMapSettings(value, s.blockMaterialMaps); });
@@ -689,6 +700,7 @@ json toJson(const RenderSettings& s) {
         {"voxelGi", toJson(s.voxelGi)},
         {"volumetric", toJson(s.volumetric)},
         {"cloud", toJson(s.cloud)},
+        {"occlusion", toJson(s.occlusion)},
         {"reflection", toJson(s.reflection)},
         {"transparent", toJson(s.transparent)},
         {"blockMaterialMaps", toJson(s.blockMaterialMaps)},

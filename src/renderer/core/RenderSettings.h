@@ -350,6 +350,12 @@ struct WeatherRenderSettings {
 };
 
 /// Complete render settings — single source of truth for the renderer configuration.
+/// GPU occlusion culling configuration.
+struct OcclusionSettings {
+    /// Build the Hi-Z pyramid and cull occluded indirect terrain draws.
+    bool hiZEnabled = true;
+};
+
 struct RenderSettings {
     PipelineMode pipelineMode = PipelineMode::Deferred;
 
@@ -360,6 +366,7 @@ struct RenderSettings {
     VoxelGiSettings voxelGi;
     VolumetricSettings volumetric;
     CloudSettings cloud;
+    OcclusionSettings occlusion;
     ReflectionSettings reflection;
     TransparentSettings transparent;
     BlockMaterialMapSettings blockMaterialMaps;
