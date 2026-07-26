@@ -52,21 +52,19 @@ RgPassHandle TemporalResolvePass::addGraphPasses(
 
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
-    RenderGraphPassBuilder copy = graph.addPass(
-        {"TemporalResolve.CurrentCopy", RgPassType::Copy,
-         RhiQueueType::Graphics});
-    copy.dependsOn(dependency)
-        .readTexture(resources.sceneResolved, RhiResourceState::TransferSrc)
-        .writeTexture(resources.temporalCurrent, RhiResourceState::TransferDst)
-        .setExecute([this, frameTargets](RgPassContext& pass) {
-            return recordCurrentCopy(pass.commandList(), *frameTargets);
-        });
+    // Scene color ping-pong: sample the current chain buffer directly and
+    // resolve into the other one instead of snapshotting through a copy.
+    const int inputIndex = targets.sceneColorIndex();
+    const RgTextureHandle inputTexture = inputIndex == 0
+        ? resources.sceneResolved : resources.temporalCurrent;
+    const RgTextureHandle outputTexture = inputIndex == 0
+        ? resources.temporalCurrent : resources.sceneResolved;
 
     RenderGraphPassBuilder resolve = graph.addPass(
         {"TemporalResolve.Resolve", RgPassType::Graphics,
          RhiQueueType::Graphics});
-    resolve.dependsOn(copy.handle())
-        .readTexture(resources.temporalCurrent, RhiResourceState::ShaderRead)
+    resolve.dependsOn(dependency)
+        .readTexture(inputTexture, RhiResourceState::ShaderRead)
         .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)
         .readTexture(resources.historyDepthPrevious, RhiResourceState::DepthRead)
         .readTexture(resources.velocity, RhiResourceState::ShaderRead)
@@ -75,32 +73,24 @@ RgPassHandle TemporalResolvePass::addGraphPasses(
         .readTexture(resources.reactiveMask, RhiResourceState::ShaderRead)
         .readTexture(resources.transparencyMask, RhiResourceState::ShaderRead)
         .readTexture(resources.materialAux, RhiResourceState::ShaderRead)
-        .writeTexture(resources.sceneResolved, RhiResourceState::RenderTarget)
-        .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
+        .writeTexture(outputTexture, RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets, settings,
+                     inputIndex](RgPassContext& pass) {
             return recordResolve(
-                pass.commandList(), *frame, settings, *frameTargets);
+                pass.commandList(), *frame, settings, *frameTargets,
+                inputIndex);
         });
+    targets.flipSceneColor();
     return resolve.handle();
-}
-
-bool TemporalResolvePass::recordCurrentCopy(
-    RhiCommandList& commandList,
-    DeferredRenderTargets& targets) {
-    if (!targets.isReady()) {
-        return false;
-    }
-    RhiTextureBlit blit;
-    blit.src = targets.sceneResolvedTextureHandle();
-    blit.dst = targets.temporalCurrentTextureHandle();
-    commandList.blitTexture(blit);
-    return true;
 }
 
 bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
                                         const FrameContext& ctx,
                                         const RenderSettings& settings,
-                                        DeferredRenderTargets& targets) {
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+                                        DeferredRenderTargets& targets,
+                                        const int inputIndex) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        inputIndex < 0 || inputIndex > 1) {
         return false;
     }
 
@@ -121,7 +111,7 @@ bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
     const int historyPrevIndex = 1 - targets.currentHistoryIndex();
     if (!ensureRhiBindGroup(rhiDevice,
                             historyPrevIndex,
-                            targets.temporalCurrentTextureViewHandle(),
+                            targets.sceneColorTextureViewHandle(inputIndex),
                             targets.historySceneTexturePrevViewHandle(),
                             targets.taaHistoryDepthTexturePrevViewHandle(),
                             targets.velocityTextureViewHandle(),
@@ -134,7 +124,7 @@ bool TemporalResolvePass::recordResolve(RhiCommandList& commandList,
     }
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.sceneResolvedTextureViewHandle();
+    colorAttachment.view = targets.sceneColorTextureViewHandle(1 - inputIndex);
     colorAttachment.loadOp = RhiLoadOp::DontCare;
     colorAttachment.storeOp = RhiStoreOp::Store;
 

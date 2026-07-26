@@ -224,7 +224,7 @@ bool DebugPass::recordGraphPass(const FrameContext& ctx,
 
     RhiTextureViewHandle binding15 = targets.cloudTextureViewHandle();
     if (usesSceneResolved(debugViewMode)) {
-        binding15 = targets.sceneResolvedTextureViewHandle();
+        binding15 = targets.currentSceneColorTextureViewHandle();
     } else if (usesSceneComposite(debugViewMode)) {
         binding15 = targets.sceneCompositeTextureViewHandle();
     } else if (usesCloudHistory(debugViewMode)) {

@@ -32,75 +32,65 @@ RgPassHandle MotionBlurPass::addGraphPasses(
     const GraphResources& resources,
     const RgPassHandle dependency) {
     if (!dependency.isValid() || !resources.sceneResolved.isValid() ||
-        !resources.historyCurrent.isValid() || !resources.velocity.isValid() ||
+        !resources.temporalCurrent.isValid() || !resources.velocity.isValid() ||
         !resources.depth.isValid()) {
         return {};
     }
 
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
-    RenderGraphPassBuilder copy = graph.addPass(
-        {"MotionBlur.HistoryCopy", RgPassType::Copy,
-         RhiQueueType::Graphics});
-    copy.dependsOn(dependency)
-        .readTexture(resources.sceneResolved, RhiResourceState::TransferSrc)
-        .writeTexture(resources.historyCurrent, RhiResourceState::TransferDst)
-        .setExecute([this, frameTargets](RgPassContext& pass) {
-            return recordHistoryCopy(pass.commandList(), *frameTargets);
-        });
+    // Scene color ping-pong: blur samples the current chain buffer and
+    // renders into the other one, replacing the former scratch snapshot blit.
+    const int inputIndex = targets.sceneColorIndex();
+    const RgTextureHandle inputTexture = inputIndex == 0
+        ? resources.sceneResolved : resources.temporalCurrent;
+    const RgTextureHandle outputTexture = inputIndex == 0
+        ? resources.temporalCurrent : resources.sceneResolved;
 
     RenderGraphPassBuilder blur = graph.addPass(
         {"MotionBlur.Resolve", RgPassType::Graphics,
          RhiQueueType::Graphics});
-    blur.dependsOn(copy.handle())
-        .readTexture(resources.historyCurrent, RhiResourceState::ShaderRead)
+    blur.dependsOn(dependency)
+        .readTexture(inputTexture, RhiResourceState::ShaderRead)
         .readTexture(resources.velocity, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
-        .writeTexture(resources.sceneResolved, RhiResourceState::RenderTarget)
-        .setExecute([this, frame, frameTargets, settings](RgPassContext& pass) {
+        .writeTexture(outputTexture, RhiResourceState::RenderTarget)
+        .setExecute([this, frame, frameTargets, settings,
+                     inputIndex](RgPassContext& pass) {
             return recordBlur(
-                pass.commandList(), *frame, settings, *frameTargets);
+                pass.commandList(), *frame, settings, *frameTargets,
+                inputIndex);
         });
+    targets.flipSceneColor();
     return blur.handle();
-}
-
-bool MotionBlurPass::recordHistoryCopy(
-    RhiCommandList& commandList,
-    DeferredRenderTargets& targets) {
-    if (!targets.isReady()) {
-        return false;
-    }
-    RhiTextureBlit blit;
-    blit.src = targets.sceneResolvedTextureHandle();
-    blit.dst = targets.historySceneTextureHandle();
-    commandList.blitTexture(blit);
-    return true;
 }
 
 bool MotionBlurPass::recordBlur(RhiCommandList& commandList,
                                 const FrameContext& ctx,
                                 const RenderSettings& settings,
-                                DeferredRenderTargets& targets) {
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+                                DeferredRenderTargets& targets,
+                                const int inputIndex) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        inputIndex < 0 || inputIndex > 1) {
         return false;
     }
 
     RhiDevice& rhiDevice = *ctx.shared->rhiDevice;
     if (!targets.ensureSceneResolvedTextureView(rhiDevice) ||
-        !targets.ensureHistorySceneTextureView(rhiDevice) ||
+        !targets.ensureTemporalCurrentTextureView(rhiDevice) ||
         !targets.ensureVelocityTextureView(rhiDevice) ||
         !targets.ensureGBufferTextureViews(rhiDevice) ||
         !ensureRhiPipeline(rhiDevice) ||
         !ensureRhiBindGroup(rhiDevice,
-                            targets.currentHistoryIndex(),
-                            targets.historySceneTextureViewHandle(),
+                            inputIndex,
+                            targets.sceneColorTextureViewHandle(inputIndex),
                             targets.velocityTextureViewHandle(),
                             targets.depthTextureViewHandle())) {
         return false;
     }
 
     RhiColorAttachment colorAttachment;
-    colorAttachment.view = targets.sceneResolvedTextureViewHandle();
+    colorAttachment.view = targets.sceneColorTextureViewHandle(1 - inputIndex);
     colorAttachment.loadOp = RhiLoadOp::DontCare;
     colorAttachment.storeOp = RhiStoreOp::Store;
 
@@ -116,7 +106,7 @@ bool MotionBlurPass::recordBlur(RhiCommandList& commandList,
     renderingInfo.colorAttachmentCount = 1u;
     commandList.beginRendering(renderingInfo);
     commandList.setGraphicsPipeline(m_pipeline);
-    commandList.setBindGroup(0u, m_bindGroup[targets.currentHistoryIndex()]);
+    commandList.setBindGroup(0u, m_bindGroup[inputIndex]);
 
     const glm::vec4 pushConstants(
         settings.postProcess.motionBlurStrength,

@@ -600,6 +600,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     const auto graphBuildStart = std::chrono::steady_clock::now();
     m_renderGraph.reset();
+    // The composite stages below always write sceneResolved, so every frame
+    // graph starts its scene color ping-pong chain at index 0.
+    targets.resetSceneColorChain();
     const auto importTexture = [&](const RhiTextureHandle texture,
                                    const RhiTextureViewHandle view,
                                    const RhiResourceState stableState,
@@ -1382,7 +1385,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         if (motionBlurEnabled) {
             MotionBlurPass::GraphResources motionResources;
             motionResources.sceneResolved = sceneResolved;
-            motionResources.historyCurrent = historySceneCurrent;
+            motionResources.temporalCurrent = temporalCurrent;
             motionResources.velocity = velocity;
             motionResources.depth = depth;
             graphTail = m_motionBlurPass->addGraphPasses(
@@ -1396,7 +1399,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         if (dofEnabled) {
             DepthOfFieldPass::GraphResources dofResources;
             dofResources.sceneResolved = sceneResolved;
-            dofResources.historyCurrent = historySceneCurrent;
+            dofResources.temporalCurrent = temporalCurrent;
             dofResources.depth = depth;
             graphTail = m_dofPass->addGraphPasses(
                 m_renderGraph, ctx, settings, targets, dofResources,
@@ -1447,8 +1450,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         settings.debug.reflectionDebugMode <= 0;
     RenderGraphPassBuilder historyCopy = m_renderGraph.addPass(
         {"Deferred.HistoryCopy", RgPassType::Copy, RhiQueueType::Graphics});
+    const RgTextureHandle sceneColorFinal = targets.sceneColorIndex() == 0
+        ? sceneResolved : temporalCurrent;
     historyCopy.dependsOn(graphTail)
-        .readTexture(sceneResolved, RhiResourceState::TransferSrc)
+        .readTexture(sceneColorFinal, RhiResourceState::TransferSrc)
         .readTexture(depth, RhiResourceState::TransferSrc)
         .readTexture(reflection, RhiResourceState::TransferSrc)
         .readTexture(cloud, RhiResourceState::TransferSrc)
@@ -1469,7 +1474,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     historyCopy.setExecute([&, volumetricHistoryWrittenByGraph,
                             taaTransparentDepthAvailable](RgPassContext& pass) {
         RhiTextureBlit sceneBlit;
-        sceneBlit.src = targets.sceneResolvedTextureHandle();
+        sceneBlit.src = targets.currentSceneColorTextureHandle();
         sceneBlit.dst = targets.historySceneTextureHandle();
         pass.commandList().blitTexture(sceneBlit);
 
@@ -1530,7 +1535,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         }
         RgTextureHandle debugGraphBinding15 = cloud;
         if (settings.debug.viewMode == 31 || settings.debug.viewMode == 79) {
-            debugGraphBinding15 = sceneResolved;
+            debugGraphBinding15 = targets.sceneColorIndex() == 0
+                ? sceneResolved : temporalCurrent;
         } else if (settings.debug.viewMode == 11 ||
                    settings.debug.viewMode == 78) {
             debugGraphBinding15 = sceneComposite;
@@ -1574,11 +1580,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         RenderGraphPassBuilder sceneOutput = m_renderGraph.addPass(
             {"Deferred.SceneOutput", RgPassType::Copy, RhiQueueType::Graphics});
         sceneOutput.dependsOn(graphTail)
-            .readTexture(sceneResolved, RhiResourceState::TransferSrc)
+            .readTexture(targets.sceneColorIndex() == 0 ? sceneResolved
+                                                        : temporalCurrent,
+                         RhiResourceState::TransferSrc)
             .writeTexture(sceneCaptureColor, RhiResourceState::TransferDst)
             .setExecute([&](RgPassContext& pass) {
                 RhiTextureBlit blit;
-                blit.src = targets.sceneResolvedTextureHandle();
+                blit.src = targets.currentSceneColorTextureHandle();
                 blit.dst = ctx.sceneCaptureColorTexture;
                 pass.commandList().blitTexture(blit);
                 return true;
@@ -1605,6 +1613,31 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         settings.debug.reflectionDebugMode <= 0 &&
         settings.transparent.waterEffectsEnabled;
     if (postWaterCandidate) {
+        // Post-temporal water only draws on the non-jittered path and samples
+        // a fixed sceneResolved binding. When the ping-pong chain ended on the
+        // other buffer, mirror it back so that binding stays valid. The chain
+        // index itself must NOT change here: earlier passes already declared
+        // their graph reads against the final index at build time, so a late
+        // reset would desynchronize their recorded blits from the barrier
+        // plan. Both buffers hold identical content after this copy.
+        if (!usesTemporalProjectionJitter(settings.upscale.type,
+                                          settings.taa.enabled) &&
+            targets.sceneColorIndex() != 0) {
+            RenderGraphPassBuilder normalize = m_renderGraph.addPass(
+                {"Deferred.SceneColorNormalize", RgPassType::Copy,
+                 RhiQueueType::Graphics});
+            normalize.dependsOn(graphTail)
+                .readTexture(temporalCurrent, RhiResourceState::TransferSrc)
+                .writeTexture(sceneResolved, RhiResourceState::TransferDst)
+                .setExecute([&](RgPassContext& pass) {
+                    RhiTextureBlit blit;
+                    blit.src = targets.temporalCurrentTextureHandle();
+                    blit.dst = targets.sceneResolvedTextureHandle();
+                    pass.commandList().blitTexture(blit);
+                    return true;
+                });
+            graphTail = normalize.handle();
+        }
         const bool postWaterComposite =
             m_deferredFrameActive && settings.transparent.compositeEnabled;
         if (postWaterComposite) {
@@ -2249,7 +2282,8 @@ FrameOutput DeferredPipeline::buildFrameOutput(const FrameContext& ctx) {
     FrameOutput output;
 
     if (m_shared && m_shared->deferredTargets) {
-        output.sceneColor = m_shared->deferredTargets->sceneResolvedTextureHandle();
+        output.sceneColor =
+            m_shared->deferredTargets->currentSceneColorTextureHandle();
         output.sceneDepth = m_shared->deferredTargets->depthTextureHandle();
         output.gbufferDepth = m_shared->deferredTargets->depthTextureHandle();
         output.weatherMask = m_shared->deferredTargets->weatherMaskTextureHandle();

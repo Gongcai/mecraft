@@ -150,6 +150,28 @@ public:
     bool ensureHistoryVolumetricTextureViews(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle temporalCurrentTextureHandle() const { return m_temporalCurrentHandle; }
     [[nodiscard]] RhiTextureViewHandle temporalCurrentTextureViewHandle() const { return m_temporalCurrentView; }
+
+    // Scene color ping-pong chain shared by TAA, motion blur, and depth of
+    // field: index 0 aliases sceneResolved and index 1 aliases the same-format
+    // temporalCurrent target. Each in-place style pass reads the current index,
+    // renders into the other one, and flips, which removes the scratch blits
+    // those passes previously issued. The chain resets to index 0 at graph
+    // build time because the composite stages always write sceneResolved.
+    void resetSceneColorChain() { m_sceneColorIndex = 0; }
+    void flipSceneColor() { m_sceneColorIndex = 1 - m_sceneColorIndex; }
+    [[nodiscard]] int sceneColorIndex() const { return m_sceneColorIndex; }
+    [[nodiscard]] RhiTextureHandle sceneColorTextureHandle(const int index) const {
+        return index == 0 ? m_sceneResolvedHandle : m_temporalCurrentHandle;
+    }
+    [[nodiscard]] RhiTextureViewHandle sceneColorTextureViewHandle(const int index) const {
+        return index == 0 ? m_sceneResolvedView : m_temporalCurrentView;
+    }
+    [[nodiscard]] RhiTextureHandle currentSceneColorTextureHandle() const {
+        return sceneColorTextureHandle(m_sceneColorIndex);
+    }
+    [[nodiscard]] RhiTextureViewHandle currentSceneColorTextureViewHandle() const {
+        return sceneColorTextureViewHandle(m_sceneColorIndex);
+    }
     bool ensureTemporalCurrentTextureView(RhiDevice& rhiDevice);
     [[nodiscard]] RhiTextureHandle velocityTextureHandle() const { return m_velocityHandle; }
     [[nodiscard]] RhiTextureViewHandle velocityTextureViewHandle() const { return m_velocityView; }
@@ -355,6 +377,7 @@ private:
     RhiTextureHandle m_historyVolumetricHandle[2];
     RhiTextureViewHandle m_historyVolumetricView[2];
     int m_currentHistoryIndex = 0;
+    int m_sceneColorIndex = 0;
     bool m_rebuiltSinceCheck = false;
 
     // TAA current-frame scratch: avoids reading history[current] as TAA input.

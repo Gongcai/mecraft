@@ -49,12 +49,11 @@ public:
         RgPassHandle dependency);
 
 private:
-    [[nodiscard]] bool recordCurrentCopy(RhiCommandList& commandList,
-                                         DeferredRenderTargets& targets);
     [[nodiscard]] bool recordResolve(RhiCommandList& commandList,
                                      const FrameContext& ctx,
                                      const RenderSettings& settings,
-                                     DeferredRenderTargets& targets);
+                                     DeferredRenderTargets& targets,
+                                     int inputIndex);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,
                             int historyPrevIndex,

@@ -18,15 +18,16 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "MotionBlur"; }
 
-    /// Graph handles for the scene scratch and motion inputs.
+    /// Graph handles for the scene ping-pong pair and motion inputs.
     struct GraphResources {
         RgTextureHandle sceneResolved;
-        RgTextureHandle historyCurrent;
+        RgTextureHandle temporalCurrent;
         RgTextureHandle velocity;
         RgTextureHandle depth;
     };
 
-    /// Adds the motion-blur scratch copy and resolve stages to the graph.
+    /// Adds the motion-blur resolve stage to the graph. The pass reads the
+    /// current scene color chain buffer and renders into the other one.
     /// @param graph Graph receiving the motion-blur stages.
     /// @param ctx Frame state retained until graph execution completes.
     /// @param settings Current post-process settings.
@@ -43,12 +44,11 @@ public:
         RgPassHandle dependency);
 
 private:
-    [[nodiscard]] bool recordHistoryCopy(RhiCommandList& commandList,
-                                         DeferredRenderTargets& targets);
     [[nodiscard]] bool recordBlur(RhiCommandList& commandList,
                                   const FrameContext& ctx,
                                   const RenderSettings& settings,
-                                  DeferredRenderTargets& targets);
+                                  DeferredRenderTargets& targets,
+                                  int inputIndex);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,
                             int historyIndex,

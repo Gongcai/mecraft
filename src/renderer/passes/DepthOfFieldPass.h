@@ -20,14 +20,15 @@ public:
     void shutdown() override;
     [[nodiscard]] const char* name() const override { return "DepthOfField"; }
 
-    /// Graph handles for the scene scratch and depth input.
+    /// Graph handles for the scene ping-pong pair and depth input.
     struct GraphResources {
         RgTextureHandle sceneResolved;
-        RgTextureHandle historyCurrent;
+        RgTextureHandle temporalCurrent;
         RgTextureHandle depth;
     };
 
-    /// Adds the depth-of-field scratch copy and resolve stages to the graph.
+    /// Adds the depth-of-field resolve stage to the graph. The pass reads the
+    /// current scene color chain buffer and renders into the other one.
     /// @param graph Graph receiving the depth-of-field stages.
     /// @param ctx Frame state retained until graph execution completes.
     /// @param settings Current post-process settings.
@@ -44,12 +45,11 @@ public:
         RgPassHandle dependency);
 
 private:
-    [[nodiscard]] bool recordHistoryCopy(RhiCommandList& commandList,
-                                         DeferredRenderTargets& targets);
     [[nodiscard]] bool recordDof(RhiCommandList& commandList,
                                  const FrameContext& ctx,
                                  const RenderSettings& settings,
-                                 DeferredRenderTargets& targets);
+                                 DeferredRenderTargets& targets,
+                                 int inputIndex);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureNoiseTextureView(RhiDevice& rhiDevice);
     bool ensureRhiBindGroup(RhiDevice& rhiDevice,

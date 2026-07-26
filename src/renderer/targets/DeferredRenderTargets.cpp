@@ -701,9 +701,15 @@ bool DeferredRenderTargets::createMotionTextures() {
     const RhiTextureUsageFlags attachmentUsage =
         rhiFlag(RhiTextureUsage::Sampled) |
         rhiFlag(RhiTextureUsage::ColorAttachment);
+    // TemporalCurrent doubles as the second scene color ping-pong buffer:
+    // TAA/motion blur/DoF render into it and downstream copies blit from it,
+    // so it needs the same usage set as SceneResolved.
     if (!createTexture("DeferredTargets.TemporalCurrent",
                        RhiTextureFormat::Rgba16Float,
-                       rhiFlag(RhiTextureUsage::Sampled) | rhiFlag(RhiTextureUsage::TransferDst),
+                       rhiFlag(RhiTextureUsage::Sampled) |
+                           rhiFlag(RhiTextureUsage::ColorAttachment) |
+                           rhiFlag(RhiTextureUsage::TransferSrc) |
+                           rhiFlag(RhiTextureUsage::TransferDst),
                        m_temporalCurrentHandle) ||
         !createTexture("DeferredTargets.Velocity", RhiTextureFormat::Rg16Float,
                        attachmentUsage, m_velocityHandle) ||
