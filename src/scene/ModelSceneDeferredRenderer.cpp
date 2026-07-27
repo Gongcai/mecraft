@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <optional>
 #include <utility>
 
 #include <glm/gtc/matrix_inverse.hpp>
@@ -13,12 +14,15 @@
 #include "renderer/core/RenderScene.h"
 #include "renderer/debug/RenderDebugService.h"
 #include "renderer/passes/PostProcessPass.h"
+#include "renderer/passes/Fsr1Pass.h"
+#include "renderer/passes/TemporalUpscalePass.h"
 #include "renderer/renderers/GameplaySkyRenderer.h"
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/shadow/ShadowRenderer.h"
 #include "renderer/targets/DeferredRenderTargets.h"
+#include "renderer/upscaling/Fsr31TemporalConfig.h"
 #include "resource/ResourceMgr.h"
 #include "ui/imgui/ImGuiRhiRenderer.h"
 #include "world/DayNightSystem.h"
@@ -158,6 +162,37 @@ PostProcessEffects buildPostProcessEffects(
 } // namespace
 
 struct ModelSceneDeferredRenderer::Impl {
+    [[nodiscard]] bool fsr1Enabled() const {
+        return settings.upscale.fsr1Enabled &&
+               settings.upscale.type == TemporalUpscalerType::Native &&
+               settings.upscale.fsr1RenderScale < 0.999f;
+    }
+
+    [[nodiscard]] std::optional<TemporalExtent> resolveRenderExtent(
+        const TemporalExtent outputExtent) const {
+        if (settings.upscale.type == TemporalUpscalerType::Fsr31) {
+#if defined(MECRAFT_ENABLE_FSR31)
+            const Fsr31RenderExtentResult result = queryFsr31RenderExtent(
+                settings.upscale.quality, outputExtent);
+            if (!result.succeeded()) {
+                return std::nullopt;
+            }
+            return result.extent;
+#else
+            return std::nullopt;
+#endif
+        }
+        if (fsr1Enabled()) {
+            const float scale = settings.upscale.fsr1RenderScale;
+            return TemporalExtent{
+                std::max(1u, static_cast<uint32_t>(std::lround(
+                    static_cast<float>(outputExtent.width) * scale))),
+                std::max(1u, static_cast<uint32_t>(std::lround(
+                    static_cast<float>(outputExtent.height) * scale)))};
+        }
+        return outputExtent;
+    }
+
     [[nodiscard]] bool beginDebugFrame() {
         RhiCommandList* commandList =
             commandListPool->acquire(RhiCommandListType::Graphics);
@@ -176,10 +211,12 @@ struct ModelSceneDeferredRenderer::Impl {
             RhiQueueType::Graphics});
     }
 
-    [[nodiscard]] FrameContext buildFrameContext(
+    [[nodiscard]] std::optional<FrameContext> buildFrameContext(
         const glm::mat4& view,
         const glm::mat4& projection,
         const glm::vec3& cameraPosition,
+        const float nearPlane,
+        const float farPlane,
         const float deltaTime) {
         FrameContext context;
         context.camera.view = view;
@@ -189,11 +226,11 @@ struct ModelSceneDeferredRenderer::Impl {
         context.camera.invViewProj = glm::inverse(context.camera.viewProj);
         context.camera.jitteredInvViewProj = context.camera.invViewProj;
         context.camera.position = cameraPosition;
-        context.camera.nearPlane = 0.05f;
-        context.camera.farPlane = 500.0f;
+        context.camera.nearPlane = nearPlane;
+        context.camera.farPlane = farPlane;
         context.camera.fovDegrees = 55.0f;
-        context.renderExtent = {width, height};
-        context.outputExtent = context.renderExtent;
+        context.renderExtent = {renderWidth, renderHeight};
+        context.outputExtent = {width, height};
         context.sceneCaptureColorTexture =
             postProcess.sceneColorTextureHandle();
         context.sceneCaptureDepthTexture =
@@ -208,9 +245,37 @@ struct ModelSceneDeferredRenderer::Impl {
             std::fmod(Time::getGameTime(), 16.0));
         context.shaderTime = static_cast<float>(
             std::fmod(Time::getRawTime(), 8192.0));
-        context.temporalReset = !hasPreviousContext;
-        if (hasPreviousContext) {
+        if (settings.upscale.type == TemporalUpscalerType::Fsr31) {
+#if defined(MECRAFT_ENABLE_FSR31)
+            const Fsr31JitterResult jitter = queryFsr31Jitter(
+                context.frameIndex, context.renderExtent, context.outputExtent);
+            if (!jitter.succeeded()) {
+                return std::nullopt;
+            }
+            context.jitter = jitter.jitter;
+#endif
+        }
+        glm::mat4 jitteredProjection = context.camera.projection;
+        for (int column = 0; column < 4; ++column) {
+            jitteredProjection[column][0] +=
+                context.jitter.projectionOffset.x *
+                context.camera.projection[column][3];
+            jitteredProjection[column][1] +=
+                context.jitter.projectionOffset.y *
+                context.camera.projection[column][3];
+        }
+        context.camera.jitteredViewProj = jitteredProjection * view;
+        context.camera.jitteredInvViewProj =
+            glm::inverse(context.camera.jitteredViewProj);
+        context.temporalReset = requiresTemporalReset(
+            hasPreviousContext,
+            previousContext.renderExtent,
+            previousContext.outputExtent,
+            context.renderExtent,
+            context.outputExtent);
+        if (!context.temporalReset) {
             context.prevCamera = previousContext.camera;
+            context.previousJitter = previousContext.jitter;
             context.previousViewProj = previousContext.camera.viewProj;
             context.previousInvViewProj = previousContext.camera.invViewProj;
             context.previousJitteredViewProj =
@@ -222,11 +287,26 @@ struct ModelSceneDeferredRenderer::Impl {
             context.previousJitteredViewProj =
                 context.camera.jitteredViewProj;
         }
-        context.previousViewProjWithCurrentJitter =
-            context.previousViewProj;
+        context.previousViewProjWithCurrentJitter = context.previousViewProj;
+        if (usesTemporalProjectionJitter(
+                settings.upscale.type, settings.taa.enabled)) {
+            for (int column = 0; column < 4; ++column) {
+                context.previousViewProjWithCurrentJitter[column][0] +=
+                    context.jitter.projectionOffset.x *
+                    context.previousViewProj[column][3];
+                context.previousViewProjWithCurrentJitter[column][1] +=
+                    context.jitter.projectionOffset.y *
+                    context.previousViewProj[column][3];
+            }
+        }
+        const glm::mat4& rasterViewProjection =
+            usesTemporalProjectionJitter(
+                settings.upscale.type, settings.taa.enabled)
+                ? context.camera.jitteredViewProj
+                : context.camera.viewProj;
         context.velocityClipToPrevClip = glm::mat4(
-            glm::dmat4(context.previousViewProj) *
-            glm::inverse(glm::dmat4(context.camera.viewProj)));
+            glm::dmat4(context.previousViewProjWithCurrentJitter) *
+            glm::inverse(glm::dmat4(rasterViewProjection)));
 
         const WeatherState& weatherState = weather.getRenderState();
         const WeatherDerived& weatherDerived = weather.getDerived();
@@ -318,9 +398,14 @@ struct ModelSceneDeferredRenderer::Impl {
     shadow::ShadowRenderer shadowRenderer;
     DeferredPipeline pipeline;
     PostProcessPass postProcess;
+    Fsr1Pass fsr1;
+    TemporalUpscalePass temporalUpscale;
     RenderDebugService debugService;
     DayNightSystem dayNight;
     WeatherSystem weather;
+    bool timePaused = true;
+    float timeScale = 1.0f;
+    bool instantWeatherTransition = true;
     SharedRenderResources shared;
     RenderSettings settings = modelSceneSettings();
     FrameContext previousContext;
@@ -328,6 +413,9 @@ struct ModelSceneDeferredRenderer::Impl {
     uint64_t textureId = 0u;
     uint32_t width = 0u;
     uint32_t height = 0u;
+    uint32_t renderWidth = 0u;
+    uint32_t renderHeight = 0u;
+    bool viewportUsesFsr1 = false;
     bool initialized = false;
     bool hasPreviousContext = false;
     std::string error;
@@ -362,6 +450,8 @@ bool ModelSceneDeferredRenderer::init(
     }
     state.sky.init(resourceMgr, rhiDevice);
     state.postProcess.init(resourceMgr, commandListPool);
+    state.fsr1.init(resourceMgr, commandListPool);
+    state.temporalUpscale.init(rhiDevice, commandListPool);
     state.debugService.init(rhiDevice);
     state.dayNight.setTimeOfDay(300.0f);
     state.weather.setDebugWeatherPresetInstant(WeatherType::Clear);
@@ -405,6 +495,8 @@ void ModelSceneDeferredRenderer::shutdown() {
     if (state.initialized) {
         state.pipeline.shutdown();
     }
+    state.temporalUpscale.shutdown();
+    state.fsr1.shutdown();
     state.postProcess.shutdown();
     state.debugService.shutdown();
     state.sky.shutdown();
@@ -421,6 +513,9 @@ void ModelSceneDeferredRenderer::shutdown() {
     state.geometryProvider = nullptr;
     state.width = 0u;
     state.height = 0u;
+    state.renderWidth = 0u;
+    state.renderHeight = 0u;
+    state.viewportUsesFsr1 = false;
     state.hasPreviousContext = false;
     state.initialized = false;
 }
@@ -432,31 +527,59 @@ bool ModelSceneDeferredRenderer::ensureViewport(
     if (!state.initialized || width == 0u || height == 0u) {
         return false;
     }
-    const bool resized = state.width != width || state.height != height;
-    if (resized && state.textureId != 0u) {
+    const TemporalExtent outputExtent{width, height};
+    const std::optional<TemporalExtent> renderExtent =
+        state.resolveRenderExtent(outputExtent);
+    if (!renderExtent.has_value()) {
+        state.error = "invalid model scene upscaler resolution settings";
+        return false;
+    }
+    const bool useFsr1 = state.fsr1Enabled();
+    const bool resized = state.width != width || state.height != height ||
+        state.renderWidth != renderExtent->width ||
+        state.renderHeight != renderExtent->height;
+    const bool bindingChanged = state.viewportUsesFsr1 != useFsr1;
+    if ((resized || bindingChanged) && state.textureId != 0u) {
         state.imguiRenderer->unregisterTexture(
             static_cast<ImTextureID>(state.textureId));
         state.textureId = 0u;
     }
     if (!state.postProcess.beginSceneCapture(
-            *state.rhiDevice, static_cast<int>(width),
-            static_cast<int>(height)) ||
+            *state.rhiDevice, static_cast<int>(renderExtent->width),
+            static_cast<int>(renderExtent->height)) ||
         !state.postProcess.prepareTextureOutput(
+            *state.rhiDevice,
+            static_cast<int>(useFsr1 ? renderExtent->width : width),
+            static_cast<int>(useFsr1 ? renderExtent->height : height))) {
+        state.error = "failed to allocate model scene post-process targets";
+        return false;
+    }
+    if (!useFsr1 && !state.temporalUpscale.prepareOutputTarget(
+            state.settings.upscale, *renderExtent, outputExtent)) {
+        state.error = "failed to allocate model scene temporal upscale target";
+        return false;
+    }
+    if (useFsr1 && !state.fsr1.prepareTextureOutput(
             *state.rhiDevice, static_cast<int>(width),
             static_cast<int>(height))) {
-        state.error = "failed to allocate model scene post-process targets";
+        state.error = "failed to allocate model scene FSR 1 output target";
         return false;
     }
     if (resized) {
         state.width = width;
         state.height = height;
+        state.renderWidth = renderExtent->width;
+        state.renderHeight = renderExtent->height;
         state.hasPreviousContext = false;
         state.pipeline.invalidateHistory();
     }
     if (state.textureId == 0u) {
+        const RhiTextureViewHandle viewportView = useFsr1
+            ? state.fsr1.outputTextureViewHandle()
+            : state.postProcess.compositeTextureViewHandle();
         state.textureId = static_cast<uint64_t>(
             state.imguiRenderer->registerTexture(
-                state.postProcess.compositeTextureViewHandle(),
+                viewportView,
                 state.viewportSampler));
         if (state.textureId == 0u) {
             state.error =
@@ -464,6 +587,7 @@ bool ModelSceneDeferredRenderer::ensureViewport(
             return false;
         }
     }
+    state.viewportUsesFsr1 = useFsr1;
     state.error.clear();
     return true;
 }
@@ -472,6 +596,8 @@ bool ModelSceneDeferredRenderer::render(
     const glm::mat4& view,
     const glm::mat4& projection,
     const glm::vec3& cameraPosition,
+    const float nearPlane,
+    const float farPlane,
     const float deltaTime) {
     Impl& state = *m_impl;
     if (!state.initialized || state.width == 0u || state.height == 0u ||
@@ -479,17 +605,102 @@ bool ModelSceneDeferredRenderer::render(
         state.error = "failed to begin model scene deferred frame";
         return false;
     }
-    FrameContext context = state.buildFrameContext(
-        view, projection, cameraPosition, deltaTime);
+    if (!state.timePaused) {
+        state.dayNight.update(deltaTime * state.timeScale);
+    }
+    state.weather.update(deltaTime);
+    const std::optional<FrameContext> builtContext = state.buildFrameContext(
+        view, projection, cameraPosition, nearPlane, farPlane, deltaTime);
+    if (!builtContext.has_value()) {
+        state.error = "failed to build model scene temporal frame context";
+        return false;
+    }
+    FrameContext context = *builtContext;
     const FrameOutput output = state.pipeline.renderFrame(
         context, state.settings);
-    if (!output.sceneColor.isValid() || !output.gbufferDepth.isValid() ||
-        !state.postProcess.setHdrInput(
-            state.postProcess.sceneColorTextureHandle(),
-            state.postProcess.sceneColorTextureViewHandle(),
-            static_cast<int>(state.width),
-            static_cast<int>(state.height))) {
+    if (!output.sceneColor.isValid() || !output.gbufferDepth.isValid()) {
         state.error = "failed to render model scene deferred pipeline";
+        return false;
+    }
+    if (!state.fsr1Enabled()) {
+        TemporalFrameInput temporalInput;
+        temporalInput.frameIndex = context.frameIndex;
+        temporalInput.renderExtent = context.renderExtent;
+        temporalInput.outputExtent = context.outputExtent;
+        temporalInput.jitter = context.jitter;
+        temporalInput.motionVectorScale = {
+            static_cast<float>(context.renderExtent.width),
+            static_cast<float>(context.renderExtent.height)};
+        temporalInput.frameDeltaMilliseconds = deltaTime * 1000.0f;
+        temporalInput.preExposure = 1.0f;
+        temporalInput.cameraNear = nearPlane;
+        temporalInput.cameraFar = farPlane;
+        temporalInput.verticalFovRadians = glm::radians(55.0f);
+        temporalInput.cameraAspectRatio =
+            static_cast<float>(state.width) / static_cast<float>(state.height);
+        temporalInput.cameraViewToClip = projection;
+        temporalInput.clipToCameraView = glm::inverse(projection);
+        temporalInput.clipToPrevClip = context.previousViewProj *
+            glm::inverse(context.camera.viewProj);
+        temporalInput.prevClipToClip =
+            glm::inverse(temporalInput.clipToPrevClip);
+        const glm::mat4 inverseView = glm::inverse(view);
+        temporalInput.cameraPosition = cameraPosition;
+        temporalInput.cameraRight = glm::normalize(glm::vec3(inverseView[0]));
+        temporalInput.cameraUp = glm::normalize(glm::vec3(inverseView[1]));
+        temporalInput.cameraForward =
+            glm::normalize(-glm::vec3(inverseView[2]));
+        temporalInput.depthInverted = false;
+        temporalInput.reset = context.temporalReset;
+        temporalInput.textures.hdrColor =
+            state.postProcess.sceneColorTextureHandle();
+        temporalInput.textures.hdrColorView =
+            state.postProcess.sceneColorTextureViewHandle();
+        temporalInput.textures.depth = output.gbufferDepth;
+        temporalInput.textures.depthView = state.targets.depthTextureViewHandle();
+        temporalInput.textures.velocity = state.targets.velocityTextureHandle();
+        temporalInput.textures.velocityView =
+            state.targets.velocityTextureViewHandle();
+        temporalInput.textures.exposure =
+            state.postProcess.exposureTextureHandle();
+        temporalInput.textures.exposureView =
+            state.postProcess.exposureTextureViewHandle();
+        temporalInput.textures.reactiveMask = output.reactiveMask;
+        temporalInput.textures.reactiveMaskView =
+            state.targets.reactiveMaskTextureViewHandle();
+        temporalInput.textures.transparencyMask = output.transparencyMask;
+        temporalInput.textures.transparencyMaskView =
+            state.targets.transparencyMaskTextureViewHandle();
+        if (state.settings.upscale.type == TemporalUpscalerType::Native) {
+            temporalInput.textures.outputHdrColor = output.sceneColor;
+            temporalInput.textures.outputHdrColorView =
+                state.postProcess.sceneColorTextureViewHandle();
+        } else {
+            temporalInput.textures.outputHdrColor =
+                state.temporalUpscale.outputTextureHandle();
+            temporalInput.textures.outputHdrColorView =
+                state.temporalUpscale.outputTextureViewHandle();
+        }
+        const TemporalUpscaleResult upscaled = state.temporalUpscale.execute(
+            state.settings.upscale, temporalInput);
+        if (!upscaled.succeeded()) {
+            state.error = std::string("failed to upscale model scene HDR output: ") +
+                TemporalUpscalePass::statusText(upscaled.status);
+            return false;
+        }
+        if (!state.postProcess.setHdrInput(
+                upscaled.outputHdrColor, upscaled.outputHdrColorView,
+                static_cast<int>(upscaled.outputExtent.width),
+                static_cast<int>(upscaled.outputExtent.height))) {
+            state.error = "failed to bind model scene temporal HDR output";
+            return false;
+        }
+    } else if (!state.postProcess.setHdrInput(
+                   state.postProcess.sceneColorTextureHandle(),
+                   state.postProcess.sceneColorTextureViewHandle(),
+                   static_cast<int>(state.renderWidth),
+                   static_cast<int>(state.renderHeight))) {
+        state.error = "failed to configure model scene FSR 1 HDR input";
         return false;
     }
     state.postProcess.setFrameEffects(
@@ -499,6 +710,18 @@ bool ModelSceneDeferredRenderer::render(
         state.debugService);
     if (!texture.isValid()) {
         state.error = "failed to composite model scene post-process output";
+        return false;
+    }
+    if (state.fsr1Enabled() && !state.fsr1.executeToTexture(
+            *state.rhiDevice, texture,
+            state.postProcess.compositeTextureViewHandle(),
+            static_cast<int>(state.renderWidth),
+            static_cast<int>(state.renderHeight),
+            static_cast<int>(state.width),
+            static_cast<int>(state.height),
+            state.settings.upscale.fsr1Sharpness,
+            state.debugService)) {
+        state.error = "failed to execute model scene FSR 1 pass";
         return false;
     }
     state.previousContext = context;
@@ -526,6 +749,59 @@ float ModelSceneDeferredRenderer::timeOfDay() const {
         std::abort();
     }
     return m_impl->dayNight.getTimeOfDay();
+}
+
+void ModelSceneDeferredRenderer::setTimePaused(const bool paused) {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    m_impl->timePaused = paused;
+}
+
+bool ModelSceneDeferredRenderer::timePaused() const {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    return m_impl->timePaused;
+}
+
+void ModelSceneDeferredRenderer::setTimeScale(const float scale) {
+    if (!m_impl->initialized || !std::isfinite(scale) || scale <= 0.0f) {
+        std::abort();
+    }
+    m_impl->timeScale = scale;
+}
+
+float ModelSceneDeferredRenderer::timeScale() const {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    return m_impl->timeScale;
+}
+
+void ModelSceneDeferredRenderer::setWeather(const WeatherType weather,
+                                            const bool instant) {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    m_impl->weather.setDebugWeatherPreset(weather, instant);
+    m_impl->instantWeatherTransition = instant;
+    m_impl->hasPreviousContext = false;
+    m_impl->pipeline.invalidateHistory();
+}
+
+WeatherType ModelSceneDeferredRenderer::weather() const {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    return m_impl->weather.getTargetState().type;
+}
+
+bool ModelSceneDeferredRenderer::weatherTransitionInstant() const {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    return m_impl->instantWeatherTransition;
 }
 
 void ModelSceneDeferredRenderer::setSettings(const RenderSettings& settings) {
@@ -580,6 +856,11 @@ bool ModelSceneDeferredRenderer::validateSettings(
         error = "model scenes do not have a gameplay render distance";
         return false;
     }
+    if (settings.upscale.fsr1Enabled &&
+        settings.upscale.type != TemporalUpscalerType::Native) {
+        error = "FSR 1 and temporal upscaling cannot be enabled together";
+        return false;
+    }
     return true;
 }
 
@@ -588,6 +869,19 @@ const RenderSettings& ModelSceneDeferredRenderer::settings() const {
         std::abort();
     }
     return m_impl->settings;
+}
+
+bool ModelSceneDeferredRenderer::isFsr1Supported() const {
+    return m_impl->initialized && Fsr1Pass::isSupported(*m_impl->rhiDevice);
+}
+
+bool ModelSceneDeferredRenderer::isFsr31Supported() const {
+#if defined(MECRAFT_ENABLE_FSR31)
+    return m_impl->initialized &&
+           m_impl->rhiDevice->backend() == RhiBackend::Vulkan;
+#else
+    return false;
+#endif
 }
 
 uint64_t ModelSceneDeferredRenderer::viewportTextureId() const {

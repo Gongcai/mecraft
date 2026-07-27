@@ -94,6 +94,8 @@ private:
     float m_cameraYaw = 35.0f;
     float m_cameraPitch = 18.0f;
     float m_cameraDistance = 5.0f;
+    float m_cameraNearPlane = 0.05f;
+    float m_cameraFarPlane = 500.0f;
     glm::vec3 m_cameraTarget{0.0f};
     int m_gizmoOperation = 0;
     int m_gizmoMode = 0;

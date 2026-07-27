@@ -23,6 +23,11 @@ public:
     [[nodiscard]] const char* name() const override { return "FSR1"; }
     [[nodiscard]] static bool isSupported(const RhiDevice& rhiDevice);
 
+    /// Allocates the owned shader-readable RCAS output for an offscreen consumer.
+    [[nodiscard]] bool prepareTextureOutput(RhiDevice& rhiDevice,
+                                            int width,
+                                            int height);
+
     bool execute(RhiDevice& rhiDevice,
                  RhiTextureViewHandle swapchainColorView,
                  RhiTextureHandle inputTexture,
@@ -34,12 +39,44 @@ public:
                  float sharpness,
                  RenderDebugService& debugService);
 
+    /// Executes EASU and RCAS into an owned shader-readable texture.
+    [[nodiscard]] bool executeToTexture(
+        RhiDevice& rhiDevice,
+        RhiTextureHandle inputTexture,
+        RhiTextureViewHandle inputView,
+        int inputWidth,
+        int inputHeight,
+        int outputWidth,
+        int outputHeight,
+        float sharpness,
+        RenderDebugService& debugService);
+    [[nodiscard]] RhiTextureHandle outputTextureHandle() const {
+        return m_outputHandle;
+    }
+    [[nodiscard]] RhiTextureViewHandle outputTextureViewHandle() const {
+        return m_outputView;
+    }
+
 private:
     [[nodiscard]] RhiCommandList& beginCommandList(const char* debugName) const;
     void submitCommandList(RhiDevice& rhiDevice,
                            RhiCommandList& commandList,
                            const char* debugName) const;
     bool ensureTargets(RhiDevice& rhiDevice, int width, int height);
+    bool ensureOutputTarget(RhiDevice& rhiDevice, int width, int height);
+    bool executeToOutput(RhiDevice& rhiDevice,
+                         RhiTextureHandle outputTexture,
+                         RhiTextureViewHandle outputView,
+                         RhiResourceState outputStableState,
+                         RhiLoadOp outputLoadOp,
+                         RhiTextureHandle inputTexture,
+                         RhiTextureViewHandle inputView,
+                         int inputWidth,
+                         int inputHeight,
+                         int outputWidth,
+                         int outputHeight,
+                         float sharpness,
+                         RenderDebugService& debugService);
     bool ensureRhiPipeline(RhiDevice& rhiDevice);
     bool ensureEasuBindGroup(RhiDevice& rhiDevice, RhiTextureViewHandle inputView);
     bool ensureRcasBindGroup(RhiDevice& rhiDevice);
@@ -75,6 +112,10 @@ private:
     RhiTextureViewHandle m_boundRcasInputView;
     RhiTextureHandle m_easuHandle;
     RhiTextureViewHandle m_easuView;
+    RhiTextureHandle m_outputHandle;
+    RhiTextureViewHandle m_outputView;
+    int m_outputWidth = 0;
+    int m_outputHeight = 0;
     int m_width = 0;
     int m_height = 0;
     RenderGraph m_renderGraph;

@@ -51,6 +51,8 @@ public:
     [[nodiscard]] bool renderViewport(const glm::mat4& view,
                                       const glm::mat4& projection,
                                       const glm::vec3& cameraPosition,
+                                      float nearPlane,
+                                      float farPlane,
                                       float deltaTime);
 
     [[nodiscard]] bool prepareGBuffer(
@@ -172,6 +174,13 @@ public:
 
     /// Returns the current deferred environment time in seconds.
     [[nodiscard]] float timeOfDay() const;
+    void setTimePaused(bool paused);
+    [[nodiscard]] bool timePaused() const;
+    void setTimeScale(float scale);
+    [[nodiscard]] float timeScale() const;
+    void setWeather(WeatherType weather, bool instant);
+    [[nodiscard]] WeatherType weather() const;
+    [[nodiscard]] bool weatherTransitionInstant() const;
 
     /// Replaces the model viewport renderer configuration.
     /// @param settings Complete deferred renderer configuration for subsequent frames.
@@ -180,6 +189,8 @@ public:
 
     /// Returns the active model viewport renderer configuration.
     [[nodiscard]] const RenderSettings& renderSettings() const;
+    [[nodiscard]] bool isFsr1Supported() const;
+    [[nodiscard]] bool isFsr31Supported() const;
     [[nodiscard]] size_t assetCount() const { return m_assets.size(); }
     [[nodiscard]] scene::SceneAssetId assetId(size_t index) const;
     [[nodiscard]] const std::string& assetName(size_t index) const;

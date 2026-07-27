@@ -3,6 +3,7 @@
 
 #include "ModelSceneIds.h"
 #include "renderer/core/RenderSettings.h"
+#include "world/WeatherSystem.h"
 
 #include <cstdint>
 #include <optional>
@@ -35,6 +36,10 @@ struct SceneEntityDocument {
 
 struct SceneEnvironmentDocument {
     float timeOfDay = 300.0f;
+    bool timePaused = true;
+    float timeScale = 1.0f;
+    WeatherType weather = WeatherType::Clear;
+    bool weatherTransitionInstant = true;
     RenderSettings renderSettings;
 };
 
@@ -43,10 +48,12 @@ struct SceneEditorCameraDocument {
     float distance = 5.0f;
     float yaw = 35.0f;
     float pitch = 18.0f;
+    float nearPlane = 0.05f;
+    float farPlane = 500.0f;
 };
 
 struct ModelSceneDocument {
-    static constexpr uint32_t kCurrentVersion = 1u;
+    static constexpr uint32_t kCurrentVersion = 2u;
     static constexpr const char* kFormat = "mecraft.scene";
 
     std::string format = kFormat;

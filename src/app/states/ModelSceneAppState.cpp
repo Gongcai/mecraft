@@ -17,6 +17,7 @@
 #include "imgui_internal.h"
 
 #include "MainMenuAppState.h"
+#include "app/AppSettings.h"
 #include "Diagnostics.h"
 #include "ecs/components/TransformComponents.h"
 #include "engine/input/InputManager.h"
@@ -24,6 +25,7 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
+#include "renderer/rhi/RhiDeviceFactory.h"
 #include "renderer/core/RenderSettings.h"
 #include "scene/ModelSceneComponents.h"
 #include "scene/ModelSceneSerializer.h"
@@ -340,6 +342,8 @@ ModelSceneAppState::captureEditorCamera() const {
     camera.distance = m_cameraDistance;
     camera.yaw = m_cameraYaw;
     camera.pitch = m_cameraPitch;
+    camera.nearPlane = m_cameraNearPlane;
+    camera.farPlane = m_cameraFarPlane;
     return camera;
 }
 
@@ -349,6 +353,8 @@ void ModelSceneAppState::applyEditorCamera(
     m_cameraDistance = camera.distance;
     m_cameraYaw = camera.yaw;
     m_cameraPitch = camera.pitch;
+    m_cameraNearPlane = camera.nearPlane;
+    m_cameraFarPlane = camera.farPlane;
 }
 
 void ModelSceneAppState::requestSceneAction(
@@ -770,6 +776,193 @@ void ModelSceneAppState::showRenderSettingsPanel() {
     bool changed = false;
 
     if (ImGui::CollapsingHeader(
+            "Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+        float nearPlane = m_cameraNearPlane;
+        float farPlane = m_cameraFarPlane;
+        ImGui::SetNextItemWidth(-1.0f);
+        bool cameraChanged = ImGui::DragFloat(
+            "Near Plane", &nearPlane, 0.005f, 0.001f,
+            std::max(0.001f, farPlane - 0.001f), "%.3f");
+        ImGui::SetNextItemWidth(-1.0f);
+        cameraChanged |= ImGui::DragFloat(
+            "Far Plane", &farPlane, 1.0f, nearPlane + 0.001f,
+            100000.0f, "%.1f");
+        if (cameraChanged) {
+            m_cameraNearPlane = std::clamp(
+                nearPlane, 0.001f, farPlane - 0.001f);
+            m_cameraFarPlane = std::clamp(
+                farPlane, m_cameraNearPlane + 0.001f, 100000.0f);
+            markSceneDirty();
+        }
+    }
+
+    if (ImGui::CollapsingHeader(
+            "Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
+        float timeOfDay = m_scene.timeOfDay();
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::SliderFloat(
+                "Time of Day", &timeOfDay, 0.0f, 1199.0f, "%.0f s")) {
+            m_scene.setTimeOfDay(timeOfDay);
+            markSceneDirty();
+        }
+        bool advanceTime = !m_scene.timePaused();
+        if (ImGui::Checkbox("Advance Time", &advanceTime)) {
+            m_scene.setTimePaused(!advanceTime);
+            markSceneDirty();
+        }
+        float timeScale = m_scene.timeScale();
+        ImGui::BeginDisabled(!advanceTime);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::DragFloat(
+                "Time Scale", &timeScale, 0.05f, 0.05f, 100.0f, "%.2fx")) {
+            m_scene.setTimeScale(std::clamp(timeScale, 0.05f, 100.0f));
+            markSceneDirty();
+        }
+        ImGui::EndDisabled();
+
+        constexpr const char* weatherNames[] = {
+            "Clear", "Rain", "Storm", "Snow"};
+        int weather = static_cast<int>(m_scene.weather());
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::Combo("Weather", &weather, weatherNames,
+                         static_cast<int>(std::size(weatherNames)))) {
+            m_scene.setWeather(
+                static_cast<WeatherType>(weather),
+                m_scene.weatherTransitionInstant());
+            markSceneDirty();
+        }
+        constexpr const char* transitionNames[] = {
+            "Immediate", "Gradual"};
+        int transition = m_scene.weatherTransitionInstant() ? 0 : 1;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::Combo("Weather Transition", &transition,
+                         transitionNames,
+                         static_cast<int>(std::size(transitionNames)))) {
+            m_scene.setWeather(m_scene.weather(), transition == 0);
+            markSceneDirty();
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Graphics Backend")) {
+        const RhiBackend currentBackend = m_deps.rhiDevice.backend();
+        const app::RhiBackendSettingResult configured = app::loadRhiBackend();
+        const RhiBackend selectedBackend =
+            configured.backend.value_or(currentBackend);
+        constexpr std::array<RhiBackend, 2> knownBackends = {
+            RhiBackend::OpenGL, RhiBackend::Vulkan};
+        std::vector<RhiBackend> availableBackends;
+        std::vector<const char*> backendNames;
+        int selectedIndex = 0;
+        for (const RhiBackend backend : knownBackends) {
+            if (!renderer::rhi::isRhiBackendAvailable(backend)) {
+                continue;
+            }
+            if (backend == selectedBackend) {
+                selectedIndex = static_cast<int>(availableBackends.size());
+            }
+            availableBackends.push_back(backend);
+            backendNames.push_back(renderer::rhi::rhiBackendDisplayName(backend));
+        }
+        ImGui::Text("Current: %s",
+                    renderer::rhi::rhiBackendDisplayName(currentBackend));
+        ImGui::SetNextItemWidth(-1.0f);
+        if (!availableBackends.empty() && ImGui::Combo(
+                "Backend", &selectedIndex, backendNames.data(),
+                static_cast<int>(backendNames.size()))) {
+            if (!app::saveRhiBackend(
+                    availableBackends[static_cast<std::size_t>(selectedIndex)])) {
+                m_sceneIoError = "Failed to save graphics backend setting";
+            }
+        }
+        ImGui::TextDisabled("Backend changes apply after restart.");
+    }
+
+    if (ImGui::CollapsingHeader(
+            "Upscaling", ImGuiTreeNodeFlags_DefaultOpen)) {
+        const bool fsr31Supported = m_scene.isFsr31Supported();
+        bool fsr31Enabled =
+            settings.upscale.type == TemporalUpscalerType::Fsr31;
+        ImGui::BeginDisabled(!fsr31Supported);
+        if (ImGui::Checkbox("FSR 3.1", &fsr31Enabled)) {
+            settings.upscale.type = fsr31Enabled
+                ? TemporalUpscalerType::Fsr31
+                : TemporalUpscalerType::Native;
+            if (fsr31Enabled) {
+                settings.upscale.fsr1Enabled = false;
+                if (settings.upscale.quality ==
+                    TemporalUpscaleQuality::Native) {
+                    settings.upscale.quality =
+                        TemporalUpscaleQuality::Quality;
+                }
+            }
+            changed = true;
+        }
+        constexpr const char* temporalQualityNames[] = {
+            "Quality", "Balanced", "Performance", "Ultra Performance"};
+        int temporalQuality = std::clamp(
+            static_cast<int>(settings.upscale.quality) -
+                static_cast<int>(TemporalUpscaleQuality::Quality),
+            0, 3);
+        ImGui::BeginDisabled(!fsr31Enabled);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::Combo(
+                "FSR 3.1 Quality", &temporalQuality,
+                temporalQualityNames,
+                static_cast<int>(std::size(temporalQualityNames)))) {
+            settings.upscale.quality = static_cast<TemporalUpscaleQuality>(
+                static_cast<int>(TemporalUpscaleQuality::Quality) +
+                temporalQuality);
+            changed = true;
+        }
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
+
+        const bool fsr1Supported = m_scene.isFsr1Supported();
+        bool fsr1Enabled = settings.upscale.fsr1Enabled;
+        ImGui::BeginDisabled(!fsr1Supported);
+        if (ImGui::Checkbox("FSR 1", &fsr1Enabled)) {
+            settings.upscale.fsr1Enabled = fsr1Enabled;
+            if (fsr1Enabled) {
+                settings.upscale.type = TemporalUpscalerType::Native;
+            }
+            changed = true;
+        }
+        constexpr const char* fsr1QualityNames[] = {
+            "Ultra Quality", "Quality", "Balanced", "Performance"};
+        constexpr std::array<float, 4> fsr1Scales = {
+            0.77f, 0.67f, 0.59f, 0.50f};
+        int fsr1Quality = 0;
+        float closestScaleDistance = std::abs(
+            settings.upscale.fsr1RenderScale - fsr1Scales[0]);
+        for (std::size_t index = 1u; index < fsr1Scales.size(); ++index) {
+            const float distance = std::abs(
+                settings.upscale.fsr1RenderScale - fsr1Scales[index]);
+            if (distance < closestScaleDistance) {
+                closestScaleDistance = distance;
+                fsr1Quality = static_cast<int>(index);
+            }
+        }
+        ImGui::BeginDisabled(!fsr1Enabled);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::Combo(
+                "FSR 1 Quality", &fsr1Quality, fsr1QualityNames,
+                static_cast<int>(std::size(fsr1QualityNames)))) {
+            settings.upscale.fsr1RenderScale =
+                fsr1Scales[static_cast<std::size_t>(fsr1Quality)];
+            changed = true;
+        }
+        ImGui::EndDisabled();
+        ImGui::EndDisabled();
+
+        if (!fsr31Supported) {
+            ImGui::TextDisabled("FSR 3.1 requires the Vulkan backend.");
+        }
+        if (!fsr1Supported) {
+            ImGui::TextDisabled("FSR 1 requires the OpenGL backend.");
+        }
+    }
+
+    if (ImGui::CollapsingHeader(
             "Debug View", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::PushID("DebugViewSettings");
         ImGui::SetNextItemWidth(-1.0f);
@@ -807,6 +1000,11 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         if (m_scene.setRenderSettings(settings)) {
             markSceneDirty();
         }
+    }
+    if (!m_scene.lastError().empty()) {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
+            "%s", m_scene.lastError().c_str());
     }
     ImGui::End();
 }
@@ -949,16 +1147,6 @@ void ModelSceneAppState::showHierarchyEntity(const entt::entity entity) {
 
 void ModelSceneAppState::showInspectorPanel() {
     ImGui::Begin("Inspector");
-    ImGui::TextUnformatted("Environment");
-    float timeOfDay = m_scene.timeOfDay();
-    ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderFloat(
-            "Time of Day", &timeOfDay, 0.0f, 1199.0f, "%.0f s")) {
-        m_scene.setTimeOfDay(timeOfDay);
-        markSceneDirty();
-    }
-    ImGui::Separator();
-
     const entt::entity selected = m_scene.selectedEntity();
     if (selected == entt::null || !m_scene.registry().valid(selected)) {
         ImGui::TextUnformatted("No entity selected");
@@ -1226,7 +1414,8 @@ void ModelSceneAppState::showViewportPanel() {
     const float aspect = available.x / available.y;
     m_view = glm::lookAt(
         cameraPosition(), m_cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
-    m_projection = glm::perspective(glm::radians(55.0f), aspect, 0.05f, 500.0f);
+    m_projection = glm::perspective(
+        glm::radians(55.0f), aspect, m_cameraNearPlane, m_cameraFarPlane);
 
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
@@ -1400,6 +1589,7 @@ void ModelSceneAppState::render(const double frameTime) {
     if (m_scene.viewportWidth() != 0u &&
         !m_scene.renderViewport(
             m_view, m_projection, cameraPosition(),
+            m_cameraNearPlane, m_cameraFarPlane,
             static_cast<float>(frameTime))) {
         std::abort();
     }

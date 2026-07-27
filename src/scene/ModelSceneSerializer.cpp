@@ -183,6 +183,24 @@ template <typename UInt>
     return true;
 }
 
+[[nodiscard]] bool readBool(const json& owner,
+                            const char* key,
+                            bool& value,
+                            const std::string& context,
+                            std::string& error) {
+    const auto it = owner.find(key);
+    if (it == owner.end()) {
+        error = context + "." + key + " is required";
+        return false;
+    }
+    if (!it->is_boolean()) {
+        error = context + "." + key + " must be a boolean";
+        return false;
+    }
+    value = it->get<bool>();
+    return true;
+}
+
 [[nodiscard]] bool readVec3(const json& owner,
                             const char* key,
                             glm::vec3& value,
@@ -378,6 +396,17 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
         error = "environment.timeOfDay must be within [0, 1200)";
         return false;
     }
+    if (!std::isfinite(document.environment.timeScale) ||
+        document.environment.timeScale <= 0.0f ||
+        document.environment.timeScale > 100.0f) {
+        error = "environment.timeScale must be within (0, 100]";
+        return false;
+    }
+    if (document.environment.weather < WeatherType::Clear ||
+        document.environment.weather > WeatherType::Snow) {
+        error = "environment.weather is invalid";
+        return false;
+    }
     RenderSettings verifiedSettings;
     if (!app::deserializeRenderSettings(
             app::serializeRenderSettings(document.environment.renderSettings),
@@ -389,7 +418,11 @@ bool ModelSceneSerializer::validate(const ModelSceneDocument& document,
         !std::isfinite(document.editorCamera.distance) ||
         !std::isfinite(document.editorCamera.yaw) ||
         !std::isfinite(document.editorCamera.pitch) ||
+        !std::isfinite(document.editorCamera.nearPlane) ||
+        !std::isfinite(document.editorCamera.farPlane) ||
         document.editorCamera.distance <= 0.0f ||
+        document.editorCamera.nearPlane <= 0.0f ||
+        document.editorCamera.farPlane <= document.editorCamera.nearPlane ||
         document.editorCamera.pitch < -89.9f ||
         document.editorCamera.pitch > 89.9f) {
         error = "editorCamera contains invalid navigation values";
@@ -433,6 +466,11 @@ nlohmann::json ModelSceneSerializer::serialize(
         {"entities", std::move(entities)},
         {"environment", {
             {"timeOfDay", document.environment.timeOfDay},
+            {"timePaused", document.environment.timePaused},
+            {"timeScale", document.environment.timeScale},
+            {"weather", static_cast<uint32_t>(document.environment.weather)},
+            {"weatherTransitionInstant",
+             document.environment.weatherTransitionInstant},
             {"renderSettings", app::serializeRenderSettings(
                 document.environment.renderSettings)},
         }},
@@ -441,6 +479,8 @@ nlohmann::json ModelSceneSerializer::serialize(
             {"distance", document.editorCamera.distance},
             {"yaw", document.editorCamera.yaw},
             {"pitch", document.editorCamera.pitch},
+            {"nearPlane", document.editorCamera.nearPlane},
+            {"farPlane", document.editorCamera.farPlane},
         }},
     };
 }
@@ -457,6 +497,12 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
     ModelSceneDocument parsed;
     if (!readString(value, "format", parsed.format, "scene", error) ||
         !readUnsigned(value, "version", parsed.version, "scene", error)) {
+        return false;
+    }
+    const uint32_t sourceVersion = parsed.version;
+    if (sourceVersion != 1u &&
+        sourceVersion != ModelSceneDocument::kCurrentVersion) {
+        error = "scene version is not supported";
         return false;
     }
     const json* assets = nullptr;
@@ -527,6 +573,29 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
             *renderSettings, parsed.environment.renderSettings, error)) {
         return false;
     }
+    if (sourceVersion >= 2u) {
+        uint32_t weather = 0u;
+        if (!readBool(
+                *environment, "timePaused", parsed.environment.timePaused,
+                "scene.environment", error) ||
+            !readFloat(
+                *environment, "timeScale", parsed.environment.timeScale,
+                "scene.environment", error) ||
+            !readUnsigned(
+                *environment, "weather", weather,
+                "scene.environment", error) ||
+            !readBool(
+                *environment, "weatherTransitionInstant",
+                parsed.environment.weatherTransitionInstant,
+                "scene.environment", error)) {
+            return false;
+        }
+        if (weather > static_cast<uint32_t>(WeatherType::Snow)) {
+            error = "scene.environment.weather is invalid";
+            return false;
+        }
+        parsed.environment.weather = static_cast<WeatherType>(weather);
+    }
     if (!readVec3(
             *editorCamera, "target", parsed.editorCamera.target,
             "scene.editorCamera", error) ||
@@ -541,6 +610,16 @@ bool ModelSceneSerializer::deserialize(const nlohmann::json& value,
             "scene.editorCamera", error)) {
         return false;
     }
+    if (sourceVersion >= 2u &&
+        (!readFloat(
+             *editorCamera, "nearPlane", parsed.editorCamera.nearPlane,
+             "scene.editorCamera", error) ||
+         !readFloat(
+             *editorCamera, "farPlane", parsed.editorCamera.farPlane,
+             "scene.editorCamera", error))) {
+        return false;
+    }
+    parsed.version = ModelSceneDocument::kCurrentVersion;
     if (!validate(parsed, error)) {
         return false;
     }

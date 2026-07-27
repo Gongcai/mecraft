@@ -985,6 +985,9 @@ void ModelSceneRuntime::resetEnvironment() {
         std::abort();
     }
     setTimeOfDay(300.0f);
+    setTimePaused(true);
+    setTimeScale(1.0f);
+    setWeather(WeatherType::Clear, true);
     if (!setRenderSettings(ModelSceneDeferredRenderer::defaultSettings())) {
         std::abort();
     }
@@ -1004,6 +1007,17 @@ bool ModelSceneRuntime::loadDocument(
     if (!ModelSceneDeferredRenderer::validateSettings(
             document.environment.renderSettings, validationError)) {
         setError(std::move(validationError));
+        return false;
+    }
+    if (document.environment.renderSettings.upscale.fsr1Enabled &&
+        !m_deferredRenderer->isFsr1Supported()) {
+        setError("FSR 1 requires the OpenGL graphics backend");
+        return false;
+    }
+    if (document.environment.renderSettings.upscale.type ==
+            TemporalUpscalerType::Fsr31 &&
+        !m_deferredRenderer->isFsr31Supported()) {
+        setError("FSR 3.1 requires an enabled Vulkan FSR 3.1 build");
         return false;
     }
 
@@ -1093,6 +1107,10 @@ bool ModelSceneRuntime::loadDocument(
         m_nextAssetId = std::max(m_nextAssetId, entry.id + 1u);
     }
     setTimeOfDay(document.environment.timeOfDay);
+    setTimePaused(document.environment.timePaused);
+    setTimeScale(document.environment.timeScale);
+    setWeather(document.environment.weather,
+               document.environment.weatherTransitionInstant);
     if (!setRenderSettings(document.environment.renderSettings)) {
         std::abort();
     }
@@ -1163,10 +1181,12 @@ bool ModelSceneRuntime::ensureViewport(const uint32_t width,
 bool ModelSceneRuntime::renderViewport(const glm::mat4& view,
                                        const glm::mat4& projection,
                                        const glm::vec3& cameraPosition,
+                                       const float nearPlane,
+                                       const float farPlane,
                                        const float deltaTime) {
     if (!m_deferredRenderer ||
         !m_deferredRenderer->render(
-            view, projection, cameraPosition, deltaTime)) {
+            view, projection, cameraPosition, nearPlane, farPlane, deltaTime)) {
         if (m_deferredRenderer) {
             setError(m_deferredRenderer->lastError());
         }
@@ -1305,6 +1325,56 @@ void ModelSceneRuntime::setTimeOfDay(const float timeOfDaySeconds) {
     m_deferredRenderer->setTimeOfDay(timeOfDaySeconds);
 }
 
+void ModelSceneRuntime::setTimePaused(const bool paused) {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    m_deferredRenderer->setTimePaused(paused);
+}
+
+bool ModelSceneRuntime::timePaused() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->timePaused();
+}
+
+void ModelSceneRuntime::setTimeScale(const float scale) {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    m_deferredRenderer->setTimeScale(scale);
+}
+
+float ModelSceneRuntime::timeScale() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->timeScale();
+}
+
+void ModelSceneRuntime::setWeather(const WeatherType weather,
+                                   const bool instant) {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    m_deferredRenderer->setWeather(weather, instant);
+}
+
+WeatherType ModelSceneRuntime::weather() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->weather();
+}
+
+bool ModelSceneRuntime::weatherTransitionInstant() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->weatherTransitionInstant();
+}
+
 float ModelSceneRuntime::timeOfDay() const {
     if (!m_deferredRenderer) {
         std::abort();
@@ -1322,6 +1392,16 @@ bool ModelSceneRuntime::setRenderSettings(const RenderSettings& settings) {
         setError(std::move(validationError));
         return false;
     }
+    if (settings.upscale.fsr1Enabled &&
+        !m_deferredRenderer->isFsr1Supported()) {
+        setError("FSR 1 requires the OpenGL graphics backend");
+        return false;
+    }
+    if (settings.upscale.type == TemporalUpscalerType::Fsr31 &&
+        !m_deferredRenderer->isFsr31Supported()) {
+        setError("FSR 3.1 requires an enabled Vulkan FSR 3.1 build");
+        return false;
+    }
     m_deferredRenderer->setSettings(settings);
     m_lastError.clear();
     return true;
@@ -1332,6 +1412,14 @@ const RenderSettings& ModelSceneRuntime::renderSettings() const {
         std::abort();
     }
     return m_deferredRenderer->settings();
+}
+
+bool ModelSceneRuntime::isFsr1Supported() const {
+    return m_deferredRenderer && m_deferredRenderer->isFsr1Supported();
+}
+
+bool ModelSceneRuntime::isFsr31Supported() const {
+    return m_deferredRenderer && m_deferredRenderer->isFsr31Supported();
 }
 
 entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,
@@ -1484,6 +1572,10 @@ scene::ModelSceneDocument ModelSceneRuntime::captureDocument(
             return lhs.id < rhs.id;
         });
     document.environment.timeOfDay = timeOfDay();
+    document.environment.timePaused = timePaused();
+    document.environment.timeScale = timeScale();
+    document.environment.weather = weather();
+    document.environment.weatherTransitionInstant = weatherTransitionInstant();
     document.environment.renderSettings = renderSettings();
     document.editorCamera = editorCamera;
     return document;

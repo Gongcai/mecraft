@@ -45,6 +45,10 @@ scene::ModelSceneDocument makeDocument() {
     document.entities.push_back(child);
 
     document.environment.timeOfDay = 725.0f;
+    document.environment.timePaused = false;
+    document.environment.timeScale = 2.5f;
+    document.environment.weather = WeatherType::Storm;
+    document.environment.weatherTransitionInstant = false;
     document.environment.renderSettings.shadow.resolution = 4096;
     document.environment.renderSettings.ssao.strength = 0.42f;
     document.environment.renderSettings.postProcess.saturation = 1.25f;
@@ -52,6 +56,8 @@ scene::ModelSceneDocument makeDocument() {
     document.editorCamera.distance = 12.0f;
     document.editorCamera.yaw = -45.0f;
     document.editorCamera.pitch = 25.0f;
+    document.editorCamera.nearPlane = 0.025f;
+    document.editorCamera.farPlane = 2500.0f;
     return document;
 }
 
@@ -86,11 +92,37 @@ int main() {
         decoded.entities[1].parentId != source.entities[0].id ||
         decoded.entities[1].assetId != source.assets[0].id ||
         !near(decoded.environment.timeOfDay, 725.0f) ||
+        decoded.environment.timePaused ||
+        !near(decoded.environment.timeScale, 2.5f) ||
+        decoded.environment.weather != WeatherType::Storm ||
+        decoded.environment.weatherTransitionInstant ||
         decoded.environment.renderSettings.shadow.resolution != 4096 ||
         !near(decoded.environment.renderSettings.ssao.strength, 0.42f) ||
         !near(decoded.environment.renderSettings.postProcess.saturation, 1.25f) ||
-        !near(decoded.editorCamera.distance, 12.0f)) {
+        !near(decoded.editorCamera.distance, 12.0f) ||
+        !near(decoded.editorCamera.nearPlane, 0.025f) ||
+        !near(decoded.editorCamera.farPlane, 2500.0f)) {
         return fail("JSON round trip changed stable scene data");
+    }
+
+    nlohmann::json versionOne = encoded;
+    versionOne["version"] = 1u;
+    versionOne["environment"].erase("timePaused");
+    versionOne["environment"].erase("timeScale");
+    versionOne["environment"].erase("weather");
+    versionOne["environment"].erase("weatherTransitionInstant");
+    versionOne["editorCamera"].erase("nearPlane");
+    versionOne["editorCamera"].erase("farPlane");
+    if (!scene::ModelSceneSerializer::deserialize(
+            versionOne, decoded, error) ||
+        decoded.version != scene::ModelSceneDocument::kCurrentVersion ||
+        !decoded.environment.timePaused ||
+        !near(decoded.environment.timeScale, 1.0f) ||
+        decoded.environment.weather != WeatherType::Clear ||
+        !decoded.environment.weatherTransitionInstant ||
+        !near(decoded.editorCamera.nearPlane, 0.05f) ||
+        !near(decoded.editorCamera.farPlane, 500.0f)) {
+        return fail("version 1 scene migration did not apply version 2 defaults");
     }
 
     nlohmann::json incompleteSettings = encoded;

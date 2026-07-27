@@ -13,6 +13,7 @@ class ResourceMgr;
 class RhiCommandListPool;
 class RhiDevice;
 struct RenderSettings;
+enum class WeatherType;
 
 /// Owns the shared deferred environment used by the standalone model scene.
 class ModelSceneDeferredRenderer {
@@ -39,6 +40,8 @@ public:
     [[nodiscard]] bool render(const glm::mat4& view,
                               const glm::mat4& projection,
                               const glm::vec3& cameraPosition,
+                              float nearPlane,
+                              float farPlane,
                               float deltaTime);
 
     /// Changes the standalone environment time and invalidates temporal history.
@@ -47,6 +50,19 @@ public:
 
     /// Returns the current environment time within the 1200-second world day.
     [[nodiscard]] float timeOfDay() const;
+
+    /// Controls whether standalone scene time advances with real frame time.
+    void setTimePaused(bool paused);
+    [[nodiscard]] bool timePaused() const;
+
+    /// Sets the multiplier applied to real frame time while scene time advances.
+    void setTimeScale(float scale);
+    [[nodiscard]] float timeScale() const;
+
+    /// Changes the target weather using either an immediate or natural transition.
+    void setWeather(WeatherType weather, bool instant);
+    [[nodiscard]] WeatherType weather() const;
+    [[nodiscard]] bool weatherTransitionInstant() const;
 
     /// Replaces the standalone renderer configuration and resets temporal history.
     /// @param settings Complete deferred renderer configuration for subsequent frames.
@@ -61,6 +77,8 @@ public:
 
     /// Returns the active standalone renderer configuration.
     [[nodiscard]] const RenderSettings& settings() const;
+    [[nodiscard]] bool isFsr1Supported() const;
+    [[nodiscard]] bool isFsr31Supported() const;
 
     [[nodiscard]] uint64_t viewportTextureId() const;
     [[nodiscard]] uint32_t viewportWidth() const;
