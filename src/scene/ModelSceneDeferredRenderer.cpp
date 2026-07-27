@@ -282,6 +282,7 @@ struct ModelSceneDeferredRenderer::Impl {
                 previousContext.camera.jitteredViewProj;
         } else {
             context.prevCamera = context.camera;
+            context.previousJitter = context.jitter;
             context.previousViewProj = context.camera.viewProj;
             context.previousInvViewProj = context.camera.invViewProj;
             context.previousJitteredViewProj =

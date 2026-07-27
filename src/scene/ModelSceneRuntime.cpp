@@ -1202,7 +1202,7 @@ bool ModelSceneRuntime::prepareGBuffer(
     for (MeshAsset& asset : m_assets) {
         asset.renderer->prepareStandaloneFrame();
         if (!asset.renderer->prepareGBuffer(
-                commandList, context.camera.viewProj,
+                commandList, context.camera.jitteredViewProj,
                 context.previousViewProjWithCurrentJitter, context)) {
             return false;
         }
