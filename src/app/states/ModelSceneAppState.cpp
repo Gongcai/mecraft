@@ -26,6 +26,9 @@
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
+constexpr float kCameraLookSensitivity = 0.25f;
+constexpr float kCameraMoveSpeed = 3.0f;
+constexpr float kCameraFastMoveMultiplier = 4.0f;
 
 [[nodiscard]] uint32_t viewportDimension(const float logicalSize,
                                          const float framebufferScale) {
@@ -48,6 +51,7 @@ ModelSceneAppState::ModelSceneAppState(AppStateDependencies deps)
 
 void ModelSceneAppState::onEnter() {
     m_deps.contextManager.pushContext(InputContextType::UI);
+    m_cameraControlActive = false;
     m_deps.input.captureMouse(false);
     m_returnRequested = false;
     if (!m_imguiRenderer.init(m_deps.window, m_deps.rhiDevice, true,
@@ -66,6 +70,8 @@ void ModelSceneAppState::onEnter() {
 }
 
 void ModelSceneAppState::onExit() {
+    m_cameraControlActive = false;
+    m_deps.input.captureMouse(false);
     m_scene.shutdown();
     m_imguiRenderer.shutdown();
     m_deps.contextManager.popContext();
@@ -80,19 +86,24 @@ void ModelSceneAppState::requestReturnToMenu() {
 }
 
 void ModelSceneAppState::update(const double frameTime, double& accumulator) {
-    (void)frameTime;
     accumulator = 0.0;
     if (!m_initialized) {
         requestReturnToMenu();
         return;
     }
+    m_deps.input.update();
     const InputSnapshot& input = m_deps.input.snapshot();
     if (input.isKeyJustPressed(GLFW_KEY_ESCAPE)) {
-        requestReturnToMenu();
+        if (m_cameraControlActive) {
+            setCameraControlActive(false);
+        } else {
+            requestReturnToMenu();
+        }
         return;
     }
-    updateCamera(input);
-    if (m_viewportHovered && !ImGuizmo::IsUsing() &&
+    updateCamera(input, frameTime);
+    if (m_viewportHovered && !m_cameraControlActive &&
+        !ImGuizmo::IsUsing() &&
         !ImGui::GetIO().WantTextInput) {
         if (input.isKeyJustPressed(GLFW_KEY_W)) m_gizmoOperation = 0;
         if (input.isKeyJustPressed(GLFW_KEY_E)) m_gizmoOperation = 1;
@@ -114,16 +125,63 @@ glm::vec3 ModelSceneAppState::cameraPosition() const {
     return m_cameraTarget + direction * m_cameraDistance;
 }
 
-void ModelSceneAppState::updateCamera(const InputSnapshot& input) {
-    if (!m_viewportHovered || ImGuizmo::IsUsing()) {
+void ModelSceneAppState::setCameraControlActive(const bool active) {
+    if (m_cameraControlActive == active) {
         return;
     }
-    if (input.isMouseButtonHeld(GLFW_MOUSE_BUTTON_RIGHT)) {
-        m_cameraYaw -= input.mouseDelta.x * 0.25f;
-        m_cameraPitch = std::clamp(
-            m_cameraPitch + input.mouseDelta.y * 0.25f, -85.0f, 85.0f);
+    m_cameraControlActive = active;
+    m_deps.input.captureMouse(active);
+}
+
+void ModelSceneAppState::updateCamera(const InputSnapshot& input,
+                                      const double frameTime) {
+    const bool canStartControl =
+        m_viewportHovered && !ImGuizmo::IsUsing() &&
+        !ImGui::GetIO().WantTextInput;
+    const bool startingControl =
+        !m_cameraControlActive && canStartControl &&
+        input.isMouseButtonJustPressed(GLFW_MOUSE_BUTTON_RIGHT);
+    if (startingControl) {
+        setCameraControlActive(true);
     }
-    if (input.scrollDelta != 0.0) {
+    if (m_cameraControlActive &&
+        input.isMouseButtonJustReleased(GLFW_MOUSE_BUTTON_RIGHT)) {
+        setCameraControlActive(false);
+        return;
+    }
+
+    if (m_cameraControlActive) {
+        if (!startingControl) {
+            m_cameraYaw = std::remainder(
+                m_cameraYaw + input.mouseDelta.x * kCameraLookSensitivity,
+                360.0f);
+            m_cameraPitch = std::clamp(
+                m_cameraPitch + input.mouseDelta.y * kCameraLookSensitivity,
+                -85.0f, 85.0f);
+        }
+
+        const glm::vec3 position = cameraPosition();
+        const glm::vec3 forward = glm::normalize(m_cameraTarget - position);
+        const glm::vec3 right = glm::normalize(glm::cross(
+            forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 movement{0.0f};
+        if (input.isKeyHeld(GLFW_KEY_W)) movement += forward;
+        if (input.isKeyHeld(GLFW_KEY_S)) movement -= forward;
+        if (input.isKeyHeld(GLFW_KEY_D)) movement += right;
+        if (input.isKeyHeld(GLFW_KEY_A)) movement -= right;
+        if (glm::dot(movement, movement) > 0.0f) {
+            const bool fastMove =
+                input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) ||
+                input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT);
+            const float speed = kCameraMoveSpeed *
+                (fastMove ? kCameraFastMoveMultiplier : 1.0f);
+            m_cameraTarget += glm::normalize(movement) * speed *
+                static_cast<float>(frameTime);
+        }
+    }
+
+    if ((m_viewportHovered || m_cameraControlActive) &&
+        input.scrollDelta != 0.0) {
         const float zoomFactor = std::exp(
             static_cast<float>(-input.scrollDelta) * 0.12f);
         m_cameraDistance = std::clamp(
@@ -355,8 +413,9 @@ void ModelSceneAppState::showViewportPanel() {
     ImGui::Image(
         static_cast<ImTextureID>(m_scene.viewportTextureId()),
         available, uv0, uv1);
-    m_viewportHovered = ImGui::IsItemHovered();
+    const bool viewportImageHovered = ImGui::IsItemHovered();
     const bool gizmoToolbarHovered = showGizmoToolbar();
+    m_viewportHovered = viewportImageHovered && !gizmoToolbarHovered;
 
     const float aspect = available.x / available.y;
     m_view = glm::lookAt(

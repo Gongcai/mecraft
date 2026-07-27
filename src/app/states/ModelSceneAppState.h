@@ -31,7 +31,8 @@ private:
     void showAssetsPanel();
     void showViewportPanel();
     [[nodiscard]] bool showGizmoToolbar();
-    void updateCamera(const InputSnapshot& input);
+    void updateCamera(const InputSnapshot& input, double frameTime);
+    void setCameraControlActive(bool active);
     void selectFromViewport(const ImVec2& mousePosition);
     void requestReturnToMenu();
     [[nodiscard]] glm::vec3 cameraPosition() const;
@@ -50,6 +51,7 @@ private:
     int m_gizmoOperation = 0;
     int m_gizmoMode = 0;
     bool m_viewportHovered = false;
+    bool m_cameraControlActive = false;
     bool m_initialized = false;
     bool m_returnRequested = false;
     std::array<char, 512> m_importPath{
