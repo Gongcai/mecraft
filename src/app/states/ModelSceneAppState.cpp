@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <nfd.h>
 
 #include "ImGuizmo.h"
 #include "imgui_internal.h"
@@ -359,14 +360,27 @@ void ModelSceneAppState::showInspectorPanel() {
 
 void ModelSceneAppState::showAssetsPanel() {
     ImGui::Begin("Assets");
-    ImGui::SetNextItemWidth(-120.0f);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float browseButtonWidth =
+        ImGui::CalcTextSize("Browse...").x + style.FramePadding.x * 2.0f;
+    const float importButtonWidth =
+        ImGui::CalcTextSize("Import Model").x + style.FramePadding.x * 2.0f;
+    ImGui::SetNextItemWidth(-(
+        browseButtonWidth + importButtonWidth +
+        style.ItemSpacing.x * 2.0f));
     ImGui::InputText("##ModelPath", m_importPath.data(), m_importPath.size());
     ImGui::SameLine();
+    if (ImGui::Button("Browse...")) {
+        browseAndImportModel();
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Import Model")) {
-        const entt::entity imported = m_scene.importModel(m_importPath.data());
-        if (imported != entt::null) {
-            m_scene.setSelectedEntity(imported);
-        }
+        importModelPath(m_importPath.data());
+    }
+    if (!m_importDialogError.empty()) {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
+            "%s", m_importDialogError.c_str());
     }
     if (!m_scene.lastError().empty()) {
         ImGui::TextColored(
@@ -381,6 +395,44 @@ void ModelSceneAppState::showAssetsPanel() {
         ImGui::TextDisabled("%s", m_scene.assetPath(index).c_str());
     }
     ImGui::End();
+}
+
+void ModelSceneAppState::browseAndImportModel() {
+    m_importDialogError.clear();
+    if (NFD_Init() != NFD_OKAY) {
+        m_importDialogError = NFD_GetError();
+        return;
+    }
+
+    const nfdfilteritem_t filters[] = {{"glTF Model", "gltf,glb"}};
+    nfdchar_t* selectedPath = nullptr;
+    const nfdresult_t result = NFD_OpenDialog(
+        &selectedPath, filters, std::size(filters), nullptr);
+    if (result == NFD_OKAY) {
+        const std::string path(selectedPath);
+        NFD_FreePath(selectedPath);
+        NFD_Quit();
+        if (path.size() >= m_importPath.size()) {
+            m_importDialogError = "Selected model path exceeds the import field capacity";
+            return;
+        }
+        std::fill(m_importPath.begin(), m_importPath.end(), '\0');
+        std::copy(path.begin(), path.end(), m_importPath.begin());
+        importModelPath(path);
+        return;
+    }
+    if (result == NFD_ERROR) {
+        m_importDialogError = NFD_GetError();
+    }
+    NFD_Quit();
+}
+
+void ModelSceneAppState::importModelPath(const std::string& path) {
+    m_importDialogError.clear();
+    const entt::entity imported = m_scene.importModel(path);
+    if (imported != entt::null) {
+        m_scene.setSelectedEntity(imported);
+    }
 }
 
 void ModelSceneAppState::showViewportPanel() {

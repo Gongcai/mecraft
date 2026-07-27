@@ -29,6 +29,8 @@ private:
     void showInspectorPanel();
     void showRenderSettingsPanel();
     void showAssetsPanel();
+    void browseAndImportModel();
+    void importModelPath(const std::string& path);
     void showViewportPanel();
     [[nodiscard]] bool showGizmoToolbar();
     void updateCamera(const InputSnapshot& input, double frameTime);
@@ -54,8 +56,9 @@ private:
     bool m_cameraControlActive = false;
     bool m_initialized = false;
     bool m_returnRequested = false;
-    std::array<char, 512> m_importPath{
+    std::array<char, 4096> m_importPath{
         "assets/models/showcase/DamagedHelmet.glb"};
+    std::string m_importDialogError;
 };
 
 #endif // MECRAFT_MODEL_SCENE_APP_STATE_H

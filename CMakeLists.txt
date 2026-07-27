@@ -214,6 +214,7 @@ find_package(OpenAL CONFIG REQUIRED)
 find_package(Vorbis CONFIG REQUIRED COMPONENTS File)
 find_package(Freetype REQUIRED)
 find_package(EnTT CONFIG REQUIRED)
+find_package(nfd CONFIG REQUIRED)
 find_package(glslang CONFIG REQUIRED)
 find_package(spirv_cross_core CONFIG REQUIRED)
 find_package(spirv_cross_glsl CONFIG REQUIRED)
@@ -816,6 +817,7 @@ target_link_libraries(mecraft_core PUBLIC
         Vorbis::vorbisfile
         Freetype::Freetype
         EnTT::EnTT
+        nfd::nfd
         glslang::glslang
         glslang::glslang-default-resource-limits
         glslang::SPIRV

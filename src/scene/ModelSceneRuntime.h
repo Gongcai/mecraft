@@ -118,6 +118,8 @@ private:
                                      uint32_t& assetIndex);
     [[nodiscard]] entt::entity instantiateAsset(uint32_t assetIndex,
                                                 const std::string& instanceName);
+    [[nodiscard]] std::string makeUniqueInstanceName(
+        const std::string& baseName) const;
     void setError(std::string message);
 
     entt::registry m_registry;

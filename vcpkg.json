@@ -9,6 +9,7 @@
     "glslang",
     "glm",
     "libvorbis",
+    "nativefiledialog-extended",
     "nlohmann-json",
     "openal-soft",
     "spirv-cross",

@@ -116,6 +116,28 @@ entt::entity ModelSceneRuntime::instantiateAsset(
     return entity;
 }
 
+std::string ModelSceneRuntime::makeUniqueInstanceName(
+    const std::string& baseName) const {
+    const auto names = m_registry.view<scene::NameComponent>();
+    const auto nameExists = [&names](const std::string& candidate) {
+        return std::any_of(
+            names.begin(), names.end(),
+            [&names, &candidate](const entt::entity entity) {
+                return names.get<scene::NameComponent>(entity).value == candidate;
+            });
+    };
+    if (!nameExists(baseName)) {
+        return baseName;
+    }
+    for (size_t suffix = 2u;; ++suffix) {
+        std::string candidate =
+            baseName + " (" + std::to_string(suffix) + ")";
+        if (!nameExists(candidate)) {
+            return candidate;
+        }
+    }
+}
+
 entt::entity ModelSceneRuntime::importModel(const std::string& path) {
     if (m_resourceMgr == nullptr || path.empty()) {
         setError("model import requires a non-empty asset path");
@@ -140,7 +162,7 @@ entt::entity ModelSceneRuntime::importModel(const std::string& path) {
             std::distance(m_assets.begin(), existing));
     }
     m_lastError.clear();
-    return instantiateAsset(assetIndex, name);
+    return instantiateAsset(assetIndex, makeUniqueInstanceName(name));
 }
 
 void ModelSceneRuntime::destroyEntity(const entt::entity entity) {
