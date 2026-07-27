@@ -528,6 +528,23 @@ float ModelSceneDeferredRenderer::timeOfDay() const {
     return m_impl->dayNight.getTimeOfDay();
 }
 
+void ModelSceneDeferredRenderer::setSettings(const RenderSettings& settings) {
+    Impl& state = *m_impl;
+    if (!state.initialized) {
+        std::abort();
+    }
+    state.settings = settings;
+    state.hasPreviousContext = false;
+    state.pipeline.invalidateHistory();
+}
+
+const RenderSettings& ModelSceneDeferredRenderer::settings() const {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    return m_impl->settings;
+}
+
 uint64_t ModelSceneDeferredRenderer::viewportTextureId() const {
     return m_impl->textureId;
 }

@@ -20,7 +20,9 @@
 #include "renderer/rhi/RhiCommandList.h"
 #include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
+#include "renderer/core/RenderSettings.h"
 #include "scene/ModelSceneComponents.h"
+#include "ui/imgui/RenderSettingsImGui.h"
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
@@ -152,6 +154,7 @@ void ModelSceneAppState::buildInitialDockLayout(const ImGuiID dockspaceId) {
         center, ImGuiDir_Down, 0.24f, &bottom, &center);
     ImGui::DockBuilderDockWindow("Scene Hierarchy", left);
     ImGui::DockBuilderDockWindow("Inspector", right);
+    ImGui::DockBuilderDockWindow("Render Settings", right);
     ImGui::DockBuilderDockWindow("Assets", bottom);
     ImGui::DockBuilderDockWindow("Scene Viewport", center);
     ImGui::DockBuilderFinish(dockspaceId);
@@ -167,14 +170,48 @@ void ModelSceneAppState::buildEditorUi() {
         }
         ImGui::EndMainMenuBar();
     }
-    const ImGuiID dockspaceId = ImGui::GetID("ModelSceneDockspace");
+    const ImGuiID dockspaceId = ImGui::GetID("ModelSceneDockspaceV2");
     ImGui::DockSpaceOverViewport(
         dockspaceId, ImGui::GetMainViewport(), ImGuiDockNodeFlags_None);
     buildInitialDockLayout(dockspaceId);
     showHierarchyPanel();
     showInspectorPanel();
+    showRenderSettingsPanel();
     showAssetsPanel();
     showViewportPanel();
+}
+
+void ModelSceneAppState::showRenderSettingsPanel() {
+    ImGui::Begin("Render Settings");
+    RenderSettings settings = m_scene.renderSettings();
+    bool changed = false;
+
+    if (ImGui::CollapsingHeader(
+            "Debug View", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::SetNextItemWidth(-1.0f);
+        changed |= render_settings_imgui::showDeferredDebugView(settings);
+    }
+    if (ImGui::CollapsingHeader("Shadows")) {
+        changed |= render_settings_imgui::showShadowSettings(settings);
+    }
+    if (ImGui::CollapsingHeader("Volumetric Light / Fog")) {
+        changed |= render_settings_imgui::showVolumetricSettings(settings);
+    }
+    if (ImGui::CollapsingHeader("SSAO")) {
+        changed |= render_settings_imgui::showSsaoSettings(settings);
+    }
+    if (ImGui::CollapsingHeader("SSGI")) {
+        changed |= render_settings_imgui::showSsgiSettings(settings);
+    }
+    if (ImGui::CollapsingHeader(
+            "Post Process / Picture", ImGuiTreeNodeFlags_DefaultOpen)) {
+        changed |= render_settings_imgui::showPostProcessSettings(settings);
+    }
+
+    if (changed) {
+        m_scene.setRenderSettings(settings);
+    }
+    ImGui::End();
 }
 
 void ModelSceneAppState::showHierarchyPanel() {

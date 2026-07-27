@@ -21,6 +21,7 @@ class RhiCommandListPool;
 class RhiDevice;
 class StaticMeshRenderer;
 class ModelSceneDeferredRenderer;
+struct RenderSettings;
 
 /// Owns editor scene entities, mesh assets, picking data, and offscreen targets.
 class ModelSceneRuntime : public IDeferredGeometryProvider {
@@ -90,6 +91,13 @@ public:
 
     /// Returns the current deferred environment time in seconds.
     [[nodiscard]] float timeOfDay() const;
+
+    /// Replaces the model viewport renderer configuration.
+    /// @param settings Complete deferred renderer configuration for subsequent frames.
+    void setRenderSettings(const RenderSettings& settings);
+
+    /// Returns the active model viewport renderer configuration.
+    [[nodiscard]] const RenderSettings& renderSettings() const;
     [[nodiscard]] size_t assetCount() const { return m_assets.size(); }
     [[nodiscard]] const std::string& assetName(size_t index) const;
     [[nodiscard]] const std::string& assetPath(size_t index) const;

@@ -324,6 +324,20 @@ float ModelSceneRuntime::timeOfDay() const {
     return m_deferredRenderer->timeOfDay();
 }
 
+void ModelSceneRuntime::setRenderSettings(const RenderSettings& settings) {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    m_deferredRenderer->setSettings(settings);
+}
+
+const RenderSettings& ModelSceneRuntime::renderSettings() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->settings();
+}
+
 entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,
                                      const glm::vec3& rayDirection) const {
     entt::entity nearestEntity = entt::null;

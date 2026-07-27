@@ -488,6 +488,7 @@ set(SRC_UI
         # Core UI Framework
         src/ui/Dashboard.cpp
         src/ui/imgui/ImGuiRhiRenderer.cpp
+        src/ui/imgui/RenderSettingsImGui.cpp
         src/ui/core/UIInputAdapter.cpp
         src/ui/core/UIRenderer.cpp
         src/ui/core/UIScene.cpp

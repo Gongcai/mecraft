@@ -98,6 +98,7 @@ bool ImGuiRhiRenderer::init(const Window& window,
 void ImGuiRhiRenderer::shutdown() {
     if (m_context != nullptr) {
         ImGui::SetCurrentContext(m_context);
+        ImGui::DestroyPlatformWindows();
     }
     destroyRhiResources();
     if (m_context != nullptr) {
@@ -204,21 +205,23 @@ bool ImGuiRhiRenderer::createRhiResources() {
     int fontHeight = 0;
     int bytesPerPixel = 0;
     ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->GetTexDataAsAlpha8(
+    io.Fonts->GetTexDataAsRGBA32(
         &fontPixels, &fontWidth, &fontHeight, &bytesPerPixel);
     if (fontPixels == nullptr || fontWidth <= 0 || fontHeight <= 0 ||
-        bytesPerPixel != 1) {
+        bytesPerPixel != 4) {
         return false;
     }
     uint64_t fontByteSize = 0u;
     if (!checkedMultiply(static_cast<uint64_t>(fontWidth),
                          static_cast<uint64_t>(fontHeight), fontByteSize) ||
+        !checkedMultiply(fontByteSize,
+                         static_cast<uint64_t>(bytesPerPixel), fontByteSize) ||
         fontByteSize > std::numeric_limits<size_t>::max()) {
         return false;
     }
     RhiTextureDesc textureDesc;
     textureDesc.debugName = "ImGui.FontAtlas";
-    textureDesc.format = RhiTextureFormat::R8Unorm;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
     textureDesc.width = static_cast<uint32_t>(fontWidth);
     textureDesc.height = static_cast<uint32_t>(fontHeight);
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
@@ -231,7 +234,7 @@ bool ImGuiRhiRenderer::createRhiResources() {
     RhiTextureViewDesc viewDesc;
     viewDesc.texture = m_fontTexture;
     viewDesc.viewType = RhiTextureViewType::Texture2D;
-    viewDesc.format = RhiTextureFormat::R8Unorm;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
     m_fontTextureView = m_rhiDevice->createTextureView(viewDesc);
     RhiSamplerDesc samplerDesc;
     samplerDesc.mipmapMode = RhiMipmapMode::Nearest;

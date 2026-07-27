@@ -12,6 +12,7 @@ class ImGuiRhiRenderer;
 class ResourceMgr;
 class RhiCommandListPool;
 class RhiDevice;
+struct RenderSettings;
 
 /// Owns the shared deferred environment used by the standalone model scene.
 class ModelSceneDeferredRenderer {
@@ -46,6 +47,13 @@ public:
 
     /// Returns the current environment time within the 1200-second world day.
     [[nodiscard]] float timeOfDay() const;
+
+    /// Replaces the standalone renderer configuration and resets temporal history.
+    /// @param settings Complete deferred renderer configuration for subsequent frames.
+    void setSettings(const RenderSettings& settings);
+
+    /// Returns the active standalone renderer configuration.
+    [[nodiscard]] const RenderSettings& settings() const;
 
     [[nodiscard]] uint64_t viewportTextureId() const;
     [[nodiscard]] uint32_t viewportWidth() const;

@@ -27,6 +27,7 @@ private:
     void buildInitialDockLayout(ImGuiID dockspaceId);
     void showHierarchyPanel();
     void showInspectorPanel();
+    void showRenderSettingsPanel();
     void showAssetsPanel();
     void showViewportPanel();
     [[nodiscard]] bool showGizmoToolbar();

@@ -14,6 +14,7 @@
 #include "../renderer/rhi/RhiCommandList.h"
 #include "../renderer/rhi/RhiDevice.h"
 #include "../renderer/rhi/RhiShaderSourceLoader.h"
+#include "ui/imgui/RenderSettingsImGui.h"
 
 #include <algorithm>
 #include <array>
@@ -213,21 +214,23 @@ bool Dashboard::createRhiResources(RhiDevice& rhiDevice) {
     int fontHeight = 0;
     int bytesPerPixel = 0;
     ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->GetTexDataAsAlpha8(&fontPixels, &fontWidth, &fontHeight, &bytesPerPixel);
-    if (fontPixels == nullptr || fontWidth <= 0 || fontHeight <= 0 || bytesPerPixel != 1) {
+    io.Fonts->GetTexDataAsRGBA32(&fontPixels, &fontWidth, &fontHeight, &bytesPerPixel);
+    if (fontPixels == nullptr || fontWidth <= 0 || fontHeight <= 0 || bytesPerPixel != 4) {
         return false;
     }
 
     uint64_t fontByteSize = 0u;
     if (!checkedMultiply(static_cast<uint64_t>(fontWidth),
                          static_cast<uint64_t>(fontHeight), fontByteSize) ||
+        !checkedMultiply(fontByteSize,
+                         static_cast<uint64_t>(bytesPerPixel), fontByteSize) ||
         fontByteSize > std::numeric_limits<size_t>::max()) {
         return false;
     }
 
     RhiTextureDesc textureDesc;
     textureDesc.debugName = "Dashboard.FontAtlas";
-    textureDesc.format = RhiTextureFormat::R8Unorm;
+    textureDesc.format = RhiTextureFormat::Rgba8Unorm;
     textureDesc.width = static_cast<uint32_t>(fontWidth);
     textureDesc.height = static_cast<uint32_t>(fontHeight);
     textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
@@ -242,7 +245,7 @@ bool Dashboard::createRhiResources(RhiDevice& rhiDevice) {
     RhiTextureViewDesc viewDesc;
     viewDesc.texture = m_fontTexture;
     viewDesc.viewType = RhiTextureViewType::Texture2D;
-    viewDesc.format = RhiTextureFormat::R8Unorm;
+    viewDesc.format = RhiTextureFormat::Rgba8Unorm;
     m_fontTextureView = rhiDevice.createTextureView(viewDesc);
 
     RhiSamplerDesc samplerDesc;
@@ -1271,7 +1274,6 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         RenderSettings settings = renderScene.getSettings();
         int pipelineMode = static_cast<int>(settings.pipelineMode);
         int tonemapMode = settings.postProcess.tonemapMode;
-        int debugViewMode = settings.debug.viewMode;
         int weatherPresetInstant = static_cast<int>(world.getWeatherSystem().getRenderState().type);
         int weatherPresetSmooth = static_cast<int>(world.getWeatherSystem().getTargetState().type);
         static constexpr const char* kPipelineModes[] = {"Forward (Vanilla)", "Deferred (Shader Effects)"};
@@ -1283,100 +1285,12 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             "AcademyFull [DerivativeMain]",
             "AgX_Full [DerivativeMain]"
         };
-        static constexpr const char* kDebugViewModes[] = {
-            "0: Off",
-            "1: GBuffer Albedo",
-            "2: GBuffer Normal",
-            "3: GBuffer Vertex AO",
-            "4: Voxel Light",
-            "5: Material Rough/F0/Emission",
-            "6: Material SSS",
-            "7: Depth",
-            "8: Shadow Depth",
-            "9: SSAO",
-            "10: Scene Lighting",
-            "11: Scene Composite",
-            "12: Transparent Composite",
-            "13: Transparent Depth",
-            "14: Volumetric RGB",
-            "15: Volumetric Transmittance",
-            "16: Sky Capture",
-            "17: Velocity",
-            "18: History Scene",
-            "19: History Depth",
-            "20: Shadow Projection",
-            "21: Shadow Visibility",
-            "22: Shadow Bias",
-            "23: CSM Cascade",
-            "24: Reflection Target",
-            "25: Cloud Target",
-            "26: Material Kind",
-            "27: Material Aux",
-            "28: Reflection History",
-            "29: Cloud History",
-            "30: SSR Hit Mask",
-            "31: Scene Resolved",
-            "32: Shadow UV",
-            "33: Shadow Density",
-            "34: Shadow Depth Compare",
-            "35: Shadow Hit Caster",
-            "36: CSM Depth 0",
-            "37: CSM Depth 1",
-            "38: CSM Depth 2",
-            "39: CSM Depth 3",
-            "40: Cascade Info",
-            "41: Sky Dir Raw",
-            "42: Sky Dir Cloudy",
-            "43: Sky Dir Raw x20",
-            "44: SkyCapture Atlas + Metadata",
-            "45: Lighting Balance",
-            "46: VFog Density",
-            "47: VFog Transmittance",
-            "48: VFog Sky Only",
-            "49: VFog Sun Only",
-            "50: VFog Sun Gates",
-            "51: VFog Integration",
-            "52: VFog Sky Ray Coverage",
-            "53: VFog March Detail",
-            "54: VFog Sun Contrast",
-            "55: VFog Sun Only x20",
-            "56: VFog Sun Only x100",
-            "57: VFog Shadow Visibility",
-            "58: VFog Shadow Raw vs PCF",
-            "59: VFog Shadow Projection",
-            "60: VFog Shadow Compare",
-            "61: VFog Bias Compare",
-            "62: VFog Cascade Index",
-            "63: VFog Receiver Depth",
-            "64: VFog Sun/Sky Ratio",
-            "65: VFog Beam Modulation",
-            "66: VFog Density Field",
-            "67: TAA Current Scratch",
-            "68: TAA Current-History Delta",
-            "69: Velocity Sky Highlight",
-            "70: Raw Half VFog",
-            "71: Upscaled VFog",
-            "72: UW VL Scatter",
-            "73: UW VL Shadow",
-            "74: UW VL Phase",
-            "75: Shadow Depth Gap",
-            "76: Shadow Color0",
-            "77: Shadow Color1",
-            "78: Reflection Composite Delta x32",
-            "79: TAA Loss x32",
-            "80: TAA Wet Reject Mask",
-            "81: SSGI",
-            "82: SSGI x8",
-            "83: SSGI Confidence",
-            "84: Reactive Mask",
-            "85: Transparency Mask"
-        };
         static constexpr const char* kWeatherPresets[] = {"Clear", "Rain", "Storm", "Snow"};
         bool pipelineChanged = false;
         pipelineChanged |= ImGui::Combo("Pipeline Mode", &pipelineMode, kPipelineModes, IM_ARRAYSIZE(kPipelineModes));
         settings.pipelineMode = static_cast<PipelineMode>(pipelineMode);
-        pipelineChanged |= ImGui::Combo("Deferred Debug View", &debugViewMode, kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));
-        settings.debug.viewMode = debugViewMode;
+        pipelineChanged |=
+            render_settings_imgui::showDeferredDebugView(settings);
         static constexpr const char* kLightDebugModes[] = {
             "0: Off",
             "1: Direct Only",
@@ -1486,7 +1400,6 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
         ImGui::SameLine();
         if (ImGui::Button("SSGI View")) {
             settings.debug.viewMode = 81;
-            debugViewMode = 81;
             pipelineChanged = true;
         }
         ImGui::SameLine();
@@ -1505,7 +1418,6 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
             settings.ssgi.samples = 16;
             settings.ssgi.denoiseIterations = 3;
             settings.debug.viewMode = 0;
-            debugViewMode = 0;
             pipelineChanged = true;
         }
         pipelineChanged |= ImGui::Checkbox("SSGI Temporal", &settings.ssgi.temporalEnabled);
@@ -2131,10 +2043,8 @@ void Dashboard::showPerformanceStats(World& world, RenderResourceHub &render, Re
                     voxelGiStats.sunRadianceScale);
         pipelineChanged |= ImGui::Checkbox("Reflection Temporal", &settings.reflection.temporalEnabled);
         pipelineChanged |= ImGui::SliderFloat("Reflection History Weight", &settings.reflection.historyWeight, 0.0f, 0.98f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Manual Exposure Value", &settings.postProcess.exposure, 0.1f, 50.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
-        pipelineChanged |= ImGui::SliderFloat("Gamma", &settings.postProcess.gamma, 1.0f, 3.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Saturation", &settings.postProcess.saturation, 0.0f, 2.0f, "%.2f");
-        pipelineChanged |= ImGui::SliderFloat("Contrast", &settings.postProcess.contrast, 0.5f, 2.0f, "%.2f");
+        pipelineChanged |=
+            render_settings_imgui::showPictureAdjustments(settings);
         ImGui::Text("Active Pipeline: %s", renderScene.activePipelineName());
         ImGui::Text("Pipeline Status: %s", renderScene.getPipelineStatus());
         if (pipelineChanged || syncRenderSceneSettings) {
