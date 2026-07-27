@@ -52,6 +52,10 @@ public:
                                            RgTextureHandle hiZ,
                                            RgPassHandle dependency);
 
+    /// Commits the readback ring position only after graph submission.
+    /// @param succeeded True when every graph command list was submitted.
+    void finishGraphExecution(bool succeeded);
+
 private:
     bool ensurePipeline(RhiDevice& rhiDevice);
     bool ensureMipBindGroup(RhiDevice& rhiDevice,
@@ -111,6 +115,9 @@ private:
     uint32_t m_cullTotalsRing[kCullStatsRingSize][2] = {};
     bool m_cullRingWritten[kCullStatsRingSize] = {};
     uint32_t m_cullRingWriteIndex = 0u;
+    uint32_t m_pendingCullRingIndex = 0u;
+    uint32_t m_pendingCullTotals[2] = {};
+    bool m_cullSubmissionPending = false;
     HiZCullFrameStats m_cullStats;
 };
 

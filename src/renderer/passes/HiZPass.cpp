@@ -389,11 +389,25 @@ bool HiZPass::recordCull(RhiCommandList& commandList,
     commandList.bufferBarrier({m_cullCounterBuffer,
                                RhiResourceState::TransferSrc,
                                RhiResourceState::StorageBuffer});
-    m_cullTotalsRing[ringIndex][0] = commandCounts[0];
-    m_cullTotalsRing[ringIndex][1] = commandCounts[1];
-    m_cullRingWritten[ringIndex] = true;
-    m_cullRingWriteIndex = (ringIndex + 1u) % kCullStatsRingSize;
+    m_pendingCullRingIndex = ringIndex;
+    m_pendingCullTotals[0] = commandCounts[0];
+    m_pendingCullTotals[1] = commandCounts[1];
+    m_cullSubmissionPending = true;
     return true;
+}
+
+void HiZPass::finishGraphExecution(const bool succeeded) {
+    if (!m_cullSubmissionPending) {
+        return;
+    }
+    if (succeeded) {
+        m_cullTotalsRing[m_pendingCullRingIndex][0] = m_pendingCullTotals[0];
+        m_cullTotalsRing[m_pendingCullRingIndex][1] = m_pendingCullTotals[1];
+        m_cullRingWritten[m_pendingCullRingIndex] = true;
+        m_cullRingWriteIndex =
+            (m_pendingCullRingIndex + 1u) % kCullStatsRingSize;
+    }
+    m_cullSubmissionPending = false;
 }
 
 bool HiZPass::ensureCullPipeline(RhiDevice& rhiDevice) {
@@ -614,6 +628,10 @@ void HiZPass::destroyRhiResources() {
         written = false;
     }
     m_cullRingWriteIndex = 0u;
+    m_pendingCullRingIndex = 0u;
+    m_pendingCullTotals[0] = 0u;
+    m_pendingCullTotals[1] = 0u;
+    m_cullSubmissionPending = false;
     m_cullPipeline = {};
     m_cullPipelineLayout = {};
     m_cullBindGroupLayout = {};

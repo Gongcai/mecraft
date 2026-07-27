@@ -1543,6 +1543,13 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             {"Deferred.GenericTransparent", RgPassType::Graphics,
              RhiQueueType::Graphics});
         genericTransparent.dependsOn(graphTail)
+            .readTexture(depth, RhiResourceState::DepthRead)
+            .readTexture(skyCapture, RhiResourceState::ShaderRead)
+            .readTexture(sceneComposite, RhiResourceState::ShaderRead)
+            .readTexture(skyNoise, RhiResourceState::ShaderRead)
+            .readTexture(atmosphereLut, RhiResourceState::ShaderRead)
+            .readTexture(lightmapDay, RhiResourceState::ShaderRead)
+            .readTexture(lightmapNight, RhiResourceState::ShaderRead)
             .readWriteTexture(transparentComposite, RhiResourceState::RenderTarget)
             .readWriteTexture(transparentCompositeDepth, RhiResourceState::DepthWrite)
             .readWriteTexture(reactiveMask, RhiResourceState::RenderTarget)
@@ -2074,6 +2081,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
     if (volumetricGraphPrepared) {
         m_volumetricPass->finishGraphExecution(executed.succeeded());
+    }
+    if (m_hiZPass) {
+        m_hiZPass->finishGraphExecution(executed.succeeded());
     }
     if (voxelGiGraphPrepared) {
         m_voxelGiClipmap->finishGraphExecution(executed.succeeded());
