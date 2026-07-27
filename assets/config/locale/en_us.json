@@ -3,6 +3,7 @@
   "ui": {
     "mecraft": "MECRAFT",
     "start_game": "START GAME",
+    "model_scene": "MODEL SCENE",
     "quit": "QUIT",
     "paused": "PAUSED",
     "resume": "RESUME",

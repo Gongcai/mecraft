@@ -234,6 +234,11 @@ set(SRC_APP
         src/app/states/GameplayAppState.cpp
         src/app/states/LoadingAppState.cpp
         src/app/states/MainMenuAppState.cpp
+        src/app/states/ModelSceneAppState.cpp
+)
+
+set(SRC_SCENE
+        src/scene/ModelSceneRuntime.cpp
 )
 
 # [引擎层]
@@ -481,6 +486,7 @@ endif()
 set(SRC_UI
         # Core UI Framework
         src/ui/Dashboard.cpp
+        src/ui/imgui/ImGuiRhiRenderer.cpp
         src/ui/core/UIInputAdapter.cpp
         src/ui/core/UIRenderer.cpp
         src/ui/core/UIScene.cpp
@@ -656,7 +662,7 @@ set(SRC_SAVE
 # 合并所有核心代码
 set(CORE_SOURCES
         ${SRC_APP} ${SRC_ENGINE} ${SRC_GAME} ${SRC_CORE}
-        ${SRC_WORLD} ${SRC_RENDERER} ${SRC_UI}
+        ${SRC_WORLD} ${SRC_RENDERER} ${SRC_UI} ${SRC_SCENE}
         ${SRC_ECS} ${SRC_PLAYER} ${SRC_PHYSICS} ${SRC_PARTICLE}
         ${SRC_ITEM} ${SRC_CRAFTING} ${SRC_AUDIO}
         ${SRC_NET} ${SRC_SERVER} ${SRC_CLIENT}
@@ -708,11 +714,16 @@ add_library(mecraft_third_party STATIC
         third_party/imgui/imgui_impl_glfw.cpp
         third_party/imgui/imgui_tables.cpp
         third_party/imgui/imgui_widgets.cpp
+        third_party/imguizmo/ImGuizmo.cpp
         third_party/mikktspace/mikktspace.c
 )
 target_compile_features(mecraft_third_party PUBLIC cxx_std_17)
 set_target_properties(mecraft_third_party PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(mecraft_third_party SYSTEM PUBLIC third_party)
+target_include_directories(mecraft_third_party SYSTEM PUBLIC
+        third_party
+        third_party/imgui
+        third_party/imguizmo
+)
 target_link_libraries(mecraft_third_party PUBLIC glfw)
 target_compile_definitions(mecraft_third_party PUBLIC
         GLFW_INCLUDE_NONE

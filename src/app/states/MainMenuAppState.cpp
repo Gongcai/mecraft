@@ -1,4 +1,5 @@
 #include "MainMenuAppState.h"
+#include "ModelSceneAppState.h"
 
 #include "../AppSettings.h"
 #include "../../Diagnostics.h"
@@ -171,6 +172,10 @@ void MainMenuAppState::onEnter() {
     // "Start Game" → switch to save list
     m_mainMenuScreen.onStartClicked = [this]() {
         switchToPage(Page::SaveList);
+    };
+
+    m_mainMenuScreen.onModelSceneClicked = [this]() {
+        m_deps.appFsm.changeState(std::make_unique<ModelSceneAppState>(m_deps));
     };
 
     // Multiplayer connect

@@ -2615,6 +2615,11 @@ void GlRhiCommandList::beginRendering(const RhiRenderingInfo& info) {
                info.renderArea.y,
                static_cast<GLsizei>(info.renderArea.width),
                static_cast<GLsizei>(info.renderArea.height));
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(info.renderArea.x,
+              info.renderArea.y,
+              static_cast<GLsizei>(info.renderArea.width),
+              static_cast<GLsizei>(info.renderArea.height));
 
     for (uint32_t i = 0u; i < info.colorAttachmentCount; ++i) {
         if (info.colorAttachments[i].loadOp == RhiLoadOp::Clear) {

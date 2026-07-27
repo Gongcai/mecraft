@@ -16,6 +16,7 @@ class UITextInput;
 class MainMenuScreen : public UIScene {
 public:
     std::function<void()> onStartClicked;
+    std::function<void()> onModelSceneClicked;
     std::function<void()> onMultiplayerClicked;
     std::function<void(const std::string& address, int port)> onConnectClicked;
     std::function<void()> onQuitClicked;
@@ -33,6 +34,7 @@ private:
 
     UIImage* m_title = nullptr;
     UIButton* m_startButton = nullptr;
+    UIButton* m_modelSceneButton = nullptr;
     UIButton* m_multiplayerButton = nullptr;
     UIButton* m_quitButton = nullptr;
     UIButton* m_connectButton = nullptr;

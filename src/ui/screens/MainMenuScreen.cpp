@@ -11,6 +11,7 @@
 void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     m_title = nullptr;
     m_startButton = nullptr;
+    m_modelSceneButton = nullptr;
     m_multiplayerButton = nullptr;
     m_quitButton = nullptr;
     m_connectButton = nullptr;
@@ -41,6 +42,19 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     });
     m_startButton = startBtn.get();
 
+    auto modelSceneBtn = std::make_unique<UIButton>();
+    modelSceneBtn->setText(getLocaleManager()->tr("model_scene"));
+    modelSceneBtn->setTextScale(2.0f);
+    modelSceneBtn->width = 300.0f;
+    modelSceneBtn->height = 48.0f;
+    modelSceneBtn->anchor = Anchor::Center;
+    modelSceneBtn->anchorOffsetY = -80.0f;
+    modelSceneBtn->setTone(UIButtonTone::Primary);
+    modelSceneBtn->setOnClick([this]() {
+        if (onModelSceneClicked) onModelSceneClicked();
+    });
+    m_modelSceneButton = modelSceneBtn.get();
+
     // Multiplayer button
     auto mpBtn = std::make_unique<UIButton>();
     mpBtn->setText(getLocaleManager() ? getLocaleManager()->tr("multiplayer") : "MULTIPLAYER");
@@ -48,7 +62,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     mpBtn->width = 300.0f;
     mpBtn->height = 48.0f;
     mpBtn->anchor = Anchor::Center;
-    mpBtn->anchorOffsetY = -80.0f;
+    mpBtn->anchorOffsetY = -140.0f;
     mpBtn->setTone(UIButtonTone::Primary);
     mpBtn->setOnClick([this]() {
         showMultiplayerPanel();
@@ -62,7 +76,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     quitBtn->width = 300.0f;
     quitBtn->height = 48.0f;
     quitBtn->anchor = Anchor::Center;
-    quitBtn->anchorOffsetY = -140.0f;
+    quitBtn->anchorOffsetY = -200.0f;
     quitBtn->setTone(UIButtonTone::Danger);
     quitBtn->setOnClick([this]() {
         if (onQuitClicked) onQuitClicked();
@@ -162,6 +176,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
     // Add root widgets
     addRoot(std::move(title));
     addRoot(std::move(startBtn));
+    addRoot(std::move(modelSceneBtn));
     addRoot(std::move(mpBtn));
     addRoot(std::move(quitBtn));
     addRoot(std::move(addrInput));
@@ -177,6 +192,7 @@ void MainMenuScreen::buildUI(ResourceMgr& resourceMgr) {
 void MainMenuScreen::refreshTexts() {
     if (!getLocaleManager()) return;
     if (m_startButton) m_startButton->setText(getLocaleManager()->tr("start_game"));
+    if (m_modelSceneButton) m_modelSceneButton->setText(getLocaleManager()->tr("model_scene"));
     if (m_multiplayerButton) m_multiplayerButton->setText(getLocaleManager()->tr("multiplayer"));
     if (m_quitButton) m_quitButton->setText(getLocaleManager()->tr("quit"));
 }
@@ -184,6 +200,7 @@ void MainMenuScreen::refreshTexts() {
 void MainMenuScreen::showMultiplayerPanel() {
     // Hide main menu buttons
     if (m_startButton) m_startButton->visible = false;
+    if (m_modelSceneButton) m_modelSceneButton->visible = false;
     if (m_multiplayerButton) m_multiplayerButton->visible = false;
     if (m_quitButton) m_quitButton->visible = false;
     // Show multiplayer panel
@@ -195,6 +212,7 @@ void MainMenuScreen::showMultiplayerPanel() {
 void MainMenuScreen::hideMultiplayerPanel() {
     // Show main menu buttons
     if (m_startButton) m_startButton->visible = true;
+    if (m_modelSceneButton) m_modelSceneButton->visible = true;
     if (m_multiplayerButton) m_multiplayerButton->visible = true;
     if (m_quitButton) m_quitButton->visible = true;
     // Hide multiplayer panel

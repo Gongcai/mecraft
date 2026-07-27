@@ -32,6 +32,18 @@ public:
     /// @param worldView Read-only source for block and sky light at the instance center.
     void prepareFrame(const FrameContext& ctx, const IWorldView& worldView);
 
+    /// Supplies an editor-owned instance transform without requiring a world.
+    /// @param model Current local-to-world matrix.
+    /// @param previousModel Local-to-world matrix used by temporal velocity.
+    void setInstanceTransform(const glm::mat4& model,
+                              const glm::mat4& previousModel);
+
+    /// Prepares constant neutral lighting for standalone scene preview rendering.
+    void prepareStandaloneFrame();
+
+    /// Returns the asset-space axis-aligned bounds generated while decoding glTF vertices.
+    void assetBounds(glm::vec3& minimum, glm::vec3& maximum) const;
+
     /// Uploads current per-instance lighting before the G-buffer rendering scope starts.
     /// @param commandList Graphics command list recording the current G-buffer pass.
     /// @return True when frame data was prepared and the upload was recorded.
@@ -50,6 +62,12 @@ public:
     /// @param shadowViewProj Current cascade view-projection matrix.
     void renderToShadowMap(RhiCommandList& commandList,
                            const glm::mat4& shadowViewProj) const;
+
+    /// Records the asset into an active RGBA8/depth editor viewport pass.
+    /// @param commandList Command list with compatible preview attachments active.
+    /// @param viewProj Current editor camera view-projection matrix.
+    void renderPreview(RhiCommandList& commandList,
+                       const glm::mat4& viewProj) const;
 
     /// Returns the precise initialization failure reported by the asset pipeline.
     [[nodiscard]] const std::string& lastError() const { return m_lastError; }
@@ -88,17 +106,23 @@ private:
     RhiBindGroupLayoutHandle m_bindGroupLayout;
     RhiPipelineLayoutHandle m_gbufferPipelineLayout;
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
+    RhiPipelineLayoutHandle m_previewPipelineLayout;
     RhiShaderHandle m_gbufferVertexShader;
     RhiShaderHandle m_gbufferFragmentShader;
     RhiShaderHandle m_shadowVertexShader;
     RhiShaderHandle m_shadowFragmentShader;
+    RhiShaderHandle m_previewVertexShader;
+    RhiShaderHandle m_previewFragmentShader;
     RhiPipelineHandle m_gbufferPipeline;
     RhiPipelineHandle m_gbufferDoubleSidedPipeline;
     RhiPipelineHandle m_shadowPipeline;
     RhiPipelineHandle m_shadowDoubleSidedPipeline;
+    RhiPipelineHandle m_previewPipeline;
+    RhiPipelineHandle m_previewDoubleSidedPipeline;
     glm::vec3 m_assetBoundsMin{0.0f};
     glm::vec3 m_assetBoundsMax{0.0f};
     glm::mat4 m_modelMatrix{1.0f};
+    glm::mat4 m_previousModelMatrix{1.0f};
     glm::vec4 m_voxelLight{1.0f, 0.0f, 0.0f, 1.0f};
     bool m_instancePlaced = false;
     bool m_framePrepared = false;

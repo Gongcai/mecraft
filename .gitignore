@@ -3,6 +3,7 @@
 /third_party/fidelityfx_fsr31/generated/vk/*.d
 /compile_commands.json
 /imgui.ini
+/model_scene_imgui.ini
 /saves/
 /cmake-build-relwithdebinfo/
 /x64-Debug/

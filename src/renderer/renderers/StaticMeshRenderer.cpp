@@ -53,6 +53,11 @@ struct StaticMeshGBufferPushConstants {
     glm::mat4 previousModelViewProj{1.0f};
 };
 
+struct StaticMeshPreviewPushConstants {
+    glm::mat4 viewProj{1.0f};
+    glm::mat4 model{1.0f};
+};
+
 struct TextureCacheKey {
     const cgltf_image* image = nullptr;
     bool srgb = false;
@@ -85,6 +90,8 @@ static_assert(sizeof(StaticMeshMaterialParams) == 64u,
               "Static mesh material UBO must match std140 layout");
 static_assert(sizeof(StaticMeshGBufferPushConstants) == 128u,
               "Static mesh G-buffer push constants must fit the Vulkan minimum limit");
+static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
+              "Static mesh preview push constants must fit the Vulkan minimum limit");
 
 [[nodiscard]] bool finiteVector(const glm::vec3& value) {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
@@ -475,8 +482,13 @@ bool StaticMeshRenderer::createPipelineResources() {
         "assets/shaders/static_mesh_shadow_rhi.vert");
     const auto shadowFragmentSource = renderer::rhi::loadShaderSource(
         "assets/shaders/static_mesh_shadow_rhi.frag");
+    const auto previewVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/static_mesh_preview_rhi.vert");
+    const auto previewFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/static_mesh_preview_rhi.frag");
     if (!gbufferVertexSource || !gbufferFragmentSource ||
-        !shadowVertexSource || !shadowFragmentSource) {
+        !shadowVertexSource || !shadowFragmentSource ||
+        !previewVertexSource || !previewFragmentSource) {
         setError("failed to load static mesh shaders");
         return false;
     }
@@ -498,8 +510,13 @@ bool StaticMeshRenderer::createPipelineResources() {
         "StaticMesh.Shadow.Vertex", RhiShaderStage::Vertex, *shadowVertexSource);
     m_shadowFragmentShader = createShader(
         "StaticMesh.Shadow.Fragment", RhiShaderStage::Fragment, *shadowFragmentSource);
+    m_previewVertexShader = createShader(
+        "StaticMesh.Preview.Vertex", RhiShaderStage::Vertex, *previewVertexSource);
+    m_previewFragmentShader = createShader(
+        "StaticMesh.Preview.Fragment", RhiShaderStage::Fragment, *previewFragmentSource);
     if (!m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() ||
-        !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid()) {
+        !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
+        !m_previewVertexShader.isValid() || !m_previewFragmentShader.isValid()) {
         setError("failed to compile static mesh shaders");
         return false;
     }
@@ -532,7 +549,11 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineLayoutDesc.debugName = "StaticMesh.Shadow.PipelineLayout";
     pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4);
     m_shadowPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
-    if (!m_gbufferPipelineLayout.isValid() || !m_shadowPipelineLayout.isValid()) {
+    pipelineLayoutDesc.debugName = "StaticMesh.Preview.PipelineLayout";
+    pipelineLayoutDesc.pushConstantBytes = sizeof(StaticMeshPreviewPushConstants);
+    m_previewPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    if (!m_gbufferPipelineLayout.isValid() || !m_shadowPipelineLayout.isValid() ||
+        !m_previewPipelineLayout.isValid()) {
         setError("failed to create static mesh pipeline layouts");
         return false;
     }
@@ -577,8 +598,29 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineDesc.debugName = "StaticMesh.Shadow.DoubleSidedPipeline";
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     m_shadowDoubleSidedPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "StaticMesh.Preview.Pipeline";
+    pipelineDesc.vertexShader = m_previewVertexShader;
+    pipelineDesc.fragmentShader = m_previewFragmentShader;
+    pipelineDesc.layout = m_previewPipelineLayout;
+    pipelineDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, offsetof(StaticMeshVertex, position)},
+        {1u, 0u, RhiVertexFormat::Float3, offsetof(StaticMeshVertex, normal)},
+        {2u, 0u, RhiVertexFormat::Float4, offsetof(StaticMeshVertex, tangent)},
+        {3u, 0u, RhiVertexFormat::Float2, offsetof(StaticMeshVertex, uv)}};
+    pipelineDesc.raster.cullMode = RhiCullMode::Back;
+    pipelineDesc.colorFormats = {RhiTextureFormat::Rgba8Unorm};
+    pipelineDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    pipelineDesc.depthStencil.depthTestEnabled = true;
+    pipelineDesc.depthStencil.depthWriteEnabled = true;
+    pipelineDesc.depthStencil.depthCompare = RhiCompareOp::Less;
+    pipelineDesc.blend.attachments.resize(1u);
+    m_previewPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+    pipelineDesc.debugName = "StaticMesh.Preview.DoubleSidedPipeline";
+    pipelineDesc.raster.cullMode = RhiCullMode::None;
+    m_previewDoubleSidedPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
     if (!m_gbufferPipeline.isValid() || !m_gbufferDoubleSidedPipeline.isValid() ||
-        !m_shadowPipeline.isValid() || !m_shadowDoubleSidedPipeline.isValid()) {
+        !m_shadowPipeline.isValid() || !m_shadowDoubleSidedPipeline.isValid() ||
+        !m_previewPipeline.isValid() || !m_previewDoubleSidedPipeline.isValid()) {
         setError("failed to create static mesh graphics pipelines");
         return false;
     }
@@ -1064,6 +1106,7 @@ void StaticMeshRenderer::prepareFrame(const FrameContext& ctx,
         m_modelMatrix = glm::translate(glm::mat4(1.0f), anchor) *
                         glm::scale(glm::mat4(1.0f), glm::vec3(displayScale)) *
                         glm::translate(glm::mat4(1.0f), -boundsCenter);
+        m_previousModelMatrix = m_modelMatrix;
         m_instancePlaced = true;
     }
     const glm::vec3 worldCenter = glm::vec3(
@@ -1074,6 +1117,24 @@ void StaticMeshRenderer::prepareFrame(const FrameContext& ctx,
         lightPosition.x, lightPosition.y, lightPosition.z));
     m_voxelLight = glm::vec4(light, 0.0f, 1.0f);
     m_framePrepared = true;
+}
+
+void StaticMeshRenderer::setInstanceTransform(const glm::mat4& model,
+                                              const glm::mat4& previousModel) {
+    m_modelMatrix = model;
+    m_previousModelMatrix = previousModel;
+    m_instancePlaced = true;
+}
+
+void StaticMeshRenderer::prepareStandaloneFrame() {
+    m_voxelLight = glm::vec4(1.0f);
+    m_framePrepared = true;
+}
+
+void StaticMeshRenderer::assetBounds(glm::vec3& minimum,
+                                     glm::vec3& maximum) const {
+    minimum = m_assetBoundsMin;
+    maximum = m_assetBoundsMax;
 }
 
 bool StaticMeshRenderer::prepareGBuffer(RhiCommandList& commandList) const {
@@ -1099,7 +1160,7 @@ void StaticMeshRenderer::renderToGBuffer(
     const glm::mat4& previousViewProj) const {
     const StaticMeshGBufferPushConstants pushConstants{
         viewProj * m_modelMatrix,
-        previousViewProj * m_modelMatrix};
+        previousViewProj * m_previousModelMatrix};
     for (const PrimitiveResource& primitive : m_primitives) {
         const MaterialResource& material = m_materials[primitive.materialIndex];
         commandList.setGraphicsPipeline(material.doubleSided
@@ -1109,6 +1170,26 @@ void StaticMeshRenderer::renderToGBuffer(
         commandList.setIndexBuffer(primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
         commandList.pushConstants(
             &pushConstants, sizeof(pushConstants), rhiFlag(RhiShaderStage::Vertex));
+        commandList.drawIndexed(primitive.indexCount, 1u, 0u, 0, 0u);
+    }
+}
+
+void StaticMeshRenderer::renderPreview(RhiCommandList& commandList,
+                                       const glm::mat4& viewProj) const {
+    if (!m_framePrepared) {
+        return;
+    }
+    const StaticMeshPreviewPushConstants constants{viewProj, m_modelMatrix};
+    for (const PrimitiveResource& primitive : m_primitives) {
+        const MaterialResource& material = m_materials[primitive.materialIndex];
+        commandList.setGraphicsPipeline(material.doubleSided
+            ? m_previewDoubleSidedPipeline : m_previewPipeline);
+        commandList.setBindGroup(0u, material.bindGroup);
+        commandList.setVertexBuffer(0u, primitive.vertexBuffer, 0u);
+        commandList.setIndexBuffer(
+            primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
+        commandList.pushConstants(
+            &constants, sizeof(constants), rhiFlag(RhiShaderStage::Vertex));
         commandList.drawIndexed(primitive.indexCount, 1u, 0u, 0, 0u);
     }
 }
@@ -1174,6 +1255,7 @@ void StaticMeshRenderer::shutdown() {
     m_assetBoundsMin = glm::vec3(0.0f);
     m_assetBoundsMax = glm::vec3(0.0f);
     m_modelMatrix = glm::mat4(1.0f);
+    m_previousModelMatrix = glm::mat4(1.0f);
     m_voxelLight = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
     m_instancePlaced = false;
     m_framePrepared = false;
@@ -1181,6 +1263,12 @@ void StaticMeshRenderer::shutdown() {
 }
 
 void StaticMeshRenderer::destroyPipelineResources() {
+    if (m_previewDoubleSidedPipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(m_previewDoubleSidedPipeline);
+    }
+    if (m_previewPipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(m_previewPipeline);
+    }
     if (m_shadowDoubleSidedPipeline.isValid()) {
         m_rhiDevice->destroyPipeline(m_shadowDoubleSidedPipeline);
     }
@@ -1196,6 +1284,9 @@ void StaticMeshRenderer::destroyPipelineResources() {
     if (m_shadowPipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
     }
+    if (m_previewPipelineLayout.isValid()) {
+        m_rhiDevice->destroyPipelineLayout(m_previewPipelineLayout);
+    }
     if (m_gbufferPipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_gbufferPipelineLayout);
     }
@@ -1207,6 +1298,12 @@ void StaticMeshRenderer::destroyPipelineResources() {
     }
     if (m_shadowVertexShader.isValid()) {
         m_rhiDevice->destroyShader(m_shadowVertexShader);
+    }
+    if (m_previewFragmentShader.isValid()) {
+        m_rhiDevice->destroyShader(m_previewFragmentShader);
+    }
+    if (m_previewVertexShader.isValid()) {
+        m_rhiDevice->destroyShader(m_previewVertexShader);
     }
     if (m_gbufferFragmentShader.isValid()) {
         m_rhiDevice->destroyShader(m_gbufferFragmentShader);
@@ -1221,12 +1318,17 @@ void StaticMeshRenderer::destroyPipelineResources() {
     m_shadowPipeline = {};
     m_gbufferDoubleSidedPipeline = {};
     m_gbufferPipeline = {};
+    m_previewDoubleSidedPipeline = {};
+    m_previewPipeline = {};
     m_shadowPipelineLayout = {};
     m_gbufferPipelineLayout = {};
+    m_previewPipelineLayout = {};
     m_bindGroupLayout = {};
     m_shadowFragmentShader = {};
     m_shadowVertexShader = {};
     m_gbufferFragmentShader = {};
     m_gbufferVertexShader = {};
+    m_previewFragmentShader = {};
+    m_previewVertexShader = {};
     m_frameUniformBuffer = {};
 }

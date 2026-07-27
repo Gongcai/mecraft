@@ -3,6 +3,7 @@
   "ui": {
     "mecraft": "MECRAFT",
     "start_game": "开始游戏",
+    "model_scene": "模型场景",
     "quit": "退出",
     "paused": "游戏暂停",
     "resume": "继续游戏",
