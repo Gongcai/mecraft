@@ -85,6 +85,10 @@ toVkCommandResourceState(const RhiResourceState state,
     auto mapping = renderer::rhi::vulkan::toVkResourceState(state);
     if (commandListType != RhiCommandListType::Compute) return mapping;
     switch (state) {
+        case RhiResourceState::DepthRead:
+            mapping.stages = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+            mapping.access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+            break;
         case RhiResourceState::ShaderRead:
         case RhiResourceState::ShaderWrite:
         case RhiResourceState::UniformBuffer:

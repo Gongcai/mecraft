@@ -238,6 +238,7 @@ set(SRC_APP
 )
 
 set(SRC_SCENE
+        src/scene/ModelSceneDeferredRenderer.cpp
         src/scene/ModelSceneRuntime.cpp
 )
 

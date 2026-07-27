@@ -49,8 +49,14 @@ struct StaticMeshMaterialParams {
 };
 
 struct StaticMeshGBufferPushConstants {
-    glm::mat4 modelViewProj{1.0f};
-    glm::mat4 previousModelViewProj{1.0f};
+    glm::mat4 model{1.0f};
+    glm::mat4 previousModel{1.0f};
+};
+
+struct StaticMeshFrameParams {
+    glm::vec4 voxelLight{1.0f, 0.0f, 0.0f, 1.0f};
+    glm::mat4 viewProjection{1.0f};
+    glm::mat4 previousViewProjection{1.0f};
 };
 
 struct StaticMeshPreviewPushConstants {
@@ -90,6 +96,8 @@ static_assert(sizeof(StaticMeshMaterialParams) == 64u,
               "Static mesh material UBO must match std140 layout");
 static_assert(sizeof(StaticMeshGBufferPushConstants) == 128u,
               "Static mesh G-buffer push constants must fit the Vulkan minimum limit");
+static_assert(sizeof(StaticMeshFrameParams) == 144u,
+              "Static mesh frame parameters must match the std140 shader block");
 static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
               "Static mesh preview push constants must fit the Vulkan minimum limit");
 
@@ -533,7 +541,9 @@ bool StaticMeshRenderer::createPipelineResources() {
         rhiFlag(RhiShaderStage::Fragment), 1u});
     bindGroupLayoutDesc.entries.push_back({
         6u, RhiBindingType::UniformBuffer,
-        rhiFlag(RhiShaderStage::Fragment), 1u});
+        rhiFlag(RhiShaderStage::Vertex) |
+            rhiFlag(RhiShaderStage::Fragment),
+        1u});
     m_bindGroupLayout = m_rhiDevice->createBindGroupLayout(bindGroupLayoutDesc);
     if (!m_bindGroupLayout.isValid()) {
         setError("failed to create static mesh material bind group layout");
@@ -627,13 +637,14 @@ bool StaticMeshRenderer::createPipelineResources() {
 
     RhiBufferDesc frameBufferDesc;
     frameBufferDesc.debugName = "StaticMesh.FrameUniformBuffer";
-    frameBufferDesc.size = sizeof(glm::vec4);
+    frameBufferDesc.size = sizeof(StaticMeshFrameParams);
     frameBufferDesc.usage = rhiFlag(RhiBufferUsage::Uniform) |
                             rhiFlag(RhiBufferUsage::TransferDst);
     frameBufferDesc.memoryUsage = RhiMemoryUsage::GpuOnly;
     frameBufferDesc.initialState = RhiResourceState::UniformBuffer;
+    const StaticMeshFrameParams frameParams{};
     m_frameUniformBuffer = m_rhiDevice->createBuffer(
-        frameBufferDesc, &m_voxelLight, sizeof(m_voxelLight));
+        frameBufferDesc, &frameParams, sizeof(frameParams));
     if (!m_frameUniformBuffer.isValid()) {
         setError("failed to create static mesh frame uniform buffer");
         return false;
@@ -846,7 +857,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         RhiBindGroupEntry frameEntry;
         frameEntry.binding = 6u;
         frameEntry.resource.buffer = {
-            m_frameUniformBuffer, 0u, sizeof(glm::vec4)};
+            m_frameUniformBuffer, 0u, sizeof(StaticMeshFrameParams)};
         bindGroupDesc.entries.push_back(frameEntry);
         resource.bindGroup = m_rhiDevice->createBindGroup(bindGroupDesc);
         if (!resource.bindGroup.isValid()) {
@@ -1127,7 +1138,7 @@ void StaticMeshRenderer::setInstanceTransform(const glm::mat4& model,
 }
 
 void StaticMeshRenderer::prepareStandaloneFrame() {
-    m_voxelLight = glm::vec4(1.0f);
+    m_voxelLight = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
     m_framePrepared = true;
 }
 
@@ -1137,7 +1148,10 @@ void StaticMeshRenderer::assetBounds(glm::vec3& minimum,
     maximum = m_assetBoundsMax;
 }
 
-bool StaticMeshRenderer::prepareGBuffer(RhiCommandList& commandList) const {
+bool StaticMeshRenderer::prepareGBuffer(
+    RhiCommandList& commandList,
+    const glm::mat4& viewProjection,
+    const glm::mat4& previousViewProjection) const {
     if (!m_framePrepared || !m_frameUniformBuffer.isValid()) {
         return false;
     }
@@ -1145,8 +1159,10 @@ bool StaticMeshRenderer::prepareGBuffer(RhiCommandList& commandList) const {
         m_frameUniformBuffer,
         RhiResourceState::UniformBuffer,
         RhiResourceState::TransferDst});
+    const StaticMeshFrameParams frameParams{
+        m_voxelLight, viewProjection, previousViewProjection};
     commandList.updateBuffer(
-        m_frameUniformBuffer, 0u, &m_voxelLight, sizeof(m_voxelLight));
+        m_frameUniformBuffer, 0u, &frameParams, sizeof(frameParams));
     commandList.bufferBarrier({
         m_frameUniformBuffer,
         RhiResourceState::TransferDst,
@@ -1154,13 +1170,9 @@ bool StaticMeshRenderer::prepareGBuffer(RhiCommandList& commandList) const {
     return true;
 }
 
-void StaticMeshRenderer::renderToGBuffer(
-    RhiCommandList& commandList,
-    const glm::mat4& viewProj,
-    const glm::mat4& previousViewProj) const {
+void StaticMeshRenderer::renderToGBuffer(RhiCommandList& commandList) const {
     const StaticMeshGBufferPushConstants pushConstants{
-        viewProj * m_modelMatrix,
-        previousViewProj * m_previousModelMatrix};
+        m_modelMatrix, m_previousModelMatrix};
     for (const PrimitiveResource& primitive : m_primitives) {
         const MaterialResource& material = m_materials[primitive.materialIndex];
         commandList.setGraphicsPipeline(material.doubleSided

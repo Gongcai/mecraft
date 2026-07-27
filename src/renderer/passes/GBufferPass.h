@@ -14,6 +14,7 @@ class FallingBlockRenderer;
 class DropSystem;
 class IWorldView;
 class RhiCommandList;
+class IDeferredGeometryProvider;
 struct RenderSettings;
 
 namespace ecs { class GameplayRegistry; }
@@ -72,6 +73,20 @@ public:
                                            const RenderSettings& settings,
                                            DeferredRenderTargets& targets,
                                            StaticMeshRenderer* staticMeshRenderer);
+
+    /// Clears and records an explicit non-world geometry source into the G-buffer.
+    /// @param commandList Graphics command list supplied by the Render Graph.
+    /// @param ctx Current camera matrices and frame state.
+    /// @param settings Current temporal projection settings.
+    /// @param targets Persistent G-buffer attachments and views.
+    /// @param geometryProvider Required external geometry source.
+    /// @return True when preparation and command recording both succeed.
+    [[nodiscard]] bool executeExternalGeometry(
+        RhiCommandList& commandList,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        IDeferredGeometryProvider& geometryProvider);
 
     /// Records dropped item and block GBuffer rendering with per-object velocity.
     /// @param commandList Recording command list supplied by the Render Graph.

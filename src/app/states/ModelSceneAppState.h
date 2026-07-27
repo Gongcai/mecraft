@@ -29,6 +29,7 @@ private:
     void showInspectorPanel();
     void showAssetsPanel();
     void showViewportPanel();
+    [[nodiscard]] bool showGizmoToolbar();
     void updateCamera(const InputSnapshot& input);
     void selectFromViewport(const ImVec2& mousePosition);
     void requestReturnToMenu();
@@ -46,6 +47,7 @@ private:
     float m_cameraDistance = 5.0f;
     glm::vec3 m_cameraTarget{0.0f};
     int m_gizmoOperation = 0;
+    int m_gizmoMode = 0;
     bool m_viewportHovered = false;
     bool m_initialized = false;
     bool m_returnRequested = false;

@@ -44,18 +44,19 @@ public:
     /// Returns the asset-space axis-aligned bounds generated while decoding glTF vertices.
     void assetBounds(glm::vec3& minimum, glm::vec3& maximum) const;
 
-    /// Uploads current per-instance lighting before the G-buffer rendering scope starts.
+    /// Uploads lighting and camera transforms before the G-buffer rendering scope starts.
     /// @param commandList Graphics command list recording the current G-buffer pass.
+    /// @param viewProjection Current raster view-projection matrix.
+    /// @param previousViewProjection Previous view-projection used for velocity.
     /// @return True when frame data was prepared and the upload was recorded.
-    [[nodiscard]] bool prepareGBuffer(RhiCommandList& commandList) const;
+    [[nodiscard]] bool prepareGBuffer(
+        RhiCommandList& commandList,
+        const glm::mat4& viewProjection,
+        const glm::mat4& previousViewProjection) const;
 
     /// Records all static primitives into the active G-buffer rendering scope.
     /// @param commandList Command list with compatible G-buffer attachments active.
-    /// @param viewProj Current raster view-projection matrix.
-    /// @param previousViewProj Previous view-projection carrying current temporal jitter.
-    void renderToGBuffer(RhiCommandList& commandList,
-                         const glm::mat4& viewProj,
-                         const glm::mat4& previousViewProj) const;
+    void renderToGBuffer(RhiCommandList& commandList) const;
 
     /// Records all static primitives into the active shadow depth rendering scope.
     /// @param commandList Command list with one CSM cascade active.

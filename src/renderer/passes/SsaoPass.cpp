@@ -70,16 +70,15 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
     const FrameContext* frame = &ctx;
     DeferredRenderTargets* frameTargets = &targets;
     if (useAsyncCompute) {
-        // Compute-queue mirror of the fragment chain. Depth is sampled via
-        // the generic shader-read layout (DepthRead is graphics-only) and
-        // the history copy uses vkCmdCopyImage, which unlike blits is legal
-        // on compute queues, so the whole chain stays on one queue and no
-        // graphics batch has to wait for it before the shadow work.
+        // Compute-queue mirror of the fragment chain. Depth remains in its
+        // sampled read-only layout, and the history copy uses vkCmdCopyImage,
+        // which is legal on compute queues. The whole chain therefore stays
+        // on one queue without blocking graphics before shadow rendering.
         RenderGraphPassBuilder base = graph.addPass(
             {"SSAO.Base", RgPassType::Compute, RhiQueueType::Compute,
              /*threadSafeRecord=*/true});
         base.dependsOn(dependency)
-            .readTexture(resources.depth, RhiResourceState::ShaderRead)
+            .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
             .readTexture(resources.noise, RhiResourceState::ShaderRead)
             .writeTexture(resources.halfRes, RhiResourceState::ShaderWrite)
@@ -95,7 +94,7 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
                  /*threadSafeRecord=*/true});
             filter.dependsOn(previous)
                 .readTexture(resources.halfRes, RhiResourceState::ShaderRead)
-                .readTexture(resources.depth, RhiResourceState::ShaderRead)
+                .readTexture(resources.depth, RhiResourceState::DepthRead)
                 .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
                 .writeTexture(resources.halfResFiltered,
                               RhiResourceState::ShaderWrite)
@@ -114,7 +113,7 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
              /*threadSafeRecord=*/true});
         upsample.dependsOn(previous)
             .readTexture(halfInput, RhiResourceState::ShaderRead)
-            .readTexture(resources.depth, RhiResourceState::ShaderRead)
+            .readTexture(resources.depth, RhiResourceState::DepthRead)
             .writeTexture(resources.filtered, RhiResourceState::ShaderWrite)
             .setExecute([this, frame, frameTargets, ssao](RgPassContext& pass) {
                 return recordSsaoUpsampleCompute(
@@ -131,7 +130,7 @@ RgPassHandle SsaoPass::addGraphPasses(RenderGraph& graph,
                 .readTexture(resources.historyPrevious,
                              RhiResourceState::ShaderRead)
                 .readTexture(resources.velocity, RhiResourceState::ShaderRead)
-                .readTexture(resources.depth, RhiResourceState::ShaderRead)
+                .readTexture(resources.depth, RhiResourceState::DepthRead)
                 .writeTexture(resources.temporal, RhiResourceState::ShaderWrite)
                 .setExecute(
                     [this, frame, frameTargets, ssao](RgPassContext& pass) {

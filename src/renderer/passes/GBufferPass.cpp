@@ -2,6 +2,7 @@
 #include "../core/RenderScene.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../core/RenderSettings.h"
+#include "../core/IDeferredGeometryProvider.h"
 #include "../debug/RenderDebugService.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
@@ -185,8 +186,15 @@ bool GBufferPass::executeStaticMeshes(RhiCommandList& commandList,
     if (staticMeshRenderer == nullptr) {
         return true;
     }
-    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
-        !staticMeshRenderer->prepareGBuffer(commandList)) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr) {
+        return false;
+    }
+    const glm::mat4& viewProj = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled)
+        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    if (!staticMeshRenderer->prepareGBuffer(
+            commandList, viewProj,
+            ctx.previousViewProjWithCurrentJitter)) {
         return false;
     }
     if (!beginObjectGBufferRendering(
@@ -197,12 +205,88 @@ bool GBufferPass::executeStaticMeshes(RhiCommandList& commandList,
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
         : GpuTimerSegmentToken{};
-    const glm::mat4& viewProj = usesTemporalProjectionJitter(
-        settings.upscale.type, settings.taa.enabled)
-        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
-    staticMeshRenderer->renderToGBuffer(
-        commandList, viewProj, ctx.previousViewProjWithCurrentJitter);
+    staticMeshRenderer->renderToGBuffer(commandList);
     endObjectGBufferRendering(commandList);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
+    }
+    return true;
+}
+
+bool GBufferPass::executeExternalGeometry(
+    RhiCommandList& commandList,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    IDeferredGeometryProvider& geometryProvider) {
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !targets.ensureGBufferTextureViews(*ctx.shared->rhiDevice) ||
+        !targets.ensurePerObjectVelocityTextureView(*ctx.shared->rhiDevice) ||
+        !geometryProvider.prepareGBuffer(commandList, ctx)) {
+        return false;
+    }
+
+    RhiColorAttachment attachments[6];
+    const auto setClear = [](RhiColorAttachment& attachment,
+                             const RhiTextureViewHandle view,
+                             const float red,
+                             const float green,
+                             const float blue,
+                             const float alpha) {
+        attachment.view = view;
+        attachment.loadOp = RhiLoadOp::Clear;
+        attachment.storeOp = RhiStoreOp::Store;
+        attachment.clearColor[0] = red;
+        attachment.clearColor[1] = green;
+        attachment.clearColor[2] = blue;
+        attachment.clearColor[3] = alpha;
+    };
+    setClear(attachments[0], targets.albedoTextureViewHandle(),
+             0.0f, 0.0f, 0.0f, 0.0f);
+    setClear(attachments[1], targets.normalAoTextureViewHandle(),
+             0.5f, 0.5f, 1.0f, 1.0f);
+    setClear(attachments[2], targets.voxelLightTextureViewHandle(),
+             0.0f, 0.0f, 0.0f, 1.0f);
+    setClear(attachments[3], targets.materialTextureViewHandle(),
+             0.86f, 0.035f, 0.0f, 0.0f);
+    setClear(attachments[4], targets.materialAuxTextureViewHandle(),
+             0.0f, 0.0f, 0.65f, 0.0f);
+    setClear(attachments[5], targets.perObjectVelocityTextureViewHandle(),
+             0.0f, 0.0f, 0.0f, 0.0f);
+
+    RhiDepthStencilAttachment depthAttachment;
+    depthAttachment.view = targets.depthTextureViewHandle();
+    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+    depthAttachment.depthStoreOp = RhiStoreOp::Store;
+    depthAttachment.clearDepth = 1.0f;
+
+    RhiRenderingInfo renderingInfo;
+    renderingInfo.debugName = "GBuffer.ExternalGeometry";
+    renderingInfo.renderArea = {
+        0, 0,
+        static_cast<uint32_t>(std::max(1, targets.width())),
+        static_cast<uint32_t>(std::max(1, targets.height()))};
+    renderingInfo.colorAttachments = attachments;
+    renderingInfo.colorAttachmentCount = 6u;
+    renderingInfo.depthStencilAttachment = &depthAttachment;
+
+    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
+        : GpuTimerSegmentToken{};
+    commandList.beginRendering(renderingInfo);
+    commandList.setViewport({
+        0.0f, 0.0f,
+        static_cast<float>(std::max(1, targets.width())),
+        static_cast<float>(std::max(1, targets.height())),
+        0.0f, 1.0f});
+    commandList.setScissor(renderingInfo.renderArea);
+    const glm::mat4& viewProjection = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled)
+        ? ctx.camera.jitteredViewProj
+        : ctx.camera.viewProj;
+    geometryProvider.renderToGBuffer(
+        commandList, viewProjection, ctx.previousViewProjWithCurrentJitter);
+    commandList.endRendering();
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }

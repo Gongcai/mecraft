@@ -102,6 +102,41 @@ bool testTextureDependencyAndBarrierPlanning() {
                      "texture lifetime must span its writer and reader");
 }
 
+bool testComputeDepthReadPlanning() {
+  RenderGraph graph;
+  const RhiTextureDesc desc = depthTextureDesc(1u);
+  const RgTextureHandle depth = graph.importTexture(
+      {"ComputeDepth", {19u, 2u}, desc,
+       RhiResourceState::DepthRead, RhiResourceState::DepthRead, {},
+       RhiQueueType::Graphics, RhiQueueType::Graphics});
+  graph.addPass({"ComputeDepthRead", RgPassType::Compute,
+                 RhiQueueType::Compute})
+      .readTexture(depth, RhiResourceState::DepthRead)
+      .setExecute(executeNoop);
+
+  const RgCompileResult result = graph.compile();
+  if (!requireTrue(result.succeeded(), result.message.c_str())) {
+    return false;
+  }
+  const RgCompiledPass& pass = graph.compiledPasses()[0];
+  return requireTrue(pass.textureBarriers.size() == 1u &&
+                         pass.textureBarriers[0].oldState ==
+                             RhiResourceState::DepthRead &&
+                         pass.textureBarriers[0].newState ==
+                             RhiResourceState::DepthRead &&
+                         pass.textureBarriers[0].sourceQueue ==
+                             RhiQueueType::Graphics &&
+                         pass.textureBarriers[0].destinationQueue ==
+                             RhiQueueType::Compute,
+                     "compute depth sampling must preserve the depth-read layout") &&
+         requireTrue(graph.epilogueTextureBarriers().size() == 1u &&
+                         graph.epilogueTextureBarriers()[0].oldState ==
+                             RhiResourceState::DepthRead &&
+                         graph.epilogueTextureBarriers()[0].newState ==
+                             RhiResourceState::DepthRead,
+                     "compute depth sampling must return ownership to graphics");
+}
+
 bool testSubresourceIndependence() {
   RenderGraph graph;
   const RgTextureHandle texture = graph.createTexture(
@@ -558,6 +593,7 @@ bool testSubmissionBatchPassLimit() {
 int main() {
   const bool passed =
       testTextureDependencyAndBarrierPlanning() &&
+      testComputeDepthReadPlanning() &&
       testSubresourceIndependence() &&
       testThreeDimensionalTextureSubresources() &&
       testLayeredDepthCopyPlanning() &&

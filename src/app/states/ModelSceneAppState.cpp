@@ -54,7 +54,8 @@ void ModelSceneAppState::onEnter() {
             std::cerr << "[ModelSceneAppState] Failed to initialize ImGui\n");
         return;
     }
-    if (!m_scene.init(m_deps.resourceMgr, m_deps.rhiDevice, m_imguiRenderer)) {
+    if (!m_scene.init(m_deps.resourceMgr, m_deps.rhiDevice,
+                      m_deps.commandListPool, m_imguiRenderer)) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         return;
@@ -93,7 +94,10 @@ void ModelSceneAppState::update(const double frameTime, double& accumulator) {
         !ImGui::GetIO().WantTextInput) {
         if (input.isKeyJustPressed(GLFW_KEY_W)) m_gizmoOperation = 0;
         if (input.isKeyJustPressed(GLFW_KEY_E)) m_gizmoOperation = 1;
-        if (input.isKeyJustPressed(GLFW_KEY_R)) m_gizmoOperation = 2;
+        if (input.isKeyJustPressed(GLFW_KEY_R)) {
+            m_gizmoOperation = 2;
+            m_gizmoMode = 0;
+        }
     }
     m_scene.syncTransforms();
 }
@@ -294,6 +298,7 @@ void ModelSceneAppState::showViewportPanel() {
         static_cast<ImTextureID>(m_scene.viewportTextureId()),
         available, uv0, uv1);
     m_viewportHovered = ImGui::IsItemHovered();
+    const bool gizmoToolbarHovered = showGizmoToolbar();
 
     const float aspect = available.x / available.y;
     m_view = glm::lookAt(
@@ -316,7 +321,8 @@ void ModelSceneAppState::showViewportPanel() {
             glm::mat4 manipulated = world->worldMatrix;
             if (ImGuizmo::Manipulate(
                     glm::value_ptr(m_view), glm::value_ptr(m_projection),
-                    gizmoOperation(m_gizmoOperation), ImGuizmo::LOCAL,
+                    gizmoOperation(m_gizmoOperation),
+                    m_gizmoMode == 0 ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
                     glm::value_ptr(manipulated))) {
                 float translation[3];
                 float rotation[3];
@@ -332,11 +338,87 @@ void ModelSceneAppState::showViewportPanel() {
         }
     }
     if (m_viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+        !gizmoToolbarHovered &&
         !ImGuizmo::IsOver() && !ImGuizmo::IsUsing()) {
         selectFromViewport(ImGui::GetMousePos());
     }
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+bool ModelSceneAppState::showGizmoToolbar() {
+    ImGui::SetCursorScreenPos(ImVec2(
+        m_viewportPosition.x + 8.0f, m_viewportPosition.y + 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 3.0f);
+    ImGui::PushStyleColor(
+        ImGuiCol_ChildBg, ImVec4(0.055f, 0.060f, 0.070f, 0.94f));
+    ImGui::BeginChild(
+        "##GizmoToolbar", ImVec2(196.0f, 38.0f), true,
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+    bool hovered = ImGui::IsWindowHovered();
+    const auto operationButton = [&](const char* label,
+                                     const int operation,
+                                     const char* tooltip) {
+        const bool active = m_gizmoOperation == operation;
+        if (active) {
+            ImGui::PushStyleColor(
+                ImGuiCol_Button, ImVec4(0.16f, 0.42f, 0.68f, 1.0f));
+        }
+        if (ImGui::Button(label, ImVec2(28.0f, 24.0f))) {
+            m_gizmoOperation = operation;
+            if (operation == 2) {
+                m_gizmoMode = 0;
+            }
+        }
+        hovered = hovered || ImGui::IsItemHovered();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", tooltip);
+        }
+        if (active) {
+            ImGui::PopStyleColor();
+        }
+    };
+    operationButton("T", 0, "Translate");
+    ImGui::SameLine();
+    operationButton("R", 1, "Rotate");
+    ImGui::SameLine();
+    operationButton("S", 2, "Scale");
+    ImGui::SameLine(0.0f, 8.0f);
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine(0.0f, 8.0f);
+
+    const auto modeButton = [&](const char* label,
+                                const int mode,
+                                const char* tooltip) {
+        const bool disabled = m_gizmoOperation == 2 && mode == 1;
+        const bool active = m_gizmoMode == mode;
+        ImGui::BeginDisabled(disabled);
+        if (active) {
+            ImGui::PushStyleColor(
+                ImGuiCol_Button, ImVec4(0.16f, 0.42f, 0.68f, 1.0f));
+        }
+        if (ImGui::Button(label, ImVec2(28.0f, 24.0f))) {
+            m_gizmoMode = mode;
+        }
+        hovered = hovered || ImGui::IsItemHovered();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s", tooltip);
+        }
+        if (active) {
+            ImGui::PopStyleColor();
+        }
+        ImGui::EndDisabled();
+    };
+    modeButton("L", 0, "Local coordinates");
+    ImGui::SameLine();
+    modeButton("W", 1, "World coordinates");
+
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    return hovered;
 }
 
 void ModelSceneAppState::selectFromViewport(const ImVec2& mousePosition) {
@@ -360,7 +442,6 @@ void ModelSceneAppState::selectFromViewport(const ImVec2& mousePosition) {
 }
 
 void ModelSceneAppState::render(const double frameTime) {
-    (void)frameTime;
     if (!m_initialized || m_returnRequested) {
         return;
     }
@@ -387,23 +468,25 @@ void ModelSceneAppState::render(const double frameTime) {
             std::cerr << "[ModelSceneAppState] Failed to acquire frame\n");
         return;
     }
-    RhiCommandList* commandList =
-        m_deps.commandListPool.acquire(RhiCommandListType::Graphics);
-    if (commandList == nullptr ||
-        !commandList->begin({"ModelScene.Commands", RhiCommandListType::Graphics})) {
-        std::abort();
-    }
     if (!m_imguiRenderer.beginFrame(
             static_cast<int>(frame.width), static_cast<int>(frame.height))) {
         std::abort();
     }
     ImGuizmo::BeginFrame();
     buildEditorUi();
-    if (!m_imguiRenderer.prepareDrawData(*commandList)) {
+    if (m_scene.viewportWidth() != 0u &&
+        !m_scene.renderViewport(
+            m_view, m_projection, cameraPosition(),
+            static_cast<float>(frameTime))) {
         std::abort();
     }
-    if (m_scene.viewportWidth() != 0u &&
-        !m_scene.recordViewport(*commandList, m_projection * m_view)) {
+    RhiCommandList* commandList =
+        m_deps.commandListPool.acquire(RhiCommandListType::Graphics);
+    if (commandList == nullptr ||
+        !commandList->begin({"ModelScene.Commands", RhiCommandListType::Graphics})) {
+        std::abort();
+    }
+    if (!m_imguiRenderer.prepareDrawData(*commandList)) {
         std::abort();
     }
     commandList->textureBarrier({

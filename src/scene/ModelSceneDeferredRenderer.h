@@ -1,0 +1,53 @@
+#ifndef MECRAFT_MODEL_SCENE_DEFERRED_RENDERER_H
+#define MECRAFT_MODEL_SCENE_DEFERRED_RENDERER_H
+
+#include <cstdint>
+#include <memory>
+#include <string>
+
+#include <glm/glm.hpp>
+
+class IDeferredGeometryProvider;
+class ImGuiRhiRenderer;
+class ResourceMgr;
+class RhiCommandListPool;
+class RhiDevice;
+
+/// Owns the shared deferred environment used by the standalone model scene.
+class ModelSceneDeferredRenderer {
+public:
+    ModelSceneDeferredRenderer();
+    ~ModelSceneDeferredRenderer();
+
+    ModelSceneDeferredRenderer(const ModelSceneDeferredRenderer&) = delete;
+    ModelSceneDeferredRenderer& operator=(
+        const ModelSceneDeferredRenderer&) = delete;
+
+    /// Initializes deferred targets, atmosphere, shadows, and post-processing.
+    [[nodiscard]] bool init(ResourceMgr& resourceMgr,
+                            RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool,
+                            ImGuiRhiRenderer& imguiRenderer,
+                            IDeferredGeometryProvider& geometryProvider);
+    void shutdown();
+
+    /// Allocates render targets and a stable ImGui texture binding for the viewport.
+    [[nodiscard]] bool ensureViewport(uint32_t width, uint32_t height);
+
+    /// Renders one deferred scene frame and composites it into the viewport texture.
+    [[nodiscard]] bool render(const glm::mat4& view,
+                              const glm::mat4& projection,
+                              const glm::vec3& cameraPosition,
+                              float deltaTime);
+
+    [[nodiscard]] uint64_t viewportTextureId() const;
+    [[nodiscard]] uint32_t viewportWidth() const;
+    [[nodiscard]] uint32_t viewportHeight() const;
+    [[nodiscard]] const std::string& lastError() const;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> m_impl;
+};
+
+#endif // MECRAFT_MODEL_SCENE_DEFERRED_RENDERER_H

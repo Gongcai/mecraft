@@ -127,7 +127,7 @@ RgPassHandle SsgiPass::addGraphPasses(RenderGraph& graph,
             .readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.normalAo, RhiResourceState::ShaderRead)
             .readTexture(resources.historyDepthPrevious,
-                         RhiResourceState::ShaderRead)
+                         RhiResourceState::DepthRead)
             .readTexture(resources.momentsHistoryPrevious,
                          RhiResourceState::ShaderRead)
             .writeTexture(resources.temporal, RhiResourceState::RenderTarget)

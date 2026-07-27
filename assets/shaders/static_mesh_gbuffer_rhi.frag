@@ -28,6 +28,8 @@ layout(std140, binding = 5) uniform StaticMeshMaterialParams {
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uVoxelLight;
+    mat4 uViewProj;
+    mat4 uPreviousViewProj;
 };
 
 void main() {

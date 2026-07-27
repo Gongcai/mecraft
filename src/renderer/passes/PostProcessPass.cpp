@@ -240,6 +240,14 @@ bool PostProcessPass::setHdrInput(const RhiTextureHandle texture,
     return true;
 }
 
+bool PostProcessPass::prepareTextureOutput(RhiDevice& rhiDevice,
+                                           const int width,
+                                           const int height) {
+    return width > 0 && height > 0 &&
+           ensureProcessingTargets(rhiDevice, width, height) &&
+           ensureCompositeTarget(rhiDevice, width, height);
+}
+
 bool PostProcessPass::compositeToBackbuffer(
     RhiDevice& rhiDevice,
     const RhiTextureViewHandle swapchainColorView,

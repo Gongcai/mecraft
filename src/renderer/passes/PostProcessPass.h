@@ -93,6 +93,15 @@ public:
                                    int width,
                                    int height);
 
+    /// Allocates the stable LDR texture view used by texture composition.
+    /// @param rhiDevice Active device that owns the post-process resources.
+    /// @param width Requested output width in pixels.
+    /// @param height Requested output height in pixels.
+    /// @return True when the texture and view are ready for external binding.
+    [[nodiscard]] bool prepareTextureOutput(RhiDevice& rhiDevice,
+                                            int width,
+                                            int height);
+
     /// Composite captured scene to back buffer with active effects.
     [[nodiscard]] bool compositeToBackbuffer(
         RhiDevice& rhiDevice,

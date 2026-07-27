@@ -47,6 +47,7 @@ class ChunkMeshingService;
 class ThreadPool;
 class ForwardPipeline;
 class DeferredPipeline;
+class IDeferredGeometryProvider;
 class RainRenderer;
 class FirstPersonHeldItemRenderer;
 class Inventory;
@@ -92,6 +93,9 @@ struct SharedRenderResources {
     ParticleSystem* particleSystem = nullptr;
     DropSystem* dropSystem = nullptr;
     ecs::GameplayRegistry* gameplayRegistry = nullptr;
+
+    // Explicit non-world geometry source used by editor and tooling scenes.
+    IDeferredGeometryProvider* deferredGeometryProvider = nullptr;
 };
 
 /// High-level render request for one gameplay frame.

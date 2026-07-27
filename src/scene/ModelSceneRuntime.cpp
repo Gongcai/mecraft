@@ -11,9 +11,12 @@
 #include <glm/gtc/matrix_inverse.hpp>
 
 #include "ModelSceneComponents.h"
+#include "ModelSceneDeferredRenderer.h"
 #include "ecs/components/TransformComponents.h"
+#include "renderer/core/FrameContext.h"
 #include "renderer/renderers/StaticMeshRenderer.h"
 #include "renderer/rhi/RhiCommandList.h"
+#include "renderer/rhi/RhiCommandListPool.h"
 #include "renderer/rhi/RhiDevice.h"
 #include "resource/ResourceMgr.h"
 #include "ui/imgui/ImGuiRhiRenderer.h"
@@ -59,24 +62,10 @@ ModelSceneRuntime::ModelSceneRuntime() = default;
 
 bool ModelSceneRuntime::init(ResourceMgr& resourceMgr,
                              RhiDevice& rhiDevice,
+                             RhiCommandListPool& commandListPool,
                              ImGuiRhiRenderer& imguiRenderer) {
     shutdown();
-    m_rhiDevice = &rhiDevice;
-    m_imguiRenderer = &imguiRenderer;
     m_resourceMgr = &resourceMgr;
-    RhiSamplerDesc samplerDesc;
-    samplerDesc.minFilter = RhiFilter::Linear;
-    samplerDesc.magFilter = RhiFilter::Linear;
-    samplerDesc.mipmapMode = RhiMipmapMode::Nearest;
-    samplerDesc.addressU = RhiAddressMode::ClampToEdge;
-    samplerDesc.addressV = RhiAddressMode::ClampToEdge;
-    samplerDesc.addressW = RhiAddressMode::ClampToEdge;
-    m_viewportSampler = m_rhiDevice->createSampler(samplerDesc);
-    if (!m_viewportSampler.isValid()) {
-        setError("failed to create model scene viewport sampler");
-        shutdown();
-        return false;
-    }
 
     if (importModel("assets/models/showcase/DamagedHelmet.glb") == entt::null) {
         const std::string error = m_lastError;
@@ -84,6 +73,15 @@ bool ModelSceneRuntime::init(ResourceMgr& resourceMgr,
         m_lastError = error;
         return false;
     }
+    m_deferredRenderer = std::make_unique<ModelSceneDeferredRenderer>();
+    if (!m_deferredRenderer->init(
+            resourceMgr, rhiDevice, commandListPool, imguiRenderer, *this)) {
+        const std::string error = m_deferredRenderer->lastError();
+        shutdown();
+        m_lastError = error;
+        return false;
+    }
+    m_lastError.clear();
     return true;
 }
 
@@ -170,7 +168,10 @@ const std::string& ModelSceneRuntime::assetPath(const size_t index) const {
 }
 
 void ModelSceneRuntime::shutdown() {
-    destroyViewport();
+    if (m_deferredRenderer) {
+        m_deferredRenderer->shutdown();
+        m_deferredRenderer.reset();
+    }
     for (MeshAsset& asset : m_assets) {
         if (asset.renderer) {
             asset.renderer->shutdown();
@@ -178,14 +179,8 @@ void ModelSceneRuntime::shutdown() {
     }
     m_assets.clear();
     m_registry.clear();
-    if (m_rhiDevice != nullptr && m_viewportSampler.isValid()) {
-        m_rhiDevice->destroySampler(m_viewportSampler);
-    }
-    m_viewportSampler = {};
     m_selectedEntity = entt::null;
-    m_imguiRenderer = nullptr;
     m_resourceMgr = nullptr;
-    m_rhiDevice = nullptr;
 }
 
 bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr,
@@ -209,121 +204,53 @@ bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr,
 
 bool ModelSceneRuntime::ensureViewport(const uint32_t width,
                                        const uint32_t height) {
-    if (m_rhiDevice == nullptr || m_imguiRenderer == nullptr ||
-        width == 0u || height == 0u) {
+    if (!m_deferredRenderer || width == 0u || height == 0u) {
         return false;
     }
-    if (width == m_viewportWidth && height == m_viewportHeight &&
-        m_colorTexture.isValid() && m_depthTexture.isValid()) {
-        return true;
-    }
-    destroyViewport();
-    RhiTextureDesc colorDesc;
-    colorDesc.debugName = "ModelScene.ViewportColor";
-    colorDesc.format = RhiTextureFormat::Rgba8Unorm;
-    colorDesc.width = width;
-    colorDesc.height = height;
-    colorDesc.usage = rhiFlag(RhiTextureUsage::ColorAttachment) |
-                      rhiFlag(RhiTextureUsage::Sampled);
-    m_colorTexture = m_rhiDevice->createTexture(colorDesc, nullptr);
-    RhiTextureViewDesc viewDesc;
-    viewDesc.texture = m_colorTexture;
-    viewDesc.viewType = RhiTextureViewType::Texture2D;
-    viewDesc.format = colorDesc.format;
-    m_colorView = m_rhiDevice->createTextureView(viewDesc);
-    RhiTextureDesc depthDesc;
-    depthDesc.debugName = "ModelScene.ViewportDepth";
-    depthDesc.format = RhiTextureFormat::Depth32Float;
-    depthDesc.width = width;
-    depthDesc.height = height;
-    depthDesc.usage = rhiFlag(RhiTextureUsage::DepthStencilAttachment);
-    m_depthTexture = m_rhiDevice->createTexture(depthDesc, nullptr);
-    viewDesc.texture = m_depthTexture;
-    viewDesc.format = depthDesc.format;
-    m_depthView = m_rhiDevice->createTextureView(viewDesc);
-    if (!m_colorTexture.isValid() || !m_colorView.isValid() ||
-        !m_depthTexture.isValid() || !m_depthView.isValid()) {
-        setError("failed to create model scene viewport textures");
-        destroyViewport();
+    if (!m_deferredRenderer->ensureViewport(width, height)) {
+        setError(m_deferredRenderer->lastError());
         return false;
     }
-    m_viewportTextureId = static_cast<uint64_t>(
-        m_imguiRenderer->registerTexture(m_colorView, m_viewportSampler));
-    if (m_viewportTextureId == 0u) {
-        setError("failed to register model scene viewport texture with ImGui");
-        destroyViewport();
-        return false;
-    }
-    m_viewportWidth = width;
-    m_viewportHeight = height;
-    m_colorState = RhiResourceState::Undefined;
-    m_depthState = RhiResourceState::Undefined;
+    m_lastError.clear();
     return true;
 }
 
-void ModelSceneRuntime::destroyViewport() {
-    if (m_imguiRenderer != nullptr && m_viewportTextureId != 0u) {
-        m_imguiRenderer->unregisterTexture(
-            static_cast<ImTextureID>(m_viewportTextureId));
-    }
-    m_viewportTextureId = 0u;
-    if (m_rhiDevice != nullptr) {
-        if (m_depthView.isValid()) m_rhiDevice->destroyTextureView(m_depthView);
-        if (m_colorView.isValid()) m_rhiDevice->destroyTextureView(m_colorView);
-        if (m_depthTexture.isValid()) m_rhiDevice->destroyTexture(m_depthTexture);
-        if (m_colorTexture.isValid()) m_rhiDevice->destroyTexture(m_colorTexture);
-    }
-    m_depthView = {};
-    m_colorView = {};
-    m_depthTexture = {};
-    m_colorTexture = {};
-    m_viewportWidth = 0u;
-    m_viewportHeight = 0u;
-    m_colorState = RhiResourceState::Undefined;
-    m_depthState = RhiResourceState::Undefined;
-}
-
-bool ModelSceneRuntime::recordViewport(RhiCommandList& commandList,
-                                       const glm::mat4& viewProjection) {
-    if (!m_colorTexture.isValid() || !m_depthTexture.isValid()) {
+bool ModelSceneRuntime::renderViewport(const glm::mat4& view,
+                                       const glm::mat4& projection,
+                                       const glm::vec3& cameraPosition,
+                                       const float deltaTime) {
+    if (!m_deferredRenderer ||
+        !m_deferredRenderer->render(
+            view, projection, cameraPosition, deltaTime)) {
+        if (m_deferredRenderer) {
+            setError(m_deferredRenderer->lastError());
+        }
         return false;
     }
+    m_lastError.clear();
+    return true;
+}
+
+bool ModelSceneRuntime::prepareGBuffer(
+    RhiCommandList& commandList,
+    const FrameContext& context) {
     for (MeshAsset& asset : m_assets) {
         asset.renderer->prepareStandaloneFrame();
-        if (!asset.renderer->prepareGBuffer(commandList)) {
+        if (!asset.renderer->prepareGBuffer(
+                commandList, context.camera.viewProj,
+                context.previousViewProjWithCurrentJitter)) {
             return false;
         }
     }
-    commandList.textureBarrier(
-        {m_colorTexture, m_colorState, RhiResourceState::RenderTarget});
-    commandList.textureBarrier(
-        {m_depthTexture, m_depthState, RhiResourceState::DepthWrite});
-    m_colorState = RhiResourceState::RenderTarget;
-    m_depthState = RhiResourceState::DepthWrite;
-    RhiColorAttachment colorAttachment;
-    colorAttachment.view = m_colorView;
-    colorAttachment.loadOp = RhiLoadOp::Clear;
-    colorAttachment.storeOp = RhiStoreOp::Store;
-    colorAttachment.clearColor[0] = 0.055f;
-    colorAttachment.clearColor[1] = 0.065f;
-    colorAttachment.clearColor[2] = 0.075f;
-    colorAttachment.clearColor[3] = 1.0f;
-    RhiDepthStencilAttachment depthAttachment;
-    depthAttachment.view = m_depthView;
-    depthAttachment.depthLoadOp = RhiLoadOp::Clear;
-    depthAttachment.depthStoreOp = RhiStoreOp::Store;
-    depthAttachment.clearDepth = 1.0f;
-    RhiRenderingInfo renderingInfo;
-    renderingInfo.debugName = "ModelScene.Viewport";
-    renderingInfo.renderArea = {0, 0, m_viewportWidth, m_viewportHeight};
-    renderingInfo.colorAttachments = &colorAttachment;
-    renderingInfo.colorAttachmentCount = 1u;
-    renderingInfo.depthStencilAttachment = &depthAttachment;
-    commandList.beginRendering(renderingInfo);
-    commandList.setViewport({
-        0.0f, 0.0f, static_cast<float>(m_viewportWidth),
-        static_cast<float>(m_viewportHeight), 0.0f, 1.0f});
-    commandList.setScissor({0, 0, m_viewportWidth, m_viewportHeight});
+    return true;
+}
+
+void ModelSceneRuntime::renderToGBuffer(
+    RhiCommandList& commandList,
+    const glm::mat4& viewProjection,
+    const glm::mat4& previousViewProjection) {
+    (void)viewProjection;
+    (void)previousViewProjection;
     const auto view = m_registry.view<
         scene::StaticMeshComponent,
         ecs::WorldTransformComponent,
@@ -334,20 +261,53 @@ bool ModelSceneRuntime::recordViewport(RhiCommandList& commandList,
         const auto& previous =
             view.get<scene::PreviousWorldTransformComponent>(entity);
         if (mesh.assetIndex >= m_assets.size()) {
-            commandList.endRendering();
-            setError("model scene entity references an invalid mesh asset");
-            return false;
+            std::abort();
         }
         StaticMeshRenderer& renderer = *m_assets[mesh.assetIndex].renderer;
         renderer.setInstanceTransform(world.worldMatrix, previous.worldMatrix);
-        renderer.renderPreview(commandList, viewProjection);
+        renderer.renderToGBuffer(commandList);
     }
-    commandList.endRendering();
-    commandList.textureBarrier(
-        {m_colorTexture, RhiResourceState::RenderTarget,
-         RhiResourceState::ShaderRead});
-    m_colorState = RhiResourceState::ShaderRead;
-    return true;
+}
+
+void ModelSceneRuntime::renderToShadowMap(
+    RhiCommandList& commandList,
+    const glm::mat4& shadowViewProjection) {
+    const auto view = m_registry.view<
+        scene::StaticMeshComponent,
+        ecs::WorldTransformComponent,
+        scene::PreviousWorldTransformComponent>();
+    for (const entt::entity entity : view) {
+        const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
+        if (mesh.assetIndex >= m_assets.size()) {
+            std::abort();
+        }
+        StaticMeshRenderer& renderer = *m_assets[mesh.assetIndex].renderer;
+        renderer.setInstanceTransform(
+            view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
+            view.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
+        renderer.renderToShadowMap(commandList, shadowViewProjection);
+    }
+}
+
+uint64_t ModelSceneRuntime::viewportTextureId() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->viewportTextureId();
+}
+
+uint32_t ModelSceneRuntime::viewportWidth() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->viewportWidth();
+}
+
+uint32_t ModelSceneRuntime::viewportHeight() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->viewportHeight();
 }
 
 entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,

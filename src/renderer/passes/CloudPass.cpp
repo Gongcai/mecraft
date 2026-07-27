@@ -110,9 +110,7 @@ RgPassHandle CloudPass::addGraphPass(
     });
     cloudPass.dependsOn(dependency);
     if (computeQueue) {
-        // DepthRead is a graphics-only attachment state; the compute queue
-        // samples the depth buffer through the generic shader-read layout.
-        cloudPass.readTexture(resources.depth, RhiResourceState::ShaderRead)
+        cloudPass.readTexture(resources.depth, RhiResourceState::DepthRead)
             .readTexture(resources.skyCapture, RhiResourceState::ShaderRead)
             .readTexture(resources.noise, RhiResourceState::ShaderRead)
             .readTexture(resources.historyPrevious, RhiResourceState::ShaderRead)

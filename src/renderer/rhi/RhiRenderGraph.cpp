@@ -218,6 +218,7 @@ void addUniqueEdge(std::vector<std::vector<uint32_t>> &edges,
     return true;
   case RhiResourceState::ShaderRead:
   case RhiResourceState::ShaderWrite:
+  case RhiResourceState::DepthRead:
   case RhiResourceState::IndirectArgument:
   case RhiResourceState::UniformBuffer:
   case RhiResourceState::StorageBuffer:
@@ -225,7 +226,6 @@ void addUniqueEdge(std::vector<std::vector<uint32_t>> &edges,
   case RhiResourceState::Present:
   case RhiResourceState::RenderTarget:
   case RhiResourceState::DepthWrite:
-  case RhiResourceState::DepthRead:
   case RhiResourceState::VertexBuffer:
   case RhiResourceState::IndexBuffer:
     return false;

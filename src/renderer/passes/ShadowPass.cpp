@@ -5,6 +5,7 @@
 #include "../shadow/ShadowMatrices.h"
 #include "../shadow/ShadowCasterCuller.h"
 #include "../core/RenderScene.h"
+#include "../core/IDeferredGeometryProvider.h"
 #include "../rhi/RhiCommandList.h"
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
@@ -69,6 +70,7 @@ void ShadowPass::shutdown() {
     m_graphFramePrepared = false;
     m_graphExecutionBegun = false;
     m_shadowStatsActive = false;
+    m_externalGeometryFrame = false;
 }
 
 void ShadowPass::renderShadowEntities(RhiCommandList& commandList,
@@ -123,12 +125,18 @@ void ShadowPass::renderShadowFallingBlocks(RhiCommandList& commandList,
 bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
                                    const RenderSettings& settings,
                                    DeferredRenderTargets& targets,
-                                   const IWorldView& worldView) {
+                                   const IWorldView* worldView) {
     if (m_graphFramePrepared || m_shadowRenderer == nullptr ||
-        m_terrainRenderer == nullptr || m_worldRenderBuffer == nullptr ||
         m_resourceMgr == nullptr || ctx.shared == nullptr ||
-        ctx.shared->rhiDevice == nullptr ||
-        ctx.shared->terrainRhiPipelines == nullptr) {
+        ctx.shared->rhiDevice == nullptr) {
+        return false;
+    }
+    m_externalGeometryFrame =
+        ctx.shared->deferredGeometryProvider != nullptr;
+    if (!m_externalGeometryFrame &&
+        (worldView == nullptr || m_terrainRenderer == nullptr ||
+         m_worldRenderBuffer == nullptr ||
+         ctx.shared->terrainRhiPipelines == nullptr)) {
         return false;
     }
 
@@ -182,7 +190,8 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
     m_lastShadowDistance = settings.shadow.distance;
     m_farCascadesPrimed = true;
 
-    m_gpuCullEnabledThisFrame = settings.shadow.gpuCascadeCullEnabled;
+    m_gpuCullEnabledThisFrame =
+        !m_externalGeometryFrame && settings.shadow.gpuCascadeCullEnabled;
     m_cullLastRenderedCascade = 0;
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
         if (m_cascadeRenderedThisFrame[static_cast<size_t>(cascade)]) {
@@ -228,24 +237,31 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
     }
 
     shadow::ShadowCasterCuller shadowCuller;
-    shadowCuller.setup(casterCullDistance, 1.0f, ctx.camera.position);
-    shadowCuller.resetCounters();
-    m_terrainRenderer->clearTransparentBatches();
-    m_terrainRenderer->collectShadowChunks(
-        worldView, ctx.camera.position, shadowDistance, &shadowCuller,
-        cascadeCullers, m_cascadeOpaqueRanges, m_cascadeCutoutRanges,
-        m_cascadeTransparentRanges);
-    m_terrainRenderer->syncTransparentBatches();
-
-    m_visibleTotal = shadowCuller.getVisibleCount();
-    m_culledTotal = shadowCuller.getCulledCount();
-    m_maxCasterDistance = shadowCuller.getMaxCasterDistance();
+    if (!m_externalGeometryFrame) {
+        shadowCuller.setup(casterCullDistance, 1.0f, ctx.camera.position);
+        shadowCuller.resetCounters();
+        m_terrainRenderer->clearTransparentBatches();
+        m_terrainRenderer->collectShadowChunks(
+            *worldView, ctx.camera.position, shadowDistance, &shadowCuller,
+            cascadeCullers, m_cascadeOpaqueRanges, m_cascadeCutoutRanges,
+            m_cascadeTransparentRanges);
+        m_terrainRenderer->syncTransparentBatches();
+        m_visibleTotal = shadowCuller.getVisibleCount();
+        m_culledTotal = shadowCuller.getCulledCount();
+        m_maxCasterDistance = shadowCuller.getMaxCasterDistance();
+    } else {
+        m_visibleTotal = 0;
+        m_culledTotal = 0;
+        m_maxCasterDistance = 0.0f;
+    }
     for (int cascade = 0; cascade < SHADOW_CASCADE_COUNT; ++cascade) {
         const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
         ShadowCascadeStats& stats = m_cascadeStats[cascade];
         stats = {};
-        stats.boxVisible = cascadeCullers[cascade].visibleCount;
-        stats.boxCulled = cascadeCullers[cascade].culledCount;
+        stats.boxVisible = m_externalGeometryFrame
+            ? 0 : cascadeCullers[cascade].visibleCount;
+        stats.boxCulled = m_externalGeometryFrame
+            ? 0 : cascadeCullers[cascade].culledCount;
         stats.distanceVisible = m_visibleTotal;
         stats.distanceCulled = m_culledTotal;
         stats.cutoutEntries = cascade < kCutoutShadowCasterCascadeCount
@@ -261,13 +277,19 @@ bool ShadowPass::prepareGraphFrame(const FrameContext& ctx,
         m_cascadeResolutions[cascade] = static_cast<uint32_t>(std::max(
             1, cascade >= 2 ? settings.shadow.resolution / 2
                             : settings.shadow.resolution));
-        std::snprintf(
-            m_cullerLabels[cascade].data(), m_cullerLabels[cascade].size(),
-            "Shadow.Cascade%d.Culler boxVisible=%d boxCulled=%d zCull=%d distanceVisible=%d distanceCulled=%d",
-            cascade, cascadeCullers[cascade].visibleCount,
-            cascadeCullers[cascade].culledCount,
-            cascadeCullers[cascade].useZCulling ? 1 : 0,
-            m_visibleTotal, m_culledTotal);
+        if (m_externalGeometryFrame) {
+            std::snprintf(
+                m_cullerLabels[cascade].data(), m_cullerLabels[cascade].size(),
+                "Shadow.Cascade%d.ExternalGeometry", cascade);
+        } else {
+            std::snprintf(
+                m_cullerLabels[cascade].data(), m_cullerLabels[cascade].size(),
+                "Shadow.Cascade%d.Culler boxVisible=%d boxCulled=%d zCull=%d distanceVisible=%d distanceCulled=%d",
+                cascade, cascadeCullers[cascade].visibleCount,
+                cascadeCullers[cascade].culledCount,
+                cascadeCullers[cascade].useZCulling ? 1 : 0,
+                m_visibleTotal, m_culledTotal);
+        }
     }
 
     m_frameContext = &ctx;
@@ -387,13 +409,16 @@ void ShadowPass::finishGraphExecution(const bool succeeded) {
             m_frameDebugService->cancelShadowFrame();
         }
     }
-    m_worldRenderBuffer->beginFrame();
+    if (!m_externalGeometryFrame) {
+        m_worldRenderBuffer->beginFrame();
+    }
     m_frameContext = nullptr;
     m_frameTargets = nullptr;
     m_frameDebugService = nullptr;
     m_graphFramePrepared = false;
     m_graphExecutionBegun = false;
     m_shadowStatsActive = false;
+    m_externalGeometryFrame = false;
 }
 
 bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade) {
@@ -404,6 +429,41 @@ bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade
     DeferredRenderTargets& targets = *m_frameTargets;
     const ShadowCascadeData& cascadeData = m_shadowRenderer->cascade(cascade);
     const bool renderCutoutCasters = cascade < kCutoutShadowCasterCascadeCount;
+
+    if (m_externalGeometryFrame) {
+        const GpuTimerSegmentToken gpuTimer = m_frameDebugService != nullptr
+            ? m_frameDebugService->beginGpuTimer(
+                  commandList, GpuTimerPass::Shadow)
+            : GpuTimerSegmentToken{};
+        if (m_shadowStatsActive) {
+            m_frameDebugService->markShadowTimestamp(
+                commandList, cascade, ShadowTimestampPoint::Start);
+        }
+        RhiDepthStencilAttachment depthAttachment;
+        depthAttachment.view =
+            targets.csmShadowDepthTextureViewHandle(cascade);
+        depthAttachment.depthLoadOp = RhiLoadOp::Clear;
+        depthAttachment.depthStoreOp = RhiStoreOp::Store;
+        depthAttachment.clearDepth = 1.0f;
+        RhiRenderingInfo renderingInfo;
+        renderingInfo.debugName = "CsmShadowExternalGeometry";
+        renderingInfo.renderArea = {
+            0, 0, m_cascadeResolutions[cascade],
+            m_cascadeResolutions[cascade]};
+        renderingInfo.depthStencilAttachment = &depthAttachment;
+        commandList.beginRendering(renderingInfo);
+        ctx.shared->deferredGeometryProvider->renderToShadowMap(
+            commandList, cascadeData.viewProj);
+        if (m_shadowStatsActive) {
+            m_frameDebugService->markShadowTimestamp(
+                commandList, cascade, ShadowTimestampPoint::OpaqueEnd);
+        }
+        commandList.endRendering();
+        if (m_frameDebugService != nullptr) {
+            m_frameDebugService->endGpuTimer(commandList, gpuTimer);
+        }
+        return true;
+    }
 
     if (cascade == 0) {
         if (m_blockEntityRenderer != nullptr) {
@@ -920,8 +980,10 @@ bool ShadowPass::recordTransparentPass(RhiCommandList& commandList,
         ? m_frameDebugService->beginGpuTimer(commandList, GpuTimerPass::Shadow)
         : GpuTimerSegmentToken{};
 
-    m_worldRenderBuffer->resetDrawCommands();
-    if (renderTransparentCasters) {
+    if (!m_externalGeometryFrame) {
+        m_worldRenderBuffer->resetDrawCommands();
+    }
+    if (!m_externalGeometryFrame && renderTransparentCasters) {
         for (const GpuMeshRange& range : m_cascadeTransparentRanges[cascade]) {
             m_worldRenderBuffer->addTransparent(range);
         }
@@ -969,7 +1031,7 @@ bool ShadowPass::recordTransparentPass(RhiCommandList& commandList,
     renderingInfo.colorAttachmentCount = 2u;
     renderingInfo.depthStencilAttachment = &depthAttachment;
     commandList.beginRendering(renderingInfo);
-    if (renderTransparentCasters) {
+    if (!m_externalGeometryFrame && renderTransparentCasters) {
         m_worldRenderBuffer->recordRhiTransparent(
             commandList,
             ctx.shared->terrainRhiPipelines->shadowTransparentPipeline(),

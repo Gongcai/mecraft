@@ -12,15 +12,18 @@
 
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
+#include "renderer/core/IDeferredGeometryProvider.h"
 
 class ImGuiRhiRenderer;
 class ResourceMgr;
 class RhiCommandList;
+class RhiCommandListPool;
 class RhiDevice;
 class StaticMeshRenderer;
+class ModelSceneDeferredRenderer;
 
 /// Owns editor scene entities, mesh assets, picking data, and offscreen targets.
-class ModelSceneRuntime {
+class ModelSceneRuntime : public IDeferredGeometryProvider {
 public:
     ModelSceneRuntime();
     ~ModelSceneRuntime();
@@ -31,15 +34,29 @@ public:
     /// Loads the initial model asset and creates one ECS scene instance.
     [[nodiscard]] bool init(ResourceMgr& resourceMgr,
                             RhiDevice& rhiDevice,
+                            RhiCommandListPool& commandListPool,
                             ImGuiRhiRenderer& imguiRenderer);
     void shutdown();
 
     /// Resizes the offscreen viewport and refreshes its ImGui texture binding.
     [[nodiscard]] bool ensureViewport(uint32_t width, uint32_t height);
 
-    /// Records all ECS mesh instances into the offscreen viewport.
-    [[nodiscard]] bool recordViewport(RhiCommandList& commandList,
-                                      const glm::mat4& viewProjection);
+    /// Renders all ECS mesh instances through the deferred viewport pipeline.
+    [[nodiscard]] bool renderViewport(const glm::mat4& view,
+                                      const glm::mat4& projection,
+                                      const glm::vec3& cameraPosition,
+                                      float deltaTime);
+
+    [[nodiscard]] bool prepareGBuffer(
+        RhiCommandList& commandList,
+        const FrameContext& context) override;
+    void renderToGBuffer(
+        RhiCommandList& commandList,
+        const glm::mat4& viewProjection,
+        const glm::mat4& previousViewProjection) override;
+    void renderToShadowMap(
+        RhiCommandList& commandList,
+        const glm::mat4& shadowViewProjection) override;
 
     /// Imports or reuses one glTF asset and creates an independent ECS instance.
     /// @param path Filesystem path to a GLB or glTF document.
@@ -63,9 +80,9 @@ public:
     [[nodiscard]] const entt::registry& registry() const { return m_registry; }
     [[nodiscard]] entt::entity selectedEntity() const { return m_selectedEntity; }
     void setSelectedEntity(entt::entity entity) { m_selectedEntity = entity; }
-    [[nodiscard]] uint64_t viewportTextureId() const { return m_viewportTextureId; }
-    [[nodiscard]] uint32_t viewportWidth() const { return m_viewportWidth; }
-    [[nodiscard]] uint32_t viewportHeight() const { return m_viewportHeight; }
+    [[nodiscard]] uint64_t viewportTextureId() const;
+    [[nodiscard]] uint32_t viewportWidth() const;
+    [[nodiscard]] uint32_t viewportHeight() const;
     [[nodiscard]] size_t assetCount() const { return m_assets.size(); }
     [[nodiscard]] const std::string& assetName(size_t index) const;
     [[nodiscard]] const std::string& assetPath(size_t index) const;
@@ -86,24 +103,12 @@ private:
                                      uint32_t& assetIndex);
     [[nodiscard]] entt::entity instantiateAsset(uint32_t assetIndex,
                                                 const std::string& instanceName);
-    void destroyViewport();
     void setError(std::string message);
 
     entt::registry m_registry;
     std::vector<MeshAsset> m_assets;
-    RhiDevice* m_rhiDevice = nullptr;
-    ImGuiRhiRenderer* m_imguiRenderer = nullptr;
     ResourceMgr* m_resourceMgr = nullptr;
-    RhiTextureHandle m_colorTexture;
-    RhiTextureViewHandle m_colorView;
-    RhiTextureHandle m_depthTexture;
-    RhiTextureViewHandle m_depthView;
-    RhiSamplerHandle m_viewportSampler;
-    RhiResourceState m_colorState = RhiResourceState::Undefined;
-    RhiResourceState m_depthState = RhiResourceState::Undefined;
-    uint64_t m_viewportTextureId = 0u;
-    uint32_t m_viewportWidth = 0u;
-    uint32_t m_viewportHeight = 0u;
+    std::unique_ptr<ModelSceneDeferredRenderer> m_deferredRenderer;
     entt::entity m_selectedEntity = entt::null;
     std::string m_lastError;
 };

@@ -1,6 +1,7 @@
 #include "DeferredPipeline.h"
 #include "RenderScene.h"
 #include "FrameOutput.h"
+#include "IDeferredGeometryProvider.h"
 #include "../debug/RenderDebugService.h"
 #include "../../resource/ResourceMgr.h"
 #include "../shadow/ShadowRenderer.h"
@@ -503,14 +504,15 @@ bool DeferredPipeline::recordDeferredAuxiliaryClear(
 
 bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                                          const RenderSettings& settings) {
+    const bool externalGeometry =
+        m_shared != nullptr &&
+        m_shared->deferredGeometryProvider != nullptr;
     if (m_shared == nullptr || m_shared->rhiDevice == nullptr ||
         m_shared->commandListPool == nullptr ||
-        m_shared->deferredTargets == nullptr || ctx.worldView == nullptr ||
+        m_shared->deferredTargets == nullptr ||
         m_resourceMgr == nullptr || m_skyCapturePass == nullptr ||
         m_lightingPass == nullptr || m_sceneCompositePass == nullptr ||
         m_waterCompositePass == nullptr || m_volumetricPass == nullptr ||
-        m_shared->worldRenderBuffer == nullptr ||
-        m_shared->terrainRhiPipelines == nullptr ||
         !ctx.sceneCaptureColorTexture.isValid() ||
         !ctx.sceneCaptureDepthTexture.isValid() ||
         !ctx.sceneCaptureColorView.isValid() ||
@@ -519,11 +521,21 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         ctx.weatherSystem == nullptr) {
         return false;
     }
+    if (!externalGeometry &&
+        (ctx.worldView == nullptr || m_shared->worldRenderBuffer == nullptr ||
+         m_shared->terrainRhiPipelines == nullptr)) {
+        return false;
+    }
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
-    if (m_shared->staticMeshRenderer != nullptr) {
+    if (!externalGeometry && m_shared->staticMeshRenderer != nullptr) {
         m_shared->staticMeshRenderer->prepareFrame(ctx, *ctx.worldView);
+    }
+    if (externalGeometry) {
+        m_transparentBatch.clear();
+        m_transparentPassPlan = {};
+        m_graphCpuTerrainPrepMs = 0.0;
     }
     const bool ssaoEnabled = settings.ssao.enabled;
     const bool ssaoTemporalEnabled =
@@ -615,7 +627,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         if (shadowEnabled &&
             (m_shadowPass == nullptr || m_shared->shadowRenderer == nullptr ||
              !m_shadowPass->prepareGraphFrame(
-                 ctx, settings, targets, *ctx.worldView))) {
+                 ctx, settings, targets, ctx.worldView))) {
             return false;
         }
         m_graphCpuShadowPrepMs = std::chrono::duration<double, std::milli>(
@@ -1084,9 +1096,11 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     // dedicated pass, and zero occluded commands before the GBuffer draws
     // consume them. Skipped on temporal resets when no valid history exists.
     m_terrainDrawsPrepared = false;
-    const bool hiZCullActive = settings.occlusion.hiZEnabled &&
+    const bool hiZCullActive = !externalGeometry &&
+        settings.occlusion.hiZEnabled &&
         m_hiZPass != nullptr && m_hasPreviousFrameData && !ctx.temporalReset;
-    if (settings.occlusion.hiZEnabled && m_hiZPass != nullptr) {
+    if (!externalGeometry && settings.occlusion.hiZEnabled &&
+        m_hiZPass != nullptr) {
         HiZPass::GraphResources hiZResources;
         hiZResources.historyDepthPrevious = historyDepthPrevious;
         hiZResources.hiZ = hiZ;
@@ -1127,6 +1141,14 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         .writeTexture(depth, RhiResourceState::DepthWrite)
         .writeTexture(perObjectVelocity, RhiResourceState::RenderTarget)
         .setExecute([&](RgPassContext& pass) {
+            if (externalGeometry) {
+                if (m_gbufferPass == nullptr) {
+                    return false;
+                }
+                return m_gbufferPass->executeExternalGeometry(
+                    pass.commandList(), ctx, settings, targets,
+                    *m_shared->deferredGeometryProvider);
+            }
             RhiColorAttachment velocityClear;
             setClearAttachment(velocityClear,
                                targets.perObjectVelocityTextureViewHandle(),
@@ -1454,7 +1476,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
           }
           volumetricGraphPrepared = m_volumetricPass->graphFramePrepared();
 
-          if (usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)) {
+          if (!externalGeometry && usesTemporalProjectionJitter(
+                  settings.upscale.type, settings.taa.enabled)) {
             RenderGraphPassBuilder water = m_renderGraph.addPass(
                 {"Deferred.WaterPreTemporal", RgPassType::Graphics,
                  RhiQueueType::Graphics});
@@ -1875,6 +1898,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     graphTail = depthOutput.handle();
 
     const bool postWaterCandidate =
+        !externalGeometry &&
         settings.debug.deferredLightDebugMode <= 0 &&
         settings.debug.reflectionDebugMode <= 0 &&
         settings.transparent.waterEffectsEnabled;

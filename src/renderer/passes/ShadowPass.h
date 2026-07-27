@@ -29,6 +29,7 @@ class FallingBlockRenderer;
 class DropSystem;
 class WorldRenderBuffer;
 class RhiCommandList;
+class IDeferredGeometryProvider;
 
 namespace ecs { class GameplayRegistry; }
 
@@ -66,12 +67,12 @@ public:
     /// @param ctx Source frame state retained until graph execution completes.
     /// @param settings Shadow quality and distance settings for this frame.
     /// @param targets Persistent shadow textures and per-layer attachment views.
-    /// @param worldView World query interface used to collect terrain casters.
+    /// @param worldView World query interface for gameplay geometry, or null for external geometry.
     /// @return True when all CPU data and attachment views are ready for graph recording.
     [[nodiscard]] bool prepareGraphFrame(const FrameContext& ctx,
                                          const RenderSettings& settings,
                                          DeferredRenderTargets& targets,
-                                         const IWorldView& worldView);
+                                         const IWorldView* worldView);
 
     /// Adds opaque, depth-copy, and transparent passes for every cascade.
     /// @param graph Graph that owns the frame pass declarations.
@@ -184,6 +185,7 @@ private:
     bool m_graphFramePrepared = false;
     bool m_graphExecutionBegun = false;
     bool m_shadowStatsActive = false;
+    bool m_externalGeometryFrame = false;
 
     // GPU cascade command culling: compute pipeline zeroing indirect draws
     // outside the cascade's tightly padded light frustum, with a delayed
