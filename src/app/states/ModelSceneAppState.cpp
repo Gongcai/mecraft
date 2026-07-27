@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <vector>
 
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -65,6 +66,13 @@ void ModelSceneAppState::onEnter() {
                       m_deps.commandListPool, m_imguiRenderer)) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
+        return;
+    }
+    if (m_scene.importModel(
+            "assets/models/showcase/DamagedHelmet.glb") == entt::null) {
+        MECRAFT_LOG_STREAM(
+            std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
+        m_scene.shutdown();
         return;
     }
     m_initialized = true;
@@ -287,15 +295,107 @@ void ModelSceneAppState::showRenderSettingsPanel() {
 
 void ModelSceneAppState::showHierarchyPanel() {
     ImGui::Begin("Scene Hierarchy");
-    const auto view = m_scene.registry().view<scene::NameComponent>();
-    for (const entt::entity entity : view) {
-        const std::string& name = view.get<scene::NameComponent>(entity).value;
-        const bool selected = entity == m_scene.selectedEntity();
-        if (ImGui::Selectable(name.c_str(), selected)) {
-            m_scene.setSelectedEntity(entity);
+    if (ImGui::Button("Create Empty")) {
+        static_cast<void>(m_scene.createEmptyEntity("Empty Entity"));
+    }
+    ImGui::Separator();
+
+    m_hierarchyDropPending = false;
+    const ImGuiTreeNodeFlags rootFlags =
+        ImGuiTreeNodeFlags_DefaultOpen |
+        ImGuiTreeNodeFlags_OpenOnArrow |
+        ImGuiTreeNodeFlags_SpanAvailWidth;
+    const bool rootOpen = ImGui::TreeNodeEx("Scene##SceneRoot", rootFlags);
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+                "MODEL_SCENE_ENTITY_ID")) {
+            if (payload->DataSize == sizeof(scene::SceneEntityId)) {
+                m_hierarchyDropChild =
+                    *static_cast<const scene::SceneEntityId*>(payload->Data);
+                m_hierarchyDropParent = scene::kInvalidSceneEntityId;
+                m_hierarchyDropPending = true;
+            }
         }
+        ImGui::EndDragDropTarget();
+    }
+    if (rootOpen) {
+        std::vector<entt::entity> roots;
+        const auto rootView = m_scene.registry().view<
+            scene::SceneEntityIdComponent,
+            scene::NameComponent,
+            ecs::ChildrenComponent>(entt::exclude<ecs::ParentComponent>);
+        roots.assign(rootView.begin(), rootView.end());
+        std::sort(
+            roots.begin(), roots.end(), [this](const entt::entity lhs,
+                                               const entt::entity rhs) {
+                return m_scene.entityId(lhs) < m_scene.entityId(rhs);
+            });
+        for (const entt::entity entity : roots) {
+            showHierarchyEntity(entity);
+        }
+        ImGui::TreePop();
+    }
+    if (m_hierarchyDropPending) {
+        const entt::entity child =
+            m_scene.findEntity(m_hierarchyDropChild);
+        const entt::entity parent =
+            m_scene.findEntity(m_hierarchyDropParent);
+        static_cast<void>(m_scene.setParent(child, parent));
+    }
+    if (!m_scene.lastError().empty()) {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
+            "%s", m_scene.lastError().c_str());
     }
     ImGui::End();
+}
+
+void ModelSceneAppState::showHierarchyEntity(const entt::entity entity) {
+    const scene::SceneEntityId id = m_scene.entityId(entity);
+    const auto& name =
+        m_scene.registry().get<scene::NameComponent>(entity).value;
+    const auto& children =
+        m_scene.registry().get<ecs::ChildrenComponent>(entity).children;
+    ImGuiTreeNodeFlags flags =
+        ImGuiTreeNodeFlags_OpenOnArrow |
+        ImGuiTreeNodeFlags_SpanAvailWidth;
+    if (children.empty()) {
+        flags |= ImGuiTreeNodeFlags_Leaf |
+                 ImGuiTreeNodeFlags_NoTreePushOnOpen;
+    }
+    if (entity == m_scene.selectedEntity()) {
+        flags |= ImGuiTreeNodeFlags_Selected;
+    }
+    const std::string label =
+        name + "###SceneEntity" + std::to_string(id);
+    const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
+    if (ImGui::IsItemClicked()) {
+        m_scene.setSelectedEntity(entity);
+    }
+    if (ImGui::BeginDragDropSource()) {
+        ImGui::SetDragDropPayload(
+            "MODEL_SCENE_ENTITY_ID", &id, sizeof(id));
+        ImGui::TextUnformatted(name.c_str());
+        ImGui::EndDragDropSource();
+    }
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+                "MODEL_SCENE_ENTITY_ID")) {
+            if (payload->DataSize == sizeof(scene::SceneEntityId)) {
+                m_hierarchyDropChild =
+                    *static_cast<const scene::SceneEntityId*>(payload->Data);
+                m_hierarchyDropParent = id;
+                m_hierarchyDropPending = true;
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+    if (open && !children.empty()) {
+        for (const entt::entity child : children) {
+            showHierarchyEntity(child);
+        }
+        ImGui::TreePop();
+    }
 }
 
 void ModelSceneAppState::showInspectorPanel() {
@@ -320,6 +420,9 @@ void ModelSceneAppState::showInspectorPanel() {
         m_scene.registry().try_get<ecs::LocalTransformComponent>(selected);
     if (name != nullptr) {
         ImGui::TextUnformatted(name->value.c_str());
+        ImGui::TextDisabled(
+            "Entity ID: %llu",
+            static_cast<unsigned long long>(m_scene.entityId(selected)));
         ImGui::Separator();
     }
     if (transform != nullptr) {
@@ -331,12 +434,7 @@ void ModelSceneAppState::showInspectorPanel() {
         changed |= ImGui::DragFloat3(
             "Scale", glm::value_ptr(transform->localScale), 0.01f, 0.001f, 1000.0f);
         if (changed) {
-            auto& world =
-                m_scene.registry().get<ecs::WorldTransformComponent>(selected);
-            auto& previous = m_scene.registry().get<
-                scene::PreviousWorldTransformComponent>(selected);
-            previous.worldMatrix = world.worldMatrix;
-            world.worldMatrix = transform->toMatrix();
+            m_scene.syncTransforms();
         }
     }
     const auto* pickable =
@@ -480,29 +578,17 @@ void ModelSceneAppState::showViewportPanel() {
         m_viewportPosition.x, m_viewportPosition.y, available.x, available.y);
     const entt::entity selected = m_scene.selectedEntity();
     if (selected != entt::null && m_scene.registry().valid(selected)) {
-        auto* transform =
-            m_scene.registry().try_get<ecs::LocalTransformComponent>(selected);
         auto* world =
             m_scene.registry().try_get<ecs::WorldTransformComponent>(selected);
-        auto* previous = m_scene.registry().try_get<
-            scene::PreviousWorldTransformComponent>(selected);
-        if (transform != nullptr && world != nullptr && previous != nullptr) {
+        if (world != nullptr) {
             glm::mat4 manipulated = world->worldMatrix;
             if (ImGuizmo::Manipulate(
                     glm::value_ptr(m_view), glm::value_ptr(m_projection),
                     gizmoOperation(m_gizmoOperation),
                     m_gizmoMode == 0 ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
                     glm::value_ptr(manipulated))) {
-                float translation[3];
-                float rotation[3];
-                float scale[3];
-                ImGuizmo::DecomposeMatrixToComponents(
-                    glm::value_ptr(manipulated), translation, rotation, scale);
-                previous->worldMatrix = world->worldMatrix;
-                world->worldMatrix = manipulated;
-                transform->localPosition = glm::make_vec3(translation);
-                transform->localRotation = glm::make_vec3(rotation);
-                transform->localScale = glm::make_vec3(scale);
+                static_cast<void>(
+                    m_scene.setWorldTransform(selected, manipulated));
             }
         }
     }

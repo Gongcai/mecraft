@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <entt/entt.hpp>
@@ -13,6 +14,7 @@
 #include "renderer/rhi/RhiHandles.h"
 #include "renderer/rhi/RhiTypes.h"
 #include "renderer/core/IDeferredGeometryProvider.h"
+#include "ModelSceneDocument.h"
 
 class ImGuiRhiRenderer;
 class ResourceMgr;
@@ -22,6 +24,9 @@ class RhiDevice;
 class StaticMeshRenderer;
 class ModelSceneDeferredRenderer;
 struct RenderSettings;
+namespace ecs {
+struct LocalTransformComponent;
+}
 
 /// Owns editor scene entities, mesh assets, picking data, and offscreen targets.
 class ModelSceneRuntime : public IDeferredGeometryProvider {
@@ -32,7 +37,7 @@ public:
     ModelSceneRuntime(const ModelSceneRuntime&) = delete;
     ModelSceneRuntime& operator=(const ModelSceneRuntime&) = delete;
 
-    /// Loads the initial model asset and creates one ECS scene instance.
+    /// Initializes rendering resources for an empty editable scene.
     [[nodiscard]] bool init(ResourceMgr& resourceMgr,
                             RhiDevice& rhiDevice,
                             RhiCommandListPool& commandListPool,
@@ -64,6 +69,22 @@ public:
     /// @return Created scene entity, or entt::null when import fails.
     [[nodiscard]] entt::entity importModel(const std::string& path);
 
+    /// Creates an empty transform entity that can own scene children.
+    [[nodiscard]] entt::entity createEmptyEntity(const std::string& baseName);
+
+    /// Removes all entities and loaded assets while keeping rendering initialized.
+    void clearScene();
+
+    /// Reparents an entity while preserving its world-space transform.
+    /// @param child Entity whose parent relationship changes.
+    /// @param parent New parent, or entt::null to move the entity to the root.
+    /// @return True when the hierarchy and local transform were updated.
+    [[nodiscard]] bool setParent(entt::entity child, entt::entity parent);
+
+    /// Applies a world-space transform and derives the corresponding local transform.
+    [[nodiscard]] bool setWorldTransform(entt::entity entity,
+                                         const glm::mat4& worldMatrix);
+
     /// Destroys one scene instance without affecting shared mesh assets.
     void destroyEntity(entt::entity entity);
 
@@ -77,10 +98,15 @@ public:
     /// Rebuilds world and previous-world matrices from editable local transforms.
     void syncTransforms();
 
+    /// Captures stable scene data without serializing runtime entity handles.
+    [[nodiscard]] scene::ModelSceneDocument captureDocument() const;
+
     [[nodiscard]] entt::registry& registry() { return m_registry; }
     [[nodiscard]] const entt::registry& registry() const { return m_registry; }
     [[nodiscard]] entt::entity selectedEntity() const { return m_selectedEntity; }
     void setSelectedEntity(entt::entity entity) { m_selectedEntity = entity; }
+    [[nodiscard]] scene::SceneEntityId entityId(entt::entity entity) const;
+    [[nodiscard]] entt::entity findEntity(scene::SceneEntityId id) const;
     [[nodiscard]] uint64_t viewportTextureId() const;
     [[nodiscard]] uint32_t viewportWidth() const;
     [[nodiscard]] uint32_t viewportHeight() const;
@@ -105,6 +131,7 @@ public:
 
 private:
     struct MeshAsset {
+        scene::SceneAssetId id = scene::kInvalidSceneAssetId;
         std::string name;
         std::string path;
         std::unique_ptr<StaticMeshRenderer> renderer;
@@ -115,18 +142,27 @@ private:
     [[nodiscard]] bool loadMeshAsset(ResourceMgr& resourceMgr,
                                      const std::string& name,
                                      const std::string& path,
-                                     uint32_t& assetIndex);
-    [[nodiscard]] entt::entity instantiateAsset(uint32_t assetIndex,
+                                     scene::SceneAssetId& assetId);
+    [[nodiscard]] entt::entity instantiateAsset(scene::SceneAssetId assetId,
                                                 const std::string& instanceName);
+    [[nodiscard]] entt::entity createEntity(const std::string& baseName);
     [[nodiscard]] std::string makeUniqueInstanceName(
         const std::string& baseName) const;
+    [[nodiscard]] uint32_t assetIndex(scene::SceneAssetId id) const;
+    [[nodiscard]] bool localTransformFromMatrix(
+        const glm::mat4& matrix,
+        ecs::LocalTransformComponent& transform) const;
+    void detachFromParent(entt::entity entity);
     void setError(std::string message);
 
     entt::registry m_registry;
     std::vector<MeshAsset> m_assets;
+    std::unordered_map<scene::SceneAssetId, uint32_t> m_assetIndices;
     ResourceMgr* m_resourceMgr = nullptr;
     std::unique_ptr<ModelSceneDeferredRenderer> m_deferredRenderer;
     entt::entity m_selectedEntity = entt::null;
+    scene::SceneEntityId m_nextEntityId = 1u;
+    scene::SceneAssetId m_nextAssetId = 1u;
     std::string m_lastError;
 };
 

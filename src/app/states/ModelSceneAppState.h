@@ -26,6 +26,7 @@ private:
     void buildEditorUi();
     void buildInitialDockLayout(ImGuiID dockspaceId);
     void showHierarchyPanel();
+    void showHierarchyEntity(entt::entity entity);
     void showInspectorPanel();
     void showRenderSettingsPanel();
     void showAssetsPanel();
@@ -53,9 +54,14 @@ private:
     int m_gizmoOperation = 0;
     int m_gizmoMode = 0;
     bool m_viewportHovered = false;
+    bool m_hierarchyDropPending = false;
     bool m_cameraControlActive = false;
     bool m_initialized = false;
     bool m_returnRequested = false;
+    scene::SceneEntityId m_hierarchyDropChild =
+        scene::kInvalidSceneEntityId;
+    scene::SceneEntityId m_hierarchyDropParent =
+        scene::kInvalidSceneEntityId;
     std::array<char, 4096> m_importPath{
         "assets/models/showcase/DamagedHelmet.glb"};
     std::string m_importDialogError;

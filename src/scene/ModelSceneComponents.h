@@ -6,14 +6,20 @@
 
 #include <glm/glm.hpp>
 
+#include "ModelSceneIds.h"
+
 namespace scene {
 
 struct NameComponent {
     std::string value;
 };
 
+struct SceneEntityIdComponent {
+    SceneEntityId value = kInvalidSceneEntityId;
+};
+
 struct StaticMeshComponent {
-    uint32_t assetIndex = 0u;
+    SceneAssetId assetId = kInvalidSceneAssetId;
 };
 
 struct PreviousWorldTransformComponent {

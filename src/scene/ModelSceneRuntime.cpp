@@ -6,9 +6,11 @@
 #include <cstdlib>
 #include <filesystem>
 #include <limits>
+#include <unordered_set>
 #include <utility>
 
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "ModelSceneComponents.h"
 #include "ModelSceneDeferredRenderer.h"
@@ -66,13 +68,6 @@ bool ModelSceneRuntime::init(ResourceMgr& resourceMgr,
                              ImGuiRhiRenderer& imguiRenderer) {
     shutdown();
     m_resourceMgr = &resourceMgr;
-
-    if (importModel("assets/models/showcase/DamagedHelmet.glb") == entt::null) {
-        const std::string error = m_lastError;
-        shutdown();
-        m_lastError = error;
-        return false;
-    }
     m_deferredRenderer = std::make_unique<ModelSceneDeferredRenderer>();
     if (!m_deferredRenderer->init(
             resourceMgr, rhiDevice, commandListPool, imguiRenderer, *this)) {
@@ -86,33 +81,55 @@ bool ModelSceneRuntime::init(ResourceMgr& resourceMgr,
 }
 
 entt::entity ModelSceneRuntime::instantiateAsset(
-    const uint32_t assetIndex,
+    const scene::SceneAssetId assetId,
     const std::string& instanceName) {
-    if (assetIndex >= m_assets.size()) {
-        setError("cannot instantiate an invalid model scene asset index");
+    const auto assetIt = m_assetIndices.find(assetId);
+    if (assetIt == m_assetIndices.end()) {
+        setError("cannot instantiate an unknown model scene asset");
         return entt::null;
     }
-    const MeshAsset& asset = m_assets[assetIndex];
+    const MeshAsset& asset = m_assets[assetIt->second];
     const glm::vec3 center = (asset.boundsMin + asset.boundsMax) * 0.5f;
     const glm::vec3 extent = asset.boundsMax - asset.boundsMin;
     const float scale = 2.4f / std::max({extent.x, extent.y, extent.z});
-    const entt::entity entity = m_registry.create();
-    m_registry.emplace<scene::NameComponent>(
-        entity, scene::NameComponent{instanceName});
+    const entt::entity entity = createEntity(instanceName);
     m_registry.emplace<scene::StaticMeshComponent>(
-        entity, scene::StaticMeshComponent{assetIndex});
-    ecs::LocalTransformComponent transform;
+        entity, scene::StaticMeshComponent{assetId});
+    auto& transform =
+        m_registry.get<ecs::LocalTransformComponent>(entity);
     transform.localPosition = -center * scale;
     transform.localScale = glm::vec3(scale);
-    m_registry.emplace<ecs::LocalTransformComponent>(entity, transform);
     const glm::mat4 world = transform.toMatrix();
-    m_registry.emplace<ecs::WorldTransformComponent>(
-        entity, ecs::WorldTransformComponent{world});
-    m_registry.emplace<scene::PreviousWorldTransformComponent>(
-        entity, scene::PreviousWorldTransformComponent{world});
+    m_registry.get<ecs::WorldTransformComponent>(entity).worldMatrix = world;
+    m_registry.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix =
+        world;
     m_registry.emplace<scene::PickableComponent>(
         entity, scene::PickableComponent{asset.boundsMin, asset.boundsMax});
     m_selectedEntity = entity;
+    return entity;
+}
+
+entt::entity ModelSceneRuntime::createEntity(const std::string& baseName) {
+    const entt::entity entity = m_registry.create();
+    m_registry.emplace<scene::SceneEntityIdComponent>(
+        entity, scene::SceneEntityIdComponent{m_nextEntityId++});
+    m_registry.emplace<scene::NameComponent>(
+        entity, scene::NameComponent{makeUniqueInstanceName(baseName)});
+    m_registry.emplace<ecs::LocalTransformComponent>(entity);
+    m_registry.emplace<ecs::WorldTransformComponent>(entity);
+    m_registry.emplace<scene::PreviousWorldTransformComponent>(entity);
+    m_registry.emplace<ecs::ChildrenComponent>(entity);
+    return entity;
+}
+
+entt::entity ModelSceneRuntime::createEmptyEntity(const std::string& baseName) {
+    if (baseName.empty()) {
+        setError("empty scene entities require a non-empty name");
+        return entt::null;
+    }
+    const entt::entity entity = createEntity(baseName);
+    m_selectedEntity = entity;
+    m_lastError.clear();
     return entity;
 }
 
@@ -143,7 +160,15 @@ entt::entity ModelSceneRuntime::importModel(const std::string& path) {
         setError("model import requires a non-empty asset path");
         return entt::null;
     }
-    const std::filesystem::path filesystemPath(path);
+    std::error_code pathError;
+    const std::filesystem::path filesystemPath =
+        std::filesystem::weakly_canonical(
+            std::filesystem::u8path(path), pathError);
+    if (pathError) {
+        setError("failed to resolve model import path: " + pathError.message());
+        return entt::null;
+    }
+    const std::string normalizedPath = filesystemPath.generic_u8string();
     const std::string name = filesystemPath.stem().string();
     if (name.empty()) {
         setError("model import path must contain a file name");
@@ -151,28 +176,263 @@ entt::entity ModelSceneRuntime::importModel(const std::string& path) {
     }
     const auto existing = std::find_if(
         m_assets.begin(), m_assets.end(),
-        [&path](const MeshAsset& asset) { return asset.path == path; });
-    uint32_t assetIndex = 0u;
+        [&normalizedPath](const MeshAsset& asset) {
+            return asset.path == normalizedPath;
+        });
+    scene::SceneAssetId assetId = scene::kInvalidSceneAssetId;
     if (existing == m_assets.end()) {
-        if (!loadMeshAsset(*m_resourceMgr, name, path, assetIndex)) {
+        if (!loadMeshAsset(
+                *m_resourceMgr, name, normalizedPath, assetId)) {
             return entt::null;
         }
     } else {
-        assetIndex = static_cast<uint32_t>(
-            std::distance(m_assets.begin(), existing));
+        assetId = existing->id;
     }
     m_lastError.clear();
-    return instantiateAsset(assetIndex, makeUniqueInstanceName(name));
+    return instantiateAsset(assetId, name);
 }
 
 void ModelSceneRuntime::destroyEntity(const entt::entity entity) {
     if (!m_registry.valid(entity)) {
         return;
     }
-    m_registry.destroy(entity);
-    if (m_selectedEntity == entity) {
+
+    detachFromParent(entity);
+    std::vector<entt::entity> entities{entity};
+    for (size_t index = 0u; index < entities.size(); ++index) {
+        const auto* children =
+            m_registry.try_get<ecs::ChildrenComponent>(entities[index]);
+        if (children != nullptr) {
+            entities.insert(
+                entities.end(), children->children.begin(), children->children.end());
+        }
+    }
+    if (std::find(entities.begin(), entities.end(), m_selectedEntity) !=
+        entities.end()) {
         m_selectedEntity = entt::null;
     }
+    for (auto it = entities.rbegin(); it != entities.rend(); ++it) {
+        if (m_registry.valid(*it)) {
+            m_registry.destroy(*it);
+        }
+    }
+}
+
+scene::SceneEntityId ModelSceneRuntime::entityId(
+    const entt::entity entity) const {
+    if (!m_registry.valid(entity)) {
+        return scene::kInvalidSceneEntityId;
+    }
+    const auto* id =
+        m_registry.try_get<scene::SceneEntityIdComponent>(entity);
+    return id != nullptr ? id->value : scene::kInvalidSceneEntityId;
+}
+
+entt::entity ModelSceneRuntime::findEntity(
+    const scene::SceneEntityId id) const {
+    if (id == scene::kInvalidSceneEntityId) {
+        return entt::null;
+    }
+    const auto view = m_registry.view<scene::SceneEntityIdComponent>();
+    const auto found = std::find_if(
+        view.begin(), view.end(), [&view, id](const entt::entity entity) {
+            return view.get<scene::SceneEntityIdComponent>(entity).value == id;
+        });
+    return found != view.end() ? *found : entt::null;
+}
+
+void ModelSceneRuntime::detachFromParent(const entt::entity entity) {
+    const auto* parent = m_registry.try_get<ecs::ParentComponent>(entity);
+    if (parent == nullptr) {
+        return;
+    }
+    if (m_registry.valid(parent->parent)) {
+        auto* siblings =
+            m_registry.try_get<ecs::ChildrenComponent>(parent->parent);
+        if (siblings != nullptr) {
+            siblings->children.erase(
+                std::remove(
+                    siblings->children.begin(), siblings->children.end(), entity),
+                siblings->children.end());
+        }
+    }
+    m_registry.remove<ecs::ParentComponent>(entity);
+}
+
+bool ModelSceneRuntime::localTransformFromMatrix(
+    const glm::mat4& matrix,
+    ecs::LocalTransformComponent& transform) const {
+    if (std::abs(matrix[0][3]) > 1e-5f ||
+        std::abs(matrix[1][3]) > 1e-5f ||
+        std::abs(matrix[2][3]) > 1e-5f ||
+        std::abs(matrix[3][3] - 1.0f) > 1e-5f) {
+        return false;
+    }
+    glm::vec3 basis[3] = {
+        glm::vec3(matrix[0]),
+        glm::vec3(matrix[1]),
+        glm::vec3(matrix[2])};
+    glm::vec3 scale{
+        glm::length(basis[0]),
+        glm::length(basis[1]),
+        glm::length(basis[2])};
+    if (scale.x <= 1e-8f || scale.y <= 1e-8f || scale.z <= 1e-8f) {
+        return false;
+    }
+    basis[0] /= scale.x;
+    basis[1] /= scale.y;
+    basis[2] /= scale.z;
+    if (std::abs(glm::dot(basis[0], basis[1])) > 1e-4f ||
+        std::abs(glm::dot(basis[0], basis[2])) > 1e-4f ||
+        std::abs(glm::dot(basis[1], basis[2])) > 1e-4f) {
+        return false;
+    }
+    if (glm::determinant(glm::mat3(basis[0], basis[1], basis[2])) < 0.0f) {
+        int reflectionAxis = 0;
+        if (scale.y > scale.x) reflectionAxis = 1;
+        if (scale.z > scale[reflectionAxis]) reflectionAxis = 2;
+        scale[reflectionAxis] = -scale[reflectionAxis];
+        basis[reflectionAxis] = -basis[reflectionAxis];
+    }
+    const glm::quat orientation = glm::quat_cast(
+        glm::mat3(basis[0], basis[1], basis[2]));
+    const glm::vec3 rotation = glm::degrees(
+        glm::eulerAngles(glm::normalize(orientation)));
+    const glm::vec3 translation = glm::vec3(matrix[3]);
+    const auto finite = [](const glm::vec3& value) {
+        return std::isfinite(value.x) &&
+               std::isfinite(value.y) &&
+               std::isfinite(value.z);
+    };
+    if (!finite(translation) || !finite(rotation) || !finite(scale)) {
+        return false;
+    }
+    ecs::LocalTransformComponent candidate;
+    candidate.localPosition = translation;
+    candidate.localRotation = rotation;
+    candidate.localScale = scale;
+    const glm::mat4 reconstructed = candidate.toMatrix();
+    float largestDifference = 0.0f;
+    float largestMagnitude = 1.0f;
+    for (int column = 0; column < 4; ++column) {
+        for (int row = 0; row < 4; ++row) {
+            largestDifference = std::max(
+                largestDifference,
+                std::abs(reconstructed[column][row] - matrix[column][row]));
+            largestMagnitude = std::max(
+                largestMagnitude, std::abs(matrix[column][row]));
+        }
+    }
+    if (largestDifference > largestMagnitude * 1e-3f) {
+        return false;
+    }
+    transform = candidate;
+    return true;
+}
+
+bool ModelSceneRuntime::setParent(const entt::entity child,
+                                  const entt::entity parent) {
+    const auto isSceneEntity = [this](const entt::entity entity) {
+        return m_registry.valid(entity) &&
+               m_registry.all_of<
+                   scene::SceneEntityIdComponent,
+                   ecs::LocalTransformComponent,
+                   ecs::WorldTransformComponent,
+                   ecs::ChildrenComponent>(entity);
+    };
+    if (!isSceneEntity(child) ||
+        (parent != entt::null && !isSceneEntity(parent))) {
+        setError("scene hierarchy requires valid scene entities");
+        return false;
+    }
+    if (child == parent) {
+        setError("a scene entity cannot be parented to itself");
+        return false;
+    }
+
+    std::unordered_set<entt::entity> ancestors;
+    for (entt::entity ancestor = parent;
+         ancestor != entt::null;) {
+        if (ancestor == child) {
+            setError("scene hierarchy reparenting would create a cycle");
+            return false;
+        }
+        if (!ancestors.insert(ancestor).second) {
+            setError("scene hierarchy contains an existing cycle");
+            return false;
+        }
+        const auto* next =
+            m_registry.try_get<ecs::ParentComponent>(ancestor);
+        ancestor = next != nullptr ? next->parent : entt::null;
+    }
+
+    syncTransforms();
+    const glm::mat4 childWorld =
+        m_registry.get<ecs::WorldTransformComponent>(child).worldMatrix;
+    glm::mat4 localMatrix = childWorld;
+    if (parent != entt::null) {
+        const glm::mat4& parentWorld =
+            m_registry.get<ecs::WorldTransformComponent>(parent).worldMatrix;
+        const float determinant = glm::determinant(glm::mat3(parentWorld));
+        if (!std::isfinite(determinant) || std::abs(determinant) < 1e-8f) {
+            setError("cannot parent under a singular world transform");
+            return false;
+        }
+        localMatrix = glm::inverse(parentWorld) * childWorld;
+    }
+    ecs::LocalTransformComponent localTransform;
+    if (!localTransformFromMatrix(localMatrix, localTransform)) {
+        setError("reparenting cannot preserve a world transform containing shear");
+        return false;
+    }
+
+    detachFromParent(child);
+    if (parent != entt::null) {
+        m_registry.emplace_or_replace<ecs::ParentComponent>(child, parent);
+        m_registry.get<ecs::ChildrenComponent>(parent).children.push_back(child);
+    }
+    m_registry.replace<ecs::LocalTransformComponent>(child, localTransform);
+    syncTransforms();
+    m_lastError.clear();
+    return true;
+}
+
+bool ModelSceneRuntime::setWorldTransform(
+    const entt::entity entity,
+    const glm::mat4& worldMatrix) {
+    if (!m_registry.valid(entity) ||
+        !m_registry.all_of<
+            ecs::LocalTransformComponent,
+            ecs::WorldTransformComponent>(entity)) {
+        setError("world transform editing requires a valid scene entity");
+        return false;
+    }
+    glm::mat4 localMatrix = worldMatrix;
+    if (const auto* parent =
+            m_registry.try_get<ecs::ParentComponent>(entity)) {
+        if (!m_registry.valid(parent->parent) ||
+            !m_registry.all_of<ecs::WorldTransformComponent>(parent->parent)) {
+            setError("world transform editing found an invalid parent entity");
+            return false;
+        }
+        const glm::mat4& parentWorld =
+            m_registry.get<ecs::WorldTransformComponent>(parent->parent).worldMatrix;
+        const float determinant = glm::determinant(glm::mat3(parentWorld));
+        if (!std::isfinite(determinant) || std::abs(determinant) < 1e-8f) {
+            setError("cannot edit a child under a singular parent transform");
+            return false;
+        }
+        localMatrix = glm::inverse(parentWorld) * worldMatrix;
+    }
+    ecs::LocalTransformComponent localTransform;
+    if (!localTransformFromMatrix(localMatrix, localTransform)) {
+        setError("world transform cannot be represented as a local TRS transform");
+        return false;
+    }
+    m_registry.replace<ecs::LocalTransformComponent>(entity, localTransform);
+    syncTransforms();
+    m_lastError.clear();
+    return true;
 }
 
 const std::string& ModelSceneRuntime::assetName(const size_t index) const {
@@ -194,34 +454,54 @@ void ModelSceneRuntime::shutdown() {
         m_deferredRenderer->shutdown();
         m_deferredRenderer.reset();
     }
+    clearScene();
+    m_resourceMgr = nullptr;
+}
+
+void ModelSceneRuntime::clearScene() {
     for (MeshAsset& asset : m_assets) {
         if (asset.renderer) {
             asset.renderer->shutdown();
         }
     }
     m_assets.clear();
+    m_assetIndices.clear();
     m_registry.clear();
     m_selectedEntity = entt::null;
-    m_resourceMgr = nullptr;
+    m_nextEntityId = 1u;
+    m_nextAssetId = 1u;
+    m_lastError.clear();
 }
 
 bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr,
                                       const std::string& name,
                                       const std::string& path,
-                                      uint32_t& assetIndex) {
+                                      scene::SceneAssetId& assetId) {
     auto renderer = std::make_unique<StaticMeshRenderer>();
     if (!renderer->init(resourceMgr, path)) {
         setError(renderer->lastError());
         return false;
     }
     MeshAsset asset;
+    asset.id = m_nextAssetId++;
     asset.name = name;
     asset.path = path;
     renderer->assetBounds(asset.boundsMin, asset.boundsMax);
     asset.renderer = std::move(renderer);
-    assetIndex = static_cast<uint32_t>(m_assets.size());
+    const uint32_t index = static_cast<uint32_t>(m_assets.size());
+    assetId = asset.id;
     m_assets.push_back(std::move(asset));
+    m_assetIndices.emplace(assetId, index);
     return true;
+}
+
+uint32_t ModelSceneRuntime::assetIndex(
+    const scene::SceneAssetId id) const {
+    const auto found = m_assetIndices.find(id);
+    if (found == m_assetIndices.end()) {
+        std::abort();
+    }
+    return found->second;
 }
 
 bool ModelSceneRuntime::ensureViewport(const uint32_t width,
@@ -282,10 +562,8 @@ void ModelSceneRuntime::renderToGBuffer(
         const auto& world = view.get<ecs::WorldTransformComponent>(entity);
         const auto& previous =
             view.get<scene::PreviousWorldTransformComponent>(entity);
-        if (mesh.assetIndex >= m_assets.size()) {
-            std::abort();
-        }
-        StaticMeshRenderer& renderer = *m_assets[mesh.assetIndex].renderer;
+        StaticMeshRenderer& renderer =
+            *m_assets[assetIndex(mesh.assetId)].renderer;
         renderer.setInstanceTransform(world.worldMatrix, previous.worldMatrix);
         renderer.renderToGBuffer(commandList);
     }
@@ -300,10 +578,8 @@ void ModelSceneRuntime::renderToShadowMap(
         scene::PreviousWorldTransformComponent>();
     for (const entt::entity entity : view) {
         const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
-        if (mesh.assetIndex >= m_assets.size()) {
-            std::abort();
-        }
-        StaticMeshRenderer& renderer = *m_assets[mesh.assetIndex].renderer;
+        StaticMeshRenderer& renderer =
+            *m_assets[assetIndex(mesh.assetId)].renderer;
         renderer.setInstanceTransform(
             view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
             view.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
@@ -400,9 +676,102 @@ void ModelSceneRuntime::syncTransforms() {
         auto& previous =
             view.get<scene::PreviousWorldTransformComponent>(entity);
         previous.worldMatrix = world.worldMatrix;
-        world.worldMatrix =
-            view.get<ecs::LocalTransformComponent>(entity).toMatrix();
     }
+
+    std::vector<entt::entity> queue;
+    const auto roots = m_registry.view<
+        ecs::LocalTransformComponent,
+        ecs::WorldTransformComponent,
+        ecs::ChildrenComponent>(entt::exclude<ecs::ParentComponent>);
+    queue.reserve(view.size_hint());
+    for (const entt::entity root : roots) {
+        roots.get<ecs::WorldTransformComponent>(root).worldMatrix =
+            roots.get<ecs::LocalTransformComponent>(root).toMatrix();
+        queue.push_back(root);
+    }
+
+    std::unordered_set<entt::entity> visited;
+    visited.reserve(view.size_hint());
+    for (size_t front = 0u; front < queue.size(); ++front) {
+        const entt::entity entity = queue[front];
+        if (!visited.insert(entity).second) {
+            std::abort();
+        }
+        const glm::mat4& parentWorld =
+            m_registry.get<ecs::WorldTransformComponent>(entity).worldMatrix;
+        const auto& children =
+            m_registry.get<ecs::ChildrenComponent>(entity).children;
+        for (const entt::entity child : children) {
+            if (!m_registry.valid(child) ||
+                !m_registry.all_of<
+                    ecs::LocalTransformComponent,
+                    ecs::WorldTransformComponent,
+                    ecs::ChildrenComponent,
+                    ecs::ParentComponent>(child) ||
+                m_registry.get<ecs::ParentComponent>(child).parent != entity) {
+                std::abort();
+            }
+            m_registry.get<ecs::WorldTransformComponent>(child).worldMatrix =
+                parentWorld *
+                m_registry.get<ecs::LocalTransformComponent>(child).toMatrix();
+            queue.push_back(child);
+        }
+    }
+    if (visited.size() != view.size_hint()) {
+        std::abort();
+    }
+}
+
+scene::ModelSceneDocument ModelSceneRuntime::captureDocument() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    scene::ModelSceneDocument document;
+    document.assets.reserve(m_assets.size());
+    for (const MeshAsset& asset : m_assets) {
+        document.assets.push_back({asset.id, asset.name, asset.path});
+    }
+
+    const auto entities = m_registry.view<
+        scene::SceneEntityIdComponent,
+        scene::NameComponent,
+        ecs::LocalTransformComponent>();
+    document.entities.reserve(entities.size_hint());
+    for (const entt::entity entity : entities) {
+        scene::SceneEntityDocument entry;
+        entry.id = entities.get<scene::SceneEntityIdComponent>(entity).value;
+        entry.name = entities.get<scene::NameComponent>(entity).value;
+        const auto& transform =
+            entities.get<ecs::LocalTransformComponent>(entity);
+        entry.transform.position = transform.localPosition;
+        entry.transform.rotation = transform.localRotation;
+        entry.transform.scale = transform.localScale;
+        if (const auto* parent =
+                m_registry.try_get<ecs::ParentComponent>(entity)) {
+            const scene::SceneEntityId parentId = this->entityId(parent->parent);
+            if (parentId == scene::kInvalidSceneEntityId) {
+                std::abort();
+            }
+            entry.parentId = parentId;
+        }
+        if (const auto* mesh =
+                m_registry.try_get<scene::StaticMeshComponent>(entity)) {
+            if (m_assetIndices.find(mesh->assetId) == m_assetIndices.end()) {
+                std::abort();
+            }
+            entry.assetId = mesh->assetId;
+        }
+        document.entities.push_back(std::move(entry));
+    }
+    std::sort(
+        document.entities.begin(), document.entities.end(),
+        [](const scene::SceneEntityDocument& lhs,
+           const scene::SceneEntityDocument& rhs) {
+            return lhs.id < rhs.id;
+        });
+    document.environment.timeOfDay = timeOfDay();
+    document.environment.renderSettings = renderSettings();
+    return document;
 }
 
 void ModelSceneRuntime::setError(std::string message) {
