@@ -108,6 +108,9 @@ void ModelSceneAppState::onEnter() {
     m_sceneDirty = false;
     m_pendingSceneAction = PendingSceneAction::None;
     m_openUnsavedPopup = false;
+    m_pendingEntityAction = PendingEntityAction::None;
+    m_pendingEntityId = scene::kInvalidSceneEntityId;
+    m_entityNameEditorId = scene::kInvalidSceneEntityId;
     m_initialized = true;
 }
 
@@ -129,6 +132,118 @@ void ModelSceneAppState::requestReturnToMenu() {
 
 void ModelSceneAppState::markSceneDirty() {
     m_sceneDirty = true;
+}
+
+void ModelSceneAppState::handleEditorShortcuts(const InputSnapshot& input) {
+    if (m_cameraControlActive || ImGuizmo::IsUsing() ||
+        ImGui::GetIO().WantTextInput ||
+        ImGui::IsPopupOpen(
+            nullptr,
+            ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
+        return;
+    }
+    const bool control =
+        input.isKeyHeld(GLFW_KEY_LEFT_CONTROL) ||
+        input.isKeyHeld(GLFW_KEY_RIGHT_CONTROL);
+    const bool shift =
+        input.isKeyHeld(GLFW_KEY_LEFT_SHIFT) ||
+        input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT);
+    if (control && input.isKeyJustPressed(GLFW_KEY_S)) {
+        static_cast<void>(shift ? saveSceneAs() : saveScene());
+        return;
+    }
+    if (control && input.isKeyJustPressed(GLFW_KEY_O)) {
+        requestSceneAction(PendingSceneAction::OpenScene);
+        return;
+    }
+    if (control && input.isKeyJustPressed(GLFW_KEY_N)) {
+        requestSceneAction(PendingSceneAction::NewScene);
+        return;
+    }
+    if (control && input.isKeyJustPressed(GLFW_KEY_D)) {
+        duplicateSelectedEntity();
+        return;
+    }
+    if (input.isKeyJustPressed(GLFW_KEY_DELETE)) {
+        deleteSelectedEntity();
+        return;
+    }
+    if (m_viewportHovered && input.isKeyJustPressed(GLFW_KEY_F)) {
+        focusSelectedEntity();
+    }
+}
+
+void ModelSceneAppState::queueEntityAction(
+    const PendingEntityAction action,
+    const scene::SceneEntityId entityId) {
+    m_pendingEntityAction = action;
+    m_pendingEntityId = entityId;
+}
+
+void ModelSceneAppState::executePendingEntityAction() {
+    if (m_pendingEntityAction == PendingEntityAction::None) {
+        return;
+    }
+    const PendingEntityAction action = m_pendingEntityAction;
+    const entt::entity entity = m_scene.findEntity(m_pendingEntityId);
+    m_pendingEntityAction = PendingEntityAction::None;
+    m_pendingEntityId = scene::kInvalidSceneEntityId;
+    if (entity == entt::null) {
+        return;
+    }
+    m_scene.setSelectedEntity(entity);
+    switch (action) {
+        case PendingEntityAction::None:
+            return;
+        case PendingEntityAction::Duplicate:
+            duplicateSelectedEntity();
+            return;
+        case PendingEntityAction::Delete:
+            deleteSelectedEntity();
+            return;
+        case PendingEntityAction::Focus:
+            focusSelectedEntity();
+            return;
+        default:
+            std::abort();
+    }
+}
+
+void ModelSceneAppState::duplicateSelectedEntity() {
+    const entt::entity selected = m_scene.selectedEntity();
+    if (selected == entt::null || !m_scene.registry().valid(selected)) {
+        return;
+    }
+    if (m_scene.duplicateEntity(selected) != entt::null) {
+        m_entityNameEditorId = scene::kInvalidSceneEntityId;
+        markSceneDirty();
+    }
+}
+
+void ModelSceneAppState::deleteSelectedEntity() {
+    const entt::entity selected = m_scene.selectedEntity();
+    if (selected == entt::null || !m_scene.registry().valid(selected)) {
+        return;
+    }
+    m_scene.destroyEntity(selected);
+    m_entityNameEditorId = scene::kInvalidSceneEntityId;
+    markSceneDirty();
+}
+
+void ModelSceneAppState::focusSelectedEntity() {
+    const entt::entity selected = m_scene.selectedEntity();
+    glm::vec3 boundsMin{0.0f};
+    glm::vec3 boundsMax{0.0f};
+    if (!m_scene.entityWorldBounds(selected, boundsMin, boundsMax)) {
+        return;
+    }
+    m_cameraTarget = (boundsMin + boundsMax) * 0.5f;
+    const float radius = glm::length(boundsMax - boundsMin) * 0.5f;
+    const float framingDistance =
+        radius / std::tan(glm::radians(27.5f)) * 1.2f;
+    m_cameraDistance = std::clamp(
+        std::max(2.0f, framingDistance), 0.6f, 80.0f);
+    markSceneDirty();
 }
 
 scene::SceneEditorCameraDocument
@@ -188,6 +303,7 @@ void ModelSceneAppState::newScene() {
     m_scenePath.clear();
     m_sceneIoError.clear();
     m_sceneDirty = false;
+    m_entityNameEditorId = scene::kInvalidSceneEntityId;
 }
 
 bool ModelSceneAppState::loadScenePath(const std::string& path) {
@@ -208,6 +324,7 @@ bool ModelSceneAppState::loadScenePath(const std::string& path) {
     applyEditorCamera(document.editorCamera);
     m_scenePath = normalized;
     m_sceneDirty = false;
+    m_entityNameEditorId = scene::kInvalidSceneEntityId;
     return true;
 }
 
@@ -314,6 +431,7 @@ void ModelSceneAppState::update(const double frameTime, double& accumulator) {
         }
         return;
     }
+    handleEditorShortcuts(input);
     updateCamera(input, frameTime);
     if (m_viewportHovered && !m_cameraControlActive &&
         !ImGuizmo::IsUsing() &&
@@ -459,6 +577,25 @@ void ModelSceneAppState::buildEditorUi() {
             ImGui::Separator();
             if (ImGui::MenuItem("Return to Main Menu")) {
                 requestSceneAction(PendingSceneAction::ReturnToMenu);
+            }
+            ImGui::EndMenu();
+        }
+        const entt::entity selected = m_scene.selectedEntity();
+        const bool hasSelection =
+            selected != entt::null && m_scene.registry().valid(selected);
+        if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem(
+                    "Duplicate Entity", nullptr, false, hasSelection)) {
+                duplicateSelectedEntity();
+            }
+            if (ImGui::MenuItem(
+                    "Delete Entity", nullptr, false, hasSelection)) {
+                deleteSelectedEntity();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem(
+                    "Focus Selection", nullptr, false, hasSelection)) {
+                focusSelectedEntity();
             }
             ImGui::EndMenu();
         }
@@ -619,6 +756,7 @@ void ModelSceneAppState::showHierarchyPanel() {
             markSceneDirty();
         }
     }
+    executePendingEntityAction();
     if (!m_scene.lastError().empty()) {
         ImGui::TextColored(
             ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
@@ -648,6 +786,20 @@ void ModelSceneAppState::showHierarchyEntity(const entt::entity entity) {
     const bool open = ImGui::TreeNodeEx(label.c_str(), flags);
     if (ImGui::IsItemClicked()) {
         m_scene.setSelectedEntity(entity);
+    }
+    if (ImGui::BeginPopupContextItem()) {
+        m_scene.setSelectedEntity(entity);
+        if (ImGui::MenuItem("Duplicate")) {
+            queueEntityAction(PendingEntityAction::Duplicate, id);
+        }
+        if (ImGui::MenuItem("Delete")) {
+            queueEntityAction(PendingEntityAction::Delete, id);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Focus")) {
+            queueEntityAction(PendingEntityAction::Focus, id);
+        }
+        ImGui::EndPopup();
     }
     if (ImGui::BeginDragDropSource()) {
         ImGui::SetDragDropPayload(
@@ -693,11 +845,48 @@ void ModelSceneAppState::showInspectorPanel() {
         ImGui::End();
         return;
     }
-    const auto* name = m_scene.registry().try_get<scene::NameComponent>(selected);
+    auto* name = m_scene.registry().try_get<scene::NameComponent>(selected);
     auto* transform =
         m_scene.registry().try_get<ecs::LocalTransformComponent>(selected);
     if (name != nullptr) {
-        ImGui::TextUnformatted(name->value.c_str());
+        const scene::SceneEntityId selectedId = m_scene.entityId(selected);
+        if (m_entityNameEditorId != selectedId) {
+            std::fill(
+                m_entityNameBuffer.begin(), m_entityNameBuffer.end(), '\0');
+            const std::size_t copyLength = std::min(
+                name->value.size(), m_entityNameBuffer.size() - 1u);
+            std::copy_n(
+                name->value.begin(), copyLength, m_entityNameBuffer.begin());
+            m_entityNameEditorId = selectedId;
+        }
+        const float nameLabelWidth =
+            ImGui::CalcTextSize("Name").x +
+            ImGui::GetStyle().ItemInnerSpacing.x;
+        ImGui::SetNextItemWidth(-nameLabelWidth);
+        const bool submitted = ImGui::InputText(
+            "Name",
+            m_entityNameBuffer.data(),
+            m_entityNameBuffer.size(),
+            ImGuiInputTextFlags_EnterReturnsTrue |
+                ImGuiInputTextFlags_AutoSelectAll);
+        const bool finishedEditing = ImGui::IsItemDeactivatedAfterEdit();
+        if (submitted || finishedEditing) {
+            const std::string previousName = name->value;
+            if (m_scene.renameEntity(selected, m_entityNameBuffer.data())) {
+                if (name->value != previousName) {
+                    markSceneDirty();
+                }
+                std::fill(
+                    m_entityNameBuffer.begin(),
+                    m_entityNameBuffer.end(), '\0');
+                const std::size_t copyLength = std::min(
+                    name->value.size(), m_entityNameBuffer.size() - 1u);
+                std::copy_n(
+                    name->value.begin(),
+                    copyLength,
+                    m_entityNameBuffer.begin());
+            }
+        }
         ImGui::TextDisabled(
             "Entity ID: %llu",
             static_cast<unsigned long long>(m_scene.entityId(selected)));
@@ -728,10 +917,18 @@ void ModelSceneAppState::showInspectorPanel() {
                     pickable->localBoundsMax.y,
                     pickable->localBoundsMax.z);
     }
+    if (!m_scene.lastError().empty()) {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
+            "%s", m_scene.lastError().c_str());
+    }
     ImGui::Separator();
+    if (ImGui::Button("Duplicate Entity")) {
+        duplicateSelectedEntity();
+    }
+    ImGui::SameLine();
     if (ImGui::Button("Delete Entity")) {
-        m_scene.destroyEntity(selected);
-        markSceneDirty();
+        deleteSelectedEntity();
     }
     ImGui::End();
 }
@@ -772,10 +969,22 @@ void ModelSceneAppState::showAssetsPanel() {
     }
     ImGui::Separator();
     for (size_t index = 0u; index < m_scene.assetCount(); ++index) {
+        ImGui::PushID(static_cast<int>(index));
+        if (ImGui::SmallButton("+")) {
+            if (m_scene.createAssetInstance(m_scene.assetId(index)) != entt::null) {
+                m_entityNameEditorId = scene::kInvalidSceneEntityId;
+                markSceneDirty();
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Create model instance");
+        }
+        ImGui::SameLine();
         ImGui::TextUnformatted(m_scene.assetName(index).c_str());
         ImGui::SameLine();
         ImGui::TextDisabled("glTF / GLB");
         ImGui::TextDisabled("%s", m_scene.assetPath(index).c_str());
+        ImGui::PopID();
     }
     ImGui::End();
 }

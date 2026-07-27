@@ -72,6 +72,23 @@ public:
     /// Creates an empty transform entity that can own scene children.
     [[nodiscard]] entt::entity createEmptyEntity(const std::string& baseName);
 
+    /// Creates another scene instance from an already loaded mesh asset.
+    /// @param assetId Stable asset identifier returned by assetId().
+    /// @return Created scene entity, or entt::null when the asset is unknown.
+    [[nodiscard]] entt::entity createAssetInstance(scene::SceneAssetId assetId);
+
+    /// Renames an entity while preserving globally unique scene names.
+    /// @param entity Scene entity whose display name changes.
+    /// @param requestedName Non-empty requested display name.
+    /// @return True when the entity name was updated or already matched.
+    [[nodiscard]] bool renameEntity(entt::entity entity,
+                                    const std::string& requestedName);
+
+    /// Duplicates an entity and its complete descendant hierarchy.
+    /// Mesh assets remain shared while every duplicate receives a new stable ID.
+    /// @return Root of the duplicated hierarchy, or entt::null on invalid input.
+    [[nodiscard]] entt::entity duplicateEntity(entt::entity source);
+
     /// Removes all entities and loaded assets while keeping rendering initialized.
     void clearScene();
 
@@ -101,6 +118,12 @@ public:
     /// @return Nearest intersected entity, or entt::null.
     [[nodiscard]] entt::entity pick(const glm::vec3& rayOrigin,
                                     const glm::vec3& rayDirection) const;
+
+    /// Computes world-space bounds for an entity pivot, meshes, and descendants.
+    /// @return True when entity is a valid scene entity and bounds were produced.
+    [[nodiscard]] bool entityWorldBounds(entt::entity entity,
+                                         glm::vec3& boundsMin,
+                                         glm::vec3& boundsMax) const;
 
     /// Rebuilds world and previous-world matrices from editable local transforms.
     void syncTransforms();
@@ -134,6 +157,7 @@ public:
     /// Returns the active model viewport renderer configuration.
     [[nodiscard]] const RenderSettings& renderSettings() const;
     [[nodiscard]] size_t assetCount() const { return m_assets.size(); }
+    [[nodiscard]] scene::SceneAssetId assetId(size_t index) const;
     [[nodiscard]] const std::string& assetName(size_t index) const;
     [[nodiscard]] const std::string& assetPath(size_t index) const;
     [[nodiscard]] const std::string& lastError() const { return m_lastError; }
@@ -161,7 +185,8 @@ private:
                                                 const std::string& instanceName);
     [[nodiscard]] entt::entity createEntity(const std::string& baseName);
     [[nodiscard]] std::string makeUniqueInstanceName(
-        const std::string& baseName) const;
+        const std::string& baseName,
+        entt::entity ignoredEntity = entt::null) const;
     [[nodiscard]] uint32_t assetIndex(scene::SceneAssetId id) const;
     [[nodiscard]] bool localTransformFromMatrix(
         const glm::mat4& matrix,

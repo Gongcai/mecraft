@@ -30,6 +30,13 @@ private:
         ReturnToMenu,
     };
 
+    enum class PendingEntityAction {
+        None,
+        Duplicate,
+        Delete,
+        Focus,
+    };
+
     void buildEditorUi();
     void buildInitialDockLayout(ImGuiID dockspaceId);
     void showHierarchyPanel();
@@ -51,6 +58,13 @@ private:
     [[nodiscard]] scene::SceneEditorCameraDocument captureEditorCamera() const;
     void applyEditorCamera(const scene::SceneEditorCameraDocument& camera);
     void markSceneDirty();
+    void handleEditorShortcuts(const InputSnapshot& input);
+    void queueEntityAction(PendingEntityAction action,
+                           scene::SceneEntityId entityId);
+    void executePendingEntityAction();
+    void duplicateSelectedEntity();
+    void deleteSelectedEntity();
+    void focusSelectedEntity();
     void showViewportPanel();
     [[nodiscard]] bool showGizmoToolbar();
     void updateCamera(const InputSnapshot& input, double frameTime);
@@ -80,12 +94,16 @@ private:
     bool m_sceneDirty = false;
     bool m_openUnsavedPopup = false;
     PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
+    PendingEntityAction m_pendingEntityAction = PendingEntityAction::None;
+    scene::SceneEntityId m_pendingEntityId = scene::kInvalidSceneEntityId;
+    scene::SceneEntityId m_entityNameEditorId = scene::kInvalidSceneEntityId;
     scene::SceneEntityId m_hierarchyDropChild =
         scene::kInvalidSceneEntityId;
     scene::SceneEntityId m_hierarchyDropParent =
         scene::kInvalidSceneEntityId;
     std::array<char, 4096> m_importPath{
         "assets/models/showcase/DamagedHelmet.glb"};
+    std::array<char, 512> m_entityNameBuffer{};
     std::string m_importDialogError;
     std::string m_scenePath;
     std::string m_sceneIoError;

@@ -107,9 +107,72 @@ int main() {
     if (!scene.setParent(child, root)) {
         return fail("second valid scene reparenting was rejected");
     }
+
+    scene.registry().emplace<scene::StaticMeshComponent>(
+        child, scene::StaticMeshComponent{42u});
+    scene.registry().emplace<scene::PickableComponent>(
+        child,
+        scene::PickableComponent{
+            glm::vec3(-1.0f), glm::vec3(1.0f)});
+    glm::vec3 boundsMin{0.0f};
+    glm::vec3 boundsMax{0.0f};
+    if (!scene.entityWorldBounds(root, boundsMin, boundsMax) ||
+        !near(boundsMin.x, 4.0f) || !near(boundsMin.y, 0.0f) ||
+        !near(boundsMin.z, -3.0f) || !near(boundsMax.x, 8.0f) ||
+        !near(boundsMax.y, 5.0f) || !near(boundsMax.z, 0.0f)) {
+        return fail("hierarchy world bounds did not include pivots and mesh bounds");
+    }
+
+    const entt::entity duplicatedRoot = scene.duplicateEntity(root);
+    if (duplicatedRoot == entt::null || duplicatedRoot == root ||
+        scene.entityId(duplicatedRoot) == scene.entityId(root) ||
+        scene.selectedEntity() != duplicatedRoot) {
+        return fail("duplicating a hierarchy did not create and select a stable root");
+    }
+    const auto& duplicatedChildren =
+        scene.registry().get<ecs::ChildrenComponent>(duplicatedRoot).children;
+    if (duplicatedChildren.size() != 1u) {
+        return fail("duplicating a hierarchy did not preserve its descendants");
+    }
+    const entt::entity duplicatedChild = duplicatedChildren.front();
+    if (!scene.registry().all_of<
+            scene::StaticMeshComponent,
+            scene::PickableComponent,
+            ecs::ParentComponent>(duplicatedChild) ||
+        scene.registry().get<ecs::ParentComponent>(duplicatedChild).parent !=
+            duplicatedRoot ||
+        scene.registry().get<scene::StaticMeshComponent>(duplicatedChild).assetId !=
+            42u ||
+        !nearPosition(
+            scene.registry()
+                .get<ecs::WorldTransformComponent>(duplicatedChild)
+                .worldMatrix,
+            {7.0f, 4.0f, -2.0f})) {
+        return fail("duplicating a hierarchy changed components or world transforms");
+    }
+    if (!scene.renameEntity(duplicatedRoot, "Renamed Group") ||
+        scene.registry().get<scene::NameComponent>(duplicatedRoot).value !=
+            "Renamed Group") {
+        return fail("valid scene entity rename failed");
+    }
+    if (scene.renameEntity(duplicatedRoot, "")) {
+        return fail("empty scene entity name was accepted");
+    }
+    const std::string collidingName =
+        scene.registry().get<scene::NameComponent>(child).value;
+    if (!scene.renameEntity(duplicatedRoot, collidingName) ||
+        scene.registry().get<scene::NameComponent>(duplicatedRoot).value ==
+            collidingName) {
+        return fail("entity rename did not preserve global name uniqueness");
+    }
+
     scene.destroyEntity(root);
     if (scene.registry().valid(root) || scene.registry().valid(child)) {
         return fail("destroying a parent did not destroy its subtree");
+    }
+    if (!scene.registry().valid(duplicatedRoot) ||
+        !scene.registry().valid(duplicatedChild)) {
+        return fail("destroying a hierarchy also removed its duplicate");
     }
 
     std::cout << "[model_scene_hierarchy_test] PASS\n";

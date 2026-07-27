@@ -148,6 +148,9 @@ entt::entity ModelSceneRuntime::instantiateAsset(
     const glm::vec3 extent = asset.boundsMax - asset.boundsMin;
     const float scale = 2.4f / std::max({extent.x, extent.y, extent.z});
     const entt::entity entity = createEntity(instanceName);
+    if (entity == entt::null) {
+        return entt::null;
+    }
     m_registry.emplace<scene::StaticMeshComponent>(
         entity, scene::StaticMeshComponent{assetId});
     auto& transform =
@@ -165,6 +168,10 @@ entt::entity ModelSceneRuntime::instantiateAsset(
 }
 
 entt::entity ModelSceneRuntime::createEntity(const std::string& baseName) {
+    if (m_nextEntityId == std::numeric_limits<scene::SceneEntityId>::max()) {
+        setError("model scene entity ID space is exhausted");
+        return entt::null;
+    }
     const entt::entity entity = m_registry.create();
     m_registry.emplace<scene::SceneEntityIdComponent>(
         entity, scene::SceneEntityIdComponent{m_nextEntityId++});
@@ -188,13 +195,158 @@ entt::entity ModelSceneRuntime::createEmptyEntity(const std::string& baseName) {
     return entity;
 }
 
+entt::entity ModelSceneRuntime::createAssetInstance(
+    const scene::SceneAssetId assetId) {
+    const auto assetIt = m_assetIndices.find(assetId);
+    if (assetIt == m_assetIndices.end()) {
+        setError("cannot instantiate an unknown model scene asset");
+        return entt::null;
+    }
+    const entt::entity entity = instantiateAsset(
+        assetId, m_assets[assetIt->second].name);
+    if (entity != entt::null) {
+        m_lastError.clear();
+    }
+    return entity;
+}
+
+bool ModelSceneRuntime::renameEntity(
+    const entt::entity entity,
+    const std::string& requestedName) {
+    if (!m_registry.valid(entity) ||
+        !m_registry.all_of<scene::NameComponent>(entity)) {
+        setError("entity renaming requires a valid scene entity");
+        return false;
+    }
+    if (requestedName.empty() ||
+        requestedName.find('\0') != std::string::npos) {
+        setError("scene entity names must be non-empty text");
+        return false;
+    }
+    auto& name = m_registry.get<scene::NameComponent>(entity).value;
+    if (name == requestedName) {
+        m_lastError.clear();
+        return true;
+    }
+    name = makeUniqueInstanceName(requestedName, entity);
+    m_lastError.clear();
+    return true;
+}
+
+entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
+    if (!m_registry.valid(source) ||
+        !m_registry.all_of<
+            scene::SceneEntityIdComponent,
+            scene::NameComponent,
+            ecs::LocalTransformComponent,
+            ecs::WorldTransformComponent,
+            ecs::ChildrenComponent>(source)) {
+        setError("entity duplication requires a valid scene entity");
+        return entt::null;
+    }
+
+    std::vector<entt::entity> originals{source};
+    std::unordered_set<entt::entity> visited;
+    for (std::size_t index = 0u; index < originals.size(); ++index) {
+        const entt::entity entity = originals[index];
+        if (!m_registry.valid(entity) ||
+            !m_registry.all_of<
+                scene::SceneEntityIdComponent,
+                scene::NameComponent,
+                ecs::LocalTransformComponent,
+                ecs::WorldTransformComponent,
+                ecs::ChildrenComponent>(entity) ||
+            !visited.insert(entity).second) {
+            setError("entity duplication found an invalid scene hierarchy");
+            return entt::null;
+        }
+        const auto& children =
+            m_registry.get<ecs::ChildrenComponent>(entity).children;
+        for (const entt::entity child : children) {
+            const auto* parent = m_registry.try_get<ecs::ParentComponent>(child);
+            if (parent == nullptr || parent->parent != entity) {
+                setError("entity duplication found an inconsistent parent link");
+                return entt::null;
+            }
+            originals.push_back(child);
+        }
+    }
+
+    const auto maximumId =
+        std::numeric_limits<scene::SceneEntityId>::max();
+    if (originals.size() > maximumId - m_nextEntityId) {
+        setError("model scene entity ID space cannot fit the duplicated hierarchy");
+        return entt::null;
+    }
+
+    std::unordered_map<entt::entity, entt::entity> duplicates;
+    duplicates.reserve(originals.size());
+    for (const entt::entity original : originals) {
+        const auto& originalName =
+            m_registry.get<scene::NameComponent>(original).value;
+        const entt::entity duplicate = createEntity(originalName);
+        if (duplicate == entt::null) {
+            std::abort();
+        }
+        duplicates.emplace(original, duplicate);
+        m_registry.replace<ecs::LocalTransformComponent>(
+            duplicate,
+            m_registry.get<ecs::LocalTransformComponent>(original));
+        if (const auto* mesh =
+                m_registry.try_get<scene::StaticMeshComponent>(original)) {
+            m_registry.emplace<scene::StaticMeshComponent>(duplicate, *mesh);
+        }
+        if (const auto* pickable =
+                m_registry.try_get<scene::PickableComponent>(original)) {
+            m_registry.emplace<scene::PickableComponent>(duplicate, *pickable);
+        }
+    }
+
+    for (const entt::entity original : originals) {
+        const entt::entity duplicate = duplicates.at(original);
+        entt::entity duplicateParent = entt::null;
+        if (const auto* originalParent =
+                m_registry.try_get<ecs::ParentComponent>(original)) {
+            const auto duplicateParentIt = duplicates.find(originalParent->parent);
+            duplicateParent = duplicateParentIt != duplicates.end()
+                ? duplicateParentIt->second
+                : originalParent->parent;
+        }
+        if (duplicateParent != entt::null) {
+            if (!m_registry.valid(duplicateParent) ||
+                !m_registry.all_of<ecs::ChildrenComponent>(duplicateParent)) {
+                std::abort();
+            }
+            m_registry.emplace<ecs::ParentComponent>(duplicate, duplicateParent);
+            m_registry.get<ecs::ChildrenComponent>(duplicateParent)
+                .children.push_back(duplicate);
+        }
+    }
+
+    syncTransforms();
+    for (const auto& pair : duplicates) {
+        const glm::mat4& world =
+            m_registry.get<ecs::WorldTransformComponent>(pair.second).worldMatrix;
+        m_registry.get<scene::PreviousWorldTransformComponent>(pair.second)
+            .worldMatrix = world;
+    }
+    const entt::entity duplicateRoot = duplicates.at(source);
+    m_selectedEntity = duplicateRoot;
+    m_lastError.clear();
+    return duplicateRoot;
+}
+
 std::string ModelSceneRuntime::makeUniqueInstanceName(
-    const std::string& baseName) const {
+    const std::string& baseName,
+    const entt::entity ignoredEntity) const {
     const auto names = m_registry.view<scene::NameComponent>();
-    const auto nameExists = [&names](const std::string& candidate) {
+    const auto nameExists = [&names, ignoredEntity](const std::string& candidate) {
         return std::any_of(
             names.begin(), names.end(),
-            [&names, &candidate](const entt::entity entity) {
+            [&names, &candidate, ignoredEntity](const entt::entity entity) {
+                if (entity == ignoredEntity) {
+                    return false;
+                }
                 return names.get<scene::NameComponent>(entity).value == candidate;
             });
     };
@@ -497,6 +649,13 @@ const std::string& ModelSceneRuntime::assetName(const size_t index) const {
     return m_assets[index].name;
 }
 
+scene::SceneAssetId ModelSceneRuntime::assetId(const size_t index) const {
+    if (index >= m_assets.size()) {
+        std::abort();
+    }
+    return m_assets[index].id;
+}
+
 const std::string& ModelSceneRuntime::assetPath(const size_t index) const {
     if (index >= m_assets.size()) {
         std::abort();
@@ -652,6 +811,10 @@ bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr,
                                       const std::string& name,
                                       const std::string& path,
                                       scene::SceneAssetId& assetId) {
+    if (m_nextAssetId == std::numeric_limits<scene::SceneAssetId>::max()) {
+        setError("model scene asset ID space is exhausted");
+        return false;
+    }
     MeshAsset asset;
     assetId = m_nextAssetId;
     if (!createMeshAsset(resourceMgr, assetId, name, path, asset)) {
@@ -859,6 +1022,71 @@ entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,
         }
     }
     return nearestEntity;
+}
+
+bool ModelSceneRuntime::entityWorldBounds(
+    const entt::entity entity,
+    glm::vec3& boundsMin,
+    glm::vec3& boundsMax) const {
+    if (!m_registry.valid(entity) ||
+        !m_registry.all_of<
+            ecs::WorldTransformComponent,
+            ecs::ChildrenComponent>(entity)) {
+        return false;
+    }
+
+    std::vector<entt::entity> entities{entity};
+    std::unordered_set<entt::entity> visited;
+    bool initialized = false;
+    const auto includePoint = [&](const glm::vec3& point) {
+        if (!initialized) {
+            boundsMin = point;
+            boundsMax = point;
+            initialized = true;
+            return;
+        }
+        boundsMin = glm::min(boundsMin, point);
+        boundsMax = glm::max(boundsMax, point);
+    };
+    for (std::size_t index = 0u; index < entities.size(); ++index) {
+        const entt::entity current = entities[index];
+        if (!m_registry.valid(current) ||
+            !m_registry.all_of<
+                ecs::WorldTransformComponent,
+                ecs::ChildrenComponent>(current) ||
+            !visited.insert(current).second) {
+            return false;
+        }
+        const glm::mat4& world =
+            m_registry.get<ecs::WorldTransformComponent>(current).worldMatrix;
+        includePoint(glm::vec3(world[3]));
+        if (const auto* pickable =
+                m_registry.try_get<scene::PickableComponent>(current)) {
+            for (uint32_t corner = 0u; corner < 8u; ++corner) {
+                const glm::vec3 local{
+                    (corner & 1u) != 0u
+                        ? pickable->localBoundsMax.x
+                        : pickable->localBoundsMin.x,
+                    (corner & 2u) != 0u
+                        ? pickable->localBoundsMax.y
+                        : pickable->localBoundsMin.y,
+                    (corner & 4u) != 0u
+                        ? pickable->localBoundsMax.z
+                        : pickable->localBoundsMin.z};
+                includePoint(glm::vec3(world * glm::vec4(local, 1.0f)));
+            }
+        }
+        const auto& children =
+            m_registry.get<ecs::ChildrenComponent>(current).children;
+        for (const entt::entity child : children) {
+            const auto* parent = m_registry.try_get<ecs::ParentComponent>(child);
+            if (parent == nullptr || parent->parent != current) {
+                return false;
+            }
+            entities.push_back(child);
+        }
+    }
+    return initialized;
 }
 
 void ModelSceneRuntime::syncTransforms() {
