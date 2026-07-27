@@ -1183,7 +1183,7 @@ bool ModelSceneRuntime::prepareGBuffer(
         asset.renderer->prepareStandaloneFrame();
         if (!asset.renderer->prepareGBuffer(
                 commandList, context.camera.viewProj,
-                context.previousViewProjWithCurrentJitter)) {
+                context.previousViewProjWithCurrentJitter, context)) {
             return false;
         }
     }
@@ -1227,6 +1227,53 @@ void ModelSceneRuntime::renderToShadowMap(
             view.get<ecs::WorldTransformComponent>(entity).worldMatrix,
             view.get<scene::PreviousWorldTransformComponent>(entity).worldMatrix);
         renderer.renderToShadowMap(commandList, shadowViewProjection);
+    }
+}
+
+bool ModelSceneRuntime::hasTransparentGeometry() const {
+    const auto view = m_registry.view<scene::StaticMeshComponent>();
+    return std::any_of(
+        view.begin(), view.end(),
+        [this, &view](const entt::entity entity) {
+            const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
+            return m_assets[assetIndex(mesh.assetId)]
+                .renderer->hasTransparentPrimitives();
+        });
+}
+
+void ModelSceneRuntime::renderTransparent(
+    RhiCommandList& commandList,
+    const glm::vec3& cameraPosition) {
+    struct QueuedDraw {
+        StaticMeshRenderer* renderer = nullptr;
+        StaticMeshRenderer::TransparentDraw draw;
+    };
+    std::vector<QueuedDraw> queued;
+    std::vector<StaticMeshRenderer::TransparentDraw> assetDraws;
+    const auto view = m_registry.view<
+        scene::StaticMeshComponent,
+        ecs::WorldTransformComponent>();
+    for (const entt::entity entity : view) {
+        const auto& mesh = view.get<scene::StaticMeshComponent>(entity);
+        const auto& world = view.get<ecs::WorldTransformComponent>(entity);
+        StaticMeshRenderer& renderer =
+            *m_assets[assetIndex(mesh.assetId)].renderer;
+        assetDraws.clear();
+        renderer.appendTransparentDraws(
+            world.worldMatrix, cameraPosition, assetDraws);
+        queued.reserve(queued.size() + assetDraws.size());
+        for (StaticMeshRenderer::TransparentDraw& draw : assetDraws) {
+            queued.push_back({&renderer, std::move(draw)});
+        }
+    }
+    std::sort(
+        queued.begin(), queued.end(),
+        [](const QueuedDraw& lhs, const QueuedDraw& rhs) {
+            return lhs.draw.distanceSquared > rhs.draw.distanceSquared;
+        });
+    for (const QueuedDraw& queuedDraw : queued) {
+        queuedDraw.renderer->renderTransparentDraw(
+            commandList, queuedDraw.draw);
     }
 }
 

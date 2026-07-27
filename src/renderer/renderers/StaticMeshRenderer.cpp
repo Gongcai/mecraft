@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -45,6 +46,7 @@ struct StaticMeshMaterialParams {
     glm::vec4 baseColorFactor{1.0f};
     glm::vec4 emissiveAlphaCutoff{0.0f, 0.0f, 0.0f, 0.5f};
     glm::vec4 materialFactors{1.0f, 1.0f, 1.0f, 1.0f};
+    glm::vec4 workflowFactors{1.0f};
     glm::ivec4 materialFlags{0};
 };
 
@@ -57,6 +59,12 @@ struct StaticMeshFrameParams {
     glm::vec4 voxelLight{1.0f, 0.0f, 0.0f, 1.0f};
     glm::mat4 viewProjection{1.0f};
     glm::mat4 previousViewProjection{1.0f};
+    glm::vec4 cameraPosition{0.0f, 0.0f, 0.0f, 1.0f};
+    glm::vec4 sunDirection{0.0f, 1.0f, 0.0f, 0.0f};
+    glm::vec4 sunColor{1.0f};
+    glm::vec4 ambientColor{0.2f, 0.2f, 0.2f, 0.0f};
+    glm::vec4 fogColor{0.0f};
+    glm::vec4 fogParams{0.0f};
 };
 
 struct StaticMeshPreviewPushConstants {
@@ -92,11 +100,11 @@ struct TangentGenerationContext {
     std::vector<StaticMeshVertex>* vertices = nullptr;
 };
 
-static_assert(sizeof(StaticMeshMaterialParams) == 64u,
+static_assert(sizeof(StaticMeshMaterialParams) == 80u,
               "Static mesh material UBO must match std140 layout");
 static_assert(sizeof(StaticMeshGBufferPushConstants) == 128u,
               "Static mesh G-buffer push constants must fit the Vulkan minimum limit");
-static_assert(sizeof(StaticMeshFrameParams) == 144u,
+static_assert(sizeof(StaticMeshFrameParams) == 240u,
               "Static mesh frame parameters must match the std140 shader block");
 static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
               "Static mesh preview push constants must fit the Vulkan minimum limit");
@@ -209,28 +217,36 @@ void appendContractIssue(std::string& error, const std::string& issue) {
 
 [[nodiscard]] std::string staticAssetContractError(const cgltf_data& data) {
     std::string error;
-    if (data.extensions_required_count != 0u) {
-        std::string extensions;
-        for (cgltf_size index = 0u;
-             index < data.extensions_required_count; ++index) {
-            extensions += extensions.empty() ? "" : ", ";
-            extensions += data.extensions_required[index];
+    std::string unsupportedExtensions;
+    for (cgltf_size index = 0u;
+         index < data.extensions_required_count; ++index) {
+        const std::string_view extension(data.extensions_required[index]);
+        if (extension != "KHR_materials_pbrSpecularGlossiness") {
+            unsupportedExtensions += unsupportedExtensions.empty() ? "" : ", ";
+            unsupportedExtensions += extension;
         }
+    }
+    if (!unsupportedExtensions.empty()) {
         appendContractIssue(
-            error, "required extensions [" + extensions + "]");
+            error, "unsupported required extensions [" +
+                       unsupportedExtensions + "]");
     }
 
     std::size_t missingMetallicRoughness = 0u;
-    std::size_t specularGlossiness = 0u;
+    std::size_t conflictingWorkflows = 0u;
     std::size_t advancedPbr = 0u;
     std::size_t unlit = 0u;
-    std::size_t alphaBlend = 0u;
     for (cgltf_size index = 0u; index < data.materials_count; ++index) {
         const cgltf_material& material = data.materials[index];
+        const bool usesMetallicRoughness =
+            material.has_pbr_metallic_roughness != 0;
+        const bool usesSpecularGlossiness =
+            material.has_pbr_specular_glossiness != 0;
         missingMetallicRoughness +=
-            material.has_pbr_metallic_roughness == 0 ? 1u : 0u;
-        specularGlossiness +=
-            material.has_pbr_specular_glossiness != 0 ? 1u : 0u;
+            !usesMetallicRoughness && !usesSpecularGlossiness ? 1u : 0u;
+        conflictingWorkflows += usesMetallicRoughness && usesSpecularGlossiness
+            ? 1u
+            : 0u;
         advancedPbr +=
             material.has_clearcoat || material.has_transmission ||
                     material.has_volume || material.has_specular ||
@@ -240,18 +256,17 @@ void appendContractIssue(std::string& error, const std::string& issue) {
                 ? 1u
                 : 0u;
         unlit += material.unlit != 0 ? 1u : 0u;
-        alphaBlend +=
-            material.alpha_mode == cgltf_alpha_mode_blend ? 1u : 0u;
     }
     if (missingMetallicRoughness != 0u) {
         appendContractIssue(
             error, std::to_string(missingMetallicRoughness) +
                        " material(s) do not define core metallic-roughness");
     }
-    if (specularGlossiness != 0u) {
+    if (conflictingWorkflows != 0u) {
         appendContractIssue(
-            error, std::to_string(specularGlossiness) +
-                       " material(s) use KHR_materials_pbrSpecularGlossiness");
+            error, std::to_string(conflictingWorkflows) +
+                       " material(s) define both metallic-roughness and "
+                       "KHR_materials_pbrSpecularGlossiness");
     }
     if (advancedPbr != 0u) {
         appendContractIssue(
@@ -262,17 +277,13 @@ void appendContractIssue(std::string& error, const std::string& issue) {
         appendContractIssue(
             error, std::to_string(unlit) + " material(s) use KHR_materials_unlit");
     }
-    if (alphaBlend != 0u) {
-        appendContractIssue(
-            error, std::to_string(alphaBlend) +
-                       " material(s) use alphaMode BLEND");
-    }
     if (error.empty()) {
         return {};
     }
     return "glTF asset is incompatible with the static mesh asset contract: " +
            error +
-           ". Supported materials are core metallic-roughness with OPAQUE or MASK alpha";
+           ". Supported workflows are core metallic-roughness and "
+           "KHR_materials_pbrSpecularGlossiness";
 }
 
 [[nodiscard]] bool readBinaryFile(const std::filesystem::path& path,
@@ -567,9 +578,14 @@ bool StaticMeshRenderer::createPipelineResources() {
         "assets/shaders/static_mesh_preview_rhi.vert");
     const auto previewFragmentSource = renderer::rhi::loadShaderSource(
         "assets/shaders/static_mesh_preview_rhi.frag");
+    const auto transparentVertexSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/static_mesh_transparent_rhi.vert");
+    const auto transparentFragmentSource = renderer::rhi::loadShaderSource(
+        "assets/shaders/static_mesh_transparent_rhi.frag");
     if (!gbufferVertexSource || !gbufferFragmentSource ||
         !shadowVertexSource || !shadowFragmentSource ||
-        !previewVertexSource || !previewFragmentSource) {
+        !previewVertexSource || !previewFragmentSource ||
+        !transparentVertexSource || !transparentFragmentSource) {
         setError("failed to load static mesh shaders");
         return false;
     }
@@ -595,9 +611,17 @@ bool StaticMeshRenderer::createPipelineResources() {
         "StaticMesh.Preview.Vertex", RhiShaderStage::Vertex, *previewVertexSource);
     m_previewFragmentShader = createShader(
         "StaticMesh.Preview.Fragment", RhiShaderStage::Fragment, *previewFragmentSource);
+    m_transparentVertexShader = createShader(
+        "StaticMesh.Transparent.Vertex", RhiShaderStage::Vertex,
+        *transparentVertexSource);
+    m_transparentFragmentShader = createShader(
+        "StaticMesh.Transparent.Fragment", RhiShaderStage::Fragment,
+        *transparentFragmentSource);
     if (!m_gbufferVertexShader.isValid() || !m_gbufferFragmentShader.isValid() ||
         !m_shadowVertexShader.isValid() || !m_shadowFragmentShader.isValid() ||
-        !m_previewVertexShader.isValid() || !m_previewFragmentShader.isValid()) {
+        !m_previewVertexShader.isValid() || !m_previewFragmentShader.isValid() ||
+        !m_transparentVertexShader.isValid() ||
+        !m_transparentFragmentShader.isValid()) {
         setError("failed to compile static mesh shaders");
         return false;
     }
@@ -635,8 +659,13 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineLayoutDesc.debugName = "StaticMesh.Preview.PipelineLayout";
     pipelineLayoutDesc.pushConstantBytes = sizeof(StaticMeshPreviewPushConstants);
     m_previewPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
+    pipelineLayoutDesc.debugName = "StaticMesh.Transparent.PipelineLayout";
+    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4);
+    m_transparentPipelineLayout =
+        m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     if (!m_gbufferPipelineLayout.isValid() || !m_shadowPipelineLayout.isValid() ||
-        !m_previewPipelineLayout.isValid()) {
+        !m_previewPipelineLayout.isValid() ||
+        !m_transparentPipelineLayout.isValid()) {
         setError("failed to create static mesh pipeline layouts");
         return false;
     }
@@ -701,9 +730,54 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineDesc.debugName = "StaticMesh.Preview.DoubleSidedPipeline";
     pipelineDesc.raster.cullMode = RhiCullMode::None;
     m_previewDoubleSidedPipeline = m_rhiDevice->createGraphicsPipeline(pipelineDesc);
+
+    RhiGraphicsPipelineDesc transparentDesc;
+    transparentDesc.debugName = "StaticMesh.Transparent.Pipeline";
+    transparentDesc.vertexShader = m_transparentVertexShader;
+    transparentDesc.fragmentShader = m_transparentFragmentShader;
+    transparentDesc.layout = m_transparentPipelineLayout;
+    transparentDesc.vertexInput.bindings = {
+        {0u, sizeof(StaticMeshVertex), RhiVertexInputRate::Vertex}};
+    transparentDesc.vertexInput.attributes = {
+        {0u, 0u, RhiVertexFormat::Float3, offsetof(StaticMeshVertex, position)},
+        {1u, 0u, RhiVertexFormat::Float3, offsetof(StaticMeshVertex, normal)},
+        {2u, 0u, RhiVertexFormat::Float4, offsetof(StaticMeshVertex, tangent)},
+        {3u, 0u, RhiVertexFormat::Float2, offsetof(StaticMeshVertex, uv)}};
+    transparentDesc.raster.cullMode = RhiCullMode::Back;
+    transparentDesc.depthStencil.depthTestEnabled = true;
+    transparentDesc.depthStencil.depthWriteEnabled = false;
+    transparentDesc.depthStencil.depthCompare = RhiCompareOp::LessOrEqual;
+    transparentDesc.colorFormats = {
+        RhiTextureFormat::Rgba16Float,
+        RhiTextureFormat::R8Unorm,
+        RhiTextureFormat::R8Unorm};
+    transparentDesc.depthFormat = RhiTextureFormat::Depth32Float;
+    RhiBlendAttachmentState colorBlend;
+    colorBlend.blendEnabled = true;
+    colorBlend.srcColor = RhiBlendFactor::SrcAlpha;
+    colorBlend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
+    colorBlend.srcAlpha = RhiBlendFactor::One;
+    colorBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
+    RhiBlendAttachmentState maskBlend;
+    maskBlend.blendEnabled = true;
+    maskBlend.srcColor = RhiBlendFactor::One;
+    maskBlend.dstColor = RhiBlendFactor::One;
+    maskBlend.colorOp = RhiBlendOp::Max;
+    maskBlend.srcAlpha = RhiBlendFactor::One;
+    maskBlend.dstAlpha = RhiBlendFactor::One;
+    maskBlend.alphaOp = RhiBlendOp::Max;
+    transparentDesc.blend.attachments = {colorBlend, maskBlend, maskBlend};
+    m_transparentPipeline =
+        m_rhiDevice->createGraphicsPipeline(transparentDesc);
+    transparentDesc.debugName = "StaticMesh.Transparent.DoubleSidedPipeline";
+    transparentDesc.raster.cullMode = RhiCullMode::None;
+    m_transparentDoubleSidedPipeline =
+        m_rhiDevice->createGraphicsPipeline(transparentDesc);
     if (!m_gbufferPipeline.isValid() || !m_gbufferDoubleSidedPipeline.isValid() ||
         !m_shadowPipeline.isValid() || !m_shadowDoubleSidedPipeline.isValid() ||
-        !m_previewPipeline.isValid() || !m_previewDoubleSidedPipeline.isValid()) {
+        !m_previewPipeline.isValid() || !m_previewDoubleSidedPipeline.isValid() ||
+        !m_transparentPipeline.isValid() ||
+        !m_transparentDoubleSidedPipeline.isValid()) {
         setError("failed to create static mesh graphics pipelines");
         return false;
     }
@@ -768,79 +842,116 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
     const std::filesystem::path modelDirectory =
         std::filesystem::path(modelPath).parent_path();
     std::unordered_map<TextureCacheKey, uint32_t, TextureCacheKeyHash> textureCache;
+    std::unordered_map<uint64_t, uint32_t> solidTextureCache;
+
+    const auto uploadTexture = [this](const unsigned char* pixels,
+                                      const std::size_t sizeBytes,
+                                      const uint32_t width,
+                                      const uint32_t height,
+                                      const bool srgb,
+                                      uint32_t& textureIndex) -> bool {
+        const uint32_t mipLevels = mipLevelCount(width, height);
+        RhiTextureDesc textureDesc;
+        textureDesc.debugName = srgb
+            ? "StaticMesh.ColorTexture" : "StaticMesh.DataTexture";
+        textureDesc.format = srgb
+            ? RhiTextureFormat::Rgba8Srgb : RhiTextureFormat::Rgba8Unorm;
+        textureDesc.width = width;
+        textureDesc.height = height;
+        textureDesc.mipLevels = mipLevels;
+        textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
+                            rhiFlag(RhiTextureUsage::TransferSrc) |
+                            rhiFlag(RhiTextureUsage::TransferDst);
+        RhiTextureInitialData initialData;
+        initialData.pixels = pixels;
+        initialData.sizeBytes = sizeBytes;
+        initialData.finalState = RhiResourceState::TransferDst;
+        TextureResource resource;
+        resource.texture = m_rhiDevice->createTexture(textureDesc, &initialData);
+        if (!resource.texture.isValid()) {
+            setError("failed to upload static mesh texture");
+            return false;
+        }
+        RhiTextureViewDesc viewDesc;
+        viewDesc.texture = resource.texture;
+        viewDesc.viewType = RhiTextureViewType::Texture2D;
+        viewDesc.mipCount = mipLevels;
+        resource.view = m_rhiDevice->createTextureView(viewDesc);
+        if (!resource.view.isValid()) {
+            m_rhiDevice->destroyTexture(resource.texture);
+            setError("failed to create static mesh texture view");
+            return false;
+        }
+        resource.mipLevels = mipLevels;
+        textureIndex = static_cast<uint32_t>(m_textures.size());
+        m_textures.push_back(resource);
+        return true;
+    };
 
     const auto loadTexture = [&](const cgltf_texture_view& textureView,
                                  const bool srgb,
+                                 const std::array<unsigned char, 4>& defaultPixel,
                                  uint32_t& textureIndex,
                                  RhiSamplerHandle& samplerHandle) -> bool {
-        if (textureView.texture == nullptr || textureView.texture->image == nullptr) {
-            setError("every supported PBR material channel must reference a 2D image");
-            return false;
-        }
-        if (textureView.texcoord != 0 || textureView.has_transform) {
-            setError("static mesh materials currently require untransformed TEXCOORD_0");
-            return false;
-        }
-        if (textureView.texture->has_basisu || textureView.texture->has_webp) {
-            setError("compressed and WebP glTF texture extensions are not supported");
-            return false;
-        }
-        const TextureCacheKey cacheKey{textureView.texture->image, srgb};
-        const auto cached = textureCache.find(cacheKey);
-        if (cached != textureCache.end()) {
-            textureIndex = cached->second;
+        const cgltf_sampler* sampler = nullptr;
+        if (textureView.texture == nullptr) {
+            const uint64_t solidKey =
+                static_cast<uint64_t>(defaultPixel[0]) |
+                (static_cast<uint64_t>(defaultPixel[1]) << 8u) |
+                (static_cast<uint64_t>(defaultPixel[2]) << 16u) |
+                (static_cast<uint64_t>(defaultPixel[3]) << 24u) |
+                (static_cast<uint64_t>(srgb) << 32u);
+            const auto cached = solidTextureCache.find(solidKey);
+            if (cached != solidTextureCache.end()) {
+                textureIndex = cached->second;
+            } else {
+                if (!uploadTexture(
+                        defaultPixel.data(), defaultPixel.size(),
+                        1u, 1u, srgb, textureIndex)) {
+                    return false;
+                }
+                solidTextureCache.emplace(solidKey, textureIndex);
+            }
         } else {
-            DecodedImage decoded;
-            std::string decodeError;
-            if (!decodeImage(*textureView.texture->image, modelDirectory,
-                             decoded, decodeError)) {
-                setError(std::move(decodeError));
+            if (textureView.texture->image == nullptr) {
+                setError("glTF texture does not reference a 2D image");
                 return false;
             }
-            const uint32_t width = static_cast<uint32_t>(decoded.width);
-            const uint32_t height = static_cast<uint32_t>(decoded.height);
-            const uint32_t mipLevels = mipLevelCount(width, height);
-            RhiTextureDesc textureDesc;
-            textureDesc.debugName = srgb
-                ? "StaticMesh.ColorTexture" : "StaticMesh.DataTexture";
-            textureDesc.format = srgb
-                ? RhiTextureFormat::Rgba8Srgb : RhiTextureFormat::Rgba8Unorm;
-            textureDesc.width = width;
-            textureDesc.height = height;
-            textureDesc.mipLevels = mipLevels;
-            textureDesc.usage = rhiFlag(RhiTextureUsage::Sampled) |
-                                rhiFlag(RhiTextureUsage::TransferSrc) |
-                                rhiFlag(RhiTextureUsage::TransferDst);
-            RhiTextureInitialData initialData;
-            initialData.pixels = decoded.pixels.data();
-            initialData.sizeBytes = decoded.pixels.size();
-            initialData.finalState = RhiResourceState::TransferDst;
-            TextureResource resource;
-            resource.texture = m_rhiDevice->createTexture(textureDesc, &initialData);
-            if (!resource.texture.isValid()) {
-                setError("failed to upload static mesh texture");
+            if (textureView.texcoord != 0 || textureView.has_transform) {
+                setError("static mesh materials require untransformed TEXCOORD_0");
                 return false;
             }
-            RhiTextureViewDesc viewDesc;
-            viewDesc.texture = resource.texture;
-            viewDesc.viewType = RhiTextureViewType::Texture2D;
-            viewDesc.mipCount = mipLevels;
-            resource.view = m_rhiDevice->createTextureView(viewDesc);
-            if (!resource.view.isValid()) {
-                m_rhiDevice->destroyTexture(resource.texture);
-                setError("failed to create static mesh texture view");
+            if (textureView.texture->has_basisu || textureView.texture->has_webp) {
+                setError("compressed and WebP glTF texture extensions are not supported");
                 return false;
             }
-            resource.mipLevels = mipLevels;
-            textureIndex = static_cast<uint32_t>(m_textures.size());
-            m_textures.push_back(resource);
-            textureCache.emplace(cacheKey, textureIndex);
+            const TextureCacheKey cacheKey{textureView.texture->image, srgb};
+            const auto cached = textureCache.find(cacheKey);
+            if (cached != textureCache.end()) {
+                textureIndex = cached->second;
+            } else {
+                DecodedImage decoded;
+                std::string decodeError;
+                if (!decodeImage(*textureView.texture->image, modelDirectory,
+                                 decoded, decodeError)) {
+                    setError(std::move(decodeError));
+                    return false;
+                }
+                if (!uploadTexture(
+                        decoded.pixels.data(), decoded.pixels.size(),
+                        static_cast<uint32_t>(decoded.width),
+                        static_cast<uint32_t>(decoded.height),
+                        srgb, textureIndex)) {
+                    return false;
+                }
+                textureCache.emplace(cacheKey, textureIndex);
+            }
+            sampler = textureView.texture->sampler;
         }
 
         const RhiCapabilities& capabilities = m_rhiDevice->capabilities();
         RhiSamplerDesc samplerDesc;
-        if (!buildSamplerDesc(textureView.texture->sampler,
-                              capabilities, samplerDesc)) {
+        if (!buildSamplerDesc(sampler, capabilities, samplerDesc)) {
             setError("glTF texture uses an invalid sampler contract");
             return false;
         }
@@ -857,37 +968,63 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
     for (cgltf_size materialIndex = 0u;
          materialIndex < data->materials_count; ++materialIndex) {
         const cgltf_material& material = data->materials[materialIndex];
+        const bool specularGlossiness =
+            material.has_pbr_specular_glossiness != 0;
         const cgltf_pbr_metallic_roughness& pbr = material.pbr_metallic_roughness;
+        const cgltf_pbr_specular_glossiness& specularGloss =
+            material.pbr_specular_glossiness;
         const std::array<const cgltf_texture_view*, 5> textureViews = {
-            &pbr.base_color_texture,
-            &pbr.metallic_roughness_texture,
+            specularGlossiness
+                ? &specularGloss.diffuse_texture
+                : &pbr.base_color_texture,
+            specularGlossiness
+                ? &specularGloss.specular_glossiness_texture
+                : &pbr.metallic_roughness_texture,
             &material.normal_texture,
             &material.occlusion_texture,
             &material.emissive_texture};
-        const std::array<bool, 5> textureSrgb = {true, false, false, false, true};
+        const std::array<bool, 5> textureSrgb = {
+            true, specularGlossiness, false, false, true};
+        const std::array<std::array<unsigned char, 4>, 5> defaultPixels = {{
+            {255u, 255u, 255u, 255u},
+            {255u, 255u, 255u, 255u},
+            {128u, 128u, 255u, 255u},
+            {255u, 255u, 255u, 255u},
+            {255u, 255u, 255u, 255u}}};
         std::array<uint32_t, 5> textureIndices{};
         std::array<RhiSamplerHandle, 5> samplers{};
         for (std::size_t channel = 0u; channel < textureViews.size(); ++channel) {
             if (!loadTexture(*textureViews[channel], textureSrgb[channel],
+                             defaultPixels[channel],
                              textureIndices[channel], samplers[channel])) {
                 return false;
             }
         }
 
         StaticMeshMaterialParams params;
-        params.baseColorFactor = glm::make_vec4(pbr.base_color_factor);
+        params.baseColorFactor = specularGlossiness
+            ? glm::make_vec4(specularGloss.diffuse_factor)
+            : glm::make_vec4(pbr.base_color_factor);
         const float emissiveStrength = material.has_emissive_strength
             ? material.emissive_strength.emissive_strength : 1.0f;
         params.emissiveAlphaCutoff = glm::vec4(
             glm::make_vec3(material.emissive_factor) * emissiveStrength,
             material.alpha_cutoff);
         params.materialFactors = glm::vec4(
-            pbr.metallic_factor,
-            pbr.roughness_factor,
+            specularGlossiness ? 0.0f : pbr.metallic_factor,
+            specularGlossiness ? 1.0f : pbr.roughness_factor,
             material.normal_texture.scale,
             material.occlusion_texture.scale);
+        if (specularGlossiness) {
+            params.workflowFactors = glm::vec4(
+                glm::make_vec3(specularGloss.specular_factor),
+                specularGloss.glossiness_factor);
+        }
         params.materialFlags.x =
             material.alpha_mode == cgltf_alpha_mode_mask ? 1 : 0;
+        params.materialFlags.y = specularGlossiness ? 1 : 0;
+        params.materialFlags.z =
+            material.alpha_mode == cgltf_alpha_mode_blend ? 1 : 0;
 
         RhiBufferDesc materialBufferDesc;
         materialBufferDesc.debugName = "StaticMesh.MaterialUniformBuffer";
@@ -904,6 +1041,8 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
             return false;
         }
         resource.doubleSided = material.double_sided != 0;
+        resource.transparent =
+            material.alpha_mode == cgltf_alpha_mode_blend;
 
         RhiBindGroupDesc bindGroupDesc;
         bindGroupDesc.layout = m_bindGroupLayout;
@@ -950,10 +1089,25 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
             primitive, cgltf_attribute_type_tangent, 0);
         const cgltf_accessor* uvs = requireAttribute(
             primitive, cgltf_attribute_type_texcoord, 0);
-        if (positions == nullptr || normals == nullptr || uvs == nullptr ||
+        const cgltf_material& primitiveMaterial = *primitive.material;
+        const cgltf_pbr_metallic_roughness& primitiveMetallicRoughness =
+            primitiveMaterial.pbr_metallic_roughness;
+        const cgltf_pbr_specular_glossiness& primitiveSpecularGlossiness =
+            primitiveMaterial.pbr_specular_glossiness;
+        const bool materialUsesTextures =
+            primitiveMetallicRoughness.base_color_texture.texture != nullptr ||
+            primitiveMetallicRoughness.metallic_roughness_texture.texture != nullptr ||
+            primitiveSpecularGlossiness.diffuse_texture.texture != nullptr ||
+            primitiveSpecularGlossiness.specular_glossiness_texture.texture != nullptr ||
+            primitiveMaterial.normal_texture.texture != nullptr ||
+            primitiveMaterial.occlusion_texture.texture != nullptr ||
+            primitiveMaterial.emissive_texture.texture != nullptr;
+        if (positions == nullptr || normals == nullptr ||
+            (uvs == nullptr && materialUsesTextures) ||
             positions->type != cgltf_type_vec3 || normals->type != cgltf_type_vec3 ||
-            uvs->type != cgltf_type_vec2 || positions->count != normals->count ||
-            positions->count != uvs->count || primitive.indices->count == 0u ||
+            (uvs != nullptr &&
+             (uvs->type != cgltf_type_vec2 || positions->count != uvs->count)) ||
+            positions->count != normals->count || primitive.indices->count == 0u ||
             primitive.indices->count % 3u != 0u ||
             (tangents != nullptr &&
              (tangents->type != cgltf_type_vec4 || tangents->count != positions->count))) {
@@ -975,6 +1129,9 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         vertices.reserve(primitive.indices->count);
         std::vector<uint32_t> indices;
         indices.reserve(primitive.indices->count);
+        glm::vec3 primitiveBoundsMin{0.0f};
+        glm::vec3 primitiveBoundsMax{0.0f};
+        bool primitiveBoundsInitialized = false;
         for (cgltf_size corner = 0u; corner < primitive.indices->count; ++corner) {
             const cgltf_size sourceIndex = cgltf_accessor_read_index(
                 primitive.indices, corner);
@@ -984,10 +1141,11 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
             }
             float positionValues[3];
             float normalValues[3];
-            float uvValues[2];
+            float uvValues[2] = {0.0f, 0.0f};
             if (!readAccessorVec(*positions, sourceIndex, positionValues, 3u) ||
                 !readAccessorVec(*normals, sourceIndex, normalValues, 3u) ||
-                !readAccessorVec(*uvs, sourceIndex, uvValues, 2u)) {
+                (uvs != nullptr &&
+                 !readAccessorVec(*uvs, sourceIndex, uvValues, 2u))) {
                 setError("failed to decode mesh vertex accessors");
                 return false;
             }
@@ -1001,6 +1159,14 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
                 return false;
             }
             const glm::vec3 normal = transformedNormal / std::sqrt(normalLengthSq);
+            if (!primitiveBoundsInitialized) {
+                primitiveBoundsMin = position;
+                primitiveBoundsMax = position;
+                primitiveBoundsInitialized = true;
+            } else {
+                primitiveBoundsMin = glm::min(primitiveBoundsMin, position);
+                primitiveBoundsMax = glm::max(primitiveBoundsMax, position);
+            }
             StaticMeshVertex vertex{};
             std::memcpy(vertex.position, glm::value_ptr(position), sizeof(vertex.position));
             std::memcpy(vertex.normal, glm::value_ptr(normal), sizeof(vertex.normal));
@@ -1026,6 +1192,17 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
                             sizeof(float) * 3u);
                 vertex.tangent[3] = tangentValues[3] *
                                     (determinant < 0.0f ? -1.0f : 1.0f);
+            } else if (uvs == nullptr) {
+                const glm::vec3 tangentReference =
+                    std::abs(normal.y) < 0.999f
+                        ? glm::vec3(0.0f, 1.0f, 0.0f)
+                        : glm::vec3(1.0f, 0.0f, 0.0f);
+                const glm::vec3 tangent =
+                    glm::normalize(glm::cross(tangentReference, normal));
+                std::memcpy(
+                    vertex.tangent, glm::value_ptr(tangent),
+                    sizeof(float) * 3u);
+                vertex.tangent[3] = 1.0f;
             }
             if (!boundsInitialized) {
                 m_assetBoundsMin = position;
@@ -1054,7 +1231,7 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
             setError("mesh primitive contains only non-rasterizable triangles");
             return false;
         }
-        if (tangents == nullptr) {
+        if (tangents == nullptr && uvs != nullptr) {
             std::string tangentError;
             if (!generateTangents(vertices, tangentError)) {
                 setError(std::move(tangentError));
@@ -1070,6 +1247,8 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         resource.indexCount = static_cast<uint32_t>(indices.size());
         resource.materialIndex = static_cast<uint32_t>(
             primitive.material - data->materials);
+        resource.boundsCenter =
+            (primitiveBoundsMin + primitiveBoundsMax) * 0.5f;
         RhiBufferDesc bufferDesc;
         bufferDesc.debugName = "StaticMesh.VertexBuffer";
         bufferDesc.size = vertices.size() * sizeof(StaticMeshVertex);
@@ -1216,7 +1395,8 @@ void StaticMeshRenderer::assetBounds(glm::vec3& minimum,
 bool StaticMeshRenderer::prepareGBuffer(
     RhiCommandList& commandList,
     const glm::mat4& viewProjection,
-    const glm::mat4& previousViewProjection) const {
+    const glm::mat4& previousViewProjection,
+    const FrameContext& context) const {
     if (!m_framePrepared || !m_frameUniformBuffer.isValid()) {
         return false;
     }
@@ -1224,8 +1404,32 @@ bool StaticMeshRenderer::prepareGBuffer(
         m_frameUniformBuffer,
         RhiResourceState::UniformBuffer,
         RhiResourceState::TransferDst});
-    const StaticMeshFrameParams frameParams{
-        m_voxelLight, viewProjection, previousViewProjection};
+    StaticMeshFrameParams frameParams;
+    frameParams.voxelLight = m_voxelLight;
+    frameParams.viewProjection = viewProjection;
+    frameParams.previousViewProjection = previousViewProjection;
+    frameParams.cameraPosition = glm::vec4(context.camera.position, 1.0f);
+    const bool moonDominant =
+        context.skyColors.moonVisibility > context.skyColors.sunVisibility;
+    frameParams.sunDirection = glm::vec4(
+        moonDominant
+            ? context.skyColors.moonDirection
+            : context.skyColors.sunDirection,
+        0.0f);
+    frameParams.sunColor = glm::vec4(
+        (moonDominant
+             ? context.skyColors.moonLightColor
+             : context.skyColors.sunLightColor) *
+            context.skyIntensity,
+        1.0f);
+    frameParams.ambientColor = glm::vec4(
+        context.skyColors.skyAmbientColor * context.skyIntensity, 0.0f);
+    frameParams.fogColor = glm::vec4(context.fog.color, 0.0f);
+    frameParams.fogParams = glm::vec4(
+        context.fog.startDistance,
+        context.fog.endDistance,
+        context.fog.density,
+        context.fog.enabled ? static_cast<float>(context.fog.mode + 1) : 0.0f);
     commandList.updateBuffer(
         m_frameUniformBuffer, 0u, &frameParams, sizeof(frameParams));
     commandList.bufferBarrier({
@@ -1240,6 +1444,9 @@ void StaticMeshRenderer::renderToGBuffer(RhiCommandList& commandList) const {
         m_modelMatrix, m_previousModelMatrix};
     for (const PrimitiveResource& primitive : m_primitives) {
         const MaterialResource& material = m_materials[primitive.materialIndex];
+        if (material.transparent) {
+            continue;
+        }
         commandList.setGraphicsPipeline(material.doubleSided
             ? m_gbufferDoubleSidedPipeline : m_gbufferPipeline);
         commandList.setBindGroup(0u, material.bindGroup);
@@ -1251,6 +1458,54 @@ void StaticMeshRenderer::renderToGBuffer(RhiCommandList& commandList) const {
     }
 }
 
+void StaticMeshRenderer::appendTransparentDraws(
+    const glm::mat4& model,
+    const glm::vec3& cameraPosition,
+    std::vector<TransparentDraw>& draws) const {
+    for (std::size_t primitiveIndex = 0u;
+         primitiveIndex < m_primitives.size(); ++primitiveIndex) {
+        const PrimitiveResource& primitive = m_primitives[primitiveIndex];
+        if (!m_materials[primitive.materialIndex].transparent) {
+            continue;
+        }
+        const glm::vec3 worldCenter = glm::vec3(
+            model * glm::vec4(primitive.boundsCenter, 1.0f));
+        const glm::vec3 toCamera = worldCenter - cameraPosition;
+        draws.push_back({
+            primitiveIndex, model, glm::dot(toCamera, toCamera)});
+    }
+}
+
+void StaticMeshRenderer::renderTransparentDraw(
+    RhiCommandList& commandList,
+    const TransparentDraw& draw) const {
+    if (draw.primitiveIndex >= m_primitives.size()) {
+        std::abort();
+    }
+    const PrimitiveResource& primitive = m_primitives[draw.primitiveIndex];
+    const MaterialResource& material = m_materials[primitive.materialIndex];
+    if (!material.transparent) {
+        std::abort();
+    }
+    commandList.setGraphicsPipeline(material.doubleSided
+        ? m_transparentDoubleSidedPipeline : m_transparentPipeline);
+    commandList.setBindGroup(0u, material.bindGroup);
+    commandList.setVertexBuffer(0u, primitive.vertexBuffer, 0u);
+    commandList.setIndexBuffer(
+        primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
+    commandList.pushConstants(
+        &draw.model, sizeof(draw.model), rhiFlag(RhiShaderStage::Vertex));
+    commandList.drawIndexed(primitive.indexCount, 1u, 0u, 0, 0u);
+}
+
+bool StaticMeshRenderer::hasTransparentPrimitives() const {
+    return std::any_of(
+        m_primitives.begin(), m_primitives.end(),
+        [this](const PrimitiveResource& primitive) {
+            return m_materials[primitive.materialIndex].transparent;
+        });
+}
+
 void StaticMeshRenderer::renderPreview(RhiCommandList& commandList,
                                        const glm::mat4& viewProj) const {
     if (!m_framePrepared) {
@@ -1259,6 +1514,9 @@ void StaticMeshRenderer::renderPreview(RhiCommandList& commandList,
     const StaticMeshPreviewPushConstants constants{viewProj, m_modelMatrix};
     for (const PrimitiveResource& primitive : m_primitives) {
         const MaterialResource& material = m_materials[primitive.materialIndex];
+        if (material.transparent) {
+            continue;
+        }
         commandList.setGraphicsPipeline(material.doubleSided
             ? m_previewDoubleSidedPipeline : m_previewPipeline);
         commandList.setBindGroup(0u, material.bindGroup);
@@ -1280,6 +1538,9 @@ void StaticMeshRenderer::renderToShadowMap(
     const glm::mat4 modelViewProj = shadowViewProj * m_modelMatrix;
     for (const PrimitiveResource& primitive : m_primitives) {
         const MaterialResource& material = m_materials[primitive.materialIndex];
+        if (material.transparent) {
+            continue;
+        }
         commandList.setGraphicsPipeline(material.doubleSided
             ? m_shadowDoubleSidedPipeline : m_shadowPipeline);
         commandList.setBindGroup(0u, material.bindGroup);
@@ -1340,6 +1601,12 @@ void StaticMeshRenderer::shutdown() {
 }
 
 void StaticMeshRenderer::destroyPipelineResources() {
+    if (m_transparentDoubleSidedPipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(m_transparentDoubleSidedPipeline);
+    }
+    if (m_transparentPipeline.isValid()) {
+        m_rhiDevice->destroyPipeline(m_transparentPipeline);
+    }
     if (m_previewDoubleSidedPipeline.isValid()) {
         m_rhiDevice->destroyPipeline(m_previewDoubleSidedPipeline);
     }
@@ -1361,6 +1628,9 @@ void StaticMeshRenderer::destroyPipelineResources() {
     if (m_shadowPipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_shadowPipelineLayout);
     }
+    if (m_transparentPipelineLayout.isValid()) {
+        m_rhiDevice->destroyPipelineLayout(m_transparentPipelineLayout);
+    }
     if (m_previewPipelineLayout.isValid()) {
         m_rhiDevice->destroyPipelineLayout(m_previewPipelineLayout);
     }
@@ -1372,6 +1642,12 @@ void StaticMeshRenderer::destroyPipelineResources() {
     }
     if (m_shadowFragmentShader.isValid()) {
         m_rhiDevice->destroyShader(m_shadowFragmentShader);
+    }
+    if (m_transparentFragmentShader.isValid()) {
+        m_rhiDevice->destroyShader(m_transparentFragmentShader);
+    }
+    if (m_transparentVertexShader.isValid()) {
+        m_rhiDevice->destroyShader(m_transparentVertexShader);
     }
     if (m_shadowVertexShader.isValid()) {
         m_rhiDevice->destroyShader(m_shadowVertexShader);
@@ -1393,16 +1669,21 @@ void StaticMeshRenderer::destroyPipelineResources() {
     }
     m_shadowDoubleSidedPipeline = {};
     m_shadowPipeline = {};
+    m_transparentDoubleSidedPipeline = {};
+    m_transparentPipeline = {};
     m_gbufferDoubleSidedPipeline = {};
     m_gbufferPipeline = {};
     m_previewDoubleSidedPipeline = {};
     m_previewPipeline = {};
     m_shadowPipelineLayout = {};
+    m_transparentPipelineLayout = {};
     m_gbufferPipelineLayout = {};
     m_previewPipelineLayout = {};
     m_bindGroupLayout = {};
     m_shadowFragmentShader = {};
     m_shadowVertexShader = {};
+    m_transparentFragmentShader = {};
+    m_transparentVertexShader = {};
     m_gbufferFragmentShader = {};
     m_gbufferVertexShader = {};
     m_previewFragmentShader = {};

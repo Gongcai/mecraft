@@ -156,6 +156,7 @@ private:
     [[nodiscard]] bool recordGenericTransparentPass(
         RhiCommandList& commandList,
         const FrameContext& ctx);
+    [[nodiscard]] bool hasGenericTransparentGeometry() const;
     [[nodiscard]] bool recordParticlesPass(
         RhiCommandList& commandList,
         const FrameContext& ctx);

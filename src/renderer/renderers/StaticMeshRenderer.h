@@ -1,6 +1,7 @@
 #ifndef MECRAFT_STATIC_MESH_RENDERER_H
 #define MECRAFT_STATIC_MESH_RENDERER_H
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -15,13 +16,19 @@ class ResourceMgr;
 class RhiCommandList;
 class RhiDevice;
 
-/// Loads and renders one static glTF 2.0 metallic-roughness showcase asset.
+/// Loads and renders one static glTF 2.0 PBR showcase asset.
 class StaticMeshRenderer {
 public:
+    struct TransparentDraw {
+        size_t primitiveIndex = 0u;
+        glm::mat4 model{1.0f};
+        float distanceSquared = 0.0f;
+    };
+
     /// Creates the asset's CPU and GPU resources.
     /// @param resourceMgr Provides the active RHI device and command pool.
     /// @param modelPath Filesystem path to a glTF 2.0 GLB or JSON document.
-    /// @return True when the complete asset and both graphics pipelines are ready.
+    /// @return True when the complete asset and all graphics pipelines are ready.
     [[nodiscard]] bool init(ResourceMgr& resourceMgr, const std::string& modelPath);
 
     /// Releases every GPU object owned by the renderer.
@@ -48,15 +55,37 @@ public:
     /// @param commandList Graphics command list recording the current G-buffer pass.
     /// @param viewProjection Current raster view-projection matrix.
     /// @param previousViewProjection Previous view-projection used for velocity.
+    /// @param context Current camera, fog, and celestial lighting state.
     /// @return True when frame data was prepared and the upload was recorded.
     [[nodiscard]] bool prepareGBuffer(
         RhiCommandList& commandList,
         const glm::mat4& viewProjection,
-        const glm::mat4& previousViewProjection) const;
+        const glm::mat4& previousViewProjection,
+        const FrameContext& context) const;
 
     /// Records all static primitives into the active G-buffer rendering scope.
     /// @param commandList Command list with compatible G-buffer attachments active.
     void renderToGBuffer(RhiCommandList& commandList) const;
+
+    /// Appends alpha-blended primitives with camera distances for global sorting.
+    /// @param model Local-to-world transform for the rendered instance.
+    /// @param cameraPosition World-space camera position used for distance sorting.
+    /// @param draws Destination receiving one entry per transparent primitive.
+    void appendTransparentDraws(
+        const glm::mat4& model,
+        const glm::vec3& cameraPosition,
+        std::vector<TransparentDraw>& draws) const;
+
+    /// Draws one previously collected transparent primitive.
+    /// @param commandList Command list with the transparent attachments active.
+    /// @param draw Primitive, transform, and sort data collected for this draw.
+    void renderTransparentDraw(
+        RhiCommandList& commandList,
+        const TransparentDraw& draw) const;
+
+    /// Reports whether a loaded primitive uses alpha blending.
+    /// @return True when the asset contains renderable transparent geometry.
+    [[nodiscard]] bool hasTransparentPrimitives() const;
 
     /// Records all static primitives into the active shadow depth rendering scope.
     /// @param commandList Command list with one CSM cascade active.
@@ -84,6 +113,7 @@ private:
         RhiBufferHandle uniformBuffer;
         RhiBindGroupHandle bindGroup;
         bool doubleSided = false;
+        bool transparent = false;
     };
 
     struct PrimitiveResource {
@@ -91,6 +121,7 @@ private:
         RhiBufferHandle indexBuffer;
         uint32_t indexCount = 0u;
         uint32_t materialIndex = 0u;
+        glm::vec3 boundsCenter{0.0f};
     };
 
     [[nodiscard]] bool createPipelineResources();
@@ -108,18 +139,23 @@ private:
     RhiPipelineLayoutHandle m_gbufferPipelineLayout;
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
     RhiPipelineLayoutHandle m_previewPipelineLayout;
+    RhiPipelineLayoutHandle m_transparentPipelineLayout;
     RhiShaderHandle m_gbufferVertexShader;
     RhiShaderHandle m_gbufferFragmentShader;
     RhiShaderHandle m_shadowVertexShader;
     RhiShaderHandle m_shadowFragmentShader;
     RhiShaderHandle m_previewVertexShader;
     RhiShaderHandle m_previewFragmentShader;
+    RhiShaderHandle m_transparentVertexShader;
+    RhiShaderHandle m_transparentFragmentShader;
     RhiPipelineHandle m_gbufferPipeline;
     RhiPipelineHandle m_gbufferDoubleSidedPipeline;
     RhiPipelineHandle m_shadowPipeline;
     RhiPipelineHandle m_shadowDoubleSidedPipeline;
     RhiPipelineHandle m_previewPipeline;
     RhiPipelineHandle m_previewDoubleSidedPipeline;
+    RhiPipelineHandle m_transparentPipeline;
+    RhiPipelineHandle m_transparentDoubleSidedPipeline;
     glm::vec3 m_assetBoundsMin{0.0f};
     glm::vec3 m_assetBoundsMax{0.0f};
     glm::mat4 m_modelMatrix{1.0f};

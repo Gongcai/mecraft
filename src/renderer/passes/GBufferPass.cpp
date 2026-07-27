@@ -194,7 +194,7 @@ bool GBufferPass::executeStaticMeshes(RhiCommandList& commandList,
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     if (!staticMeshRenderer->prepareGBuffer(
             commandList, viewProj,
-            ctx.previousViewProjWithCurrentJitter)) {
+            ctx.previousViewProjWithCurrentJitter, ctx)) {
         return false;
     }
     if (!beginObjectGBufferRendering(

@@ -17,14 +17,18 @@ layout(std140, binding = 5) uniform StaticMeshMaterialParams {
     vec4 uBaseColorFactor;
     vec4 uEmissiveAlphaCutoff;
     vec4 uMaterialFactors;
+    vec4 uWorkflowFactors;
     ivec4 uMaterialFlags;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uPreviewLight;
 };
 
+#include "static_mesh_material.glsl"
+
 void main() {
-    vec4 baseColor = texture(uBaseColorTexture, vUv) * uBaseColorFactor;
+    StaticMeshMaterialSample sampledMaterial = sampleStaticMeshMaterial(vUv);
+    vec4 baseColor = sampledMaterial.baseColor;
     if (uMaterialFlags.x != 0 && baseColor.a < uEmissiveAlphaCutoff.w) {
         discard;
     }
@@ -35,9 +39,8 @@ void main() {
     tangentNormal.xy *= uMaterialFactors.z;
     normal = normalize(mat3(tangent, bitangent, normal) * normalize(tangentNormal));
 
-    vec4 metallicRoughness = texture(uMetallicRoughnessTexture, vUv);
-    float roughness = clamp(metallicRoughness.g * uMaterialFactors.y, 0.04, 1.0);
-    float metalness = clamp(metallicRoughness.b * uMaterialFactors.x, 0.0, 1.0);
+    float roughness = sampledMaterial.roughness;
+    float metalness = sampledMaterial.metalness;
     float occlusion = mix(1.0, texture(uOcclusionTexture, vUv).r, uMaterialFactors.w);
     vec3 emissive = texture(uEmissiveTexture, vUv).rgb * uEmissiveAlphaCutoff.rgb;
     vec3 lightDirection = normalize(vec3(-0.45, 0.8, 0.35));

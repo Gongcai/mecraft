@@ -34,6 +34,17 @@ public:
     virtual void renderToShadowMap(
         RhiCommandList& commandList,
         const glm::mat4& shadowViewProjection) = 0;
+
+    /// Reports whether the provider owns alpha-blended forward geometry.
+    /// @return True when at least one instantiated transparent primitive exists.
+    [[nodiscard]] virtual bool hasTransparentGeometry() const = 0;
+
+    /// Draws transparent geometry back-to-front into the active composite pass.
+    /// @param commandList Command list with the transparent attachments active.
+    /// @param cameraPosition World-space camera position used for draw sorting.
+    virtual void renderTransparent(
+        RhiCommandList& commandList,
+        const glm::vec3& cameraPosition) = 0;
 };
 
 #endif // MECRAFT_I_DEFERRED_GEOMETRY_PROVIDER_H

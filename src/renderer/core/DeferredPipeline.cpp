@@ -1569,7 +1569,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
             .setExecute([&](RgPassContext& pass) {
                 // Mirrors recordGenericTransparentPass: no generic draws means
                 // the working buffer was untouched and needs no writeback.
-                if (!m_transparentPassPlan.hasGeneric()) {
+                if (!hasGenericTransparentGeometry()) {
                     return true;
                 }
                 RhiTextureBlit sceneBlit;
@@ -2359,16 +2359,25 @@ bool DeferredPipeline::renderGBufferTerrain(RhiCommandList& commandList,
 bool DeferredPipeline::recordGenericTransparentPass(
     RhiCommandList& commandList,
     const FrameContext& ctx) {
-    if (!m_transparentPassPlan.hasGeneric()) {
+    if (!hasGenericTransparentGeometry()) {
         return true;
     }
-    if (!m_shared || !m_shared->deferredTargets || !m_shared->worldRenderBuffer ||
-        !m_shared->terrainRhiPipelines || !m_resourceMgr || !m_shared->rhiDevice) {
+    if (!m_shared || !m_shared->deferredTargets || !m_shared->rhiDevice) {
+        return false;
+    }
+
+    IDeferredGeometryProvider* geometryProvider =
+        m_shared->deferredGeometryProvider;
+    const bool externalTransparent =
+        geometryProvider != nullptr &&
+        geometryProvider->hasTransparentGeometry();
+    if (!externalTransparent &&
+        (!m_shared->worldRenderBuffer || !m_shared->terrainRhiPipelines ||
+         !m_resourceMgr)) {
         return false;
     }
 
     auto& targets = *m_shared->deferredTargets;
-    auto& worldBuffer = *m_shared->worldRenderBuffer;
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
     if (!targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
@@ -2408,6 +2417,27 @@ bool DeferredPipeline::recordGenericTransparentPass(
     const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
         ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::Transparent)
         : GpuTimerSegmentToken{};
+
+    if (externalTransparent) {
+        commandList.beginRendering(renderingInfo);
+        commandList.setViewport({
+            0.0f,
+            0.0f,
+            static_cast<float>(std::max(1, targets.width())),
+            static_cast<float>(std::max(1, targets.height())),
+            0.0f,
+            1.0f});
+        commandList.setScissor(renderingInfo.renderArea);
+        geometryProvider->renderTransparent(
+            commandList, ctx.camera.position);
+        commandList.endRendering();
+        if (ctx.debugService != nullptr) {
+            ctx.debugService->endGpuTimer(commandList, gpuTimer);
+        }
+        return true;
+    }
+
+    auto& worldBuffer = *m_shared->worldRenderBuffer;
 
     TerrainFrameData tfd;
     tfd.view = ctx.camera.view;
@@ -2515,6 +2545,14 @@ bool DeferredPipeline::recordGenericTransparentPass(
     }
 
     commandList.beginRendering(renderingInfo);
+    commandList.setViewport({
+        0.0f,
+        0.0f,
+        static_cast<float>(std::max(1, targets.width())),
+        static_cast<float>(std::max(1, targets.height())),
+        0.0f,
+        1.0f});
+    commandList.setScissor(renderingInfo.renderArea);
     worldBuffer.recordRhiTransparent(
         commandList,
         m_shared->terrainRhiPipelines->transparentPipeline(),
@@ -2525,6 +2563,13 @@ bool DeferredPipeline::recordGenericTransparentPass(
         ctx.debugService->endGpuTimer(commandList, gpuTimer);
     }
     return true;
+}
+
+bool DeferredPipeline::hasGenericTransparentGeometry() const {
+    return m_transparentPassPlan.hasGeneric() ||
+           (m_shared != nullptr &&
+            m_shared->deferredGeometryProvider != nullptr &&
+            m_shared->deferredGeometryProvider->hasTransparentGeometry());
 }
 
 void DeferredPipeline::commitDeferredHistoryState() {
