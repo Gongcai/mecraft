@@ -1105,14 +1105,11 @@ void ModelSceneAppState::showAssetsPanel() {
         importModelPath(m_importPath.data());
     }
     if (!m_importDialogError.empty()) {
+        ImGui::PushTextWrapPos(0.0f);
         ImGui::TextColored(
             ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
             "%s", m_importDialogError.c_str());
-    }
-    if (!m_scene.lastError().empty()) {
-        ImGui::TextColored(
-            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
-            "%s", m_scene.lastError().c_str());
+        ImGui::PopTextWrapPos();
     }
     if (!m_sceneIoError.empty()) {
         ImGui::TextColored(
@@ -1177,12 +1174,14 @@ void ModelSceneAppState::importModelPath(const std::string& path) {
     m_importDialogError.clear();
     const std::size_t assetCountBeforeImport = m_scene.assetCount();
     const entt::entity imported = m_scene.importModel(path);
-    if (imported != entt::null) {
-        m_scene.setSelectedEntity(imported);
-        recordCreatedEntity(imported);
-        if (m_scene.assetCount() != assetCountBeforeImport) {
-            markSceneDirty();
-        }
+    if (imported == entt::null) {
+        m_importDialogError = m_scene.lastError();
+        return;
+    }
+    m_scene.setSelectedEntity(imported);
+    recordCreatedEntity(imported);
+    if (m_scene.assetCount() != assetCountBeforeImport) {
+        markSceneDirty();
     }
 }
 

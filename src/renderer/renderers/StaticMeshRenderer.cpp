@@ -202,6 +202,79 @@ static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
     return "invalid cgltf result";
 }
 
+void appendContractIssue(std::string& error, const std::string& issue) {
+    error += error.empty() ? "" : "; ";
+    error += issue;
+}
+
+[[nodiscard]] std::string staticAssetContractError(const cgltf_data& data) {
+    std::string error;
+    if (data.extensions_required_count != 0u) {
+        std::string extensions;
+        for (cgltf_size index = 0u;
+             index < data.extensions_required_count; ++index) {
+            extensions += extensions.empty() ? "" : ", ";
+            extensions += data.extensions_required[index];
+        }
+        appendContractIssue(
+            error, "required extensions [" + extensions + "]");
+    }
+
+    std::size_t missingMetallicRoughness = 0u;
+    std::size_t specularGlossiness = 0u;
+    std::size_t advancedPbr = 0u;
+    std::size_t unlit = 0u;
+    std::size_t alphaBlend = 0u;
+    for (cgltf_size index = 0u; index < data.materials_count; ++index) {
+        const cgltf_material& material = data.materials[index];
+        missingMetallicRoughness +=
+            material.has_pbr_metallic_roughness == 0 ? 1u : 0u;
+        specularGlossiness +=
+            material.has_pbr_specular_glossiness != 0 ? 1u : 0u;
+        advancedPbr +=
+            material.has_clearcoat || material.has_transmission ||
+                    material.has_volume || material.has_specular ||
+                    material.has_sheen || material.has_iridescence ||
+                    material.has_diffuse_transmission ||
+                    material.has_anisotropy || material.has_dispersion
+                ? 1u
+                : 0u;
+        unlit += material.unlit != 0 ? 1u : 0u;
+        alphaBlend +=
+            material.alpha_mode == cgltf_alpha_mode_blend ? 1u : 0u;
+    }
+    if (missingMetallicRoughness != 0u) {
+        appendContractIssue(
+            error, std::to_string(missingMetallicRoughness) +
+                       " material(s) do not define core metallic-roughness");
+    }
+    if (specularGlossiness != 0u) {
+        appendContractIssue(
+            error, std::to_string(specularGlossiness) +
+                       " material(s) use KHR_materials_pbrSpecularGlossiness");
+    }
+    if (advancedPbr != 0u) {
+        appendContractIssue(
+            error, std::to_string(advancedPbr) +
+                       " material(s) use unsupported advanced PBR extensions");
+    }
+    if (unlit != 0u) {
+        appendContractIssue(
+            error, std::to_string(unlit) + " material(s) use KHR_materials_unlit");
+    }
+    if (alphaBlend != 0u) {
+        appendContractIssue(
+            error, std::to_string(alphaBlend) +
+                       " material(s) use alphaMode BLEND");
+    }
+    if (error.empty()) {
+        return {};
+    }
+    return "glTF asset is incompatible with the static mesh asset contract: " +
+           error +
+           ". Supported materials are core metallic-roughness with OPAQUE or MASK alpha";
+}
+
 [[nodiscard]] bool readBinaryFile(const std::filesystem::path& path,
                                   std::vector<unsigned char>& bytes) {
     std::ifstream stream(path, std::ios::binary | std::ios::ate);
@@ -677,10 +750,6 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
         setError("static mesh assets must declare glTF version 2.0");
         return false;
     }
-    if (data->extensions_required_count != 0u) {
-        setError("required glTF extensions are outside the static mesh asset contract");
-        return false;
-    }
     if (data->scene == nullptr || data->scene->nodes_count == 0u ||
         data->animations_count != 0u || data->skins_count != 0u) {
         setError("static mesh assets require a non-empty default scene without skins or animations");
@@ -688,6 +757,11 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
     }
     if (data->materials_count == 0u) {
         setError("static mesh assets require explicit metallic-roughness materials");
+        return false;
+    }
+    const std::string contractError = staticAssetContractError(*data);
+    if (!contractError.empty()) {
+        setError(contractError);
         return false;
     }
 
@@ -783,15 +857,6 @@ bool StaticMeshRenderer::loadAsset(const std::string& modelPath,
     for (cgltf_size materialIndex = 0u;
          materialIndex < data->materials_count; ++materialIndex) {
         const cgltf_material& material = data->materials[materialIndex];
-        if (!material.has_pbr_metallic_roughness || material.has_pbr_specular_glossiness ||
-            material.has_clearcoat || material.has_transmission || material.has_volume ||
-            material.has_specular || material.has_sheen || material.has_iridescence ||
-            material.has_diffuse_transmission || material.has_anisotropy ||
-            material.has_dispersion || material.unlit ||
-            material.alpha_mode == cgltf_alpha_mode_blend) {
-            setError("material is outside the static metallic-roughness OPAQUE/MASK contract");
-            return false;
-        }
         const cgltf_pbr_metallic_roughness& pbr = material.pbr_metallic_roughness;
         const std::array<const cgltf_texture_view*, 5> textureViews = {
             &pbr.base_color_texture,
