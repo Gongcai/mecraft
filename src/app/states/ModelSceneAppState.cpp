@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <utility>
 #include <vector>
 
 #include <GLFW/glfw3.h>
@@ -105,12 +106,17 @@ void ModelSceneAppState::onEnter() {
     }
     m_scenePath.clear();
     m_sceneIoError.clear();
+    m_history.clear();
+    m_nonHistoryDirty = false;
     m_sceneDirty = false;
     m_pendingSceneAction = PendingSceneAction::None;
     m_openUnsavedPopup = false;
     m_pendingEntityAction = PendingEntityAction::None;
     m_pendingEntityId = scene::kInvalidSceneEntityId;
     m_entityNameEditorId = scene::kInvalidSceneEntityId;
+    m_transformCommandActive = false;
+    m_transformCommandFromGizmo = false;
+    m_transformCommandEntityId = scene::kInvalidSceneEntityId;
     m_initialized = true;
 }
 
@@ -131,7 +137,71 @@ void ModelSceneAppState::requestReturnToMenu() {
 }
 
 void ModelSceneAppState::markSceneDirty() {
-    m_sceneDirty = true;
+    m_nonHistoryDirty = true;
+    refreshSceneDirty();
+}
+
+void ModelSceneAppState::refreshSceneDirty() {
+    m_sceneDirty =
+        m_nonHistoryDirty || !m_history.isAtSavedState();
+}
+
+void ModelSceneAppState::recordCreatedEntity(const entt::entity entity) {
+    std::vector<scene::SceneEntityDocument> states;
+    if (!m_scene.captureEntitySubtree(entity, states)) {
+        std::abort();
+    }
+    m_history.recordCreatedSubtree(std::move(states));
+    refreshSceneDirty();
+}
+
+void ModelSceneAppState::beginTransformCommand(
+    const entt::entity entity,
+    const scene::SceneEntityDocument& before,
+    const bool fromGizmo) {
+    if (m_transformCommandActive) {
+        return;
+    }
+    m_transformCommandActive = true;
+    m_transformCommandFromGizmo = fromGizmo;
+    m_transformCommandEntityId = m_scene.entityId(entity);
+    m_transformCommandBefore = before;
+}
+
+void ModelSceneAppState::finishTransformCommand() {
+    if (!m_transformCommandActive) {
+        return;
+    }
+    const entt::entity entity =
+        m_scene.findEntity(m_transformCommandEntityId);
+    scene::SceneEntityDocument after;
+    if (entity != entt::null && m_scene.captureEntityState(entity, after)) {
+        m_history.recordEntityState(m_transformCommandBefore, after);
+    }
+    m_transformCommandActive = false;
+    m_transformCommandFromGizmo = false;
+    m_transformCommandEntityId = scene::kInvalidSceneEntityId;
+    refreshSceneDirty();
+}
+
+void ModelSceneAppState::undoSceneCommand() {
+    if (m_transformCommandActive || !m_history.canUndo()) {
+        return;
+    }
+    if (m_history.undo(m_scene)) {
+        m_entityNameEditorId = scene::kInvalidSceneEntityId;
+        refreshSceneDirty();
+    }
+}
+
+void ModelSceneAppState::redoSceneCommand() {
+    if (m_transformCommandActive || !m_history.canRedo()) {
+        return;
+    }
+    if (m_history.redo(m_scene)) {
+        m_entityNameEditorId = scene::kInvalidSceneEntityId;
+        refreshSceneDirty();
+    }
 }
 
 void ModelSceneAppState::handleEditorShortcuts(const InputSnapshot& input) {
@@ -150,6 +220,18 @@ void ModelSceneAppState::handleEditorShortcuts(const InputSnapshot& input) {
         input.isKeyHeld(GLFW_KEY_RIGHT_SHIFT);
     if (control && input.isKeyJustPressed(GLFW_KEY_S)) {
         static_cast<void>(shift ? saveSceneAs() : saveScene());
+        return;
+    }
+    if (control && input.isKeyJustPressed(GLFW_KEY_Z)) {
+        if (shift) {
+            redoSceneCommand();
+        } else {
+            undoSceneCommand();
+        }
+        return;
+    }
+    if (control && input.isKeyJustPressed(GLFW_KEY_Y)) {
+        redoSceneCommand();
         return;
     }
     if (control && input.isKeyJustPressed(GLFW_KEY_O)) {
@@ -215,8 +297,8 @@ void ModelSceneAppState::duplicateSelectedEntity() {
         return;
     }
     if (m_scene.duplicateEntity(selected) != entt::null) {
+        recordCreatedEntity(m_scene.selectedEntity());
         m_entityNameEditorId = scene::kInvalidSceneEntityId;
-        markSceneDirty();
     }
 }
 
@@ -225,9 +307,14 @@ void ModelSceneAppState::deleteSelectedEntity() {
     if (selected == entt::null || !m_scene.registry().valid(selected)) {
         return;
     }
+    std::vector<scene::SceneEntityDocument> states;
+    if (!m_scene.captureEntitySubtree(selected, states)) {
+        std::abort();
+    }
     m_scene.destroyEntity(selected);
+    m_history.recordDeletedSubtree(std::move(states));
     m_entityNameEditorId = scene::kInvalidSceneEntityId;
-    markSceneDirty();
+    refreshSceneDirty();
 }
 
 void ModelSceneAppState::focusSelectedEntity() {
@@ -302,8 +389,13 @@ void ModelSceneAppState::newScene() {
     applyEditorCamera(scene::SceneEditorCameraDocument{});
     m_scenePath.clear();
     m_sceneIoError.clear();
-    m_sceneDirty = false;
+    m_history.clear();
+    m_nonHistoryDirty = false;
+    refreshSceneDirty();
     m_entityNameEditorId = scene::kInvalidSceneEntityId;
+    m_transformCommandActive = false;
+    m_transformCommandFromGizmo = false;
+    m_transformCommandEntityId = scene::kInvalidSceneEntityId;
 }
 
 bool ModelSceneAppState::loadScenePath(const std::string& path) {
@@ -323,8 +415,13 @@ bool ModelSceneAppState::loadScenePath(const std::string& path) {
     }
     applyEditorCamera(document.editorCamera);
     m_scenePath = normalized;
-    m_sceneDirty = false;
+    m_history.clear();
+    m_nonHistoryDirty = false;
+    refreshSceneDirty();
     m_entityNameEditorId = scene::kInvalidSceneEntityId;
+    m_transformCommandActive = false;
+    m_transformCommandFromGizmo = false;
+    m_transformCommandEntityId = scene::kInvalidSceneEntityId;
     return true;
 }
 
@@ -372,7 +469,9 @@ bool ModelSceneAppState::saveSceneToPath(const std::string& path) {
         return false;
     }
     m_scenePath = normalized;
-    m_sceneDirty = false;
+    m_history.markSaved();
+    m_nonHistoryDirty = false;
+    refreshSceneDirty();
     return true;
 }
 
@@ -585,6 +684,15 @@ void ModelSceneAppState::buildEditorUi() {
             selected != entt::null && m_scene.registry().valid(selected);
         if (ImGui::BeginMenu("Edit")) {
             if (ImGui::MenuItem(
+                    "Undo", nullptr, false, m_history.canUndo())) {
+                undoSceneCommand();
+            }
+            if (ImGui::MenuItem(
+                    "Redo", nullptr, false, m_history.canRedo())) {
+                redoSceneCommand();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem(
                     "Duplicate Entity", nullptr, false, hasSelection)) {
                 duplicateSelectedEntity();
             }
@@ -706,8 +814,10 @@ void ModelSceneAppState::showRenderSettingsPanel() {
 void ModelSceneAppState::showHierarchyPanel() {
     ImGui::Begin("Scene Hierarchy");
     if (ImGui::Button("Create Empty")) {
-        if (m_scene.createEmptyEntity("Empty Entity") != entt::null) {
-            markSceneDirty();
+        const entt::entity created =
+            m_scene.createEmptyEntity("Empty Entity");
+        if (created != entt::null) {
+            recordCreatedEntity(created);
         }
     }
     ImGui::Separator();
@@ -752,8 +862,18 @@ void ModelSceneAppState::showHierarchyPanel() {
             m_scene.findEntity(m_hierarchyDropChild);
         const entt::entity parent =
             m_scene.findEntity(m_hierarchyDropParent);
+        scene::SceneEntityDocument before;
+        if (child != entt::null &&
+            !m_scene.captureEntityState(child, before)) {
+            std::abort();
+        }
         if (m_scene.setParent(child, parent)) {
-            markSceneDirty();
+            scene::SceneEntityDocument after;
+            if (!m_scene.captureEntityState(child, after)) {
+                std::abort();
+            }
+            m_history.recordEntityState(before, after);
+            refreshSceneDirty();
         }
     }
     executePendingEntityAction();
@@ -871,11 +991,17 @@ void ModelSceneAppState::showInspectorPanel() {
                 ImGuiInputTextFlags_AutoSelectAll);
         const bool finishedEditing = ImGui::IsItemDeactivatedAfterEdit();
         if (submitted || finishedEditing) {
-            const std::string previousName = name->value;
+            scene::SceneEntityDocument before;
+            if (!m_scene.captureEntityState(selected, before)) {
+                std::abort();
+            }
             if (m_scene.renameEntity(selected, m_entityNameBuffer.data())) {
-                if (name->value != previousName) {
-                    markSceneDirty();
+                scene::SceneEntityDocument after;
+                if (!m_scene.captureEntityState(selected, after)) {
+                    std::abort();
                 }
+                m_history.recordEntityState(before, after);
+                refreshSceneDirty();
                 std::fill(
                     m_entityNameBuffer.begin(),
                     m_entityNameBuffer.end(), '\0');
@@ -893,16 +1019,42 @@ void ModelSceneAppState::showInspectorPanel() {
         ImGui::Separator();
     }
     if (transform != nullptr) {
+        ecs::LocalTransformComponent editedTransform = *transform;
+        scene::SceneEntityDocument beforeFrame;
+        if (!m_scene.captureEntityState(selected, beforeFrame)) {
+            std::abort();
+        }
         bool changed = false;
+        bool activated = false;
+        bool deactivated = false;
         changed |= ImGui::DragFloat3(
-            "Position", glm::value_ptr(transform->localPosition), 0.02f);
+            "Position", glm::value_ptr(editedTransform.localPosition), 0.02f);
+        activated |= ImGui::IsItemActivated();
+        deactivated |= ImGui::IsItemDeactivated();
         changed |= ImGui::DragFloat3(
-            "Rotation", glm::value_ptr(transform->localRotation), 0.25f);
+            "Rotation", glm::value_ptr(editedTransform.localRotation), 0.25f);
+        activated |= ImGui::IsItemActivated();
+        deactivated |= ImGui::IsItemDeactivated();
         changed |= ImGui::DragFloat3(
-            "Scale", glm::value_ptr(transform->localScale), 0.01f, 0.001f, 1000.0f);
+            "Scale", glm::value_ptr(editedTransform.localScale),
+            0.01f, 0.001f, 1000.0f);
+        activated |= ImGui::IsItemActivated();
+        deactivated |= ImGui::IsItemDeactivated();
+        if (activated) {
+            beginTransformCommand(selected, beforeFrame, false);
+        }
         if (changed) {
-            m_scene.syncTransforms();
-            markSceneDirty();
+            scene::SceneEntityDocument editedState = beforeFrame;
+            editedState.transform.position = editedTransform.localPosition;
+            editedState.transform.rotation = editedTransform.localRotation;
+            editedState.transform.scale = editedTransform.localScale;
+            if (m_scene.applyEntityState(editedState)) {
+                m_sceneDirty = true;
+            }
+        }
+        if (deactivated && m_transformCommandActive &&
+            !m_transformCommandFromGizmo) {
+            finishTransformCommand();
         }
     }
     const auto* pickable =
@@ -971,9 +1123,11 @@ void ModelSceneAppState::showAssetsPanel() {
     for (size_t index = 0u; index < m_scene.assetCount(); ++index) {
         ImGui::PushID(static_cast<int>(index));
         if (ImGui::SmallButton("+")) {
-            if (m_scene.createAssetInstance(m_scene.assetId(index)) != entt::null) {
+            const entt::entity created =
+                m_scene.createAssetInstance(m_scene.assetId(index));
+            if (created != entt::null) {
+                recordCreatedEntity(created);
                 m_entityNameEditorId = scene::kInvalidSceneEntityId;
-                markSceneDirty();
             }
         }
         if (ImGui::IsItemHovered()) {
@@ -1021,14 +1175,22 @@ void ModelSceneAppState::browseAndImportModel() {
 
 void ModelSceneAppState::importModelPath(const std::string& path) {
     m_importDialogError.clear();
+    const std::size_t assetCountBeforeImport = m_scene.assetCount();
     const entt::entity imported = m_scene.importModel(path);
     if (imported != entt::null) {
         m_scene.setSelectedEntity(imported);
-        markSceneDirty();
+        recordCreatedEntity(imported);
+        if (m_scene.assetCount() != assetCountBeforeImport) {
+            markSceneDirty();
+        }
     }
 }
 
 void ModelSceneAppState::showViewportPanel() {
+    if (m_transformCommandActive && m_transformCommandFromGizmo &&
+        !ImGuizmo::IsUsing()) {
+        finishTransformCommand();
+    }
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin("Scene Viewport", nullptr,
                  ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -1082,11 +1244,22 @@ void ModelSceneAppState::showViewportPanel() {
                     gizmoOperation(m_gizmoOperation),
                     m_gizmoMode == 0 ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
                     glm::value_ptr(manipulated))) {
+                if (!m_transformCommandActive) {
+                    scene::SceneEntityDocument before;
+                    if (!m_scene.captureEntityState(selected, before)) {
+                        std::abort();
+                    }
+                    beginTransformCommand(selected, before, true);
+                }
                 if (m_scene.setWorldTransform(selected, manipulated)) {
-                    markSceneDirty();
+                    m_sceneDirty = true;
                 }
             }
         }
+    }
+    if (m_transformCommandActive && m_transformCommandFromGizmo &&
+        !ImGuizmo::IsUsing()) {
+        finishTransformCommand();
     }
     if (m_viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
         !gizmoToolbarHovered &&

@@ -109,6 +109,21 @@ namespace {
     }
     return visited.size() == view.size_hint();
 }
+
+[[nodiscard]] bool validDocumentTransform(
+    const scene::SceneTransformDocument& transform) {
+    const auto finite = [](const glm::vec3& value) {
+        return std::isfinite(value.x) &&
+               std::isfinite(value.y) &&
+               std::isfinite(value.z);
+    };
+    return finite(transform.position) &&
+           finite(transform.rotation) &&
+           finite(transform.scale) &&
+           std::abs(transform.scale.x) > 1e-8f &&
+           std::abs(transform.scale.y) > 1e-8f &&
+           std::abs(transform.scale.z) > 1e-8f;
+}
 } // namespace
 
 ModelSceneRuntime::~ModelSceneRuntime() {
@@ -334,6 +349,284 @@ entt::entity ModelSceneRuntime::duplicateEntity(const entt::entity source) {
     m_selectedEntity = duplicateRoot;
     m_lastError.clear();
     return duplicateRoot;
+}
+
+bool ModelSceneRuntime::captureEntityState(
+    const entt::entity entity,
+    scene::SceneEntityDocument& state) const {
+    if (!m_registry.valid(entity) ||
+        !m_registry.all_of<
+            scene::SceneEntityIdComponent,
+            scene::NameComponent,
+            ecs::LocalTransformComponent,
+            ecs::ChildrenComponent>(entity)) {
+        return false;
+    }
+    scene::SceneEntityDocument captured;
+    captured.id =
+        m_registry.get<scene::SceneEntityIdComponent>(entity).value;
+    captured.name = m_registry.get<scene::NameComponent>(entity).value;
+    if (const auto* parent =
+            m_registry.try_get<ecs::ParentComponent>(entity)) {
+        captured.parentId = entityId(parent->parent);
+        if (*captured.parentId == scene::kInvalidSceneEntityId) {
+            return false;
+        }
+    }
+    if (const auto* mesh =
+            m_registry.try_get<scene::StaticMeshComponent>(entity)) {
+        captured.assetId = mesh->assetId;
+    }
+    const auto& transform =
+        m_registry.get<ecs::LocalTransformComponent>(entity);
+    captured.transform.position = transform.localPosition;
+    captured.transform.rotation = transform.localRotation;
+    captured.transform.scale = transform.localScale;
+    state = std::move(captured);
+    return true;
+}
+
+bool ModelSceneRuntime::captureEntitySubtree(
+    const entt::entity root,
+    std::vector<scene::SceneEntityDocument>& states) const {
+    states.clear();
+    if (!m_registry.valid(root)) {
+        return false;
+    }
+    std::vector<entt::entity> entities{root};
+    std::unordered_set<entt::entity> visited;
+    for (std::size_t index = 0u; index < entities.size(); ++index) {
+        const entt::entity entity = entities[index];
+        if (!visited.insert(entity).second) {
+            states.clear();
+            return false;
+        }
+        scene::SceneEntityDocument state;
+        if (!captureEntityState(entity, state)) {
+            states.clear();
+            return false;
+        }
+        states.push_back(std::move(state));
+        const auto& children =
+            m_registry.get<ecs::ChildrenComponent>(entity).children;
+        for (const entt::entity child : children) {
+            const auto* parent = m_registry.try_get<ecs::ParentComponent>(child);
+            if (parent == nullptr || parent->parent != entity) {
+                states.clear();
+                return false;
+            }
+            entities.push_back(child);
+        }
+    }
+    return true;
+}
+
+bool ModelSceneRuntime::applyEntityState(
+    const scene::SceneEntityDocument& state) {
+    const entt::entity entity = findEntity(state.id);
+    if (entity == entt::null || state.name.empty() ||
+        state.name.find('\0') != std::string::npos ||
+        !validDocumentTransform(state.transform)) {
+        setError("entity state command contains invalid entity data");
+        return false;
+    }
+    const auto* mesh =
+        m_registry.try_get<scene::StaticMeshComponent>(entity);
+    const std::optional<scene::SceneAssetId> currentAsset =
+        mesh != nullptr
+            ? std::optional<scene::SceneAssetId>(mesh->assetId)
+            : std::nullopt;
+    if (currentAsset != state.assetId) {
+        setError("entity state command cannot change mesh asset ownership");
+        return false;
+    }
+    const auto names = m_registry.view<scene::NameComponent>();
+    for (const entt::entity namedEntity : names) {
+        if (namedEntity != entity &&
+            names.get<scene::NameComponent>(namedEntity).value == state.name) {
+            setError("entity state command would create a duplicate name");
+            return false;
+        }
+    }
+
+    entt::entity parent = entt::null;
+    if (state.parentId.has_value()) {
+        parent = findEntity(*state.parentId);
+        if (parent == entt::null || parent == entity) {
+            setError("entity state command references an invalid parent");
+            return false;
+        }
+        std::unordered_set<entt::entity> ancestors;
+        for (entt::entity ancestor = parent;
+             ancestor != entt::null;) {
+            if (ancestor == entity || !ancestors.insert(ancestor).second) {
+                setError("entity state command would create a hierarchy cycle");
+                return false;
+            }
+            const auto* next =
+                m_registry.try_get<ecs::ParentComponent>(ancestor);
+            ancestor = next != nullptr ? next->parent : entt::null;
+        }
+    }
+
+    detachFromParent(entity);
+    if (parent != entt::null) {
+        m_registry.emplace<ecs::ParentComponent>(entity, parent);
+        m_registry.get<ecs::ChildrenComponent>(parent).children.push_back(entity);
+    }
+    auto& name = m_registry.get<scene::NameComponent>(entity).value;
+    name = state.name;
+    ecs::LocalTransformComponent transform;
+    transform.localPosition = state.transform.position;
+    transform.localRotation = state.transform.rotation;
+    transform.localScale = state.transform.scale;
+    m_registry.replace<ecs::LocalTransformComponent>(entity, transform);
+    syncTransforms();
+    m_lastError.clear();
+    return true;
+}
+
+entt::entity ModelSceneRuntime::restoreEntitySubtree(
+    const std::vector<scene::SceneEntityDocument>& states) {
+    if (states.empty()) {
+        setError("entity subtree restoration requires at least one entity");
+        return entt::null;
+    }
+
+    std::unordered_set<scene::SceneEntityId> restoredIds;
+    std::unordered_set<std::string> restoredNames;
+    restoredIds.reserve(states.size());
+    restoredNames.reserve(states.size());
+    const auto existingNames = m_registry.view<scene::NameComponent>();
+    for (std::size_t index = 0u; index < states.size(); ++index) {
+        const scene::SceneEntityDocument& state = states[index];
+        if (state.id == scene::kInvalidSceneEntityId ||
+            state.id == std::numeric_limits<scene::SceneEntityId>::max() ||
+            findEntity(state.id) != entt::null ||
+            !restoredIds.insert(state.id).second ||
+            state.name.empty() ||
+            state.name.find('\0') != std::string::npos ||
+            !restoredNames.insert(state.name).second ||
+            !validDocumentTransform(state.transform)) {
+            setError("entity subtree restoration contains invalid or conflicting data");
+            return entt::null;
+        }
+        for (const entt::entity existing : existingNames) {
+            if (existingNames.get<scene::NameComponent>(existing).value ==
+                state.name) {
+                setError("entity subtree restoration would create a duplicate name");
+                return entt::null;
+            }
+        }
+        if (state.assetId.has_value() &&
+            m_assetIndices.find(*state.assetId) == m_assetIndices.end()) {
+            setError("entity subtree restoration references an unknown asset");
+            return entt::null;
+        }
+    }
+
+    std::unordered_map<scene::SceneEntityId, scene::SceneEntityId> parents;
+    parents.reserve(states.size());
+    for (std::size_t index = 0u; index < states.size(); ++index) {
+        const scene::SceneEntityDocument& state = states[index];
+        if (!state.parentId.has_value()) {
+            parents.emplace(state.id, scene::kInvalidSceneEntityId);
+            if (index != 0u) {
+                setError("restored subtree contains more than one root");
+                return entt::null;
+            }
+            continue;
+        }
+        if (*state.parentId == state.id) {
+            setError("restored subtree entity cannot parent itself");
+            return entt::null;
+        }
+        const bool parentIsRestored =
+            restoredIds.find(*state.parentId) != restoredIds.end();
+        if (index == 0u) {
+            if (parentIsRestored) {
+                setError("restored subtree root cannot reference a descendant");
+                return entt::null;
+            }
+            if (findEntity(*state.parentId) == entt::null) {
+                setError("restored subtree root references an unknown parent");
+                return entt::null;
+            }
+        } else if (!parentIsRestored) {
+            setError("restored subtree descendant references an external parent");
+            return entt::null;
+        }
+        parents.emplace(state.id, *state.parentId);
+    }
+    for (const scene::SceneEntityDocument& state : states) {
+        std::unordered_set<scene::SceneEntityId> ancestors;
+        scene::SceneEntityId current = state.id;
+        while (restoredIds.find(current) != restoredIds.end()) {
+            if (!ancestors.insert(current).second) {
+                setError("restored subtree contains a hierarchy cycle");
+                return entt::null;
+            }
+            current = parents.at(current);
+        }
+    }
+
+    std::unordered_map<scene::SceneEntityId, entt::entity> restored;
+    restored.reserve(states.size());
+    for (const scene::SceneEntityDocument& state : states) {
+        const entt::entity entity = m_registry.create();
+        restored.emplace(state.id, entity);
+        m_registry.emplace<scene::SceneEntityIdComponent>(
+            entity, scene::SceneEntityIdComponent{state.id});
+        m_registry.emplace<scene::NameComponent>(
+            entity, scene::NameComponent{state.name});
+        ecs::LocalTransformComponent transform;
+        transform.localPosition = state.transform.position;
+        transform.localRotation = state.transform.rotation;
+        transform.localScale = state.transform.scale;
+        m_registry.emplace<ecs::LocalTransformComponent>(entity, transform);
+        m_registry.emplace<ecs::WorldTransformComponent>(entity);
+        m_registry.emplace<scene::PreviousWorldTransformComponent>(entity);
+        m_registry.emplace<ecs::ChildrenComponent>(entity);
+        if (state.assetId.has_value()) {
+            const MeshAsset& asset =
+                m_assets[m_assetIndices.at(*state.assetId)];
+            m_registry.emplace<scene::StaticMeshComponent>(
+                entity, scene::StaticMeshComponent{*state.assetId});
+            m_registry.emplace<scene::PickableComponent>(
+                entity,
+                scene::PickableComponent{asset.boundsMin, asset.boundsMax});
+        }
+    }
+    for (const scene::SceneEntityDocument& state : states) {
+        if (!state.parentId.has_value()) {
+            continue;
+        }
+        const entt::entity child = restored.at(state.id);
+        const auto restoredParent = restored.find(*state.parentId);
+        const entt::entity parent = restoredParent != restored.end()
+            ? restoredParent->second
+            : findEntity(*state.parentId);
+        if (parent == entt::null ||
+            !m_registry.all_of<ecs::ChildrenComponent>(parent)) {
+            std::abort();
+        }
+        m_registry.emplace<ecs::ParentComponent>(child, parent);
+        m_registry.get<ecs::ChildrenComponent>(parent).children.push_back(child);
+    }
+    syncTransforms();
+    for (const auto& pair : restored) {
+        const glm::mat4& world =
+            m_registry.get<ecs::WorldTransformComponent>(pair.second).worldMatrix;
+        m_registry.get<scene::PreviousWorldTransformComponent>(pair.second)
+            .worldMatrix = world;
+    }
+    for (const scene::SceneEntityDocument& state : states) {
+        m_nextEntityId = std::max(m_nextEntityId, state.id + 1u);
+    }
+    const entt::entity root = restored.at(states.front().id);
+    m_selectedEntity = root;
+    m_lastError.clear();
+    return root;
 }
 
 std::string ModelSceneRuntime::makeUniqueInstanceName(

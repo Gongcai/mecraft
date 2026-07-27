@@ -9,6 +9,7 @@
 #include <array>
 
 #include "scene/ModelSceneRuntime.h"
+#include "scene/ModelSceneCommandHistory.h"
 #include "ui/imgui/ImGuiRhiRenderer.h"
 
 struct InputSnapshot;
@@ -58,6 +59,15 @@ private:
     [[nodiscard]] scene::SceneEditorCameraDocument captureEditorCamera() const;
     void applyEditorCamera(const scene::SceneEditorCameraDocument& camera);
     void markSceneDirty();
+    void refreshSceneDirty();
+    void recordCreatedEntity(entt::entity entity);
+    void beginTransformCommand(
+        entt::entity entity,
+        const scene::SceneEntityDocument& before,
+        bool fromGizmo);
+    void finishTransformCommand();
+    void undoSceneCommand();
+    void redoSceneCommand();
     void handleEditorShortcuts(const InputSnapshot& input);
     void queueEntityAction(PendingEntityAction action,
                            scene::SceneEntityId entityId);
@@ -76,6 +86,7 @@ private:
     AppStateDependencies m_deps;
     ImGuiRhiRenderer m_imguiRenderer;
     ModelSceneRuntime m_scene;
+    scene::ModelSceneCommandHistory m_history;
     glm::mat4 m_view{1.0f};
     glm::mat4 m_projection{1.0f};
     ImVec2 m_viewportPosition{0.0f, 0.0f};
@@ -92,11 +103,17 @@ private:
     bool m_initialized = false;
     bool m_returnRequested = false;
     bool m_sceneDirty = false;
+    bool m_nonHistoryDirty = false;
     bool m_openUnsavedPopup = false;
+    bool m_transformCommandActive = false;
+    bool m_transformCommandFromGizmo = false;
     PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
     PendingEntityAction m_pendingEntityAction = PendingEntityAction::None;
     scene::SceneEntityId m_pendingEntityId = scene::kInvalidSceneEntityId;
     scene::SceneEntityId m_entityNameEditorId = scene::kInvalidSceneEntityId;
+    scene::SceneEntityId m_transformCommandEntityId =
+        scene::kInvalidSceneEntityId;
+    scene::SceneEntityDocument m_transformCommandBefore;
     scene::SceneEntityId m_hierarchyDropChild =
         scene::kInvalidSceneEntityId;
     scene::SceneEntityId m_hierarchyDropParent =

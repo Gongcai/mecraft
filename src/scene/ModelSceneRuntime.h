@@ -89,6 +89,26 @@ public:
     /// @return Root of the duplicated hierarchy, or entt::null on invalid input.
     [[nodiscard]] entt::entity duplicateEntity(entt::entity source);
 
+    /// Captures one entity using stable document identifiers and local state.
+    [[nodiscard]] bool captureEntityState(
+        entt::entity entity,
+        scene::SceneEntityDocument& state) const;
+
+    /// Captures an entity and all descendants in parent-before-child order.
+    [[nodiscard]] bool captureEntitySubtree(
+        entt::entity root,
+        std::vector<scene::SceneEntityDocument>& states) const;
+
+    /// Applies an exact name, local transform, and parent from a stable snapshot.
+    /// The mesh asset association must match the existing entity.
+    [[nodiscard]] bool applyEntityState(
+        const scene::SceneEntityDocument& state);
+
+    /// Restores a previously removed hierarchy while preserving stable IDs.
+    /// @return Root entity from the first snapshot, or entt::null on validation failure.
+    [[nodiscard]] entt::entity restoreEntitySubtree(
+        const std::vector<scene::SceneEntityDocument>& states);
+
     /// Removes all entities and loaded assets while keeping rendering initialized.
     void clearScene();
 
