@@ -188,24 +188,36 @@ void ModelSceneAppState::showRenderSettingsPanel() {
 
     if (ImGui::CollapsingHeader(
             "Debug View", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID("DebugViewSettings");
         ImGui::SetNextItemWidth(-1.0f);
         changed |= render_settings_imgui::showDeferredDebugView(settings);
+        ImGui::PopID();
     }
     if (ImGui::CollapsingHeader("Shadows")) {
+        ImGui::PushID("ShadowSettings");
         changed |= render_settings_imgui::showShadowSettings(settings);
+        ImGui::PopID();
     }
     if (ImGui::CollapsingHeader("Volumetric Light / Fog")) {
+        ImGui::PushID("VolumetricSettings");
         changed |= render_settings_imgui::showVolumetricSettings(settings);
+        ImGui::PopID();
     }
     if (ImGui::CollapsingHeader("SSAO")) {
+        ImGui::PushID("SsaoSettings");
         changed |= render_settings_imgui::showSsaoSettings(settings);
+        ImGui::PopID();
     }
     if (ImGui::CollapsingHeader("SSGI")) {
+        ImGui::PushID("SsgiSettings");
         changed |= render_settings_imgui::showSsgiSettings(settings);
+        ImGui::PopID();
     }
     if (ImGui::CollapsingHeader(
             "Post Process / Picture", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID("PostProcessSettings");
         changed |= render_settings_imgui::showPostProcessSettings(settings);
+        ImGui::PopID();
     }
 
     if (changed) {
