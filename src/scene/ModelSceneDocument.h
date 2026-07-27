@@ -34,7 +34,7 @@ struct SceneEntityDocument {
 };
 
 struct SceneEnvironmentDocument {
-    float timeOfDay = 0.0f;
+    float timeOfDay = 300.0f;
     RenderSettings renderSettings;
 };
 

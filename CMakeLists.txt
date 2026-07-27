@@ -241,6 +241,7 @@ set(SRC_APP
 set(SRC_SCENE
         src/scene/ModelSceneDeferredRenderer.cpp
         src/scene/ModelSceneRuntime.cpp
+        src/scene/ModelSceneSerializer.cpp
 )
 
 # [引擎层]
@@ -971,6 +972,7 @@ if(MECRAFT_BUILD_TESTS)
     add_mecraft_test(terrain_perf_test tests/terrain_perf_test.cpp)
     add_mecraft_test(day_night_system_test tests/day_night_system_test.cpp)
     add_mecraft_test(model_scene_hierarchy_test tests/model_scene_hierarchy_test.cpp)
+    add_mecraft_test(model_scene_serializer_test tests/model_scene_serializer_test.cpp)
     add_mecraft_test(sleeping_state_test tests/sleeping_state_test.cpp)
     add_mecraft_test(gameplay_sky_renderer_test tests/gameplay_sky_renderer_test.cpp)
     add_mecraft_test(rhi_shader_compiler_test tests/rhi_shader_compiler_test.cpp)

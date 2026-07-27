@@ -75,6 +75,13 @@ public:
     /// Removes all entities and loaded assets while keeping rendering initialized.
     void clearScene();
 
+    /// Restores standalone time and renderer settings for a new scene.
+    void resetEnvironment();
+
+    /// Rebuilds the complete runtime scene transactionally from stable document data.
+    /// @return True when every asset and entity was loaded and committed.
+    [[nodiscard]] bool loadDocument(const scene::ModelSceneDocument& document);
+
     /// Reparents an entity while preserving its world-space transform.
     /// @param child Entity whose parent relationship changes.
     /// @param parent New parent, or entt::null to move the entity to the root.
@@ -99,7 +106,8 @@ public:
     void syncTransforms();
 
     /// Captures stable scene data without serializing runtime entity handles.
-    [[nodiscard]] scene::ModelSceneDocument captureDocument() const;
+    [[nodiscard]] scene::ModelSceneDocument captureDocument(
+        const scene::SceneEditorCameraDocument& editorCamera) const;
 
     [[nodiscard]] entt::registry& registry() { return m_registry; }
     [[nodiscard]] const entt::registry& registry() const { return m_registry; }
@@ -120,7 +128,8 @@ public:
 
     /// Replaces the model viewport renderer configuration.
     /// @param settings Complete deferred renderer configuration for subsequent frames.
-    void setRenderSettings(const RenderSettings& settings);
+    /// @return True when the settings are supported by standalone scene resources.
+    [[nodiscard]] bool setRenderSettings(const RenderSettings& settings);
 
     /// Returns the active model viewport renderer configuration.
     [[nodiscard]] const RenderSettings& renderSettings() const;
@@ -139,6 +148,11 @@ private:
         glm::vec3 boundsMax{0.0f};
     };
 
+    [[nodiscard]] bool createMeshAsset(ResourceMgr& resourceMgr,
+                                       scene::SceneAssetId assetId,
+                                       const std::string& name,
+                                       const std::string& path,
+                                       MeshAsset& asset);
     [[nodiscard]] bool loadMeshAsset(ResourceMgr& resourceMgr,
                                      const std::string& name,
                                      const std::string& path,

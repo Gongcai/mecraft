@@ -538,6 +538,51 @@ void ModelSceneDeferredRenderer::setSettings(const RenderSettings& settings) {
     state.pipeline.invalidateHistory();
 }
 
+RenderSettings ModelSceneDeferredRenderer::defaultSettings() {
+    return modelSceneSettings();
+}
+
+bool ModelSceneDeferredRenderer::validateSettings(
+    const RenderSettings& settings,
+    std::string& error) {
+    error.clear();
+    if (settings.pipelineMode != PipelineMode::Deferred) {
+        error = "model scenes require the deferred rendering pipeline";
+        return false;
+    }
+    if (settings.occlusion.hiZEnabled) {
+        error = "model scenes do not provide terrain Hi-Z occlusion resources";
+        return false;
+    }
+    if (settings.voxelGi.enabled) {
+        error = "model scenes do not provide voxel GI world resources";
+        return false;
+    }
+    if (settings.transparent.waterEffectsEnabled ||
+        settings.transparent.compositeEnabled) {
+        error = "model scenes do not provide gameplay water resources";
+        return false;
+    }
+    if (settings.weather.particlesEnabled ||
+        settings.weather.rainLinesEnabled) {
+        error = "model scenes do not provide gameplay weather renderers";
+        return false;
+    }
+    if (settings.shadow.gpuCascadeCullEnabled) {
+        error = "model scenes do not provide terrain GPU shadow culling resources";
+        return false;
+    }
+    if (settings.renderGraph.multithreadedRecordEnabled) {
+        error = "model scene geometry recording must remain on the device thread";
+        return false;
+    }
+    if (settings.fog.autoDistanceByRenderDistance) {
+        error = "model scenes do not have a gameplay render distance";
+        return false;
+    }
+    return true;
+}
+
 const RenderSettings& ModelSceneDeferredRenderer::settings() const {
     if (!m_impl->initialized) {
         std::abort();

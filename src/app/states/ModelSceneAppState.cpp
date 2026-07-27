@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include "renderer/rhi/RhiDevice.h"
 #include "renderer/core/RenderSettings.h"
 #include "scene/ModelSceneComponents.h"
+#include "scene/ModelSceneSerializer.h"
 #include "ui/imgui/RenderSettingsImGui.h"
 
 namespace {
@@ -31,6 +33,33 @@ constexpr float kPi = 3.14159265358979323846f;
 constexpr float kCameraLookSensitivity = 0.25f;
 constexpr float kCameraMoveSpeed = 3.0f;
 constexpr float kCameraFastMoveMultiplier = 4.0f;
+constexpr const char* kDefaultModelPath =
+    "assets/models/showcase/DamagedHelmet.glb";
+
+[[nodiscard]] std::string normalizedScenePath(const std::string& path,
+                                              std::string& error) {
+    std::error_code filesystemError;
+    std::filesystem::path normalized = std::filesystem::absolute(
+        std::filesystem::u8path(path), filesystemError);
+    if (filesystemError) {
+        error = "Failed to resolve scene path: " + filesystemError.message();
+        return {};
+    }
+    normalized = std::filesystem::weakly_canonical(normalized, filesystemError);
+    if (filesystemError) {
+        error = "Failed to normalize scene path: " + filesystemError.message();
+        return {};
+    }
+    return normalized.generic_u8string();
+}
+
+[[nodiscard]] std::string scenePathWithExtension(const std::string& path) {
+    std::filesystem::path result = std::filesystem::u8path(path);
+    if (result.extension() != ".scene") {
+        result += ".scene";
+    }
+    return result.generic_u8string();
+}
 
 [[nodiscard]] uint32_t viewportDimension(const float logicalSize,
                                          const float framebufferScale) {
@@ -68,13 +97,17 @@ void ModelSceneAppState::onEnter() {
             std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         return;
     }
-    if (m_scene.importModel(
-            "assets/models/showcase/DamagedHelmet.glb") == entt::null) {
+    if (m_scene.importModel(kDefaultModelPath) == entt::null) {
         MECRAFT_LOG_STREAM(
             std::cerr << "[ModelSceneAppState] " << m_scene.lastError() << '\n');
         m_scene.shutdown();
         return;
     }
+    m_scenePath.clear();
+    m_sceneIoError.clear();
+    m_sceneDirty = false;
+    m_pendingSceneAction = PendingSceneAction::None;
+    m_openUnsavedPopup = false;
     m_initialized = true;
 }
 
@@ -94,6 +127,177 @@ void ModelSceneAppState::requestReturnToMenu() {
     }
 }
 
+void ModelSceneAppState::markSceneDirty() {
+    m_sceneDirty = true;
+}
+
+scene::SceneEditorCameraDocument
+ModelSceneAppState::captureEditorCamera() const {
+    scene::SceneEditorCameraDocument camera;
+    camera.target = m_cameraTarget;
+    camera.distance = m_cameraDistance;
+    camera.yaw = m_cameraYaw;
+    camera.pitch = m_cameraPitch;
+    return camera;
+}
+
+void ModelSceneAppState::applyEditorCamera(
+    const scene::SceneEditorCameraDocument& camera) {
+    m_cameraTarget = camera.target;
+    m_cameraDistance = camera.distance;
+    m_cameraYaw = camera.yaw;
+    m_cameraPitch = camera.pitch;
+}
+
+void ModelSceneAppState::requestSceneAction(
+    const PendingSceneAction action) {
+    if (action == PendingSceneAction::None) {
+        return;
+    }
+    if (!m_sceneDirty) {
+        executeSceneAction(action);
+        return;
+    }
+    m_pendingSceneAction = action;
+    m_openUnsavedPopup = true;
+}
+
+void ModelSceneAppState::executeSceneAction(
+    const PendingSceneAction action) {
+    switch (action) {
+        case PendingSceneAction::None:
+            return;
+        case PendingSceneAction::NewScene:
+            newScene();
+            return;
+        case PendingSceneAction::OpenScene:
+            openSceneDialog();
+            return;
+        case PendingSceneAction::ReturnToMenu:
+            requestReturnToMenu();
+            return;
+        default:
+            std::abort();
+    }
+}
+
+void ModelSceneAppState::newScene() {
+    m_scene.clearScene();
+    m_scene.resetEnvironment();
+    applyEditorCamera(scene::SceneEditorCameraDocument{});
+    m_scenePath.clear();
+    m_sceneIoError.clear();
+    m_sceneDirty = false;
+}
+
+bool ModelSceneAppState::loadScenePath(const std::string& path) {
+    m_sceneIoError.clear();
+    const std::string normalized = normalizedScenePath(path, m_sceneIoError);
+    if (normalized.empty()) {
+        return false;
+    }
+    scene::ModelSceneDocument document;
+    if (!scene::ModelSceneSerializer::loadFromFile(
+            normalized, document, m_sceneIoError)) {
+        return false;
+    }
+    if (!m_scene.loadDocument(document)) {
+        m_sceneIoError = m_scene.lastError();
+        return false;
+    }
+    applyEditorCamera(document.editorCamera);
+    m_scenePath = normalized;
+    m_sceneDirty = false;
+    return true;
+}
+
+void ModelSceneAppState::openSceneDialog() {
+    m_sceneIoError.clear();
+    if (NFD_Init() != NFD_OKAY) {
+        m_sceneIoError = NFD_GetError();
+        return;
+    }
+    const nfdfilteritem_t filters[] = {{"Mecraft Scene", "scene"}};
+    nfdchar_t* selectedPath = nullptr;
+    std::string defaultPath;
+    if (!m_scenePath.empty()) {
+        defaultPath = std::filesystem::u8path(m_scenePath)
+            .parent_path().generic_u8string();
+    }
+    const nfdresult_t result = NFD_OpenDialog(
+        &selectedPath, filters, std::size(filters),
+        defaultPath.empty() ? nullptr : defaultPath.c_str());
+    if (result == NFD_OKAY) {
+        const std::string path(selectedPath);
+        NFD_FreePath(selectedPath);
+        NFD_Quit();
+        static_cast<void>(loadScenePath(path));
+        return;
+    }
+    if (result == NFD_ERROR) {
+        m_sceneIoError = NFD_GetError();
+    }
+    NFD_Quit();
+}
+
+bool ModelSceneAppState::saveSceneToPath(const std::string& path) {
+    m_sceneIoError.clear();
+    const std::string withExtension = scenePathWithExtension(path);
+    const std::string normalized = normalizedScenePath(
+        withExtension, m_sceneIoError);
+    if (normalized.empty()) {
+        return false;
+    }
+    const scene::ModelSceneDocument document =
+        m_scene.captureDocument(captureEditorCamera());
+    if (!scene::ModelSceneSerializer::saveToFile(
+            normalized, document, m_sceneIoError)) {
+        return false;
+    }
+    m_scenePath = normalized;
+    m_sceneDirty = false;
+    return true;
+}
+
+bool ModelSceneAppState::saveSceneAs() {
+    m_sceneIoError.clear();
+    if (NFD_Init() != NFD_OKAY) {
+        m_sceneIoError = NFD_GetError();
+        return false;
+    }
+    const nfdfilteritem_t filters[] = {{"Mecraft Scene", "scene"}};
+    nfdchar_t* selectedPath = nullptr;
+    std::string defaultPath;
+    std::string defaultName = "Untitled.scene";
+    if (!m_scenePath.empty()) {
+        const std::filesystem::path current =
+            std::filesystem::u8path(m_scenePath);
+        defaultPath = current.parent_path().generic_u8string();
+        defaultName = current.filename().generic_u8string();
+    }
+    const nfdresult_t result = NFD_SaveDialog(
+        &selectedPath, filters, std::size(filters),
+        defaultPath.empty() ? nullptr : defaultPath.c_str(),
+        defaultName.c_str());
+    if (result == NFD_OKAY) {
+        const std::string path(selectedPath);
+        NFD_FreePath(selectedPath);
+        NFD_Quit();
+        return saveSceneToPath(path);
+    }
+    if (result == NFD_ERROR) {
+        m_sceneIoError = NFD_GetError();
+    }
+    NFD_Quit();
+    return false;
+}
+
+bool ModelSceneAppState::saveScene() {
+    return m_scenePath.empty()
+        ? saveSceneAs()
+        : saveSceneToPath(m_scenePath);
+}
+
 void ModelSceneAppState::update(const double frameTime, double& accumulator) {
     accumulator = 0.0;
     if (!m_initialized) {
@@ -106,7 +310,7 @@ void ModelSceneAppState::update(const double frameTime, double& accumulator) {
         if (m_cameraControlActive) {
             setCameraControlActive(false);
         } else {
-            requestReturnToMenu();
+            requestSceneAction(PendingSceneAction::ReturnToMenu);
         }
         return;
     }
@@ -144,6 +348,10 @@ void ModelSceneAppState::setCameraControlActive(const bool active) {
 
 void ModelSceneAppState::updateCamera(const InputSnapshot& input,
                                       const double frameTime) {
+    const glm::vec3 previousTarget = m_cameraTarget;
+    const float previousDistance = m_cameraDistance;
+    const float previousYaw = m_cameraYaw;
+    const float previousPitch = m_cameraPitch;
     const bool canStartControl =
         m_viewportHovered && !ImGuizmo::IsUsing() &&
         !ImGui::GetIO().WantTextInput;
@@ -196,6 +404,11 @@ void ModelSceneAppState::updateCamera(const InputSnapshot& input,
         m_cameraDistance = std::clamp(
             m_cameraDistance * zoomFactor, 0.6f, 80.0f);
     }
+    if (previousTarget != m_cameraTarget ||
+        previousDistance != m_cameraDistance ||
+        previousYaw != m_cameraYaw || previousPitch != m_cameraPitch) {
+        markSceneDirty();
+    }
 }
 
 void ModelSceneAppState::buildInitialDockLayout(const ImGuiID dockspaceId) {
@@ -230,11 +443,29 @@ void ModelSceneAppState::buildInitialDockLayout(const ImGuiID dockspaceId) {
 void ModelSceneAppState::buildEditorUi() {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("New Scene")) {
+                requestSceneAction(PendingSceneAction::NewScene);
+            }
+            if (ImGui::MenuItem("Open Scene...")) {
+                requestSceneAction(PendingSceneAction::OpenScene);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Save Scene")) {
+                static_cast<void>(saveScene());
+            }
+            if (ImGui::MenuItem("Save Scene As...")) {
+                static_cast<void>(saveSceneAs());
+            }
+            ImGui::Separator();
             if (ImGui::MenuItem("Return to Main Menu")) {
-                requestReturnToMenu();
+                requestSceneAction(PendingSceneAction::ReturnToMenu);
             }
             ImGui::EndMenu();
         }
+        const std::string sceneName = m_scenePath.empty()
+            ? "Untitled"
+            : std::filesystem::u8path(m_scenePath).filename().generic_u8string();
+        ImGui::TextDisabled("%s%s", sceneName.c_str(), m_sceneDirty ? " *" : "");
         ImGui::EndMainMenuBar();
     }
     const ImGuiID dockspaceId = ImGui::GetID("ModelSceneDockspaceV2");
@@ -246,6 +477,46 @@ void ModelSceneAppState::buildEditorUi() {
     showRenderSettingsPanel();
     showAssetsPanel();
     showViewportPanel();
+    showUnsavedChangesModal();
+}
+
+void ModelSceneAppState::showUnsavedChangesModal() {
+    if (m_openUnsavedPopup) {
+        ImGui::OpenPopup("Unsaved Scene");
+        m_openUnsavedPopup = false;
+    }
+    if (!ImGui::BeginPopupModal(
+            "Unsaved Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+    ImGui::TextUnformatted("Save changes to the current scene?");
+    ImGui::Separator();
+    if (ImGui::Button("Save", ImVec2(100.0f, 0.0f))) {
+        if (saveScene()) {
+            const PendingSceneAction action = m_pendingSceneAction;
+            m_pendingSceneAction = PendingSceneAction::None;
+            ImGui::CloseCurrentPopup();
+            executeSceneAction(action);
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Discard", ImVec2(100.0f, 0.0f))) {
+        const PendingSceneAction action = m_pendingSceneAction;
+        m_pendingSceneAction = PendingSceneAction::None;
+        ImGui::CloseCurrentPopup();
+        executeSceneAction(action);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(100.0f, 0.0f))) {
+        m_pendingSceneAction = PendingSceneAction::None;
+        ImGui::CloseCurrentPopup();
+    }
+    if (!m_sceneIoError.empty()) {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
+            "%s", m_sceneIoError.c_str());
+    }
+    ImGui::EndPopup();
 }
 
 void ModelSceneAppState::showRenderSettingsPanel() {
@@ -288,7 +559,9 @@ void ModelSceneAppState::showRenderSettingsPanel() {
     }
 
     if (changed) {
-        m_scene.setRenderSettings(settings);
+        if (m_scene.setRenderSettings(settings)) {
+            markSceneDirty();
+        }
     }
     ImGui::End();
 }
@@ -296,7 +569,9 @@ void ModelSceneAppState::showRenderSettingsPanel() {
 void ModelSceneAppState::showHierarchyPanel() {
     ImGui::Begin("Scene Hierarchy");
     if (ImGui::Button("Create Empty")) {
-        static_cast<void>(m_scene.createEmptyEntity("Empty Entity"));
+        if (m_scene.createEmptyEntity("Empty Entity") != entt::null) {
+            markSceneDirty();
+        }
     }
     ImGui::Separator();
 
@@ -340,7 +615,9 @@ void ModelSceneAppState::showHierarchyPanel() {
             m_scene.findEntity(m_hierarchyDropChild);
         const entt::entity parent =
             m_scene.findEntity(m_hierarchyDropParent);
-        static_cast<void>(m_scene.setParent(child, parent));
+        if (m_scene.setParent(child, parent)) {
+            markSceneDirty();
+        }
     }
     if (!m_scene.lastError().empty()) {
         ImGui::TextColored(
@@ -406,6 +683,7 @@ void ModelSceneAppState::showInspectorPanel() {
     if (ImGui::SliderFloat(
             "Time of Day", &timeOfDay, 0.0f, 1199.0f, "%.0f s")) {
         m_scene.setTimeOfDay(timeOfDay);
+        markSceneDirty();
     }
     ImGui::Separator();
 
@@ -435,6 +713,7 @@ void ModelSceneAppState::showInspectorPanel() {
             "Scale", glm::value_ptr(transform->localScale), 0.01f, 0.001f, 1000.0f);
         if (changed) {
             m_scene.syncTransforms();
+            markSceneDirty();
         }
     }
     const auto* pickable =
@@ -452,6 +731,7 @@ void ModelSceneAppState::showInspectorPanel() {
     ImGui::Separator();
     if (ImGui::Button("Delete Entity")) {
         m_scene.destroyEntity(selected);
+        markSceneDirty();
     }
     ImGui::End();
 }
@@ -484,6 +764,11 @@ void ModelSceneAppState::showAssetsPanel() {
         ImGui::TextColored(
             ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
             "%s", m_scene.lastError().c_str());
+    }
+    if (!m_sceneIoError.empty()) {
+        ImGui::TextColored(
+            ImVec4(1.0f, 0.35f, 0.30f, 1.0f),
+            "%s", m_sceneIoError.c_str());
     }
     ImGui::Separator();
     for (size_t index = 0u; index < m_scene.assetCount(); ++index) {
@@ -530,6 +815,7 @@ void ModelSceneAppState::importModelPath(const std::string& path) {
     const entt::entity imported = m_scene.importModel(path);
     if (imported != entt::null) {
         m_scene.setSelectedEntity(imported);
+        markSceneDirty();
     }
 }
 
@@ -587,8 +873,9 @@ void ModelSceneAppState::showViewportPanel() {
                     gizmoOperation(m_gizmoOperation),
                     m_gizmoMode == 0 ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
                     glm::value_ptr(manipulated))) {
-                static_cast<void>(
-                    m_scene.setWorldTransform(selected, manipulated));
+                if (m_scene.setWorldTransform(selected, manipulated)) {
+                    markSceneDirty();
+                }
             }
         }
     }

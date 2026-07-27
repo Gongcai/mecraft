@@ -23,6 +23,13 @@ public:
     void render(double frameTime) override;
 
 private:
+    enum class PendingSceneAction {
+        None,
+        NewScene,
+        OpenScene,
+        ReturnToMenu,
+    };
+
     void buildEditorUi();
     void buildInitialDockLayout(ImGuiID dockspaceId);
     void showHierarchyPanel();
@@ -32,6 +39,18 @@ private:
     void showAssetsPanel();
     void browseAndImportModel();
     void importModelPath(const std::string& path);
+    void showUnsavedChangesModal();
+    void requestSceneAction(PendingSceneAction action);
+    void executeSceneAction(PendingSceneAction action);
+    void newScene();
+    void openSceneDialog();
+    [[nodiscard]] bool loadScenePath(const std::string& path);
+    [[nodiscard]] bool saveScene();
+    [[nodiscard]] bool saveSceneAs();
+    [[nodiscard]] bool saveSceneToPath(const std::string& path);
+    [[nodiscard]] scene::SceneEditorCameraDocument captureEditorCamera() const;
+    void applyEditorCamera(const scene::SceneEditorCameraDocument& camera);
+    void markSceneDirty();
     void showViewportPanel();
     [[nodiscard]] bool showGizmoToolbar();
     void updateCamera(const InputSnapshot& input, double frameTime);
@@ -58,6 +77,9 @@ private:
     bool m_cameraControlActive = false;
     bool m_initialized = false;
     bool m_returnRequested = false;
+    bool m_sceneDirty = false;
+    bool m_openUnsavedPopup = false;
+    PendingSceneAction m_pendingSceneAction = PendingSceneAction::None;
     scene::SceneEntityId m_hierarchyDropChild =
         scene::kInvalidSceneEntityId;
     scene::SceneEntityId m_hierarchyDropParent =
@@ -65,6 +87,8 @@ private:
     std::array<char, 4096> m_importPath{
         "assets/models/showcase/DamagedHelmet.glb"};
     std::string m_importDialogError;
+    std::string m_scenePath;
+    std::string m_sceneIoError;
 };
 
 #endif // MECRAFT_MODEL_SCENE_APP_STATE_H

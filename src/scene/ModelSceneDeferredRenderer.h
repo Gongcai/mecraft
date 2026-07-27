@@ -52,6 +52,13 @@ public:
     /// @param settings Complete deferred renderer configuration for subsequent frames.
     void setSettings(const RenderSettings& settings);
 
+    /// Returns the renderer configuration supported by a new standalone scene.
+    [[nodiscard]] static RenderSettings defaultSettings();
+
+    /// Verifies that settings do not require gameplay-only rendering resources.
+    [[nodiscard]] static bool validateSettings(const RenderSettings& settings,
+                                               std::string& error);
+
     /// Returns the active standalone renderer configuration.
     [[nodiscard]] const RenderSettings& settings() const;
 

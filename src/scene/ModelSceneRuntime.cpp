@@ -14,6 +14,7 @@
 
 #include "ModelSceneComponents.h"
 #include "ModelSceneDeferredRenderer.h"
+#include "ModelSceneSerializer.h"
 #include "ecs/components/TransformComponents.h"
 #include "renderer/core/FrameContext.h"
 #include "renderer/renderers/StaticMeshRenderer.h"
@@ -53,6 +54,60 @@ namespace {
     }
     distance = nearDistance;
     return farDistance >= 0.0f;
+}
+
+[[nodiscard]] bool syncRegistryTransforms(entt::registry& registry) {
+    const auto view = registry.view<
+        ecs::LocalTransformComponent,
+        ecs::WorldTransformComponent,
+        scene::PreviousWorldTransformComponent>();
+    for (const entt::entity entity : view) {
+        auto& world = view.get<ecs::WorldTransformComponent>(entity);
+        auto& previous =
+            view.get<scene::PreviousWorldTransformComponent>(entity);
+        previous.worldMatrix = world.worldMatrix;
+    }
+
+    std::vector<entt::entity> queue;
+    const auto roots = registry.view<
+        ecs::LocalTransformComponent,
+        ecs::WorldTransformComponent,
+        ecs::ChildrenComponent>(entt::exclude<ecs::ParentComponent>);
+    queue.reserve(view.size_hint());
+    for (const entt::entity root : roots) {
+        roots.get<ecs::WorldTransformComponent>(root).worldMatrix =
+            roots.get<ecs::LocalTransformComponent>(root).toMatrix();
+        queue.push_back(root);
+    }
+
+    std::unordered_set<entt::entity> visited;
+    visited.reserve(view.size_hint());
+    for (std::size_t front = 0u; front < queue.size(); ++front) {
+        const entt::entity entity = queue[front];
+        if (!visited.insert(entity).second) {
+            return false;
+        }
+        const glm::mat4& parentWorld =
+            registry.get<ecs::WorldTransformComponent>(entity).worldMatrix;
+        const auto& children =
+            registry.get<ecs::ChildrenComponent>(entity).children;
+        for (const entt::entity child : children) {
+            if (!registry.valid(child) ||
+                !registry.all_of<
+                    ecs::LocalTransformComponent,
+                    ecs::WorldTransformComponent,
+                    ecs::ChildrenComponent,
+                    ecs::ParentComponent>(child) ||
+                registry.get<ecs::ParentComponent>(child).parent != entity) {
+                return false;
+            }
+            registry.get<ecs::WorldTransformComponent>(child).worldMatrix =
+                parentWorld *
+                registry.get<ecs::LocalTransformComponent>(child).toMatrix();
+            queue.push_back(child);
+        }
+    }
+    return visited.size() == view.size_hint();
 }
 } // namespace
 
@@ -473,25 +528,157 @@ void ModelSceneRuntime::clearScene() {
     m_lastError.clear();
 }
 
+void ModelSceneRuntime::resetEnvironment() {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    setTimeOfDay(300.0f);
+    if (!setRenderSettings(ModelSceneDeferredRenderer::defaultSettings())) {
+        std::abort();
+    }
+}
+
+bool ModelSceneRuntime::loadDocument(
+    const scene::ModelSceneDocument& document) {
+    if (m_resourceMgr == nullptr || !m_deferredRenderer) {
+        setError("scene document loading requires an initialized model scene");
+        return false;
+    }
+    std::string validationError;
+    if (!scene::ModelSceneSerializer::validate(document, validationError)) {
+        setError(std::move(validationError));
+        return false;
+    }
+    if (!ModelSceneDeferredRenderer::validateSettings(
+            document.environment.renderSettings, validationError)) {
+        setError(std::move(validationError));
+        return false;
+    }
+
+    std::vector<MeshAsset> loadedAssets;
+    loadedAssets.reserve(document.assets.size());
+    std::unordered_map<scene::SceneAssetId, uint32_t> loadedAssetIndices;
+    loadedAssetIndices.reserve(document.assets.size());
+    for (const scene::SceneAssetDocument& entry : document.assets) {
+        MeshAsset asset;
+        if (!createMeshAsset(
+                *m_resourceMgr, entry.id, entry.name, entry.path, asset)) {
+            for (MeshAsset& loaded : loadedAssets) {
+                loaded.renderer->shutdown();
+            }
+            return false;
+        }
+        const uint32_t index = static_cast<uint32_t>(loadedAssets.size());
+        loadedAssetIndices.emplace(entry.id, index);
+        loadedAssets.push_back(std::move(asset));
+    }
+
+    entt::registry loadedRegistry;
+    std::unordered_map<scene::SceneEntityId, entt::entity> loadedEntities;
+    loadedEntities.reserve(document.entities.size());
+    entt::entity selectedEntity = entt::null;
+    scene::SceneEntityId selectedId =
+        std::numeric_limits<scene::SceneEntityId>::max();
+    for (const scene::SceneEntityDocument& entry : document.entities) {
+        const entt::entity entity = loadedRegistry.create();
+        loadedEntities.emplace(entry.id, entity);
+        loadedRegistry.emplace<scene::SceneEntityIdComponent>(
+            entity, scene::SceneEntityIdComponent{entry.id});
+        loadedRegistry.emplace<scene::NameComponent>(
+            entity, scene::NameComponent{entry.name});
+        ecs::LocalTransformComponent transform;
+        transform.localPosition = entry.transform.position;
+        transform.localRotation = entry.transform.rotation;
+        transform.localScale = entry.transform.scale;
+        loadedRegistry.emplace<ecs::LocalTransformComponent>(entity, transform);
+        loadedRegistry.emplace<ecs::WorldTransformComponent>(entity);
+        loadedRegistry.emplace<scene::PreviousWorldTransformComponent>(entity);
+        loadedRegistry.emplace<ecs::ChildrenComponent>(entity);
+        if (entry.assetId.has_value()) {
+            const uint32_t assetIndex = loadedAssetIndices.at(*entry.assetId);
+            const MeshAsset& asset = loadedAssets[assetIndex];
+            loadedRegistry.emplace<scene::StaticMeshComponent>(
+                entity, scene::StaticMeshComponent{*entry.assetId});
+            loadedRegistry.emplace<scene::PickableComponent>(
+                entity,
+                scene::PickableComponent{asset.boundsMin, asset.boundsMax});
+        }
+        if (entry.id < selectedId) {
+            selectedId = entry.id;
+            selectedEntity = entity;
+        }
+    }
+    for (const scene::SceneEntityDocument& entry : document.entities) {
+        if (!entry.parentId.has_value()) {
+            continue;
+        }
+        const entt::entity child = loadedEntities.at(entry.id);
+        const entt::entity parent = loadedEntities.at(*entry.parentId);
+        loadedRegistry.emplace<ecs::ParentComponent>(child, parent);
+        loadedRegistry.get<ecs::ChildrenComponent>(parent).children.push_back(child);
+    }
+    if (!syncRegistryTransforms(loadedRegistry)) {
+        for (MeshAsset& loaded : loadedAssets) {
+            loaded.renderer->shutdown();
+        }
+        setError("validated scene hierarchy could not be synchronized");
+        return false;
+    }
+
+    for (MeshAsset& asset : m_assets) {
+        asset.renderer->shutdown();
+    }
+    m_assets = std::move(loadedAssets);
+    m_assetIndices = std::move(loadedAssetIndices);
+    m_registry.swap(loadedRegistry);
+    m_selectedEntity = selectedEntity;
+    m_nextEntityId = 1u;
+    for (const scene::SceneEntityDocument& entry : document.entities) {
+        m_nextEntityId = std::max(m_nextEntityId, entry.id + 1u);
+    }
+    m_nextAssetId = 1u;
+    for (const scene::SceneAssetDocument& entry : document.assets) {
+        m_nextAssetId = std::max(m_nextAssetId, entry.id + 1u);
+    }
+    setTimeOfDay(document.environment.timeOfDay);
+    if (!setRenderSettings(document.environment.renderSettings)) {
+        std::abort();
+    }
+    m_lastError.clear();
+    return true;
+}
+
 bool ModelSceneRuntime::loadMeshAsset(ResourceMgr& resourceMgr,
                                       const std::string& name,
                                       const std::string& path,
                                       scene::SceneAssetId& assetId) {
+    MeshAsset asset;
+    assetId = m_nextAssetId;
+    if (!createMeshAsset(resourceMgr, assetId, name, path, asset)) {
+        return false;
+    }
+    ++m_nextAssetId;
+    const uint32_t index = static_cast<uint32_t>(m_assets.size());
+    m_assets.push_back(std::move(asset));
+    m_assetIndices.emplace(assetId, index);
+    return true;
+}
+
+bool ModelSceneRuntime::createMeshAsset(ResourceMgr& resourceMgr,
+                                        const scene::SceneAssetId assetId,
+                                        const std::string& name,
+                                        const std::string& path,
+                                        MeshAsset& asset) {
     auto renderer = std::make_unique<StaticMeshRenderer>();
     if (!renderer->init(resourceMgr, path)) {
         setError(renderer->lastError());
         return false;
     }
-    MeshAsset asset;
-    asset.id = m_nextAssetId++;
+    asset.id = assetId;
     asset.name = name;
     asset.path = path;
     renderer->assetBounds(asset.boundsMin, asset.boundsMax);
     asset.renderer = std::move(renderer);
-    const uint32_t index = static_cast<uint32_t>(m_assets.size());
-    assetId = asset.id;
-    m_assets.push_back(std::move(asset));
-    m_assetIndices.emplace(assetId, index);
     return true;
 }
 
@@ -622,11 +809,19 @@ float ModelSceneRuntime::timeOfDay() const {
     return m_deferredRenderer->timeOfDay();
 }
 
-void ModelSceneRuntime::setRenderSettings(const RenderSettings& settings) {
+bool ModelSceneRuntime::setRenderSettings(const RenderSettings& settings) {
     if (!m_deferredRenderer) {
         std::abort();
     }
+    std::string validationError;
+    if (!ModelSceneDeferredRenderer::validateSettings(
+            settings, validationError)) {
+        setError(std::move(validationError));
+        return false;
+    }
     m_deferredRenderer->setSettings(settings);
+    m_lastError.clear();
+    return true;
 }
 
 const RenderSettings& ModelSceneRuntime::renderSettings() const {
@@ -667,62 +862,13 @@ entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,
 }
 
 void ModelSceneRuntime::syncTransforms() {
-    const auto view = m_registry.view<
-        ecs::LocalTransformComponent,
-        ecs::WorldTransformComponent,
-        scene::PreviousWorldTransformComponent>();
-    for (const entt::entity entity : view) {
-        auto& world = view.get<ecs::WorldTransformComponent>(entity);
-        auto& previous =
-            view.get<scene::PreviousWorldTransformComponent>(entity);
-        previous.worldMatrix = world.worldMatrix;
-    }
-
-    std::vector<entt::entity> queue;
-    const auto roots = m_registry.view<
-        ecs::LocalTransformComponent,
-        ecs::WorldTransformComponent,
-        ecs::ChildrenComponent>(entt::exclude<ecs::ParentComponent>);
-    queue.reserve(view.size_hint());
-    for (const entt::entity root : roots) {
-        roots.get<ecs::WorldTransformComponent>(root).worldMatrix =
-            roots.get<ecs::LocalTransformComponent>(root).toMatrix();
-        queue.push_back(root);
-    }
-
-    std::unordered_set<entt::entity> visited;
-    visited.reserve(view.size_hint());
-    for (size_t front = 0u; front < queue.size(); ++front) {
-        const entt::entity entity = queue[front];
-        if (!visited.insert(entity).second) {
-            std::abort();
-        }
-        const glm::mat4& parentWorld =
-            m_registry.get<ecs::WorldTransformComponent>(entity).worldMatrix;
-        const auto& children =
-            m_registry.get<ecs::ChildrenComponent>(entity).children;
-        for (const entt::entity child : children) {
-            if (!m_registry.valid(child) ||
-                !m_registry.all_of<
-                    ecs::LocalTransformComponent,
-                    ecs::WorldTransformComponent,
-                    ecs::ChildrenComponent,
-                    ecs::ParentComponent>(child) ||
-                m_registry.get<ecs::ParentComponent>(child).parent != entity) {
-                std::abort();
-            }
-            m_registry.get<ecs::WorldTransformComponent>(child).worldMatrix =
-                parentWorld *
-                m_registry.get<ecs::LocalTransformComponent>(child).toMatrix();
-            queue.push_back(child);
-        }
-    }
-    if (visited.size() != view.size_hint()) {
+    if (!syncRegistryTransforms(m_registry)) {
         std::abort();
     }
 }
 
-scene::ModelSceneDocument ModelSceneRuntime::captureDocument() const {
+scene::ModelSceneDocument ModelSceneRuntime::captureDocument(
+    const scene::SceneEditorCameraDocument& editorCamera) const {
     if (!m_deferredRenderer) {
         std::abort();
     }
@@ -771,6 +917,7 @@ scene::ModelSceneDocument ModelSceneRuntime::captureDocument() const {
         });
     document.environment.timeOfDay = timeOfDay();
     document.environment.renderSettings = renderSettings();
+    document.editorCamera = editorCamera;
     return document;
 }
 
