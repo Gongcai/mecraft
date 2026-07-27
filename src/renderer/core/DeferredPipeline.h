@@ -143,7 +143,8 @@ private:
         DeferredRenderTargets& targets,
         bool clearReflection,
         bool clearSceneComposite,
-        bool clearCloud);
+        bool clearCloud,
+        bool clearSsaoFiltered);
     void commitDeferredHistoryState();
     [[nodiscard]] bool recordTerrainDrawPreparation(RhiCommandList& commandList,
                                                     const FrameContext& ctx);

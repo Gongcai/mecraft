@@ -52,7 +52,35 @@ public:
         RgTextureHandle sceneResolved;
     };
 
-    [[nodiscard]] RgPassHandle addGraphPasses(
+    /// Adds fog generation and temporal reprojection before transparent water
+    /// samples the current frame's half-resolution volumetric texture.
+    /// @param graph Render graph receiving the preparation passes.
+    /// @param ctx Current frame inputs used by fog generation.
+    /// @param settings Current render settings.
+    /// @param targets Deferred targets resolved during graph execution.
+    /// @param hasPreviousFrame Whether temporal history is valid this frame.
+    /// @param resources Graph handles required by volumetric preparation.
+    /// @param dependency Pass that must complete before preparation starts.
+    /// @return Final preparation pass, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphPreparationPasses(
+        RenderGraph& graph,
+        const FrameContext& ctx,
+        const RenderSettings& settings,
+        DeferredRenderTargets& targets,
+        bool hasPreviousFrame,
+        const GraphResources& resources,
+        RgPassHandle dependency);
+
+    /// Adds the final scene composite after transparent geometry has completed.
+    /// @param graph Render graph receiving the composite pass.
+    /// @param ctx Current frame inputs used by the composite shader.
+    /// @param settings Current render settings.
+    /// @param targets Deferred targets resolved during graph execution.
+    /// @param hasPreviousFrame Whether temporal history is valid this frame.
+    /// @param resources Graph handles required by the composite pass.
+    /// @param dependency Pass that must complete before compositing starts.
+    /// @return Composite pass handle, or an invalid handle for an invalid contract.
+    [[nodiscard]] RgPassHandle addGraphCompositePass(
         RenderGraph& graph,
         const FrameContext& ctx,
         const RenderSettings& settings,
@@ -62,6 +90,9 @@ public:
         RgPassHandle dependency);
     void finishGraphExecution(bool succeeded);
     [[nodiscard]] bool graphFramePrepared() const { return m_graphFramePrepared; }
+    [[nodiscard]] bool graphWritesHistory() const {
+        return m_graphWritesHistory;
+    }
     void invalidateHistory();
 
 private:
@@ -144,6 +175,7 @@ private:
     glm::vec3 m_lastCameraPos = glm::vec3(0.0f);
     float m_lastWeatherSignal = 0.0f;
     bool m_graphFramePrepared = false;
+    bool m_graphWritesHistory = false;
     bool m_pendingRenderedFog = false;
     glm::vec3 m_pendingCameraPos = glm::vec3(0.0f);
     float m_pendingWeatherSignal = 0.0f;

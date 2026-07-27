@@ -441,11 +441,12 @@ bool DeferredPipeline::recordDeferredAuxiliaryClear(
     DeferredRenderTargets& targets,
     const bool clearReflection,
     const bool clearSceneComposite,
-    const bool clearCloud) {
-    // The reflection/sceneComposite/cloud transients are cleared only when
-    // their producer pass is skipped this frame; the flags must mirror the
-    // writeTexture declarations of the AuxiliaryClear pass exactly.
-    RhiColorAttachment sceneAttachments[3];
+    const bool clearCloud,
+    const bool clearSsaoFiltered) {
+    // Optional clears must mirror the AuxiliaryClear write declarations. The
+    // transient targets are cleared only when their producers do not run, and
+    // disabled SSAO is defined as fully unoccluded for lighting and debug views.
+    RhiColorAttachment sceneAttachments[4];
     uint32_t sceneAttachmentCount = 0u;
     if (clearReflection) {
         setClearAttachment(sceneAttachments[sceneAttachmentCount++],
@@ -460,6 +461,11 @@ bool DeferredPipeline::recordDeferredAuxiliaryClear(
     setClearAttachment(sceneAttachments[sceneAttachmentCount++],
                        targets.sceneResolvedTextureViewHandle(),
                        0.0f, 0.0f, 0.0f, 1.0f);
+    if (clearSsaoFiltered) {
+        setClearAttachment(sceneAttachments[sceneAttachmentCount++],
+                           targets.ssaoFilteredTextureViewHandle(),
+                           1.0f, 1.0f, 1.0f, 1.0f);
+    }
     clearColorAttachments(commandList, "DeferredAuxiliarySceneClear",
                           targets.width(), targets.height(), sceneAttachments,
                           sceneAttachmentCount);
@@ -537,8 +543,6 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     const bool motionBlurEnabled = settings.postProcess.motionBlurEnabled &&
                                    hasPreviousFrame;
     const bool dofEnabled = settings.postProcess.dofEnabled;
-    const bool volumetricTemporalEnabled =
-        settings.volumetric.temporalEnabled && hasPreviousFrame;
     // SceneLighting/SceneComposite/TransparentComposite/Reflection/Cloud are
     // render-graph transients: their views are published inside execute(),
     // so no ensure* call may run for them before the graph resolves.
@@ -1016,6 +1020,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     const bool auxClearReflection = !reflectionPassAdded;
     const bool auxClearSceneComposite = !sceneCompositePassAdded;
     const bool auxClearCloud = !cloudPassAdded;
+    const bool auxClearSsaoFiltered = !ssaoEnabled;
     RenderGraphPassBuilder auxiliaryClear = m_renderGraph.addPass(
         {"Deferred.AuxiliaryClear", RgPassType::Graphics,
          RhiQueueType::Graphics});
@@ -1029,6 +1034,10 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (auxClearCloud) {
         auxiliaryClear.writeTexture(cloud, RhiResourceState::RenderTarget);
     }
+    if (auxClearSsaoFiltered) {
+        auxiliaryClear.writeTexture(ssaoResources.filtered,
+                                    RhiResourceState::RenderTarget);
+    }
     auxiliaryClear.writeTexture(sceneResolved, RhiResourceState::RenderTarget)
         .writeTexture(ssgiHalfRes, RhiResourceState::RenderTarget)
         .writeTexture(ssgi, RhiResourceState::RenderTarget)
@@ -1040,10 +1049,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         .writeTexture(reactiveMask, RhiResourceState::RenderTarget)
         .writeTexture(transparencyMask, RhiResourceState::RenderTarget)
         .setExecute([&, auxClearReflection, auxClearSceneComposite,
-                     auxClearCloud](RgPassContext& pass) {
+                     auxClearCloud,
+                     auxClearSsaoFiltered](RgPassContext& pass) {
             return recordDeferredAuxiliaryClear(
                 pass.commandList(), targets, auxClearReflection,
-                auxClearSceneComposite, auxClearCloud);
+                auxClearSceneComposite, auxClearCloud,
+                auxClearSsaoFiltered);
         });
     RgPassHandle graphTail = auxiliaryClear.handle();
 
@@ -1407,6 +1418,33 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
         graphTail = sceneCompositeCopies.handle();
 
         if (settings.debug.reflectionDebugMode <= 0) {
+          // Produce this frame's volumetric field before pre-temporal water
+          // samples halfRes. The scene composite remains after transparent
+          // rendering so its established coverage order does not change.
+          VolumetricPass::GraphResources volumetricResources;
+          volumetricResources.depth = depth;
+          volumetricResources.skyCapture = skyCapture;
+          volumetricResources.noise = skyNoise;
+          volumetricResources.atmosphereLut = atmosphereLut;
+          volumetricResources.shadowDepthOpaque = shadowResources.depthOpaque;
+          volumetricResources.shadowDepthAll = shadowResources.depthAll;
+          volumetricResources.shadowColor0 = shadowResources.color0;
+          volumetricResources.shadowColor1 = shadowResources.color1;
+          volumetricResources.velocity = velocity;
+          volumetricResources.historyDepthPrevious = historyDepthPrevious;
+          volumetricResources.halfRes = halfRes;
+          volumetricResources.historyPrevious = historyVolumetricPrevious;
+          volumetricResources.historyCurrent = historyVolumetricCurrent;
+          volumetricResources.sceneComposite = sceneComposite;
+          volumetricResources.sceneResolved = sceneResolved;
+          graphTail = m_volumetricPass->addGraphPreparationPasses(
+              m_renderGraph, ctx, settings, targets, hasPreviousFrame,
+              volumetricResources, graphTail);
+          if (!graphTail.isValid()) {
+              return failGraphSetup();
+          }
+          volumetricGraphPrepared = m_volumetricPass->graphFramePrepared();
+
           if (usesTemporalProjectionJitter(settings.upscale.type, settings.taa.enabled)) {
             RenderGraphPassBuilder water = m_renderGraph.addPass(
                 {"Deferred.WaterPreTemporal", RgPassType::Graphics,
@@ -1561,29 +1599,12 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
               graphTail = transparentVelocity.handle();
           }
 
-          VolumetricPass::GraphResources volumetricResources;
-          volumetricResources.depth = depth;
-          volumetricResources.skyCapture = skyCapture;
-          volumetricResources.noise = skyNoise;
-          volumetricResources.atmosphereLut = atmosphereLut;
-          volumetricResources.shadowDepthOpaque = shadowResources.depthOpaque;
-          volumetricResources.shadowDepthAll = shadowResources.depthAll;
-          volumetricResources.shadowColor0 = shadowResources.color0;
-          volumetricResources.shadowColor1 = shadowResources.color1;
-          volumetricResources.velocity = velocity;
-          volumetricResources.historyDepthPrevious = historyDepthPrevious;
-          volumetricResources.halfRes = halfRes;
-          volumetricResources.historyPrevious = historyVolumetricPrevious;
-          volumetricResources.historyCurrent = historyVolumetricCurrent;
-          volumetricResources.sceneComposite = sceneComposite;
-          volumetricResources.sceneResolved = sceneResolved;
-          graphTail = m_volumetricPass->addGraphPasses(
+          graphTail = m_volumetricPass->addGraphCompositePass(
               m_renderGraph, ctx, settings, targets, hasPreviousFrame,
               volumetricResources, graphTail);
           if (!graphTail.isValid()) {
               return failGraphSetup();
           }
-          volumetricGraphPrepared = m_volumetricPass->graphFramePrepared();
         }
     }
 
@@ -1669,8 +1690,8 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     }
 
     const bool volumetricHistoryWrittenByGraph =
-        settings.debug.deferredLightDebugMode <= 0 &&
-        volumetricTemporalEnabled;
+        volumetricGraphPrepared && m_volumetricPass->graphWritesHistory();
+    const bool volumetricCurrentFrameAvailable = volumetricGraphPrepared;
     const bool taaTransparentDepthAvailable =
         settings.debug.deferredLightDebugMode <= 0 &&
         settings.debug.reflectionDebugMode <= 0;
@@ -1694,11 +1715,16 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                                 RhiResourceState::TransferSrc);
     }
     if (!volumetricHistoryWrittenByGraph) {
-        historyCopy.readTexture(halfRes, RhiResourceState::TransferSrc)
+        historyCopy
+            .readTexture(volumetricCurrentFrameAvailable
+                             ? halfRes
+                             : historyVolumetricPrevious,
+                         RhiResourceState::TransferSrc)
             .writeTexture(historyVolumetricCurrent,
                           RhiResourceState::TransferDst);
     }
     historyCopy.setExecute([&, volumetricHistoryWrittenByGraph,
+                            volumetricCurrentFrameAvailable,
                             taaTransparentDepthAvailable](RgPassContext& pass) {
         RhiTextureBlit sceneBlit;
         sceneBlit.src = targets.currentSceneColorTextureHandle();
@@ -1729,7 +1755,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
         if (!volumetricHistoryWrittenByGraph) {
             RhiTextureBlit volumetricBlit;
-            volumetricBlit.src = targets.halfResTextureHandle();
+            volumetricBlit.src = volumetricCurrentFrameAvailable
+                ? targets.halfResTextureHandle()
+                : targets.historyVolumetricTexturePrevHandle();
             volumetricBlit.dst = targets.historyVolumetricTextureHandle();
             pass.commandList().blitTexture(volumetricBlit);
         }

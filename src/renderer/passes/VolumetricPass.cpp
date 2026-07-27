@@ -85,6 +85,7 @@ void VolumetricPass::shutdown() {
     m_noiseTexture = {};
     m_hasRenderedFog = false;
     m_graphFramePrepared = false;
+    m_graphWritesHistory = false;
     m_pendingRenderedFog = false;
     m_pendingCameraPos = glm::vec3(0.0f);
     m_pendingWeatherSignal = 0.0f;
@@ -93,6 +94,7 @@ void VolumetricPass::shutdown() {
 void VolumetricPass::invalidateHistory() {
     m_hasRenderedFog = false;
     m_graphFramePrepared = false;
+    m_graphWritesHistory = false;
     m_pendingRenderedFog = false;
 }
 
@@ -121,7 +123,7 @@ bool VolumetricPass::shouldRenderFog(const FrameContext& ctx, const RenderSettin
     return (ctx.frameIndex % static_cast<uint64_t>(updateInterval)) == 0;
 }
 
-RgPassHandle VolumetricPass::addGraphPasses(
+RgPassHandle VolumetricPass::addGraphPreparationPasses(
     RenderGraph& graph,
     const FrameContext& ctx,
     const RenderSettings& settings,
@@ -130,9 +132,9 @@ RgPassHandle VolumetricPass::addGraphPasses(
     const GraphResources& resources,
     const RgPassHandle dependency) {
     m_graphFramePrepared = false;
+    m_graphWritesHistory = false;
     if (!dependency.isValid() || !resources.depth.isValid() ||
-        !resources.halfRes.isValid() || !resources.sceneComposite.isValid() ||
-        !resources.sceneResolved.isValid()) {
+        !resources.halfRes.isValid()) {
         return {};
     }
 
@@ -220,6 +222,32 @@ RgPassHandle VolumetricPass::addGraphPasses(
         tail = temporal.handle();
     }
 
+    m_graphFramePrepared = true;
+    m_graphWritesHistory = !renderCurrentFog || useTemporalVolumetric;
+    m_pendingRenderedFog = renderCurrentFog;
+    m_pendingCameraPos = ctx.camera.position;
+    m_pendingWeatherSignal = ctx.weather.wetness + ctx.weather.storm +
+                             ctx.weather.fogWetness +
+                             ctx.weather.lightningFlash * 4.0f;
+    return tail;
+}
+
+RgPassHandle VolumetricPass::addGraphCompositePass(
+    RenderGraph& graph,
+    const FrameContext& ctx,
+    const RenderSettings& settings,
+    DeferredRenderTargets& targets,
+    const bool hasPreviousFrame,
+    const GraphResources& resources,
+    const RgPassHandle dependency) {
+    if (!m_graphFramePrepared || !dependency.isValid() ||
+        !resources.depth.isValid() || !resources.sceneComposite.isValid() ||
+        !resources.sceneResolved.isValid()) {
+        return {};
+    }
+
+    const bool useTemporalVolumetric = settings.volumetric.temporalEnabled &&
+                                       hasPreviousFrame && hasTemporalShader();
     const RgTextureHandle volumetricInput = useTemporalVolumetric
         ? resources.historyCurrent
         : resources.halfRes;
@@ -229,7 +257,7 @@ RgPassHandle VolumetricPass::addGraphPasses(
     RenderGraphPassBuilder composite = graph.addPass(
         {"Volumetric.Composite", RgPassType::Graphics,
          RhiQueueType::Graphics, /*threadSafeRecord=*/true});
-    composite.dependsOn(tail)
+    composite.dependsOn(dependency)
         .readTexture(resources.sceneComposite, RhiResourceState::ShaderRead)
         .readTexture(volumetricInput, RhiResourceState::ShaderRead)
         .readTexture(resources.depth, RhiResourceState::DepthRead)
@@ -242,12 +270,6 @@ RgPassHandle VolumetricPass::addGraphPasses(
                                        hasPreviousFrame);
         });
 
-    m_graphFramePrepared = true;
-    m_pendingRenderedFog = renderCurrentFog;
-    m_pendingCameraPos = ctx.camera.position;
-    m_pendingWeatherSignal = ctx.weather.wetness + ctx.weather.storm +
-                             ctx.weather.fogWetness +
-                             ctx.weather.lightningFlash * 4.0f;
     return composite.handle();
 }
 
@@ -258,6 +280,7 @@ void VolumetricPass::finishGraphExecution(const bool succeeded) {
         m_hasRenderedFog = true;
     }
     m_graphFramePrepared = false;
+    m_graphWritesHistory = false;
     m_pendingRenderedFog = false;
     m_pendingCameraPos = glm::vec3(0.0f);
     m_pendingWeatherSignal = 0.0f;
