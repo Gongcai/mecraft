@@ -9,6 +9,7 @@
 #include "../rhi/RhiResources.h"
 #include "../targets/DeferredRenderTargets.h"
 #include "../renderers/BlockEntityRenderer.h"
+#include "../renderers/StaticMeshRenderer.h"
 #include "../renderers/FirstPersonHeldItemRenderer.h"
 #include "engine/camera/Camera.h"
 #include "../mesh/TerrainStreamingService.h"
@@ -936,6 +937,14 @@ void RenderScene::setBlockEntityRenderer(BlockEntityRenderer* ber) {
     m_shared.blockEntityRenderer = ber;
     if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
         m_deferredPipeline->shadowPass()->setBlockEntityRenderer(ber);
+    }
+}
+
+void RenderScene::setStaticMeshRenderer(StaticMeshRenderer* smr) {
+    m_staticMeshRenderer = smr;
+    m_shared.staticMeshRenderer = smr;
+    if (m_deferredPipeline && m_deferredPipeline->shadowPass()) {
+        m_deferredPipeline->shadowPass()->setStaticMeshRenderer(smr);
     }
 }
 

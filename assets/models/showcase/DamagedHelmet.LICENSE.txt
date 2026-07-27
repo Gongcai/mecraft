@@ -1,0 +1,7 @@
+Damaged Helmet glTF sample asset
+
+Copyright 2018 ctxwing. Licensed under CC BY 4.0 International.
+Copyright 2016 theblueturtle_. Licensed under CC BY-NC 4.0 International.
+
+Model source and full attribution:
+https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/DamagedHelmet

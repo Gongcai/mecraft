@@ -394,6 +394,7 @@ set(SRC_RENDERER
         src/renderer/renderers/HumanoidRenderer.cpp
         src/renderer/renderers/HumanoidSkinLayoutCatalog.cpp
         src/renderer/renderers/SkyboxRenderer.cpp
+        src/renderer/renderers/StaticMeshRenderer.cpp
 
         # Mesh system
         src/renderer/mesh/ChunkMesher.cpp
@@ -699,6 +700,7 @@ endif()
 # 4. 第三方源码库
 # ===========================================================================
 add_library(mecraft_third_party STATIC
+        third_party/cgltf/cgltf_impl.c
         third_party/enet/enet_impl.cpp
         third_party/imgui/imgui.cpp
         third_party/imgui/imgui_demo.cpp
@@ -706,6 +708,7 @@ add_library(mecraft_third_party STATIC
         third_party/imgui/imgui_impl_glfw.cpp
         third_party/imgui/imgui_tables.cpp
         third_party/imgui/imgui_widgets.cpp
+        third_party/mikktspace/mikktspace.c
 )
 target_compile_features(mecraft_third_party PUBLIC cxx_std_17)
 set_target_properties(mecraft_third_party PROPERTIES POSITION_INDEPENDENT_CODE ON)

@@ -22,6 +22,7 @@ class RhiDevice;
 class IWorldView;
 class World;
 class BlockEntityRenderer;
+class StaticMeshRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
@@ -46,6 +47,7 @@ public:
     void setTerrainRenderer(TerrainRenderer* tr) { m_terrainRenderer = tr; }
     void setWorldRenderBuffer(WorldRenderBuffer* buf) { m_worldRenderBuffer = buf; }
     void setBlockEntityRenderer(BlockEntityRenderer* ber) { m_blockEntityRenderer = ber; }
+    void setStaticMeshRenderer(StaticMeshRenderer* smr) { m_staticMeshRenderer = smr; }
     void setHumanoidRenderer(HumanoidRenderer* hr) { m_humanoidRenderer = hr; }
     void setDropRenderer(DropRenderer* dr) { m_dropRenderer = dr; }
     void setFallingBlockRenderer(FallingBlockRenderer* fbr) { m_fallingBlockRenderer = fbr; }
@@ -102,6 +104,10 @@ private:
     void renderShadowBlockEntities(RhiCommandList& commandList,
                                    const glm::mat4& shadowViewProj);
 
+    /// Renders the static showcase model into the current cascade depth layer.
+    void renderShadowStaticMeshes(RhiCommandList& commandList,
+                                  const glm::mat4& shadowViewProj);
+
     /// Render dropped items/blocks into the current shadow cascade layer.
     void renderShadowDrops(RhiCommandList& commandList,
                            const glm::mat4& shadowViewProj,
@@ -148,6 +154,7 @@ private:
     TerrainRenderer* m_terrainRenderer = nullptr;
     WorldRenderBuffer* m_worldRenderBuffer = nullptr;
     BlockEntityRenderer* m_blockEntityRenderer = nullptr;
+    StaticMeshRenderer* m_staticMeshRenderer = nullptr;
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;

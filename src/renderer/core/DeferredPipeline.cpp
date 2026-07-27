@@ -9,6 +9,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../renderers/GameplaySkyRenderer.h"
+#include "../renderers/StaticMeshRenderer.h"
 #include "../mesh/TerrainRhiPipelineSet.h"
 #include "../mesh/TerrainRenderer.h"
 #include "../mesh/WorldRenderBuffer.h"
@@ -320,6 +321,7 @@ void DeferredPipeline::init(SharedRenderResources& shared) {
         m_shadowPass->setTerrainRenderer(shared.terrain);
         m_shadowPass->setWorldRenderBuffer(shared.worldRenderBuffer);
         m_shadowPass->setBlockEntityRenderer(shared.blockEntityRenderer);
+        m_shadowPass->setStaticMeshRenderer(shared.staticMeshRenderer);
         m_shadowPass->setHumanoidRenderer(shared.humanoidRenderer);
         m_shadowPass->setDropRenderer(shared.dropRenderer);
         m_shadowPass->setFallingBlockRenderer(shared.fallingBlockRenderer);
@@ -520,6 +522,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
 
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
     DeferredRenderTargets& targets = *m_shared->deferredTargets;
+    if (m_shared->staticMeshRenderer != nullptr) {
+        m_shared->staticMeshRenderer->prepareFrame(ctx, *ctx.worldView);
+    }
     const bool ssaoEnabled = settings.ssao.enabled;
     const bool ssaoTemporalEnabled =
         ssaoEnabled && settings.ssao.temporalEnabled && !ctx.temporalReset;
@@ -1140,6 +1145,9 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
                    m_gbufferPass->executeBlockEntities(
                        pass.commandList(), *ctx.worldView, ctx, settings, targets,
                        m_shared->blockEntityRenderer) &&
+                   m_gbufferPass->executeStaticMeshes(
+                       pass.commandList(), ctx, settings, targets,
+                       m_shared->staticMeshRenderer) &&
                    m_gbufferPass->executeDrops(
                        pass.commandList(), *ctx.worldView, ctx, settings, targets,
                        m_shared->dropRenderer, m_shared->dropSystem) &&
@@ -1320,6 +1328,7 @@ bool DeferredPipeline::executeFrameGraph(const FrameContext& ctx,
     if (settings.debug.deferredLightDebugMode <= 0) {
         ReflectionPass::GraphResources reflectionResources;
         reflectionResources.sceneLighting = sceneLighting;
+        reflectionResources.albedo = albedo;
         reflectionResources.depth = depth;
         reflectionResources.normalAo = normalAo;
         reflectionResources.material = material;

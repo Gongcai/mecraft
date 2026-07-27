@@ -18,6 +18,7 @@
 #define CONFIG_DIR        ASSETS_DIR "/config"
 #define FONTS_DIR          ASSETS_DIR "/fonts"
 #define THEMES_DIR         ASSETS_DIR "/themes"
+#define MODELS_DIR         ASSETS_DIR "/models"
 
 // 常用资源路径
 #define BLOCKS_TEXTURES_DIR   TEXTURES_DIR "/blocks"
@@ -86,5 +87,6 @@
 #define CREATIVE_TABS_PATH     CREATIVE_TEXTURE_DIR "/tabs"
 #define CREATIVE_TAB_ITEMS_PATH    CREATIVE_TEXTURE_DIR "/tab_items.png"
 #define DEFAULT_FONT_PATH     FONTS_DIR "/msyhbd.ttc"
+#define DAMAGED_HELMET_MODEL_PATH MODELS_DIR "/showcase/DamagedHelmet.glb"
 #define FOLIAGE_TEXTURE_PATH    COLORMAP_DIR "/foliage.png"
 #define GRASS_TEXTURE_PATH      COLORMAP_DIR "/grass.png"

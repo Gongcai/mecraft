@@ -7,14 +7,15 @@ layout(location = 1) in vec2 vClipUv;
 layout(location = 0) out vec4 FragColor;
 
 layout(binding = 0) uniform sampler2D uSceneLightingTex;
-layout(binding = 1) uniform sampler2D uDepthTex;
-layout(binding = 2) uniform sampler2D uNormalAoTex;
-layout(binding = 3) uniform sampler2D uMaterialTex;
-layout(binding = 4) uniform sampler2D uMaterialAuxTex;
-layout(binding = 5) uniform sampler2D uSkyCaptureTex;
-layout(binding = 6) uniform sampler2D uVoxelLightTex;
+layout(binding = 1) uniform sampler2D uAlbedoTex;
+layout(binding = 2) uniform sampler2D uDepthTex;
+layout(binding = 3) uniform sampler2D uNormalAoTex;
+layout(binding = 4) uniform sampler2D uMaterialTex;
+layout(binding = 5) uniform sampler2D uMaterialAuxTex;
+layout(binding = 6) uniform sampler2D uSkyCaptureTex;
+layout(binding = 7) uniform sampler2D uVoxelLightTex;
 
-layout(std140, binding = 7) uniform ReflectionParams {
+layout(std140, binding = 8) uniform ReflectionParams {
     mat4 pViewProj;
     mat4 pInvViewProj;
     vec4 pCameraPosNear;
@@ -214,6 +215,7 @@ void main() {
     vec4 packedMaterial = texture(uMaterialTex, textureUv);
     SurfaceMaterial material = unpackGBufferMaterial(packedMaterial);
     SurfaceMaterialAux aux = unpackGBufferMaterialAux(texture(uMaterialAuxTex, textureUv));
+    vec3 baseColor = texture(uAlbedoTex, textureUv).rgb;
 
     if (depth >= 0.9999) {
         vec3 skyPos = reconstructWorldPosition(vClipUv, 1.0);
@@ -389,8 +391,8 @@ void main() {
     } else {
         specular = FresnelDielectric(nDotView, f0Scalar);
     }
-    specular *= oneMinus(aux.metalness);
-    float reflectance = specular + aux.metalness;
+    float metalness = clamp(aux.metalness, 0.0, 1.0);
+    float dielectricReflectance = specular;
     if (!transMask.isTranslucent && puddleMask > 1e-4) {
         // Mecraft adaptation: DerivativeMain's sky reflection source is sampled
         // from an HDR sky capture in the same composite chain. Our separated
@@ -398,8 +400,13 @@ void main() {
         // close to damp terrain, so use the same water F0 as a smooth dielectric
         // Fresnel floor only where Terrain.frag already wrote a puddle mask.
         float waterFresnel = FresnelDielectric(nDotView, max(f0Scalar, 0.04));
-        reflectance = max(reflectance, waterFresnel * puddleCoreMask);
+        dielectricReflectance = max(dielectricReflectance,
+                                    waterFresnel * puddleCoreMask);
     }
+    vec3 reflectionSpecular = vec3(dielectricReflectance) * oneMinus(metalness) +
+                              baseColor * metalness;
+    float reflectance = max(reflectionSpecular.r,
+                            max(reflectionSpecular.g, reflectionSpecular.b));
 
     // Late debug: reflectance and ssrHit only valid after SSR trace.
     if (uReflectionDebugMode == 2) {
@@ -463,7 +470,7 @@ void main() {
 
     // DerivativeMain world0/deferred6.fsh returns rgb = reflection * specular,
     // alpha = reflection distance/rough-filter data for opaque surfaces.
-    vec3 reflectionRgb = max(color, vec3(0.0)) * reflectance;
+    vec3 reflectionRgb = max(color, vec3(0.0)) * reflectionSpecular;
     if (uReflectionDebugMode == 13) {
         FragColor = vec4(reflectionRgb * 8.0, 0.0);
         return;

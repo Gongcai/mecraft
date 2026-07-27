@@ -6,7 +6,9 @@
 #include "../../renderer/renderers/FallingBlockRenderer.h"
 #include "../../renderer/renderers/FirstPersonHeldItemRenderer.h"
 #include "../../renderer/renderers/HumanoidRenderer.h"
+#include "../../renderer/renderers/StaticMeshRenderer.h"
 #include "../../renderer/presentation/PresentationController.h"
+#include "../../Paths.h"
 #if defined(MECRAFT_ENABLE_STREAMLINE)
 #include "../../renderer/upscaling/DlssFrameGeneration.h"
 #include "../../renderer/upscaling/StreamlineRuntime.h"
@@ -40,6 +42,7 @@ struct GameplayRenderRuntime::Impl {
     RenderResourceHub resourceHub;
     RenderScene scene;
     BlockEntityRenderer blockEntityRenderer;
+    StaticMeshRenderer staticMeshRenderer;
     DropRenderer dropRenderer;
     FallingBlockRenderer fallingBlockRenderer;
     FirstPersonHeldItemRenderer firstPersonHeldItemRenderer;
@@ -154,6 +157,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
     auto& renderer = m_impl->resourceHub;
     auto& renderScene = m_impl->scene;
     auto& blockEntityRenderer = m_impl->blockEntityRenderer;
+    auto& staticMeshRenderer = m_impl->staticMeshRenderer;
     auto& dropRenderer = m_impl->dropRenderer;
     auto& fallingBlockRenderer = m_impl->fallingBlockRenderer;
     auto& firstPersonHeldItemRenderer = m_impl->firstPersonHeldItemRenderer;
@@ -231,6 +235,10 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
     // Entity renderers
     blockEntityRenderer.init(resourceMgr);
+    if (!staticMeshRenderer.init(resourceMgr, DAMAGED_HELMET_MODEL_PATH)) {
+        std::cerr << "GameplayRenderRuntime: " << staticMeshRenderer.lastError() << '\n';
+        return false;
+    }
     dropRenderer.init(resourceMgr);
     if (!fallingBlockRenderer.init(resourceMgr)) {
         return false;
@@ -240,6 +248,7 @@ bool GameplayRenderRuntime::init(ResourceMgr& resourceMgr,
 
     // Cross-wire renderers into RenderScene
     renderScene.setBlockEntityRenderer(&blockEntityRenderer);
+    renderScene.setStaticMeshRenderer(&staticMeshRenderer);
     renderScene.setHumanoidRenderer(&humanoidRenderer);
     renderScene.setDropRenderer(&dropRenderer);
     renderScene.setFallingBlockRenderer(&fallingBlockRenderer);
@@ -294,6 +303,7 @@ void GameplayRenderRuntime::shutdown() {
     m_impl->firstPersonHeldItemRenderer.shutdown();
     m_impl->fallingBlockRenderer.shutdown();
     m_impl->dropRenderer.shutdown();
+    m_impl->staticMeshRenderer.shutdown();
     m_impl->blockEntityRenderer.shutdown();
     m_impl->scene.shutdown();
     m_impl->resourceHub.shutdown();

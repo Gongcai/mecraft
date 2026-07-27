@@ -15,6 +15,7 @@
 #include "../../world/IWorldView.h"
 
 #include "../renderers/BlockEntityRenderer.h"
+#include "../renderers/StaticMeshRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
@@ -88,6 +89,13 @@ void ShadowPass::renderShadowBlockEntities(RhiCommandList& commandList,
         return;
     }
     m_blockEntityRenderer->renderToShadowMap(commandList, shadowViewProj);
+}
+
+void ShadowPass::renderShadowStaticMeshes(RhiCommandList& commandList,
+                                          const glm::mat4& shadowViewProj) {
+    if (m_staticMeshRenderer != nullptr) {
+        m_staticMeshRenderer->renderToShadowMap(commandList, shadowViewProj);
+    }
 }
 
 void ShadowPass::renderShadowDrops(RhiCommandList& commandList,
@@ -482,6 +490,7 @@ bool ShadowPass::recordOpaquePass(RhiCommandList& commandList, const int cascade
             ctx.shared->terrainRhiPipelines->shadowOpaquePipeline());
     }
     renderShadowBlockEntities(commandList, cascadeData.viewProj);
+    renderShadowStaticMeshes(commandList, cascadeData.viewProj);
     renderShadowEntities(commandList, cascadeData.viewProj, ctx.camera.position,
                          cascadeData.splitNear, cascadeData.splitFar);
     renderShadowDrops(commandList, cascadeData.viewProj, ctx.animationTime);

@@ -25,6 +25,7 @@ public:
     /// Graph handles for reflection inputs, scratch storage, and history.
     struct GraphResources {
         RgTextureHandle sceneLighting;
+        RgTextureHandle albedo;
         RgTextureHandle depth;
         RgTextureHandle normalAo;
         RgTextureHandle material;
@@ -71,7 +72,7 @@ private:
                                       bool readScratch);
     bool ensureBaseRhiPipeline(RhiDevice& rhiDevice);
     bool ensureBaseBindGroup(RhiDevice& rhiDevice,
-                             const std::array<RhiTextureViewHandle, 7>& views);
+                             const std::array<RhiTextureViewHandle, 8>& views);
     void destroyBaseBindGroup();
     void destroyBaseRhiResources();
     bool ensureFilterRhiPipeline(RhiDevice& rhiDevice);
@@ -95,7 +96,7 @@ private:
     RhiShaderHandle m_baseFragmentShader;
     RhiPipelineHandle m_basePipeline;
     RhiBindGroupHandle m_baseBindGroup;
-    std::array<RhiTextureViewHandle, 7> m_baseBoundViews = {};
+    std::array<RhiTextureViewHandle, 8> m_baseBoundViews = {};
 
     RhiDevice* m_filterRhiDevice = nullptr;
     RhiSamplerHandle m_filterNearestSampler;

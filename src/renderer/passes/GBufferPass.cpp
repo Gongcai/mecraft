@@ -7,6 +7,7 @@
 #include "../rhi/RhiDevice.h"
 #include "../rhi/RhiResources.h"
 #include "../renderers/BlockEntityRenderer.h"
+#include "../renderers/StaticMeshRenderer.h"
 #include "../renderers/HumanoidRenderer.h"
 #include "../renderers/DropRenderer.h"
 #include "../renderers/FallingBlockRenderer.h"
@@ -169,6 +170,38 @@ bool GBufferPass::executeBlockEntities(RhiCommandList& commandList,
         ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
     blockEntityRenderer->renderToGBuffer(commandList, viewProj);
 
+    endObjectGBufferRendering(commandList);
+    if (ctx.debugService != nullptr) {
+        ctx.debugService->endGpuTimer(commandList, gpuTimer);
+    }
+    return true;
+}
+
+bool GBufferPass::executeStaticMeshes(RhiCommandList& commandList,
+                                      const FrameContext& ctx,
+                                      const RenderSettings& settings,
+                                      DeferredRenderTargets& targets,
+                                      StaticMeshRenderer* staticMeshRenderer) {
+    if (staticMeshRenderer == nullptr) {
+        return true;
+    }
+    if (ctx.shared == nullptr || ctx.shared->rhiDevice == nullptr ||
+        !staticMeshRenderer->prepareGBuffer(commandList)) {
+        return false;
+    }
+    if (!beginObjectGBufferRendering(
+            *ctx.shared->rhiDevice, commandList, targets,
+            "GBuffer.StaticMeshes", false)) {
+        return false;
+    }
+    const GpuTimerSegmentToken gpuTimer = ctx.debugService != nullptr
+        ? ctx.debugService->beginGpuTimer(commandList, GpuTimerPass::GBuffer)
+        : GpuTimerSegmentToken{};
+    const glm::mat4& viewProj = usesTemporalProjectionJitter(
+        settings.upscale.type, settings.taa.enabled)
+        ? ctx.camera.jitteredViewProj : ctx.camera.viewProj;
+    staticMeshRenderer->renderToGBuffer(
+        commandList, viewProj, ctx.previousViewProjWithCurrentJitter);
     endObjectGBufferRendering(commandList);
     if (ctx.debugService != nullptr) {
         ctx.debugService->endGpuTimer(commandList, gpuTimer);

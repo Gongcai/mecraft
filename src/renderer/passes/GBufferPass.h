@@ -7,6 +7,7 @@
 class DeferredRenderTargets;
 class ResourceMgr;
 class BlockEntityRenderer;
+class StaticMeshRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
@@ -58,6 +59,19 @@ public:
                                             const RenderSettings& settings,
                                             DeferredRenderTargets& targets,
                                             BlockEntityRenderer* blockEntityRenderer);
+
+    /// Records the prepared static showcase model into the G-buffer.
+    /// @param commandList Graphics command list supplied by the Render Graph.
+    /// @param ctx Current camera matrices and temporal state.
+    /// @param settings Current temporal projection settings.
+    /// @param targets Persistent G-buffer attachments and views.
+    /// @param staticMeshRenderer Optional static model renderer.
+    /// @return True when optional work was skipped or all commands were recorded.
+    [[nodiscard]] bool executeStaticMeshes(RhiCommandList& commandList,
+                                           const FrameContext& ctx,
+                                           const RenderSettings& settings,
+                                           DeferredRenderTargets& targets,
+                                           StaticMeshRenderer* staticMeshRenderer);
 
     /// Records dropped item and block GBuffer rendering with per-object velocity.
     /// @param commandList Recording command list supplied by the Render Graph.

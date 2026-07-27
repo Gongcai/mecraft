@@ -30,6 +30,7 @@ class DayNightSystem;
 class WeatherSystem;
 class Window;
 class BlockEntityRenderer;
+class StaticMeshRenderer;
 class HumanoidRenderer;
 class DropRenderer;
 class FallingBlockRenderer;
@@ -84,6 +85,7 @@ struct SharedRenderResources {
 
     // Sub-renderers (non-owning)
     BlockEntityRenderer* blockEntityRenderer = nullptr;
+    StaticMeshRenderer* staticMeshRenderer = nullptr;
     HumanoidRenderer* humanoidRenderer = nullptr;
     DropRenderer* dropRenderer = nullptr;
     FallingBlockRenderer* fallingBlockRenderer = nullptr;
@@ -160,6 +162,7 @@ public:
 
     // Sub-renderer injection (temporary until ECS-driven)
     void setBlockEntityRenderer(BlockEntityRenderer* ber);
+    void setStaticMeshRenderer(StaticMeshRenderer* smr);
     void setHumanoidRenderer(HumanoidRenderer* hr);
     void setDropRenderer(DropRenderer* dr);
     void setFallingBlockRenderer(FallingBlockRenderer* fbr);
@@ -348,6 +351,7 @@ private:
 
     // Sub-renderers (non-owning)
     BlockEntityRenderer* m_blockEntityRenderer = nullptr;
+    StaticMeshRenderer* m_staticMeshRenderer = nullptr;
     HumanoidRenderer* m_humanoidRenderer = nullptr;
     DropRenderer* m_dropRenderer = nullptr;
     FallingBlockRenderer* m_fallingBlockRenderer = nullptr;
