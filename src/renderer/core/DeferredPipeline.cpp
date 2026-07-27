@@ -2482,7 +2482,7 @@ bool DeferredPipeline::recordGenericTransparentPass(
                   return a->distanceSq > b->distanceSq;
               });
 
-    worldBuffer.beginFrame();
+    worldBuffer.resetDrawCommands();
     for (const DrawBatchEntry* entry : genericEntries) {
         worldBuffer.addTransparent(entry->range);
     }
