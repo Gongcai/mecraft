@@ -83,6 +83,13 @@ public:
     [[nodiscard]] uint64_t viewportTextureId() const;
     [[nodiscard]] uint32_t viewportWidth() const;
     [[nodiscard]] uint32_t viewportHeight() const;
+
+    /// Updates the deferred environment time used by sky and lighting passes.
+    /// @param timeOfDaySeconds Time within the 1200-second world day.
+    void setTimeOfDay(float timeOfDaySeconds);
+
+    /// Returns the current deferred environment time in seconds.
+    [[nodiscard]] float timeOfDay() const;
     [[nodiscard]] size_t assetCount() const { return m_assets.size(); }
     [[nodiscard]] const std::string& assetName(size_t index) const;
     [[nodiscard]] const std::string& assetPath(size_t index) const;

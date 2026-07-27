@@ -40,6 +40,13 @@ public:
                               const glm::vec3& cameraPosition,
                               float deltaTime);
 
+    /// Changes the standalone environment time and invalidates temporal history.
+    /// @param timeOfDaySeconds Time within the 1200-second world day.
+    void setTimeOfDay(float timeOfDaySeconds);
+
+    /// Returns the current environment time within the 1200-second world day.
+    [[nodiscard]] float timeOfDay() const;
+
     [[nodiscard]] uint64_t viewportTextureId() const;
     [[nodiscard]] uint32_t viewportWidth() const;
     [[nodiscard]] uint32_t viewportHeight() const;

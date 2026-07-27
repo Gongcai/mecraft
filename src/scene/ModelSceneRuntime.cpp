@@ -310,6 +310,20 @@ uint32_t ModelSceneRuntime::viewportHeight() const {
     return m_deferredRenderer->viewportHeight();
 }
 
+void ModelSceneRuntime::setTimeOfDay(const float timeOfDaySeconds) {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    m_deferredRenderer->setTimeOfDay(timeOfDaySeconds);
+}
+
+float ModelSceneRuntime::timeOfDay() const {
+    if (!m_deferredRenderer) {
+        std::abort();
+    }
+    return m_deferredRenderer->timeOfDay();
+}
+
 entt::entity ModelSceneRuntime::pick(const glm::vec3& rayOrigin,
                                      const glm::vec3& rayDirection) const {
     entt::entity nearestEntity = entt::null;

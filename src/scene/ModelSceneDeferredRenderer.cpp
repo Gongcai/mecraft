@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <utility>
 
 #include <glm/gtc/matrix_inverse.hpp>
@@ -504,6 +505,27 @@ bool ModelSceneDeferredRenderer::render(
     state.hasPreviousContext = true;
     state.error.clear();
     return true;
+}
+
+void ModelSceneDeferredRenderer::setTimeOfDay(const float timeOfDaySeconds) {
+    Impl& state = *m_impl;
+    if (!state.initialized) {
+        std::abort();
+    }
+    const float currentTime = state.dayNight.getTimeOfDay();
+    if (std::abs(currentTime - timeOfDaySeconds) <= 0.001f) {
+        return;
+    }
+    state.dayNight.setTimeOfDay(timeOfDaySeconds);
+    state.hasPreviousContext = false;
+    state.pipeline.invalidateHistory();
+}
+
+float ModelSceneDeferredRenderer::timeOfDay() const {
+    if (!m_impl->initialized) {
+        std::abort();
+    }
+    return m_impl->dayNight.getTimeOfDay();
 }
 
 uint64_t ModelSceneDeferredRenderer::viewportTextureId() const {

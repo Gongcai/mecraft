@@ -192,6 +192,15 @@ void ModelSceneAppState::showHierarchyPanel() {
 
 void ModelSceneAppState::showInspectorPanel() {
     ImGui::Begin("Inspector");
+    ImGui::TextUnformatted("Environment");
+    float timeOfDay = m_scene.timeOfDay();
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::SliderFloat(
+            "Time of Day", &timeOfDay, 0.0f, 1199.0f, "%.0f s")) {
+        m_scene.setTimeOfDay(timeOfDay);
+    }
+    ImGui::Separator();
+
     const entt::entity selected = m_scene.selectedEntity();
     if (selected == entt::null || !m_scene.registry().valid(selected)) {
         ImGui::TextUnformatted("No entity selected");
