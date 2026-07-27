@@ -55,6 +55,11 @@ struct StaticMeshGBufferPushConstants {
     glm::mat4 previousModel{1.0f};
 };
 
+struct StaticMeshTransparentPushConstants {
+    glm::mat4 model{1.0f};
+    glm::vec4 reflectionParams{1.0f, 0.0f, 0.0f, 0.0f};
+};
+
 struct StaticMeshFrameParams {
     glm::vec4 voxelLight{1.0f, 0.0f, 0.0f, 1.0f};
     glm::mat4 viewProjection{1.0f};
@@ -104,6 +109,8 @@ static_assert(sizeof(StaticMeshMaterialParams) == 80u,
               "Static mesh material UBO must match std140 layout");
 static_assert(sizeof(StaticMeshGBufferPushConstants) == 128u,
               "Static mesh G-buffer push constants must fit the Vulkan minimum limit");
+static_assert(sizeof(StaticMeshTransparentPushConstants) == 80u,
+              "Static mesh transparent push constants must match the shader block");
 static_assert(sizeof(StaticMeshFrameParams) == 240u,
               "Static mesh frame parameters must match the std140 shader block");
 static_assert(sizeof(StaticMeshPreviewPushConstants) == 128u,
@@ -647,6 +654,36 @@ bool StaticMeshRenderer::createPipelineResources() {
         return false;
     }
 
+    RhiBindGroupLayoutDesc transparentSceneLayoutDesc;
+    transparentSceneLayoutDesc.debugName =
+        "StaticMesh.TransparentScene.BindGroupLayout";
+    for (uint32_t binding = 0u; binding < 3u; ++binding) {
+        transparentSceneLayoutDesc.entries.push_back({
+            binding,
+            RhiBindingType::CombinedTextureSampler,
+            rhiFlag(RhiShaderStage::Fragment),
+            1u});
+    }
+    m_transparentSceneBindGroupLayout =
+        m_rhiDevice->createBindGroupLayout(transparentSceneLayoutDesc);
+    RhiSamplerDesc linearSamplerDesc;
+    linearSamplerDesc.minFilter = RhiFilter::Linear;
+    linearSamplerDesc.magFilter = RhiFilter::Linear;
+    linearSamplerDesc.mipmapMode = RhiMipmapMode::Nearest;
+    m_transparentSceneLinearSampler =
+        m_rhiDevice->createSampler(linearSamplerDesc);
+    RhiSamplerDesc depthSamplerDesc = linearSamplerDesc;
+    depthSamplerDesc.minFilter = RhiFilter::Nearest;
+    depthSamplerDesc.magFilter = RhiFilter::Nearest;
+    m_transparentSceneDepthSampler =
+        m_rhiDevice->createSampler(depthSamplerDesc);
+    if (!m_transparentSceneBindGroupLayout.isValid() ||
+        !m_transparentSceneLinearSampler.isValid() ||
+        !m_transparentSceneDepthSampler.isValid()) {
+        setError("failed to create static mesh transparent scene resources");
+        return false;
+    }
+
     RhiPipelineLayoutDesc pipelineLayoutDesc;
     pipelineLayoutDesc.debugName = "StaticMesh.GBuffer.PipelineLayout";
     pipelineLayoutDesc.bindGroupLayouts.push_back(m_bindGroupLayout);
@@ -660,7 +697,13 @@ bool StaticMeshRenderer::createPipelineResources() {
     pipelineLayoutDesc.pushConstantBytes = sizeof(StaticMeshPreviewPushConstants);
     m_previewPipelineLayout = m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     pipelineLayoutDesc.debugName = "StaticMesh.Transparent.PipelineLayout";
-    pipelineLayoutDesc.pushConstantBytes = sizeof(glm::mat4);
+    pipelineLayoutDesc.bindGroupLayouts.push_back(
+        m_transparentSceneBindGroupLayout);
+    pipelineLayoutDesc.pushConstantBytes =
+        sizeof(StaticMeshTransparentPushConstants);
+    pipelineLayoutDesc.pushConstantStages =
+        rhiFlag(RhiShaderStage::Vertex) |
+        rhiFlag(RhiShaderStage::Fragment);
     m_transparentPipelineLayout =
         m_rhiDevice->createPipelineLayout(pipelineLayoutDesc);
     if (!m_gbufferPipelineLayout.isValid() || !m_shadowPipelineLayout.isValid() ||
@@ -754,7 +797,7 @@ bool StaticMeshRenderer::createPipelineResources() {
     transparentDesc.depthFormat = RhiTextureFormat::Depth32Float;
     RhiBlendAttachmentState colorBlend;
     colorBlend.blendEnabled = true;
-    colorBlend.srcColor = RhiBlendFactor::SrcAlpha;
+    colorBlend.srcColor = RhiBlendFactor::One;
     colorBlend.dstColor = RhiBlendFactor::OneMinusSrcAlpha;
     colorBlend.srcAlpha = RhiBlendFactor::One;
     colorBlend.dstAlpha = RhiBlendFactor::OneMinusSrcAlpha;
@@ -1476,9 +1519,67 @@ void StaticMeshRenderer::appendTransparentDraws(
     }
 }
 
+bool StaticMeshRenderer::prepareTransparentResources(
+    const RhiTextureViewHandle sceneColor,
+    const RhiTextureViewHandle opaqueDepth,
+    const RhiTextureViewHandle skyCapture) {
+    const std::array<RhiTextureViewHandle, 3> views = {
+        sceneColor, opaqueDepth, skyCapture};
+    if (m_rhiDevice == nullptr ||
+        !m_transparentSceneBindGroupLayout.isValid() ||
+        !m_transparentSceneLinearSampler.isValid() ||
+        !m_transparentSceneDepthSampler.isValid() ||
+        std::any_of(views.begin(), views.end(),
+                    [](const RhiTextureViewHandle view) {
+                        return !view.isValid();
+                    })) {
+        setError("static mesh transparent reflection resources are invalid");
+        return false;
+    }
+    const bool viewsMatch = std::equal(
+        views.begin(), views.end(), m_transparentSceneViews.begin(),
+        [](const RhiTextureViewHandle lhs,
+           const RhiTextureViewHandle rhs) {
+            return lhs.index == rhs.index &&
+                   lhs.generation == rhs.generation;
+        });
+    if (m_transparentSceneBindGroup.isValid() && viewsMatch) {
+        return true;
+    }
+    if (m_transparentSceneBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_transparentSceneBindGroup);
+        m_transparentSceneBindGroup = {};
+        m_transparentSceneViews = {};
+    }
+
+    const std::array<RhiSamplerHandle, 3> samplers = {
+        m_transparentSceneLinearSampler,
+        m_transparentSceneDepthSampler,
+        m_transparentSceneLinearSampler};
+    RhiBindGroupDesc bindGroupDesc;
+    bindGroupDesc.layout = m_transparentSceneBindGroupLayout;
+    for (uint32_t binding = 0u;
+         binding < static_cast<uint32_t>(views.size()); ++binding) {
+        RhiBindGroupEntry entry;
+        entry.binding = binding;
+        entry.resource.combinedTextureSampler = {
+            views[binding], samplers[binding]};
+        bindGroupDesc.entries.push_back(entry);
+    }
+    m_transparentSceneBindGroup =
+        m_rhiDevice->createBindGroup(bindGroupDesc);
+    if (!m_transparentSceneBindGroup.isValid()) {
+        setError("failed to bind static mesh transparent reflection resources");
+        return false;
+    }
+    m_transparentSceneViews = views;
+    return true;
+}
+
 void StaticMeshRenderer::renderTransparentDraw(
     RhiCommandList& commandList,
-    const TransparentDraw& draw) const {
+    const TransparentDraw& draw,
+    const float reflectionCompositeStrength) const {
     if (draw.primitiveIndex >= m_primitives.size()) {
         std::abort();
     }
@@ -1487,14 +1588,24 @@ void StaticMeshRenderer::renderTransparentDraw(
     if (!material.transparent) {
         std::abort();
     }
+    if (!m_transparentSceneBindGroup.isValid()) {
+        std::abort();
+    }
     commandList.setGraphicsPipeline(material.doubleSided
         ? m_transparentDoubleSidedPipeline : m_transparentPipeline);
     commandList.setBindGroup(0u, material.bindGroup);
+    commandList.setBindGroup(1u, m_transparentSceneBindGroup);
     commandList.setVertexBuffer(0u, primitive.vertexBuffer, 0u);
     commandList.setIndexBuffer(
         primitive.indexBuffer, RhiIndexFormat::Uint32, 0u);
+    const StaticMeshTransparentPushConstants pushConstants{
+        draw.model,
+        glm::vec4(std::clamp(reflectionCompositeStrength, 0.0f, 1.0f),
+                  0.0f, 0.0f, 0.0f)};
     commandList.pushConstants(
-        &draw.model, sizeof(draw.model), rhiFlag(RhiShaderStage::Vertex));
+        &pushConstants, sizeof(pushConstants),
+        rhiFlag(RhiShaderStage::Vertex) |
+            rhiFlag(RhiShaderStage::Fragment));
     commandList.drawIndexed(primitive.indexCount, 1u, 0u, 0, 0u);
 }
 
@@ -1601,6 +1712,9 @@ void StaticMeshRenderer::shutdown() {
 }
 
 void StaticMeshRenderer::destroyPipelineResources() {
+    if (m_transparentSceneBindGroup.isValid()) {
+        m_rhiDevice->destroyBindGroup(m_transparentSceneBindGroup);
+    }
     if (m_transparentDoubleSidedPipeline.isValid()) {
         m_rhiDevice->destroyPipeline(m_transparentDoubleSidedPipeline);
     }
@@ -1639,6 +1753,16 @@ void StaticMeshRenderer::destroyPipelineResources() {
     }
     if (m_bindGroupLayout.isValid()) {
         m_rhiDevice->destroyBindGroupLayout(m_bindGroupLayout);
+    }
+    if (m_transparentSceneBindGroupLayout.isValid()) {
+        m_rhiDevice->destroyBindGroupLayout(
+            m_transparentSceneBindGroupLayout);
+    }
+    if (m_transparentSceneDepthSampler.isValid()) {
+        m_rhiDevice->destroySampler(m_transparentSceneDepthSampler);
+    }
+    if (m_transparentSceneLinearSampler.isValid()) {
+        m_rhiDevice->destroySampler(m_transparentSceneLinearSampler);
     }
     if (m_shadowFragmentShader.isValid()) {
         m_rhiDevice->destroyShader(m_shadowFragmentShader);
@@ -1680,6 +1804,11 @@ void StaticMeshRenderer::destroyPipelineResources() {
     m_gbufferPipelineLayout = {};
     m_previewPipelineLayout = {};
     m_bindGroupLayout = {};
+    m_transparentSceneBindGroupLayout = {};
+    m_transparentSceneBindGroup = {};
+    m_transparentSceneLinearSampler = {};
+    m_transparentSceneDepthSampler = {};
+    m_transparentSceneViews = {};
     m_shadowFragmentShader = {};
     m_shadowVertexShader = {};
     m_transparentFragmentShader = {};

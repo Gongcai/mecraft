@@ -66,9 +66,12 @@ public:
         RhiCommandList& commandList,
         const glm::mat4& shadowViewProjection) override;
     [[nodiscard]] bool hasTransparentGeometry() const override;
+    [[nodiscard]] bool prepareTransparentResources(
+        const DeferredTransparentResources& resources) override;
     void renderTransparent(
         RhiCommandList& commandList,
-        const glm::vec3& cameraPosition) override;
+        const glm::vec3& cameraPosition,
+        float reflectionCompositeStrength) override;
 
     /// Imports or reuses one glTF asset and creates an independent ECS instance.
     /// @param path Filesystem path to a GLB or glTF document.

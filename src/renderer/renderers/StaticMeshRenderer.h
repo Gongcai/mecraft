@@ -1,6 +1,7 @@
 #ifndef MECRAFT_STATIC_MESH_RENDERER_H
 #define MECRAFT_STATIC_MESH_RENDERER_H
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -79,13 +80,25 @@ public:
     /// Draws one previously collected transparent primitive.
     /// @param commandList Command list with the transparent attachments active.
     /// @param draw Primitive, transform, and sort data collected for this draw.
+    /// @param reflectionCompositeStrength Global scene reflection contribution.
     void renderTransparentDraw(
         RhiCommandList& commandList,
-        const TransparentDraw& draw) const;
+        const TransparentDraw& draw,
+        float reflectionCompositeStrength) const;
 
     /// Reports whether a loaded primitive uses alpha blending.
     /// @return True when the asset contains renderable transparent geometry.
     [[nodiscard]] bool hasTransparentPrimitives() const;
+
+    /// Creates the descriptors used to reflect the resolved deferred scene.
+    /// @param sceneColor Opaque HDR scene after deferred composition.
+    /// @param opaqueDepth Opaque depth used by screen-space ray traversal.
+    /// @param skyCapture Dynamic sky radiance used by environment reflection.
+    /// @return True when the transparent scene bind group is valid.
+    [[nodiscard]] bool prepareTransparentResources(
+        RhiTextureViewHandle sceneColor,
+        RhiTextureViewHandle opaqueDepth,
+        RhiTextureViewHandle skyCapture);
 
     /// Records all static primitives into the active shadow depth rendering scope.
     /// @param commandList Command list with one CSM cascade active.
@@ -136,6 +149,11 @@ private:
     std::vector<PrimitiveResource> m_primitives;
     RhiBufferHandle m_frameUniformBuffer;
     RhiBindGroupLayoutHandle m_bindGroupLayout;
+    RhiBindGroupLayoutHandle m_transparentSceneBindGroupLayout;
+    RhiBindGroupHandle m_transparentSceneBindGroup;
+    RhiSamplerHandle m_transparentSceneLinearSampler;
+    RhiSamplerHandle m_transparentSceneDepthSampler;
+    std::array<RhiTextureViewHandle, 3> m_transparentSceneViews{};
     RhiPipelineLayoutHandle m_gbufferPipelineLayout;
     RhiPipelineLayoutHandle m_shadowPipelineLayout;
     RhiPipelineLayoutHandle m_previewPipelineLayout;

@@ -13,6 +13,7 @@ layout(location = 4) out vec3 vWorldPosition;
 
 layout(push_constant) uniform StaticMeshTransparentPushConstants {
     mat4 uModel;
+    vec4 uReflectionParams;
 };
 layout(std140, binding = 6) uniform StaticMeshFrameParams {
     vec4 uVoxelLight;

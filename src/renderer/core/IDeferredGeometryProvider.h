@@ -1,10 +1,20 @@
 #ifndef MECRAFT_I_DEFERRED_GEOMETRY_PROVIDER_H
 #define MECRAFT_I_DEFERRED_GEOMETRY_PROVIDER_H
 
+#include "../rhi/RhiHandles.h"
+
 #include <glm/glm.hpp>
 
 class FrameContext;
 class RhiCommandList;
+
+/// Read-only deferred targets required by external transparent geometry.
+struct DeferredTransparentResources {
+    RhiTextureViewHandle sceneColor;
+    RhiTextureViewHandle opaqueDepth;
+    RhiTextureViewHandle skyCapture;
+    float reflectionCompositeStrength = 1.0f;
+};
 
 /// Supplies non-world geometry to the shared deferred rendering pipeline.
 class IDeferredGeometryProvider {
@@ -39,12 +49,20 @@ public:
     /// @return True when at least one instantiated transparent primitive exists.
     [[nodiscard]] virtual bool hasTransparentGeometry() const = 0;
 
+    /// Binds the resolved opaque scene inputs used by transparent shading.
+    /// @param resources Scene color, depth, sky capture, and reflection strength.
+    /// @return True when every transparent draw resource is ready.
+    [[nodiscard]] virtual bool prepareTransparentResources(
+        const DeferredTransparentResources& resources) = 0;
+
     /// Draws transparent geometry back-to-front into the active composite pass.
     /// @param commandList Command list with the transparent attachments active.
     /// @param cameraPosition World-space camera position used for draw sorting.
+    /// @param reflectionCompositeStrength Global scene reflection contribution.
     virtual void renderTransparent(
         RhiCommandList& commandList,
-        const glm::vec3& cameraPosition) = 0;
+        const glm::vec3& cameraPosition,
+        float reflectionCompositeStrength) = 0;
 };
 
 #endif // MECRAFT_I_DEFERRED_GEOMETRY_PROVIDER_H

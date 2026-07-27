@@ -39,7 +39,7 @@ struct ShaderCase {
 } // namespace
 
 int main() {
-    constexpr std::array<ShaderCase, 57> kShaderCases{{
+    constexpr std::array<ShaderCase, 59> kShaderCases{{
         {"tests/shaders/rhi_screen_coordinates_test.frag", RhiShaderStage::Fragment},
         {"assets/shaders/fullscreen_triangle_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/deferred_lighting.vert", RhiShaderStage::Vertex},
@@ -48,6 +48,8 @@ int main() {
         {"assets/shaders/entity_gbuffer_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/item_drop_gbuffer_rhi.vert", RhiShaderStage::Vertex},
         {"assets/shaders/falling_block_gbuffer_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/static_mesh_transparent_rhi.vert", RhiShaderStage::Vertex},
+        {"assets/shaders/static_mesh_transparent_rhi.frag", RhiShaderStage::Fragment},
         {"assets/shaders/ssao.frag", RhiShaderStage::Fragment},
         {"assets/shaders/ssao_filter.frag", RhiShaderStage::Fragment},
         {"assets/shaders/ssao_upsample.frag", RhiShaderStage::Fragment},

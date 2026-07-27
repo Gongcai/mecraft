@@ -1,5 +1,7 @@
 #version 450 core
 
+#include "rhi_screen_coordinates.glsl"
+
 layout(location = 0) in vec2 vUv;
 layout(location = 1) in vec3 vNormal;
 layout(location = 2) in vec3 vTangent;
@@ -15,6 +17,13 @@ layout(binding = 1) uniform sampler2D uMetallicRoughnessTexture;
 layout(binding = 2) uniform sampler2D uNormalTexture;
 layout(binding = 3) uniform sampler2D uOcclusionTexture;
 layout(binding = 4) uniform sampler2D uEmissiveTexture;
+layout(set = 1, binding = 0) uniform sampler2D uSceneColorTexture;
+layout(set = 1, binding = 1) uniform sampler2D uOpaqueDepthTexture;
+layout(set = 1, binding = 2) uniform sampler2D uSkyCaptureTexture;
+layout(push_constant) uniform StaticMeshTransparentPushConstants {
+    mat4 uModel;
+    vec4 uReflectionParams;
+};
 layout(std140, binding = 5) uniform StaticMeshMaterialParams {
     vec4 uBaseColorFactor;
     vec4 uEmissiveAlphaCutoff;
@@ -35,6 +44,7 @@ layout(std140, binding = 6) uniform StaticMeshFrameParams {
 };
 
 #include "static_mesh_material.glsl"
+#include "render_contract.glsl"
 
 const float PI = 3.14159265358979323846;
 
@@ -53,6 +63,71 @@ float geometrySchlickGgx(float nDotV, float roughness) {
 
 vec3 fresnelSchlick(float cosTheta, vec3 f0) {
     return f0 + (1.0 - f0) * pow(1.0 - cosTheta, 5.0);
+}
+
+vec2 projectTransparentReflection(
+    vec3 worldPosition,
+    out float projectedDepth) {
+    vec4 clip = uViewProj * vec4(worldPosition, 1.0);
+    if (clip.w <= 0.00001) {
+        projectedDepth = -1.0;
+        return vec2(-1.0);
+    }
+    vec3 ndc = clip.xyz / clip.w;
+    projectedDepth = ndc.z * 0.5 + 0.5;
+    return rhiScreenUvToClipUv(ndc.xy * 0.5 + 0.5);
+}
+
+bool traceTransparentScreenReflection(
+    vec3 worldPosition,
+    vec3 reflectedDirection,
+    vec3 normal,
+    float roughness,
+    out vec3 hitColor,
+    out float hitConfidence) {
+    hitColor = vec3(0.0);
+    hitConfidence = 0.0;
+    float maxDistance = mix(48.0, 12.0, roughness);
+    int stepCount = int(mix(28.0, 12.0, roughness));
+    float stepLength = maxDistance / float(stepCount);
+    vec3 rayOrigin = worldPosition + normal * 0.025 +
+                     reflectedDirection * 0.1;
+
+    for (int stepIndex = 1; stepIndex <= 28; ++stepIndex) {
+        if (stepIndex > stepCount) {
+            break;
+        }
+        float progress = float(stepIndex) / float(stepCount);
+        vec3 samplePosition = rayOrigin + reflectedDirection *
+            (float(stepIndex) * stepLength);
+        float rayDepth;
+        vec2 screenUv = projectTransparentReflection(
+            samplePosition, rayDepth);
+        if (screenUv.x <= 0.001 || screenUv.x >= 0.999 ||
+            screenUv.y <= 0.001 || screenUv.y >= 0.999 ||
+            rayDepth <= 0.0 || rayDepth >= 1.0) {
+            return false;
+        }
+
+        vec2 textureUv = rhiScreenUvToTextureUv(screenUv);
+        float sceneDepth = texture(uOpaqueDepthTexture, textureUv).r;
+        if (sceneDepth >= 0.9999) {
+            continue;
+        }
+        float thickness = mix(0.00025, 0.005, progress) *
+                          mix(1.0, 1.8, roughness);
+        if (rayDepth >= sceneDepth &&
+            rayDepth - sceneDepth < thickness) {
+            vec2 edgeDistance = min(screenUv, 1.0 - screenUv);
+            float edgeConfidence = smoothstep(
+                0.0, 0.08, min(edgeDistance.x, edgeDistance.y));
+            hitConfidence = edgeConfidence *
+                mix(1.0, 0.35, roughness * roughness);
+            hitColor = texture(uSceneColorTexture, textureUv).rgb;
+            return true;
+        }
+    }
+    return false;
 }
 
 float fogAmount(float distanceToCamera) {
@@ -88,6 +163,7 @@ void main() {
         mat3(tangent, bitangent, geometricNormal) * normalize(tangentNormal));
 
     vec3 viewDirection = normalize(uCameraPosition.xyz - vWorldPosition);
+    normal = faceforward(normal, -viewDirection, normal);
     vec3 lightDirection = normalize(uSunDirection.xyz);
     vec3 halfDirection = normalize(viewDirection + lightDirection);
     float nDotL = max(dot(normal, lightDirection), 0.0);
@@ -118,7 +194,28 @@ void main() {
     float distanceToCamera = length(uCameraPosition.xyz - vWorldPosition);
     color = mix(color, uFogColor.rgb, fogAmount(distanceToCamera));
 
-    outColor = vec4(color, sampledMaterial.baseColor.a);
+    vec3 reflectedDirection = reflect(-viewDirection, normal);
+    vec3 environmentReflection = sampleSkyRadianceCloudy(
+        uSkyCaptureTexture, reflectedDirection);
+    vec3 screenReflection;
+    float screenReflectionConfidence;
+    traceTransparentScreenReflection(
+        vWorldPosition, reflectedDirection, normal,
+        sampledMaterial.roughness,
+        screenReflection, screenReflectionConfidence);
+    vec3 reflectionSource = mix(
+        environmentReflection, screenReflection,
+        screenReflectionConfidence);
+    vec3 viewFresnel = fresnelSchlick(nDotV, f0);
+    float roughnessEnergy = mix(
+        1.0, 0.25,
+        sampledMaterial.roughness * sampledMaterial.roughness);
+    vec3 reflection = reflectionSource * viewFresnel *
+        roughnessEnergy * clamp(uReflectionParams.x, 0.0, 1.0);
+
+    outColor = vec4(
+        color * sampledMaterial.baseColor.a + reflection,
+        sampledMaterial.baseColor.a);
     outReactiveMask = sampledMaterial.baseColor.a;
     outTransparencyMask = sampledMaterial.baseColor.a;
 }

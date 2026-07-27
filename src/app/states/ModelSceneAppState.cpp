@@ -969,6 +969,12 @@ void ModelSceneAppState::showRenderSettingsPanel() {
         changed |= render_settings_imgui::showDeferredDebugView(settings);
         ImGui::PopID();
     }
+    if (ImGui::CollapsingHeader(
+            "Reflections", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID("ReflectionSettings");
+        changed |= render_settings_imgui::showReflectionSettings(settings);
+        ImGui::PopID();
+    }
     if (ImGui::CollapsingHeader("Shadows")) {
         ImGui::PushID("ShadowSettings");
         changed |= render_settings_imgui::showShadowSettings(settings);

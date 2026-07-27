@@ -2381,6 +2381,8 @@ bool DeferredPipeline::recordGenericTransparentPass(
     RhiDevice& rhiDevice = *m_shared->rhiDevice;
 
     if (!targets.ensureTransparentCompositeTextureViews(rhiDevice) ||
+        !targets.ensureSceneCompositeTextureView(rhiDevice) ||
+        !targets.ensureSkyCaptureTextureView(rhiDevice) ||
         !targets.ensureReactiveMaskTextureView(rhiDevice) ||
         !targets.ensureTransparencyMaskTextureView(rhiDevice)) {
         return false;
@@ -2419,6 +2421,14 @@ bool DeferredPipeline::recordGenericTransparentPass(
         : GpuTimerSegmentToken{};
 
     if (externalTransparent) {
+        const DeferredTransparentResources resources{
+            targets.sceneCompositeTextureViewHandle(),
+            targets.depthTextureViewHandle(),
+            targets.skyCaptureTextureViewHandle(),
+            m_currentSettings.reflection.sceneReflectionCompositeStrength};
+        if (!geometryProvider->prepareTransparentResources(resources)) {
+            return false;
+        }
         commandList.beginRendering(renderingInfo);
         commandList.setViewport({
             0.0f,
@@ -2429,7 +2439,8 @@ bool DeferredPipeline::recordGenericTransparentPass(
             1.0f});
         commandList.setScissor(renderingInfo.renderArea);
         geometryProvider->renderTransparent(
-            commandList, ctx.camera.position);
+            commandList, ctx.camera.position,
+            resources.reflectionCompositeStrength);
         commandList.endRendering();
         if (ctx.debugService != nullptr) {
             ctx.debugService->endGpuTimer(commandList, gpuTimer);

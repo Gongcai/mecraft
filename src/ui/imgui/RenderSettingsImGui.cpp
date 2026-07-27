@@ -38,7 +38,7 @@ bool showDeferredDebugView(RenderSettings& settings) {
         "27: Material Aux",
         "28: Reflection History",
         "29: Cloud History",
-        "30: SSR Hit Mask",
+        "30: Reflection Filter Metric",
         "31: Scene Resolved",
         "32: Shadow UV",
         "33: Shadow Density",
@@ -100,6 +100,61 @@ bool showDeferredDebugView(RenderSettings& settings) {
         "Deferred Debug View", &debugViewMode,
         kDebugViewModes, IM_ARRAYSIZE(kDebugViewModes));
     settings.debug.viewMode = debugViewMode;
+    return changed;
+}
+
+bool showReflectionSettings(RenderSettings& settings) {
+    static constexpr const char* kReflectionDebugModes[] = {
+        "0: Off",
+        "1: Pixel Wetness",
+        "2: Reflectance",
+        "3: SSR Hit Confidence",
+        "4: Roughness",
+        "5: Specular Weight x8",
+        "6: Composite Delta",
+        "7: Puddle Mask",
+        "8: Rain Splash Mask",
+        "9: Rain Ripple Normal",
+        "10: Rain Ripple Strength",
+        "11: F0 x8",
+        "12: Sky Environment",
+        "13: Reflection RGB x8",
+        "14: Reflective Material Mask",
+        "15: Sky Light Raw",
+        "16: Voxel Light RG",
+        "17: Material Aux",
+        "18: Sky Gradient x64",
+        "19: Final Contribution",
+        "20: Reflection Source",
+        "21: Reflectance x32",
+        "22: F0 x32",
+        "23: Roughness",
+        "24: Reflection Source x8",
+        "25: Final Contribution x32",
+        "26: Reflection / Scene Ratio",
+        "27: Scene Luminance",
+        "28: Reflection Luminance x64",
+        "29: Reflectance x128",
+        "30: Source Gradient x128"
+    };
+
+    bool changed = false;
+    changed |= ImGui::Checkbox(
+        "Bilateral Filter", &settings.reflection.filterEnabled);
+    changed |= ImGui::Checkbox(
+        "Temporal Accumulation", &settings.reflection.temporalEnabled);
+    changed |= ImGui::SliderFloat(
+        "Filter Strength", &settings.reflection.filterStrength,
+        0.0f, 2.0f, "%.2f");
+    changed |= ImGui::SliderFloat(
+        "History Weight", &settings.reflection.historyWeight,
+        0.0f, 0.98f, "%.2f");
+    changed |= ImGui::SliderFloat(
+        "Scene Composite", &settings.reflection.sceneReflectionCompositeStrength,
+        0.0f, 1.0f, "%.2f");
+    changed |= ImGui::Combo(
+        "Reflection Debug", &settings.debug.reflectionDebugMode,
+        kReflectionDebugModes, IM_ARRAYSIZE(kReflectionDebugModes));
     return changed;
 }
 

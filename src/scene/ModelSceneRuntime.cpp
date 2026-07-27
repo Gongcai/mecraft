@@ -1261,9 +1261,25 @@ bool ModelSceneRuntime::hasTransparentGeometry() const {
         });
 }
 
+bool ModelSceneRuntime::prepareTransparentResources(
+    const DeferredTransparentResources& resources) {
+    for (MeshAsset& asset : m_assets) {
+        if (asset.renderer->hasTransparentPrimitives() &&
+            !asset.renderer->prepareTransparentResources(
+                resources.sceneColor,
+                resources.opaqueDepth,
+                resources.skyCapture)) {
+            setError(asset.renderer->lastError());
+            return false;
+        }
+    }
+    return true;
+}
+
 void ModelSceneRuntime::renderTransparent(
     RhiCommandList& commandList,
-    const glm::vec3& cameraPosition) {
+    const glm::vec3& cameraPosition,
+    const float reflectionCompositeStrength) {
     struct QueuedDraw {
         StaticMeshRenderer* renderer = nullptr;
         StaticMeshRenderer::TransparentDraw draw;
@@ -1293,7 +1309,7 @@ void ModelSceneRuntime::renderTransparent(
         });
     for (const QueuedDraw& queuedDraw : queued) {
         queuedDraw.renderer->renderTransparentDraw(
-            commandList, queuedDraw.draw);
+            commandList, queuedDraw.draw, reflectionCompositeStrength);
     }
 }
 

@@ -10,6 +10,11 @@ namespace render_settings_imgui {
 /// @return True when the user changed the selected debug view.
 [[nodiscard]] bool showDeferredDebugView(RenderSettings& settings);
 
+/// Draws screen-space and environment reflection controls.
+/// @param settings Renderer settings updated by the controls.
+/// @return True when the user changed at least one reflection setting.
+[[nodiscard]] bool showReflectionSettings(RenderSettings& settings);
+
 /// Draws all shadow controls shared by renderer configuration panels.
 /// @param settings Renderer settings updated by the controls.
 /// @return True when the user changed at least one shadow setting.
