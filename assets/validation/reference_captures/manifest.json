@@ -1,0 +1,120 @@
+{
+  "kind": "mecraft.reference_capture_manifest",
+  "version": 1,
+  "capture_profile": {
+    "width": 1280,
+    "height": 720,
+    "warmup_frame_count": 300,
+    "sample_frame_count": 3
+  },
+  "captures": [
+    {
+      "scene": "voxel",
+      "rhi_backend": "vulkan",
+      "scene_contract": {
+        "source": "../scenes/m0_voxel_baseline.json",
+        "id": "m0_voxel_baseline",
+        "version": 1,
+        "content_hash": "ecb85fb88ef6aeef",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "m0_voxel_baseline",
+        "content_hash": "93b8b518406d50f9"
+      },
+      "render_settings": {
+        "id": "m0_voxel_render_settings",
+        "version": 1,
+        "content_hash": "511c4e7a0e2e2de9"
+      },
+      "image": {
+        "source": "m0_voxel_baseline_vulkan_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1511309,
+        "fnv1a64": "f07952a77f7a1b80",
+        "sha256": "e57d401434e60e967f37543721c0a753dcc02eb1103af05cdc62c2bf283d4467"
+      }
+    },
+    {
+      "scene": "model",
+      "rhi_backend": "vulkan",
+      "scene_contract": {
+        "source": "../scenes/m0_model_damaged_helmet.json",
+        "id": "m0_model_damaged_helmet",
+        "version": 1,
+        "content_hash": "bde98b1cf0faca9a",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "m0_model_damaged_helmet",
+        "content_hash": "6f33df94f7766d10"
+      },
+      "render_settings": {
+        "id": "m0_model_render_settings",
+        "version": 1,
+        "content_hash": "9a8940b4590c9585"
+      },
+      "image": {
+        "source": "m0_model_damaged_helmet_vulkan_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1234823,
+        "fnv1a64": "0acff06e5a4b407b",
+        "sha256": "c7c20bb8820f0413dd0e4e418b9bb04d6b47689f1f07de69bf8a2896c7e25e66"
+      }
+    },
+    {
+      "scene": "voxel",
+      "rhi_backend": "opengl",
+      "scene_contract": {
+        "source": "../scenes/m0_voxel_baseline.json",
+        "id": "m0_voxel_baseline",
+        "version": 1,
+        "content_hash": "ecb85fb88ef6aeef",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "m0_voxel_baseline",
+        "content_hash": "93b8b518406d50f9"
+      },
+      "render_settings": {
+        "id": "m0_voxel_render_settings",
+        "version": 1,
+        "content_hash": "511c4e7a0e2e2de9"
+      },
+      "image": {
+        "source": "m0_voxel_baseline_opengl_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1559880,
+        "fnv1a64": "c0ab8dfe38860049",
+        "sha256": "83491e3140815b3471cd5b1a25f576f1c727da1dc9c263dd95649bc4b4315079"
+      }
+    },
+    {
+      "scene": "model",
+      "rhi_backend": "opengl",
+      "scene_contract": {
+        "source": "../scenes/m0_model_damaged_helmet.json",
+        "id": "m0_model_damaged_helmet",
+        "version": 1,
+        "content_hash": "bde98b1cf0faca9a",
+        "hash_algorithm": "fnv1a64"
+      },
+      "camera_path": {
+        "id": "m0_model_damaged_helmet",
+        "content_hash": "6f33df94f7766d10"
+      },
+      "render_settings": {
+        "id": "m0_model_render_settings",
+        "version": 1,
+        "content_hash": "9a8940b4590c9585"
+      },
+      "image": {
+        "source": "m0_model_damaged_helmet_opengl_1280x720.png",
+        "format": "png_rgba8",
+        "byte_size": 1254074,
+        "fnv1a64": "fcd624333380366c",
+        "sha256": "4fe801feffe55134f413fcc0e512b9fc4b5fc4f61d263250914ae3e754a30278"
+      }
+    }
+  ]
+}
